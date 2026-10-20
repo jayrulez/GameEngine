@@ -59,7 +59,7 @@ TEST_CASE("dock drop: over the surface's band the panel goes along the whole edg
 {
     Bed bed;
     bed.Tear(u8"inspector");
-    const core::Float2 top{400.0f, 8.0f}; // in the surface's band (20), over the central strip
+    const core::Float2 top{400.0f, 4.0f}; // over the central strip, in the band's outer third (20 / 3)
     // Down the left side, over the hierarchy's body: the surface's band too.
     bed.Over(core::Float2{6.0f, 300.0f});
     CHECK(bed.D().GetDropTarget() == bed.space.Get());
@@ -189,4 +189,26 @@ TEST_CASE("dock drop: dimmed instead by the theme's torn-tab, or when it is its 
     CHECK(bed.ViewOf(u8"hierarchy")->HasClass(SV(u8"dock-torn")));
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK_FALSE(bed.ViewOf(u8"hierarchy")->HasClass(SV(u8"dock-torn")));
+}
+
+TEST_CASE("dock drop: a tab moved a few pixels along its strip is a drag at once; dropped further along, the layout reorders it")
+{
+    Bed bed;
+    const DockNodeId central = bed.controller.GetLayout().CentralStack();
+    REQUIRE(bed.controller.GetLayout().FindNode(central)->Panels[0] == SV(u8"scene"));
+    Tab* scene = bed.TabOf(u8"scene");
+    const core::Float2 start = Bed::Centre(Bed::Bounds(*scene));
+    bed.D().InjectMouseDown(start, MouseButton::Left);
+    bed.Over(core::Float2{start.x + 8.0f, start.y});
+    REQUIRE(bed.D().IsDragging());
+    CHECK_FALSE(scene->IsDisplayed()); // its strip closed up from the first move
+    bed.Lay();
+    const Rect inspector = Bed::Bounds(*bed.TabOf(u8"inspector"));
+    const core::Float2 end{inspector.x + inspector.width - 5.0f, start.y};
+    bed.Over(end);
+    bed.Release(end);
+    const DockNode* stack = bed.controller.GetLayout().FindNode(central);
+    CHECK(stack->Panels[0] == SV(u8"inspector"));
+    CHECK(stack->Panels[1] == SV(u8"scene"));
+    CHECK(bed.TabOf(u8"scene")->IsDisplayed());
 }

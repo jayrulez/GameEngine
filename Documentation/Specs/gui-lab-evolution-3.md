@@ -281,6 +281,11 @@ grabbed), and its strip closes up meanwhile, a neighbour's panel shown, or it di
 (`torn-tab`, the theme's `--dock-torn-tab`); the layout still moves nothing until the drop, so
 Escape shows the stack as it was (foundation.ui floats the panel instead). A stack's only tab, or a
 tab picked up from the keyboard, dims either way. The floating-window feel waits for D5.
+Then the drag's start: a tab first slid along its strip and tore out only 32 pixels past the
+strip's top or bottom (never past its ends), 35 to 55 pixels from the press by where on the tab
+it was, so the ghost and the gap came late and abruptly. In a strip of a group a tab is now a drag
+past the dispatcher's threshold, any way, as foundation.ui's; a reorder within its strip is a drop
+there at the mark (strips of no group keep the live slide), and the tear distance is gone.
 
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

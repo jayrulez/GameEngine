@@ -391,7 +391,8 @@ export namespace experimental::gui
         /// `edge-band`, the theme's `--dock-edge`.
         [[nodiscard]] f32 GetEdgeBand() const noexcept { return m_edgeBand; }
         void SetEdgeBand(f32 band) noexcept { m_edgeBand = Max(0.0f, band); }
-        /// How far into the surface its own edge band reaches (`surface-band`, `--dock-surface-edge`).
+        /// How far into the surface its own edge band reaches (`surface-band`, `--dock-surface-edge`);
+        /// over a strip along the edge, its outer third (the rest is the strip's).
         [[nodiscard]] f32 GetSurfaceBand() const noexcept { return m_surfaceBand; }
         void SetSurfaceBand(f32 band) noexcept { m_surfaceBand = Max(0.0f, band); }
 
@@ -418,13 +419,13 @@ export namespace experimental::gui
         /// The drop a point means (in this widget's space), over `stack` (kNoDock: over none): the
         /// surface's edge within its band, else the stack's edge within its band, else its middle;
         /// false when it means none.
-        [[nodiscard]] bool DropAt(core::Float2 at, DockNodeId stack, DockDrop& drop) const
+        [[nodiscard]] bool DropAt(core::Float2 at, DockNodeId stack, DockDrop& drop, f32 surfaceShare = 1.0f) const
         {
             const Rect bounds = GetScreenBounds();
             const f32 w = bounds.width;
             const f32 h = bounds.height;
             DockSide side{};
-            if (NearestEdge(at, Rect{0.0f, 0.0f, w, h}, Min(m_surfaceBand, Min(w, h) / 3.0f), side))
+            if (NearestEdge(at, Rect{0.0f, 0.0f, w, h}, Min(m_surfaceBand, Min(w, h) / 3.0f) * surfaceShare, side))
             {
                 drop = DockDrop{DockDropKind::Edge, kNoDock, m_surface, -1, side};
                 return true;
@@ -658,10 +659,11 @@ export namespace experimental::gui
                     if (const String* panel = self->DraggedPanel(query.Payload))
                     {
                         const String dragged = *panel;
-                        // The surface's band wins over the strip (a strip along the surface's edge).
+                        // The outer third of the surface's band wins over a strip along the surface's
+                        // edge; the rest of the strip is the strip's (a tab moved along it reorders).
                         DockDrop drop{DockDropKind::Tab, id, kNoDock, index, DockSide::Start};
                         DockDrop edge;
-                        if (!query.FromKeyboard && self->DropAt(self->FromNode(*bar, query.Local), kNoDock, edge))
+                        if (!query.FromKeyboard && self->DropAt(self->FromNode(*bar, query.Local), kNoDock, edge, 1.0f / 3.0f))
                             drop = edge;
                         self->Offer(*bar, query, dragged.AsView(), drop);
                     }

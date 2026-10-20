@@ -160,7 +160,9 @@ TEST_CASE("gui.hosting: an offscreen target draws a root at its own size, timed,
     REQUIRE(offscreen.IsReady());
     GuiOffscreen::Times times;
     foundation::image::Image picture;
-    CHECK(offscreen.Draw(*root, &picture, &times));
+    const String path = PathJoin(GetCurrentDirectory().AsView(), StringView(u8"gui-hosting-offscreen.png"));
+    CHECK(offscreen.Picture(*root, path.AsView(), picture, &times));
+    CHECK(FileExists(path.AsView()));
     CHECK(root->GetViewportSize().x == doctest::Approx(320.0f));
     CHECK(root->GetViewportSize().y == doctest::Approx(200.0f));
     CHECK(picture.Width() == 320u);
@@ -168,7 +170,7 @@ TEST_CASE("gui.hosting: an offscreen target draws a root at its own size, timed,
     CHECK(times.Draw >= 0.0);
     CHECK(times.Gpu >= 0.0);
     CHECK(root->GetLastFrameStats().FramesDrawn == 1u); // a frame of the root's, counted as a window's are
-    CHECK(offscreen.Draw(*root)); // again, nothing read back
+    CHECK(offscreen.Draw(*root)); // again, nothing read back or written
 }
 
 TEST_CASE("gui.hosting: a pane is another root over a region of a window, laid out at its size")

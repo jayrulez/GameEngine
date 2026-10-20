@@ -111,9 +111,16 @@ export namespace experimental::gui
         [[nodiscard]] rhi::Texture* Texture() const noexcept { return m_texture; }
 
         /// `root` styled, laid out at this target's size (at its own display scale) and drawn, the
-        /// GPU's work waited for; read back into `out` when given, the stages timed into `times`.
-        /// False when the target is not ready or the read back failed.
-        bool Draw(SceneRoot& root, image::Image* out = nullptr, Times* times = nullptr)
+        /// GPU's work waited for, the stages timed into `times`. False when the target is not ready.
+        bool Draw(SceneRoot& root, Times* times = nullptr) { return Render(root, {}, nullptr, times); }
+        /// Draw, and the picture read back into `out` and written to `path` as a PNG.
+        bool Picture(SceneRoot& root, StringView path, image::Image& out, Times* times = nullptr)
+        {
+            return Render(root, path, &out, times);
+        }
+
+    private:
+        bool Render(SceneRoot& root, StringView path, image::Image* out, Times* times)
         {
             if (!m_ready)
                 return false;
@@ -169,7 +176,7 @@ export namespace experimental::gui
             bool recorded = true;
             if (out != nullptr)
             {
-                m_capture.Request(u8"offscreen");
+                m_capture.Request(path);
                 recorded = m_capture.Record(device, *encoder, m_texture, m_format, m_width, m_height);
             }
             encoder->TransitionTexture(m_texture, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
@@ -184,7 +191,6 @@ export namespace experimental::gui
             return out == nullptr || (recorded && m_capture.Complete(device, m_allocator, *out).IsOk());
         }
 
-    private:
         IAllocator& m_allocator;
         GuiHost& m_host;
         vg::renderer::VGRenderer m_renderer;

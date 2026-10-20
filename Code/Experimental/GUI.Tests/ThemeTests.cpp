@@ -68,6 +68,7 @@ namespace
     class MockResources : public IResourceProvider
     {
     public:
+        MockResources() : IResourceProvider(core::DefaultAllocator()) {}
         image::OwnedImageData img{2, 2, image::PixelFormat::RGBA8,
                                   core::Span<const core::u8>(kPixels, 16)};
         core::String lastPath;

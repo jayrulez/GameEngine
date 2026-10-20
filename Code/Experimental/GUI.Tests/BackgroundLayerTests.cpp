@@ -22,6 +22,7 @@ namespace
     class Pictures : public IResourceProvider
     {
     public:
+        Pictures() : IResourceProvider(core::DefaultAllocator()) {}
         static inline core::u8 kPixels[40 * 20 * 4]{};
         image::OwnedImageData img{40, 20, image::PixelFormat::RGBA8, core::Span<const core::u8>(kPixels, sizeof(kPixels))};
         const image::ImageData* LoadImage(core::StringView) override { return &img; }

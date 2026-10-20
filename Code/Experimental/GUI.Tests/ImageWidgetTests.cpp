@@ -190,6 +190,7 @@ namespace
 {
     struct OneImage : IResourceProvider
     {
+        OneImage() : IResourceProvider(core::DefaultAllocator()) {}
         image::OwnedImageData img = MakeImage();
         int loads = 0;
         const image::ImageData* LoadImage(core::StringView path) override

@@ -36,7 +36,7 @@ export namespace experimental::gui::vfs
     {
     public:
         VfsResourceProvider(foundation::vfs::IFileSystem* fs, IAllocator& allocator) noexcept
-            : m_fs(fs), m_allocator(allocator), m_images(allocator)
+            : IResourceProvider(allocator), m_fs(fs), m_allocator(allocator), m_images(allocator)
         {
         }
 

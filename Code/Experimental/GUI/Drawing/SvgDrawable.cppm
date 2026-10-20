@@ -8,8 +8,9 @@
 // layer is (NodeBox). Its intrinsic size is the document's. A tint other than white recolours it
 // whole, as VG's SVG renderer does (an icon taking its colour); white draws it as authored.
 // It owns its document when made from SVG text (FromText: an icon set compiled into the binary,
-// as the editor's are) and borrows the resource provider's for a path (PictureDrawable, which
-// picks the kind by the path's ending: an SVG by .svg, a raster otherwise).
+// as the editor's are) and borrows the resource provider's for a source (PictureDrawable, which
+// picks the kind by the source: an SVG by a .svg ending or a data:image/svg+xml URL, a raster
+// otherwise).
 
 module;
 #include "Core/Prelude.h"
@@ -78,13 +79,14 @@ export namespace experimental::gui
 
     RTTI_DEFINE_OBJECT(SvgDrawable, "rtti::gui")
 
-    /// A picture by its path, as a resource provider has it: an SvgDrawable for a path ending in
-    /// .svg, an ImageDrawable otherwise; null when the provider has none.
+    /// A picture by its source, as a resource provider has it: an SvgDrawable for an SVG source
+    /// (IsSvgSource: a .svg path or one written inline), an ImageDrawable otherwise; null when the
+    /// provider has none.
     [[nodiscard]] inline RefPtr<Drawable> PictureDrawable(IResourceProvider& resources, core::StringView path, IAllocator& allocator)
     {
-        if (IsSvgPath(path))
+        if (IsSvgSource(path))
         {
-            if (const foundation::vg::svg::SVGDocument* document = resources.LoadSvg(path))
+            if (const foundation::vg::svg::SVGDocument* document = resources.Svg(path))
                 return core::MakeRef<SvgDrawable>(allocator, document);
             return {};
         }

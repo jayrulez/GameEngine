@@ -594,11 +594,11 @@ export namespace experimental::gui
                     if (layer.Kind == BackgroundKind::Image)
                     {
                         out.IsImage = true;
-                        // An SVG by its name (E13): paths, drawn at the size it fills.
+                        // An SVG by its name or written inline (E13): paths, drawn at the size it fills.
                         const core::StringView path = layer.Image.AsView();
-                        const bool svg = IsSvgPath(path);
+                        const bool svg = IsSvgSource(path);
                         if (resources != nullptr && svg)
-                            out.Svg = resources->LoadSvg(path);
+                            out.Svg = resources->Svg(path);
                         else if (resources != nullptr)
                             out.Image = resources->LoadImage(ImagePath(path, out.Source)); // a sprite's region too
                         if (out.Image == nullptr && out.Svg == nullptr)

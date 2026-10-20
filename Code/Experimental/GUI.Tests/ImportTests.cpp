@@ -22,6 +22,7 @@ namespace
     class Sheets : public IResourceProvider
     {
     public:
+        Sheets() : IResourceProvider(core::DefaultAllocator()) {}
         core::Array<core::String> paths;
         core::Array<core::String> texts;
         core::Array<core::String> loaded;

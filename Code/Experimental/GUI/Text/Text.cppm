@@ -406,9 +406,9 @@ export namespace experimental::gui
                     break;
                 const TextRun& run = m_document.Runs[static_cast<usize>(icon.Run)];
                 const Rectangle r{icon.Rect.x + origin.x, icon.Rect.y + origin.y, icon.Rect.width, icon.Rect.height};
-                if (IsSvgPath(run.Icon.AsView())) // drawn as paths, crisp at the line's size
+                if (IsSvgSource(run.Icon.AsView())) // drawn as paths, crisp at the line's size
                 {
-                    if (const foundation::vg::svg::SVGDocument* svg = m_resources->LoadSvg(run.Icon.AsView()))
+                    if (const foundation::vg::svg::SVGDocument* svg = m_resources->Svg(run.Icon.AsView()))
                         foundation::vg::svg::SVGRenderer::Render(g, *svg, r);
                 }
                 else if (const foundation::image::ImageData* image = m_resources->LoadImage(run.Icon.AsView()))

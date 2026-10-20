@@ -121,7 +121,7 @@ namespace
     class SandboxResources final : public gui::IResourceProvider
     {
     public:
-        explicit SandboxResources(Function<String(StringView)> resolve) : m_resolve(Move(resolve)) {}
+        explicit SandboxResources(Function<String(StringView)> resolve) : IResourceProvider(AppRoot()), m_resolve(Move(resolve)) {}
         const image::ImageData* LoadImage(StringView path) override
         {
             for (const Entry& e : m_images)

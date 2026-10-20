@@ -22,6 +22,7 @@ namespace
     class Atlas : public IResourceProvider
     {
     public:
+        Atlas() : IResourceProvider(core::DefaultAllocator()) {}
         static inline core::u8 kPixels[64 * 32 * 4]{};
         image::OwnedImageData img{64, 32, image::PixelFormat::RGBA8, core::Span<const core::u8>(kPixels, sizeof(kPixels))};
         core::Array<core::String> asked;

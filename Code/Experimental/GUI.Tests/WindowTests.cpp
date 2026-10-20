@@ -3,7 +3,8 @@
 
 // GUI - Window tests: title-bar drag moves the window, the grip resizes it (clamped
 // to the minimum), title clicks fall through to the draggable bar, and a press raises the
-// window to the front.
+// window to the front; a move or resize reported when the press lets go, and a title bar handed to a
+// drag source.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -195,4 +196,55 @@ TEST_CASE("window: one held by its tree alone closes and calls back, not freed b
     win->Close();
     CHECK(closed == 1);
     CHECK(root->ChildCount() == 0u);
+}
+
+TEST_CASE("window: a move or resize the user made is reported once the press lets go; a handed-over title bar starts a drag instead")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    auto win = Make<Window>();
+    win->SetSize(core::Float2{200.0f, 150.0f});
+    win->SetPosition(core::Float2{50.0f, 50.0f});
+    root->AddChild(win.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    int arranged = 0;
+    win->SetOnUserArranged([&arranged]() { ++arranged; });
+
+    d->InjectMouseDown(core::Float2{120.0f, 60.0f}, MouseButton::Left);
+    d->InjectMouseMove(core::Float2{140.0f, 70.0f});
+    d->InjectMouseMove(core::Float2{160.0f, 80.0f});
+    CHECK(arranged == 0); // not each move
+    d->InjectMouseUp(core::Float2{160.0f, 80.0f}, MouseButton::Left);
+    CHECK(arranged == 1);
+    d->InjectMouseDown(core::Float2{160.0f, 80.0f}, MouseButton::Left); // a press that moves nothing
+    d->InjectMouseUp(core::Float2{160.0f, 80.0f}, MouseButton::Left);
+    CHECK(arranged == 1);
+    const Rect grip{win->GetPosition().x + 193.0f, win->GetPosition().y + 143.0f, 0.0f, 0.0f};
+    d->InjectMouseDown(core::Float2{grip.x, grip.y}, MouseButton::Left);
+    d->InjectMouseMove(core::Float2{grip.x + 30.0f, grip.y + 10.0f});
+    d->InjectMouseUp(core::Float2{grip.x + 30.0f, grip.y + 10.0f}, MouseButton::Left);
+    CHECK(arranged == 2);
+    CHECK(win->GetSize().x == doctest::Approx(230.0f));
+
+    // Handed over: the title bar moves nothing itself; its drag source's drag starts past the threshold.
+    DragHandle* bar = win->GetTitleBar();
+    REQUIRE(bar != nullptr);
+    bar->SetDragsItself(false);
+    bool started = false;
+    bar->SetDragSource([&started](DragRequest& r)
+    {
+        r.Payload.Type = core::String(u8"test/window");
+        started = true;
+        return true;
+    });
+    const core::Float2 at{win->GetPosition().x + 40.0f, win->GetPosition().y + 10.0f};
+    const core::Float2 was = win->GetPosition();
+    d->InjectMouseDown(at, MouseButton::Left);
+    d->InjectMouseMove(core::Float2{at.x + 20.0f, at.y});
+    CHECK(started);
+    CHECK(d->IsDragging());
+    CHECK(win->GetPosition().x == doctest::Approx(was.x));
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    d->InjectMouseUp(core::Float2{at.x + 20.0f, at.y}, MouseButton::Left);
+    CHECK(arranged == 2);
 }

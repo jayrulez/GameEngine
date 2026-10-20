@@ -4,8 +4,9 @@
 // GUI - :window partition
 //
 // Window: a movable panel with a title bar and a content area. Modeled on eepp's UIWindow (role
-// only). Dragging the title bar moves the window; with `resizable`, dragging the bottom-right
-// grip resizes it (clamped to a minimum); with `closable`, a close button in the title bar
+// only). Dragging the title bar moves the window (or, handed over, starts a drag source's drag);
+// with `resizable`, dragging the bottom-right grip resizes it (clamped to a minimum); either
+// reported once the press lets go; with `closable`, a close button in the title bar
 // closes it. Pressing anywhere on the title raises the window to the front. It arranges its
 // parts itself (title bar, content, grip), its look the theme's (window::title, ::grip,
 // `window titlebar > close`). Movement uses incremental world-space cursor deltas via an internal DragHandle
@@ -48,18 +49,24 @@ export namespace experimental::gui
     public:
         core::Function<void(core::Float2)> OnDrag; // incremental cursor delta
         core::Function<void()> OnPressed;
+        core::Function<void()> OnReleased; // the press that dragged it let go (after OnDrag moved something)
+        /// Whether its press drags it (the default); off, its press is a drag source's (its own,
+        /// SetDragSource, or an ancestor's): what a floating dock window's title bar does (D5).
+        void SetDragsItself(bool drags) noexcept { m_dragsItself = drags; }
+        [[nodiscard]] bool DragsItself() const noexcept { return m_dragsItself; }
 
     protected:
         // A press moves or resizes the window (E7): a drag from what holds it is not offered.
-        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return true; }
+        [[nodiscard]] bool OwnsPressDrag(core::Float2) const override { return m_dragsItself; }
         void OnMouseDown(const MouseEvent& event) override
         {
             event.Handled = true;
             if (OnPressed)
                 OnPressed(); // raise on any button
-            if (event.Button != MouseButton::Left)
+            if (event.Button != MouseButton::Left || !m_dragsItself)
                 return; // but only the left button drags
             m_dragging = true;
+            m_moved = false;
             m_last = event.Position;
         }
         void OnMouseMove(const MouseEvent& event) override
@@ -68,18 +75,29 @@ export namespace experimental::gui
                 return;
             const core::Float2 delta{event.Position.x - m_last.x, event.Position.y - m_last.y};
             m_last = event.Position;
+            m_moved = m_moved || delta.x != 0.0f || delta.y != 0.0f;
             if (OnDrag)
                 OnDrag(delta);
         }
         void OnMouseUp(const MouseEvent& event) override
         {
             (void)event;
-            m_dragging = false;
+            LetGo();
         }
-        void OnPointerCancel(const MouseEvent&) override { m_dragging = false; }
+        void OnPointerCancel(const MouseEvent&) override { LetGo(); }
 
     private:
+        void LetGo()
+        {
+            const bool moved = m_dragging && m_moved;
+            m_dragging = false;
+            m_moved = false;
+            if (moved && OnReleased)
+                OnReleased();
+        }
         bool m_dragging = false;
+        bool m_moved = false;
+        bool m_dragsItself = true;
         core::Float2 m_last{0.0f, 0.0f};
     };
 
@@ -179,6 +197,7 @@ export namespace experimental::gui
                     core::Float2{self->GetPosition().x + d.x, self->GetPosition().y + d.y});
             };
             m_titleBar->OnPressed = [self]() { self->ToFront(); };
+            m_titleBar->OnReleased = [self]() { self->UserArranged(); };
             AddChild(m_titleBar.Get());
 
             m_title = core::MakeRef<Label>(MemoryAllocator());
@@ -199,6 +218,7 @@ export namespace experimental::gui
             m_resizeGrip = core::MakeRef<WindowGrip>(MemoryAllocator());
             m_resizeGrip->OnDrag = [self](core::Float2 d) { self->ResizeBy(d); };
             m_resizeGrip->OnPressed = [self]() { self->ToFront(); };
+            m_resizeGrip->OnReleased = [self]() { self->UserArranged(); };
             m_resizeGrip->SetCursor(Cursor::NwseResize);
             AddChild(m_resizeGrip.Get());
             RefreshPartNodes();
@@ -248,6 +268,12 @@ export namespace experimental::gui
 
         // Fired when the window is closed via Close().
         void SetOnClose(core::Function<void()> callback) { m_onClose = core::Move(callback); }
+        /// The user moved it by its title bar or resized it by its grip: called once the press lets
+        /// go (not each move), with its place and size as they are then.
+        void SetOnUserArranged(core::Function<void()> callback) { m_onUserArranged = core::Move(callback); }
+        /// Its title bar (what dragging it moves the window; DragHandle::SetDragsItself hands the
+        /// press to a drag source instead).
+        [[nodiscard]] DragHandle* GetTitleBar() const noexcept { return m_titleBar.Get(); }
 
         // Show centered in `owner` as a MODAL window (E5): a manual, modal popup of `owner`, so
         // everything below it is inert (pointer, keys, bindings) until Close(), its `::backdrop`
@@ -366,6 +392,11 @@ export namespace experimental::gui
             ToFront();
             m_open = true;
         }
+        void UserArranged()
+        {
+            if (m_onUserArranged)
+                m_onUserArranged();
+        }
         void Closed()
         {
             m_open = false;
@@ -414,6 +445,7 @@ export namespace experimental::gui
         RefPtr<UIWidget> m_contentHost;
         RefPtr<WindowGrip> m_resizeGrip;
         core::Function<void()> m_onClose;
+        core::Function<void()> m_onUserArranged;
         bool m_open = false;
         bool m_modal = false;
         core::Float2 m_minSize{120.0f, 60.0f};

@@ -30,6 +30,13 @@ first three: hosting, the viewport, then docking.
 5. **The order:** hosting and the viewport, then docking, whose design comes from a survey of the
    reference UIs first. The sandbox moves onto hosting, and shows the viewport and docking when
    each is ready.
+6. **One splitter, in the core.** Docking's splits and every other split (a scene editor's three
+   panes, a tool's, a game's) are one `Splitter` widget in `experimental.gui`, not a dock splitter
+   beside a toolkit one: what a splitter must get right (minimums from content, weights that survive
+   a pane coming or going, keyboard, accessibility, right to left) is fixed once. foundation.ui has
+   two (`DockSplit`, the toolkit's `SplitView`), and they drifted. It is in the core, not the
+   toolkit, so docking needs no toolkit and a game needs no editor widgets to split a window; what
+   docking adds (weights from its layout, drop zones, previews) is the DockSpace's, around it.
 
 ## The libraries
 
@@ -40,9 +47,9 @@ first three: hosting, the viewport, then docking.
 | GUI.VFS | `experimental.gui.vfs` | A resource provider on the VFS | UI.VFS | Built |
 | GUI.Inspector | `experimental.gui.inspector` | The inspector (a tool) | none | Built |
 | GUI.Testing | `experimental.gui.testing` | Test helpers, image comparison (a tool) | none | Built |
-| GUI.Hosting | `experimental.gui.hosting` | The host on `foundation.graphics`: one GUI, a root per window, each window's VG context, renderer, targets and input; the frame; offscreen pictures; the picture baker | UI.Runtime | H1 to H3 |
-| GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | V1, V2 |
-| GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | D, after its survey |
+| GUI.Hosting | `experimental.gui.hosting` | The host on `foundation.graphics`: one GUI, a root per window, each window's VG context, renderer, targets and input; the frame; offscreen pictures; the picture baker | UI.Runtime | Built (H1 to H3) |
+| GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | Built (V1, V2) |
+| GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D7) |
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: the property grid, colour pickers, curves, node graphs, tool and status bars | UI.Toolkit less docking | Empty (round two's ruling 4) |
 | GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts, toasts | UI.Gamekit | Empty |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
@@ -109,10 +116,10 @@ its references were drawn; the host's default is encoded, as foundation.ui's is.
 
 `Viewport`, a widget that shows content drawn into a colour target (and depth) of its own, sized
 to the widget in device pixels: an `OnRender` the application fills, recorded before the window's
-pass, the target registered with the window's renderer as an external texture, so the node draws
-it as an image. Its input is gated: a shell input surface over the node's area, so a 3D camera
-reads the keyboard and mouse only while the node is hovered or focused, and a drag that leaves it
-keeps going. It follows the window it is in (a node moved to another window's root re-registers).
+pass, the target registered with the window's renderer as an external texture, so the widget draws
+it as an image. Its input is gated: a shell input surface over the widget's area, so a 3D camera
+reads the keyboard and mouse only while the widget is hovered or focused, and a drag that leaves it
+keeps going. It follows the window it is in (a widget moved to another window's root re-registers).
 
 As built on `vg` (2026-10-20): `Viewport`, a widget, is hosted content (`IHostedContent`, a new
 seam in GUI.Hosting): handed to the host once (`HostIn`), the host binds it to the renderer of the
@@ -133,7 +140,7 @@ As built on `vg` (2026-10-20): the sandbox's Viewport page, a spinning cube (the
 a camera reset and a letterbox at a fixed 16:9. Its image reference shows the widget unbound: the
 image tests draw offscreen, where no window binds it.
 
-### D Docking (proposed, from the survey; for review)
+### D Docking (approved by the user, 2026-10-20)
 
 The survey (2026-10-20) read Godot's docks, the Zero editor, ezEngine with Qt-ADS, Dear ImGui's
 dock nodes through Lumix, traktor, zed and gpui, LunarSong, eepp, and foundation.ui's own port.
@@ -165,8 +172,8 @@ The design:
    policy: hide, rebuild or destroy, a default place, the places it may go, which panels it may tab
    with, whether it may have several instances), registered in code, markup or script. The registry
    owns a panel's content, so moving it between windows or hiding it never destroys it.
-3. **Widgets from the data.** A `DockSpace` widget shows one surface: splits become a new `Splitter`
-   widget (n children, minimums from each child's min-content so nothing is squeezed past what it can
+3. **Widgets from the data.** A `DockSpace` widget shows one surface: splits become the core's
+   `Splitter` (ruling 6; n children, minimums from each child's min-content so nothing is squeezed past what it can
    draw, keyboard resizing, a separator's accessibility role, right to left), stacks a `TabView` whose
    strip's group is `dock`, reconciled by node id without rebuilding what did not change.
 4. **Drag to dock.** A tab torn from a strip carries the panel; a stack's own grip carries the stack.
@@ -184,14 +191,21 @@ The design:
    and the window is made or moved at the drop. On Wayland, where a client can neither place its
    windows nor know the global pointer, floats are decorated windows and docking between them goes
    by the keyboard and the "Move to" menu.
-6. **Saved as text.** A versioned layout document per project and user, named presets beside it, a
-   dry run before a restore (a bad file keeps the current layout), panels it names that are not
-   registered kept as placeholders that fill when they are, registered panels it does not name put
-   at their default place, floating windows clamped back onto the screens there are.
+6. **Serializable data.** A layout is reflected data that the engine's serializer reads and writes,
+   with a version and its migrations; docking adds a restore that checks it first (a bad layout is
+   refused with its reason and the current one stays), panels it names that are not registered kept
+   as placeholders that fill when they are, registered panels it does not name put at their default
+   place. Docking reads and writes no files: where a layout is kept (the editor's, per project and
+   user), when it is saved and where named presets live are the application's. Hosting knows nothing
+   of it either; as the surface host it only answers where each floating window is and what screens
+   there are, so a layout taken carries the floats' bounds and a layout restored clamps them back
+   onto the screens there are.
 
 The phases, each a layer with its tests: D0 the Splitter; D1 the layout and its operations; D2
 saving and restoring; D3 the DockSpace, the registry and the panels' lifetimes; D4 drag to dock
 within one window, the keyboard and the "Move to" menu; D5 floating surfaces in the window; D6
-floating as OS windows through the host, and drags between windows; D7 presets, the tools an agent
-drives it with, and the editor's move off foundation.ui's docking. The sandbox's Docking page grows
-with them.
+floating as OS windows through the host, and drags between windows; D7 presets and the tools an
+agent drives it with. The sandbox's Docking page grows with them.
+
+Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
+written, and the lab's libraries proven stable first (the user, 2026-10-20).

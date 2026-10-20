@@ -101,6 +101,22 @@ TEST_CASE("gui.hosting: a window's root takes the window's size and a renderer o
     CHECK(root->GetViewportSize().y == doctest::Approx(360.0f));
 }
 
+TEST_CASE("gui.hosting: SizePanes gives the roots a resized window's size before the frame's update")
+{
+    Bed bed;
+    RefPtr<SceneRoot> root = bed.MakeRoot();
+    bed.host->AttachWindow(*bed.main, root);
+    bed.Frame(bed.main.Get());
+    static_cast<shell::NullWindow*>(bed.shell.MainWindow())->Resize(700, 420);
+    bed.host->SetPaneRegion(*root, Rectangle{0.0f, 0.0f, 500.0f, 420.0f}); // an application's layout of its panes
+    bed.host->SizePanes(); // what it lays out from is this frame's, not the last's
+    CHECK(root->GetViewportSize().x == doctest::Approx(500.0f));
+    CHECK(root->GetViewportSize().y == doctest::Approx(420.0f));
+    const u64 drawn = bed.host->FramesDrawn();
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->FramesDrawn() == drawn + 1); // the new size is drawn
+}
+
 TEST_CASE("gui.hosting: a root draws when it needs a frame, else its window encodes the last batch again")
 {
     Bed bed;

@@ -293,6 +293,16 @@ export namespace experimental::gui
         /// Once per frame: each window's input to its panes, the GUI's clock, then every pane styled
         /// and laid out at its region's size and its window's scale, and asked whether it needs a
         /// frame (a pane of another GUI runs on that GUI's clock, which its owner advances).
+        /// Each pane's root takes its window's size and scale now (Update does it too): an
+        /// application that sizes its own nodes from a root's size calls it first, so they follow a
+        /// resized window in the same frame rather than the next.
+        void SizePanes()
+        {
+            for (const Attached& attached : m_attached)
+                if (SizePanes(*attached.Data, *attached.Window, attached.Window->Window().ContentScale() * m_uiScale))
+                    attached.Data->NeedsFrame = true;
+        }
+
         void Update(f32 deltaTime)
         {
             m_router->Update();
@@ -310,20 +320,11 @@ export namespace experimental::gui
                     m_device.Raw()->WaitIdle();
                     (void)data.Targets.Resize(width, height);
                 }
-                bool needs = data.NeedsFrame;
+                bool needs = SizePanes(data, window, scale) || data.NeedsFrame;
                 for (const UniquePtr<GuiWindowData::Pane>& pane : data.Panes)
                 {
-                    SceneRoot& root = *pane->Root;
-                    const Rectangle area = AreaOf(window, pane->Region);
-                    if (root.GetDisplayScale() != scale)
-                        root.SetDisplayScale(scale);
-                    if (root.GetViewportSize() != Float2{area.width, area.height})
-                    {
-                        root.SetViewportSize(Float2{area.width, area.height});
-                        needs = true;
-                    }
-                    StyleAndLayOut(root, pane->Styles);
-                    needs = root.NeedsFrame() || needs;
+                    StyleAndLayOut(*pane->Root, pane->Styles);
+                    needs = pane->Root->NeedsFrame() || needs;
                 }
                 data.NeedsFrame = needs;
             }
@@ -435,6 +436,25 @@ export namespace experimental::gui
 
     private:
         friend class GuiOffscreen; // draws with the host's device, shaders and baker
+
+        // The panes' roots at their regions' sizes and the window's scale; whether one changed.
+        bool SizePanes(GuiWindowData& data, graphics::RenderWindow& window, f32 scale)
+        {
+            bool changed = false;
+            for (const UniquePtr<GuiWindowData::Pane>& pane : data.Panes)
+            {
+                SceneRoot& root = *pane->Root;
+                const Rectangle area = AreaOf(window, pane->Region);
+                if (root.GetDisplayScale() != scale)
+                    root.SetDisplayScale(scale);
+                if (root.GetViewportSize() != Float2{area.width, area.height})
+                {
+                    root.SetViewportSize(Float2{area.width, area.height});
+                    changed = true;
+                }
+            }
+            return changed;
+        }
 
         // The baker's renderer takes the first target's format and blend space; false without one.
         bool EnsureBaker(rhi::TextureFormat format, vg::VGBlendSpace space)

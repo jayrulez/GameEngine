@@ -1518,6 +1518,7 @@ void GUISandbox::Layout()
     m_guiHost->SetPaneRegion(*m_root, Rectangle{0.0f, 0.0f, static_cast<f32>(m_width) - pane, static_cast<f32>(m_height)});
     if (m_inspectorOpen)
         m_guiHost->SetPaneRegion(m_inspector->GetRoot(), Rectangle{static_cast<f32>(m_width) - pane, 0.0f, pane, static_cast<f32>(m_height)});
+    m_guiHost->SizePanes(); // the roots at this frame's size: the shell is laid out from it
 }
 
 // Before the host routes the frame's input: the boundary between the root on show and the pane.

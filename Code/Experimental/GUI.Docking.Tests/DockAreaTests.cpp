@@ -377,3 +377,22 @@ TEST_CASE("dock area: a float dragged with Shift is only moved; Escape puts it b
     CHECK(window->GetPosition().y == doctest::Approx(bounds.y));
     CHECK(bed.controller.GetLayout().FindSurface(floating) != nullptr); // nothing docked
 }
+
+TEST_CASE("dock area: a float laid out before the area has its size stands at its bounds once it has")
+{
+    Bed bed;
+    bed.area->EditLayoutStyle([](LayoutStyle& s) {
+        s.Width = LayoutLength::Px(0.0f);
+        s.Height = LayoutLength::Px(0.0f);
+    });
+    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{350.0f, 70.0f, 220.0f, 160.0f}); // kept in an area of none
+    bed.area->EditLayoutStyle([](LayoutStyle& s) {
+        s.Width = LayoutLength::Px(800.0f);
+        s.Height = LayoutLength::Px(600.0f);
+    });
+    bed.Lay();
+    const DockFloat* window = bed.area->FloatOf(floating);
+    REQUIRE(window != nullptr);
+    CHECK(window->GetPosition().x == doctest::Approx(350.0f));
+    CHECK(window->GetPosition().y == doctest::Approx(70.0f));
+}

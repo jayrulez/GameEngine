@@ -262,7 +262,8 @@ export namespace experimental::gui
         }
 
     protected:
-        // The main surface fills it; each float at its place, kept in view.
+        // The main surface fills it; each float at its surface's place (where the pointer has it
+        // while it is dragged), kept in view.
         void OnLayout() override
         {
             const Rect box = GetContentBounds();
@@ -271,7 +272,11 @@ export namespace experimental::gui
                 m_preview->Arrange(Rect{m_previewBounds.x, m_previewBounds.y, m_previewBounds.width, m_previewBounds.height});
             for (const RefPtr<DockFloat>& window : m_floats)
             {
-                const core::Float2 at = KeptInView(window->GetPosition(), window->GetSize());
+                core::Float2 place = window->GetPosition();
+                if (const DockSurface* surface = m_controller != nullptr ? m_controller->GetLayout().FindSurface(window->GetSurface()) : nullptr;
+                    surface != nullptr && !window->IsBeingDragged())
+                    place = core::Float2{surface->Bounds.x, surface->Bounds.y};
+                const core::Float2 at = KeptInView(place, window->GetSize());
                 window->Arrange(Rect{at.x, at.y, window->GetSize().x, window->GetSize().y});
             }
         }

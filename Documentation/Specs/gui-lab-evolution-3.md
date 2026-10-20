@@ -49,7 +49,7 @@ first three: hosting, the viewport, then docking.
 | GUI.Testing | `experimental.gui.testing` | Test helpers, image comparison (a tool) | none | Built |
 | GUI.Hosting | `experimental.gui.hosting` | The host on `foundation.graphics`: one GUI, a root per window, each window's VG context, renderer, targets and input; the frame; offscreen pictures; the picture baker | UI.Runtime | Built (H1 to H3) |
 | GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | Built (V1, V2) |
-| GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D7) |
+| GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D6) |
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: the property grid, colour pickers, curves, node graphs, tool and status bars | UI.Toolkit less docking | Empty (round two's ruling 4) |
 | GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts, toasts | UI.Gamekit | Empty |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
@@ -204,8 +204,12 @@ The design:
 The phases, each a layer with its tests: D0 the Splitter; D1 the layout and its operations; D2
 saving and restoring; D3 the DockSpace, the registry and the panels' lifetimes; D4 drag to dock
 within one window, the keyboard and the "Move to" menu; D5 floating surfaces in the window; D6
-floating as OS windows through the host, and drags between windows; D7 presets and the tools an
-agent drives it with. The sandbox's Docking page grows with them.
+floating as OS windows through the host, and drags between windows. The sandbox's Docking page
+grows with them.
+
+Presets and agent tools are the application's, not docking's (the user, 2026-10-20): the library
+gives a layout as data to take and adopt, and an application such as the editor keeps its named
+presets and offers its own tools (MCP's among them) over that. There is no D7.
 
 D0 as built on `vg` (2026-10-20): `Splitter` and `SplitterHandle` in the core. Panes by weight,
 each held at its minimum (its sheet's) and clipped when the minimums pass the room; a handle between each two kept in step as panes come and go, read as a separator with where

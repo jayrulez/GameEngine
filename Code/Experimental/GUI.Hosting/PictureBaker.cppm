@@ -1,24 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - `experimental.gui.bake`: GpuPictureBaker, the GUI's IPictureBaker on the GPU.
+// GUI.Hosting - :picture_baker partition: GpuPictureBaker, the GUI's IPictureBaker on the GPU.
 //
 // A picture the GUI asks for (an SVG at a size in device pixels) is queued; the host's frame
 // records the queue (Record, on the frame's own command encoder, before the passes that sample
-// it): each picture drawn through a VG renderer of its own into a texture of its own, which the
-// GUI's renderer is told to sample under the picture's key (RegisterExternalTexture). Nothing is
+// it): each picture drawn through a VG renderer of its own into a texture of its own, which every
+// window's renderer (its targets) is told to sample under the picture's key
+// (RegisterExternalTexture), so a picture baked once shows in any window. Nothing is
 // read back, so nothing waits: the frame that asked draws the picture as paths, and the next one
 // draws it from the texture. The texture holds premultiplied colour in the canvas's blend space,
 // as a layer's target does, so the GUI draws it with VGContext::DrawImagePremultiplied.
 //
 // A bake no draw has asked for in kKeepFrames frames goes (the GUI's renderer forgets it first):
-// that long unasked, no frame still in flight samples it. Bakes draw without stencil fills (the
+// that long unasked, no frame still in flight samples it. A window that goes takes its renderer
+// out of the targets first (RemoveTarget), which forgets every bake. Bakes draw without stencil fills (the
 // bake targets have no depth-stencil), as a context without a stencil-capable renderer does.
 
 module;
 #include "Core/Prelude.h"
 
-export module experimental.gui.bake;
+export module experimental.gui.hosting:picture_baker;
 
 import foundation.core;
 import foundation.rhi;
@@ -59,10 +61,9 @@ export namespace experimental::gui
         /// Frames a bake stays after a draw last asked for it.
         static constexpr u64 kKeepFrames = 600;
 
-        /// `target` is the GUI's renderer, which samples the bakes; `fonts` draws an SVG's text.
-        GpuPictureBaker(IAllocator& allocator, rhi::Device& device, vg::renderer::VGRenderer& target,
-                        foundation::fonts::IFontService* fonts) noexcept
-            : m_allocator(allocator), m_device(device), m_target(target), m_renderer(allocator), m_canvas(fonts),
+        /// `fonts` draws an SVG's text. The renderers that sample the bakes are its targets.
+        GpuPictureBaker(IAllocator& allocator, rhi::Device& device, foundation::fonts::IFontService* fonts) noexcept
+            : m_allocator(allocator), m_device(device), m_renderer(allocator), m_canvas(fonts), m_targets(allocator),
               m_entries(allocator)
         {
         }
@@ -86,15 +87,42 @@ export namespace experimental::gui
             return Status{ErrorCode::Ok};
         }
 
-        /// Forgets every bake (the GUI's renderer first) and releases the renderer. The GPU must be
-        /// done with them (a host disposes after its device is idle).
+        /// Forgets every bake (its targets first) and releases the renderer. The GPU must be done
+        /// with them (a host disposes after its device is idle).
         void Dispose()
         {
             for (const UniquePtr<Entry>& entry : m_entries)
                 Release(*entry);
             m_entries.Clear();
+            m_targets.Clear();
             if (m_renderer.IsInitialized())
                 m_renderer.Dispose();
+        }
+
+        /// A renderer that samples the bakes (a window's): every bake drawn is registered with it,
+        /// those drawn before too.
+        void AddTarget(vg::renderer::VGRenderer& target)
+        {
+            for (vg::renderer::VGRenderer* known : m_targets)
+                if (known == &target)
+                    return;
+            m_targets.PushBack(&target);
+            for (const UniquePtr<Entry>& entry : m_entries)
+                if (entry->View != nullptr)
+                    target.RegisterExternalTexture(entry->Key.Get(), entry->View);
+        }
+        /// A renderer that goes (its window's): it forgets every bake, and is told of no more.
+        void RemoveTarget(vg::renderer::VGRenderer& target)
+        {
+            for (usize i = 0; i < m_targets.Size(); ++i)
+                if (m_targets[i] == &target)
+                {
+                    for (const UniquePtr<Entry>& entry : m_entries)
+                        if (entry->View != nullptr)
+                            target.UnregisterExternalTexture(entry->Key.Get());
+                    m_targets.RemoveAt(i);
+                    return;
+                }
         }
 
         const image::ImageData* Baked(const foundation::vg::svg::SVGDocument& document, u32 width, u32 height) override
@@ -199,7 +227,8 @@ export namespace experimental::gui
                 encoderPass->End();
             }
             encoder.TransitionTexture(entry.Texture, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
-            m_target.RegisterExternalTexture(entry.Key.Get(), entry.View);
+            for (vg::renderer::VGRenderer* target : m_targets)
+                target->RegisterExternalTexture(entry.Key.Get(), entry.View);
             return true;
         }
 
@@ -207,7 +236,8 @@ export namespace experimental::gui
         {
             if (entry.View != nullptr)
             {
-                m_target.UnregisterExternalTexture(entry.Key.Get());
+                for (vg::renderer::VGRenderer* target : m_targets)
+                    target->UnregisterExternalTexture(entry.Key.Get());
                 m_device.DestroyTextureView(entry.View);
                 entry.View = nullptr;
             }
@@ -220,10 +250,10 @@ export namespace experimental::gui
 
         IAllocator& m_allocator;
         rhi::Device& m_device;
-        vg::renderer::VGRenderer& m_target;
         vg::renderer::VGRenderer m_renderer; // the bakes' own: its frame buffers are not the GUI's
         vg::VGContext m_canvas;
         rhi::TextureFormat m_format = rhi::TextureFormat::RGBA8UnormSrgb;
+        Array<vg::renderer::VGRenderer*> m_targets; // the windows' renderers, which sample the bakes
         Array<UniquePtr<Entry>> m_entries;
         u64 m_frame = 0;
         u64 m_generation = 0;

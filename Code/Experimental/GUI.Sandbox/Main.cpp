@@ -41,7 +41,7 @@ import experimental.gui;
 import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
 import experimental.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
-import experimental.gui.bake;      // SVG skins baked into textures
+import experimental.gui.hosting;   // the picture baker (SVG skins as textures)
 import foundation.rhi.capture;     // the image tests' readback (E8g)
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
@@ -620,7 +620,7 @@ Status GUISandbox::OnInit()
     m_vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
     m_vg->SetLayers(m_layerFs != nullptr);
     m_vg->SetStencilFills(m_renderer.StencilFillsSupported());
-    m_baker = MakeUnique<gui::GpuPictureBaker>(AppRoot(), AppRoot(), *m_device, m_renderer, m_fontService.Get());
+    m_baker = MakeUnique<gui::GpuPictureBaker>(AppRoot(), AppRoot(), *m_device, m_fontService.Get());
     gui::PictureBakerSetup bakes;
     bakes.VertexShader = m_vs;
     bakes.FragmentShader = m_fs;
@@ -630,7 +630,9 @@ Status GUISandbox::OnInit()
     bakes.Format = m_swapChain->Format();
     bakes.BlendSpace = targetsOk ? m_targets.ConfigFor().blendSpace : vg::VGBlendSpace::Linear;
     bakes.FrameCount = static_cast<i32>(kFrames);
-    if (!m_baker->Initialize(bakes).IsOk())
+    if (m_baker->Initialize(bakes).IsOk())
+        m_baker->AddTarget(m_renderer);
+    else
         m_baker.Reset(); // the skins draw as paths
 
 #ifdef OPTION_HAS_ANGELSCRIPT

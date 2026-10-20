@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Bake - the GPU picture baker on the Null RHI backend: a picture asked for is queued, baked
-// when the frame records, and registered with the GUI's renderer under its key; asked again it
-// is that key; a size of its own is a bake of its own; one no draw asks for goes in time.
+// GUI.Hosting - the GPU picture baker on the Null RHI backend: a picture asked for is queued, baked
+// when the frame records, and registered with every target renderer under its key; asked again it
+// is that key; a size of its own is a bake of its own; one no draw asks for goes in time; a target
+// added late learns the bakes, and one taken out forgets them.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -14,7 +15,7 @@ import foundation.vg;
 import foundation.vg.svg;
 import foundation.vg.renderer;
 import experimental.gui;
-import experimental.gui.bake;
+import experimental.gui.hosting;
 
 using namespace foundation::core;
 using namespace experimental::gui;
@@ -41,7 +42,7 @@ namespace
         rhi::ShaderModule* vs = MakeModule(device);
         rhi::ShaderModule* fs = MakeModule(device);
         vg::renderer::VGRenderer target{DefaultAllocator()};
-        GpuPictureBaker baker{DefaultAllocator(), device, target, nullptr};
+        GpuPictureBaker baker{DefaultAllocator(), device, nullptr};
         rhi::CommandPool* pool = nullptr;
         vg::svg::SVGDocument document = vg::svg::SVGLoader::Load(
             StringView(u8"<svg width='24' height='12'><rect width='24' height='12' fill='red'/></svg>")).Value();
@@ -54,6 +55,7 @@ namespace
             setup.FragmentShader = fs;
             setup.Format = rhi::TextureFormat::BGRA8UnormSrgb;
             REQUIRE(baker.Initialize(setup).IsOk());
+            baker.AddTarget(target);
             REQUIRE(device.CreateCommandPool(rhi::QueueType::Graphics, pool).IsOk());
         }
         ~Bed()
@@ -77,7 +79,7 @@ namespace
     };
 }
 
-TEST_CASE("gui.bake: a picture asked for is baked when the frame records, then drawn from its key")
+TEST_CASE("gui.hosting.baker: a picture asked for is baked when the frame records, then drawn from its key")
 {
     Bed bed;
     CHECK(bed.baker.Baked(bed.document, 48, 24) == nullptr); // queued
@@ -101,7 +103,7 @@ TEST_CASE("gui.bake: a picture asked for is baked when the frame records, then d
     CHECK(bed.baker.BakeCount() == 2u);
 }
 
-TEST_CASE("gui.bake: a bake no draw asks for goes, and the GUI's renderer forgets it")
+TEST_CASE("gui.hosting.baker: a bake no draw asks for goes, and the GUI's renderer forgets it")
 {
     Bed bed;
     (void)bed.baker.Baked(bed.document, 48, 24);
@@ -119,4 +121,25 @@ TEST_CASE("gui.bake: a bake no draw asks for goes, and the GUI's renderer forget
         (void)bed.Frame(static_cast<i32>(frame % 2));
     CHECK(bed.baker.BakeCount() == 0u);
     CHECK_FALSE(bed.target.IsExternalTextureRegistered(key));
+}
+
+TEST_CASE("gui.hosting.baker: a renderer added late learns the bakes; one taken out forgets them")
+{
+    Bed bed;
+    vg::renderer::VGRenderer second{DefaultAllocator()};
+    REQUIRE(second.Initialize(bed.device, *bed.vs, *bed.fs, rhi::TextureFormat::BGRA8UnormSrgb, 2).IsOk());
+    (void)bed.baker.Baked(bed.document, 48, 24);
+    (void)bed.Frame(0);
+    const foundation::image::ImageData* key = bed.baker.Baked(bed.document, 48, 24);
+    REQUIRE(key != nullptr);
+    CHECK_FALSE(second.IsExternalTextureRegistered(key));
+    bed.baker.AddTarget(second); // a window opened after the bake
+    CHECK(second.IsExternalTextureRegistered(key));
+    (void)bed.baker.Baked(bed.document, 24, 12);
+    (void)bed.Frame(1);
+    CHECK(second.IsExternalTextureRegistered(bed.baker.Baked(bed.document, 24, 12)));
+    bed.baker.RemoveTarget(second); // its window goes
+    CHECK_FALSE(second.IsExternalTextureRegistered(key));
+    CHECK(bed.target.IsExternalTextureRegistered(key));
+    second.Dispose();
 }

@@ -67,6 +67,13 @@ Tests: on the Null backend, a host attaches and detaches windows, a root's frame
 it needs one, the baker registers its bakes with every window's renderer, and a detached window's
 renderer forgets them.
 
+As built on `vg` (2026-10-20): `GuiHost` and `GuiWindowData` (the window's payload), `VgShaderSet`
+and `VgShaderLibrary` (the set resolved from a data mount; a test hands its own), and the baker
+moved in from `GUI.Bake`, which is gone, serving several renderers (`AddTarget`, `RemoveTarget`).
+Input: the pointer to the window under it or the one a held press began in (the lab has no capture
+to ask), keys, text and the pad to the focused window, drops to the window they landed on. The
+null shell injects no input, so routing is checked by the sandbox once it runs on the host (H3).
+
 ### H2 Pictures offscreen
 
 A root drawn into an image at a given size on the host's device, read back: what the sandbox's

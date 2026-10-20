@@ -54,7 +54,9 @@ UDP), a player-side server armed by a flag, and the panel choosing its source.
 
 ## The GUI lab after E9: stability first, then the decision (user 2026-10-17)
 
-The lab's evolution (`Specs/gui-lab-evolution.md`) is built through E9. Before anyone thinks about
+The lab's evolution is built through E17 (`Specs/gui-lab-evolution.md`, E1 to E9, and
+`Specs/gui-lab-evolution-2.md`, E10 to E17); round three, its satellite libraries (hosting, the
+viewport, docking), is `Specs/gui-lab-evolution-3.md`. Before anyone thinks about
 it replacing foundation.ui, it has to be shown as stable as foundation.ui is (the user,
 2026-10-17: "a lot of testing"). In order:
 

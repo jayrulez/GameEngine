@@ -182,6 +182,35 @@ TEST_CASE("vg.context: DrawImage registers the texture and switches command")
     CHECK(batch.GetCommand(1).textureIndex == 1);
 }
 
+TEST_CASE("vg.context: a premultiplied image is a composite of its own texture, clipped and faded as drawn")
+{
+    VGContext ctx;
+    const u8 px[16] = {};
+    image::OwnedImageData tex(2, 2, image::PixelFormat::RGBA8, Span<const u8>(px, 16));
+
+    ctx.FillRect(Rectangle{0, 0, 5, 5}, Color::Red);
+    ctx.PushClipRect(Rectangle{0, 0, 30, 30});
+    ctx.PushOpacity(0.5f);
+    ctx.DrawImagePremultiplied(&tex, Rectangle{10, 10, 20, 20}, Rectangle{1, 0, 1, 2}, 0.8f);
+    ctx.PopOpacity();
+    ctx.PopClip();
+    ctx.FillRect(Rectangle{0, 0, 5, 5}, Color::Blue); // a new command after it
+
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.CommandCount() == 3u);
+    const VGCommand& picture = batch.GetCommand(1);
+    CHECK(picture.drawMode == VGDrawMode::Layer);
+    CHECK(picture.compositeLayer == -1); // its texture, not a layer's target
+    REQUIRE(picture.textureIndex >= 0);
+    CHECK(batch.textures[static_cast<usize>(picture.textureIndex)] == &tex);
+    CHECK(picture.indexCount == 6);
+    CHECK(picture.clipMode == VGClipMode::Scissor);
+    const VGVertex& corner = batch.vertices[batch.indices[static_cast<usize>(picture.startIndex)]];
+    CHECK(corner.color.a == doctest::Approx(0.4f)); // its opacity under the context's
+    CHECK(corner.texCoord.x == doctest::Approx(0.5f)); // the source's half of the texture
+    CHECK(batch.GetCommand(2).drawMode == VGDrawMode::Default);
+}
+
 TEST_CASE("vg.context: clear resets and re-seeds the white texture")
 {
     VGContext ctx;

@@ -772,3 +772,53 @@ TEST_CASE("vg.renderer: pass targets configure, create, resize and describe the 
     CHECK_FALSE(targets.Resize(96, 48));
     CHECK_FALSE(targets.Matches(96, 48));
 }
+
+TEST_CASE("vg.renderer: a premultiplied image draws through the composite shader with its own texture, or not at all")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    rhi::ShaderModule* vs = MakeModule(device);
+    rhi::ShaderModule* fs = MakeModule(device);
+    rhi::ShaderModule* layerFs = MakeModule(device);
+    REQUIRE(layerFs != nullptr);
+
+    static const u8 pixels[16]{};
+    const image::OwnedImageData picture(2, 2, image::PixelFormat::RGBA8, Span<const u8>(pixels, 16));
+    VGContext ctx;
+    ctx.FillRect(Rectangle{0, 0, 8, 8}, Color::White);
+    ctx.DrawImagePremultiplied(&picture, Rectangle{10, 10, 20, 20}, Rectangle{0, 0, 2, 2});
+    VGBatch& batch = ctx.GetBatch();
+
+    const auto run = [&](rhi::ShaderModule* layerShader)
+    {
+        VGRenderer renderer{DefaultAllocator()};
+        REQUIRE(renderer
+                    .Initialize(device, *vs, *fs, rhi::TextureFormat::BGRA8UnormSrgb, 2, nullptr, nullptr, nullptr,
+                                VGTargetConfig{}, nullptr, nullptr, nullptr, layerShader)
+                    .IsOk());
+        renderer.BeginFrame(0);
+        const VGRenderSlice slice = renderer.Prepare(batch, 0, 64, 64);
+        REQUIRE(slice.isValid);
+        CHECK(slice.layerCount == 0);
+        NullPass pass;
+        REQUIRE(pass.Open(device));
+        renderer.RenderLayers(*pass.encoder, 0, slice);
+        REQUIRE(pass.BeginPass());
+        renderer.Render(*pass.pass, 64, 64, 0, slice);
+        pass.End(device);
+        const VGRenderer::RenderStats stats = renderer.LastRenderStats();
+        renderer.Dispose();
+        return stats;
+    };
+    const VGRenderer::RenderStats with = run(layerFs);
+    CHECK(with.drawn == 2); // the fill and the picture, no layer target asked for
+    CHECK(with.skipped == 0);
+    // Without the composite shader the picture is skipped, never premultiplied again by the
+    // default one.
+    const VGRenderer::RenderStats without = run(nullptr);
+    CHECK(without.drawn == 1);
+    CHECK(without.skipped == 1);
+
+    device.DestroyShaderModule(layerFs);
+    device.DestroyShaderModule(fs);
+    device.DestroyShaderModule(vs);
+}

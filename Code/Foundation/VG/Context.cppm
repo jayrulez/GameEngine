@@ -1265,6 +1265,37 @@ export namespace foundation::vg
             TransformVertices(startVertex);
         }
 
+        /// DrawImage for a texture that already holds PREMULTIPLIED colour in the canvas's blend
+        /// space, as a layer's target does (a picture drawn once into a GPU texture and registered
+        /// with the renderer under `texture`, RegisterExternalTexture): sampled as a layer's
+        /// composite is, scaled by `opacity`, never premultiplied again. The plain DrawImage takes
+        /// straight alpha and would darken such a texture's edges.
+        void DrawImagePremultiplied(const image::ImageData* texture, Rectangle destRect, Rectangle srcRect,
+                                    f32 opacity = 1.0f)
+        {
+            if (texture == nullptr || destRect.width <= 0.0f || destRect.height <= 0.0f)
+                return;
+            FlushCurrentCommand();
+            const i32 start = static_cast<i32>(m_batch.indices.Size());
+            const usize startVertex = m_batch.vertices.Size();
+            EmitTexturedQuad(destRect, srcRect, texture->Width(), texture->Height(),
+                             ApplyOpacity(Color{1.0f, 1.0f, 1.0f, opacity}));
+            TransformVertices(startVertex);
+            VGCommand cmd;
+            cmd.startIndex = start;
+            cmd.indexCount = static_cast<i32>(m_batch.indices.Size()) - start;
+            cmd.textureIndex = GetOrAddTexture(texture);
+            cmd.clipRect = m_currentState.clipRect;
+            cmd.clipMode = m_currentState.clipMode;
+            cmd.scissored = m_currentState.scissored && m_currentState.clipMode == VGClipMode::Stencil;
+            cmd.stencilRef = m_currentState.stencilRef;
+            cmd.blendMode = m_currentBlendMode;
+            cmd.drawMode = VGDrawMode::Layer; // compositeLayer -1: the texture, not a layer's target
+            cmd.layer = m_currentLayer;
+            m_batch.commands.PushBack(cmd);
+            m_commandStartIndex = static_cast<i32>(m_batch.indices.Size());
+        }
+
         /// DrawImage clipped to a rounded rectangle: `srcRect` of the texture maps onto
         /// `destRect`, and only the part inside `destRect` rounded by `radii` is drawn, with an
         /// anti-aliased edge (a picture with rounded corners, such as a card's thumbnail).

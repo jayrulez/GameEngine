@@ -904,9 +904,10 @@ export namespace foundation::vg::renderer
                 if (cmd.indexCount == 0 || cmd.layer != layer)
                     continue;
 
-                // A layer's composite samples the target RenderLayers drew it into; none, no draw.
+                // A layer's composite samples the target RenderLayers drew it into; none, no draw. A
+                // Layer-mode draw with no layer samples its own texture (a premultiplied image).
                 rhi::BindGroup* compositeGroup = nullptr;
-                if (cmd.drawMode == foundation::vg::VGDrawMode::Layer)
+                if (cmd.drawMode == foundation::vg::VGDrawMode::Layer && cmd.compositeLayer >= 0)
                 {
                     const bool known = cmd.compositeLayer >= 0 && cmd.compositeLayer < static_cast<i32>(m_layers.Size());
                     const i32 target = !known ? -1

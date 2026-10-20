@@ -83,7 +83,8 @@ export namespace foundation::vg
         /// texture, any number of shadows per command.
         BoxShadow,
         /// A layer's composite (VGContext::PopLayer): a quad sampling the layer's offscreen target,
-        /// which holds premultiplied colour, scaled by the quad's alpha (the layer's opacity).
+        /// which holds premultiplied colour, scaled by the quad's alpha (the layer's opacity). With
+        /// no compositeLayer, the command's texture instead (VGContext::DrawImagePremultiplied).
         Layer,
         /// An analytic box (VGContext::DrawBox): the command's vertices are VGBatch::boxVertices
         /// (startIndex, indexCount count them, six to a box), drawn unindexed through the box

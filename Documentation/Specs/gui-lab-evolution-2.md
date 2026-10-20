@@ -548,26 +548,26 @@ reading an item's position among them all.
 
 E17a as built on `vg` (2026-10-19): popups place themselves on logical sides (`InlineEnd`,
 `InlineStart`) and a dropdown's start is the inline start, resolved in `PlacePopup` against the
-anchor's direction (else the popup's own, its owner's); a tooltip takes its provider's (a6c76cba1).
+anchor's direction (else the popup's own, its owner's); a tooltip takes its provider's (7f7d1317f).
 `MirroredX` and `MirroredIn` place a widget's own parts from the inline start: a menu's gutter,
-label, shortcut and submenu arrow, a combo box's arrow (e1b835173); a progress fill, a horizontal
+label, shortcut and submenu arrow, a combo box's arrow (51ac69a7f); a progress fill, a horizontal
 scrollbar's thumb and its presses, a switch's knob, a closed chevron, a number field's arrows and
 the room its text keeps clear of them (a new `EditBounds` of the text editors, not a physical
-padding, in code or in the theme) (1be20d13b); a tree row's indent, a window's grip at its bottom
-left pulling its left edge, and a tab drag's passing, drop place and mark (f172cfedb).
+padding, in code or in the theme) (b1b25815d); a tree row's indent, a window's grip at its bottom
+left pulling its left edge, and a tab drag's passing, drop place and mark (24ef0aaf5).
 `Node::InlineStep` says which way an arrow goes along the line, for the tree, an exclusive group, a
-grid, a submenu (its `menu.left` and `menu.right` read by direction) and the tab strip (597c67847).
+grid, a submenu (its `menu.left` and `menu.right` read by direction) and the tab strip (2486b1fba).
 A scroller across a right-to-left flow keeps CSS's scroll positions, `GetScrollMin` and
 `GetScrollMax` bounding every clamp; its end, the wheel on a strip and the thumb follow; a table's
-rows, columns, header, sort mark and grips and a grid's cells run from the right (52334041d).
-Content wider than a right-to-left box overflows toward its inline end, the left (d723c036c).
+rows, columns, header, sort mark and grips and a grid's cells run from the right (d01a28483).
+Content wider than a right-to-left box overflows toward its inline end, the left (b55044554).
 `GUISandbox --mirror-audit` (the GUI.Mirror test) lays every page out both ways and checks each
 widget's box within its parent; it found the pages' sheets padding and pinning by physical sides
 where they meant the inline start, now logical; 748 widgets, none out of place; the sweep runs in
-Arabic too, `GUI.Sweep.<backend>.ar` (a0f69b745). The Arabic Language page's reference moved a
-pixel with the overflow rule, approved by the user (4f85b68ec). Screen: the game menu, its
+Arabic too, `GUI.Sweep.<backend>.ar` (6696b6a58). The Arabic Language page's reference moved a
+pixel with the overflow rule, approved by the user (680026cca). Screen: the game menu, its
 settings among it, speaks Arabic: every text a key, the script's through `gui::tr`, its families
-falling back to DejaVu (0b29f4084).
+falling back to DejaVu (561599c29).
 Left: the audit skips docks (physical by design), popups at a point, item views' recycled rows
 (the unit tests cover theirs) and the Stress and Motion pages; transforms stay physical, as CSS's
 do; the Arabic is unchecked by a speaker; scripts see negative x offsets in right to left, as the
@@ -577,19 +577,19 @@ the line's direction and scrolls a long one from its inline start, and `text-ali
 reaches it (the user's catch on the Arabic settings screen).
 
 E17c as built on `vg` (2026-10-19): the click, tap, pan, drag and fling thresholds are lengths in
-DIPs, scaled by the display (318370576). The dispatcher follows every finger down (d26650e9f).
+DIPs, scaled by the display (c85e2b44c). The dispatcher follows every finger down (817b04479).
 `touch-action` (auto, none, manipulation, or any of pan-x, pan-y and pinch-zoom) is a reflected
 property with its css name, as `cursor` and `pointer-events` are, narrowed by every ancestor; a
 one-finger move along an axis a node keeps goes on as the pointer instead of panning; two fingers
 over a node that leaves pinch-zoom out make one gesture from the second's landing, the first's
 press cancelled: `gesturestart`, `gesturechange` (scale, rotation and translation, totals and
 deltas, about the fingers' middle), `gestureend`, `gesturecancel`; scripts read them from
-`GuiEvent`, and the tester has `Pinch`, `Rotate` and `TwoFingerPan` (56790c322). The desktop shell
+`GuiEvent`, and the tester has `Pinch`, `Rotate` and `TwoFingerPan` (0d85399e2). The desktop shell
 passes a cancelled finger and a trackpad's pinch, and no longer takes a trackpad's fingers for
-touches (22f864b1a); the bridge forwards both, a pinch as the mouse's gesture at the pointer, and
-its polled path follows every finger (e3c43ad3c). A gesture's translation is in the GUI's units,
-not its node's, which its gesture may turn (df972b819). Screen: the Input page's picture viewer,
-and two fingers' steps in the sandbox's `--keys` (dbd4b7974).
+touches (1dca6412f); the bridge forwards both, a pinch as the mouse's gesture at the pointer, and
+its polled path follows every finger (1b8b58d8f). A gesture's translation is in the GUI's units,
+not its node's, which its gesture may turn (7935feb6e). Screen: the Input page's picture viewer,
+and two fingers' steps in the sandbox's `--keys` (8245f3c6c).
 Left: a third finger is ignored; per-pointer capture for the second finger is not modelled; a
 trackpad's rotation and two-finger scroll come as the platform gives them (SDL has no rotation);
 the trackpad filter could not be tested without a trackpad device.

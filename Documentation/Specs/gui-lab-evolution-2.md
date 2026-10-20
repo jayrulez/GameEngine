@@ -594,6 +594,19 @@ Left: a third finger is ignored; per-pointer capture for the second finger is no
 trackpad's rotation and two-finger scroll come as the platform gives them (SDL has no rotation);
 the trackpad filter could not be tested without a trackpad device.
 
+E17b as built on `vg` (2026-10-19): an AccessNode says an item's place in its set and the set's
+size, a tree item's level, a table's rows and columns and a row's index, and that an item is off
+screen; `--narrate` reads them; an id's row in RowIds is a lookup (39cb8a569). An item view's items
+are nodes of their own with no widget behind them: the rows made and a page each side, the current
+item and the first fifty selected, in item order, under ids that follow the item (a bit, the view's
+key, the item's key); roles listitem, treeitem and a new row; the focus is the current item; focus,
+activate, scroll-into-view, expand and collapse run through the view; a view sends again only the
+items whose nodes changed (677440a84). Screen: `--narrate` on the Data views page reads "Row 3,
+listitem, 4 of 500, selected", and End reaches "500 of 500".
+Left: a table's cells are not nodes (a row is read by its first column); items without nodes are
+counted, not listed, which a pull adapter (UIA, AT-SPI) would list on demand, eepp's way (host work,
+ruling 3); the narrator speaks a root not on screen (the game menu's, at start).
+
 ## Not taken in this round
 
 - **Engine hosting** (a scene component, reference-resolution scaling, world-space canvases): not in

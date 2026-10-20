@@ -77,10 +77,8 @@ Gaps the phases left, by area (each phase's own notes say more):
   collapsing to its logical end; a right-to-left line's clamp ellipsis on its right; full UAX #29
   (Hangul jamo, Indic conjuncts) and words from the shaper; a password taking no composition; a
   link with no pointer cursor; HarfBuzz as the lab's default shaper outside the sandbox.
-- **Direction.** A right-to-left horizontal scroller starts at its left, not its inline start.
-- **Accessibility.** Item views expose only the rows they have made, not every item (rows need
-  a model of their own); the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real
-  text to speech are host work.
+- **Accessibility.** The platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to
+  speech are host work; a table's cells are not nodes of their own.
 - **Layout.** A container's baseline is its content box's bottom, not its first child's; grid and
   stack place `baseline` as start; text is not snapped to the pixel grid; no `calc()`; a node
   scrolling on both axes gives `fr` columns their content's width.

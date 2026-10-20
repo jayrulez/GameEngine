@@ -431,8 +431,11 @@ export namespace experimental::gui
             const core::Float2 s = GetSize();
             m_titleBar->Arrange(Rect{0.0f, 0.0f, s.x, m_titleBarHeight});
             m_contentHost->Arrange(Rect{0.0f, m_titleBarHeight, s.x, core::Max(0.0f, s.y - m_titleBarHeight)});
+            const bool rtl = IsRightToLeft();
             m_resizeGrip->Arrange(MirroredIn(Rect{s.x - m_gripSize, s.y - m_gripSize, m_gripSize, m_gripSize},
-                                             Rect{0.0f, 0.0f, s.x, s.y}, IsRightToLeft()));
+                                             Rect{0.0f, 0.0f, s.x, s.y}, rtl));
+            // Its cursor the way its corner resizes: bottom right, or bottom left right to left.
+            m_resizeGrip->SetCursor(rtl ? Cursor::NeswResize : Cursor::NwseResize);
             if (GetChildIndex(m_resizeGrip.Get()) + 1 != ChildCount())
                 m_resizeGrip->ToFront(); // over the content
         }

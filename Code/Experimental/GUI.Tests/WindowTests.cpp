@@ -88,7 +88,7 @@ TEST_CASE("window: dragging the grip resizes, clamped to the minimum")
     CHECK(win->GetSize().y == doctest::Approx(80.0f));
 }
 
-TEST_CASE("window: right to left, its title bar is the mirror of left to right")
+TEST_CASE("window: right to left, its title bar is the mirror of left to right, its grip at the bottom left")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{600.0f, 400.0f});
@@ -109,6 +109,9 @@ TEST_CASE("window: right to left, its title bar is the mirror of left to right")
     }
     CHECK(at[1].x + size[1].x < width - 1.0f); // the close button kept off the edge
 
+    const Node* grip = win->GetChildAt(win->ChildCount() - 1); // over the content
+    CHECK(grip->GetCursor() == Cursor::NwseResize);
+
     win->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
     root->UpdateLayout();
     for (core::usize i = 0; i < 2; ++i)
@@ -116,6 +119,9 @@ TEST_CASE("window: right to left, its title bar is the mirror of left to right")
         CHECK(bar->GetChildAt(i)->GetPosition().x == doctest::Approx(width - at[i].x - size[i].x));
         CHECK(bar->GetChildAt(i)->GetSize().x == doctest::Approx(size[i].x));
     }
+    // The grip at its bottom left, its cursor the way that corner resizes.
+    CHECK(grip->GetPosition().x == doctest::Approx(0.0f));
+    CHECK(grip->GetCursor() == Cursor::NeswResize);
 }
 
 TEST_CASE("window: content host is placed below the title bar and add-able")

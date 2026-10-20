@@ -26,4 +26,6 @@ namespace experimental::gui
     }
 
     RTTI_DEFINE_OBJECT(DockStack, "rtti::gui::docking")
+    RTTI_DEFINE_OBJECT(DockFloat, "rtti::gui::docking")
+    RTTI_DEFINE_OBJECT(DockArea, "rtti::gui::docking")
 }

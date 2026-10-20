@@ -207,6 +207,14 @@ export namespace experimental::gui
         void NoteWeights(DockNodeId split, Span<const f32> weights) { (void)m_layout.SetWeights(split, weights); }
         void NoteActive(core::StringView panel) { (void)m_layout.Activate(panel); }
         void NoteTabPlace(core::StringView panel, DockNodeId stack, i32 index) { (void)m_layout.MoveToTab(panel, stack, index); }
+        void NoteSurfaceBounds(DockSurfaceId surface, Rectangle bounds)
+        {
+            if (const DockSurface* found = m_layout.FindSurface(surface))
+            {
+                const String screen = found->Screen;
+                (void)m_layout.SetSurfaceBounds(surface, bounds, screen.AsView(), found->Scale);
+            }
+        }
 
         /// The panel a page some view shows is for (a dragged tab's); null when none shows it.
         [[nodiscard]] const String* PanelShownBy(const Node& page) const
@@ -231,6 +239,8 @@ export namespace experimental::gui
                 if (m_views[i] == &view)
                 {
                     m_views.RemoveAt(i);
+                    if (m_showing && static_cast<i64>(i) <= m_showAt)
+                        --m_showAt; // the pass goes on with the view that took its place
                     return;
                 }
         }
@@ -251,15 +261,32 @@ export namespace experimental::gui
                     return;
                 }
         }
+        // Each view shows the layout. A view may make or end others as it does (a floating surface's
+        // window and its dock space): one made joins the pass, one ended leaves it; a change asked
+        // for during the pass runs it again after.
         void ShowEverywhere()
         {
-            for (IDockView* view : m_views)
-                view->ShowLayout();
+            if (m_showing)
+            {
+                m_showAgain = true;
+                return;
+            }
+            m_showing = true;
+            do
+            {
+                m_showAgain = false;
+                for (m_showAt = 0; m_showAt < static_cast<i64>(m_views.Size()); ++m_showAt)
+                    m_views[static_cast<usize>(m_showAt)]->ShowLayout();
+            } while (m_showAgain);
+            m_showing = false;
         }
 
         DockLayout m_layout;
         Array<DockPanelDescription> m_panels;
         Array<Made> m_contents;
         Array<IDockView*> m_views;
+        bool m_showing = false;   // a pass of ShowEverywhere is on
+        bool m_showAgain = false; // the layout changed during it
+        i64 m_showAt = 0;         // the view it is at
     };
 }

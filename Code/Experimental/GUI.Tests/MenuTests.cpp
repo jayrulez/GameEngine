@@ -331,25 +331,85 @@ TEST_CASE("menu: a submenu stays open while the pointer heads for it across anot
     sub->AddItem(core::StringView(u8"A"), [] {});
     sub->AddItem(core::StringView(u8"B"), [] {});
     sub->AddItem(core::StringView(u8"C"), [] {});
-    menu->AddItem(core::StringView(u8"Next"), [] {});
+    MenuItem* next = menu->AddItem(core::StringView(u8"Next"), [] {});
     menu->AddItem(core::StringView(u8"Last"), [] {});
     menu->Open(*anchor, core::Float2{50.0f, 50.0f}); // rows at y 50, 76, 102; 160 wide
     d->InjectMouseMove(core::Float2{100.0f, 60.0f}); // on "More": its submenu opens at x 210, y 50
     REQUIRE(sub->IsOpen());
+    auto* more = core::Cast<MenuItem>(sub->GetParent());
+    REQUIRE(more != nullptr);
     d->InjectMouseMove(core::Float2{150.0f, 70.0f});
-    // Down and right toward the submenu, over "Next": the submenu stays.
+    // Down and right toward the submenu, over "Next": the submenu stays, and only "More" is lit.
     d->InjectMouseMove(core::Float2{190.0f, 80.0f});
     CHECK(sub->IsOpen());
+    CHECK(more->IsLit());
+    CHECK_FALSE(next->IsLit());
     // Resting on "Next" a moment: it takes over.
     for (int i = 0; i < 5; ++i)
         root->GetContext().Update(core::Duration::FromSeconds(0.1));
     CHECK_FALSE(sub->IsOpen());
+    CHECK(next->IsLit());
+    CHECK_FALSE(more->IsLit());
 
     // Straight down, away from it: the submenu closes at once.
     d->InjectMouseMove(core::Float2{100.0f, 60.0f});
     REQUIRE(sub->IsOpen());
     d->InjectMouseMove(core::Float2{100.0f, 110.0f}); // onto "Last", heading away
     CHECK_FALSE(sub->IsOpen());
+}
+
+TEST_CASE("menu: one row is lit at a time: the pointer and the keys move the same highlight")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 400.0f});
+    auto anchor = Make<UIWidget>();
+    root->AddChild(anchor.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    auto menu = Make<Menu>();
+    menu->SetItemHeight(26.0f);
+    MenuItem* a = menu->AddItem(core::StringView(u8"A"), [] {});
+    MenuItem* b = menu->AddItem(core::StringView(u8"B"), [] {});
+    MenuItem* c = menu->AddItem(core::StringView(u8"C"), [] {});
+    menu->AddSeparator();
+    MenuItem* off = menu->AddItem(core::StringView(u8"Off"), [] {});
+    off->SetEnabled(false);
+    menu->Open(*anchor, core::Float2{50.0f, 50.0f});
+    root->GetContext().Update(core::Duration{}); // a frame: the popup placed
+    const auto centre = [](const Node& n)
+    {
+        const Rect r = n.GetScreenBounds();
+        return core::Float2{r.x + r.width * 0.5f, r.y + r.height * 0.5f};
+    };
+    const auto lit = [&]()
+    {
+        const MenuItem* items[] = {a, b, c, off};
+        int n = 0;
+        for (const MenuItem* item : items)
+            n += item->IsLit() ? 1 : 0;
+        return n;
+    };
+
+    d->InjectMouseMove(centre(*b));
+    CHECK(b->IsLit());
+    CHECK(lit() == 1);
+    // A key moves on from the pointer's row, the pointer resting where it was: one lit, the keys'.
+    (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
+    CHECK(c->IsLit());
+    CHECK(b->IsHovered());
+    CHECK(lit() == 1);
+    // Onto the separator, then the disabled item: neither can be lit, and nothing else stays lit.
+    const Rect cb = c->GetScreenBounds();
+    const Rect ob = off->GetScreenBounds();
+    REQUIRE(ob.y > cb.y + cb.height + 1.0f);
+    d->InjectMouseMove(core::Float2{cb.x + cb.width * 0.5f, (cb.y + cb.height + ob.y) * 0.5f});
+    CHECK(lit() == 0);
+    (void)d->InjectKeyDown(static_cast<core::u32>(KeyCode::Down)); // from none, round to the first
+    CHECK(a->IsLit());
+    d->InjectMouseMove(centre(*off));
+    CHECK(lit() == 0);
+    d->InjectMouseMove(centre(*a));
+    CHECK(a->IsLit());
+    CHECK(lit() == 1);
 }
 
 TEST_CASE("menu: in markup, items, separators and nested menus; an item reports activate")

@@ -253,11 +253,15 @@ export namespace experimental::gui
             return kGutter + textW + shortcutW + kRightPad;
         }
 
-        // Theming: menuitem::highlight (hover row background); text via the hook below.
+        // Theming: menuitem::highlight (the lit row's background); text via the hook below.
         void CollectStyleParts(core::Array<core::StringView>& out) const override
         {
             out.PushBack(core::StringView(u8"highlight"));
         }
+        /// Lit: focused, or (a submenu item) with its submenu open. Not hovered as such: the pointer
+        /// moves the focus to the row it enters, so the pointer and the keys share one highlight
+        /// (two rows lit at once, the keys' and the pointer's, was ambiguous).
+        [[nodiscard]] virtual bool IsLit() const { return IsFocused(); }
 
     protected:
         // Its label and shortcut draw in its text style.
@@ -341,9 +345,6 @@ export namespace experimental::gui
             if (m_shortcut.GetString().Size() > 0)
                 m_shortcut.Draw(ctx, inner);
         }
-
-        /// Lit: under the pointer, focused, or (a submenu item) with its submenu open.
-        [[nodiscard]] virtual bool IsLit() const { return IsHovered() || IsFocused(); }
 
         // Draw a check mark stroked inside the gutter (a check is not mirrored, only placed).
         void DrawCheck(DrawContext& ctx, const Rect& b, bool rtl) const
@@ -1010,7 +1011,8 @@ export namespace experimental::gui
 
         // A row was hovered: an open submenu of another row closes (unless the pointer is heading
         // for it: then a moment later, if it rests on this row); a submenu row opens its own; an
-        // item takes focus, so the keys go on from where the pointer is.
+        // item takes focus, so the keys go on from where the pointer is, and a row that cannot (a
+        // separator, a disabled item) gives it to the menu, lighting none.
         void OnRowHovered(MenuRow* row)
         {
             Menu* open = CurrentSubMenu();
@@ -1024,6 +1026,8 @@ export namespace experimental::gui
                 open->Close();
             if (row->IsSelectable() && row->IsTreeEnabled())
                 row->RequestFocus();
+            else if (IsFocusWithin())
+                RequestFocus();
             if (MenuSubItem* sub = core::Cast<MenuSubItem>(row))
                 OpenSubMenuFor(sub, false);
         }

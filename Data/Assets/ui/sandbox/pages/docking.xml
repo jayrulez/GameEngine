@@ -13,7 +13,7 @@
             <Button id="docking-torn" class="docking-button" text="A torn tab dims" command="docking.torn-tab"/>
         </Panel>
         <Label class="docking-keys" white-space="normal"
-               text="Docking is the pointer's: drag a tab, with Shift to float it; close one by its cross or a middle click. From the keyboard, a focused tab's context menu (Shift+F10) is Move to and Close, and Ctrl+Shift+D picks a tab up."/>
+               text="Docking is the pointer's: drag a tab, with Shift to float it; close one by its cross or a middle click. The arrow at a strip's end lists its tabs, and dragged, carries the whole stack; the cross past it closes them all. From the keyboard, a focused tab's context menu (Shift+F10) is Move to and Close, and Ctrl+Shift+D picks a tab up."/>
         <Label class="caption docking-keys" white-space="normal" text="DockArea (GUI.Docking) over a DockController: a DockSpace for the main surface and a window for each float; splits are Splitters, stacks TabViews, the panels' contents kept as they move."/>
     </Panel>
 </Panel>

@@ -43,6 +43,10 @@ export namespace experimental::gui
             dockspace { edge-band: var(--dock-edge, 64px); surface-band: var(--dock-surface-edge, 20px);
                         torn-tab: var(--dock-torn-tab, dim); }
             tab.dock-torn, tabview.dock-torn { opacity: var(--dock-torn-opacity, 0.45); }
+            tabview.dock-stack tablist, tabview.dock-stack closeall { color: var(--dock-strip-button, var(--text-dim)); }
+            tabview.dock-stack tablist:hover, tabview.dock-stack closeall:hover {
+                background-color: var(--dock-strip-button-hover, var(--control-hover));
+            }
             window.dock-float.dock-dragging { opacity: var(--dock-dragging-opacity, 0.6); }
             panel.dock-preview {
                 background-color: var(--dock-preview, rgba(80, 150, 255, 0.25));
@@ -146,6 +150,10 @@ export namespace experimental::gui
             // and Godot's docks show it), and a middle click closes one; a sheet's `close-display`
             // says otherwise.
             GetBar()->SetCloseDisplay(TabCloseDisplay::Hover);
+            // Its strip's end, as Dear ImGui's: the list button always (clicked it lists the tabs,
+            // dragged it carries the stack), and past it a cross closing every closable tab.
+            GetBar()->SetListDisplay(TabListDisplay::Always);
+            GetBar()->SetCloseAll(true);
         }
         [[nodiscard]] DockNodeId GetNode() const noexcept { return m_node; }
         [[nodiscard]] DockSpace* GetSpace() const noexcept { return m_space; }
@@ -563,12 +571,26 @@ export namespace experimental::gui
             const DockSurface* surface = id != nullptr ? m_controller->GetLayout().FindSurface(static_cast<DockSurfaceId>(*id)) : nullptr;
             return surface != nullptr && surface->Kind == DockSurfaceKind::Floating ? surface->Id : kNoDock;
         }
-        /// What a dock drag carries (a panel or a floating surface); false for any other drag.
+        /// The stack a drag carries whole (its strip's grip dragged); kNoDock for anything else.
+        [[nodiscard]] DockNodeId DraggedStack(const DragPayload& payload) const
+        {
+            if (m_controller == nullptr || payload.Type.AsView() != core::StringView(kDockStackDragType))
+                return kNoDock;
+            const u64* id = payload.Value.TryGet<u64>();
+            const DockNode* stack = id != nullptr ? m_controller->GetLayout().FindNode(static_cast<DockNodeId>(*id)) : nullptr;
+            return stack != nullptr && stack->IsStack() ? stack->Id : kNoDock;
+        }
+        /// What a dock drag carries (a panel, a floating surface or a stack); false for any other drag.
         [[nodiscard]] bool Dragged(const DragPayload& payload, DockDragged& out) const
         {
             if (const String* panel = DraggedPanel(payload))
             {
                 out = DockDragged{*panel, kNoDock};
+                return true;
+            }
+            if (const DockNodeId stack = DraggedStack(payload); stack != kNoDock)
+            {
+                out = DockDragged{String{}, kNoDock, stack};
                 return true;
             }
             const DockSurfaceId surface = DraggedSurface(payload);
@@ -715,6 +737,34 @@ export namespace experimental::gui
             tab.SetDisplayed(false);
         }
 
+        // A drag of the whole stack from its grip: the pointer's (the keyboard moves a stack's panels
+        // by its tab menu), of a stack that has panels.
+        bool StartStackDrag(DockNodeId stack, DragRequest& request) const
+        {
+            const DockNode* node = m_controller != nullptr ? m_controller->GetLayout().FindNode(stack) : nullptr;
+            if (request.FromKeyboard || node == nullptr || !node->IsStack() || node->Panels.IsEmpty())
+                return false;
+            request.Payload.Type = String(kDockStackDragType);
+            request.Payload.Value = core::Variant::From<u64>(static_cast<u64>(stack));
+            request.Payload.Label = StackName(stack);
+            request.Payload.Allowed = DropEffectsMove;
+            return true;
+        }
+        // The stack holding `grip` dimmed while it is carried (the grip's ancestors asked: a drop may
+        // have moved it into another widget, or let it go).
+        static void DimStackOf(Node& grip, bool dim)
+        {
+            for (Node* n = &grip; n != nullptr; n = n->GetParent())
+                if (DockStack* stack = Cast<DockStack>(n))
+                {
+                    if (dim)
+                        stack->AddClass(core::StringView(u8"dock-torn"));
+                    else
+                        stack->RemoveClass(core::StringView(u8"dock-torn"));
+                    return;
+                }
+        }
+
         [[nodiscard]] Shown* Find(DockNodeId node) noexcept
         {
             for (Shown& shown : m_shown)
@@ -831,6 +881,29 @@ export namespace experimental::gui
                         query.Refuse(core::StringView(u8"it is not a docked panel"));
                 });
                 bar->SetTabTaker([self, bar](Tab&, i32) { self->TakeOffer(*bar); });
+                // A whole stack over the strip goes in as tabs (the bar asks only of tabs); the outer
+                // third of the surface's band wins, as for a tab.
+                bar->SetOnDragQuery([self, id, bar](DropQuery& query)
+                {
+                    DockDragged dragged;
+                    if (AsksToFloat(query) || !self->Dragged(query.Payload, dragged) || !dragged.IsStack())
+                        return;
+                    DockDrop drop{DockDropKind::Middle, id, kNoDock, -1, DockSide::Start};
+                    DockDrop edge;
+                    if (self->DropAt(self->FromNode(*bar, query.Local), kNoDock, edge, 1.0f / 3.0f))
+                        drop = edge;
+                    self->Offer(*bar, query, dragged, drop);
+                });
+                (void)bar->AddEventListener(EventType::Drop, [self, bar](const Event& event)
+                {
+                    if (self->DraggedStack(static_cast<const DragEvent&>(event).Payload) != kNoDock)
+                        self->TakeOffer(*bar);
+                });
+                // Its grip: the list button, dragged, carries the whole stack (dimmed meanwhile).
+                Node* grip = bar->GetListButton();
+                grip->SetDragSource([self, id](DragRequest& request) { return self->StartStackDrag(id, request); });
+                (void)grip->AddEventListener(EventType::DragStart, [grip](const Event&) { DimStackOf(*grip, true); });
+                grip->SetOnDragEnd([grip](const DragResult&) { DimStackOf(*grip, false); });
                 bar->SetOnTabTorn([self, id](Tab& tab, bool torn) { self->NoteTorn(id, tab, torn); });
                 (void)bar->AddEventListener(EventType::DragLeave, [self, bar](const Event&) { self->Withdraw(*bar); });
                 made->SetGroup(String(u8"dock"));

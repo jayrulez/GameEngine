@@ -77,16 +77,20 @@ export namespace experimental::gui
     };
     /// A docked panel dropped: the move it is, done on `layout` (a copy, to preview it and say why
     /// not, or the controller's).
-    /// What a dock drag carries: a docked panel (a tab torn out) or a whole floating surface (a
-    /// float dragged by its title, D5).
+    /// What a dock drag carries: a docked panel (a tab torn out), a whole floating surface (a
+    /// float dragged by its title, D5) or a whole stack (its strip's grip).
     struct DockDragged
     {
         String Panel;
         DockSurfaceId Surface = kNoDock;
+        DockNodeId Stack = kNoDock;
         [[nodiscard]] bool IsSurface() const noexcept { return Surface != kNoDock; }
+        [[nodiscard]] bool IsStack() const noexcept { return Stack != kNoDock; }
     };
     /// The drag type of a whole floating surface; its value the surface's id.
     inline constexpr const char8_t* kDockSurfaceDragType = u8"lab/dock-surface";
+    /// The drag type of a whole stack; its value the stack's id.
+    inline constexpr const char8_t* kDockStackDragType = u8"lab/dock-stack";
 
     inline DockOutcome ApplyDrop(DockLayout& layout, core::StringView panel, const DockDrop& drop)
     {
@@ -109,9 +113,18 @@ export namespace experimental::gui
         return DockOutcome::Refuse(u8"no such drop");
     }
     /// A drop of what a drag carries: a panel as above; a floating surface docked whole (into the
-    /// stack over its strip or its middle, beside it, along the surface's edge).
+    /// stack over its strip or its middle, beside it, along the surface's edge); a stack moved whole
+    /// the same ways (at a tab's place over a strip).
     inline DockOutcome ApplyDrop(DockLayout& layout, const DockDragged& dragged, const DockDrop& drop)
     {
+        if (dragged.IsStack())
+            switch (drop.Kind)
+            {
+            case DockDropKind::Tab: return layout.MoveStackInto(dragged.Stack, drop.Stack, drop.Index);
+            case DockDropKind::Middle: return layout.MoveStackInto(dragged.Stack, drop.Stack);
+            case DockDropKind::Beside: return layout.MoveStackBeside(dragged.Stack, drop.Stack, drop.Side);
+            case DockDropKind::Edge: return layout.MoveStackToEdge(dragged.Stack, drop.Surface, drop.Side);
+            }
         if (!dragged.IsSurface())
             return ApplyDrop(layout, dragged.Panel.AsView(), drop);
         switch (drop.Kind)
@@ -127,6 +140,13 @@ export namespace experimental::gui
     [[nodiscard]] inline Array<String> PanelsOf(const DockLayout& layout, const DockDragged& dragged)
     {
         Array<String> out;
+        if (dragged.IsStack())
+        {
+            if (const DockNode* stack = layout.FindNode(dragged.Stack))
+                for (const String& panel : stack->Panels)
+                    out.PushBack(panel);
+            return out;
+        }
         if (!dragged.IsSurface())
         {
             out.PushBack(dragged.Panel);

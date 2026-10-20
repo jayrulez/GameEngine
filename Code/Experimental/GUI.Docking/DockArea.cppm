@@ -319,6 +319,24 @@ export namespace experimental::gui
                 query.Accept(DropEffect::Move);
                 return;
             }
+            // A whole stack from its grip, floated as it is.
+            if (const DockNodeId stack = m_main->DraggedStack(query.Payload); stack != kNoDock)
+            {
+                const DockNode* node = m_controller->GetLayout().FindNode(stack);
+                const core::Float2 size = node->Panels.IsEmpty() ? FloatSizeOf(kFloatSize) : FloatSizeFrom(node->Panels[0].AsView());
+                const Rectangle bounds = FloatBoundsAt(query.Local, size, core::Float2{Min(60.0f, size.x * 0.25f), 14.0f});
+                DockLayout after = m_controller->GetLayout();
+                if (DockOutcome refused = after.FloatStack(stack, bounds); !refused.Ok())
+                {
+                    HidePreview();
+                    query.Refuse(refused.Refused.AsView());
+                    return;
+                }
+                query.Accept(DropEffect::Move);
+                m_floatStack = stack;
+                ShowFloatPreview(bounds);
+                return;
+            }
             const String* panel = m_main->DraggedPanel(query.Payload);
             if (panel == nullptr)
                 return;
@@ -334,10 +352,7 @@ export namespace experimental::gui
             }
             query.Accept(DropEffect::Move);
             m_floatPanel = dragged;
-            m_previewBounds = bounds;
-            m_preview->SetVisible(true);
-            m_preview->ToFront();
-            RequestLayout();
+            ShowFloatPreview(bounds);
         }
         void OnDragLeave(const DragEvent&) override
         {
@@ -354,9 +369,14 @@ export namespace experimental::gui
                 return;
             }
             const String panel = core::Move(m_floatPanel);
+            const DockNodeId stack = m_floatStack;
             const Rectangle bounds = m_previewBounds;
             HidePreview();
-            if (!panel.IsEmpty() && m_controller != nullptr)
+            if (m_controller == nullptr)
+                return;
+            if (stack != kNoDock)
+                (void)m_controller->Edit([&](DockLayout& layout) { return layout.FloatStack(stack, bounds); });
+            else if (!panel.IsEmpty())
                 (void)m_controller->Edit([&](DockLayout& layout) { return layout.Float(panel.AsView(), bounds); });
         }
 
@@ -444,9 +464,18 @@ export namespace experimental::gui
             const UIWidget* stack = space != nullptr ? space->WidgetOf(m_controller->GetLayout().StackOf(panel)) : nullptr;
             return FloatSizeOf(stack != nullptr ? stack->GetSize() : kFloatSize);
         }
+        // The float's preview at `bounds`, over everything.
+        void ShowFloatPreview(const Rectangle& bounds)
+        {
+            m_previewBounds = bounds;
+            m_preview->SetVisible(true);
+            m_preview->ToFront();
+            RequestLayout();
+        }
         void HidePreview()
         {
             m_floatPanel = String{};
+            m_floatStack = kNoDock;
             if (m_preview->IsVisible())
                 m_preview->SetVisible(false);
         }
@@ -501,6 +530,7 @@ export namespace experimental::gui
         RefPtr<Panel> m_preview; // where a float asked for would stand
         Rectangle m_previewBounds{0.0f, 0.0f, 0.0f, 0.0f};
         String m_floatPanel; // the panel it is for
+        DockNodeId m_floatStack = kNoDock; // or the stack
         DockSurfaceId m_moving = kNoDock; // a float dragged with Shift: only moved
         struct LastFocused
         {

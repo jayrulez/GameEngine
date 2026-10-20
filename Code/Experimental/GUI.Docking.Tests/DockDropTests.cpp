@@ -6,7 +6,9 @@
 // middle into it, over its edge band beside it, over the surface's band along the whole edge. Each
 // drop is the layout's move, tried on a copy first: the preview is where the panel would be, and a
 // move the layout refuses shows its reason and does nothing. Meanwhile the torn tab dims (or its
-// strip closes up, as the theme says), shown again as the layout has it when the drag ends.
+// strip closes up, as the theme says), shown again as the layout has it when the drag ends. A
+// stack's grip (its strip's list button) carries the whole stack the same ways, and lists its tabs
+// when clicked; the cross past it closes every closable panel of the stack.
 #include "DockingTestBed.h"
 
 using namespace experimental::gui;
@@ -219,4 +221,90 @@ TEST_CASE("dock drop: a tab moved a few pixels along its strip is a drag at once
     CHECK(stack->Panels[0] == SV(u8"inspector"));
     CHECK(stack->Panels[1] == SV(u8"scene"));
     CHECK(bed.TabOf(u8"scene")->IsDisplayed());
+}
+
+namespace
+{
+    // A drag of `panel`'s stack by its strip's grip, past the threshold.
+    void GrabStack(Bed& bed, const char8_t* panel)
+    {
+        Node* grip = bed.ViewOf(panel)->GetBar()->GetListButton();
+        REQUIRE(grip->IsDisplayed());
+        const core::Float2 at = Bed::Centre(Bed::Bounds(*grip));
+        bed.D().InjectMouseDown(at, MouseButton::Left);
+        bed.D().InjectMouseMove(core::Float2{at.x - 20.0f, at.y + 20.0f});
+        bed.D().InjectMouseMove(core::Float2{at.x - 30.0f, at.y + 30.0f});
+        REQUIRE(bed.D().IsDragging());
+    }
+}
+
+TEST_CASE("dock drop: a stack's grip, dragged, carries the whole stack: into a stack over its strip, beside one by its edge")
+{
+    {
+        Bed bed;
+        TabView* central = bed.ViewOf(u8"scene");
+        GrabStack(bed, u8"scene"); // scene and inspector
+        CHECK(central->HasClass(SV(u8"dock-torn"))); // the stack dims while it is carried
+        CHECK(bed.ViewOf(u8"hierarchy")->GetBar()->GetTabListMenu() == nullptr);
+        const core::Float2 strip = Bed::Centre(Bed::Bounds(*bed.TabOf(u8"hierarchy")));
+        bed.Over(strip);
+        CHECK(bed.D().GetDropTarget() == bed.ViewOf(u8"hierarchy")->GetBar());
+        Rect preview;
+        REQUIRE(bed.Preview(preview));
+        bed.Release(strip);
+        const DockNode& into = *bed.controller.GetLayout().FindNode(bed.StackOf(u8"hierarchy"));
+        REQUIRE(into.Panels.Size() == 3u);
+        CHECK(into.Panels[1] == SV(u8"scene"));
+        CHECK(into.Panels[2] == SV(u8"inspector"));
+        // The central stack stays, emptied; the drag opened no list.
+        CHECK(bed.controller.GetLayout().FindNode(bed.controller.GetLayout().CentralStack())->Panels.IsEmpty());
+        CHECK_FALSE(central->HasClass(SV(u8"dock-torn")));
+        CHECK(central->GetBar()->GetTabListMenu() == nullptr);
+    }
+    {
+        Bed bed;
+        const DockNodeId console = bed.StackOf(u8"console");
+        GrabStack(bed, u8"console");
+        // Into the hierarchy's bottom edge band: the stack beside it, below.
+        const Rect h = Bed::Bounds(*bed.space->WidgetOf(bed.StackOf(u8"hierarchy")));
+        const core::Float2 low{h.x + h.width * 0.5f, h.y + h.height - 40.0f}; // past the surface's own band
+        bed.Over(low);
+        bed.Release(low);
+        CHECK(bed.StackOf(u8"console") == console); // the same stack, moved
+        const DockLayout& layout = bed.controller.GetLayout();
+        const DockNode& split = *layout.FindNode(layout.FindNode(console)->Parent);
+        CHECK(split.Axis == DockAxis::Vertical);
+        CHECK(split.Children[0] == bed.StackOf(u8"hierarchy"));
+        CHECK(split.Children[1] == console);
+    }
+}
+
+TEST_CASE("dock drop: a stack's grip, clicked, lists its tabs; the cross past it closes every closable panel of the stack")
+{
+    Bed bed;
+    DockPanelDescription fixed;
+    fixed.Id = core::String(u8"fixed");
+    fixed.Closable = false;
+    fixed.Factory = []() { return core::RefPtr<Node>(core::MakeRef<Panel>(core::DefaultAllocator())); };
+    REQUIRE(bed.controller.Register(core::Move(fixed)));
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"fixed"), bed.StackOf(u8"scene"), 0); }).Ok());
+    bed.Lay();
+    TabBar& bar = *bed.ViewOf(u8"scene")->GetBar();
+    const core::Float2 grip = Bed::Centre(Bed::Bounds(*bar.GetListButton()));
+    bed.D().InjectMouseDown(grip, MouseButton::Left);
+    bed.D().InjectMouseUp(grip, MouseButton::Left);
+    Menu* list = bar.GetTabListMenu();
+    REQUIRE(list != nullptr);
+    CHECK(list->ItemCount() == 3);
+    list->Close();
+
+    REQUIRE(bar.GetCloseAllPart()->IsDisplayed());
+    const core::Float2 cross = Bed::Centre(Bed::Bounds(*bar.GetCloseAllPart()));
+    bed.D().InjectMouseDown(cross, MouseButton::Left);
+    bed.D().InjectMouseUp(cross, MouseButton::Left);
+    CHECK(bed.StackOf(u8"scene") == kNoDock);
+    CHECK(bed.StackOf(u8"inspector") == kNoDock);
+    CHECK(bed.StackOf(u8"fixed") == bed.controller.GetLayout().CentralStack()); // it cannot be closed
+    bed.Lay();
+    CHECK_FALSE(bed.ViewOf(u8"fixed")->GetBar()->GetCloseAllPart()->IsDisplayed()); // nothing left to close
 }

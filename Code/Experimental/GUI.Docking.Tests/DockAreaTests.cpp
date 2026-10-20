@@ -7,7 +7,8 @@
 // user does to them (moved or resized, closed); a float is docked into like the main surface; a tab
 // dragged with Shift, Move to's Float and dock.float float a panel; a float dragged by its title
 // docks whole over a target, is only moved with Shift, and goes back on Escape; the dock keys reach
-// across the surfaces (past a float's edge, the surface cycle) and so does the Move to menu.
+// across the surfaces (past a float's edge, the surface cycle) and so does the Move to menu; a
+// stack's grip dragged with Shift floats the whole stack.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -531,4 +532,45 @@ TEST_CASE("dock area: a float's Move to menu lists the other surfaces' stacks, n
     CHECK(bed.controller.GetLayout().StackOf(SV(u8"profiler")) == bed.controller.GetLayout().StackOf(SV(u8"scene")));
     CHECK(bed.area->GetFloatCount() == 1u);
     CHECK(FocusedStackOf(bed) == bed.controller.GetLayout().StackOf(SV(u8"scene")));
+}
+
+TEST_CASE("dock area: a stack's grip dragged with Shift floats the whole stack at the pointer; a float closed whole by its cross")
+{
+    Bed bed;
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertBeside(SV(u8"profiler"), l.CentralStack(), DockSide::End, 0.4f); }).Ok());
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.StackOf(SV(u8"profiler"))); }).Ok());
+    bed.Lay();
+    const DockNodeId stack = bed.controller.GetLayout().StackOf(SV(u8"profiler"));
+    TabView* view = Cast<TabView>(bed.area->GetMainSpace()->WidgetOf(stack));
+    REQUIRE(view != nullptr);
+    const core::Float2 grip = [&]()
+    {
+        const Rect r = view->GetBar()->GetListButton()->GetScreenBounds();
+        return core::Float2{r.x + r.width * 0.5f, r.y + r.height * 0.5f};
+    }();
+    const core::Float2 over{300.0f, 300.0f};
+    bed.D().InjectMouseDown(grip, MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{grip.x - 20.0f, grip.y + 10.0f}, KeyModShift);
+    bed.D().InjectMouseMove(over, KeyModShift);
+    REQUIRE(bed.D().IsDragging());
+    CHECK(bed.D().GetDropTarget() == bed.area.Get());
+    core::Rectangle preview;
+    REQUIRE(bed.area->GetFloatPreview(preview));
+    bed.D().InjectMouseUp(over, MouseButton::Left, KeyModShift);
+    bed.Lay();
+    REQUIRE(bed.area->GetFloatCount() == 1u);
+    DockFloat* window = bed.area->GetFloat(0);
+    const DockLayout& layout = bed.controller.GetLayout();
+    CHECK(layout.FindSurface(window->GetSurface())->Root == stack); // the stack itself, floated
+    CHECK(layout.FindNode(stack)->Panels.Size() == 2u);
+    CHECK(window->GetPosition().x == doctest::Approx(preview.x));
+
+    // Its strip's cross closes both, and the float with them.
+    TabView* floated = Cast<TabView>(window->GetSpace()->WidgetOf(stack));
+    REQUIRE(floated != nullptr);
+    floated->GetBar()->CloseAll();
+    CHECK(bed.controller.GetLayout().StackOf(SV(u8"profiler")) == kNoDock);
+    CHECK(bed.controller.GetLayout().StackOf(SV(u8"memory")) == kNoDock);
+    bed.Lay();
+    CHECK(bed.area->GetFloatCount() == 0u);
 }

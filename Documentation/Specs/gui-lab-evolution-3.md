@@ -273,8 +273,8 @@ stack (the bands are the pointer's aim; the keyboard has none). `DefineDockingCo
 surface's edge, the focus going with the panel; left and right as the screen runs), `dock.maximize`
 (and back), `dock.close` and `dock.move-to`, with keys. "Move to" is a menu, from a tab's context
 menu or the command: into each other stack, beside one on each side, along the surface's edges,
-each place the layout refuses shown disabled; a list of the places, not yet a map of them. Not yet:
-a stack's own grip carrying the whole stack.
+each place the layout refuses shown disabled; a list of the places, not yet a map of them. A stack's
+own grip came after D5 (below).
 
 D4, the drag's feel, after the user tried it (2026-10-20): the drag showed only the payload's
 label beside the pointer, and the torn tab sat in its strip as if nothing were dragged. Surveyed:
@@ -305,7 +305,7 @@ Qt-ADS's), the preview the room its content would take; with Shift it only moves
 back. On the way, in the core: a drag source may follow the pointer itself with no preview, a window
 reports a move or resize the user made and its title bar can start a drag instead, and a tab bar's
 owner may pass a tab offered on. The controller's pass over its views takes views made and ended as
-it goes. Not yet: a stack's own grip carrying the stack.
+it goes.
 
 The dock keys across surfaces (2026-10-20). A float lies over the main surface, not beside it, so an
 arrow alone cannot reach most floats; no surveyed UI crosses overlapping windows with arrows alone
@@ -329,6 +329,17 @@ Closing is the pointer's too: a closable panel's tab shows its close part when c
 Visual Studio's and Godot's docks do), a middle click closes it, and the tab's context menu ends with
 Close, disabled for a panel that cannot be closed. Unbinding `dock.close` had left a docked panel no
 way to close.
+
+A stack's grip (the user's choice, after Dear ImGui's, 2026-10-20): a dock strip's end always shows
+its list button, which clicked lists the tabs and dragged carries the whole stack, to the same places
+a tab goes (into a stack over its strip or its middle, beside one, along an edge; with Shift, a float
+of the stack as it is), the stack dimmed meanwhile; past it a cross closes every closable panel of the
+stack. Both are parts a sheet styles (`tablist`, `closeall`, the docking sheet's
+`--dock-strip-button` tokens), and they need no room past the tabs, so a full strip keeps its grip.
+In the layout a stack moves whole: its panels into another stack, the stack itself beside one, along
+an edge or floated, the central stack's panels going while it stays. In the core, a tab strip's list
+button may always show (`list-display`), and a `close-all` part asks to close every closable tab,
+by place, as an owner may make its tabs again after each close.
 
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

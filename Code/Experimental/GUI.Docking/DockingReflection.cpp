@@ -22,6 +22,7 @@ namespace experimental::gui
         builder.AccessorProperty<&DockSpace::GetEdgeBand, &DockSpace::SetEdgeBand>("edgeBand").PropAttribute("css", core::String(u8"edge-band"));
         builder.AccessorProperty<&DockSpace::GetSurfaceBand, &DockSpace::SetSurfaceBand>("surfaceBand")
             .PropAttribute("css", core::String(u8"surface-band"));
+        builder.AccessorProperty<&DockSpace::GetTornTabName, &DockSpace::SetTornTabName>("tornTab").PropAttribute("css", core::String(u8"torn-tab"));
     }
 
     RTTI_DEFINE_OBJECT(DockStack, "rtti::gui::docking")

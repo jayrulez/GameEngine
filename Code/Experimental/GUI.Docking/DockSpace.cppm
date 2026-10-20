@@ -40,7 +40,9 @@ export namespace experimental::gui
             tabview.dock-stack { background-color: var(--dock-stack-background, var(--panel)); }
             tabview.dock-central { background-color: var(--dock-central-background, var(--surface)); }
             label.dock-placeholder { color: var(--dock-placeholder, var(--muted)); padding: 16px; }
-            dockspace { edge-band: var(--dock-edge, 64px); surface-band: var(--dock-surface-edge, 20px); }
+            dockspace { edge-band: var(--dock-edge, 64px); surface-band: var(--dock-surface-edge, 20px);
+                        torn-tab: var(--dock-torn-tab, close); }
+            tab.dock-torn, tabview.dock-torn { opacity: var(--dock-torn-opacity, 0.45); }
             panel.dock-preview {
                 background-color: var(--dock-preview, rgba(80, 150, 255, 0.25));
                 border: 2px solid var(--dock-preview-border, var(--accent));
@@ -84,6 +86,13 @@ export namespace experimental::gui
     }
 
     /// A way on the screen, for the directional commands.
+    /// What a tab torn out of its stack leaves while it is dragged (DockSpace::SetTornTab).
+    enum class DockTornTab : u8
+    {
+        Close, ///< its strip closes up, a neighbour's panel shown
+        Dim,   ///< it stays, dimmed
+    };
+
     enum class DockDirection : u8
     {
         Left,
@@ -386,6 +395,16 @@ export namespace experimental::gui
         [[nodiscard]] f32 GetSurfaceBand() const noexcept { return m_surfaceBand; }
         void SetSurfaceBand(f32 band) noexcept { m_surfaceBand = Max(0.0f, band); }
 
+        /// What a tab torn out of its stack leaves while it is dragged (`torn-tab`, the theme's
+        /// `--dock-torn-tab`): `close`, its strip closing up and its stack showing a neighbour's
+        /// panel; `dim`, it stays where it is, dimmed. Nothing moves in the layout until the drop,
+        /// and a drag that ends without one shows the stack as it was. A stack's only tab, or a tab
+        /// picked up from the keyboard (the focus stays on it), is dimmed either way.
+        [[nodiscard]] DockTornTab GetTornTab() const noexcept { return m_tornTab; }
+        void SetTornTab(DockTornTab torn) noexcept { m_tornTab = torn; }
+        [[nodiscard]] String GetTornTabName() const { return String(m_tornTab == DockTornTab::Dim ? u8"dim" : u8"close"); }
+        void SetTornTabName(const String& name) { m_tornTab = name.AsView() == core::StringView(u8"dim") ? DockTornTab::Dim : DockTornTab::Close; }
+
         /// The docked panel a drag carries (a torn-out tab of a page some view of the controller
         /// shows); null for anything else.
         [[nodiscard]] const String* DraggedPanel(const DragPayload& payload) const
@@ -495,6 +514,46 @@ export namespace experimental::gui
             Array<Page> Pages; // a stack's, by panel
             bool Used = false;
         };
+
+        // A tab of `stack` torn out (`torn`) or its drag over: closed up or dimmed meanwhile, then
+        // shown again and the stack's panel as the layout has it (where the drop left it).
+        void NoteTorn(DockNodeId stack, Tab& tab, bool torn)
+        {
+            Shown* shown = Find(stack);
+            TabView* view = shown != nullptr ? Cast<TabView>(shown->Widget.Get()) : nullptr;
+            if (!torn)
+            {
+                tab.SetDisplayed(true);
+                tab.RemoveClass(core::StringView(u8"dock-torn"));
+                if (view == nullptr)
+                    return;
+                view->RemoveClass(core::StringView(u8"dock-torn"));
+                const DockNode* node = m_controller != nullptr ? m_controller->GetLayout().FindNode(stack) : nullptr;
+                if (node != nullptr && node->Kind == DockNodeKind::Stack && !node->Panels.IsEmpty())
+                    view->SetSelectedIndex(static_cast<i32>(Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)));
+                return;
+            }
+            if (view == nullptr)
+                return;
+            TabBar& bar = *view->GetBar();
+            const EventDispatcher* d = GetEventDispatcher();
+            const bool keyboard = d != nullptr && d->IsKeyboardDrag();
+            if (bar.GetTabCount() <= 1)
+            {
+                view->AddClass(core::StringView(u8"dock-torn")); // its stack goes with it: dimmed whole
+                return;
+            }
+            if (m_tornTab == DockTornTab::Dim || keyboard)
+            {
+                tab.AddClass(core::StringView(u8"dock-torn"));
+                return;
+            }
+            // Closed up: a neighbour's panel shown in its place (the view's selection, not the layout's).
+            const i32 at = bar.IndexOf(&tab);
+            if (bar.GetSelectedIndex() == at)
+                view->SetSelectedIndex(at + 1 < bar.GetTabCount() ? at + 1 : at - 1);
+            tab.SetDisplayed(false);
+        }
 
         [[nodiscard]] Shown* Find(DockNodeId node) noexcept
         {
@@ -610,6 +669,7 @@ export namespace experimental::gui
                         query.Refuse(core::StringView(u8"it is not a docked panel"));
                 });
                 bar->SetTabTaker([self, bar](Tab&, i32) { self->TakeOffer(*bar); });
+                bar->SetOnTabTorn([self, id](Tab& tab, bool torn) { self->NoteTorn(id, tab, torn); });
                 (void)bar->AddEventListener(EventType::DragLeave, [self, bar](const Event&) { self->Withdraw(*bar); });
                 made->SetGroup(String(u8"dock"));
                 made->SetReorderable(true);
@@ -939,6 +999,7 @@ export namespace experimental::gui
         Array<Shown> m_shown;
         f32 m_edgeBand = 64.0f;
         f32 m_surfaceBand = 20.0f;
+        DockTornTab m_tornTab = DockTornTab::Close;
         RefPtr<Panel> m_preview;
         RefPtr<Menu> m_moveMenu;
         Rect m_previewBounds{};

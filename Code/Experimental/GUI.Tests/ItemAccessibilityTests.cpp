@@ -48,8 +48,8 @@ namespace
 
     struct ListBed
     {
+        StringListModel model; // first: it outlives the view that registers with it
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
-        StringListModel model;
         core::RefPtr<ListView> list = core::MakeRef<ListView>(core::DefaultAllocator());
         explicit ListBed(int count) : model(Numbered(count))
         {
@@ -134,17 +134,23 @@ TEST_CASE("item-access: the focus is the current item; End reaches the last of a
 TEST_CASE("item-access: an item's id follows it through scrolling away and back, and rows inserted above")
 {
     ListBed bed(1000);
-    const u64 fifth = bed.ItemNode(bed.Tree(), 5)->Id;
+    // Each tree held while its nodes are read (they live in it).
+    AccessTreeUpdate tree = bed.Tree();
+    REQUIRE(bed.ItemNode(tree, 5) != nullptr);
+    const u64 fifth = bed.ItemNode(tree, 5)->Id;
     bed.list->ScrollToItem(500);
     (void)bed.root->UpdateLayout();
-    CHECK(bed.ItemNode(bed.Tree(), 5) == nullptr); // far from the rows made: no node now
+    tree = bed.Tree();
+    CHECK(bed.ItemNode(tree, 5) == nullptr); // far from the rows made: no node now
     bed.list->ScrollToItem(0);
     (void)bed.root->UpdateLayout();
-    REQUIRE(bed.ItemNode(bed.Tree(), 5) != nullptr);
-    CHECK(bed.ItemNode(bed.Tree(), 5)->Id == fifth);
+    tree = bed.Tree();
+    REQUIRE(bed.ItemNode(tree, 5) != nullptr);
+    CHECK(bed.ItemNode(tree, 5)->Id == fifth);
     bed.model.InsertItem(0, SV(u8"new"));
     (void)bed.root->UpdateLayout();
-    const AccessNode* moved = bed.ItemNode(bed.Tree(), 6);
+    tree = bed.Tree();
+    const AccessNode* moved = bed.ItemNode(tree, 6);
     REQUIRE(moved != nullptr);
     CHECK(moved->Id == fifth); // the same item, a place further down
     CHECK(moved->Name == core::String(u8"item 4"));
@@ -154,7 +160,7 @@ TEST_CASE("item-access: an item's id follows it through scrolling away and back,
     (void)bed.root->UpdateLayout();
     bed.list->ScrollToItem(290);
     (void)bed.root->UpdateLayout();
-    const AccessTreeUpdate tree = bed.Tree();
+    tree = bed.Tree();
     i32 last = 0;
     for (const u64 child : bed.ListNode(tree)->Children)
     {
@@ -168,7 +174,8 @@ TEST_CASE("item-access: an item's id follows it through scrolling away and back,
 TEST_CASE("item-access: a screen reader focuses an item off screen, scrolling to it; a removed item refuses")
 {
     ListBed bed(1000);
-    const AccessNode* below = bed.ItemNode(bed.Tree(), 16);
+    const AccessTreeUpdate tree = bed.Tree();
+    const AccessNode* below = bed.ItemNode(tree, 16);
     REQUIRE(below != nullptr);
     REQUIRE(below->Has(AccessOffscreen));
     AccessActionRequest focus;
@@ -181,7 +188,9 @@ TEST_CASE("item-access: a screen reader focuses an item off screen, scrolling to
     CHECK(bed.list->IsItemSelected(15));
     CHECK(bed.list->RowForItem(15) != nullptr); // made: scrolled into view
 
-    const u64 gone = bed.ItemNode(bed.Tree(), 3)->Id;
+    const AccessTreeUpdate before = bed.Tree();
+    REQUIRE(bed.ItemNode(before, 3) != nullptr);
+    const u64 gone = bed.ItemNode(before, 3)->Id;
     bed.model.RemoveItem(2);
     bed.model.RemoveItem(2); // "item 2", then "item 3"
     (void)bed.root->UpdateLayout();
@@ -239,9 +248,9 @@ TEST_CASE("item-access: a tree's items say their level and place among their sib
 
 TEST_CASE("item-access: a table's rows say their index; the table its rows and columns")
 {
+    TableModel model; // first: it outlives the view that registers with it
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 400.0f});
-    TableModel model;
     core::Array<core::String> columns;
     columns.PushBack(core::String(u8"Name"));
     columns.PushBack(core::String(u8"Age"));

@@ -478,7 +478,7 @@ private:
 
     // === The Docking page (D3 and D4 of Specs/gui-lab-evolution-3.md) ===
     UniquePtr<gui::DockController> m_dock;
-    RefPtr<gui::DockSpace> m_dockSpace;
+    RefPtr<gui::DockArea> m_dockArea;
     Array<String> m_dockPanels; // the registered panels' ids, for "Show the closed panels"
     u32 m_dockMade[8]{};        // how often each panel's content was made (its close policy shows)
     void FillDocking(gui::Node& host);
@@ -2002,6 +2002,7 @@ static gui::DockLayout DefaultDockLayout()
     (void)layout.InsertTab(u8"assets", bottom);
     (void)layout.InsertTab(u8"profiler", bottom);
     (void)layout.Activate(u8"console");
+    (void)layout.Float(u8"assets", Rectangle{350.0f, 70.0f, 220.0f, 160.0f}); // a float, over them
     return layout;
 }
 
@@ -2050,9 +2051,9 @@ void GUISandbox::FillDocking(gui::Node& host)
     RegisterDockPanel(u8"log", u8"Log", gui::DockClosePolicy::Hide, u8"Loaded the sandbox.");
     RegisterDockPanel(u8"assets", u8"Assets", gui::DockClosePolicy::Destroy, u8"cube.glb, sky.png, theme.css.");
     (void)m_dock->Adopt(DefaultDockLayout());
-    m_dockSpace = MakeRef<gui::DockSpace>(AppRoot());
-    host.AddChild(m_dockSpace.Get());
-    m_dockSpace->Show(*m_dock, m_dock->GetLayout().MainSurface());
+    m_dockArea = MakeRef<gui::DockArea>(AppRoot());
+    host.AddChild(m_dockArea.Get());
+    m_dockArea->Show(*m_dock);
 
     GUISandbox* self = this;
     (void)m_root->OnCommand(u8"docking.reset", [self](gui::CommandEvent&) { (void)self->m_dock->Adopt(DefaultDockLayout()); });
@@ -2070,12 +2071,19 @@ void GUISandbox::FillDocking(gui::Node& host)
                                     self->RegisterDockPanel(u8"profiler", u8"Profiler", gui::DockClosePolicy::Hide,
                                                             u8"Registered late: it fills the place the layout kept for it.");
                             });
-    // What a torn tab leaves, both to try: its strip closing up, or it dimmed in place.
+    // What a torn tab leaves, both to try: its strip closing up, or it dimmed in place (the page's
+    // sheet, for every dock space in the area: the floats' too).
     (void)m_root->OnCommand(u8"docking.torn-tab",
-                            [self, &host](gui::CommandEvent&)
+                            [&host](gui::CommandEvent&)
                             {
-                                const bool dim = self->m_dockSpace->GetTornTab() == gui::DockTornTab::Close;
-                                self->m_dockSpace->SetTornTab(dim ? gui::DockTornTab::Dim : gui::DockTornTab::Close);
+                                auto* holder = Cast<gui::UIWidget>(&host);
+                                if (holder == nullptr)
+                                    return;
+                                const bool dim = holder->HasClass(u8"torn-close");
+                                if (dim)
+                                    holder->RemoveClass(u8"torn-close");
+                                else
+                                    holder->AddClass(u8"torn-close");
                                 gui::Node* page = host.GetParent() != nullptr ? host.GetParent()->GetParent() : nullptr;
                                 if (auto* button = page != nullptr ? Cast<gui::Button>(FindById(*page, u8"docking-torn")) : nullptr)
                                     button->SetText(dim ? u8"A torn tab dims" : u8"A torn tab closes up");
@@ -2335,7 +2343,7 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     m_dialog.Reset();
     m_shellNode.Reset();
     m_viewport.Reset(); // its targets go with the tree, while the host and the device are here
-    m_dockSpace.Reset();
+    m_dockArea.Reset();
     m_root.Reset(); // the widgets go with the tree, before the models they read
     m_dock.Reset(); // after the dock space that showed its layout
     m_menu.Reset();

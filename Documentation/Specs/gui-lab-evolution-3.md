@@ -287,5 +287,22 @@ it was, so the ghost and the gap came late and abruptly. In a strip of a group a
 past the dispatcher's threshold, any way, as foundation.ui's; a reorder within its strip is a drop
 there at the mark (strips of no group keep the live slide), and the tear distance is gone.
 
+D5 as built on `vg` (2026-10-20): floating surfaces in one window. The layout docks a floating
+surface whole: its panels as a stack's tabs, or its tree beside a stack or along an edge, its splits
+kept. `DockArea` is the virtual surface host: the main surface's DockSpace fills it, and each
+floating surface is a `DockFloat` over it (a Window holding a DockSpace of its own), made, placed,
+titled and ended with the layout; a window moved or resized writes its bounds back once let go, kept
+where its title bar can be reached, and closing it closes its panels as their policies say. How a
+float is asked for and what a float's title does were the user's choices: a tab dragged with Shift
+held floats (Dear ImGui's rule: the dock targets pass the drop on, the area shows the window at the
+pointer), as do "Move to"'s Float and `dock.float` (Ctrl+Alt+F); a float dragged by its title bar
+follows the pointer itself and docks whole where it is let go over a target (Dear ImGui's and
+Qt-ADS's), the preview the room its content would take; with Shift it only moves, and Escape puts it
+back. On the way, in the core: a drag source may follow the pointer itself with no preview, a window
+reports a move or resize the user made and its title bar can start a drag instead, and a tab bar's
+owner may pass a tab offered on. The controller's pass over its views takes views made and ended as
+it goes. Not yet: a stack's own grip carrying the stack; the keyboard and `dock.*` commands acting
+across surfaces (they stay within the focused one).
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

@@ -110,6 +110,9 @@ export namespace experimental::gui
             menu       { background-color: var(--menu-background, var(--chrome)); }
             menuitem::highlight, menusubmenu::highlight { background-color: var(--menu-highlight, var(--selection)); }
             menuseparator::line { background-color: var(--menu-separator, var(--separator)); }
+            splitter-handle { background-color: var(--splitter-handle, var(--separator)); }
+            splitter-handle:hover, splitter-handle:active, splitter-handle:focus-visible
+                { background-color: var(--splitter-handle-active, var(--accent)); }
             menubar    { background-color: var(--menubar-background, var(--chrome-raised)); }
             .menubutton          { background-color: var(--menubar-background, var(--chrome-raised)); color: var(--text); padding: var(--space-m); }
             .menubutton:hover    { background-color: var(--menubar-hover, var(--chrome-hover)); }

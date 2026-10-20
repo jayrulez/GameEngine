@@ -91,6 +91,7 @@ export import :scroll_bar;
 export import :scroll_view;
 export import :image;
 export import :separator;
+export import :splitter;
 export import :list_box;
 export import :item_view;
 export import :list_view;

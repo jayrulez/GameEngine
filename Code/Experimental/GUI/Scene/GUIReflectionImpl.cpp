@@ -716,6 +716,7 @@ namespace experimental::gui
                 &MenuItem::StaticType(),       &MenuSeparator::StaticType(), &MenuBar::StaticType(),
                 &TreeView::StaticType(),       &TreeItem::StaticType(),      &TableView::StaticType(),
                 &TableItem::StaticType(),      &ScrollBar::StaticType(),     &MessageBox::StaticType(),
+                &Splitter::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -1214,6 +1215,26 @@ namespace experimental::gui
         builder.AccessorProperty<&Separator::GetThickness, &Separator::SetThickness>("thickness").PropAttribute("css", core::String(u8"thickness"));
         builder.Method<&ElementOf<Separator>, Separator, Node>("of");
         builder.Creator();
+    }
+
+    REFLECT_MEMBERS(Splitter, "rtti::gui")
+    {
+        builder.AccessorProperty<&Splitter::GetAxisName, &Splitter::SetAxisName>("axis").PropAttribute("css", core::String(u8"axis"));
+        builder.AccessorProperty<&Splitter::GetWeightsText, &Splitter::SetWeightsText>("weights").PropAttribute("css", core::String(u8"weights"));
+        builder.Method<&Splitter::ResetWeights>("resetWeights");
+        builder.Method<&ElementOf<Splitter>, Splitter, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(SplitterHandle, "rtti::gui")
+    {
+        builder.Attribute("accessRole", core::String(u8"separator")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&SplitterHandle::GetValue, &SplitterHandle::SetValue>("value").PropAttribute("access", core::String(u8"value"));
+        builder.ComputedProperty<&SplitterHandle::GetMin>("min").PropAttribute("access", core::String(u8"min"));
+        builder.ComputedProperty<&SplitterHandle::GetMax>("max").PropAttribute("access", core::String(u8"max"));
+        builder.AccessorProperty<&SplitterHandle::GetThickness, &SplitterHandle::SetThickness>("thickness")
+            .PropAttribute("css", core::String(u8"thickness"));
+        builder.Method<&ElementOf<SplitterHandle>, SplitterHandle, Node>("of");
     }
 
     REFLECT_MEMBERS(Spacer, "rtti::gui")

@@ -207,5 +207,15 @@ within one window, the keyboard and the "Move to" menu; D5 floating surfaces in 
 floating as OS windows through the host, and drags between windows; D7 presets and the tools an
 agent drives it with. The sandbox's Docking page grows with them.
 
+D0 as built on `vg` (2026-10-20): `Splitter` and `SplitterHandle` in the core. Panes by weight,
+each held at its minimum (its sheet's, else its content's) and clipped when the minimums pass the
+room; a handle between each two kept in step as panes come and go, read as a separator with where
+it stands, moved by drag and by the arrow keys (Shift, Home, End), a double click giving the given
+shares back; a resize changes the two panes beside the handle alone, a pane that goes gives its
+share to its neighbours; vertical and right to left; `axis` and `weights` in markup and sheets; the
+theme's `splitter-handle` quiet until hovered, dragged or focused. On the way: a node measured with
+no room (min-content) lost a width its style gave it, because exactness was read from a minimum
+equal to the maximum; the constraints now say it (2bb68576f).
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

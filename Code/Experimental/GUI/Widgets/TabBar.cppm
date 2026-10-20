@@ -14,7 +14,8 @@
 // it. In a strip of a `group` a tab moved past the drag threshold, any way, is a drag at once (E7,
 // type `lab/tab`) that the group's strips take, its own too (a reorder when it is `reorderable`),
 // a mark showing where it would land; between tab views its page goes with it. Tabs past the strip's end scroll it (the wheel turns it, a selected tab is scrolled to), and
-// a button at its end lists them all.
+// a button at its end lists them all (shown while they overflow, or always: `list-display`); with
+// `close-all`, a part past it asks to close every closable tab.
 //
 // A change the user makes reports `change`; code's report only to bindings, as a button's do.
 
@@ -56,6 +57,27 @@ export namespace experimental::gui
         Always,   ///< every closable tab's
     };
 
+    /// When the strip's list button shows.
+    enum class TabListDisplay : u8
+    {
+        Overflow, ///< while the tabs overflow the strip
+        Always,   ///< always (a strip whose button does more than list: docking's)
+    };
+
+    // A cross in `color` filling `box` (the close parts').
+    inline void DrawTabCross(DrawContext& ctx, const Rect& box, Color color)
+    {
+        const f32 s = core::Min(box.width, box.height) * 0.5f;
+        const f32 cx = box.x + box.width * 0.5f;
+        const f32 cy = box.y + box.height * 0.5f;
+        vg::PathBuilder cross;
+        cross.MoveTo(cx - s, cy - s);
+        cross.LineTo(cx + s, cy + s);
+        cross.MoveTo(cx + s, cy - s);
+        cross.LineTo(cx - s, cy + s);
+        ctx.VG().StrokePath(cross.ToPath(), color, vg::StrokeStyle(1.5f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+    }
+
     /// A tab's close part (`tab > close`): a cross in its text colour.
     class TabCloseButton : public ButtonBase
     {
@@ -72,16 +94,7 @@ export namespace experimental::gui
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             ButtonBase::OnDraw(ctx, localBounds);
-            const Rect box = GetContentBounds();
-            const f32 s = core::Min(box.width, box.height) * 0.5f;
-            const f32 cx = box.x + box.width * 0.5f;
-            const f32 cy = box.y + box.height * 0.5f;
-            vg::PathBuilder cross;
-            cross.MoveTo(cx - s, cy - s);
-            cross.LineTo(cx + s, cy + s);
-            cross.MoveTo(cx + s, cy - s);
-            cross.LineTo(cx - s, cy + s);
-            ctx.VG().StrokePath(cross.ToPath(), GetTextColor(), vg::StrokeStyle(1.5f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+            DrawTabCross(ctx, GetContentBounds(), GetTextColor());
         }
         // A press on it is its own: the tab under it neither selects nor starts a drag.
         void OnMouseDown(const MouseEvent& event) override
@@ -197,7 +210,7 @@ export namespace experimental::gui
         TabBar& m_bar; // its parent, which owns it
     };
 
-    // The button at the strip's end that lists every tab (shown while they overflow).
+    // The button at the strip's end that lists every tab (shown while they overflow, or always).
     class TabListButton : public ButtonBase
     {
         RTTI_OBJECT(TabListButton, ButtonBase)
@@ -214,6 +227,27 @@ export namespace experimental::gui
         {
             ButtonBase::OnDraw(ctx, localBounds);
             DrawDisclosure(ctx, GetContentBounds(), true, GetTextColor(), IsRightToLeft());
+        }
+    };
+
+    // The button past the list button that closes every closable tab (`closeall`, with
+    // `close-all`; shown while one is closable).
+    class TabCloseAllButton : public ButtonBase
+    {
+        RTTI_OBJECT(TabCloseAllButton, ButtonBase)
+    public:
+        TabCloseAllButton()
+        {
+            SetTag(core::StringView(u8"closeall"));
+            SetTabFocusable(false); // the keyboard closes tab by tab
+        }
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{10.0f, 10.0f}; }
+
+    protected:
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            ButtonBase::OnDraw(ctx, localBounds);
+            DrawTabCross(ctx, GetContentBounds(), GetTextColor());
         }
     };
 
@@ -239,6 +273,10 @@ export namespace experimental::gui
             TabBar* self = this;
             m_list->SetOnClick([self]() { self->OpenTabList(); });
             AddChild(m_list.Get());
+            m_closeAllPart = core::MakeRef<TabCloseAllButton>(MemoryAllocator());
+            m_closeAllPart->SetDisplayed(false);
+            m_closeAllPart->SetOnClick([self]() { self->CloseAll(); });
+            AddChild(m_closeAllPart.Get());
         }
 
         // === Tabs ===
@@ -334,6 +372,28 @@ export namespace experimental::gui
             static constexpr core::StringView kNames[] = {u8"never", u8"selected", u8"hover", u8"always"};
             return core::String(kNames[static_cast<usize>(m_closeDisplay)]);
         }
+        /// Asks to close every closable tab, last first, each as its close part does (what the
+        /// close-all part does). A request that ends the bar (an owner rebuilding it) ends it.
+        void CloseAll()
+        {
+            const core::RefPtr<TabBar> keep(this);
+            core::Array<core::RefPtr<Tab>> closing(MemoryAllocator());
+            for (i32 i = GetTabCount(); i-- > 0;)
+                if (GetTab(i)->IsClosable())
+                    closing.PushBack(core::RefPtr<Tab>(GetTab(i)));
+            for (const core::RefPtr<Tab>& tab : closing)
+                if (const i32 at = IndexOf(tab.Get()); at >= 0)
+                    RequestClose(at);
+        }
+        /// A part past the list button closes every closable tab (markup's and a sheet's
+        /// `close-all`), shown while one is closable.
+        void SetCloseAll(bool shown)
+        {
+            m_closeAll = shown;
+            UpdateCloseAll();
+        }
+        [[nodiscard]] bool HasCloseAll() const noexcept { return m_closeAll; }
+        [[nodiscard]] Node* GetCloseAllPart() const noexcept { return m_closeAllPart.Get(); }
         /// Asks to close a tab, as its close part does: `tabclose` is reported, and unless a
         /// listener takes it, the tab goes. (A TabView takes the request over.)
         void RequestClose(i32 index)
@@ -425,13 +485,28 @@ export namespace experimental::gui
 
         [[nodiscard]] Node* GetStrip() const noexcept { return m_strip.Get(); }
         [[nodiscard]] Node* GetListButton() const noexcept { return m_list.Get(); }
+        /// When the list button shows: while the tabs overflow (the default) or always.
+        void SetListDisplay(TabListDisplay display)
+        {
+            m_listDisplay = display;
+            RequestLayout();
+        }
+        [[nodiscard]] TabListDisplay GetListDisplay() const noexcept { return m_listDisplay; }
+        /// "overflow" or "always" (markup's and a sheet's `list-display`).
+        void SetListDisplayName(const core::String& name)
+        {
+            SetListDisplay(core::Trim(name.AsView()) == core::StringView(u8"always") ? TabListDisplay::Always : TabListDisplay::Overflow);
+        }
+        [[nodiscard]] core::String GetListDisplayName() const
+        {
+            return core::String(m_listDisplay == TabListDisplay::Always ? core::StringView(u8"always") : core::StringView(u8"overflow"));
+        }
         /// The menu of every tab, while it is open (null otherwise).
         [[nodiscard]] Menu* GetTabListMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
         /// Markup's children are its tabs.
         [[nodiscard]] Node* GetChildHost() override { return m_strip.Get(); }
 
-        /// Lists every tab in a menu below the list button (shown while they overflow); picking
-        /// one selects it.
+        /// Lists every tab in a menu below the list button; picking one selects it.
         void OpenTabList()
         {
             m_menu = core::MakeRef<Menu>(MemoryAllocator());
@@ -450,14 +525,14 @@ export namespace experimental::gui
             for (i32 i = 0; i < GetTabCount(); ++i)
                 ShareTextStyle(*GetTab(i), false);
         }
-        // The list button shows while the tabs overflow the strip.
+        // The list button shows while the tabs overflow the strip (or always).
         void OnLayout() override
         {
             LayoutChildren();
-            const bool overflows = m_strip->GetScrollRange().x > 0.5f;
-            if (overflows == m_list->IsDisplayed())
+            const bool shown = m_listDisplay == TabListDisplay::Always || m_strip->GetScrollRange().x > 0.5f;
+            if (shown == m_list->IsDisplayed())
                 return;
-            m_list->SetDisplayed(overflows);
+            m_list->SetDisplayed(shown);
             LayoutChildren();
             if (m_selected != nullptr)
                 m_strip->ScrollIntoView(*m_selected);
@@ -479,6 +554,14 @@ export namespace experimental::gui
 
     private:
         friend class Tab;
+        // The close-all part shows while it is asked for and a tab is closable.
+        void UpdateCloseAll()
+        {
+            bool any = false;
+            for (i32 i = 0; i < GetTabCount() && !any; ++i)
+                any = GetTab(i)->IsClosable();
+            m_closeAllPart->SetDisplayed(m_closeAll && any);
+        }
         void SetDropIndex(i32 index)
         {
             if (index == m_dropIndex)
@@ -560,6 +643,7 @@ export namespace experimental::gui
                 ShareTextStyle(*tab, false);
                 tab->UpdateClose();
             }
+            UpdateCloseAll();
             if (m_selected != nullptr && IndexOf(m_selected) < 0)
             {
                 m_selected->SetSelectedState(false);
@@ -609,11 +693,14 @@ export namespace experimental::gui
 
         core::RefPtr<TabStrip> m_strip;
         core::RefPtr<TabListButton> m_list;
+        core::RefPtr<TabCloseAllButton> m_closeAllPart;
         core::RefPtr<Menu> m_menu;
         Tab* m_selected = nullptr; // a child of the strip, which owns it
         core::Array<Tab*> m_known; // the tabs as they were (to tell which left)
         mutable Observable m_selectedChanged;
         TabCloseDisplay m_closeDisplay = TabCloseDisplay::Never;
+        TabListDisplay m_listDisplay = TabListDisplay::Overflow;
+        bool m_closeAll = false;
         bool m_reorderable = false;
         i32 m_pendingSelect = -1; // a selection asked for before its tab was there
         i32 m_selectedAt = 0; // where the selected tab is (removed, the one after it takes its place)
@@ -696,6 +783,8 @@ export namespace experimental::gui
         const bool shown = display == TabCloseDisplay::Always || (display == TabCloseDisplay::Selected && m_selected) ||
                            (display == TabCloseDisplay::Hover && (m_selected || IsHovered()));
         m_close->SetVisible(shown);
+        if (TabBar* owner = GetBar())
+            owner->UpdateCloseAll(); // its closability may be what changed
     }
 
     inline bool Tab::OwnsPressDrag(core::Float2) const

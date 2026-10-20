@@ -1124,6 +1124,10 @@ namespace experimental::gui
     {
     }
 
+    REFLECT_MEMBERS(TabCloseAllButton, "rtti::gui")
+    {
+    }
+
     REFLECT_MEMBERS(TabStrip, "rtti::gui")
     {
         builder.Attribute("accessRole", core::String(u8"tablist")); // what a screen reader takes it for (E9d)
@@ -1144,6 +1148,9 @@ namespace experimental::gui
             .PropAttribute("twoWay", true); // the user selects: a binding may write it back
         builder.AccessorProperty<&TabBar::GetCloseDisplayName, &TabBar::SetCloseDisplayName>("closeDisplay")
             .PropAttribute("css", core::String(u8"close-display"));
+        builder.AccessorProperty<&TabBar::GetListDisplayName, &TabBar::SetListDisplayName>("listDisplay")
+            .PropAttribute("css", core::String(u8"list-display"));
+        builder.AccessorProperty<&TabBar::HasCloseAll, &TabBar::SetCloseAll>("closeAll").PropAttribute("css", core::String(u8"close-all"));
         builder.AccessorProperty<&TabBar::IsReorderable, &TabBar::SetReorderable>("reorderable")
             .PropAttribute("css", core::String(u8"reorderable"));
         builder.AccessorProperty<&TabBar::GetGroup, &TabBar::SetGroup>("group").PropAttribute("css", core::String(u8"group"));
@@ -1175,6 +1182,9 @@ namespace experimental::gui
             .PropAttribute("twoWay", true);
         builder.AccessorProperty<&TabView::GetCloseDisplayName, &TabView::SetCloseDisplayName>("closeDisplay")
             .PropAttribute("css", core::String(u8"close-display"));
+        builder.AccessorProperty<&TabView::GetListDisplayName, &TabView::SetListDisplayName>("listDisplay")
+            .PropAttribute("css", core::String(u8"list-display"));
+        builder.AccessorProperty<&TabView::HasCloseAll, &TabView::SetCloseAll>("closeAll").PropAttribute("css", core::String(u8"close-all"));
         builder.AccessorProperty<&TabView::IsReorderable, &TabView::SetReorderable>("reorderable")
             .PropAttribute("css", core::String(u8"reorderable"));
         builder.AccessorProperty<&TabView::GetGroup, &TabView::SetGroup>("group").PropAttribute("css", core::String(u8"group"));

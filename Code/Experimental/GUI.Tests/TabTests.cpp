@@ -3,8 +3,9 @@
 
 // GUI - tabs (E6): a TabBar of real tab elements and a TabView pairing it with pages. Selection by
 // the press, the keys and Ctrl+Tab; closing as a request with a display policy; reordering by a
-// drag across a neighbour's midpoint; an overflowing strip that scrolls and lists every tab; pages
-// kept alive, or built on first show; markup's pages.
+// drag across a neighbour's midpoint; an overflowing strip that scrolls and lists every tab (or
+// always lists them), and a part that closes them all; pages kept alive, or built on first show;
+// markup's pages.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -296,6 +297,68 @@ TEST_CASE("tabs: tabs past the strip's end scroll it, a selected one is scrolled
     CHECK(bar->GetTabListMenu() == nullptr);
 }
 
+TEST_CASE("tabs: the list button shows always when asked; close-all asks to close every closable tab, last first")
+{
+    auto root = MakeRoot();
+    auto bar = Make<TabBar>();
+    root->AddChild(bar.Get());
+    AddSizedTab(*bar, u8"A");
+    AddSizedTab(*bar, u8"B");
+    Tab* fixed = AddSizedTab(*bar, u8"C");
+    fixed->SetClosable(false);
+    (void)root->UpdateLayout();
+    CHECK_FALSE(bar->GetListButton()->IsDisplayed()); // they fit
+    CHECK_FALSE(bar->GetCloseAllPart()->IsDisplayed()); // not asked for
+    bar->SetListDisplay(TabListDisplay::Always);
+    bar->SetCloseAll(true);
+    (void)root->UpdateLayout();
+    CHECK(bar->GetListButton()->IsDisplayed());
+    REQUIRE(bar->GetCloseAllPart()->IsDisplayed());
+    // Past the list button, both past the strip.
+    const Rect list = bar->GetListButton()->GetScreenBounds();
+    const Rect all = bar->GetCloseAllPart()->GetScreenBounds();
+    CHECK(all.x >= list.x + list.width - 0.5f);
+    CHECK(list.x >= bar->GetStrip()->GetScreenBounds().x + bar->GetStrip()->GetScreenBounds().width - 0.5f);
+
+    core::Array<core::String> asked;
+    (void)bar->AddEventListener(EventType::TabClose, [&](const Event& e)
+    {
+        asked.PushBack(core::String(bar->GetTab(static_cast<const TabEvent&>(e).Index)->GetText()));
+    });
+    EventDispatcher& d = *root->GetEventDispatcher();
+    Press(d, CentreOf(*bar->GetCloseAllPart()));
+    REQUIRE(asked.Size() == 2);
+    CHECK(asked[0] == core::StringView(u8"B"));
+    CHECK(asked[1] == core::StringView(u8"A"));
+    REQUIRE(bar->GetTabCount() == 1);
+    CHECK(bar->GetTab(0) == fixed);
+    CHECK_FALSE(bar->GetCloseAllPart()->IsDisplayed()); // none closable is left
+    fixed->SetClosable(true);
+    CHECK(bar->GetCloseAllPart()->IsDisplayed());
+}
+
+TEST_CASE("tabview: close-all closes every closable page through the view's own request")
+{
+    auto root = MakeRoot();
+    auto view = Make<TabView>();
+    root->AddChild(view.Get());
+    view->SetCloseAll(true);
+    const char8_t* const titles[] = {u8"A", u8"B", u8"C"};
+    for (const char8_t* t : titles)
+        (void)view->AddPage(core::StringView(t));
+    int requests = 0;
+    (void)view->AddEventListener(EventType::TabClose, [&](const Event& e)
+    {
+        ++requests;
+        if (static_cast<const TabEvent&>(e).Index == 0)
+            e.Handled = true; // the first is kept (an unsaved document asks first)
+    });
+    view->GetBar()->CloseAll();
+    CHECK(requests == 3);
+    REQUIRE(view->GetPageCount() == 1);
+    CHECK(view->GetBar()->GetTab(0)->GetText() == core::StringView(u8"A"));
+}
+
 TEST_CASE("tabview: pages pair with tabs; only the selected one shows; hidden ones stay alive; Ctrl+Tab from inside a page")
 {
     auto root = MakeRoot();
@@ -444,7 +507,7 @@ TEST_CASE("tabview: markup's pages are its children, with title, icon and closab
     RegisterGuiElements();
     static const ElementSet elements = ElementSet::All();
     MarkupLoader loader(elements, core::DefaultAllocator());
-    auto tree = loader.LoadFromString(core::StringView(u8R"(<TabView close-display="hover" reorderable="true" selected="1">
+    auto tree = loader.LoadFromString(core::StringView(u8R"(<TabView close-display="hover" reorderable="true" selected="1" list-display="always" close-all="true">
         <TabPage title="General"><Label text="one"/></TabPage>
         <TabPage title="Advanced" closable="false" icon="ui/icons/gear.png"/>
     </TabView>)"));
@@ -458,6 +521,8 @@ TEST_CASE("tabview: markup's pages are its children, with title, icon and closab
     CHECK(view->GetBar()->GetCloseDisplay() == TabCloseDisplay::Hover);
     CHECK(view->IsReorderable());
     CHECK(view->GetSelectedIndex() == 1);
+    CHECK(view->GetBar()->GetListDisplay() == TabListDisplay::Always);
+    CHECK(view->HasCloseAll());
 
     // A bar alone: markup's children are its tabs.
     auto barTree = loader.LoadFromString(core::StringView(u8R"(<TabBar><Tab text="One"/><Tab text="Two" icon="a.png"/></TabBar>)"));

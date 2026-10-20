@@ -213,6 +213,10 @@ export namespace experimental::gui
         // === The bar's settings, from markup ===
         void SetCloseDisplayName(const core::String& name) { m_bar->SetCloseDisplayName(name); }
         [[nodiscard]] core::String GetCloseDisplayName() const { return m_bar->GetCloseDisplayName(); }
+        void SetListDisplayName(const core::String& name) { m_bar->SetListDisplayName(name); }
+        [[nodiscard]] core::String GetListDisplayName() const { return m_bar->GetListDisplayName(); }
+        void SetCloseAll(bool shown) { m_bar->SetCloseAll(shown); }
+        [[nodiscard]] bool HasCloseAll() const noexcept { return m_bar->HasCloseAll(); }
         void SetReorderable(bool reorderable) noexcept { m_bar->SetReorderable(reorderable); }
         [[nodiscard]] bool IsReorderable() const noexcept { return m_bar->IsReorderable(); }
         void SetGroup(const core::String& group) { m_bar->SetGroup(group); }

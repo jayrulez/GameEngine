@@ -74,6 +74,8 @@ export namespace experimental::gui
             tab > close:hover { background-color: var(--overlay-hover); }
             tablist       { color: var(--text-dim); padding: var(--space-m) 8; }
             tablist:hover { background-color: var(--control-hover); }
+            closeall      { color: var(--text-dim); padding: var(--space-m) 8; }
+            closeall:hover { background-color: var(--control-hover); }
             textfield, textarea { background-color: var(--field-background, var(--control)); color: var(--field-text, var(--text-strong));
                                   padding: var(--space-m); cursor: text; }
             numberfield { background-color: var(--field-background, var(--control)); color: var(--field-text, var(--text-strong));

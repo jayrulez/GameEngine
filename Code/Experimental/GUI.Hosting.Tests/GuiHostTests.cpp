@@ -141,7 +141,9 @@ TEST_CASE("gui.hosting: the baker serves every window, and a detached window's r
     CHECK(bed.host->RendererFor(other.Get())->IsExternalTextureRegistered(key));
 
     foundation::vg::renderer::VGRenderer* gone = bed.host->RendererFor(other.Get());
+    const u32 held = otherRoot->RefCount();
     bed.host->DetachWindow(*other);
+    CHECK(otherRoot->RefCount() == held - 1); // the root let go at once, not when the window goes
     CHECK(bed.host->WindowCount() == 1u);
     CHECK(bed.host->WindowFor(otherRoot.Get()) == nullptr);
     CHECK_FALSE(gone->IsExternalTextureRegistered(key)); // the payload lives until its window goes
@@ -197,6 +199,10 @@ TEST_CASE("gui.hosting: a pane is another root over a region of a window, laid o
     CHECK(bed.host->FramesDrawn() == drawn + 1);
     CHECK(overlaid);
     CHECK(pane->GetViewportSize().x == doctest::Approx(240.0f));
+    const u64 before = bed.host->FramesDrawn();
+    bed.host->SetPaneRegion(*pane, Rectangle{560.0f, 0.0f, 240.0f, 600.0f}); // the same again, as a host's layout does each frame
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->FramesDrawn() == before); // nothing to draw
     bed.host->RemovePane(*pane);
     CHECK(bed.host->WindowFor(pane.Get()) == nullptr);
     CHECK(bed.host->WindowFor(root.Get()) == bed.main.Get());

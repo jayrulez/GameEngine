@@ -141,6 +141,15 @@ export namespace experimental::gui
         /// What shows behind a root that does not cover its window, as authored (sRGB).
         void SetClearColor(Color color) noexcept { m_clear = color; }
         void SetPointerFilter(PointerFilter filter) { m_pointerFilter = Move(filter); }
+        /// Every pane's cursor follows its GUI again (after the application set one of its own, a
+        /// boundary's resize cursor).
+        void ResetCursors()
+        {
+            shell::IMouse* mouse = m_shell.Input() != nullptr ? m_shell.Input()->Mouse() : nullptr;
+            for (const Attached& attached : m_attached)
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    pane->Bridge->SetCursorTarget(mouse);
+        }
         void SetOverlay(Overlay overlay) { m_overlay = Move(overlay); }
         /// Told of each file the OS drops, before the window it landed on is.
         void SetDropObserver(Function<void(const shell::DroppedFile&)> observer) { m_dropObserver = Move(observer); }
@@ -219,12 +228,13 @@ export namespace experimental::gui
         /// Moves a pane (the window's root too) to `region` of its window (empty: all of it).
         void SetPaneRegion(const SceneRoot& root, Rectangle region)
         {
-            if (GuiWindowData::Pane* pane = FindPane(root))
-            {
-                pane->Region = region;
-                if (GuiWindowData* data = FindData(root))
-                    data->NeedsFrame = true;
-            }
+            GuiWindowData::Pane* pane = FindPane(root);
+            if (pane == nullptr || (pane->Region.x == region.x && pane->Region.y == region.y && pane->Region.width == region.width &&
+                                    pane->Region.height == region.height))
+                return; // the same again changes nothing
+            pane->Region = region;
+            if (GuiWindowData* data = FindData(root))
+                data->NeedsFrame = true;
         }
         /// Takes a pane added with AddPane out of its window.
         void RemovePane(const SceneRoot& root)
@@ -240,8 +250,9 @@ export namespace experimental::gui
                     }
         }
 
-        /// Stops drawing and feeding the window's panes; its renderer forgets the bakes. The payload
-        /// stays on the RenderWindow, which frees it when it goes (after the GPU is idle).
+        /// Stops drawing and feeding the window's panes, and lets their roots go; its renderer forgets
+        /// the bakes. The rest of the payload stays on the RenderWindow, which frees it when it goes
+        /// (after the GPU is idle).
         void DetachWindow(graphics::RenderWindow& window)
         {
             for (usize i = 0; i < m_attached.Size(); ++i)
@@ -460,10 +471,14 @@ export namespace experimental::gui
             m_router->RemoveSurface(pane.Surface.Get());
             pane.Bridge->SetTextInputTarget(nullptr); // the window may close after this
         }
+        // A window leaves: its panes' roots are let go now (the trees may hold views of models their
+        // application frees next), its renderer forgets the bakes; the GPU half of the payload stays
+        // with the RenderWindow until the GPU is done with it.
         void Forget(const Attached& attached)
         {
             for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
                 Forget(*pane);
+            attached.Data->Panes.Clear();
             if (m_baker)
                 m_baker->RemoveTarget(attached.Data->Renderer);
         }

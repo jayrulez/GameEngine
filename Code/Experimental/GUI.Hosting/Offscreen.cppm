@@ -87,6 +87,7 @@ export namespace experimental::gui
             if (device == nullptr)
                 return;
             device->WaitIdle();
+            m_capture.Release(*device); // its read back buffer
             if (m_host.m_baker)
                 m_host.m_baker->RemoveTarget(m_renderer);
             if (m_renderer.IsInitialized())

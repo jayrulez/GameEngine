@@ -136,6 +136,8 @@ export namespace experimental::gui::inspector
         }
         [[nodiscard]] SceneRoot* GetTarget() const noexcept { return m_target; }
         [[nodiscard]] SceneRoot& GetRoot() const noexcept { return *m_root; }
+        /// Its root held, for a host that draws it as a pane of a window.
+        [[nodiscard]] RefPtr<SceneRoot> GetRootRef() const noexcept { return m_root; }
         [[nodiscard]] StyleManager& GetStyles() noexcept { return m_styles; }
 
         /// Once a frame, before its root's style pass: the tree when its shape changed, the details

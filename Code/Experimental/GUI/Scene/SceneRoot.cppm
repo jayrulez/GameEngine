@@ -52,6 +52,7 @@ import :keymap;
 import foundation.fonts;   // IFontService
 import foundation.i18n;    // Localization (E9a)
 import :resource_provider; // IResourceProvider
+import :picture_baker;     // IPictureBaker
 import :text_editing_keys; // the editing keys every GUI starts with (E4)
 import :accessibility;     // the accessibility tree's model and the host's bridge (E9d)
 
@@ -118,6 +119,10 @@ export namespace experimental::gui
         [[nodiscard]] bool IsReducedMotion() const noexcept { return m_reducedMotion; }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
         void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
+        /// The host's picture baker (its renderer's): an SVG skin drawn from a texture baked at the
+        /// size it shows, not as paths every frame. None: paths. Not owned.
+        void SetPictureBaker(IPictureBaker* baker) noexcept { m_baker = baker; }
+        [[nodiscard]] IPictureBaker* GetPictureBaker() const noexcept { return m_baker; }
         /// The texts its translated properties resolve through (E9a), the host's; not owned. Its
         /// changes (a language, a table, pseudolocalization) re-resolve every translated property
         /// and restyle the roots (`:lang`). Null: a translated property shows its key.
@@ -231,6 +236,7 @@ export namespace experimental::gui
         ContrastPreference m_contrast = ContrastPreference::NoPreference;
         bool m_reducedMotion = false;
         IResourceProvider* m_resources = nullptr;
+        IPictureBaker* m_baker = nullptr;
         foundation::i18n::Localization* m_localization = nullptr; // the host's
         u32 m_localizationToken = 0;
         Observable m_languageChanged;
@@ -314,6 +320,10 @@ export namespace experimental::gui
         [[nodiscard]] bool NeedsFrame()
         {
             FrameReasons& why = m_frameStats.Reasons;
+            // A bake landed since this root last drew: what drew as paths while it waited draws
+            // from it now.
+            if (const IPictureBaker* baker = m_context->GetPictureBaker(); baker != nullptr && baker->Generation() != m_bakeGeneration)
+                Invalidate();
             why.Redraw = NeedsRedraw();
             why.Layout = IsLayoutDirty() || HasLayoutDirtyDescendant();
             why.Pending = m_context->m_effects.HasPending();
@@ -353,6 +363,8 @@ export namespace experimental::gui
             const u32 drawn = ctx.NodesDrawn();
             const u32 culled = ctx.NodesCulled();
             ctx.SetFrame(m_framesDrawn + 1); // the nodes drawn note it (FramesDrawn is set after)
+            ctx.SetPictureBaker(m_context->GetPictureBaker());
+            m_bakeGeneration = m_context->GetPictureBaker() != nullptr ? m_context->GetPictureBaker()->Generation() : 0;
             m_frameRedraws.Clear();
             if (m_debugOverlay.RedrawFlash)
                 ctx.SetRedrawRecorder(&m_frameRedraws);
@@ -661,6 +673,7 @@ export namespace experimental::gui
         FrameStats m_frameStats; // in progress
         FrameStats m_lastFrame;
         u64 m_framesDrawn = 0;
+        u64 m_bakeGeneration = 0; // the picture baker's, as of the last frame drawn
         bool m_framePublished = false;
 
         // The frame's style and layout are done: the last frame starts from them, undrawn.

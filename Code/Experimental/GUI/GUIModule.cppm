@@ -50,6 +50,7 @@ export import :draw_context;
 export import :drawable;
 export import :image_drawable;
 export import :svg_drawable;
+export import :picture_baker;
 export import :node_box;
 
 // Text (Phase 4)

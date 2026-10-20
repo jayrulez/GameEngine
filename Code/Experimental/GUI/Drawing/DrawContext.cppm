@@ -18,6 +18,7 @@ import foundation.core; // Float4x4
 import foundation.vg;   // VGContext
 import :rect;
 import :transform2d;
+import :picture_baker; // IPictureBaker
 
 using namespace foundation::core;
 namespace vg = foundation::vg;
@@ -35,6 +36,10 @@ export namespace experimental::gui
         // The underlying vector-graphics context (the actual draw surface).
         [[nodiscard]] vg::VGContext& VG() const noexcept { return *m_vg; }
         [[nodiscard]] f32 DpiScale() const noexcept { return m_dpiScale; }
+        /// The host's baker (a root's DrawFrame sets its GUI's): vector pictures drawn as baked
+        /// textures; null draws them as paths.
+        void SetPictureBaker(IPictureBaker* baker) noexcept { m_baker = baker; }
+        [[nodiscard]] IPictureBaker* PictureBaker() const noexcept { return m_baker; }
 
         // Clip stack (device/local rect).
         void PushClip(const Rect& rect) { m_vg->PushClipRect(rect.ToRectangle()); }
@@ -134,6 +139,7 @@ export namespace experimental::gui
     private:
         vg::VGContext* m_vg;
         f32 m_dpiScale;
+        IPictureBaker* m_baker = nullptr;
         u32 m_nodesDrawn = 0;
         u32 m_nodesCulled = 0;
         bool m_culling = true;

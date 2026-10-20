@@ -163,3 +163,94 @@ TEST_CASE("border-image: an SVG is sliced in its own units, each piece drawn as 
     CHECK(green > 0u);
     CHECK(blue > 0u);
 }
+
+namespace
+{
+    // Bakes what it is asked for at once, on the second asking (the first queues it), and
+    // counts the askings.
+    class FakeBaker : public IPictureBaker
+    {
+    public:
+        core::u32 width = 0, height = 0;
+        int asked = 0;
+        bool ready = false;
+        core::u64 generation = 0;
+        image::ImageDataRef key{90, 90}; // the size the test asks for
+        const image::ImageData* Baked(const foundation::vg::svg::SVGDocument&, core::u32 w, core::u32 h) override
+        {
+            ++asked;
+            width = w;
+            height = h;
+            return ready ? &key : nullptr;
+        }
+        core::u64 Generation() const override { return generation; }
+    };
+}
+
+TEST_CASE("border-image: an SVG skin draws from its bake once there is one, sized at its corners' scale in device pixels")
+{
+    // 30 units sliced 10, drawn 20 wide: twice its size; at a device scale of 1.5, three times.
+    Bed bed(u8".skin { border-image: url(\"data:image/svg+xml,<svg width='30' height='30'><rect width='30' height='30' fill='red'/></svg>\") 10 fill / 20px stretch; }");
+    const NodeBox& box = bed.panel->GetBox();
+    REQUIRE(box.Skin.Svg != nullptr);
+    FakeBaker baker;
+    const auto draw = [&](foundation::vg::VGContext& ctx)
+    {
+        DrawContext dc{ctx};
+        dc.SetPictureBaker(&baker);
+        ctx.Scale(1.5f, 1.5f);
+        box.DrawUnder(dc, Rect{0.0f, 0.0f, 100.0f, 60.0f});
+    };
+    {
+        foundation::vg::VGContext ctx;
+        draw(ctx); // not baked yet: queued, drawn as paths
+        CHECK(baker.asked == 1);
+        CHECK(baker.width == 90u); // 30 units, twice, at 1.5
+        CHECK(baker.height == 90u);
+        bool layered = false;
+        for (const foundation::vg::VGCommand& command : ctx.GetBatch().commands)
+            layered = layered || command.drawMode == foundation::vg::VGDrawMode::Layer;
+        CHECK_FALSE(layered);
+        CHECK(ctx.GetBatch().vertices.Size() > 36u); // paths, not nine quads
+    }
+    baker.ready = true;
+    {
+        foundation::vg::VGContext ctx;
+        draw(ctx);
+        core::usize pieces = 0;
+        for (const foundation::vg::VGCommand& command : ctx.GetBatch().commands)
+        {
+            if (command.drawMode != foundation::vg::VGDrawMode::Layer)
+                continue;
+            ++pieces;
+            CHECK(command.compositeLayer == -1);
+            CHECK(ctx.GetBatch().textures[static_cast<core::usize>(command.textureIndex)] == &baker.key);
+        }
+        CHECK(pieces == 9u); // a premultiplied quad a piece, the middle filled
+        CHECK(ctx.GetBatch().vertices.Size() == 36u);
+    }
+}
+
+TEST_CASE("border-image: a root redraws when a bake lands")
+{
+    Bed bed(u8".skin { width: 40px; height: 40px; }");
+    FakeBaker baker;
+    bed.root->GetContext().SetPictureBaker(&baker);
+    bed.root->SetSize(core::Float2{100.0f, 100.0f});
+    bed.root->UpdateLayout();
+    (void)bed.root->NeedsFrame();
+    foundation::vg::VGContext ctx;
+    {
+        DrawContext dc{ctx};
+        bed.root->DrawFrame(dc);
+    }
+    CHECK_FALSE(bed.root->NeedsFrame()); // drawn: nothing new
+    baker.generation = 1;                // a bake landed
+    CHECK(bed.root->NeedsFrame());
+    CHECK(bed.root->GetLastFrameStats().Reasons.Redraw);
+    {
+        DrawContext dc{ctx};
+        bed.root->DrawFrame(dc);
+    }
+    CHECK_FALSE(bed.root->NeedsFrame());
+}

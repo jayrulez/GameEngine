@@ -21,6 +21,7 @@ import foundation.vg;
 import foundation.vg.svg; // SVGDocument, SVGRenderer (an SVG layer)
 import :rect;
 import :draw_context;
+import :picture_baker; // an SVG skin's bake
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -260,7 +261,7 @@ export namespace experimental::gui
                 canvas.FillBoxShadow(shrunk, Grown(Radii, -shadow.Spread), shadow.Blur, shadow.ShadowColor, true);
             }
             if (Skin.HasPicture())
-                DrawSkin(canvas, rect); // a border image stands in for the border (CSS)
+                DrawSkin(ctx, rect); // a border image stands in for the border (CSS)
             else if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
             {
                 const bool solid = BorderLines[0] == BorderLine::Solid && BorderLines[1] == BorderLine::Solid &&
@@ -420,13 +421,16 @@ export namespace experimental::gui
         }
 
         // The border image: nine pieces of the image (its region) into the box, corners as they
-        // are cut, edges and the middle stretched, repeated or rounded along.
-        void DrawSkin(vg::VGContext& canvas, const Rectangle& rect) const
+        // are cut, edges and the middle stretched, repeated or rounded along. An SVG's pieces come
+        // from the picture baked at the size its corners land, when the host bakes (a textured
+        // quad each); until then, and without a baker, each is the document drawn as paths.
+        void DrawSkin(DrawContext& ctx, const Rectangle& rect) const
         {
-            const Rectangle src = Skin.Source.width > 0.0f && Skin.Source.height > 0.0f ? Skin.Source
-                                  : Skin.Image != nullptr
-                                      ? Rectangle{0.0f, 0.0f, static_cast<f32>(Skin.Image->Width()), static_cast<f32>(Skin.Image->Height())}
-                                      : Rectangle{0.0f, 0.0f, Skin.Svg->width, Skin.Svg->height};
+            vg::VGContext& canvas = ctx.VG();
+            Rectangle src = Skin.Source.width > 0.0f && Skin.Source.height > 0.0f ? Skin.Source
+                            : Skin.Image != nullptr
+                                ? Rectangle{0.0f, 0.0f, static_cast<f32>(Skin.Image->Width()), static_cast<f32>(Skin.Image->Height())}
+                                : Rectangle{0.0f, 0.0f, Skin.Svg->width, Skin.Svg->height};
             const f32 borders[4] = {BorderWidths.top, BorderWidths.right, BorderWidths.bottom, BorderWidths.left};
             f32 w[4];
             for (usize i = 0; i < 4; ++i)
@@ -437,8 +441,20 @@ export namespace experimental::gui
             const f32 fit = Min(fitX, fitY);
             for (f32& v : w)
                 v *= fit;
-            const f32 s[4] = {Min(Skin.Slice[0], src.height), Min(Skin.Slice[1], src.width), Min(Skin.Slice[2], src.height),
-                              Min(Skin.Slice[3], src.width)};
+            f32 s[4] = {Min(Skin.Slice[0], src.height), Min(Skin.Slice[1], src.width), Min(Skin.Slice[2], src.height),
+                        Min(Skin.Slice[3], src.width)};
+            const image::ImageData* baked = Skin.Svg != nullptr ? BakedSkin(ctx, w, s) : nullptr;
+            if (baked != nullptr)
+            {
+                // The baked picture's pixels stand in for the document's units.
+                const f32 px = static_cast<f32>(baked->Width()) / Skin.Svg->width;
+                const f32 py = static_cast<f32>(baked->Height()) / Skin.Svg->height;
+                src = Rectangle{0.0f, 0.0f, static_cast<f32>(baked->Width()), static_cast<f32>(baked->Height())};
+                s[0] *= py;
+                s[2] *= py;
+                s[1] *= px;
+                s[3] *= px;
+            }
             // Columns and rows, of the box and of the image.
             const f32 dx[4] = {rect.x, rect.x + w[3], rect.x + rect.width - w[1], rect.x + rect.width};
             const f32 dy[4] = {rect.y, rect.y + w[0], rect.y + rect.height - w[2], rect.y + rect.height};
@@ -458,13 +474,32 @@ export namespace experimental::gui
                     const BorderImageRepeat down = row == 1 ? Skin.RepeatY : BorderImageRepeat::Stretch;
                     const f32 tileW = col == 1 ? piece.width * (row == 1 ? (w[0] > 0.0f ? w[0] / Max(s[0], 1.0f) : 1.0f) : d.height / piece.height) : d.width;
                     const f32 tileH = row == 1 ? piece.height * (col == 1 ? (w[3] > 0.0f ? w[3] / Max(s[3], 1.0f) : 1.0f) : d.width / piece.width) : d.height;
-                    DrawTiled(canvas, d, piece, along, down, tileW, tileH);
+                    DrawTiled(canvas, d, piece, along, down, tileW, tileH, baked);
                 }
+        }
+        // The SVG skin baked at its corners' scale (each border width over its slice; the largest,
+        // so no corner is magnified) in device pixels; null when there is no baker, it is not baked
+        // yet (asking queues it), or it would be larger than a bake is allowed.
+        const image::ImageData* BakedSkin(DrawContext& ctx, const f32 (&w)[4], const f32 (&s)[4]) const
+        {
+            static constexpr f32 kLargestBake = 2048.0f;
+            IPictureBaker* baker = ctx.PictureBaker();
+            if (baker == nullptr || Skin.Svg->width <= 0.0f || Skin.Svg->height <= 0.0f)
+                return nullptr;
+            f32 scale = 0.0f;
+            for (usize i = 0; i < 4; ++i)
+                if (s[i] > 0.0f)
+                    scale = Max(scale, w[i] / s[i]);
+            scale = (scale > 0.0f ? scale : 1.0f) * ctx.DeviceScale();
+            const f32 width = Ceil(Skin.Svg->width * scale), height = Ceil(Skin.Svg->height * scale);
+            if (width < 1.0f || height < 1.0f || width > kLargestBake || height > kLargestBake)
+                return nullptr;
+            return baker->Baked(*Skin.Svg, static_cast<u32>(width), static_cast<u32>(height));
         }
         // `piece` of the skin's image over `d`: stretched, or tiled at `tileW` by `tileH` (repeat:
         // centred, cut at the ends; round: a whole number, stretched to fit).
         void DrawTiled(vg::VGContext& canvas, const Rectangle& d, const Rectangle& piece, BorderImageRepeat along,
-                       BorderImageRepeat down, f32 tileW, f32 tileH) const
+                       BorderImageRepeat down, f32 tileW, f32 tileH, const image::ImageData* baked) const
         {
             const auto layout = [](BorderImageRepeat mode, f32 length, f32 tile, f32& size, f32& start, usize& count)
             {
@@ -501,6 +536,8 @@ export namespace experimental::gui
                                          shown.width / tw * piece.width, shown.height / th * piece.height};
                     if (Skin.Image != nullptr)
                         canvas.DrawImage(Skin.Image, shown, part, Color::White);
+                    else if (baked != nullptr)
+                        canvas.DrawImagePremultiplied(baked, shown, part);
                     else
                         DrawSvgPart(canvas, shown, part);
                 }

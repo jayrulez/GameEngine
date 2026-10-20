@@ -23,6 +23,7 @@ import :rect;
 import :draw_context;
 import :drawable;
 import :image_drawable;
+import :svg_drawable; // PictureDrawable (an SVG drawn as paths)
 import :resource_provider;
 import :ui_widget;
 import :layout_style; // kUnbounded, LayoutLengthKind
@@ -261,8 +262,7 @@ export namespace experimental::gui
             if (resources == nullptr)
                 return; // not in a GUI with one yet: tried again when drawn or measured
             m_sourceLoaded = true;
-            if (const foundation::image::ImageData* data = resources->LoadImage(m_source.AsView()))
-                m_drawable = core::MakeRef<ImageDrawable>(MemoryAllocator(), data);
+            m_drawable = PictureDrawable(*resources, m_source.AsView(), MemoryAllocator()); // an SVG drawn as paths
             RequestLayout();
         }
         [[nodiscard]] static f32 ParseNumber(core::StringView text)

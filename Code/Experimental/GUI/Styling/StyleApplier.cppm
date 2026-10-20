@@ -596,8 +596,7 @@ export namespace experimental::gui
                         out.IsImage = true;
                         // An SVG by its name (E13): paths, drawn at the size it fills.
                         const core::StringView path = layer.Image.AsView();
-                        const bool svg = path.Size() > 4 && (path.SubStr(path.Size() - 4, 4) == core::StringView(u8".svg") ||
-                                                             path.SubStr(path.Size() - 4, 4) == core::StringView(u8".SVG"));
+                        const bool svg = IsSvgPath(path);
                         if (resources != nullptr && svg)
                             out.Svg = resources->LoadSvg(path);
                         else if (resources != nullptr)

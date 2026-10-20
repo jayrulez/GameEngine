@@ -42,6 +42,7 @@ target_sources(GUI
             Drawing/DrawContext.cppm
             Drawing/Drawable.cppm
             Drawing/ImageDrawable.cppm
+            Drawing/SvgDrawable.cppm
             Drawing/NodeBox.cppm
             Text/Text.cppm
             Text/TextRuns.cppm

@@ -4,6 +4,7 @@ add_executable(GUI.Tests
     RectTests.cpp
     Transform2DTests.cpp
     ImageDrawableTests.cpp
+    SvgDrawableTests.cpp
     CompositorTests.cpp
     TransformableTests.cpp
     NodeTests.cpp

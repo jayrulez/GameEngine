@@ -44,6 +44,7 @@ import :ui_widget;
 import :event_dispatcher; // the popup stack (E5)
 import :actions;          // TickAction (the safe area's grace)
 import :image_drawable;   // a command's icon
+import :svg_drawable;     // PictureDrawable: an icon an SVG
 import :resource_provider;
 import foundation.image;  // ImageData
 import :popup_placement;
@@ -155,6 +156,7 @@ export namespace experimental::gui
             m_icon = core::Move(icon);
             Invalidate();
         }
+        [[nodiscard]] Drawable* GetIcon() const noexcept { return m_icon.Get(); }
 
         void SetHighlightColor(Color color) { m_highlight = color; }
         void SetRowHeight(f32 height) { m_rowHeight = core::Max(1.0f, height); }
@@ -211,8 +213,8 @@ export namespace experimental::gui
             }
             if (icon.Size() != 0)
                 if (IResourceProvider* resources = GetResourceProvider())
-                    if (const image::ImageData* image = resources->LoadImage(icon))
-                        SetIcon(core::MakeRef<ImageDrawable>(MemoryAllocator(), image));
+                    if (RefPtr<Drawable> picture = PictureDrawable(*resources, icon, MemoryAllocator()))
+                        SetIcon(core::Move(picture)); // an SVG drawn as paths, at any size
         }
 
         // Markup: its text and shortcut exactly as written.

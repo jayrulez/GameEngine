@@ -40,4 +40,14 @@ export namespace experimental::gui
         // keeps (parsed once), drawn as paths at whatever size it fills; null if not found.
         [[nodiscard]] virtual const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) = 0;
     };
+
+    /// Whether a picture's path names an SVG (by its ending, either case): drawn as paths, not
+    /// loaded as a raster.
+    [[nodiscard]] inline bool IsSvgPath(core::StringView path) noexcept
+    {
+        if (path.Size() <= 4)
+            return false;
+        const core::StringView end = path.SubStr(path.Size() - 4, 4);
+        return end == core::StringView(u8".svg") || end == core::StringView(u8".SVG");
+    }
 }

@@ -20,6 +20,7 @@ import foundation.core;  // String, StringView, Float2, Color, Array, Max
 import foundation.fonts; // CachedFont, IFontService
 import foundation.vg;    // TextEffects
 import foundation.image; // ImageData
+import foundation.vg.svg; // SVGDocument, SVGRenderer (an inline icon an SVG)
 export import :text_layout; // TextHAlign, TextVAlign, TextWhiteSpace, TextOverflow, TextLayout
 import :text_runs;
 import :rect;
@@ -401,12 +402,17 @@ export namespace experimental::gui
             }
             for (const LaidOutBox& icon : layout.Icons)
             {
+                if (m_resources == nullptr)
+                    break;
                 const TextRun& run = m_document.Runs[static_cast<usize>(icon.Run)];
-                const foundation::image::ImageData* image = m_resources != nullptr ? m_resources->LoadImage(run.Icon.AsView()) : nullptr;
-                if (image == nullptr)
-                    continue;
-                const Rectangle r = icon.Rect;
-                g.DrawImage(image, Rectangle{r.x + origin.x, r.y + origin.y, r.width, r.height});
+                const Rectangle r{icon.Rect.x + origin.x, icon.Rect.y + origin.y, icon.Rect.width, icon.Rect.height};
+                if (IsSvgPath(run.Icon.AsView())) // drawn as paths, crisp at the line's size
+                {
+                    if (const foundation::vg::svg::SVGDocument* svg = m_resources->LoadSvg(run.Icon.AsView()))
+                        foundation::vg::svg::SVGRenderer::Render(g, *svg, r);
+                }
+                else if (const foundation::image::ImageData* image = m_resources->LoadImage(run.Icon.AsView()))
+                    g.DrawImage(image, r);
             }
         }
 

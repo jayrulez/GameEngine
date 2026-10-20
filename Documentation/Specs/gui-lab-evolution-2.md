@@ -304,7 +304,9 @@ nearest declared colour, through the cascade (2a0dac384); media query lists, `no
 and the user's preferences, `prefers-color-scheme`, `prefers-contrast` and
 `prefers-reduced-motion`, which a host sets on its GUI (308c7961e); `@import` through the
 resource provider's new `LoadText`, a cycle stopping (95775b47d); `background-size` and
-`background-position` (39a54cd9f); SVG images drawn as paths at the size they fill (`LoadSvg`),
+`background-position` (39a54cd9f); SVG images drawn as paths at the size they fill (`LoadSvg`;
+since 2026-10-19 an Image's `src`, a menu command's icon and a rich text's `[icon=]` too, by an
+`.svg` path, and an `SvgDrawable` made from SVG markup for an icon set compiled into a binary),
 `border-image` nine-slice skins (stretch, repeat, round, fill) and `@spritesheet` atlases written
 as `url(atlas.png#xywh=...)` (202d678bb); dashed and dotted borders through VG's dash patterns,
 the lab's alone, no Foundation change (8b433b342). The built-in theme is one sheet of tokens on

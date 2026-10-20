@@ -22,6 +22,7 @@
             <Label class="nav-heading" text="LOOKS"/>
             <Button id="nav-styling" class="nav" text="Styling" command="page.styling"/>
             <Button id="nav-effects" class="nav" text="Effects" command="page.effects"/>
+            <Button id="nav-pictures" class="nav" text="Pictures" command="page.pictures"/>
             <Button id="nav-motion" class="nav" text="Motion" command="page.motion"/>
             <Button id="nav-themes" class="nav" text="Themes" command="page.themes"/>
             <Label class="nav-heading" text="BEHAVIOUR"/>

@@ -41,6 +41,7 @@ import experimental.gui;
 import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
 import experimental.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
+import experimental.gui.bake;      // SVG skins baked into textures
 import foundation.rhi.capture;     // the image tests' readback (E8g)
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
@@ -452,6 +453,7 @@ private:
     u32 m_frameIndex = 0;
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
     UniquePtr<vg::VGContext> m_vg;
+    UniquePtr<gui::GpuPictureBaker> m_baker; // the GUI's SVG skins, drawn once into textures
     vg::renderer::VGRenderer m_renderer{AppRoot()};
     fonts::CachedFont* m_font = nullptr; // Roboto 16, for what native code builds
 
@@ -618,6 +620,18 @@ Status GUISandbox::OnInit()
     m_vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
     m_vg->SetLayers(m_layerFs != nullptr);
     m_vg->SetStencilFills(m_renderer.StencilFillsSupported());
+    m_baker = MakeUnique<gui::GpuPictureBaker>(AppRoot(), AppRoot(), *m_device, m_renderer, m_fontService.Get());
+    gui::PictureBakerSetup bakes;
+    bakes.VertexShader = m_vs;
+    bakes.FragmentShader = m_fs;
+    bakes.GradientRadialShader = m_gradRadialFs;
+    bakes.GradientConicShader = m_gradConicFs;
+    bakes.DistanceFieldShader = m_distanceFieldFs;
+    bakes.Format = m_swapChain->Format();
+    bakes.BlendSpace = targetsOk ? m_targets.ConfigFor().blendSpace : vg::VGBlendSpace::Linear;
+    bakes.FrameCount = static_cast<i32>(kFrames);
+    if (!m_baker->Initialize(bakes).IsOk())
+        m_baker.Reset(); // the skins draw as paths
 
 #ifdef OPTION_HAS_ANGELSCRIPT
     RegisterCoreTypes();
@@ -629,6 +643,7 @@ Status GUISandbox::OnInit()
 #endif
 
     m_gui = MakeRef<gui::GUIContext>(AppRoot());
+    m_gui->SetPictureBaker(m_baker.Get());
     // The data the pages and the game menu share.
     gui::DataModel& data = m_gui->GetData();
     data.Set(StringView(u8"volume"), Variant::From<f32>(0.7f));
@@ -1966,6 +1981,8 @@ void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
     if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
         return;
     enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
+    if (m_baker)
+        (void)m_baker->Record(*enc, static_cast<i32>(m_frameIndex)); // what this frame asked to bake, for the next
     m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice); // layers draw in passes of their own, first
 
     const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
@@ -2064,6 +2081,15 @@ void GUISandbox::RunImageTests()
     const String name = Format(u8"{}.{}", id, m_backendName);
     const String picturePath = PathJoin(m_imageOut.AsView(), Format(u8"{}.png", name).AsView());
     image::Image picture;
+    // A frame first, uncaptured, when a picture is waiting to be baked: the capture shows the
+    // page as every frame after its first does.
+    if (m_baker)
+    {
+        const u64 bakes = m_baker->Generation();
+        (void)RenderOffscreen(*m_root, StringView{}, nullptr);
+        if (m_baker->Generation() != bakes)
+            (void)m_root->NeedsFrame(); // the root redraws from the bakes
+    }
     if (!RenderImage(*m_root, picturePath.AsView(), picture))
     {
         std::printf("GUISandbox: image %s: could not be drawn\n", reinterpret_cast<const char*>(name.CStr()));
@@ -2210,6 +2236,8 @@ bool GUISandbox::RenderOffscreen(gui::SceneRoot& root, StringView capture, image
     if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
         return false;
     enc->TransitionTexture(m_imageTarget, rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
+    if (m_baker)
+        (void)m_baker->Record(*enc, static_cast<i32>(m_frameIndex));
     m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice);
     const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
     rhi::RenderPassDesc rpd{};
@@ -2293,6 +2321,7 @@ void GUISandbox::OnShutdown()
     m_listModel.Reset();
     m_treeModel.Reset();
     m_checker.Reset();
+    m_baker.Reset(); // its bakes leave the renderer first
     m_renderer.Dispose();
     m_targets.Destroy(); // before the framework releases the device
     m_vg.Reset();

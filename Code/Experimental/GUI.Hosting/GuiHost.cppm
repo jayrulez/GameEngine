@@ -168,19 +168,8 @@ export namespace experimental::gui
             root->SetViewportSize(size);
 
             // The bakes: the first window gives the baker its format, every window samples them.
-            if (m_baker)
-            {
-                if (!m_bakerReady)
-                {
-                    m_bakerSetup.Format = data->DrawFormat;
-                    m_bakerSetup.BlendSpace = config.blendSpace;
-                    m_bakerReady = m_baker->Initialize(m_bakerSetup).IsOk();
-                    if (m_bakerReady)
-                        m_context->SetPictureBaker(m_baker.Get());
-                }
-                if (m_bakerReady)
-                    m_baker->AddTarget(data->Renderer);
-            }
+            if (EnsureBaker(data->DrawFormat, config.blendSpace))
+                m_baker->AddTarget(data->Renderer);
 
             GuiWindowData* raw = data.Get();
             // A payload replaced while frames in flight use it: wait for them first.
@@ -232,9 +221,7 @@ export namespace experimental::gui
                     m_device.Raw()->WaitIdle();
                     (void)data.Targets.Resize(width, height);
                 }
-                m_styles.SetMediaContext(data.Root->GetMediaContext());
-                m_styles.ApplyTree(*data.Root);
-                data.Root->UpdateLayout();
+                StyleAndLayOut(*data.Root);
                 data.NeedsFrame = data.Root->NeedsFrame() || resized || data.NeedsFrame;
             }
             m_bakesRecorded = false;
@@ -303,11 +290,38 @@ export namespace experimental::gui
         }
         [[nodiscard]] usize WindowCount() const noexcept { return m_attached.Size(); }
 
+        /// Styles `root` through the host's style manager and lays it out, as Update does each
+        /// window's: for a root drawn elsewhere (offscreen).
+        void StyleAndLayOut(SceneRoot& root)
+        {
+            m_styles.SetMediaContext(root.GetMediaContext());
+            m_styles.ApplyTree(root);
+            root.UpdateLayout();
+        }
+
         /// Frames a root was drawn in, and frames a window encoded its last batch again.
         [[nodiscard]] u64 FramesDrawn() const noexcept { return m_framesDrawn; }
         [[nodiscard]] u64 FramesReused() const noexcept { return m_framesReused; }
 
     private:
+        friend class GuiOffscreen; // draws with the host's device, shaders and baker
+
+        // The baker's renderer takes the first target's format and blend space; false without one.
+        bool EnsureBaker(rhi::TextureFormat format, vg::VGBlendSpace space)
+        {
+            if (!m_baker)
+                return false;
+            if (!m_bakerReady)
+            {
+                m_bakerSetup.Format = format;
+                m_bakerSetup.BlendSpace = space;
+                m_bakerReady = m_baker->Initialize(m_bakerSetup).IsOk();
+                if (m_bakerReady)
+                    m_context->SetPictureBaker(m_baker.Get());
+            }
+            return m_bakerReady;
+        }
+
         struct Attached
         {
             graphics::RenderWindow* Window = nullptr;

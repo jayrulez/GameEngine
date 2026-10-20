@@ -149,3 +149,24 @@ TEST_CASE("gui.hosting: the baker serves every window, and a detached window's r
     bed.Frame(bed.main.Get());
     other.Reset();
 }
+
+TEST_CASE("gui.hosting: an offscreen target draws a root at its own size, timed, and reads it back")
+{
+    Bed bed;
+    RefPtr<SceneRoot> root = bed.MakeRoot();
+    RefPtr<Panel> panel = MakeRef<Panel>(DefaultAllocator());
+    root->AddChild(panel.Get());
+    GuiOffscreen offscreen{DefaultAllocator(), *bed.host, 320, 200};
+    REQUIRE(offscreen.IsReady());
+    GuiOffscreen::Times times;
+    foundation::image::Image picture;
+    CHECK(offscreen.Draw(*root, &picture, &times));
+    CHECK(root->GetViewportSize().x == doctest::Approx(320.0f));
+    CHECK(root->GetViewportSize().y == doctest::Approx(200.0f));
+    CHECK(picture.Width() == 320u);
+    CHECK(picture.Height() == 200u);
+    CHECK(times.Draw >= 0.0);
+    CHECK(times.Gpu >= 0.0);
+    CHECK(root->GetLastFrameStats().FramesDrawn == 1u); // a frame of the root's, counted as a window's are
+    CHECK(offscreen.Draw(*root)); // again, nothing read back
+}

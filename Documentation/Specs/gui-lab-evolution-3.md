@@ -80,6 +80,13 @@ A root drawn into an image at a given size on the host's device, read back: what
 image tests, `--bench`, the sweep and the mirror audit draw with today by hand. Tests: a root drawn
 offscreen matches the same root drawn on screen; the bench's stages are timed.
 
+As built on `vg` (2026-10-20): `GuiOffscreen`, a target of a size and format of its own with a
+renderer and pass targets of its own (the bakes registered with it, as with a window's), drawn on an
+encoder and fence of its own and waited for, the picture read back in the call through
+`foundation.rhi.capture`; each draw times the GUI's draw, the renderer's prepare and the GPU. The
+host's `StyleAndLayOut` styles and lays out a root as a window's is. The "matches on screen" test
+is the sandbox's image tests, which draw this way once the sandbox is on the host (H3).
+
 ### H3 The sandbox on hosting
 
 GUISandbox becomes an application on the runtime host (`runtime::RunApplication`), its window, its

@@ -277,8 +277,8 @@ label beside the pointer, and the torn tab sat in its strip as if nothing were d
 foundation.ui shows a tab chip and takes the tab out of its strip at once; Godot leaves it and shows
 its icon and title; LunarSong dims it and shows a mock panel; Zero and Dear ImGui tear the panel out
 into a floating window. Now a torn tab's ghost is the tab (its title, its size, held where it was
-grabbed), and its strip closes up meanwhile, a neighbour's panel shown, or it dims in place
-(`torn-tab`, the theme's `--dock-torn-tab`); the layout still moves nothing until the drop, so
+grabbed), and it dims in place meanwhile, or its strip closes up, a neighbour's panel shown
+(`torn-tab`, the theme's `--dock-torn-tab`; dim the default, the user's choice after trying both); the layout still moves nothing until the drop, so
 Escape shows the stack as it was (foundation.ui floats the panel instead). A stack's only tab, or a
 tab picked up from the keyboard, dims either way. The floating-window feel waits for D5.
 Then the drag's start: a tab first slid along its strip and tore out only 32 pixels past the

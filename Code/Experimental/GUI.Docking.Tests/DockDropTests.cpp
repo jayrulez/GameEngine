@@ -5,8 +5,8 @@
 // from a stack's strip carries its panel; over a strip it goes in at a tab's place, over a stack's
 // middle into it, over its edge band beside it, over the surface's band along the whole edge. Each
 // drop is the layout's move, tried on a copy first: the preview is where the panel would be, and a
-// move the layout refuses shows its reason and does nothing. Meanwhile the torn tab's strip closes
-// up (or it dims, as the theme says), shown again as the layout has it when the drag ends.
+// move the layout refuses shows its reason and does nothing. Meanwhile the torn tab dims (or its
+// strip closes up, as the theme says), shown again as the layout has it when the drag ends.
 #include "DockingTestBed.h"
 
 using namespace experimental::gui;
@@ -144,6 +144,7 @@ TEST_CASE("dock drop: the bands are the sheet's, through the theme's tokens")
 TEST_CASE("dock drop: a torn tab closes up its strip, a neighbour shown, and Escape shows the stack as it was")
 {
     Bed bed;
+    bed.space->SetTornTab(DockTornTab::Close);
     TabView* central = bed.ViewOf(u8"inspector");
     REQUIRE(central != nullptr);
     Tab* inspector = bed.TabOf(u8"inspector");
@@ -168,14 +169,20 @@ TEST_CASE("dock drop: a torn tab closes up its strip, a neighbour shown, and Esc
     CHECK(central->GetSelectedPage() == bed.space->PageOf(SV(u8"scene")));
 }
 
-TEST_CASE("dock drop: dimmed instead by the theme's torn-tab, or when it is its stack's only tab")
+TEST_CASE("dock drop: a torn tab dims by default; the theme's torn-tab closes it up; a stack's only tab dims its stack")
 {
     Bed bed;
-    StyleManager styles;
-    const core::String css = core::Format(u8"{} :root {{ --dock-torn-tab: dim; }}", DockingSheetCSS());
-    styles.SetStyleSheet(CSSParser::Parse(css.AsView()));
-    styles.ApplyTree(*bed.root.Get());
-    CHECK(bed.space->GetTornTab() == DockTornTab::Dim);
+    {
+        StyleManager styles;
+        styles.SetStyleSheet(CSSParser::Parse(DockingSheetCSS()));
+        styles.ApplyTree(*bed.root.Get());
+        CHECK(bed.space->GetTornTab() == DockTornTab::Dim);
+        const core::String css = core::Format(u8"{} :root {{ --dock-torn-tab: close; }}", DockingSheetCSS());
+        styles.SetStyleSheet(CSSParser::Parse(css.AsView()));
+        styles.ApplyTree(*bed.root.Get());
+        CHECK(bed.space->GetTornTab() == DockTornTab::Close);
+    }
+    bed.space->SetTornTab(DockTornTab::Dim);
     bed.Tear(u8"inspector");
     Tab* inspector = bed.TabOf(u8"inspector");
     CHECK(inspector->IsDisplayed());
@@ -196,6 +203,7 @@ TEST_CASE("dock drop: a tab moved a few pixels along its strip is a drag at once
     Bed bed;
     const DockNodeId central = bed.controller.GetLayout().CentralStack();
     REQUIRE(bed.controller.GetLayout().FindNode(central)->Panels[0] == SV(u8"scene"));
+    bed.space->SetTornTab(DockTornTab::Close);
     Tab* scene = bed.TabOf(u8"scene");
     const core::Float2 start = Bed::Centre(Bed::Bounds(*scene));
     bed.D().InjectMouseDown(start, MouseButton::Left);

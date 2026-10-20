@@ -41,7 +41,7 @@ export namespace experimental::gui
             tabview.dock-central { background-color: var(--dock-central-background, var(--surface)); }
             label.dock-placeholder { color: var(--dock-placeholder, var(--muted)); padding: 16px; }
             dockspace { edge-band: var(--dock-edge, 64px); surface-band: var(--dock-surface-edge, 20px);
-                        torn-tab: var(--dock-torn-tab, close); }
+                        torn-tab: var(--dock-torn-tab, dim); }
             tab.dock-torn, tabview.dock-torn { opacity: var(--dock-torn-opacity, 0.45); }
             panel.dock-preview {
                 background-color: var(--dock-preview, rgba(80, 150, 255, 0.25));
@@ -89,8 +89,8 @@ export namespace experimental::gui
     /// What a tab torn out of its stack leaves while it is dragged (DockSpace::SetTornTab).
     enum class DockTornTab : u8
     {
+        Dim,   ///< it stays, dimmed (the default)
         Close, ///< its strip closes up, a neighbour's panel shown
-        Dim,   ///< it stays, dimmed
     };
 
     enum class DockDirection : u8
@@ -397,14 +397,14 @@ export namespace experimental::gui
         void SetSurfaceBand(f32 band) noexcept { m_surfaceBand = Max(0.0f, band); }
 
         /// What a tab torn out of its stack leaves while it is dragged (`torn-tab`, the theme's
-        /// `--dock-torn-tab`): `close`, its strip closing up and its stack showing a neighbour's
-        /// panel; `dim`, it stays where it is, dimmed. Nothing moves in the layout until the drop,
+        /// `--dock-torn-tab`): `dim` (the default), it stays where it is, dimmed; `close`, its strip
+        /// closing up and its stack showing a neighbour's panel. Nothing moves in the layout until the drop,
         /// and a drag that ends without one shows the stack as it was. A stack's only tab, or a tab
         /// picked up from the keyboard (the focus stays on it), is dimmed either way.
         [[nodiscard]] DockTornTab GetTornTab() const noexcept { return m_tornTab; }
         void SetTornTab(DockTornTab torn) noexcept { m_tornTab = torn; }
-        [[nodiscard]] String GetTornTabName() const { return String(m_tornTab == DockTornTab::Dim ? u8"dim" : u8"close"); }
-        void SetTornTabName(const String& name) { m_tornTab = name.AsView() == core::StringView(u8"dim") ? DockTornTab::Dim : DockTornTab::Close; }
+        [[nodiscard]] String GetTornTabName() const { return String(m_tornTab == DockTornTab::Close ? u8"close" : u8"dim"); }
+        void SetTornTabName(const String& name) { m_tornTab = name.AsView() == core::StringView(u8"close") ? DockTornTab::Close : DockTornTab::Dim; }
 
         /// The docked panel a drag carries (a torn-out tab of a page some view of the controller
         /// shows); null for anything else.
@@ -1001,7 +1001,7 @@ export namespace experimental::gui
         Array<Shown> m_shown;
         f32 m_edgeBand = 64.0f;
         f32 m_surfaceBand = 20.0f;
-        DockTornTab m_tornTab = DockTornTab::Close;
+        DockTornTab m_tornTab = DockTornTab::Dim;
         RefPtr<Panel> m_preview;
         RefPtr<Menu> m_moveMenu;
         Rect m_previewBounds{};

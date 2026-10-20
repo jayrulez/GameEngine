@@ -5,7 +5,8 @@
 // a node owning its press ending the walk; every move, modifier change and requery asks the node
 // under the pointer and up its ancestors what a drop would do (an effect, a reason, a place); the
 // cursor, the preview and a hint show it; a release drops, Escape, a right press or the source
-// leaving cancels; the source is told how it ended; a finger drags after a long press.
+// leaving cancels; the source is told how it ended; a finger drags after a long press; a source
+// may follow the drag itself, with no preview.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -297,6 +298,36 @@ TEST_CASE("dnd: the preview follows the pointer, held where the press was, and s
     CHECK(s.D().GetDragPreview()->GetScreenBounds().y == doctest::Approx(130.0f));
     s.D().CancelDrag();
     s.D().InjectMouseUp(core::Float2{150.0f, 150.0f}, MouseButton::Left);
+}
+
+TEST_CASE("dnd: a source that follows the drag itself has no preview; it moves first, and what it leaves is asked")
+{
+    Scene s;
+    s.target->SetDropTypes(core::String(u8"card"));
+    core::Array<core::Float2> followed;
+    s.source->SetDragSource([&](DragRequest& r)
+    {
+        r.Payload.Type = core::String(u8"card");
+        r.Follow = [&](core::Float2 at)
+        {
+            followed.PushBack(at);
+            s.source->SetHitTestVisible(false); // what a following source does: the drop is asked of what is below
+            s.source->SetPosition(core::Float2{at.x - 20.0f, at.y - 20.0f}); // the source under the pointer
+        };
+        return true;
+    });
+    s.DragTo(core::Float2{250.0f, 50.0f});
+    REQUIRE(s.D().IsDragging());
+    CHECK(s.D().GetDragPreview() == nullptr);
+    REQUIRE(followed.Size() >= 2u);
+    CHECK(followed.Back().x == doctest::Approx(250.0f));
+    CHECK(s.source->GetPosition().x == doctest::Approx(230.0f));
+    CHECK(s.D().GetDropTarget() == s.target.Get()); // under the source, the target answered
+    s.D().InjectMouseUp(core::Float2{250.0f, 50.0f}, MouseButton::Left);
+    CHECK_FALSE(s.D().IsDragging());
+    const core::usize calls = followed.Size();
+    s.D().InjectMouseMove(core::Float2{260.0f, 50.0f}); // over: no more calls
+    CHECK(followed.Size() == calls);
 }
 
 TEST_CASE("dnd: Escape, a right press and the source leaving the tree cancel; the source hears it cancelled")

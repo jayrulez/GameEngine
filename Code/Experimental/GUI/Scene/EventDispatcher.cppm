@@ -1857,7 +1857,8 @@ export namespace experimental::gui
                 m_grabOffset = request.Press;
             else
                 m_grabOffset = core::Float2{-14.0f, -12.0f};
-            if (!m_dragPreview)
+            m_dragFollow = core::Move(request.Follow);
+            if (!m_dragPreview && !m_dragFollow)
                 m_dragPreview = source.CreateDragPreview(m_dragPayload);
             if (m_root != nullptr)
             {
@@ -1886,6 +1887,8 @@ export namespace experimental::gui
         void QueryDrop(core::Float2 at)
         {
             m_mousePos = at;
+            if (m_dragFollow)
+                m_dragFollow(RootPoint(at)); // the source moves first: what it leaves is asked
             Node* hit = HitTest(at);
             NoteDragRest(hit);
             DropQuery query{m_dragPayload, core::Float2{0.0f, 0.0f}, 0, DropEffect::Move, false, DropEffect::None, core::String{}, false, 0};
@@ -2028,6 +2031,7 @@ export namespace experimental::gui
                 (void)ClosePopup(*m_dragLayer, PopupCloseReason::Code);
             m_dragLayer = core::RefPtr<DragLayer>{};
             m_dragPreview = core::RefPtr<Node>{};
+            m_dragFollow = {};
             m_dropHint = core::RefPtr<Node>{};
             m_dragSource = nullptr;
             m_dropEffect = DropEffect::None;
@@ -2558,6 +2562,7 @@ export namespace experimental::gui
         core::Float2 m_grabOffset{0.0f, 0.0f};
         core::RefPtr<DragLayer> m_dragLayer;
         core::RefPtr<Node> m_dragPreview;
+        core::Function<void(core::Float2)> m_dragFollow; // a source that shows itself where the drag is
         core::RefPtr<Node> m_dropHint;
         core::Function<bool(const core::Array<core::String>&, core::Float2)> m_onFileDrop;
         f32 m_dragScrollBand = 24.0f;

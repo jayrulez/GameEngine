@@ -545,6 +545,10 @@ export namespace experimental::gui
         core::RefPtr<Node> Preview;
         core::Float2 GrabOffset{0.0f, 0.0f};
         bool HasGrabOffset = false;
+        /// A source that shows itself where the drag is (a window dragged by its title, D5): no
+        /// preview is made, and each move of the drag calls this with the pointer in the root's
+        /// space, before the drop is asked about (the source keeps itself out of hit tests).
+        core::Function<void(core::Float2)> Follow;
     };
 
     /// What a drop here would do, asked of the node under the pointer and up its ancestors every

@@ -4,7 +4,8 @@
 // GUI.Docking - floating surfaces in one window (D5 of Specs/gui-lab-evolution-3.md): a DockArea
 // shows the main surface and each floating one as a window over it, holding a dock space of its
 // own; the windows follow the layout (made, placed, titled, ended) and the layout follows what the
-// user does to them (moved or resized, closed); a float is docked into like the main surface.
+// user does to them (moved or resized, closed); a float is docked into like the main surface; a tab
+// dragged with Shift, Move to's Float and dock.float float a panel.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -49,7 +50,43 @@ namespace
             REQUIRE(controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"scene"), l.CentralStack()); }).Ok());
             Lay();
         }
-        void Lay() { root->UpdateLayout(); }
+        void Lay()
+        {
+            root->UpdateLayout();
+            // The tabs a size of their own: with no font their text measures nothing.
+            const char8_t* const ids[] = {u8"scene", u8"profiler", u8"memory", u8"console"};
+            for (const char8_t* id : ids)
+                if (Tab* tab = TabOf(id))
+                    tab->EditLayoutStyle([](LayoutStyle& s) {
+                        s.Width = LayoutLength::Px(80.0f);
+                        s.Height = LayoutLength::Px(24.0f);
+                    });
+            root->UpdateLayout();
+        }
+        // The dock space showing a panel: the main one or a float's.
+        DockSpace* SpaceOf(const char8_t* panel) const
+        {
+            if (area->GetMainSpace()->PageOf(SV(panel)) != nullptr)
+                return area->GetMainSpace();
+            for (usize i = 0; i < area->GetFloatCount(); ++i)
+                if (area->GetFloat(i)->GetSpace()->PageOf(SV(panel)) != nullptr)
+                    return area->GetFloat(i)->GetSpace();
+            return nullptr;
+        }
+        Tab* TabOf(const char8_t* panel) const
+        {
+            DockSpace* space = SpaceOf(panel);
+            if (space == nullptr)
+                return nullptr;
+            TabView* view = Cast<TabView>(space->WidgetOf(controller.GetLayout().StackOf(SV(panel))));
+            TabPage* page = space->PageOf(SV(panel));
+            if (view == nullptr)
+                return nullptr;
+            for (core::i32 i = 0; i < view->GetPageCount(); ++i)
+                if (view->GetPage(i) == page)
+                    return view->GetBar()->GetTab(i);
+            return nullptr;
+        }
         EventDispatcher& D() { return *root->GetEventDispatcher(); }
         DockSurfaceId Float(const char8_t* panel, core::Rectangle bounds)
         {
@@ -164,4 +201,76 @@ TEST_CASE("dock area: floats with no bounds of their own cascade, and a restored
     REQUIRE(bed.controller.Adopt(saved).Ok());
     bed.Lay();
     CHECK(bed.area->GetFloatCount() == 2u);
+}
+
+TEST_CASE("dock area: a tab dragged with Shift held floats at the pointer: the dock targets pass it on, the preview is the window")
+{
+    Bed bed;
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"profiler"), l.CentralStack()); }).Ok());
+    bed.Lay();
+    Tab* tab = bed.TabOf(u8"profiler");
+    REQUIRE(tab != nullptr);
+    const Rect from = tab->GetScreenBounds();
+    const core::Float2 press{from.x + 10.0f, from.y + 10.0f};
+    bed.D().InjectMouseDown(press, MouseButton::Left);
+    const core::Float2 over{400.0f, 300.0f}; // the central stack's middle
+    bed.D().InjectMouseMove(core::Float2{press.x + 10.0f, press.y});
+    bed.D().InjectMouseMove(over);
+    REQUIRE(bed.D().IsDragging());
+    CHECK(bed.D().GetDropTarget() != bed.area.Get()); // docking: into the stack
+    core::Rectangle preview;
+    CHECK_FALSE(bed.area->GetFloatPreview(preview));
+
+    bed.D().InjectMouseMove(over, KeyModShift); // Shift: a float
+    CHECK(bed.D().GetDropTarget() == bed.area.Get());
+    REQUIRE(bed.area->GetFloatPreview(preview));
+    CHECK(preview.x < over.x);
+    CHECK(preview.x + preview.width > over.x);
+    CHECK(preview.y == doctest::Approx(over.y - 14.0f)); // its title bar under the pointer
+    Rect docked;
+    CHECK_FALSE(bed.area->GetMainSpace()->GetPreviewBounds(docked)); // the dock's preview gone
+
+    bed.D().InjectMouseUp(over, MouseButton::Left, KeyModShift); // let go with Shift still held
+    bed.Lay();
+    REQUIRE(bed.area->GetFloatCount() == 1u);
+    DockFloat* window = bed.area->GetFloat(0);
+    CHECK(window->GetSpace()->PageOf(SV(u8"profiler")) != nullptr);
+    CHECK(window->GetPosition().x == doctest::Approx(preview.x));
+    CHECK(window->GetPosition().y == doctest::Approx(preview.y));
+    CHECK_FALSE(bed.area->GetFloatPreview(preview));
+}
+
+TEST_CASE("dock area: Move to's Float and dock.float float a panel over its stack")
+{
+    Bed bed;
+    DefineDockingCommands(bed.root->GetContext());
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertBeside(SV(u8"profiler"), l.CentralStack(), DockSide::End, 0.4f); }).Ok());
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.StackOf(SV(u8"profiler"))); }).Ok());
+    bed.Lay();
+    DockSpace* main = bed.area->GetMainSpace();
+    Tab* tab = bed.TabOf(u8"memory");
+    REQUIRE(tab != nullptr);
+    Menu* menu = main->OpenMoveTo(SV(u8"memory"), *tab, core::Float2{0.0f, 0.0f});
+    REQUIRE(menu != nullptr);
+    MenuItem* floatItem = nullptr;
+    for (usize i = 0; i < menu->ChildCount(); ++i)
+        if (auto* item = Cast<MenuItem>(menu->GetChildAt(i)); item != nullptr && item->GetText() == SV(u8"Float"))
+            floatItem = item;
+    REQUIRE(floatItem != nullptr);
+    CHECK(floatItem->IsEnabled());
+    const Rect stack = main->WidgetOf(bed.controller.GetLayout().StackOf(SV(u8"memory")))->GetScreenBounds();
+    floatItem->HandleActivate();
+    bed.Lay();
+    REQUIRE(bed.area->GetFloatCount() == 1u);
+    const DockFloat* window = bed.area->GetFloat(0);
+    CHECK(window->GetSpace()->PageOf(SV(u8"memory")) != nullptr);
+    CHECK(window->GetPosition().x == doctest::Approx(stack.x + 24.0f).epsilon(0.01)); // over its stack, a little in
+    CHECK(window->GetPosition().y == doctest::Approx(stack.y + 24.0f).epsilon(0.01));
+
+    // From the keys: the focused stack's panel.
+    bed.TabOf(u8"profiler")->RequestFocus();
+    CHECK(bed.root->RunCommand(SV(u8"dock.float")));
+    bed.Lay();
+    CHECK(bed.area->GetFloatCount() == 2u);
+    CHECK(bed.SpaceOf(u8"profiler") != main);
 }

@@ -76,6 +76,7 @@ export namespace experimental::gui
             {u8"dock.maximize", u8"Maximize the Stack", u8"ctrl-alt-m"},
             {u8"dock.close", u8"Close the Panel", u8"ctrl-alt-w"},
             {u8"dock.move-to", u8"Move the Panel To...", u8"ctrl-alt-period"},
+            {u8"dock.float", u8"Float the Panel", u8"ctrl-alt-f"},
         };
         for (const Named& named : kCommands)
         {
@@ -171,6 +172,7 @@ export namespace experimental::gui
             (void)OnCommand(core::StringView(u8"dock.maximize"), [self](CommandEvent& e) { e.Propagate = !self->ToggleMaximized().Ok(); });
             (void)OnCommand(core::StringView(u8"dock.close"), [self](CommandEvent& e) { e.Propagate = !self->CloseFocused().Ok(); });
             (void)OnCommand(core::StringView(u8"dock.move-to"), [self](CommandEvent& e) { e.Propagate = self->OpenMoveToFocused() == nullptr; });
+            (void)OnCommand(core::StringView(u8"dock.float"), [self](CommandEvent& e) { e.Propagate = !self->FloatFocused().Ok(); });
         }
         ~DockSpace() override
         {
@@ -325,6 +327,36 @@ export namespace experimental::gui
             return m_controller->Close(panel.AsView());
         }
 
+        // === Floating (D5) ===
+        /// A drag asks for a float rather than a dock: Shift held (the pointer's; the keyboard drops
+        /// where the focus is).
+        [[nodiscard]] static bool AsksToFloat(const DropQuery& query) noexcept
+        {
+            return !query.FromKeyboard && (query.Modifiers & KeyModShift) != 0;
+        }
+        /// Where a panel floated from here (the menu, `dock.float`) stands: what the area it is in
+        /// says (a DockArea sets it); none, a float placed where the area cascades them.
+        void SetFloatPlacer(Function<Rectangle(core::StringView panel)> placer) { m_floatPlacer = core::Move(placer); }
+        /// A panel docked here floated into a surface of its own.
+        DockOutcome FloatPanel(core::StringView panel)
+        {
+            if (m_controller == nullptr)
+                return DockOutcome::Refuse(u8"it shows no layout");
+            const Rectangle bounds = m_floatPlacer ? m_floatPlacer(panel) : Rectangle{0.0f, 0.0f, 0.0f, 0.0f};
+            const String moving(panel);
+            return m_controller->Edit([&](DockLayout& layout) { return layout.Float(moving.AsView(), bounds); });
+        }
+        /// The focused stack's chosen panel floated.
+        DockOutcome FloatFocused()
+        {
+            const DockNodeId stack = FocusedStack();
+            const DockNode* node = stack != kNoDock ? m_controller->GetLayout().FindNode(stack) : nullptr;
+            if (node == nullptr || node->Panels.IsEmpty())
+                return DockOutcome::Refuse(u8"no stack is focused");
+            const String panel = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
+            return FloatPanel(panel.AsView());
+        }
+
         // === The "Move to" menu (D4) ===
         /// Opens the menu of the places `panel` may go, at `at` (root space) for `owner`: into each
         /// other stack, beside one (on each side), along the surface's edges; a place the layout
@@ -368,6 +400,12 @@ export namespace experimental::gui
             Menu* edge = menu.AddSubMenu(core::StringView(u8"Along the Edge"));
             for (usize i = 0; i < 4; ++i)
                 add(*edge, core::StringView(edgeNames[i]), DockDrop{DockDropKind::Edge, kNoDock, m_surface, -1, SideOf(ways[i])});
+            {
+                DockLayout after = m_controller->GetLayout();
+                const bool can = after.Float(panel, Rectangle{0.0f, 0.0f, 0.0f, 0.0f}).Ok();
+                MenuItem* item = menu.AddItem(core::StringView(u8"Float"), [self, moving]() { (void)self->FloatPanel(moving.AsView()); });
+                item->SetEnabled(can);
+            }
             menu.Open(owner, at);
             return m_moveMenu.Get();
         }
@@ -494,7 +532,7 @@ export namespace experimental::gui
             // Reached over a separator, or past a stack that left it the surface's band.
             const String* panel = DraggedPanel(query.Payload);
             DockDrop drop;
-            if (panel != nullptr && !query.FromKeyboard && DropAt(query.Local, kNoDock, drop))
+            if (panel != nullptr && !query.FromKeyboard && !AsksToFloat(query) && DropAt(query.Local, kNoDock, drop))
                 Offer(*this, query, panel->AsView(), drop);
         }
         void OnDragLeave(const DragEvent&) override { Withdraw(*this); }
@@ -656,7 +694,9 @@ export namespace experimental::gui
                 TabBar* bar = made->GetBar();
                 bar->SetOnTabOffered([self, id, bar](DropQuery& query, Tab&, i32 index)
                 {
-                    if (const String* panel = self->DraggedPanel(query.Payload))
+                    if (AsksToFloat(query))
+                        query.Effect = DropEffect::None; // passed on: a float, the area's
+                    else if (const String* panel = self->DraggedPanel(query.Payload))
                     {
                         const String dragged = *panel;
                         // The outer third of the surface's band wins over a strip along the surface's
@@ -1002,6 +1042,7 @@ export namespace experimental::gui
         f32 m_edgeBand = 64.0f;
         f32 m_surfaceBand = 20.0f;
         DockTornTab m_tornTab = DockTornTab::Dim;
+        Function<Rectangle(core::StringView)> m_floatPlacer;
         RefPtr<Panel> m_preview;
         RefPtr<Menu> m_moveMenu;
         Rect m_previewBounds{};
@@ -1014,8 +1055,8 @@ export namespace experimental::gui
     inline void DockStack::OnDragQuery(DropQuery& query)
     {
         const String* panel = m_space->DraggedPanel(query.Payload);
-        if (panel == nullptr)
-            return; // a tab of another kind: not the layout's
+        if (panel == nullptr || DockSpace::AsksToFloat(query))
+            return; // a tab of another kind (not the layout's), or a float asked for (the area's)
         DockDrop drop{DockDropKind::Middle, m_node, kNoDock, -1, DockSide::Start};
         // The keyboard aims at no band (the focus's middle is no aim): into the stack it is in.
         if (!query.FromKeyboard && (!m_space->DropAt(m_space->FromNode(*this, query.Local), m_node, drop) || drop.Kind == DockDropKind::Edge))

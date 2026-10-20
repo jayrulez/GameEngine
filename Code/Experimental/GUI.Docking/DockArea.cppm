@@ -9,7 +9,9 @@
 // a float is a whole dock tree that is docked into like the main one. The area keeps the floats
 // with the layout as it changes (one made for a surface that came, one ended for a surface that
 // went), each at its surface's bounds (this widget's space), and notes back what the user does to a
-// window: moved or resized, its bounds; closed, its panels closed as their policies say.
+// window: moved or resized, its bounds; closed, its panels closed as their policies say. A tab
+// dragged with Shift held floats: the dock spaces pass the drop on, and the area shows the window
+// at the pointer and makes it there.
 
 module;
 #include "Core/Prelude.h"
@@ -64,6 +66,12 @@ export namespace experimental::gui
             SetClipChildren(true);
             m_main = MakeRef<DockSpace>(MemoryAllocator());
             AddChild(m_main.Get());
+            Placing(*m_main);
+            m_preview = MakeRef<Panel>(MemoryAllocator());
+            m_preview->AddClass(core::StringView(u8"dock-preview"));
+            m_preview->SetHitTestVisible(false);
+            m_preview->SetVisible(false);
+            AddChild(m_preview.Get());
         }
         ~DockArea() override
         {
@@ -137,6 +145,7 @@ export namespace experimental::gui
                     AddChild(made.Get());
                     m_floats.PushBack(made);
                     window = made.Get();
+                    Placing(*window->GetSpace());
                     window->GetSpace()->Show(*m_controller, surface.Id);
                 }
                 Rectangle bounds = surface.Bounds;
@@ -151,9 +160,69 @@ export namespace experimental::gui
                 window->SetSize(core::Float2{bounds.width, bounds.height});
                 window->SetTitle(TitleOf(layout, surface).AsView());
             }
+            if (GetChildAt(ChildCount() - 1) != m_preview.Get())
+                m_preview->ToFront(); // over the floats
             RequestLayout();
         }
         [[nodiscard]] const String* PanelOf(const Node&) const override { return nullptr; } // its dock spaces answer
+
+        /// Where a float being asked for would stand (this widget's space); false when none is.
+        [[nodiscard]] bool GetFloatPreview(Rectangle& out) const
+        {
+            if (!m_preview->IsVisible())
+                return false;
+            out = m_previewBounds;
+            return true;
+        }
+        /// Where a panel floated from its stack stands: over the stack, a little in, at most the
+        /// stack's size (and at least a usable one).
+        [[nodiscard]] Rectangle FloatBoundsFor(core::StringView panel) const
+        {
+            const DockSpace* space = SpaceOf(panel);
+            const UIWidget* stack = space != nullptr ? space->WidgetOf(m_controller->GetLayout().StackOf(panel)) : nullptr;
+            if (stack == nullptr)
+                return Rectangle{0.0f, 0.0f, 0.0f, 0.0f}; // cascaded
+            const Rect at = stack->GetScreenBounds();
+            const core::Float2 origin = ConvertToNodeSpace(core::Float2{at.x, at.y});
+            const core::Float2 size = FloatSizeOf(core::Float2{at.width, at.height});
+            const core::Float2 place = KeptInView(core::Float2{origin.x + 24.0f, origin.y + 24.0f}, size);
+            return Rectangle{place.x, place.y, size.x, size.y};
+        }
+
+    protected:
+        // A float asked for (Shift held): the drop the dock spaces passed on lands here, the
+        // window at the pointer, its title bar under it.
+        void OnDragQuery(DropQuery& query) override
+        {
+            const String* panel = m_main->DraggedPanel(query.Payload);
+            if (panel == nullptr || !DockSpace::AsksToFloat(query))
+                return;
+            const String dragged = *panel;
+            DockLayout after = m_controller->GetLayout();
+            const core::Float2 size = FloatSizeFrom(dragged.AsView());
+            const Rectangle bounds = FloatBoundsAt(query.Local, size, core::Float2{Min(60.0f, size.x * 0.25f), 14.0f});
+            if (DockOutcome refused = after.Float(dragged.AsView(), bounds); !refused.Ok())
+            {
+                HidePreview();
+                query.Refuse(refused.Refused.AsView());
+                return;
+            }
+            query.Accept(DropEffect::Move);
+            m_floatPanel = dragged;
+            m_previewBounds = bounds;
+            m_preview->SetVisible(true);
+            m_preview->ToFront();
+            RequestLayout();
+        }
+        void OnDragLeave(const DragEvent&) override { HidePreview(); }
+        void OnDrop(const DragEvent&) override
+        {
+            const String panel = core::Move(m_floatPanel);
+            const Rectangle bounds = m_previewBounds;
+            HidePreview();
+            if (!panel.IsEmpty() && m_controller != nullptr)
+                (void)m_controller->Edit([&](DockLayout& layout) { return layout.Float(panel.AsView(), bounds); });
+        }
 
     protected:
         // The main surface fills it; each float at its place, kept in view.
@@ -161,6 +230,8 @@ export namespace experimental::gui
         {
             const Rect box = GetContentBounds();
             m_main->Arrange(box);
+            if (m_preview->IsVisible())
+                m_preview->Arrange(Rect{m_previewBounds.x, m_previewBounds.y, m_previewBounds.width, m_previewBounds.height});
             for (const RefPtr<DockFloat>& window : m_floats)
             {
                 const core::Float2 at = KeptInView(window->GetPosition(), window->GetSize());
@@ -171,6 +242,40 @@ export namespace experimental::gui
     private:
         friend class DockFloat;
 
+        // A dock space of the area places its floats as the area does.
+        void Placing(DockSpace& space)
+        {
+            DockArea* self = this;
+            space.SetFloatPlacer([self](core::StringView panel) { return self->FloatBoundsFor(panel); });
+        }
+        [[nodiscard]] DockSpace* SpaceOf(core::StringView panel) const
+        {
+            if (m_main->PageOf(panel) != nullptr)
+                return m_main.Get();
+            for (const RefPtr<DockFloat>& window : m_floats)
+                if (window->GetSpace()->PageOf(panel) != nullptr)
+                    return window->GetSpace();
+            return nullptr;
+        }
+        // A float's size from what it came from: no larger than most of the area, no smaller than a
+        // window can be used at.
+        [[nodiscard]] core::Float2 FloatSizeOf(core::Float2 from) const
+        {
+            const core::Float2 room = GetSize();
+            return core::Float2{Clamp(from.x, 200.0f, Max(200.0f, room.x * 0.7f)), Clamp(from.y, 140.0f, Max(140.0f, room.y * 0.7f))};
+        }
+        [[nodiscard]] core::Float2 FloatSizeFrom(core::StringView panel) const
+        {
+            const DockSpace* space = SpaceOf(panel);
+            const UIWidget* stack = space != nullptr ? space->WidgetOf(m_controller->GetLayout().StackOf(panel)) : nullptr;
+            return FloatSizeOf(stack != nullptr ? stack->GetSize() : kFloatSize);
+        }
+        void HidePreview()
+        {
+            m_floatPanel = String{};
+            if (m_preview->IsVisible())
+                m_preview->SetVisible(false);
+        }
         // A window's place moved so a part of its title bar stays in the area.
         [[nodiscard]] core::Float2 KeptInView(core::Float2 at, core::Float2 size) const
         {
@@ -219,6 +324,9 @@ export namespace experimental::gui
         DockController* m_controller = nullptr;
         RefPtr<DockSpace> m_main;
         Array<RefPtr<DockFloat>> m_floats;
+        RefPtr<Panel> m_preview; // where a float asked for would stand
+        Rectangle m_previewBounds{0.0f, 0.0f, 0.0f, 0.0f};
+        String m_floatPanel; // the panel it is for
     };
 
     inline DockFloat::DockFloat(DockArea& area, DockSurfaceId surface) : m_area(&area), m_surface(surface)

@@ -313,11 +313,14 @@ void main()
     root.find("volume-text").bind("text", TextExpression(volumeText));
     root.find("music-text").bind("text", TextExpression(musicText));
 
-    // Played by keyboard and gamepad too: Back is Escape and the East button.
-    root.onCommand("back", CommandHandler(onBackCommand));
+    // Played by keyboard and gamepad too: Back is Escape and the East button. The handlers are the
+    // menu's own: it is a modal layer of the sandbox's root, and a command from inside it stops at
+    // its edge (one on the root would never be reached while the menu is open).
+    Node@ menu = root.find("showcase");
+    menu.onCommand("back", CommandHandler(onBackCommand));
     gui::bindKey("escape", "back", "");
     gui::bindKey("pad-east", "back", "");
-    root.onCommand("pause", CommandHandler(onPauseCommand));
+    menu.onCommand("pause", CommandHandler(onPauseCommand));
     gui::bindKey("pad-start", "pause", "");
 
     enter();

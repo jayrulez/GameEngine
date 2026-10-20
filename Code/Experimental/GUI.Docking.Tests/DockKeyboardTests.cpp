@@ -5,7 +5,7 @@
 // tab picked up (`drag.pick`) and dropped on another stack's tab; `dock.focus-*` and `dock.move-*`
 // by direction (into the stack that way, else along the surface's edge, the focus going with the
 // panel); `dock.maximize` and back; `dock.close`; none bound to a key, the keyboard's way in a tab's
-// context menu.
+// context menu (Move to, Float, Close).
 #include "DockingTestBed.h"
 
 using namespace experimental::gui;
@@ -158,4 +158,35 @@ TEST_CASE("dock keys: the Move to menu, from a tab's context menu or dock.move-t
     const DockNode* root = layout.FindNode(layout.FindSurface(layout.MainSurface())->Root);
     CHECK(root->Axis == DockAxis::Vertical);
     CHECK(root->Children[0] == bed.StackOf(u8"inspector"));
+}
+
+TEST_CASE("dock keys: a tab's context menu ends with Close, disabled for a panel that cannot be closed")
+{
+    KeyBed bed;
+    DockPanelDescription fixed;
+    fixed.Id = core::String(u8"fixed");
+    fixed.Closable = false;
+    fixed.Factory = []() { return core::RefPtr<Node>(core::MakeRef<Panel>(core::DefaultAllocator())); };
+    REQUIRE(bed.controller.Register(core::Move(fixed)));
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"fixed"), bed.StackOf(u8"hierarchy")); }).Ok());
+    bed.Lay();
+
+    bed.TabOf(u8"inspector")->RequestFocus();
+    REQUIRE(bed.Run(u8"dock.move-to"));
+    Menu* menu = bed.space->GetMoveMenu();
+    REQUIRE(menu != nullptr);
+    MenuItem* close = Row(*menu, u8"Close");
+    REQUIRE(close != nullptr);
+    CHECK(close->IsEnabled());
+    close->HandleActivate();
+    CHECK_FALSE(menu->IsOpen());
+    CHECK(bed.StackOf(u8"inspector") == kNoDock);
+
+    bed.Lay();
+    bed.TabOf(u8"fixed")->RequestFocus();
+    REQUIRE(bed.Run(u8"dock.move-to"));
+    menu = bed.space->GetMoveMenu();
+    REQUIRE(menu != nullptr);
+    REQUIRE(Row(*menu, u8"Close") != nullptr);
+    CHECK_FALSE(Row(*menu, u8"Close")->IsEnabled());
 }

@@ -56,7 +56,7 @@ export namespace experimental::gui
     /// that way, or move the focused stack's panel into it (past the surface's edge into what lies
     /// beyond it, in a DockArea; else along that edge); `dock.maximize` shows the focused stack alone
     /// or all again; `dock.close` closes its panel; `dock.move-to` opens the menu of where it may go
-    /// (what a tab's context menu opens too); `dock.float` floats it. A DockSpace takes them for the
+    /// (what a tab's context menu opens too, with Close); `dock.float` floats it. A DockSpace takes them for the
     /// stack the focus is in. `dock.next-surface` and `dock.previous-surface` take the focus to a
     /// DockArea's next surface (its main one, then its floats), to the stack last focused there.
     ///
@@ -142,6 +142,10 @@ export namespace experimental::gui
                 s.OverflowX = Overflow::Hidden;
                 s.OverflowY = Overflow::Hidden;
             });
+            // A closable panel's close part on the chosen tab and the one hovered (as Visual Studio's
+            // and Godot's docks show it), and a middle click closes one; a sheet's `close-display`
+            // says otherwise.
+            GetBar()->SetCloseDisplay(TabCloseDisplay::Hover);
         }
         [[nodiscard]] DockNodeId GetNode() const noexcept { return m_node; }
         [[nodiscard]] DockSpace* GetSpace() const noexcept { return m_space; }
@@ -434,8 +438,8 @@ export namespace experimental::gui
         // === The "Move to" menu (D4) ===
         /// Opens the menu of the places `panel` may go, at `at` (root space) for `owner`: into each
         /// other stack, beside one (on each side), its own and then the surroundings', along the
-        /// surface's edges, floated; a place the layout refuses is shown disabled. Null when the
-        /// panel is not docked here.
+        /// surface's edges, floated; a place the layout refuses is shown disabled. Then Close (disabled
+        /// for a panel that cannot be closed). Null when the panel is not docked here.
         Menu* OpenMoveTo(core::StringView panel, Node& owner, core::Float2 at)
         {
             if (m_controller == nullptr || m_controller->GetLayout().SurfaceOf(m_controller->GetLayout().StackOf(panel)) != m_surface)
@@ -490,6 +494,16 @@ export namespace experimental::gui
                 const bool can = after.Float(panel, Rectangle{0.0f, 0.0f, 0.0f, 0.0f}).Ok();
                 MenuItem* item = menu.AddItem(core::StringView(u8"Float"), [self, moving]() { (void)self->FloatPanel(moving.AsView()); });
                 item->SetEnabled(can);
+            }
+            menu.AddSeparator();
+            {
+                const DockPanelDescription* description = m_controller->Describe(panel);
+                MenuItem* item = menu.AddItem(core::StringView(u8"Close"), [self, moving]()
+                {
+                    const RefPtr<DockSpace> keep(self); // a float this empties ends with the close
+                    (void)self->m_controller->Close(moving.AsView());
+                });
+                item->SetEnabled(description == nullptr || description->Closable);
             }
             menu.Open(owner, at);
             return m_moveMenu.Get();

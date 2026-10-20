@@ -5,7 +5,8 @@
 // Splitters and stacks as TabViews, kept by node id as the layout changes; a panel's content made
 // when its tab is first shown and kept by the controller; closing by the panel's policy; a
 // placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
-// user does in the widgets (a separator dragged, a tab chosen, dragged or closed) noted back; a
+// user does in the widgets (a separator dragged, a tab chosen, dragged or closed, by its close part
+// or a middle click) noted back; a
 // panel wider than its stack moves no separator, the stack clipping it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -235,4 +236,52 @@ TEST_CASE("dock space: a tab shown with content wider than its stack moves no se
     CHECK(stack->GetSize().x == doctest::Approx(before).epsilon(0.01)); // snapped to the pixel
     CHECK(stack->GetLayoutStyle().OverflowX == Overflow::Hidden);
     CHECK(stack->GetLayoutStyle().OverflowY == Overflow::Hidden);
+}
+
+TEST_CASE("dock space: a closable panel's tab shows its close part, chosen or hovered; it, or a middle click, closes the panel")
+{
+    Bed bed;
+    DockPanelDescription fixed;
+    fixed.Id = core::String(u8"fixed");
+    fixed.Closable = false;
+    fixed.Factory = []() { return core::RefPtr<Node>(core::MakeRef<Panel>(core::DefaultAllocator())); };
+    REQUIRE(bed.controller.Register(core::Move(fixed)));
+    const char8_t* const tabbed[] = {u8"fixed", u8"hierarchy", u8"inspector"};
+    for (const char8_t* id : tabbed)
+        REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(id), bed.Central()); }).Ok());
+    bed.Lay();
+    TabBar& bar = *Cast<TabView>(bed.space->WidgetOf(bed.Central()))->GetBar();
+    REQUIRE(bar.GetTabCount() == 3);
+    bar.SelectByUser(2); // the inspector
+    bed.Lay();
+    CHECK(bar.GetCloseDisplay() == TabCloseDisplay::Hover);
+    CHECK_FALSE(bar.GetTab(0)->GetClosePart()->IsDisplayed()); // it cannot be closed
+    CHECK(bar.GetTab(1)->GetClosePart()->IsDisplayed());       // its room kept, shown when hovered
+    CHECK_FALSE(bar.GetTab(1)->GetClosePart()->IsVisible());
+    CHECK(bar.GetTab(2)->GetClosePart()->IsVisible()); // the chosen tab's
+
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+    const Rect close = bar.GetTab(2)->GetClosePart()->GetScreenBounds();
+    const core::Float2 at{close.x + close.width * 0.5f, close.y + close.height * 0.5f};
+    d.InjectMouseMove(at);
+    d.InjectMouseDown(at, MouseButton::Left);
+    d.InjectMouseUp(at, MouseButton::Left);
+    CHECK(bed.StackOf(u8"inspector") == kNoDock);
+    bed.Lay();
+
+    REQUIRE(bar.GetTabCount() == 2);
+    const auto middleClick = [&](core::i32 index)
+    {
+        const Rect tab = bar.GetTab(index)->GetScreenBounds();
+        const core::Float2 on{tab.x + tab.width * 0.5f, tab.y + tab.height * 0.5f};
+        d.InjectMouseMove(on);
+        d.InjectMouseDown(on, MouseButton::Middle);
+        d.InjectMouseUp(on, MouseButton::Middle);
+        bed.Lay();
+    };
+    middleClick(0); // the fixed panel: nothing
+    CHECK(bed.StackOf(u8"fixed") != kNoDock);
+    middleClick(1);
+    CHECK(bed.StackOf(u8"hierarchy") == kNoDock);
+    CHECK(bed.StackOf(u8"fixed") != kNoDock);
 }

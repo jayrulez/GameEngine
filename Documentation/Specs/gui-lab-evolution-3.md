@@ -321,5 +321,10 @@ Ctrl+Alt and an arrow is GNOME's and Ctrl+Alt is AltGr on many layouts; the keyb
 focused tab's context menu (Shift+F10, the Menu key), which is Move to and reaches every place, and
 `drag.pick` (Ctrl+Shift+D). An application binds the commands where it wants keys.
 
+Closing is the pointer's too: a closable panel's tab shows its close part when chosen or hovered (as
+Visual Studio's and Godot's docks do), a middle click closes it, and the tab's context menu ends with
+Close, disabled for a panel that cannot be closed. Unbinding `dock.close` had left a docked panel no
+way to close.
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

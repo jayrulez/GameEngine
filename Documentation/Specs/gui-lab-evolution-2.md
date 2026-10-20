@@ -576,6 +576,24 @@ ruling has it. A text field laid its one line out from its left whatever its dir
 the line's direction and scrolls a long one from its inline start, and `text-align` from a sheet
 reaches it (the user's catch on the Arabic settings screen).
 
+E17c as built on `vg` (2026-10-19): the click, tap, pan, drag and fling thresholds are lengths in
+DIPs, scaled by the display (318370576). The dispatcher follows every finger down (d26650e9f).
+`touch-action` (auto, none, manipulation, or any of pan-x, pan-y and pinch-zoom) is a reflected
+property with its css name, as `cursor` and `pointer-events` are, narrowed by every ancestor; a
+one-finger move along an axis a node keeps goes on as the pointer instead of panning; two fingers
+over a node that leaves pinch-zoom out make one gesture from the second's landing, the first's
+press cancelled: `gesturestart`, `gesturechange` (scale, rotation and translation, totals and
+deltas, about the fingers' middle), `gestureend`, `gesturecancel`; scripts read them from
+`GuiEvent`, and the tester has `Pinch`, `Rotate` and `TwoFingerPan` (56790c322). The desktop shell
+passes a cancelled finger and a trackpad's pinch, and no longer takes a trackpad's fingers for
+touches (22f864b1a); the bridge forwards both, a pinch as the mouse's gesture at the pointer, and
+its polled path follows every finger (e3c43ad3c). A gesture's translation is in the GUI's units,
+not its node's, which its gesture may turn (df972b819). Screen: the Input page's picture viewer,
+and two fingers' steps in the sandbox's `--keys` (dbd4b7974).
+Left: a third finger is ignored; per-pointer capture for the second finger is not modelled; a
+trackpad's rotation and two-finger scroll come as the platform gives them (SDL has no rotation);
+the trackpad filter could not be tested without a trackpad device.
+
 ## Not taken in this round
 
 - **Engine hosting** (a scene component, reference-resolution scaling, world-space canvases): not in

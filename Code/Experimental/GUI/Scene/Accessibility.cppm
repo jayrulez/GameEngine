@@ -123,6 +123,7 @@ export namespace experimental::gui
         AccessExpanded = 1u << 6,
         AccessCollapsed = 1u << 7,
         AccessEditable = 1u << 8, ///< the user edits its value
+        AccessOffscreen = 1u << 9, ///< an item scrolled out of view, its bounds estimated (UIA's IsOffscreen)
     };
 
     /// What a platform may ask of a node, one bit each in what it advertises.
@@ -153,6 +154,15 @@ export namespace experimental::gui
         f64 Max = 0.0;
         f64 Step = 0.0;
         Rect Bounds{}; ///< in its window's pixels (its root's world space)
+        // Where it stands among its own (E17b, ARIA's and AccessKit's): an item's position, from 1,
+        // of how many there are (a list's every item, though only some have nodes); a tree item's
+        // level, from 1; a table's rows and columns, and a row's index, from 1. 0: not said.
+        i32 PositionInSet = 0;
+        i32 SetSize = 0;
+        i32 Level = 0;
+        i32 RowCount = 0;
+        i32 ColumnCount = 0;
+        i32 RowIndex = 0;
         u32 States = 0;
         u32 Actions = 0; ///< AccessActionBit of each it takes
         Array<u64> Children;

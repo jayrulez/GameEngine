@@ -307,6 +307,12 @@ namespace experimental::gui
             value(n.Bounds.height);
             value(n.States);
             value(n.Actions);
+            value(n.PositionInSet);
+            value(n.SetSize);
+            value(n.Level);
+            value(n.RowCount);
+            value(n.ColumnCount);
+            value(n.RowIndex);
             const auto ids = [&h](const Array<u64>& list)
             {
                 h = HashBytes(list.Data(), list.Size() * sizeof(u64), h ^ list.Size());

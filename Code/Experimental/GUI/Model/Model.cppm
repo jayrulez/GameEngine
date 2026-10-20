@@ -237,7 +237,9 @@ export namespace experimental::gui
         Array<IModelClient*> m_clients; // non-owning
     };
 
-    /// Ids for a flat model's rows: one per row, handed out in turn, moving with its row.
+    /// Ids for a flat model's rows: one per row, handed out in turn, moving with its row. Finding
+    /// an id's row is a lookup (E17b: an accessibility node asks it for every item it describes),
+    /// its index made again on the first ask after the rows change.
     class RowIds
     {
     public:
@@ -245,30 +247,51 @@ export namespace experimental::gui
         [[nodiscard]] ItemId At(usize row) const { return row < m_ids.Size() ? m_ids[row] : kNoItem; }
         [[nodiscard]] i32 RowOf(ItemId id) const
         {
-            for (usize i = 0; i < m_ids.Size(); ++i)
-                if (m_ids[i] == id)
-                    return static_cast<i32>(i);
-            return -1;
+            if (m_stale)
+            {
+                m_rows.Clear();
+                for (usize i = 0; i < m_ids.Size(); ++i)
+                    m_rows.InsertOrAssign(m_ids[i], static_cast<i32>(i));
+                m_stale = false;
+            }
+            const i32* row = m_rows.Find(id);
+            return row != nullptr ? *row : -1;
         }
         void Reset(usize count)
         {
             m_ids.Clear();
             for (usize i = 0; i < count; ++i)
                 m_ids.PushBack(m_next++);
+            m_stale = true;
         }
-        void Insert(usize row) { m_ids.Insert(row, m_next++); }
+        void Insert(usize row)
+        {
+            m_ids.Insert(row, m_next++);
+            m_stale = true;
+        }
         /// Puts an existing id back at `row` (a row moved by a drop keeps its id).
-        void InsertId(usize row, ItemId id) { m_ids.Insert(row, id); }
-        void Remove(usize row) { m_ids.RemoveAt(row); }
+        void InsertId(usize row, ItemId id)
+        {
+            m_ids.Insert(row, id);
+            m_stale = true;
+        }
+        void Remove(usize row)
+        {
+            m_ids.RemoveAt(row);
+            m_stale = true;
+        }
         void Move(usize from, usize to)
         {
             const ItemId id = m_ids[from];
             m_ids.RemoveAt(from);
             m_ids.Insert(to, id);
+            m_stale = true;
         }
 
     private:
         Array<ItemId> m_ids;
         ItemId m_next = 0;
+        mutable HashMap<ItemId, i32> m_rows; // id to row, as of the last ask
+        mutable bool m_stale = true;
     };
 }

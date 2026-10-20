@@ -219,3 +219,22 @@ TEST_CASE("model: a tree reports rows under their parent, and a removed node's i
     CHECK(b != a1);
     CHECK_FALSE(tree.IndexOfNode(a1).IsValid());
 }
+
+TEST_CASE("row-ids: an id's row is found after rows are inserted, moved and removed")
+{
+    RowIds ids;
+    ids.Reset(5); // ids 0..4 in rows 0..4
+    CHECK(ids.RowOf(3) == 3);
+    ids.Insert(0); // id 5 at the top
+    CHECK(ids.RowOf(5) == 0);
+    CHECK(ids.RowOf(3) == 4);
+    ids.Move(4, 1); // id 3 to row 1
+    CHECK(ids.RowOf(3) == 1);
+    CHECK(ids.RowOf(1) == 3);
+    ids.Remove(1);
+    CHECK(ids.RowOf(3) == -1);
+    CHECK(ids.RowOf(4) == 4);
+    ids.InsertId(2, 3); // back, keeping its id
+    CHECK(ids.RowOf(3) == 2);
+    CHECK(ids.RowOf(99) == -1);
+}

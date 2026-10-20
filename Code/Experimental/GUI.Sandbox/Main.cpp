@@ -200,6 +200,20 @@ namespace
                 line += StringView(u8", ");
                 line += focused->Value.AsView();
             }
+            if (focused->PositionInSet > 0 && focused->SetSize > 0) // "3 of 100000" (E17b)
+            {
+                char where[64];
+                std::snprintf(where, sizeof(where), ", %d of %d", focused->PositionInSet, focused->SetSize);
+                line += StringView(reinterpret_cast<const utf8char*>(where));
+            }
+            if (focused->Level > 0)
+            {
+                char level[32];
+                std::snprintf(level, sizeof(level), ", level %d", focused->Level);
+                line += StringView(reinterpret_cast<const utf8char*>(level));
+            }
+            if (focused->Has(gui::AccessSelected))
+                line += StringView(u8", selected");
             if (focused->Has(gui::AccessChecked))
                 line += StringView(u8", checked");
             if (focused->Has(gui::AccessCollapsed))

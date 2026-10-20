@@ -1,9 +1,10 @@
 add_executable(GUI.Docking.Tests
     DockLayoutTests.cpp
     DockDocumentTests.cpp
+    DockSpaceTests.cpp
     TestsMain.cpp)
 
-target_link_libraries(GUI.Docking.Tests PRIVATE Experimental::GUI.Docking Foundation::Xml Foundation::Xml.Serialization doctest::doctest)
+target_link_libraries(GUI.Docking.Tests PRIVATE Experimental::GUI.Docking Experimental::GUI Foundation::Xml Foundation::Xml.Serialization doctest::doctest)
 
 target_compile_definitions(GUI.Docking.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

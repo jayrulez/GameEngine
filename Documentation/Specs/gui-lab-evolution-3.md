@@ -234,5 +234,20 @@ stay (placeholders), registered ones it does not name go to their `DockDefault` 
 surface off every screen comes back onto the first. The invariants also refuse ids at or past the
 layout's counters (a file edited by hand would make a new node collide).
 
+D3 as built on `vg` (2026-10-20): `DockController` holds the layout and the registered panels
+(title, icon, a content factory, a close policy, closable, a default place) and owns each panel's
+content once made, so a panel moved or hidden keeps it. Closing follows the policy: Hide keeps the
+content and the place, Rebuild lets the content go, Destroy lets both go (`DockLayout::Forget`).
+Every change goes through the controller, which tells each `DockSpace` showing it to show it again;
+what the user already did in the widgets (a separator dragged, a tab chosen or dragged within its
+strip, a tab's close) is noted back. `DockSpace` shows a surface as core widgets: splits as
+`Splitter`s and stacks as `TabView`s (group `dock`, reorderable), kept by node id as the layout
+changes; a panel's content is made when its tab is first shown; a panel not registered shows a
+placeholder that fills when it registers; a maximized stack is shown alone, the widgets of the
+rest kept for its restore. On the way, in the core: a `TabView` reports a page moved; a tab bar no
+longer selects its first tab while a selection asked for waits for its tab (it built content that
+was not to be shown); a node destroyed leaves the children held elsewhere pointing at no parent
+(a panel's content, kept by the controller, reached its freed page when it moved).
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

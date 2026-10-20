@@ -372,6 +372,14 @@ export namespace experimental::gui
                 return InsertTab(panel, central);
             return DockOutcome::Refuse(u8"there is nowhere to show it");
         }
+        /// A closed panel's place let go: it is no longer remembered.
+        DockOutcome Forget(core::StringView panel)
+        {
+            if (FindHidden(panel) == nullptr)
+                return DockOutcome::Refuse(u8"it is not closed");
+            Unhide(panel);
+            return {};
+        }
         /// A docked panel made its stack's active tab.
         DockOutcome Activate(core::StringView panel)
         {

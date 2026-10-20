@@ -13,3 +13,5 @@ export module experimental.gui.docking;
 
 export import :layout;   // D1: the layout as data and its operations
 export import :document; // D2: the layout as the serializer reads and writes it
+export import :controller; // D3: the layout and its panels
+export import :dock_space; // D3: the widget that shows a surface

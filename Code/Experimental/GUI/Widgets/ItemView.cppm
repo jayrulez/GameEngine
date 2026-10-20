@@ -39,6 +39,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <algorithm> // sort (the items with accessibility nodes)
 #include "Core/Reflection/Reflect.h"
 
 export module experimental.gui:item_view;
@@ -570,6 +571,74 @@ export namespace experimental::gui
             const i32 item = GetSelectedItem();
             return item >= 0 ? ItemToModelIndex(item) : ModelIndex{};
         }
+
+        // === Accessibility (E17b): its items as nodes of the accessibility tree, which the GUI
+        // builds (AccessibilityImpl.cpp). Not every item has one: the rows made and a page of items
+        // each side, the current item and the selected ones (each node says its place among all),
+        // so a list of a hundred thousand sends a few dozen. ===
+        [[nodiscard]] usize GetItemCount() const { return ItemCount(); }
+        [[nodiscard]] core::String GetItemText(i32 item) const { return TypeAheadText(item); }
+        [[nodiscard]] ModelIndex GetItemIndex(i32 item) const { return ItemToModelIndex(item); }
+        /// The items that have nodes, in item order.
+        void GetAccessItems(core::Array<i32>& out) const
+        {
+            const i32 count = static_cast<i32>(ItemCount());
+            if (count <= 0)
+                return;
+            i32 first = count, last = -1;
+            for (const core::RefPtr<ItemRow>& row : m_live)
+                if (row->m_item >= 0)
+                {
+                    first = core::Min(first, row->m_item);
+                    last = core::Max(last, row->m_item);
+                }
+            if (last < 0)
+                first = last = core::Max(0, GetCurrentItem());
+            const i32 page = core::Max(1, last - first + 1);
+            core::HashSet<i32> wanted;
+            for (i32 i = core::Max(0, first - page); i <= core::Min(count - 1, last + page); ++i)
+                (void)wanted.Insert(i);
+            if (const i32 current = GetCurrentItem(); current >= 0)
+                (void)wanted.Insert(current);
+            usize selected = 0;
+            for (ItemId id : m_selected)
+                if (const i32 item = ItemOfId(id); item >= 0 && selected++ < kAccessSelectedCap)
+                    (void)wanted.Insert(item);
+            for (i32 item : wanted)
+                out.PushBack(item);
+            std::sort(out.begin(), out.end());
+        }
+        /// An item's key among this view's nodes: it follows the item as rows recycle, scroll and
+        /// move, made the first time the item is asked for. The GUI joins it to the view's own.
+        [[nodiscard]] u32 GetAccessKeyOfItem(i32 item)
+        {
+            const ItemId id = ItemIdAt(item);
+            if (const u32* key = m_accessKeys.Find(id))
+                return *key;
+            const u32 key = m_nextAccessKey++;
+            m_accessKeys.InsertOrAssign(id, key);
+            m_accessItems.InsertOrAssign(key, id);
+            return key;
+        }
+        /// The item a key names now (-1: gone).
+        [[nodiscard]] i32 GetItemOfAccessKey(u32 key) const
+        {
+            const ItemId* id = m_accessItems.Find(key);
+            return id != nullptr ? ItemOfId(*id) : -1;
+        }
+        /// This view's key among the GUI's item views (0 until the GUI gives it one).
+        [[nodiscard]] u32 GetAccessViewKey() const noexcept { return m_accessViewKey; }
+        void SetAccessViewKey(u32 key) noexcept { m_accessViewKey = key; }
+        /// What each item's node said last (by its id), so a node unchanged is not sent again.
+        [[nodiscard]] core::HashMap<u64, u64>& AccessItemsSent() noexcept { return m_accessSent; }
+        /// A screen reader moves to an item: as the keyboard would, selected and scrolled to.
+        void FocusItemFromAccess(i32 item)
+        {
+            RequestFocus();
+            SelectByUser(item, 0);
+            ScrollToItem(item);
+        }
+        void ActivateItemFromAccess(i32 item) { ActivateItem(item); }
         /// Selects one item from code (scrolled into view; no events). -1 clears.
         void SetSelectedItem(i32 item)
         {
@@ -1158,6 +1227,13 @@ export namespace experimental::gui
         ModelDrop m_lastDrop;                 // the drop the last query found
         RowHeights m_heights;
         core::Array<core::RefPtr<ItemRow>> m_live; // realised, in item order
+        // Accessibility (E17b): each item's key, and back; this view's key; what each node said.
+        core::HashMap<ItemId, u32> m_accessKeys;
+        core::HashMap<u32, ItemId> m_accessItems;
+        u32 m_nextAccessKey = 1;
+        u32 m_accessViewKey = 0;
+        core::HashMap<u64, u64> m_accessSent;
+        static constexpr usize kAccessSelectedCap = 50; // a selection of thousands: its first fifty
         core::Array<Pool> m_pools;                 // released rows, by type
         core::HashSet<ItemId> m_selected;
         ItemId m_current = kNoItem;         // where the keyboard is

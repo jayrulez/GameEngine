@@ -6,7 +6,9 @@
 // `accessRole` attribute (a base's when its own has none) or markup's `role`; its name, value,
 // range, description and expanded state are the reflected properties its type marks `access`; its
 // other states are the ones its selectors read. A node with no role is no node of its own (what it
-// holds belongs to the nearest ancestor that has one), and a leaf role's parts are none either.
+// holds belongs to the nearest ancestor that has one), and a leaf role's parts are none either. An
+// item view's items are nodes with no widget of their own (E17b): the items it says have nodes,
+// in item order, each saying where it stands among them all, under ids that follow the item.
 
 module;
 #include "Core/Prelude.h"
@@ -128,9 +130,76 @@ namespace experimental::gui
             return nullptr;
         }
 
+        // An item's node id: the view's key among the GUI's item views, and the item's in its view.
+        [[nodiscard]] u64 ItemAccessId(Node& top, ItemView& view, i32 item)
+        {
+            GUIContext* gui = top.GetGUIContext();
+            const u32 viewKey = gui != nullptr ? gui->AccessViewKey(view) : 0;
+            return kAccessItemIdBit | (static_cast<u64>(viewKey) << 32) | view.GetAccessKeyOfItem(item);
+        }
+        [[nodiscard]] AccessRole ItemRoleOf(const ItemView& view)
+        {
+            if (core::Cast<TreeView>(&view) != nullptr)
+                return AccessRole::TreeItem;
+            if (core::Cast<TableView>(&view) != nullptr)
+                return AccessRole::Row;
+            return AccessRole::ListItem;
+        }
+
         struct Builder
         {
             Node& top; // the root the ids in aria lists resolve under
+
+            // An item view's item, a node with no widget of its own: where it stands among all the
+            // items (a tree item among its siblings, at its level), its bounds (estimated, off
+            // screen, while it has no row), and what a screen reader may do with it.
+            void DescribeItem(ItemView& view, i32 item, AccessNode& out)
+            {
+                out.Id = ItemAccessId(top, view, item);
+                out.Role = ItemRoleOf(view);
+                out.Name = view.GetItemText(item);
+                const bool enabled = view.IsTreeEnabled();
+                out.States |= AccessFocusable;
+                if (!enabled)
+                    out.States |= AccessDisabled;
+                if (view.IsItemSelected(item))
+                    out.States |= AccessSelected;
+                if (view.IsFocused() && view.GetCurrentItem() == item)
+                    out.States |= AccessFocused;
+                out.Actions |= AccessActionBit(AccessAction::Focus) | AccessActionBit(AccessAction::ScrollIntoView);
+                if (enabled)
+                    out.Actions |= AccessActionBit(AccessAction::Activate);
+                if (const ItemRow* row = view.RowForItem(item))
+                    out.Bounds = row->GetScreenBounds();
+                else
+                {
+                    out.States |= AccessOffscreen;
+                    const Rect b = view.ItemBounds(item);
+                    const core::Float2 scrolled = view.GetScrollOffset();
+                    const core::Float2 at = view.ConvertToWorldSpace(core::Float2{b.x - scrolled.x, b.y - scrolled.y});
+                    out.Bounds = Rect{at.x, at.y, b.width, b.height};
+                }
+                const IModel* model = view.GetModel();
+                if (TreeView* tree = core::Cast<TreeView>(&view))
+                {
+                    const ModelIndex index = view.GetItemIndex(item);
+                    out.Level = tree->ItemDepth(item) + 1;
+                    out.PositionInSet = index.Row + 1;
+                    out.SetSize = model != nullptr ? static_cast<i32>(model->RowCount(model->ParentIndex(index))) : 0;
+                    if (model != nullptr && model->HasChildren(index))
+                    {
+                        const bool open = tree->IsItemExpanded(item);
+                        out.States |= open ? AccessExpanded : AccessCollapsed;
+                        if (enabled)
+                            out.Actions |= AccessActionBit(open ? AccessAction::Collapse : AccessAction::Expand);
+                    }
+                    return;
+                }
+                out.PositionInSet = item + 1;
+                out.SetSize = static_cast<i32>(view.GetItemCount());
+                if (core::Cast<TableView>(&view) != nullptr)
+                    out.RowIndex = item + 1;
+            }
 
             // The included nodes under `node`: each child with a role, or what a child without
             // one holds, in order.
@@ -263,8 +332,34 @@ namespace experimental::gui
                     if (enabled && Writable(*expanded))
                         out.Actions |= AccessActionBit(open ? AccessAction::Collapse : AccessAction::Expand);
                 }
+                if (ItemView* view = core::Cast<ItemView>(&node))
+                {
+                    // Its items, not the rows it happens to have made (which recycle).
+                    Array<i32> items;
+                    view->GetAccessItems(items);
+                    for (const i32 item : items)
+                        out.Children.PushBack(ItemAccessId(top, *view, item));
+                    if (core::Cast<TableView>(view) != nullptr)
+                    {
+                        out.RowCount = static_cast<i32>(view->GetItemCount());
+                        out.ColumnCount = view->GetModel() != nullptr ? static_cast<i32>(view->GetModel()->ColumnCount()) : 0;
+                    }
+                    return;
+                }
                 if (!IsLeafRole(role))
                     Children(node, out.Children);
+            }
+            // An item view's items' nodes.
+            void Items(ItemView& view, Array<AccessNode>& out)
+            {
+                Array<i32> items;
+                view.GetAccessItems(items);
+                for (const i32 item : items)
+                {
+                    AccessNode described;
+                    DescribeItem(view, item, described);
+                    out.PushBack(Move(described));
+                }
             }
 
             // Every included node from `node` down (`node` itself when it has a role).
@@ -280,6 +375,11 @@ namespace experimental::gui
                     out.PushBack(Move(described));
                     if (IsLeafRole(role))
                         return;
+                }
+                if (ItemView* view = core::Cast<ItemView>(&node); view != nullptr && role != AccessRole::None)
+                {
+                    Items(*view, out);
+                    return;
                 }
                 for (usize i = 0; i < node.ChildCount(); ++i)
                     if (Node* child = node.GetChildAt(i))
@@ -357,6 +457,19 @@ namespace experimental::gui
                 node.SetAccessSent(hash);
                 out.PushBack(Move(described));
             }
+            void SendItems(ItemView& view)
+            {
+                Array<AccessNode> items;
+                builder.Items(view, items);
+                for (AccessNode& item : items)
+                {
+                    const u64 hash = HashOf(item);
+                    if (const u64* was = view.AccessItemsSent().Find(item.Id); was != nullptr && *was == hash)
+                        continue;
+                    view.AccessItemsSent().InsertOrAssign(item.Id, hash);
+                    out.PushBack(Move(item));
+                }
+            }
             void Walk(Node& node, Node* owner)
             {
                 if (!node.IsAccessDirty() && !node.HasAccessDirtyDescendant())
@@ -375,6 +488,16 @@ namespace experimental::gui
                 const AccessRole role = RoleOf(node);
                 if (marked && owner != nullptr && owner != &node)
                     Send(*owner);
+                if (ItemView* view = core::Cast<ItemView>(&node); view != nullptr && role != AccessRole::None)
+                {
+                    // Its rows' changes are its items': the view and each item whose node changed.
+                    Send(node);
+                    SendItems(*view);
+                    for (usize i = 0; i < node.ChildCount(); ++i)
+                        if (Node* child = node.GetChildAt(i))
+                            ClearMarks(*child);
+                    return;
+                }
                 Node* next = role != AccessRole::None ? &node : owner;
                 if (IsLeafRole(role))
                 {
@@ -396,6 +519,10 @@ namespace experimental::gui
         [[nodiscard]] u64 FocusOf(SceneRoot& root)
         {
             Node* focus = root.GetEventDispatcher()->GetFocusNode();
+            // An item view's focus is its current item's (E17b): what the keys move is the item.
+            if (ItemView* view = core::Cast<ItemView>(focus); view != nullptr && view->GetCurrentItem() >= 0 && !Excluded(*view) &&
+                                                              RoleOf(*view) != AccessRole::None)
+                return ItemAccessId(root, *view, view->GetCurrentItem());
             // The focus as a screen reader sees it: the nearest included node holding it.
             for (Node* n = focus; n != nullptr; n = n->GetParent())
                 if (RoleOf(*n) != AccessRole::None && !Excluded(*n))
@@ -464,8 +591,15 @@ namespace experimental::gui
                 ClearMarks(*root);
                 root->m_accessSent = true;
                 for (const AccessNode& n : update.Nodes) // what each said, so a mark alone sends nothing
-                    if (Node* node = ResolveAccessId(n.Id))
+                {
+                    if (IsAccessItemId(n.Id))
+                    {
+                        if (ItemView* view = core::Cast<ItemView>(ResolveAccessId(n.Id)))
+                            view->AccessItemsSent().InsertOrAssign(n.Id, HashOf(n));
+                    }
+                    else if (Node* node = ResolveAccessId(n.Id))
                         node->SetAccessSent(HashOf(n));
+                }
             }
             else
             {
@@ -491,11 +625,58 @@ namespace experimental::gui
             (void)RunAccessAction(request);
     }
 
+    u32 GUIContext::AccessViewKey(Node& view)
+    {
+        ItemView* items = core::Cast<ItemView>(&view);
+        if (items == nullptr)
+            return 0;
+        if (items->GetAccessViewKey() != 0)
+            return items->GetAccessViewKey();
+        const u32 key = m_nextAccessView++;
+        m_accessViews.InsertOrAssign(key, view.TakeElementRef());
+        items->SetAccessViewKey(key);
+        return key;
+    }
+
     bool GUIContext::RunAccessAction(const AccessActionRequest& request)
     {
         Node* node = ResolveAccessId(request.Target);
         if (node == nullptr)
             return false;
+        if (IsAccessItemId(request.Target))
+        {
+            // An item's, run through its view, by its key: the item may have moved since.
+            ItemView* view = core::Cast<ItemView>(node);
+            SceneRoot* root = node->GetSceneRoot();
+            if (view == nullptr || root == nullptr || Excluded(*view))
+                return false;
+            const i32 item = view->GetItemOfAccessKey(static_cast<u32>(request.Target & 0xFFFFFFFFu));
+            if (item < 0)
+                return false; // gone from the model
+            Builder builder{*root};
+            AccessNode described;
+            builder.DescribeItem(*view, item, described);
+            if (!described.Takes(request.Action))
+                return false;
+            switch (request.Action)
+            {
+            case AccessAction::Focus: view->FocusItemFromAccess(item); return true;
+            case AccessAction::Activate: view->ActivateItemFromAccess(item); return true;
+            case AccessAction::ScrollIntoView: view->ScrollToItem(item); return true;
+            case AccessAction::Expand:
+            case AccessAction::Collapse:
+                if (TreeView* tree = core::Cast<TreeView>(view))
+                {
+                    if (request.Action == AccessAction::Expand)
+                        tree->ExpandItem(item);
+                    else
+                        tree->CollapseItem(item);
+                    return true;
+                }
+                return false;
+            default: return false;
+            }
+        }
         SceneRoot* root = node->GetSceneRoot();
         if (root == nullptr || Excluded(*node))
             return false;

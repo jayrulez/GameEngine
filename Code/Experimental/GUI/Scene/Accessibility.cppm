@@ -49,6 +49,7 @@ export namespace experimental::gui
         Tree,
         TreeItem,
         Table,
+        Row, ///< a table's (E17b)
         TabList,
         Tab,
         TabPanel,
@@ -68,7 +69,7 @@ export namespace experimental::gui
         constexpr core::StringView kNames[static_cast<usize>(AccessRole::Count)] = {
             u8"none",     u8"window",      u8"dialog",  u8"group",     u8"label",     u8"button",   u8"checkbox",
             u8"radio",    u8"switch",      u8"slider",  u8"progress",  u8"spinbutton", u8"textbox", u8"textarea",
-            u8"combobox", u8"list",        u8"listitem", u8"tree",     u8"treeitem",  u8"table",    u8"tablist",
+            u8"combobox", u8"list",        u8"listitem", u8"tree",     u8"treeitem",  u8"table",    u8"row",      u8"tablist",
             u8"tab",      u8"tabpanel",    u8"menu",    u8"menubar",   u8"menuitem",  u8"separator", u8"image",
             u8"scrollview", u8"scrollbar",
         };
@@ -106,6 +107,7 @@ export namespace experimental::gui
         case AccessRole::MenuItem:
         case AccessRole::Separator:
         case AccessRole::Image:
+        case AccessRole::Row:
         case AccessRole::ScrollBar: return true;
         default: return false;
         }
@@ -140,10 +142,15 @@ export namespace experimental::gui
     };
     [[nodiscard]] constexpr u32 AccessActionBit(AccessAction action) noexcept { return 1u << static_cast<u32>(action); }
 
+    /// An item view's item's node id (E17b): this bit, the view's key among the GUI's item views,
+    /// and the item's key in its view. A node's own id is its element handle, which never sets it.
+    inline constexpr u64 kAccessItemIdBit = u64{1} << 63;
+    [[nodiscard]] constexpr bool IsAccessItemId(u64 id) noexcept { return (id & kAccessItemIdBit) != 0; }
+
     /// One node of the tree, as the bridge sees it.
     struct AccessNode
     {
-        u64 Id = 0; ///< stable while the node lives (its GUI's element handle)
+        u64 Id = 0; ///< stable while the node lives (its GUI's element handle; an item's, kAccessItemIdBit)
         AccessRole Role = AccessRole::None;
         core::String Name;
         core::String Description;

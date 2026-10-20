@@ -47,6 +47,7 @@ add_executable(GUI.Tests
     DirectionTests.cpp
     MirrorTests.cpp
     GestureTests.cpp
+    ItemAccessibilityTests.cpp
     BidiTextTests.cpp
     FontFallbackTests.cpp
     FontSelectionTests.cpp

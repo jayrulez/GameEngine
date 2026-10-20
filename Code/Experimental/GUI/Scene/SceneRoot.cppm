@@ -203,11 +203,18 @@ export namespace experimental::gui
         /// `node`'s accessibility node as it is now; false when it has none of its own (no role,
         /// hidden, or a part of a leaf: what a screen reader reads it as is an ancestor's).
         bool DescribeAccess(Node& node, AccessNode& out);
-        /// The node an accessibility id names, or null when it is gone.
+        /// The node an accessibility id names, or null when it is gone (an item's: its view's).
         [[nodiscard]] Node* ResolveAccessId(u64 id) const noexcept
         {
+            if (IsAccessItemId(id))
+            {
+                const Node::ElementRef* view = m_accessViews.Find(static_cast<u32>((id & ~kAccessItemIdBit) >> 32));
+                return view != nullptr && view->table != nullptr ? view->table->Resolve(view->slot, view->generation) : nullptr;
+            }
             return m_elements->Resolve(static_cast<u32>(id & 0xFFFFFFFFu), static_cast<u32>(id >> 32));
         }
+        /// An item view's key among this GUI's, given the first time it is asked (E17b).
+        [[nodiscard]] u32 AccessViewKey(Node& view); // AccessibilityImpl.cpp
 
     private:
         friend class SceneRoot;
@@ -231,6 +238,8 @@ export namespace experimental::gui
         IAccessibilityBridge* m_accessBridge = nullptr; // the host's
         bool m_accessListening = false;                 // it listened at the last update
         core::Mutex m_accessLock;                       // guards the requests, which any thread adds
+        core::HashMap<u32, Node::ElementRef> m_accessViews; // item views by key (E17b), for their items' ids
+        u32 m_nextAccessView = 1;
         Array<AccessActionRequest> m_accessRequests;
         void RunAccessRequests();  // AccessibilityImpl.cpp: the requests queued, each run
         void FlushAccessibility(); // AccessibilityImpl.cpp: each root's changes to the bridge

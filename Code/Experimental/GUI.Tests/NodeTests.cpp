@@ -67,6 +67,19 @@ TEST_CASE("node: child kept alive by tree after external ref drops")
     CHECK(raw->GetParent() == root.Get());
 }
 
+TEST_CASE("node: a child held elsewhere outlives its parent and points at none")
+{
+    auto child = MakeNode();
+    {
+        auto parent = MakeNode();
+        parent->AddChild(child.Get());
+    } // the parent's last reference dropped
+    CHECK(child->GetParent() == nullptr);
+    auto other = MakeNode();
+    other->AddChild(child.Get()); // it was reaching the freed parent to leave it
+    CHECK(child->GetParent() == other.Get());
+}
+
 TEST_CASE("node: z-order and siblings")
 {
     auto root = MakeNode();

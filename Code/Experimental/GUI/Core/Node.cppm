@@ -147,6 +147,9 @@ export namespace experimental::gui
         Node() = default;
         ~Node() override
         {
+            // A child held elsewhere outlives its parent: it must not point at it after.
+            for (const RefPtr<Node>& child : m_children)
+                child->m_parent = nullptr;
             if (m_elementTable)
                 m_elementTable->Free(m_elementSlot);
         }

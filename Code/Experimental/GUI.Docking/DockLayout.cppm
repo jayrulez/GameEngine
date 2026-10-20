@@ -118,6 +118,18 @@ export namespace experimental::gui
         DockPlace Last;
     };
 
+    /// A registered panel's place when a restored layout does not name it: a tab of the central
+    /// stack, or a stack of its own along the main surface's `Side` with `Share` of it.
+    struct DockDefault
+    {
+        String Panel;
+        bool Central = false;
+        DockSide Side = DockSide::End;
+        f32 Share = 0.25f;
+    };
+
+    class DockLayoutDocument;
+
     /// What an operation did: nothing refused, or its reason.
     struct DockOutcome
     {
@@ -422,6 +434,46 @@ export namespace experimental::gui
             return {};
         }
 
+        /// `read` (a layout restored from text) made this one, if it holds together; refused with
+        /// what does not, this one unchanged. A panel it names that is not registered stays, a
+        /// placeholder for when it is; one registered (in `known`) that it names nowhere goes to its
+        /// default place; a floating surface off every one of `screens` (logical units; none: no
+        /// check) comes back onto the first, no larger than it.
+        DockOutcome Adopt(DockLayout read, Span<const DockDefault> known, Span<const Rectangle> screens = {})
+        {
+            String why;
+            if (!read.CheckInvariants(&why))
+                return DockOutcome::Refuse(why.AsView());
+            for (const DockDefault& panel : known)
+            {
+                if (read.StackOf(panel.Panel.AsView()) != kNoDock || read.FindHidden(panel.Panel.AsView()) != nullptr)
+                    continue;
+                const DockOutcome placed = panel.Central ? read.InsertTab(panel.Panel.AsView(), read.CentralStack())
+                                                         : read.InsertAtEdge(panel.Panel.AsView(), read.MainSurface(), panel.Side, panel.Share);
+                if (!placed.Ok())
+                    return placed;
+            }
+            if (!screens.IsEmpty())
+                for (DockSurface& surface : read.m_surfaces)
+                {
+                    if (surface.Kind != DockSurfaceKind::Floating)
+                        continue;
+                    bool on = false;
+                    for (const Rectangle& screen : screens)
+                        on = on || (surface.Bounds.x < screen.x + screen.width && surface.Bounds.x + surface.Bounds.width > screen.x &&
+                                    surface.Bounds.y < screen.y + screen.height && surface.Bounds.y + surface.Bounds.height > screen.y);
+                    if (on)
+                        continue;
+                    const Rectangle& first = screens[0];
+                    surface.Bounds.width = Min(surface.Bounds.width, first.width);
+                    surface.Bounds.height = Min(surface.Bounds.height, first.height);
+                    surface.Bounds.x = first.x + (first.width - surface.Bounds.width) * 0.5f;
+                    surface.Bounds.y = first.y + (first.height - surface.Bounds.height) * 0.5f;
+                }
+            *this = core::Move(read);
+            return {};
+        }
+
         /// Whether it holds together: every node in one place in one surface's tree, splits of two
         /// or more children whose shares sum to one and none of its own axis inside it, no empty stack
         /// but the central one, which is in the main surface, a panel in one stack at most and never
@@ -429,6 +481,8 @@ export namespace experimental::gui
         [[nodiscard]] bool CheckInvariants(String* why = nullptr) const;
 
     private:
+        friend class DockLayoutDocument; // reads and writes it whole
+
         // === Checks ===
         [[nodiscard]] DockOutcome CanEnter(core::StringView panel) const
         {
@@ -776,6 +830,12 @@ export namespace experimental::gui
         };
         if (m_surfaces.IsEmpty() || m_surfaces[0].Kind != DockSurfaceKind::Main)
             return fail(u8"the main surface is not first");
+        for (const DockNode& node : m_nodes)
+            if (node.Id == kNoDock || node.Id >= m_nextNode)
+                return fail(u8"a node's id past the next one made"); // a new one would collide
+        for (const DockSurface& surface : m_surfaces)
+            if (surface.Id == kNoDock || surface.Id >= m_nextSurface)
+                return fail(u8"a surface's id past the next one made");
         Array<DockNodeId> seen;
         Array<String> panels;
         for (const DockSurface& surface : m_surfaces)

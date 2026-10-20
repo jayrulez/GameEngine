@@ -226,5 +226,13 @@ refuse what they forbid. Every operation refuses with its reason and changes not
 it says and normalizes. Tested headless, with five seeded runs of 4000 random operations each
 checked against the layout's invariants after every step.
 
+D2 as built on `vg` (2026-10-20): `DockLayoutDocument`, an `ISerializable` holding a layout (the
+layout stays a value, copied for a preview), versioned (a payload of another version is refused);
+it reads and writes no file. `DockLayout::Adopt` takes a restored layout only if it holds together,
+refused with what does not and the current one unchanged; panels it names that are not registered
+stay (placeholders), registered ones it does not name go to their `DockDefault` place, a floating
+surface off every screen comes back onto the first. The invariants also refuse ids at or past the
+layout's counters (a file edited by hand would make a new node collide).
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

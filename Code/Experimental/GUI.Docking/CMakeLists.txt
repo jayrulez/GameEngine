@@ -8,4 +8,5 @@ target_sources(GUI.Docking
     PUBLIC
         FILE_SET guidocking_modules TYPE CXX_MODULES FILES
             DockingModule.cppm
-            DockLayout.cppm)
+            DockLayout.cppm
+            DockDocument.cppm)

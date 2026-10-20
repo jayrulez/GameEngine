@@ -11,4 +11,5 @@ module;
 
 export module experimental.gui.docking;
 
-export import :layout; // D1: the layout as data and its operations
+export import :layout;   // D1: the layout as data and its operations
+export import :document; // D2: the layout as the serializer reads and writes it

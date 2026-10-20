@@ -2,7 +2,10 @@
    from the lab's sheet: gradients, shadows, borders, transforms, blur filters, a frosted backdrop,
    text glow, transitions and keyframes. No colour or position is set in code. */
 
-.showcase { --ink: #fff4e2; --muted: #b9b2d0; --accent: #f3a047; --accent-deep: #c4552c; --glow: rgba(255, 176, 86, 0.55);
+/* The sandbox's built-in theme styles its widgets beneath this sheet (one root); its tokens say
+   what the menu keeps for itself: its panels have no surface of their own. */
+.showcase { --panel-background: rgba(0, 0, 0, 0);
+            --ink: #fff4e2; --muted: #b9b2d0; --accent: #f3a047; --accent-deep: #c4552c; --glow: rgba(255, 176, 86, 0.55);
              background: radial-gradient(#2a1f4d, #120d24 70%, #07050f); }
 
 /* Lilita and Roboto have no Arabic: what they lack is drawn in DejaVu, the family after them (E11),

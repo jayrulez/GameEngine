@@ -374,7 +374,6 @@ private:
     // Styled and laid out as a frame would, without drawing.
     void Settle();
     void DrawAndPresent(gui::SceneRoot& root);
-    [[nodiscard]] gui::SceneRoot& Shown() { return m_showingMenu ? *m_menuRoot : *m_root; }
 
     // === Options ===
     String m_startPage = String(u8"controls");
@@ -471,12 +470,12 @@ private:
     // === The GUI: one context, two roots ===
     RefPtr<gui::GUIContext> m_gui;
     RefPtr<gui::SceneRoot> m_root;     // the sandbox
-    RefPtr<gui::SceneRoot> m_menuRoot; // the game menu
+    // The game menu: a screen of the sandbox's one root (one root per window), hidden until it
+    // opens as a modal layer over the shell, back in its place when it closes.
+    RefPtr<gui::Node> m_menu;
     UniquePtr<SandboxResources> m_resources; // pictures by path, from the data folder
     gui::StyleManager m_styles;        // the sandbox's sheet
-    gui::StyleManager m_menuStyles;    // the game menu's
     UniquePtr<gui::GuiInputBridge> m_bridge;
-    UniquePtr<gui::GuiInputBridge> m_menuBridge;
     UniquePtr<gui::ShellClipboard> m_clipboard;
     UniquePtr<shell::InputSurface> m_inputSurface;
     UniquePtr<shell::InputRouter> m_router;
@@ -1180,8 +1179,6 @@ void GUISandbox::ApplyDebugOverlay()
     }
     if (m_root)
         m_root->SetDebugOverlay(overlay);
-    if (m_menuRoot)
-        m_menuRoot->SetDebugOverlay(overlay);
 }
 
 bool GUISandbox::ResizeInspector(shell::IInputManager& input)
@@ -1212,13 +1209,11 @@ bool GUISandbox::ResizeInspector(shell::IInputManager& input)
     if (over != m_overInspectorEdge)
     {
         m_overInspectorEdge = over;
-        Shown().Invalidate(); // the boundary's highlight
+        m_root->Invalidate(); // the boundary's highlight
         if (!over)
         {
             // The GUI's cursors take the pointer back.
             m_bridge->SetCursorTarget(&mouse);
-            if (m_menuBridge)
-                m_menuBridge->SetCursorTarget(&mouse);
             m_inspectorBridge->SetCursorTarget(&mouse);
         }
     }
@@ -1238,26 +1233,15 @@ void GUISandbox::ToggleInspector()
     }
     m_inspectorOpen = !m_inspectorOpen;
     if (m_inspectorOpen)
-        m_inspector->Inspect(&Shown(), m_showingMenu ? &m_menuStyles : &m_styles);
+        m_inspector->Inspect(m_root.Get(), &m_styles);
     else
         m_inspector->SetPicking(false);
-    Shown().Invalidate();
+    m_root->Invalidate();
 }
 
 void GUISandbox::BuildMenu()
 {
-    m_menuRoot = MakeRef<gui::SceneRoot>(AppRoot(), m_gui);
-    m_menuRoot->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
-    m_menuRoot->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-    m_menuBinding.root = m_menuRoot.Get();
-    {
-        GUISandbox* self = this;
-        (void)m_menuRoot->OnCommand(u8"debug.layout", [self](gui::CommandEvent&) { self->m_layoutOverlay = !self->m_layoutOverlay; self->ApplyDebugOverlay(); });
-        (void)m_menuRoot->OnCommand(u8"debug.input", [self](gui::CommandEvent&) { self->m_inputOverlay = !self->m_inputOverlay; self->ApplyDebugOverlay(); });
-        (void)m_menuRoot->OnCommand(u8"inspector.toggle", [self](gui::CommandEvent&) { self->ToggleInspector(); });
-    }
-    m_menuRoot->SetDebugFont(m_font);
-    ApplyDebugOverlay();
+    m_menuBinding.root = m_root.Get(); // its script finds its widgets in the one root
     String path(kMenuDir);
     path += StringView(u8"menu.xml");
     RefPtr<gui::Node> menu = LoadMarkup(ReadText(path.AsView()).AsView());
@@ -1266,12 +1250,14 @@ void GUISandbox::BuildMenu()
         std::fprintf(stderr, "GUISandbox: the game menu did not load\n");
         return;
     }
-    m_menuRoot->AddChild(menu.Get());
+    // Over the shell, last of the root's children; not shown until it opens. Its sheet styles it
+    // alone, as a page's does.
+    menu->SetDisplayed(false);
+    m_root->AddChild(menu.Get());
+    m_menu = menu;
     String css(kMenuDir);
     css += StringView(u8"menu.css");
-    m_menuStyles.SetFontService(m_fontService.Get());
-    m_menuStyles.SetFontFaceLoader([this](StringView face, StringView source) { return LoadFontFace(face, source); });
-    m_menuStyles.SetStyleSheet(gui::CSSParser::Parse(ReadText(css.AsView()).AsView(), css.AsView()));
+    (void)m_styles.SetSubtreeSheet(*menu, gui::CSSParser::Parse(ReadText(css.AsView()).AsView(), css.AsView()));
     // Leave: the menu fades out, then the sandbox comes back.
     RefPtr<gui::DataModel> model = m_gui->GetDataRef();
     menu->Bind([this, model]()
@@ -1283,7 +1269,6 @@ void GUISandbox::BuildMenu()
     String as(kMenuDir);
     as += StringView(u8"menu.as");
     m_menuScript = RunScript(as.AsView(), m_menuBinding);
-    m_menuBridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_menuRoot->GetEventDispatcher());
 }
 
 // === Running ===
@@ -1377,12 +1362,20 @@ void GUISandbox::ShowMessage()
 
 void GUISandbox::OpenMenu()
 {
-    if (!m_menuRoot)
+    if (!m_menu || m_showingMenu)
         return;
     m_showingMenu = true;
     m_menuLeaveAt = -1.0f;
     m_gui->GetData().Set(u8"quit", Variant::From<bool>(false));
-    m_gui->SetActiveRoot(m_menuRoot.Get());
+    // A modal layer over the shell: drawn over it, the shell inert below it, the focus inside it
+    // and given back on close; Escape is its own (a manual layer: nothing closes it but it).
+    m_menu->SetDisplayed(true);
+    gui::PopupOptions options;
+    options.Kind = gui::PopupKind::Manual;
+    options.Modal = true;
+    options.TakesFocus = true;
+    options.ReturnHome = true; // back in its place when it closes, to open again
+    m_root->GetEventDispatcher()->OpenPopup(*m_root, *m_menu, Move(options));
     if (m_menuScript && m_menuScript->HasFunction(u8"enter"))
         (void)m_menuScript->Call(u8"enter", Span<Variant>{});
     m_menuWantsUpdate = true;
@@ -1390,10 +1383,13 @@ void GUISandbox::OpenMenu()
 
 void GUISandbox::CloseMenu()
 {
+    if (!m_showingMenu)
+        return;
     m_showingMenu = false;
     m_menuLeaveAt = -1.0f;
     m_gui->GetData().Set(u8"quit", Variant::From<bool>(false));
-    m_gui->SetActiveRoot(m_root.Get());
+    (void)m_root->GetEventDispatcher()->ClosePopup(*m_menu);
+    m_menu->SetDisplayed(false);
     if (gui::Node* back = FindById(*m_shellNode, u8"nav-game-menu"))
         (void)back->FocusElement(); // where the player left from
 }
@@ -1414,12 +1410,12 @@ void GUISandbox::LayOutShell()
         m_sidebar->SetSize(Float2{kSidebarWidth, body.y});
     if (m_content != nullptr)
         m_content->SetSize(Float2{Max(0.0f, body.x - kSidebarWidth), body.y});
-    if (m_menuRoot && m_menuRoot->ChildCount() != 0)
+    if (m_menu)
     {
-        gui::Node* menu = m_menuRoot->GetChildAt(0);
-        menu->SetSize(m_menuRoot->GetSize());
-        for (usize i = 0; i < menu->ChildCount(); ++i)
-            menu->GetChildAt(i)->SetSize(m_menuRoot->GetSize());
+        m_menu->SetPosition(Float2{0.0f, 0.0f});
+        m_menu->SetSize(size);
+        for (usize i = 0; i < m_menu->ChildCount(); ++i)
+            m_menu->GetChildAt(i)->SetSize(size);
     }
 }
 
@@ -1430,7 +1426,7 @@ void GUISandbox::RouteInput()
     if (m_shell == nullptr || m_shell->Input() == nullptr || m_window == nullptr)
         return;
     shell::IInputManager& input = *m_shell->Input();
-    gui::GuiInputBridge& bridge = m_showingMenu ? *m_menuBridge : *m_bridge;
+    gui::GuiInputBridge& bridge = *m_bridge;
     // The inspector's pane takes the window's right side; the root on show the rest.
     const f32 pane = InspectorPixels();
     const Rectangle region{0.0f, 0.0f, static_cast<f32>(m_width) - pane, static_cast<f32>(m_height)};
@@ -1442,11 +1438,6 @@ void GUISandbox::RouteInput()
         m_router->AddSurface(m_inputSurface.Get());
         m_bridge->SetTextInputTarget(m_window);
         m_bridge->SetCursorTarget(input.Mouse()); // the pointer takes the look of what it is over
-        if (m_menuBridge)
-        {
-            m_menuBridge->SetTextInputTarget(m_window);
-            m_menuBridge->SetCursorTarget(input.Mouse());
-        }
     }
     m_inputSurface->SetRegion(region);
     m_inputSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}); // places fingers
@@ -1862,8 +1853,7 @@ void GUISandbox::OnRender()
         return;
     }
     RouteInput();
-    gui::SceneRoot& shown = Shown();
-    TypeKeys(shown);
+    TypeKeys(*m_root);
     // --scroll: once the GUI is up (held a few frames while the page settles).
     if (m_scroll > 0.0f && m_frames >= 10 && m_frames <= 20 && m_content != nullptr)
         m_content->SetScrollOffset(Float2{0.0f, m_scroll});
@@ -1876,32 +1866,25 @@ void GUISandbox::OnRender()
 
     // A window moved to a monitor of another density takes its scale.
     const Float2 viewport{static_cast<f32>(m_width) - InspectorPixels(), static_cast<f32>(m_height)};
-    gui::SceneRoot* roots[2] = {m_root.Get(), m_menuRoot.Get()};
-    for (gui::SceneRoot* root : roots)
-    {
-        if (root == nullptr)
-            continue;
-        if (m_window != nullptr && m_window->ContentScale() != root->GetDisplayScale())
-            root->SetDisplayScale(m_window->ContentScale());
-        root->SetViewportSize(viewport);
-    }
+    if (m_window != nullptr && m_window->ContentScale() != m_root->GetDisplayScale())
+        m_root->SetDisplayScale(m_window->ContentScale());
+    m_root->SetViewportSize(viewport);
     LayOutShell();
     m_gui->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
     if (m_showingMenu)
         UpdateMenu();
 
-    // Style the root on show (the other draws nothing), then the layout styling moved.
-    gui::SceneRoot& drawn = Shown(); // the menu may have closed this frame
-    gui::StyleManager& styles = m_showingMenu ? m_menuStyles : m_styles;
-    styles.SetMediaContext(drawn.GetMediaContext());
-    styles.ApplyTree(drawn);
+    // Style the root, then the layout styling moved.
+    gui::SceneRoot& drawn = *m_root;
+    m_styles.SetMediaContext(drawn.GetMediaContext());
+    m_styles.ApplyTree(drawn);
     drawn.UpdateLayout();
     bool paneNeeds = false;
     if (m_inspectorOpen)
     {
         gui::SceneRoot& pane = m_inspector->GetRoot();
-        if (m_inspector->GetTarget() != &drawn) // the game menu opened or closed
-            m_inspector->Inspect(&drawn, m_showingMenu ? &m_menuStyles : &m_styles);
+        if (m_inspector->GetTarget() != &drawn)
+            m_inspector->Inspect(&drawn, &m_styles);
         if (m_window != nullptr && m_window->ContentScale() != pane.GetDisplayScale())
             pane.SetDisplayScale(m_window->ContentScale());
         pane.SetViewportSize(Float2{InspectorPixels(), static_cast<f32>(m_height)});
@@ -2297,14 +2280,13 @@ void GUISandbox::OnShutdown()
     m_inspector.Reset(); // its root on the GUI's context, before the context
     m_inputSurface.Reset();
     m_bridge.Reset();
-    m_menuBridge.Reset();
     m_pages.Clear();
     m_contextMenu.Reset();
     m_floating.Reset();
     m_dialog.Reset();
     m_shellNode.Reset();
     m_root.Reset(); // the views go with the tree, before the models they read
-    m_menuRoot.Reset();
+    m_menu.Reset();
     m_gui.Reset();
     m_tableProxy.Reset();
     m_tableModel.Reset();

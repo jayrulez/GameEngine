@@ -4,7 +4,7 @@
 // GUI - commands (G7 of Specs/vg-and-gui-lab.md): one model controls bind to by id; running walks
 // the focus path (capture down, bubble up, a bubble handler stopping it unless it propagates); a
 // command is available when enabled with a handler on the focus path, and its state reaches a
-// button, a checkbox and a menu item with no bookkeeping.
+// button, a checkbox and a menu item with no bookkeeping; a handler may end the nodes on its path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -60,6 +60,29 @@ TEST_CASE("command: running walks the focus path, capture down then bubble up")
     CHECK_FALSE(root->RunCommand(SV(u8"save")));
     CHECK(order.IsEmpty());
     CHECK_FALSE(root->RunCommand(SV(u8"nobody")));
+}
+
+TEST_CASE("command: a handler that ends the nodes on its path (the last hold on them) finishes the walk safely")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    core::RefPtr<UIWidget> panel = Make<UIWidget>();
+    auto field = Make<Button>();
+    field->SetTabFocusable(true);
+    root->AddChild(panel.Get());
+    panel->AddChild(field.Get());
+    root->GetEventDispatcher()->SetFocusNode(field.Get());
+    // The panel's handler takes it out of the tree and lets go of it: the walk still has it.
+    bool reachedRoot = false;
+    (void)panel->OnCommand(SV(u8"close"), [&](CommandEvent& e)
+    {
+        e.Propagate = true;
+        core::RefPtr<UIWidget> gone = core::Move(panel);
+        gone->RemoveFromParent();
+    });
+    (void)root->OnCommand(SV(u8"close"), [&](CommandEvent&) { reachedRoot = true; });
+    CHECK(root->RunCommand(SV(u8"close")));
+    CHECK(panel.Get() == nullptr);
+    CHECK(reachedRoot);
 }
 
 TEST_CASE("command: availability follows focus, and a bound button greys and lights with it")

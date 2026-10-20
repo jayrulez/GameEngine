@@ -435,10 +435,12 @@ export namespace experimental::gui
         {
             if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
                 return false;
-            Array<Node*> path; // focused first, up to this root or a modal popup (below it is inert)
+            // Focused first, up to this root or a modal popup (below it is inert); held for the walk,
+            // as a handler may end nodes on it (a dock float its own move empties).
+            Array<RefPtr<Node>> path(MemoryAllocator());
             for (Node* n = CommandStart(); n != nullptr; n = n->GetParent())
             {
-                path.PushBack(n);
+                path.PushBack(RefPtr<Node>(n));
                 if (n->IsRouteStop())
                     break;
             }
@@ -451,7 +453,7 @@ export namespace experimental::gui
                     return true; // taken on the way down (a modal wrapper, a mode that owns the key)
             }
             event.Phase = CommandPhase::Bubble;
-            for (Node* n : path)
+            for (const RefPtr<Node>& n : path)
             {
                 event.Propagate = false;
                 if (n->RunCommandHandlers(event))

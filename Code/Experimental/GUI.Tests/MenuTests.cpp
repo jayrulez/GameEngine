@@ -81,6 +81,18 @@ TEST_CASE("menu: activating an item runs its action and closes")
     CHECK(menu->GetParent() == nullptr); // removed from the tree
 }
 
+TEST_CASE("menu: an item whose action lets go of its menu (and what held it) outlives the action")
+{
+    // The menu's only owner is let go by its item's own action, as a dock float's Move to menu is
+    // when the move ends the float.
+    core::RefPtr<Menu> menu = Make<Menu>();
+    int ran = 0;
+    MenuItem* item = menu->AddItem(core::StringView(u8"End"), [&] { ++ran; menu = nullptr; });
+    CHECK(item->HandleActivate());
+    CHECK(ran == 1);
+    CHECK(menu.Get() == nullptr);
+}
+
 TEST_CASE("menu: outside click and Escape dismiss it")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

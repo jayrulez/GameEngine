@@ -290,6 +290,11 @@ export namespace experimental::gui
         // Run the item: toggle (if checkable), fire the user's action, then close the chain.
         virtual void Activate()
         {
+            // Its action may end the menu and what holds it (the menu's own close runs after it):
+            // they live until it is done.
+            core::Array<core::RefPtr<Node>> keep(MemoryAllocator());
+            for (Node* n = this; n != nullptr; n = n->GetParent())
+                keep.PushBack(core::RefPtr<Node>(n));
             if (HasCommand())
                 (void)RunBoundCommand(); // a bound command decides its own checked state (G7)
             else if (m_checkable)

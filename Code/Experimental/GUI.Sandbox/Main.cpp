@@ -1709,13 +1709,14 @@ void GUISandbox::Settle()
 namespace
 {
     // The widgets a mirror audit checks: shown and sized, outside what is placed physically on
-    // purpose (a dock's sides, a popup at a point) and an item view's rows, which it recycles from
-    // item to item (the unit tests check theirs).
+    // purpose (a dock's sides, a popup or a window at a point; what a window holds is checked) and
+    // an item view's rows, which it recycles from item to item (the unit tests check theirs).
     void CollectMirrored(gui::Node& node, Array<gui::Node*>& out)
     {
         if (!node.IsVisible() || !node.IsDisplayed() || node.IsInTopLayer())
             return;
-        if (node.GetSize().x > 0.0f && node.GetSize().y > 0.0f && Cast<gui::UIWidget>(&node) != nullptr)
+        if (node.GetSize().x > 0.0f && node.GetSize().y > 0.0f && Cast<gui::UIWidget>(&node) != nullptr &&
+            Cast<gui::Window>(&node) == nullptr)
             out.PushBack(&node);
         if (node.GetLayoutStyle().Kind == gui::Display::Dock || Cast<gui::ItemView>(&node) != nullptr)
             return;

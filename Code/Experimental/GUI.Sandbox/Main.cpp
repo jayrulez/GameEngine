@@ -47,6 +47,7 @@ import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
 import experimental.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
 import experimental.gui.hosting;   // the host: the window's GUI, offscreen pictures, the picture baker
 import experimental.gui.viewport;  // the Viewport page's widget
+import experimental.gui.docking;   // the Docking page's dock space
 import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
@@ -474,6 +475,14 @@ private:
     foundation::shaders::Compiler* m_cubeCompiler = nullptr;
     f32 m_spin = 0.0f;
     void ResetCamera();
+
+    // === The Docking page (D3 and D4 of Specs/gui-lab-evolution-3.md) ===
+    UniquePtr<gui::DockController> m_dock;
+    RefPtr<gui::DockSpace> m_dockSpace;
+    Array<String> m_dockPanels; // the registered panels' ids, for "Show the closed panels"
+    u32 m_dockMade[8]{};        // how often each panel's content was made (its close policy shows)
+    void FillDocking(gui::Node& host);
+    void RegisterDockPanel(StringView id, StringView title, gui::DockClosePolicy close, StringView line);
 
     // === Fonts ===
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
@@ -974,6 +983,10 @@ void GUISandbox::FillNativeHosts()
         host->AddChild(view.Get());
     }
 
+    // Docking: a dock space over a controller (D3, D4).
+    if (gui::Node* host = FindById(*m_shellNode, u8"docking-host"))
+        FillDocking(*host);
+
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
     {
@@ -1232,7 +1245,8 @@ void GUISandbox::ApplySandboxSheet()
 {
     // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
     // page's own sheet over that, styling its page alone.
-    m_styles->SetUserAgentSheet(gui::CSSParser::Parse(gui::DefaultThemeCSS(), StringView(u8"theme")));
+    const String theme = Format(u8"{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS()); // docking's over the widgets'
+    m_styles->SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
     m_styles->SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView(), path.AsView()));
@@ -1971,6 +1985,102 @@ void GUISandbox::OnRenderWindow(runtime::IApplicationHost&, graphics::FrameConte
     }
 }
 
+// The Docking page's layout as it starts and resets: the scene in the middle, the hierarchy on the
+// left, the inspector on the right, the console, the log and the assets under the scene, and a
+// profiler the layout names before it is registered (a placeholder until it is).
+static gui::DockLayout DefaultDockLayout()
+{
+    gui::DockLayout layout;
+    const gui::DockNodeId central = layout.CentralStack();
+    (void)layout.InsertTab(u8"scene", central);
+    (void)layout.InsertBeside(u8"hierarchy", central, gui::DockSide::Start, 0.22f);
+    (void)layout.InsertBeside(u8"inspector", central, gui::DockSide::End, 0.3f);
+    (void)layout.InsertBeside(u8"console", central, gui::DockSide::Bottom, 0.34f);
+    const gui::DockNodeId bottom = layout.StackOf(u8"console");
+    (void)layout.InsertTab(u8"log", bottom);
+    (void)layout.InsertTab(u8"assets", bottom);
+    (void)layout.InsertTab(u8"profiler", bottom);
+    (void)layout.Activate(u8"console");
+    return layout;
+}
+
+void GUISandbox::RegisterDockPanel(StringView id, StringView title, gui::DockClosePolicy close, StringView line)
+{
+    const usize index = m_dockPanels.Size();
+    m_dockPanels.PushBack(String(id));
+    gui::DockPanelDescription description;
+    description.Id = String(id);
+    description.Title = String(title);
+    description.Close = close;
+    description.Closable = id != StringView(u8"scene");
+    description.Default.Central = id == StringView(u8"scene");
+    GUISandbox* self = this;
+    const String text(line);
+    const StringView policy = close == gui::DockClosePolicy::Hide      ? StringView(u8"closing hides it, its content kept")
+                              : close == gui::DockClosePolicy::Rebuild ? StringView(u8"closing lets its content go; shown again, it is made anew")
+                                                                       : StringView(u8"closing forgets it, its place too");
+    const String note = description.Closable ? String(policy) : String(u8"it cannot be closed");
+    description.Factory = [self, index, text, note]()
+    {
+        ++self->m_dockMade[index];
+        RefPtr<gui::Panel> content = MakeRef<gui::Panel>(AppRoot());
+        content->AddClass(u8"dock-content");
+        content->EditLayoutStyle([](gui::LayoutStyle& s) { s.Direction = gui::FlexDirection::Column; });
+        const String lines[] = {text, note, Format(u8"Made {} time{}.", self->m_dockMade[index], self->m_dockMade[index] == 1 ? u8"" : u8"s")};
+        for (const String& l : lines)
+        {
+            RefPtr<gui::Label> label = MakeRef<gui::Label>(AppRoot());
+            label->SetText(l.AsView());
+            content->AddChild(label.Get());
+        }
+        return RefPtr<gui::Node>(content);
+    };
+    (void)m_dock->Register(Move(description));
+}
+
+void GUISandbox::FillDocking(gui::Node& host)
+{
+    gui::DefineDockingCommands(*m_gui);
+    m_dock = MakeUnique<gui::DockController>(AppRoot(), AppRoot());
+    RegisterDockPanel(u8"scene", u8"Scene", gui::DockClosePolicy::Hide, u8"The central stack: it stays when every tab leaves it.");
+    RegisterDockPanel(u8"hierarchy", u8"Hierarchy", gui::DockClosePolicy::Hide, u8"World, Camera, Light, Cube.");
+    RegisterDockPanel(u8"inspector", u8"Inspector", gui::DockClosePolicy::Hide, u8"The cube: position 0 0 0, spin 1.");
+    RegisterDockPanel(u8"console", u8"Console", gui::DockClosePolicy::Rebuild, u8"> ready");
+    RegisterDockPanel(u8"log", u8"Log", gui::DockClosePolicy::Hide, u8"Loaded the sandbox.");
+    RegisterDockPanel(u8"assets", u8"Assets", gui::DockClosePolicy::Destroy, u8"cube.glb, sky.png, theme.css.");
+    (void)m_dock->Adopt(DefaultDockLayout());
+    m_dockSpace = MakeRef<gui::DockSpace>(AppRoot());
+    host.AddChild(m_dockSpace.Get());
+    m_dockSpace->Show(*m_dock, m_dock->GetLayout().MainSurface());
+
+    GUISandbox* self = this;
+    (void)m_root->OnCommand(u8"docking.reset", [self](gui::CommandEvent&) { (void)self->m_dock->Adopt(DefaultDockLayout()); });
+    (void)m_root->OnCommand(u8"docking.show-closed",
+                            [self](gui::CommandEvent&)
+                            {
+                                for (const String& id : self->m_dockPanels)
+                                    if (self->m_dock->GetLayout().StackOf(id.AsView()) == gui::kNoDock)
+                                        (void)self->m_dock->Show(id.AsView());
+                            });
+    (void)m_root->OnCommand(u8"docking.register",
+                            [self](gui::CommandEvent&)
+                            {
+                                if (self->m_dock->Describe(u8"profiler") == nullptr)
+                                    self->RegisterDockPanel(u8"profiler", u8"Profiler", gui::DockClosePolicy::Hide,
+                                                            u8"Registered late: it fills the place the layout kept for it.");
+                            });
+    // What a torn tab leaves, both to try: its strip closing up, or it dimmed in place.
+    (void)m_root->OnCommand(u8"docking.torn-tab",
+                            [self, &host](gui::CommandEvent&)
+                            {
+                                const bool dim = self->m_dockSpace->GetTornTab() == gui::DockTornTab::Close;
+                                self->m_dockSpace->SetTornTab(dim ? gui::DockTornTab::Dim : gui::DockTornTab::Close);
+                                gui::Node* page = host.GetParent() != nullptr ? host.GetParent()->GetParent() : nullptr;
+                                if (auto* button = page != nullptr ? Cast<gui::Button>(FindById(*page, u8"docking-torn")) : nullptr)
+                                    button->SetText(dim ? u8"A torn tab dims" : u8"A torn tab closes up");
+                            });
+}
+
 // The Viewport page's camera, framing the cube.
 void GUISandbox::ResetCamera()
 {
@@ -2224,7 +2334,9 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     m_dialog.Reset();
     m_shellNode.Reset();
     m_viewport.Reset(); // its targets go with the tree, while the host and the device are here
+    m_dockSpace.Reset();
     m_root.Reset(); // the widgets go with the tree, before the models they read
+    m_dock.Reset(); // after the dock space that showed its layout
     m_menu.Reset();
     m_gui.Reset();
     m_tableProxy.Reset();

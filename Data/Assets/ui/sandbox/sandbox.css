@@ -49,6 +49,7 @@
 .btn:focus-visible { box-shadow: 0 0 0 2px var(--shell-accent); }
 .btn:disabled { opacity: 0.4; }
 tooltip { font-family: Roboto; font-size: 13px; color: var(--ink); }
+window, messagebox { font-family: Roboto; font-size: 16px; } /* a script's too (native code sets Roboto 16 on its own) */
 
 /* The page's bars as parts (E6): a quiet thumb that lights under the pointer and while held. */
 .content::scrollbar-thumb { background-color: rgba(151, 162, 180, 0.35); border-radius: 4; }

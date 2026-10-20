@@ -382,6 +382,11 @@ export namespace experimental::gui
                     SetDropIndex(-1);
                     return true; // answered: the walk ends with the reason
                 }
+                if (query.Effect == DropEffect::None)
+                {
+                    SetDropIndex(-1);
+                    return false; // passed on: what holds the strip is asked
+                }
             }
             SetDropIndex(index);
             return true;
@@ -394,8 +399,9 @@ export namespace experimental::gui
         /// to it at an index, and its tab comes with it.
         void SetPageAdopter(core::Function<void(Node& page, i32 index)> adopter) { m_pageAdopter = core::Move(adopter); }
         /// Asked when a tab of its group is offered at `index` (accepted already): it may refuse it,
-        /// saying why, or say what the drop would do (the query's Reason). An owner that keeps where
-        /// tabs are elsewhere (docking) answers with its own rules.
+        /// saying why, pass it on (its effect set back to none: what holds the strip is asked), or
+        /// say what the drop would do (the query's Reason). An owner that keeps where tabs are
+        /// elsewhere (docking) answers with its own rules.
         void SetOnTabOffered(core::Function<void(DropQuery& query, Tab& tab, i32 index)> offered) { m_onTabOffered = core::Move(offered); }
         /// Takes a dropped tab over: the bar moves nothing, the taker does (`index` counted with every
         /// tab where it is, the dropped one too when it is this bar's).

@@ -562,7 +562,7 @@ TEST_CASE("tabs: in a group's strip a tab dropped back into it reorders it; not 
     CHECK(top->GetTab(2) == a);
 }
 
-TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its reason) and takes a dropped one over")
+TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its reason, or passed on) and takes a dropped one over")
 {
     auto root = MakeRoot();
     auto top = BarAt(*root, 10.0f, u8"docs");
@@ -613,6 +613,24 @@ TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its r
     CHECK(top->GetTabCount() == 2); // the bar moved nothing
     CHECK(bottom->GetTabCount() == 2);
     CHECK(bottom->GetDropIndex() == -1);
+
+    // Passed on (its effect set back to none): no mark, and what holds the strip is asked.
+    bool askedAbove = false;
+    bottom->SetOnTabOffered([](DropQuery& query, Tab&, core::i32) { query.Effect = DropEffect::None; });
+    root->SetOnDragQuery([&askedAbove](DropQuery& query)
+    {
+        askedAbove = true;
+        query.Accept(DropEffect::Move);
+    });
+    const core::Float2 b = CentreOf(*top->GetTab(1));
+    d.InjectMouseDown(b, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{b.x, b.y + 60.0f});
+    REQUIRE(d.IsDragging());
+    d.InjectMouseMove(at);
+    CHECK(askedAbove);
+    CHECK(d.GetDropTarget() == root.Get());
+    CHECK(bottom->GetDropIndex() == -1);
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
 }
 
 TEST_CASE("tabs: a torn tab's ghost is the tab, held where it was grabbed; its bar hears it torn and the drag over; a hidden tab is no place")

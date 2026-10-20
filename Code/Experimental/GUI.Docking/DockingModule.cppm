@@ -11,5 +11,4 @@ module;
 
 export module experimental.gui.docking;
 
-import foundation.core;
-import experimental.gui;
+export import :layout; // D1: the layout as data and its operations

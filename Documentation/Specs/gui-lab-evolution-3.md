@@ -217,5 +217,14 @@ theme's `splitter-handle` quiet until hovered, dragged or focused. On the way: a
 no room (min-content) lost a width its style gave it, because exactness was read from a minimum
 equal to the maximum; the constraints now say it (2bb68576f).
 
+D1 as built on `vg` (2026-10-20): `DockLayout` in GUI.Docking, plain data. Panels tab into a
+stack, dock beside one (joining its split when the axis matches, else wrapping it) or along a whole
+surface's edge, move, float into a surface of their own (docked into in turn), close keeping their
+place and show again there, beside a neighbour from then when the stack is gone, else in the central
+stack; a split's shares are set, a stack maximized, its flags (central, locked, no split, no tabs)
+refuse what they forbid. Every operation refuses with its reason and changes nothing, or does what
+it says and normalizes. Tested headless, with five seeded runs of 4000 random operations each
+checked against the layout's invariants after every step.
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

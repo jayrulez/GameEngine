@@ -7,4 +7,5 @@ target_link_libraries(GUI.Docking
 target_sources(GUI.Docking
     PUBLIC
         FILE_SET guidocking_modules TYPE CXX_MODULES FILES
-            DockingModule.cppm)
+            DockingModule.cppm
+            DockLayout.cppm)

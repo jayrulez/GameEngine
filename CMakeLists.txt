@@ -529,6 +529,18 @@ endif()
 add_subdirectory(Code/Foundation/Graphics)  # GraphicsDevice/RenderWindow render host over RHI+Shell; below Runtime
 add_subdirectory(Code/Foundation/Runtime)
 add_subdirectory(Code/Foundation/Runtime.Client)
+if(OPTION_EXPERIMENTAL_GUI)
+    # The lab's satellites (Specs/gui-lab-evolution-3.md), over the graphics and runtime hosts.
+    add_subdirectory(Code/Experimental/GUI.Hosting)   # the host: windows, roots, renderers, input, offscreen pictures
+    add_subdirectory(Code/Experimental/GUI.Viewport)  # 3D content in a node, its input gated
+    add_subdirectory(Code/Experimental/GUI.Docking)   # docking, floating panels as OS windows
+    add_subdirectory(Code/Experimental/GUI.Toolkit)   # editor widgets
+    add_subdirectory(Code/Experimental/GUI.Gamekit)   # a game's screens
+    add_subdirectory(Code/Experimental/GUI.Resources) # cooked documents and themes
+    if(OPTION_BUILD_TOOLS)
+        add_subdirectory(Code/Experimental/GUI.Pipeline) # cooking them (tools only)
+    endif()
+endif()
 add_subdirectory(Code/Engine/Engine.GameInstance)
 add_subdirectory(Code/Engine/Engine.UI.Script)  # UI script surface: reflected view handles + `ui` screen-tier facade (over UI.Gamekit)
 # The script-surface composition root: links every subsystem facade above and exposes

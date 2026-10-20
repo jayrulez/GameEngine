@@ -309,7 +309,12 @@ since 2026-10-19 an Image's `src`, a menu command's icon and a rich text's `[ico
 `.svg` path, and an `SvgDrawable` made from SVG markup for an icon set compiled into a binary;
 an SVG written inline anywhere a picture's source goes, a `data:image/svg+xml,...` URL, plain,
 percent-encoded or base64, which the resource provider parses once and keeps; and an SVG
-`border-image`, sliced in its own units, each piece drawn as paths clipped to its place),
+`border-image`, sliced in its own units, each piece drawn as paths clipped to its place; since
+2026-10-20 baked: a host's `IPictureBaker` (the sandbox's `GpuPictureBaker`, `GUI.Bake`) draws the
+document once into a GPU texture at the size its corners land in device pixels, which the pieces
+then sample as premultiplied quads (VG's `DrawImagePremultiplied`), paths only while a bake is
+queued; the sandbox's Pictures page, 40 framed tiles, went from 680,383 vertices and 36.7 ms of
+GUI draw a frame to 5,779 and 0.2 ms),
 `border-image` nine-slice skins (stretch, repeat, round, fill) and `@spritesheet` atlases written
 as `url(atlas.png#xywh=...)` (202d678bb); dashed and dotted borders through VG's dash patterns,
 the lab's alone, no Foundation change (8b433b342). The built-in theme is one sheet of tokens on

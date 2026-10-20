@@ -128,3 +128,27 @@ TEST_CASE("css-parser: each rule keeps its sheet's name, its selector as written
     CHECK(sheet.Rules()[3].Line() == 8u);
     CHECK(CSSParser::Parse(SV(u8"a { color: red; }")).Name().Size() == 0u);
 }
+
+TEST_CASE("css-parser: a quoted string and parentheses keep their semicolons, braces and comment openers")
+{
+    const StyleSheet sheet = CSSParser::Parse(SV(
+        u8".a { background-image: url(\"data:image/svg+xml,<svg style='fill:red;stroke:none'>{}/*x*/</svg>\"); color: red; }\n"
+        u8".b { background-image: url(data:image/svg+xml;base64,PHN2Zy8+); color: blue; }\n"
+        u8"@media (min-width: 1px) { .c { content: \"}\"; color: green; } }\n"
+        u8".d { content: 'it\\'s; } still'; color: black; }\n"));
+    REQUIRE(sheet.RuleCount() == 4u);
+    const auto& a = sheet.Rules()[0].Properties();
+    REQUIRE(a.Size() == 2u);
+    CHECK(a[0].Value.AsView() == SV(u8"url(\"data:image/svg+xml,<svg style='fill:red;stroke:none'>{}/*x*/</svg>\")"));
+    CHECK(a[1].Name.AsView() == SV(u8"color"));
+    const auto& b = sheet.Rules()[1].Properties();
+    REQUIRE(b.Size() == 2u);
+    CHECK(b[0].Value.AsView() == SV(u8"url(data:image/svg+xml;base64,PHN2Zy8+)"));
+    const auto& c = sheet.Rules()[2].Properties();
+    REQUIRE(c.Size() == 2u);
+    CHECK(c[0].Value.AsView() == SV(u8"\"}\""));
+    CHECK(sheet.Rules()[2].SelectorText() == SV(u8".c"));
+    const auto& d = sheet.Rules()[3].Properties();
+    REQUIRE(d.Size() == 2u);
+    CHECK(d[1].Value.AsView() == SV(u8"black"));
+}

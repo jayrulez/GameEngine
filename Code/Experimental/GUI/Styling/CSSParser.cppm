@@ -7,7 +7,9 @@
 // (common subset). Handles `/* comments */`, comma-separated selector lists, `name: value;`
 // declaration blocks (custom properties and `!important` among them), `@media` blocks and
 // `@keyframes` and `@font-face`; best-effort (malformed bits are skipped). Other at-rules
-// (`@import`) are skipped, and nesting is not read.
+// (`@import`) are skipped, and nesting is not read. A quoted string is whole, as CSS tokenizes
+// one: no `;`, brace or comment opener inside it ends or starts anything, and no `;` inside
+// parentheses ends a declaration either (an inline SVG's markup, `url(data:...;base64,...)`).
 
 module;
 #include "Core/Prelude.h"
@@ -25,6 +27,43 @@ namespace core = foundation::core;
 
 namespace experimental::gui
 {
+    // Past the quoted string starting at `i` (its closing quote, a backslash escaping one), or
+    // `i` when no string starts there.
+    [[nodiscard]] inline usize SkipQuoted(core::StringView s, usize i) noexcept
+    {
+        if (i >= s.Size() || (s[i] != u8'"' && s[i] != u8'\''))
+            return i;
+        const char8_t quote = s[i++];
+        while (i < s.Size() && s[i] != quote)
+            i += s[i] == u8'\\' && i + 1 < s.Size() ? 2 : 1;
+        return i < s.Size() ? i + 1 : i;
+    }
+
+    // The first of `stops` from `i` outside quoted strings and parentheses; the end when none.
+    [[nodiscard]] inline usize ScanTo(core::StringView s, usize i, core::StringView stops) noexcept
+    {
+        usize depth = 0;
+        while (i < s.Size())
+        {
+            if (const usize past = SkipQuoted(s, i); past != i)
+            {
+                i = past;
+                continue;
+            }
+            const char8_t c = s[i];
+            if (depth == 0)
+                for (const char8_t stop : stops)
+                    if (c == stop)
+                        return i;
+            if (c == u8'(')
+                ++depth;
+            else if (c == u8')' && depth > 0)
+                --depth;
+            ++i;
+        }
+        return i;
+    }
+
     // Blank out /* ... */ comments, keeping their line breaks, so a rule's place in the result is
     // its place in the source (its line, for the inspector).
     [[nodiscard]] inline core::String StripComments(core::StringView s)
@@ -34,7 +73,9 @@ namespace experimental::gui
         usize runStart = 0, i = 0;
         while (i < n)
         {
-            if (i + 1 < n && s[i] == u8'/' && s[i + 1] == u8'*')
+            if (const usize past = SkipQuoted(s, i); past != i)
+                i = past; // a string's "/*" is its text
+            else if (i + 1 < n && s[i] == u8'/' && s[i + 1] == u8'*')
             {
                 out.Append(s.SubStr(runStart, i - runStart));
                 const usize start = i;
@@ -115,8 +156,7 @@ export namespace experimental::gui
                 {
                     // At-rule: read the prelude up to '{' (block) or ';' (statement).
                     const usize atStart = i;
-                    while (i < n && src[i] != u8'{' && src[i] != u8';')
-                        ++i;
+                    i = ScanTo(src, i, core::StringView(u8"{;"));
                     const core::StringView prelude = Trim(src.SubStr(atStart, i - atStart));
                     if (i < n && src[i] == u8';')
                     {
@@ -137,6 +177,11 @@ export namespace experimental::gui
                     i32 depth = 1;
                     while (i < n && depth > 0)
                     {
+                        if (const usize past = SkipQuoted(src, i); past != i)
+                        {
+                            i = past;
+                            continue;
+                        }
                         if (src[i] == u8'{')
                             ++depth;
                         else if (src[i] == u8'}')
@@ -177,16 +222,14 @@ export namespace experimental::gui
 
                 // Normal rule: selector list up to '{'.
                 const usize selStart = i;
-                while (i < n && src[i] != u8'{' && src[i] != u8'}')
-                    ++i;
+                i = ScanTo(src, i, core::StringView(u8"{}"));
                 if (i >= n || src[i] != u8'{')
                     break;
                 const core::StringView selectorList = src.SubStr(selStart, i - selStart);
                 ++i; // consume '{'
 
                 const usize blockStart = i;
-                while (i < n && src[i] != u8'}')
-                    ++i;
+                i = ScanTo(src, i, core::StringView(u8"}"));
                 const core::StringView block = src.SubStr(blockStart, i - blockStart);
                 if (i < n)
                     ++i; // consume '}'
@@ -328,15 +371,13 @@ export namespace experimental::gui
                     break;
 
                 const usize selStart = i;
-                while (i < n && inner[i] != u8'{')
-                    ++i;
+                i = ScanTo(inner, i, core::StringView(u8"{"));
                 if (i >= n)
                     break;
                 const core::StringView offsetList = inner.SubStr(selStart, i - selStart);
                 ++i; // consume '{'
                 const usize blockStart = i;
-                while (i < n && inner[i] != u8'}')
-                    ++i;
+                i = ScanTo(inner, i, core::StringView(u8"}"));
                 const core::StringView block = inner.SubStr(blockStart, i - blockStart);
                 if (i < n)
                     ++i; // consume '}'
@@ -438,33 +479,28 @@ export namespace experimental::gui
             Array<StyleProperty> out;
             usize start = 0;
             const usize n = block.Size();
-            for (usize i = 0; i <= n; ++i)
+            while (start <= n)
             {
-                if (i == n || block[i] == u8';')
+                const usize end = ScanTo(block, start, core::StringView(u8";"));
+                const core::StringView decl = block.SubStr(start, end - start);
+                start = end + 1;
+                const usize colon = FindChar(decl, u8':');
+                if (colon == kNotFound)
+                    continue;
+                const core::StringView name = Trim(decl.SubStr(0, colon));
+                core::StringView value = Trim(decl.SubStr(colon + 1, decl.Size() - colon - 1));
+
+                // Trailing !important.
+                bool important = false;
+                const core::StringView flag(u8"!important");
+                if (value.Size() >= flag.Size() && value.SubStr(value.Size() - flag.Size(), flag.Size()) == flag)
                 {
-                    const core::StringView decl = block.SubStr(start, i - start);
-                    const usize colon = FindChar(decl, u8':');
-                    if (colon != kNotFound)
-                    {
-                        const core::StringView name = Trim(decl.SubStr(0, colon));
-                        core::StringView value =
-                            Trim(decl.SubStr(colon + 1, decl.Size() - colon - 1));
-
-                        // Trailing !important.
-                        bool important = false;
-                        const core::StringView flag(u8"!important");
-                        if (value.Size() >= flag.Size() &&
-                            value.SubStr(value.Size() - flag.Size(), flag.Size()) == flag)
-                        {
-                            important = true;
-                            value = Trim(value.SubStr(0, value.Size() - flag.Size()));
-                        }
-
-                        if (name.Size() != 0)
-                            out.PushBack(StyleProperty(name, value, important));
-                    }
-                    start = i + 1;
+                    important = true;
+                    value = Trim(value.SubStr(0, value.Size() - flag.Size()));
                 }
+
+                if (name.Size() != 0)
+                    out.PushBack(StyleProperty(name, value, important));
             }
             return out;
         }

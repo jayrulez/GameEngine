@@ -125,6 +125,9 @@ export namespace experimental::gui
         bool OnDragRequested(DragRequest& request) override;
         /// The drag a tab torn out of its strip is.
         void FillTabPayload(DragPayload& payload);
+        /// A torn tab's ghost: its title in a `dragpreview.tab`, its own size (held where it was
+        /// grabbed, so it does not jump beside the pointer).
+        [[nodiscard]] core::RefPtr<Node> CreateDragPreview(const DragPayload& payload) override;
 
     protected:
         bool OnActivate() override;
@@ -142,6 +145,7 @@ export namespace experimental::gui
         }
         void OnPointerCaptureLost() override { EndDrag(); }
         void OnKeyDown(const KeyEvent& event) override;
+        void OnDragEnd(const DragResult&) override;
         void OnPointerStateChange() override
         {
             ButtonBase::OnPointerStateChange();
@@ -177,6 +181,8 @@ export namespace experimental::gui
         bool m_pressing = false; // a left press on it, not yet released
         bool m_dragging = false; // that press moved far enough to reorder
         f32 m_pressX = 0.0f;
+        core::Float2 m_pressLocal{0.0f, 0.0f}; // where on it the press was
+        core::RefPtr<TabBar> m_tornFrom; // the bar told it was torn out, told again when the drag ends
     };
 
     // The row the tabs are in: it scrolls across, its bar hidden.
@@ -396,6 +402,10 @@ export namespace experimental::gui
         /// Takes a dropped tab over: the bar moves nothing, the taker does (`index` counted with every
         /// tab where it is, the dropped one too when it is this bar's).
         void SetTabTaker(core::Function<void(Tab& tab, i32 index)> taker) { m_tabTaker = core::Move(taker); }
+        /// A tab of its own was torn out as a drag (`torn`), or that drag ended, dropped or not (the
+        /// tab may be in another bar by then): an owner may hide or dim it meanwhile. A tab not
+        /// displayed is no place for a drop.
+        void SetOnTabTorn(core::Function<void(Tab& tab, bool torn)> torn) { m_onTabTorn = core::Move(torn); }
 
         // === Callbacks ===
         /// The user selected a tab (the `change` event's).
@@ -480,6 +490,8 @@ export namespace experimental::gui
             const f32 way = IsRightToLeft() ? -1.0f : 1.0f;
             for (i32 i = 0; i < GetTabCount(); ++i)
             {
+                if (!GetTab(i)->IsDisplayed())
+                    continue; // hidden (torn out): counted, but no place of its own
                 const Rect r = GetTab(i)->GetScreenBounds();
                 if (way * world.x < way * (r.x + r.width * 0.5f))
                     return i;
@@ -612,6 +624,7 @@ export namespace experimental::gui
         core::Function<void(Node&, i32)> m_pageAdopter;
         core::Function<void(DropQuery&, Tab&, i32)> m_onTabOffered;
         core::Function<void(Tab&, i32)> m_tabTaker;
+        core::Function<void(Tab&, bool)> m_onTabTorn;
     };
 
     // === Tab ===
@@ -628,6 +641,40 @@ export namespace experimental::gui
                 bar->RequestClose(bar->IndexOf(self));
         });
         AddChild(m_close.Get()); // after its icon and text
+        // Torn out (by the pointer or `drag.pick`): its bar hears it, and again when the drag ends.
+        (void)AddEventListener(EventType::DragStart, [self](const Event& event)
+        {
+            TabBar* bar = self->GetBar();
+            if (bar == nullptr || TabBar::DraggedTab(static_cast<const DragEvent&>(event).Payload) != self)
+                return;
+            self->m_tornFrom = core::RefPtr<TabBar>(bar);
+            if (bar->m_onTabTorn)
+                bar->m_onTabTorn(*self, true);
+        });
+    }
+
+    inline void Tab::OnDragEnd(const DragResult&)
+    {
+        const core::RefPtr<TabBar> from = core::Move(m_tornFrom);
+        if (from && from->m_onTabTorn)
+            from->m_onTabTorn(*this, false);
+    }
+
+    inline core::RefPtr<Node> Tab::CreateDragPreview(const DragPayload& payload)
+    {
+        core::RefPtr<Node> ghost = Node::CreateDragPreview(payload);
+        if (UIWidget* widget = core::Cast<UIWidget>(ghost.Get()))
+        {
+            widget->AddClass(core::StringView(u8"tab"));
+            const core::Float2 size = GetSize();
+            StyleWriteScope defaults(*widget);
+            widget->EditLayoutStyle([size](LayoutStyle& s)
+            {
+                s.Width = LayoutLength::Px(size.x);
+                s.Height = LayoutLength::Px(size.y);
+            });
+        }
+        return ghost;
     }
 
     inline TabBar* Tab::GetBar() const
@@ -709,6 +756,7 @@ export namespace experimental::gui
         m_pressing = true;
         m_dragging = false;
         m_pressX = event.Position.x;
+        m_pressLocal = ConvertToNodeSpace(event.Position);
     }
 
     inline void Tab::OnMouseMove(const MouseEvent& event)
@@ -726,6 +774,8 @@ export namespace experimental::gui
                 EndDrag();
                 DragRequest request;
                 FillTabPayload(request.Payload);
+                request.GrabOffset = m_pressLocal; // its ghost held where the press took it
+                request.HasGrabOffset = true;
                 d->StartDrag(*this, core::Move(request));
                 return;
             }

@@ -126,6 +126,9 @@ export namespace experimental::gui
             dragpreview { background-color: var(--dragpreview-background, #2b3444); color: var(--text-strong); border-radius: var(--radius);
                           opacity: 0.92; }
             dragpreview::effect { background-color: var(--dragpreview-effect, #8fc1ff); }
+            /* A torn tab's ghost: the tab as it was, a little see-through. */
+            dragpreview.tab { background-color: var(--tab-checked-background, var(--accent)); color: var(--tab-checked-text, var(--on-accent));
+                              padding: var(--space-m) 10; border-radius: 0; opacity: 0.85; }
             tooltip.drophint.refused { color: var(--drop-refused, #ff8a80); }
             /* The focus ring: where the keyboard is (a field shows it while it has the caret). */
             button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,

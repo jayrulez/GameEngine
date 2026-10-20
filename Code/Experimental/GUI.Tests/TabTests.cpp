@@ -579,6 +579,51 @@ TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its r
     CHECK(bottom->GetDropIndex() == -1);
 }
 
+TEST_CASE("tabs: a torn tab's ghost is the tab, held where it was grabbed; its bar hears it torn and the drag over; a hidden tab is no place")
+{
+    auto root = MakeRoot();
+    auto top = BarAt(*root, 10.0f, u8"docs");
+    Tab* a = AddSizedTab(*top, u8"A");
+    Tab* b = AddSizedTab(*top, u8"B");
+    Tab* c = AddSizedTab(*top, u8"C");
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    core::Array<core::String> heard;
+    top->SetOnTabTorn([&](Tab& tab, bool torn) { heard.PushBack(core::Format(u8"{} {}", tab.GetText(), torn ? u8"torn" : u8"back")); });
+
+    const Rect from = b->GetScreenBounds();
+    const core::Float2 press{from.x + 7.0f, from.y + 5.0f};
+    d.InjectMouseDown(press, MouseButton::Left);
+    const core::Float2 out{press.x + 3.0f, press.y + 60.0f};
+    d.InjectMouseMove(out);
+    REQUIRE(d.IsDragging());
+    REQUIRE(heard.Size() == 1u);
+    CHECK(heard[0] == core::StringView(u8"B torn"));
+    auto* ghost = Cast<DragPreview>(d.GetDragPreview());
+    REQUIRE(ghost != nullptr);
+    CHECK(ghost->HasClass(core::StringView(u8"tab")));
+    CHECK(ghost->GetText() == core::StringView(u8"B"));
+    (void)root->UpdateLayout();
+    CHECK(ghost->GetSize().x == doctest::Approx(from.width));
+    CHECK(ghost->GetSize().y == doctest::Approx(from.height));
+    const Rect held = ghost->GetScreenBounds();
+    CHECK(held.x == doctest::Approx(out.x - 7.0f)); // the press's place on it, under the pointer
+    CHECK(held.y == doctest::Approx(out.y - 5.0f));
+
+    // Hidden (as an owner may while it is torn): counted, but no place of its own. Left of C's
+    // middle is before C (2), past the hidden B.
+    b->SetDisplayed(false);
+    (void)root->UpdateLayout();
+    const Rect cr = c->GetScreenBounds();
+    d.InjectMouseMove(core::Float2{cr.x + 3.0f, cr.y + 5.0f});
+    CHECK(top->GetDropIndex() == 2);
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK_FALSE(d.IsDragging());
+    REQUIRE(heard.Size() == 2u);
+    CHECK(heard[1] == core::StringView(u8"B back"));
+    (void)a;
+}
+
 TEST_CASE("tabs: a tab of a group is picked up from the keyboard and dropped on a strip's tab it is moved to")
 {
     auto root = MakeRoot();

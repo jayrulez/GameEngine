@@ -632,3 +632,28 @@ TEST_CASE("tabs: a torn-out tab dropped on another view's page area (not its str
     REQUIRE(right->GetPageCount() == 2);
     CHECK(right->GetPage(1) == two);
 }
+
+TEST_CASE("tabview: a page asked for before it is there waits; the first is not shown, nor built, on the way; a page moved is reported")
+{
+    auto root = MakeRoot();
+    auto view = Make<TabView>();
+    root->AddChild(view.Get());
+    int built = 0;
+    view->SetSelectedIndex(1); // the second, which is not there yet
+    auto first = Make<TabPage>();
+    first->SetContentFactory([&built](TabPage&) { ++built; });
+    view->AddPage(*first);
+    CHECK(view->GetSelectedIndex() == -1); // waiting, the first not selected meanwhile
+    CHECK(built == 0);
+    auto second = Make<TabPage>();
+    second->SetContentFactory([&built](TabPage&) { built += 10; });
+    view->AddPage(*second);
+    CHECK(view->GetSelectedIndex() == 1);
+    CHECK(built == 10); // the second alone shown, and built
+
+    core::i32 movedTo = -1;
+    view->SetOnPageMoved([&movedTo](core::i32 to) { movedTo = to; });
+    view->GetBar()->MoveTab(1, 0);
+    CHECK(movedTo == 0);
+    CHECK(view->GetPage(0) == second.Get());
+}

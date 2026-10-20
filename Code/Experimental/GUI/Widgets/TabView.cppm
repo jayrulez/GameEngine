@@ -160,6 +160,8 @@ export namespace experimental::gui
                 // The pages keep the tabs' order (a script's children read as the strip does).
                 if (Node* page = self->m_bar->GetTab(to)->GetPage())
                     self->m_host->SetChildIndex(page, static_cast<usize>(to));
+                if (self->m_onPageMoved)
+                    self->m_onPageMoved(to);
             });
             m_bar->SetOnTabRemoved([self](Tab& tab)
             {
@@ -205,6 +207,8 @@ export namespace experimental::gui
         [[nodiscard]] Node* GetSelectedPage() const { return GetPage(m_bar->GetSelectedIndex()); }
         /// The user selected a page (the `change` event's).
         void SetOnSelected(core::Function<void(i32)> callback) { m_onSelected = core::Move(callback); }
+        /// The user dragged a page's tab to another place in the strip; `to` is where it is now.
+        void SetOnPageMoved(core::Function<void(i32 to)> callback) { m_onPageMoved = core::Move(callback); }
 
         // === The bar's settings, from markup ===
         void SetCloseDisplayName(const core::String& name) { m_bar->SetCloseDisplayName(name); }
@@ -301,6 +305,7 @@ export namespace experimental::gui
 
         core::RefPtr<TabBar> m_bar;
         core::RefPtr<TabPageHost> m_host;
+        core::Function<void(i32)> m_onPageMoved;
         core::Function<void(i32)> m_onSelected;
     };
 

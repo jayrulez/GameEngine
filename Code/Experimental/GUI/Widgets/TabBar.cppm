@@ -544,8 +544,8 @@ export namespace experimental::gui
                 m_pendingSelect = -1;
                 Select(GetTab(pending), false);
             }
-            else if (m_selected == nullptr && GetTabCount() > 0)
-                Select(GetTab(0), false);
+            else if (m_selected == nullptr && GetTabCount() > 0 && m_pendingSelect < 0)
+                Select(GetTab(0), false); // none asked for yet (one asked for waits: its page is not shown, nor built, on the way)
             else if (m_selected != nullptr)
                 m_selectedAt = IndexOf(m_selected); // a tab added before it moved it
             if (m_onRemoved)

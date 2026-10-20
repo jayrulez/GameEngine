@@ -170,3 +170,32 @@ TEST_CASE("gui.hosting: an offscreen target draws a root at its own size, timed,
     CHECK(root->GetLastFrameStats().FramesDrawn == 1u); // a frame of the root's, counted as a window's are
     CHECK(offscreen.Draw(*root)); // again, nothing read back
 }
+
+TEST_CASE("gui.hosting: a pane is another root over a region of a window, laid out at its size")
+{
+    Bed bed;
+    static_cast<shell::NullWindow*>(bed.shell.MainWindow())->Resize(800, 600);
+    RefPtr<SceneRoot> root = bed.MakeRoot();
+    RefPtr<SceneRoot> pane = bed.MakeRoot();
+    bed.host->AttachWindow(*bed.main, root);
+    bed.host->SetPaneRegion(*root, Rectangle{0.0f, 0.0f, 600.0f, 600.0f});
+    bed.host->AddPane(*bed.main, pane, Rectangle{600.0f, 0.0f, 200.0f, 600.0f});
+    bed.Frame(bed.main.Get());
+    CHECK(root->GetViewportSize().x == doctest::Approx(600.0f));
+    CHECK(pane->GetViewportSize().x == doctest::Approx(200.0f));
+    CHECK(pane->GetViewportSize().y == doctest::Approx(600.0f));
+    CHECK(bed.host->WindowFor(pane.Get()) == bed.main.Get());
+    CHECK(bed.host->PaneArea(*pane).x == doctest::Approx(600.0f));
+    const u64 drawn = bed.host->FramesDrawn();
+    bool overlaid = false;
+    bed.host->SetOverlay([&overlaid](graphics::RenderWindow&, DrawContext&) { overlaid = true; });
+    bed.host->SetPaneRegion(*pane, Rectangle{560.0f, 0.0f, 240.0f, 600.0f}); // the pane widened
+    bed.host->SetPaneRegion(*root, Rectangle{0.0f, 0.0f, 560.0f, 600.0f});
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->FramesDrawn() == drawn + 1);
+    CHECK(overlaid);
+    CHECK(pane->GetViewportSize().x == doctest::Approx(240.0f));
+    bed.host->RemovePane(*pane);
+    CHECK(bed.host->WindowFor(pane.Get()) == nullptr);
+    CHECK(bed.host->WindowFor(root.Get()) == bed.main.Get());
+}

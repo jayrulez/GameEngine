@@ -5,15 +5,19 @@
 // host (foundation.graphics).
 //
 // One GUIContext and one style manager for the application, and a SceneRoot per RenderWindow with
-// that window's VG context, VG renderer, pass targets (multisampling, and the stencil the fills
-// use), input surface and input bridge (a root has a dispatcher of its own), stashed on the window
-// as its payload. The picture baker serves every window: a picture baked once registers with each
+// that window's VG context, VG renderer and pass targets (multisampling, and the stencil the fills
+// use), stashed on the window as its payload. A window may hold more roots, panes, each over a region
+// of it with an input surface and bridge of its own (a root has a dispatcher of its own) and, when it
+// belongs to another GUI (a tool's, such as the inspector), that GUI's style manager. The picture baker serves every window: a picture baked once registers with each
 // window's renderer. An application constructs one host, attaches a root to its main window (and
 // to each window it opens), and calls Update from its update and RenderWindow from its render.
 //
 // Input: the pointer goes to the window under it, or to the window a press began in until every
-// button is up (the lab has no capture to ask, so a held press is one); keys, text and the gamepad
-// go to the focused window; a file dropped goes to the window it landed on. A root draws when it
+// button is up (the lab has no capture to ask, so a held press is one), each of its panes pumped
+// through its own surface (the router gates them by region); keys, text and the gamepad go to the
+// focused window's pane that was clicked last, else its first; a file dropped goes to the window it
+// landed on. An application may take a pane's pointer for itself first (a tool picking what is under
+// it) and draw over a window after its panes (a tool's highlights). A root draws when it
 // needs a frame (E8a's NeedsFrame: something changed, an animation runs, a bake landed); otherwise
 // its window re-encodes the batch it drew last, since the runtime host presents every frame.
 //
@@ -52,22 +56,38 @@ export namespace experimental::gui
     class GuiWindowData final : public graphics::IRenderWindowData
     {
     public:
-        explicit GuiWindowData(IAllocator& allocator) noexcept : Renderer(allocator) {}
+        /// A root over a region of the window (empty: all of it), with its own input.
+        struct Pane
+        {
+            RefPtr<SceneRoot> Root;
+            Rectangle Region{};
+            StyleManager* Styles = nullptr; ///< another GUI's; null: the host's
+            UniquePtr<shell::InputSurface> Surface;
+            UniquePtr<GuiInputBridge> Bridge;
+        };
 
-        RefPtr<SceneRoot> Root;
+        explicit GuiWindowData(IAllocator& allocator, IAllocator& panes) noexcept : Panes(panes), Renderer(allocator) {}
+
+        Array<UniquePtr<Pane>> Panes; ///< the first is the window's root
         UniquePtr<vg::VGContext> Canvas;
         vg::renderer::VGRenderer Renderer;
         vg::renderer::VGPassTargets Targets; // none: a plain single-sampled pass
-        UniquePtr<shell::InputSurface> Surface;
-        UniquePtr<GuiInputBridge> Bridge;
         bool Encoded = false; ///< blends encoded values, through the backbuffer's UNORM view
         rhi::TextureFormat DrawFormat = rhi::TextureFormat::Undefined;
-        bool NeedsFrame = true; ///< Update's verdict: the root draws this frame, else its last batch is encoded
+        bool NeedsFrame = true; ///< Update's verdict: the panes draw this frame, else the last batch is encoded
+
+        [[nodiscard]] SceneRoot* Root() const noexcept { return Panes.IsEmpty() ? nullptr : Panes[0]->Root.Get(); }
     };
 
     class GuiHost
     {
     public:
+        /// Takes a pane's pointer for the application before the pane sees it (a tool picking what
+        /// is under it, a boundary being dragged): true when it did, and the pane is not pumped.
+        using PointerFilter = Function<bool(SceneRoot& pane, shell::InputSurface& surface)>;
+        /// Draws over a window after its panes, in the window's pixels.
+        using Overlay = Function<void(graphics::RenderWindow& window, DrawContext& context)>;
+
         /// `fonts` is the font service the GUI's text and an SVG's text draw with; `shaders` the VG
         /// shaders (a VgShaderLibrary's), which outlive the host. All borrowed.
         GuiHost(IAllocator& allocator, graphics::GraphicsDevice& device, shell::IShell& shellRef, fonts::IFontService* fonts,
@@ -120,17 +140,20 @@ export namespace experimental::gui
         void SetBlendSpace(vg::VGBlendSpace space) noexcept { m_blendSpace = space; }
         /// What shows behind a root that does not cover its window, as authored (sRGB).
         void SetClearColor(Color color) noexcept { m_clear = color; }
+        void SetPointerFilter(PointerFilter filter) { m_pointerFilter = Move(filter); }
+        void SetOverlay(Overlay overlay) { m_overlay = Move(overlay); }
+        /// Told of each file the OS drops, before the window it landed on is.
+        void SetDropObserver(Function<void(const shell::DroppedFile&)> observer) { m_dropObserver = Move(observer); }
 
-        /// Gives `window` the root `root` (made with Context()): its canvas, renderer, targets and
-        /// input. Attaching again replaces the window's last root.
+        /// Gives `window` the root `root` (made with Context()) over all of it: its canvas, renderer,
+        /// targets and input. Attaching again replaces the window's panes.
         void AttachWindow(graphics::RenderWindow& window, RefPtr<SceneRoot> root)
         {
             if (!root || m_device.Raw() == nullptr || !m_shaders.IsUsable())
                 return;
             if (Find(&window) != nullptr)
                 DetachWindow(window);
-            UniquePtr<GuiWindowData> data = MakeUnique<GuiWindowData>(m_allocator, m_allocator);
-            data->Root = root;
+            UniquePtr<GuiWindowData> data = MakeUnique<GuiWindowData>(m_allocator, m_allocator, m_allocator);
             data->Canvas = MakeUnique<vg::VGContext>(m_allocator, m_fonts);
             data->Encoded = m_blendSpace == vg::VGBlendSpace::Encoded && window.Swap() != nullptr &&
                             window.Swap()->AlternateViewFormat() != rhi::TextureFormat::Undefined;
@@ -154,19 +177,6 @@ export namespace experimental::gui
             data->Canvas->SetLayers(m_shaders.Layer != nullptr);
             data->Canvas->SetStencilFills(data->Renderer.StencilFillsSupported());
 
-            // Input: a surface over the whole window, through the router; the root's own bridge.
-            const Float2 size{static_cast<f32>(width), static_cast<f32>(height)};
-            data->Surface = MakeUnique<shell::InputSurface>(m_allocator, m_shell.Input(), window.Window().Id(),
-                                                            ContentFit{Rectangle{0.0f, 0.0f, size.x, size.y}, size, FitMode::Stretch});
-            m_router->AddSurface(data->Surface.Get());
-            data->Bridge = MakeUnique<GuiInputBridge>(m_allocator, root->GetEventDispatcher());
-            data->Bridge->SetTextInputTarget(&window.Window());
-            if (m_shell.Input() != nullptr)
-                data->Bridge->SetCursorTarget(m_shell.Input()->Mouse());
-            root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
-            root->SetDisplayScale(window.Window().ContentScale() * m_uiScale);
-            root->SetViewportSize(size);
-
             // The bakes: the first window gives the baker its format, every window samples them.
             if (EnsureBaker(data->DrawFormat, config.blendSpace))
                 m_baker->AddTarget(data->Renderer);
@@ -177,9 +187,60 @@ export namespace experimental::gui
                 m_device.Raw()->WaitIdle();
             window.SetData(Move(data));
             m_attached.PushBack(Attached{&window, raw});
+            AddPane(window, Move(root), Rectangle{});
         }
 
-        /// Stops drawing and feeding the window's root; its renderer forgets the bakes. The payload
+        /// Another root in `window` (attached first), over `region` of it in its pixels (empty: all
+        /// of it), with its own input; `styles` styles it when it belongs to another GUI (a tool's),
+        /// else the host's do. Drawn after the window's root and the panes added before it.
+        void AddPane(graphics::RenderWindow& window, RefPtr<SceneRoot> root, Rectangle region, StyleManager* styles = nullptr)
+        {
+            GuiWindowData* data = Find(&window);
+            if (data == nullptr || !root)
+                return;
+            UniquePtr<GuiWindowData::Pane> pane = MakeUnique<GuiWindowData::Pane>(m_allocator);
+            pane->Root = root;
+            pane->Region = region;
+            pane->Styles = styles;
+            const Rectangle area = AreaOf(window, region);
+            pane->Surface = MakeUnique<shell::InputSurface>(m_allocator, m_shell.Input(), window.Window().Id(),
+                                                            ContentFit{area, Float2{area.width, area.height}, FitMode::Stretch});
+            m_router->AddSurface(pane->Surface.Get());
+            pane->Bridge = MakeUnique<GuiInputBridge>(m_allocator, root->GetEventDispatcher());
+            pane->Bridge->SetTextInputTarget(&window.Window());
+            if (m_shell.Input() != nullptr)
+                pane->Bridge->SetCursorTarget(m_shell.Input()->Mouse());
+            root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
+            root->SetDisplayScale(window.Window().ContentScale() * m_uiScale);
+            root->SetViewportSize(Float2{area.width, area.height});
+            data->Panes.PushBack(Move(pane));
+            data->NeedsFrame = true;
+        }
+        /// Moves a pane (the window's root too) to `region` of its window (empty: all of it).
+        void SetPaneRegion(const SceneRoot& root, Rectangle region)
+        {
+            if (GuiWindowData::Pane* pane = FindPane(root))
+            {
+                pane->Region = region;
+                if (GuiWindowData* data = FindData(root))
+                    data->NeedsFrame = true;
+            }
+        }
+        /// Takes a pane added with AddPane out of its window.
+        void RemovePane(const SceneRoot& root)
+        {
+            for (const Attached& attached : m_attached)
+                for (usize i = 1; i < attached.Data->Panes.Size(); ++i)
+                    if (attached.Data->Panes[i]->Root.Get() == &root)
+                    {
+                        Forget(*attached.Data->Panes[i]);
+                        attached.Data->Panes.RemoveAt(i);
+                        attached.Data->NeedsFrame = true;
+                        return;
+                    }
+        }
+
+        /// Stops drawing and feeding the window's panes; its renderer forgets the bakes. The payload
         /// stays on the RenderWindow, which frees it when it goes (after the GPU is idle).
         void DetachWindow(graphics::RenderWindow& window)
         {
@@ -194,8 +255,9 @@ export namespace experimental::gui
                 }
         }
 
-        /// Once per frame: each window's input to its root, the GUI's clock, then every root styled
-        /// and laid out at its window's size and scale, and asked whether it needs a frame.
+        /// Once per frame: each window's input to its panes, the GUI's clock, then every pane styled
+        /// and laid out at its region's size and its window's scale, and asked whether it needs a
+        /// frame (a pane of another GUI runs on that GUI's clock, which its owner advances).
         void Update(f32 deltaTime)
         {
             m_router->Update();
@@ -204,31 +266,38 @@ export namespace experimental::gui
             for (const Attached& attached : m_attached)
             {
                 GuiWindowData& data = *attached.Data;
-                shell::IWindow& window = attached.Window->Window();
-                const u32 width = window.Width(), height = window.Height();
-                const f32 scale = window.ContentScale() * m_uiScale;
-                bool resized = false;
-                if (data.Root->GetDisplayScale() != scale)
-                    data.Root->SetDisplayScale(scale);
-                if (data.Root->GetViewportSize() != Float2{static_cast<f32>(width), static_cast<f32>(height)})
-                {
-                    data.Root->SetViewportSize(Float2{static_cast<f32>(width), static_cast<f32>(height)});
-                    resized = true;
-                }
+                graphics::RenderWindow& window = *attached.Window;
+                const u32 width = window.Window().Width(), height = window.Window().Height();
+                const f32 scale = window.Window().ContentScale() * m_uiScale;
                 // The targets follow the window, outside any frame (in flight ones use them).
                 if (data.Targets.NeedsResize(width, height))
                 {
                     m_device.Raw()->WaitIdle();
                     (void)data.Targets.Resize(width, height);
                 }
-                StyleAndLayOut(*data.Root);
-                data.NeedsFrame = data.Root->NeedsFrame() || resized || data.NeedsFrame;
+                bool needs = data.NeedsFrame;
+                for (const UniquePtr<GuiWindowData::Pane>& pane : data.Panes)
+                {
+                    SceneRoot& root = *pane->Root;
+                    const Rectangle area = AreaOf(window, pane->Region);
+                    if (root.GetDisplayScale() != scale)
+                        root.SetDisplayScale(scale);
+                    if (root.GetViewportSize() != Float2{area.width, area.height})
+                    {
+                        root.SetViewportSize(Float2{area.width, area.height});
+                        needs = true;
+                    }
+                    StyleAndLayOut(root, pane->Styles);
+                    needs = root.NeedsFrame() || needs;
+                }
+                data.NeedsFrame = needs;
             }
             m_bakesRecorded = false;
         }
 
-        /// Draws `frame`'s window: its root when it needs a frame (else the batch it drew last), the
-        /// baker's queue (once a frame, before any pass samples it), the layers, then the pass.
+        /// Draws `frame`'s window: its panes when any needs a frame (else the batch drawn last) and
+        /// the overlay, the baker's queue (once a frame, before any pass samples it), the layers, then
+        /// the pass.
         void RenderWindow(graphics::FrameContext& frame)
         {
             if (!frame.valid || frame.encoder == nullptr)
@@ -240,7 +309,17 @@ export namespace experimental::gui
             {
                 data->Canvas->Clear();
                 DrawContext context{*data->Canvas};
-                data->Root->DrawFrame(context);
+                for (const UniquePtr<GuiWindowData::Pane>& pane : data->Panes)
+                {
+                    const Rectangle area = AreaOf(*frame.window, pane->Region);
+                    data->Canvas->PushState();
+                    data->Canvas->Translate(area.x, area.y);
+                    DrawContext paneContext{*data->Canvas};
+                    pane->Root->DrawFrame(paneContext);
+                    data->Canvas->PopState();
+                }
+                if (m_overlay)
+                    m_overlay(*frame.window, context);
                 data->NeedsFrame = false;
                 ++m_framesDrawn;
             }
@@ -256,7 +335,7 @@ export namespace experimental::gui
             data->Renderer.BeginFrame(slot);
             const vg::renderer::VGRenderSlice slice = data->Renderer.Prepare(batch, slot, frame.width, frame.height);
             data->Renderer.RenderLayers(*frame.encoder, slot, slice);
-            const rhi::ClearColor clear = ClearFor(*data);
+            const rhi::ClearColor clear = ClearFor(data->Encoded);
             rhi::TextureView* view = data->Encoded ? frame.backbufferAlternateView : frame.backbufferView;
             if (data->Targets.Matches(frame.width, frame.height))
             {
@@ -280,26 +359,37 @@ export namespace experimental::gui
             GuiWindowData* data = Find(window);
             return data != nullptr ? &data->Renderer : nullptr;
         }
-        /// The window `root` is attached to; null when it is in none.
+        /// The window `root` is a pane of (its root or another); null when it is in none.
         [[nodiscard]] graphics::RenderWindow* WindowFor(const SceneRoot* root) noexcept
         {
             for (const Attached& attached : m_attached)
-                if (attached.Data->Root.Get() == root)
-                    return attached.Window;
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    if (pane->Root.Get() == root)
+                        return attached.Window;
             return nullptr;
+        }
+        /// Where `root` draws in its window's pixels; empty when it is in none.
+        [[nodiscard]] Rectangle PaneArea(const SceneRoot& root) noexcept
+        {
+            for (const Attached& attached : m_attached)
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    if (pane->Root.Get() == &root)
+                        return AreaOf(*attached.Window, pane->Region);
+            return Rectangle{};
         }
         [[nodiscard]] usize WindowCount() const noexcept { return m_attached.Size(); }
 
-        /// Styles `root` through the host's style manager and lays it out, as Update does each
-        /// window's: for a root drawn elsewhere (offscreen).
-        void StyleAndLayOut(SceneRoot& root)
+        /// Styles `root` through `styles` (null: the host's) and lays it out, as Update does each
+        /// pane's: for a root drawn elsewhere (offscreen).
+        void StyleAndLayOut(SceneRoot& root, StyleManager* styles = nullptr)
         {
-            m_styles.SetMediaContext(root.GetMediaContext());
-            m_styles.ApplyTree(root);
+            StyleManager& manager = styles != nullptr ? *styles : m_styles;
+            manager.SetMediaContext(root.GetMediaContext());
+            manager.ApplyTree(root);
             root.UpdateLayout();
         }
 
-        /// Frames a root was drawn in, and frames a window encoded its last batch again.
+        /// Frames a window's panes were drawn in, and frames a window encoded its last batch again.
         [[nodiscard]] u64 FramesDrawn() const noexcept { return m_framesDrawn; }
         [[nodiscard]] u64 FramesReused() const noexcept { return m_framesReused; }
 
@@ -328,6 +418,12 @@ export namespace experimental::gui
             GuiWindowData* Data = nullptr; // the RenderWindow's
         };
 
+        [[nodiscard]] static Rectangle AreaOf(graphics::RenderWindow& window, Rectangle region) noexcept
+        {
+            if (region.width > 0.0f && region.height > 0.0f)
+                return region;
+            return Rectangle{0.0f, 0.0f, static_cast<f32>(window.Window().Width()), static_cast<f32>(window.Window().Height())};
+        }
         [[nodiscard]] GuiWindowData* Find(const graphics::RenderWindow* window) noexcept
         {
             for (const Attached& attached : m_attached)
@@ -342,13 +438,34 @@ export namespace experimental::gui
                     return &attached;
             return nullptr;
         }
+        [[nodiscard]] GuiWindowData::Pane* FindPane(const SceneRoot& root) noexcept
+        {
+            for (const Attached& attached : m_attached)
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    if (pane->Root.Get() == &root)
+                        return pane.Get();
+            return nullptr;
+        }
+        [[nodiscard]] GuiWindowData* FindData(const SceneRoot& root) noexcept
+        {
+            for (const Attached& attached : m_attached)
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    if (pane->Root.Get() == &root)
+                        return attached.Data;
+            return nullptr;
+        }
 
+        void Forget(GuiWindowData::Pane& pane)
+        {
+            m_router->RemoveSurface(pane.Surface.Get());
+            pane.Bridge->SetTextInputTarget(nullptr); // the window may close after this
+        }
         void Forget(const Attached& attached)
         {
-            m_router->RemoveSurface(attached.Data->Surface.Get());
+            for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                Forget(*pane);
             if (m_baker)
                 m_baker->RemoveTarget(attached.Data->Renderer);
-            attached.Data->Bridge->SetTextInputTarget(nullptr); // the window closes after this
         }
 
         void RouteInput()
@@ -369,47 +486,64 @@ export namespace experimental::gui
             const Attached* pointer = FindById(m_pressWindow);
             if (pointer == nullptr)
                 pointer = FindById(input->HoverWindow());
+            if (pointer == nullptr && m_attached.Size() == 1)
+                pointer = &m_attached[0];
             if (pointer != nullptr)
             {
-                const f32 width = static_cast<f32>(pointer->Window->Window().Width());
-                const f32 height = static_cast<f32>(pointer->Window->Window().Height());
-                pointer->Data->Surface->SetRegion(Rectangle{0.0f, 0.0f, width, height});
-                pointer->Data->Surface->SetWindowSize(Float2{width, height});
-                pointer->Data->Surface->SetContentSize(Float2{width, height});
-                pointer->Data->Bridge->PumpFromSurface(*pointer->Data->Surface);
+                graphics::RenderWindow& window = *pointer->Window;
+                const Float2 size{static_cast<f32>(window.Window().Width()), static_cast<f32>(window.Window().Height())};
+                for (const UniquePtr<GuiWindowData::Pane>& pane : pointer->Data->Panes)
+                {
+                    const Rectangle area = AreaOf(window, pane->Region);
+                    pane->Surface->SetRegion(area);
+                    pane->Surface->SetWindowSize(size); // places fingers
+                    pane->Surface->SetContentSize(Float2{area.width, area.height});
+                    if (!m_pointerFilter || !m_pointerFilter(*pane->Root, *pane->Surface))
+                        pane->Bridge->PumpFromSurface(*pane->Surface);
+                }
                 if (held && m_pressWindow == 0)
-                    m_pressWindow = pointer->Window->Window().Id();
+                    m_pressWindow = window.Window().Id();
             }
-            // Keys, text and the gamepad: the focused window, else the first.
+            // Keys, text and the gamepad: the focused window's pane clicked last, else its first.
             const Attached* focused = FindById(input->FocusedWindow());
             if (focused == nullptr)
                 focused = &m_attached[0];
-            for (const shell::InputEvent& event : input->Events())
-                switch (event.kind)
-                {
-                case shell::InputEventKind::KeyDown:
-                case shell::InputEventKind::KeyUp:
-                case shell::InputEventKind::TextInput:
-                case shell::InputEventKind::GamepadButtonDown:
-                case shell::InputEventKind::GamepadButtonUp:
-                case shell::InputEventKind::GamepadAxis:
-                    (void)focused->Data->Bridge->Dispatch(event);
-                    break;
-                default:
-                    break;
-                }
-            // Files the OS dropped: the window they landed on.
+            GuiWindowData::Pane* keys = focused->Data->Panes.IsEmpty() ? nullptr : focused->Data->Panes[0].Get();
+            for (usize i = 1; i < focused->Data->Panes.Size(); ++i)
+                if (focused->Data->Panes[i]->Surface->Focused())
+                    keys = focused->Data->Panes[i].Get();
+            if (keys != nullptr)
+                for (const shell::InputEvent& event : input->Events())
+                    switch (event.kind)
+                    {
+                    case shell::InputEventKind::KeyDown:
+                    case shell::InputEventKind::KeyUp:
+                    case shell::InputEventKind::TextInput:
+                    case shell::InputEventKind::GamepadButtonDown:
+                    case shell::InputEventKind::GamepadButtonUp:
+                    case shell::InputEventKind::GamepadAxis:
+                        (void)keys->Bridge->Dispatch(event);
+                        break;
+                    default:
+                        break;
+                    }
+            // Files the OS dropped: the window they landed on (its root).
             Array<shell::DroppedFile> drops(m_allocator);
             m_shell.DrainDroppedFiles(drops);
-            for (const Attached& attached : m_attached)
-                (void)attached.Data->Bridge->DispatchFileDrops(drops, attached.Window->Window().Id());
+            if (m_dropObserver)
+                for (const shell::DroppedFile& drop : drops)
+                    m_dropObserver(drop);
+            if (!drops.IsEmpty())
+                for (const Attached& attached : m_attached)
+                    if (!attached.Data->Panes.IsEmpty())
+                        (void)attached.Data->Panes[0]->Bridge->DispatchFileDrops(drops, attached.Window->Window().Id());
         }
 
         // The clear colour for a window: as authored when it blends encoded, else in linear light
         // (an sRGB target encodes what a pass clears to).
-        [[nodiscard]] rhi::ClearColor ClearFor(const GuiWindowData& data) const noexcept
+        [[nodiscard]] rhi::ClearColor ClearFor(bool encoded) const noexcept
         {
-            if (data.Encoded)
+            if (encoded)
                 return rhi::ClearColor(m_clear.r, m_clear.g, m_clear.b, m_clear.a);
             return rhi::ClearColor(SrgbToLinear(m_clear.r), SrgbToLinear(m_clear.g), SrgbToLinear(m_clear.b), m_clear.a);
         }
@@ -428,6 +562,9 @@ export namespace experimental::gui
         bool m_bakerReady = false;
         bool m_bakesRecorded = false;
         Array<Attached> m_attached;
+        PointerFilter m_pointerFilter;
+        Overlay m_overlay;
+        Function<void(const shell::DroppedFile&)> m_dropObserver;
         u32 m_pressWindow = 0; // the window a held press began in
         f32 m_uiScale = 1.0f;
         vg::VGBlendSpace m_blendSpace = vg::VGBlendSpace::Encoded;

@@ -100,7 +100,17 @@ export namespace experimental::gui
     {
         RTTI_OBJECT(DockStack, TabView)
     public:
-        DockStack(DockSpace& space, DockNodeId node) noexcept : m_space(&space), m_node(node) {}
+        DockStack(DockSpace& space, DockNodeId node) : m_space(&space), m_node(node)
+        {
+            // Its splitter gives it the room the user left it: a panel wider or taller than that
+            // wraps or is clipped here, never spilling onto its neighbours.
+            StyleWriteScope defaults(*this);
+            EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.OverflowX = Overflow::Hidden;
+                s.OverflowY = Overflow::Hidden;
+            });
+        }
         [[nodiscard]] DockNodeId GetNode() const noexcept { return m_node; }
         [[nodiscard]] DockSpace* GetSpace() const noexcept { return m_space; }
 

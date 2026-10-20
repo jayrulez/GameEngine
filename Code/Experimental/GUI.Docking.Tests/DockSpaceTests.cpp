@@ -5,7 +5,8 @@
 // Splitters and stacks as TabViews, kept by node id as the layout changes; a panel's content made
 // when its tab is first shown and kept by the controller; closing by the panel's policy; a
 // placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
-// user does in the widgets (a separator dragged, a tab chosen, dragged or closed) noted back.
+// user does in the widgets (a separator dragged, a tab chosen, dragged or closed) noted back; a
+// panel wider than its stack moves no separator, the stack clipping it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -205,4 +206,33 @@ TEST_CASE("dock space: a separator dragged and a tab dragged are noted; a maximi
     CHECK(bed.space->GetChildAt(0) == splitter); // kept while out of sight
     CHECK(splitter->GetPane(1) == central);
     CHECK(splitter->GetWeights()[0] == doctest::Approx(200.0f / 794.0f).epsilon(0.01));
+}
+
+TEST_CASE("dock space: a tab shown with content wider than its stack moves no separator; the stack clips it")
+{
+    Bed bed;
+    DockPanelDescription description;
+    description.Id = core::String(u8"wide");
+    description.Factory = []()
+    {
+        core::RefPtr<Panel> wide = core::MakeRef<Panel>(core::DefaultAllocator());
+        wide->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength::Px(700.0f); });
+        return core::RefPtr<Node>(wide);
+    };
+    REQUIRE(bed.controller.Register(core::Move(description)));
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertBeside(SV(u8"hierarchy"), bed.Central(), DockSide::Start, 0.25f); }).Ok());
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"wide"), l.StackOf(SV(u8"hierarchy"))); }).Ok());
+    auto* stack = Cast<TabView>(bed.space->WidgetOf(bed.StackOf(u8"hierarchy")));
+    REQUIRE(stack != nullptr);
+    stack->SetSelectedIndex(0);
+    bed.Lay();
+    auto* splitter = Cast<Splitter>(bed.space->GetChildAt(0));
+    REQUIRE(splitter != nullptr);
+    const f32 before = splitter->GetPaneSizes()[0];
+    stack->SetSelectedIndex(1); // the wide one
+    bed.Lay();
+    CHECK(splitter->GetPaneSizes()[0] == doctest::Approx(before));
+    CHECK(stack->GetSize().x == doctest::Approx(before).epsilon(0.01)); // snapped to the pixel
+    CHECK(stack->GetLayoutStyle().OverflowX == Overflow::Hidden);
+    CHECK(stack->GetLayoutStyle().OverflowY == Overflow::Hidden);
 }

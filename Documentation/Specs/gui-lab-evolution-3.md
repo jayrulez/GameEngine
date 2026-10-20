@@ -173,8 +173,8 @@ The design:
    with, whether it may have several instances), registered in code, markup or script. The registry
    owns a panel's content, so moving it between windows or hiding it never destroys it.
 3. **Widgets from the data.** A `DockSpace` widget shows one surface: splits become the core's
-   `Splitter` (ruling 6; n children, minimums from each child's min-content so nothing is squeezed past what it can
-   draw, keyboard resizing, a separator's accessibility role, right to left), stacks a `TabView` whose
+   `Splitter` (ruling 6; n children, minimums from each child's sheet alone, never its content, so
+   only the user moves a separator and a panel that does not fit wraps or is clipped; keyboard resizing, a separator's accessibility role, right to left), stacks a `TabView` whose
    strip's group is `dock`, reconciled by node id without rebuilding what did not change.
 4. **Drag to dock.** A tab torn from a strip carries the panel; a stack's own grip carries the stack.
    Over a strip it is a tab at an index; over a stack, its middle or an edge band (`--dock-edge`, a
@@ -208,14 +208,17 @@ floating as OS windows through the host, and drags between windows; D7 presets a
 agent drives it with. The sandbox's Docking page grows with them.
 
 D0 as built on `vg` (2026-10-20): `Splitter` and `SplitterHandle` in the core. Panes by weight,
-each held at its minimum (its sheet's, else its content's) and clipped when the minimums pass the
-room; a handle between each two kept in step as panes come and go, read as a separator with where
+each held at its minimum (its sheet's) and clipped when the minimums pass the room; a handle between each two kept in step as panes come and go, read as a separator with where
 it stands, moved by drag and by the arrow keys (Shift, Home, End), a double click giving the given
 shares back; a resize changes the two panes beside the handle alone, a pane that goes gives its
 share to its neighbours; vertical and right to left; `axis` and `weights` in markup and sheets; the
 theme's `splitter-handle` quiet until hovered, dragged or focused. On the way: a node measured with
 no room (min-content) lost a width its style gave it, because exactness was read from a minimum
-equal to the maximum; the constraints now say it (2bb68576f).
+equal to the maximum; the constraints now say it (2bb68576f). Changed after the user tried the Docking page:
+a pane's content no longer gives it a minimum (a tab shown with longer text pushed the separator
+over; only the user moves one, and a dock stack clips what does not fit), and a dragged handle reads
+the pointer in its splitter's space (it added its own place to a screen point, running ahead of
+the pointer faster the further it went).
 
 D1 as built on `vg` (2026-10-20): `DockLayout` in GUI.Docking, plain data. Panels tab into a
 stack, dock beside one (joining its split when the axis matches, else wrapping it) or along a whole

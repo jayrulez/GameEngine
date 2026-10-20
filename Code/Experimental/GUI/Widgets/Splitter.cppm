@@ -8,9 +8,10 @@
 // splits and every other split are this widget.
 //
 // Its children are its panes, laid out along its axis by their weights. Each pane gets at least
-// its minimum along the axis: its sheet's min-width (or min-height), else its content's minimum,
-// as flex finds an item's automatic minimum. When even the minimums do not fit, it gives them and
-// clips what passes its end: a pane is never squeezed past what it can draw.
+// its minimum along the axis: its sheet's min-width (or min-height), else none. Not its content's:
+// the user alone moves a handle, so a pane whose content grows (a tab shown with longer text) wraps
+// or clips it where it stands rather than pushing its neighbours. When even the minimums do not
+// fit, it gives them and clips what passes its end.
 //
 // A SplitterHandle sits between each two panes, kept in step as panes come and go (a pane added in
 // markup or by a script gets its handle). A handle is a widget of its own: focusable, read as a
@@ -94,7 +95,7 @@ export namespace experimental::gui
     private:
         [[nodiscard]] bool Horizontal() const;
         f32 m_thickness = 6.0f;
-        f32 m_grab = 0.0f; // where along it the press took it
+        f32 m_grab = 0.0f; // where along it the press took it, in its own space
         bool m_dragging = false;
     };
 
@@ -194,8 +195,8 @@ export namespace experimental::gui
             handle.AddClass(core::StringView(Horizontal() ? u8"horizontal" : u8"vertical"));
             handle.SetCursor(Horizontal() ? Cursor::EwResize : Cursor::NsResize);
         }
-        // A pane's least size along the axis: its sheet's minimum, else its content's.
-        [[nodiscard]] f32 MinimumOf(Node& pane, f32 cross) const;
+        // A pane's least size along the axis: its sheet's minimum, else none.
+        [[nodiscard]] f32 MinimumOf(const Node& pane) const;
         // The panes found among the children again, a handle between each two, the children in
         // that order; a pane gone gives its share to its neighbours.
         void SyncPanes();
@@ -277,15 +278,18 @@ export namespace experimental::gui
             return;
         }
         m_dragging = true;
-        m_grab = Horizontal() ? event.Position.x : event.Position.y;
+        const core::Float2 local = ConvertToNodeSpace(event.Position); // events come in screen space
+        m_grab = Horizontal() ? local.x : local.y;
     }
     inline void SplitterHandle::OnMouseMove(const MouseEvent& event)
     {
         Splitter* splitter = GetSplitter();
         if (!m_dragging || splitter == nullptr)
             return;
+        // The pointer in the splitter's content box, less where along the handle it was taken.
         const Rect box = splitter->GetContentBounds();
-        const f32 at = Horizontal() ? GetPosition().x - box.x + event.Position.x : GetPosition().y - box.y + event.Position.y;
+        const core::Float2 local = splitter->ConvertToNodeSpace(event.Position);
+        const f32 at = Horizontal() ? local.x - box.x : local.y - box.y;
         splitter->MoveHandleTo(GetIndex(), at - m_grab);
     }
     inline void SplitterHandle::OnKeyDown(const KeyEvent& event)
@@ -350,16 +354,12 @@ export namespace experimental::gui
         return out;
     }
 
-    inline f32 Splitter::MinimumOf(Node& pane, f32 cross) const
+    inline f32 Splitter::MinimumOf(const Node& pane) const
     {
         const LayoutStyle& s = pane.GetLayoutStyle();
         const Rect box = GetContentBounds();
-        if (const Optional<f32> given = (Horizontal() ? s.MinWidth : s.MinHeight).Resolve(Horizontal() ? box.width : box.height); given.HasValue())
-            return given.Value();
-        const Thickness chrome = pane.GetChrome();
-        const core::Float2 content = Horizontal() ? pane.MeasureContent(core::Float2{0.0f, Max(0.0f, cross - chrome.TotalVertical())})
-                                                  : pane.MeasureContent(core::Float2{Max(0.0f, cross - chrome.TotalHorizontal()), 0.0f});
-        return Horizontal() ? content.x + chrome.TotalHorizontal() : content.y + chrome.TotalVertical();
+        const Optional<f32> given = (Horizontal() ? s.MinWidth : s.MinHeight).Resolve(Horizontal() ? box.width : box.height);
+        return given.HasValue() ? Max(0.0f, given.Value()) : 0.0f;
     }
 
     inline void Splitter::SyncPanes()
@@ -492,7 +492,6 @@ export namespace experimental::gui
     {
         const Rect box = GetContentBounds();
         const f32 main = Horizontal() ? box.width : box.height;
-        const f32 cross = Horizontal() ? box.height : box.width;
         const usize count = m_panes.Size();
         m_thickness.Clear();
         f32 handles = 0.0f;
@@ -507,7 +506,7 @@ export namespace experimental::gui
         f32 minimums = 0.0f;
         for (const PaneState& pane : m_panes)
         {
-            const f32 least = MinimumOf(*pane.Pane, cross);
+            const f32 least = MinimumOf(*pane.Pane);
             m_minimums.PushBack(least);
             minimums += least;
         }

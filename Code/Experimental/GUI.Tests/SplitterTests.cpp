@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI - the Splitter (D0 of Specs/gui-lab-evolution-3.md): panes laid out by their weights with a
-// handle between each two; minimums held (a sheet's, else the content's), the rest shared again;
+// handle between each two; minimums held (a sheet's, never the content's), the rest shared again;
 // when even the minimums do not fit, each has its own and the end is clipped; a handle moves the two
 // panes beside it alone, by the pointer and the keys; a pane that goes gives its share to its
 // neighbours; vertical, right to left, markup, and a handle read as a separator.
@@ -86,10 +86,15 @@ TEST_CASE("splitter: a pane below its minimum holds it and the others share the 
     CHECK(bed.W(0) == doctest::Approx(150.0f));
     CHECK(bed.W(1) == doctest::Approx(69.0f)); // (288 - 150) / 2
     CHECK(bed.W(2) == doctest::Approx(69.0f));
-    // The content's minimum when the sheet gives none: a child 120 wide.
+    // Content wider than its share is no minimum: the user alone moves a handle (the pane wraps or
+    // clips it where it stands).
     core::RefPtr<Panel> wide = core::MakeRef<Panel>(core::DefaultAllocator());
     wide->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(120.0f); });
     bed.panes[2]->AddChild(wide.Get());
+    bed.Lay();
+    CHECK(bed.W(2) == doctest::Approx(69.0f));
+    CHECK(bed.W(1) == doctest::Approx(69.0f));
+    bed.panes[2]->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength::Px(120.0f); });
     bed.Lay();
     CHECK(bed.W(2) == doctest::Approx(120.0f));
     CHECK(bed.W(1) == doctest::Approx(18.0f)); // what is left
@@ -192,6 +197,22 @@ TEST_CASE("splitter: a handle moves by the keys and the pointer, and a double cl
     d.InjectMouseUp(core::Float2{middle.x + 50.0f, middle.y}, MouseButton::Left);
     bed.Lay();
     CHECK(bed.W(0) == doctest::Approx(50.0f));
+    // It keeps under the pointer through many moves, wherever the splitter stands on the screen.
+    bed.root->SetPadding(Thickness{40.0f, 30.0f, 0.0f, 0.0f});
+    bed.Lay();
+    const Rect from = handle->GetScreenBounds();
+    core::Float2 pointer{from.x + 2.0f, from.y + 10.0f};
+    d.InjectMouseMove(pointer);
+    d.InjectMouseDown(pointer, MouseButton::Left);
+    for (int step = 0; step < 10; ++step)
+    {
+        pointer.x += 7.0f;
+        d.InjectMouseMove(pointer);
+        bed.Lay();
+        CHECK(handle->GetScreenBounds().x == doctest::Approx(pointer.x - 2.0f));
+    }
+    d.InjectMouseUp(pointer, MouseButton::Left);
+    CHECK(bed.W(0) == doctest::Approx(120.0f)); // 50 + 70
 
     bed.splitter->ResetWeights(); // what a double click does
     bed.Lay();

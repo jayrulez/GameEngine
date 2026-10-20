@@ -373,17 +373,14 @@ export namespace experimental::gui
             return core::String(kNames[static_cast<usize>(m_closeDisplay)]);
         }
         /// Asks to close every closable tab, last first, each as its close part does (what the
-        /// close-all part does). A request that ends the bar (an owner rebuilding it) ends it.
+        /// close-all part does). By place, not by tab: an owner may make its tabs again after each
+        /// close (docking does), and those before the one closed keep their places.
         void CloseAll()
         {
-            const core::RefPtr<TabBar> keep(this);
-            core::Array<core::RefPtr<Tab>> closing(MemoryAllocator());
+            const core::RefPtr<TabBar> keep(this); // an owner may let it go on the way
             for (i32 i = GetTabCount(); i-- > 0;)
-                if (GetTab(i)->IsClosable())
-                    closing.PushBack(core::RefPtr<Tab>(GetTab(i)));
-            for (const core::RefPtr<Tab>& tab : closing)
-                if (const i32 at = IndexOf(tab.Get()); at >= 0)
-                    RequestClose(at);
+                if (i < GetTabCount() && GetTab(i)->IsClosable())
+                    RequestClose(i);
         }
         /// A part past the list button closes every closable tab (markup's and a sheet's
         /// `close-all`), shown while one is closable.

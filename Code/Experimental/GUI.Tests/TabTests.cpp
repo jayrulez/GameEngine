@@ -335,6 +335,26 @@ TEST_CASE("tabs: the list button shows always when asked; close-all asks to clos
     CHECK_FALSE(bar->GetCloseAllPart()->IsDisplayed()); // none closable is left
     fixed->SetClosable(true);
     CHECK(bar->GetCloseAllPart()->IsDisplayed());
+
+    // An owner that makes its tabs again after each close (docking does): every one still closes.
+    auto owned = Make<TabBar>();
+    root->AddChild(owned.Get());
+    const char8_t* const names[] = {u8"P", u8"Q", u8"R"};
+    for (const char8_t* t : names)
+        AddSizedTab(*owned, t);
+    owned->SetCloseHandler([&](core::i32 index)
+    {
+        core::Array<core::String> rest;
+        for (core::i32 i = 0; i < owned->GetTabCount(); ++i)
+            if (i != index)
+                rest.PushBack(core::String(owned->GetTab(i)->GetText()));
+        while (owned->GetTabCount() > 0)
+            owned->RemoveTab(0);
+        for (const core::String& t : rest)
+            (void)owned->AddTab(t.AsView());
+    });
+    owned->CloseAll();
+    CHECK(owned->GetTabCount() == 0);
 }
 
 TEST_CASE("tabview: close-all closes every closable page through the view's own request")

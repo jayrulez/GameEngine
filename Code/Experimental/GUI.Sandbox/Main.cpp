@@ -20,10 +20,14 @@
 
 import foundation.core;
 import foundation.rhi;
-import foundation.shaders;
-import foundation.shaders.system; // ShaderSystemHost
-import samples.framework;
 import foundation.shell;
+import foundation.shell.desktop;   // the window
+import foundation.vfs;             // the data folder
+import foundation.graphics;        // the device and the window's frames
+import foundation.graphics.gpu;
+import foundation.runtime;
+import foundation.runtime.client;  // IApplication: the runtime host runs the sandbox
+import foundation.runtime.desktop;
 import foundation.image;
 import foundation.image.io; // the resource provider's pictures
 import foundation.fonts;
@@ -41,8 +45,8 @@ import experimental.gui;
 import experimental.gui.shell;
 import experimental.gui.inspector; // Ctrl+Shift+I (E8e)
 import experimental.gui.testing;   // --keys targets by selector or text (E8f), the image tests' match (E8g)
-import experimental.gui.hosting;   // the picture baker (SVG skins as textures)
-import foundation.rhi.capture;     // the image tests' readback (E8g)
+import experimental.gui.hosting;   // the host: the window's GUI, offscreen pictures, the picture baker
+import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
@@ -51,8 +55,10 @@ import foundation.script.angelscript;
 
 using namespace foundation::core;
 namespace rhi = foundation::rhi;
-namespace shaders = foundation::shaders;
 namespace shell = foundation::shell;
+namespace runtime = foundation::runtime;
+namespace graphics = foundation::graphics;
+namespace vfs = foundation::vfs;
 namespace image = foundation::image;
 namespace fonts = foundation::fonts;
 namespace vg = foundation::vg;
@@ -256,7 +262,7 @@ namespace
     };
 }
 
-class GUISandbox : public samples::framework::SampleApp
+class GUISandbox : public runtime::IApplication
 {
 public:
     void SetStartPage(StringView id) { m_startPage = String(id); }
@@ -321,23 +327,48 @@ public:
     /// --narrate: a stand-in screen reader on the console.
     void SetNarrate(bool on) { m_narrate = on; }
 
-    GUISandbox()
-    {
-        m_width = 960;
-        m_height = 820;
-    }
-    StringView Title() const override { return u8"GUI Sandbox"; }
-    bool DrawsTextComposition() const override { return true; } // its fields show an IME's composition in place
-    u32 BufferCount() const override { return kFrames; }
+    /// The framework's --screenshot flags (and F12): a picture of the window as presented.
+    void SetScreenshots(rhi::ScreenshotOptions options) { m_screenshotOptions = Move(options); }
 
-protected:
-    Status OnInit() override;
-    void OnRender() override;
-    void OnResize(u32 width, u32 height) override { (void)m_targets.Resize(width, height); } // the GPU is idle here
-    void OnShutdown() override;
+    void OnStartup(runtime::IApplicationHost& host) override;
+    void OnUpdate(runtime::IApplicationHost& host, f32 deltaTime) override;
+    void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override;
+    void OnShutdown(runtime::IApplicationHost& host) override;
 
 private:
-    static constexpr u32 kFrames = 2;
+    // === On the runtime host (H3 of Specs/gui-lab-evolution-3.md) ===
+    runtime::IApplicationHost* m_host = nullptr;
+    shell::IShell* m_shell = nullptr;
+    shell::IWindow* m_window = nullptr;
+    graphics::RenderWindow* m_mainWindow = nullptr;
+    rhi::Device* m_device = nullptr;
+    u32 m_width = 960;  // the window's pixels
+    u32 m_height = 820;
+    f32 m_deltaTime = 0.0f;
+    f32 m_totalTime = 0.0f;
+    String m_dataRoot;
+    UniquePtr<vfs::NativeFileSystem> m_dataFileSystem;
+    UniquePtr<gui::VgShaderLibrary> m_shaders;
+    UniquePtr<gui::GuiHost> m_guiHost;      // the window's GUI: input, frames, the baker
+    UniquePtr<gui::GuiOffscreen> m_offscreen; // what the image tests and the bench draw into
+    void Exit()
+    {
+        if (m_host != nullptr)
+            m_host->RequestExit(0);
+    }
+    [[nodiscard]] String DataPath(StringView relative) const { return vfs::DataPath(m_dataRoot.AsView(), relative); }
+    // The image tests and the bench draw offscreen on a fixed clock: the window shows nothing.
+    [[nodiscard]] bool DrawsOffscreen() const noexcept { return m_imageTests || !m_benchPage.IsEmpty(); }
+    void Layout(); // the panes' regions: the root on show, the inspector's pane at its right
+    // F12 and --screenshot: the window as presented, written once the GPU has run the frame.
+    rhi::ScreenshotOptions m_screenshotOptions;
+    rhi::ScreenshotCapture m_screenshot;
+    u32 m_screenshotsTaken = 0;
+    u32 m_screenshotSerial = 0;
+    u64 m_presentedFrames = 0;
+    bool m_screenshotExitPending = false;
+    void RequestScreenshot();
+    void FinishScreenshot();
 
     // === Building ===
     void LoadFonts();
@@ -374,7 +405,6 @@ private:
     void MirrorAudit();
     // Styled and laid out as a frame would, without drawing.
     void Settle();
-    void DrawAndPresent(gui::SceneRoot& root);
 
     // === Options ===
     String m_startPage = String(u8"controls");
@@ -431,30 +461,9 @@ private:
     usize m_sweepNext = 0;
     f32 m_nextStatsTime = 1.0f;
     u64 m_frames = 0;      // frames the loop ran
-    u64 m_drawnFrames = 0; // of them, the ones that drew
 
-    // === Render plumbing ===
-    shaders::ShaderSystemHost m_shaderHost{AppRoot()}; // owns the ShaderSystem + the VG modules
-    rhi::ShaderModule* m_vs = nullptr; // borrowed from m_shaderHost
-    rhi::ShaderModule* m_fs = nullptr;
-    rhi::ShaderModule* m_gradRadialFs = nullptr;
-    rhi::ShaderModule* m_gradConicFs = nullptr;
-    rhi::ShaderModule* m_distanceFieldFs = nullptr;
-    rhi::ShaderModule* m_boxShadowFs = nullptr;
-    rhi::ShaderModule* m_boxVs = nullptr;
-    rhi::ShaderModule* m_boxFs = nullptr;
-    rhi::ShaderModule* m_layerFs = nullptr;
-    rhi::ShaderModule* m_blurVs = nullptr;
-    rhi::ShaderModule* m_blurFs = nullptr;
-    vg::renderer::VGPassTargets m_targets; // MSAA + stencil (clip paths, complex fills)
-    rhi::CommandPool* m_pool = nullptr;
-    rhi::Fence* m_fence = nullptr;
-    u64 m_fenceVal = 0;
-    u32 m_frameIndex = 0;
+    // === Fonts ===
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
-    UniquePtr<vg::VGContext> m_vg;
-    UniquePtr<gui::GpuPictureBaker> m_baker; // the GUI's SVG skins, drawn once into textures
-    vg::renderer::VGRenderer m_renderer{AppRoot()};
     fonts::CachedFont* m_font = nullptr; // Roboto 16, for what native code builds
 
     // The Stress page's builder and its views' models: before the GUI, so it outlives the views.
@@ -476,15 +485,9 @@ private:
     // opens as a modal layer over the shell, back in its place when it closes.
     RefPtr<gui::Node> m_menu;
     UniquePtr<SandboxResources> m_resources; // pictures by path, from the data folder
-    gui::StyleManager m_styles;        // the sandbox's sheet
-    UniquePtr<gui::GuiInputBridge> m_bridge;
-    UniquePtr<gui::ShellClipboard> m_clipboard;
-    UniquePtr<shell::InputSurface> m_inputSurface;
-    UniquePtr<shell::InputRouter> m_router;
+    gui::StyleManager* m_styles = nullptr; // the host's: the sandbox's sheet
     // The inspector (E8e): a pane of its own root on the right, Ctrl+Shift+I.
     UniquePtr<gui::inspector::Inspector> m_inspector;
-    UniquePtr<gui::GuiInputBridge> m_inspectorBridge;
-    UniquePtr<shell::InputSurface> m_inspectorSurface;
     bool m_inspectorOpen = false;
     bool m_openInspector = false; // --inspector
     // The image tests (E8g).
@@ -500,20 +503,11 @@ private:
     i32 m_imageFrame = 0;
     u32 m_imagesDone = 0;
     u32 m_imageFailures = 0;
-    rhi::Texture* m_imageTarget = nullptr;
-    rhi::TextureView* m_imageView = nullptr;
-    vg::renderer::VGPassTargets m_imageTargets;
-    rhi::ScreenshotCapture m_imageCapture;
     void RunImageTests();
-    bool RenderImage(gui::SceneRoot& root, StringView path, image::Image& out);
-    // Draws `root` into the offscreen target; with `capture`, reads it back into `*out`.
-    bool RenderOffscreen(gui::SceneRoot& root, StringView capture, image::Image* out);
-    bool EnsureOffscreenTarget();
     void RunBench();
     String m_benchPage;
     u32 m_benchFrames = 0;
     u32 m_benchFrame = 0;
-    f64 m_lastPrepareMs = 0.0, m_lastGpuMs = 0.0; // the last offscreen frame's
     struct BenchTotals
     {
         f64 Draw = 0.0, Prepare = 0.0, Gpu = 0.0;
@@ -528,6 +522,9 @@ private:
     // arrows, pressed it drags the pane's width (neither root sees the pointer meanwhile).
     // True while it has the pointer.
     bool ResizeInspector(shell::IInputManager& input);
+    // The pointer as the host would give a pane: false when the sandbox takes it first (the
+    // inspector picking, the boundary held, a --keys script driving the pointer).
+    bool FilterPointer(gui::SceneRoot& pane, shell::InputSurface& surface);
     bool m_showingMenu = false;
     f32 m_menuLeaveAt = -1.0f; // when the game menu's Leave has faded: back to the sandbox
 
@@ -572,41 +569,38 @@ private:
 
 // === Building ===
 
-Status GUISandbox::OnInit()
+void GUISandbox::OnStartup(runtime::IApplicationHost& host)
 {
+    m_host = &host;
+    m_shell = host.Shell();
+    m_mainWindow = host.MainRenderWindow();
+    if (m_shell == nullptr || m_mainWindow == nullptr || host.Graphics() == nullptr || host.Graphics()->Raw() == nullptr)
+    {
+        std::fprintf(stderr, "GUISandbox: no window or device\n");
+        host.RequestExit(1);
+        return;
+    }
+    m_window = &m_mainWindow->Window();
+    m_device = host.Graphics()->Raw();
+    m_width = m_window->Width();
+    m_height = m_window->Height();
+    // The data folder: fonts, pages, pictures, and the VG shaders (cooked, or compiled from Shaders/).
+    m_dataRoot = vfs::FindDataRoot();
+    if (m_dataRoot.IsEmpty())
+    {
+        std::fprintf(stderr, "GUISandbox: no data folder\n");
+        host.RequestExit(1);
+        return;
+    }
+    m_dataFileSystem = MakeUnique<vfs::NativeFileSystem>(AppRoot(), m_dataRoot.AsView(), AppRoot());
     gui::RegisterGuiElements(); // the lab's widgets, creatable by tag from markup
-    // The VG shaders through the shared ShaderSystemHost over the data mount (cooked pack or dev
-    // DXC over Shaders/), the same corpus the runtime UI uses, and everything VG draws with.
-    if (!m_shaderHost.Initialize(*m_device, DataFileSystem()))
-        return ErrorCode::Unknown;
-    const auto variant = [this](StringView name, shaders::ShaderStage stage)
-    { return m_shaderHost.GetVariant(name, stage, shaders::ShaderFlags::None); };
-    m_vs = variant(u8"vg", shaders::ShaderStage::Vertex);
-    m_fs = variant(u8"vg", shaders::ShaderStage::Fragment);
-    m_gradRadialFs = variant(u8"vg_grad_radial", shaders::ShaderStage::Fragment);
-    m_gradConicFs = variant(u8"vg_grad_conic", shaders::ShaderStage::Fragment);
-    m_distanceFieldFs = variant(u8"vg_df", shaders::ShaderStage::Fragment);
-    m_boxShadowFs = variant(u8"vg_shadow", shaders::ShaderStage::Fragment);
-    m_boxVs = variant(u8"vg_box", shaders::ShaderStage::Vertex);
-    m_boxFs = variant(u8"vg_box", shaders::ShaderStage::Fragment);
-    m_layerFs = variant(u8"vg_layer", shaders::ShaderStage::Fragment);
-    m_blurVs = variant(u8"vg_blur", shaders::ShaderStage::Vertex);
-    m_blurFs = variant(u8"vg_blur", shaders::ShaderStage::Fragment);
-    if (m_vs == nullptr || m_fs == nullptr || m_gradRadialFs == nullptr || m_gradConicFs == nullptr)
-        return ErrorCode::Unknown;
-
-    m_targets.Configure(*m_device);
-    const bool targetsOk = m_targets.Create(m_swapChain->Format(), m_width, m_height);
-    if (!m_renderer
-             .Initialize(*m_device, *m_vs, *m_fs, m_swapChain->Format(), static_cast<i32>(kFrames), m_distanceFieldFs,
-                         m_gradRadialFs, m_gradConicFs, targetsOk ? m_targets.ConfigFor() : vg::renderer::VGTargetConfig{},
-                         m_boxShadowFs, m_boxVs, m_boxFs, m_layerFs, m_blurVs, m_blurFs)
-             .IsOk())
-        return ErrorCode::Unknown;
-    if (m_device->CreateCommandPool(rhi::QueueType::Graphics, m_pool) != ErrorCode::Ok)
-        return ErrorCode::Unknown;
-    if (m_device->CreateFence(0, m_fence) != ErrorCode::Ok)
-        return ErrorCode::Unknown;
+    m_shaders = MakeUnique<gui::VgShaderLibrary>(AppRoot(), AppRoot());
+    if (!m_shaders->Load(*m_device, *m_dataFileSystem))
+    {
+        std::fprintf(stderr, "GUISandbox: the VG shaders did not load\n");
+        host.RequestExit(1);
+        return;
+    }
 
     // Mixed-direction text reorders by the Unicode bidirectional algorithm (E9c), as Engine.UI's does.
     fonts::BidiAlgorithm::Install();
@@ -615,25 +609,11 @@ Status GUISandbox::OnInit()
     fonts::HarfBuzzShaping::Install();
     m_fontService = MakeUnique<fonts::TrueTypeFontService>(AppRoot(), AppRoot());
     LoadFonts();
-    m_vg = MakeUnique<vg::VGContext>(AppRoot(), m_fontService.Get());
-    m_vg->SetPerPixelGradients(true);
-    m_vg->SetAnalyticBoxes(m_boxVs != nullptr && m_boxFs != nullptr);
-    m_vg->SetLayers(m_layerFs != nullptr);
-    m_vg->SetStencilFills(m_renderer.StencilFillsSupported());
-    m_baker = MakeUnique<gui::GpuPictureBaker>(AppRoot(), AppRoot(), *m_device, m_fontService.Get());
-    gui::PictureBakerSetup bakes;
-    bakes.VertexShader = m_vs;
-    bakes.FragmentShader = m_fs;
-    bakes.GradientRadialShader = m_gradRadialFs;
-    bakes.GradientConicShader = m_gradConicFs;
-    bakes.DistanceFieldShader = m_distanceFieldFs;
-    bakes.Format = m_swapChain->Format();
-    bakes.BlendSpace = targetsOk ? m_targets.ConfigFor().blendSpace : vg::VGBlendSpace::Linear;
-    bakes.FrameCount = static_cast<i32>(kFrames);
-    if (m_baker->Initialize(bakes).IsOk())
-        m_baker->AddTarget(m_renderer);
-    else
-        m_baker.Reset(); // the skins draw as paths
+    // The window's GUI: its input, its frames, its renderer and the picture baker. The sandbox blends
+    // in linear light, as its references were drawn.
+    m_guiHost = MakeUnique<gui::GuiHost>(AppRoot(), AppRoot(), *host.Graphics(), *m_shell, m_fontService.Get(), m_shaders->Set());
+    m_guiHost->SetBlendSpace(vg::VGBlendSpace::Linear);
+    m_styles = &m_guiHost->Styles();
 
 #ifdef OPTION_HAS_ANGELSCRIPT
     RegisterCoreTypes();
@@ -644,8 +624,7 @@ Status GUISandbox::OnInit()
     std::fprintf(stderr, "GUISandbox: built without AngelScript; the pages' and the game menu's scripts do not run\n");
 #endif
 
-    m_gui = MakeRef<gui::GUIContext>(AppRoot());
-    m_gui->SetPictureBaker(m_baker.Get());
+    m_gui = m_guiHost->ContextRef();
     // The data the pages and the game menu share.
     gui::DataModel& data = m_gui->GetData();
     data.Set(StringView(u8"volume"), Variant::From<f32>(0.7f));
@@ -669,7 +648,41 @@ Status GUISandbox::OnInit()
     BuildMenu();
     if (m_openMenuAtStart)
         OpenMenu();
-    return ErrorCode::Ok;
+
+    // What the sandbox does to the host's input and drawing: the inspector picks and draws over
+    // the page, its boundary takes the pointer, a desk test hears of the OS's drops.
+    GUISandbox* self = this;
+    m_guiHost->SetPointerFilter([self](gui::SceneRoot& pane, shell::InputSurface& surface) { return self->FilterPointer(pane, surface); });
+    m_guiHost->SetOverlay(
+        [self](graphics::RenderWindow&, gui::DrawContext& context)
+        {
+            if (!self->m_inspectorOpen)
+                return;
+            self->m_inspector->RecordFrame(self->m_root->GetLastFrameStats());
+            self->m_inspector->DrawOverTarget(context);
+            // The boundary, lit while the pointer is on it or drags it.
+            if (self->m_overInspectorEdge)
+                context.VG().FillRect(Rectangle{static_cast<f32>(self->m_width) - self->InspectorPixels() - 1.0f, 0.0f, 2.0f,
+                                                static_cast<f32>(self->m_height)},
+                                      Color{0.31f, 0.61f, 1.0f, 1.0f});
+        });
+    m_guiHost->SetDropObserver(
+        [self](const shell::DroppedFile& drop) // said, for a desk test of a desktop's drops
+        {
+            std::printf("GUISandbox: OS drop on window %u (this %u) at %.0f, %.0f: %s\n", drop.window, self->m_window->Id(), drop.x,
+                        drop.y, reinterpret_cast<const char*>(drop.path.CStr()));
+        });
+    // The image tests and the bench draw the root offscreen; otherwise it is the window's.
+    if (DrawsOffscreen())
+        m_offscreen = MakeUnique<gui::GuiOffscreen>(AppRoot(), AppRoot(), *m_guiHost, kImageWidth, kImageHeight,
+                                                    m_mainWindow->Swap()->Format(), vg::VGBlendSpace::Linear);
+    else
+    {
+        m_guiHost->AttachWindow(*m_mainWindow, m_root);
+        if (m_inspectorOpen)
+            m_guiHost->AddPane(*m_mainWindow, m_inspector->GetRootRef(), Rectangle{}, &m_inspector->GetStyles());
+        Layout();
+    }
 }
 
 // The Language and direction page's table (E9e): the serialized StringTable in the data folder,
@@ -852,25 +865,19 @@ void GUISandbox::BuildSandbox()
     ApplyDebugOverlay();
 
     GUISandbox* app = this;
-    m_styles.SetFontService(m_fontService.Get());
-    m_styles.SetFontFaceLoader([app](StringView face, StringView source) { return app->LoadFontFace(face, source); });
+    m_styles->SetFontService(m_fontService.Get());
+    m_styles->SetFontFaceLoader([app](StringView face, StringView source) { return app->LoadFontFace(face, source); });
     m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
     m_resources = MakeUnique<SandboxResources>(AppRoot(), [app](StringView path) { return app->DataPath(path); });
-    m_styles.SetResourceProvider(m_resources.Get());
+    m_styles->SetResourceProvider(m_resources.Get());
     m_gui->SetResourceProvider(m_resources.Get());
     ApplySandboxSheet();
     if (m_lightAtStart)
         ToggleTheme();
     ShowPage(m_startPage.AsView());
 
-    m_bridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_root->GetEventDispatcher());
     if (m_openInspector)
         ToggleInspector();
-    if (m_shell != nullptr)
-    {
-        m_clipboard = MakeUnique<gui::ShellClipboard>(AppRoot(), m_shell);
-        m_root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
-    }
     m_root->GetEventDispatcher()->SetTooltipDelay(0.4f); // tooltips are the GUI's own (E5)
 }
 
@@ -1173,13 +1180,13 @@ void GUISandbox::ApplySandboxSheet()
 {
     // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
     // page's own sheet over that, styling its page alone.
-    m_styles.SetUserAgentSheet(gui::CSSParser::Parse(gui::DefaultThemeCSS(), StringView(u8"theme")));
+    m_styles->SetUserAgentSheet(gui::CSSParser::Parse(gui::DefaultThemeCSS(), StringView(u8"theme")));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
-    m_styles.SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView(), path.AsView()));
+    m_styles->SetStyleSheet(gui::CSSParser::Parse(ReadText(path.AsView()).AsView(), path.AsView()));
     for (const Page& page : m_pages)
         if (page.node != nullptr)
-            (void)m_styles.SetSubtreeSheet(*page.node, gui::CSSParser::Parse(page.sheet.AsView(), Format(u8"pages/{}.css", page.id).AsView()));
+            (void)m_styles->SetSubtreeSheet(*page.node, gui::CSSParser::Parse(page.sheet.AsView(), Format(u8"pages/{}.css", page.id).AsView()));
 }
 
 void GUISandbox::ApplyDebugOverlay()
@@ -1228,11 +1235,7 @@ bool GUISandbox::ResizeInspector(shell::IInputManager& input)
         m_overInspectorEdge = over;
         m_root->Invalidate(); // the boundary's highlight
         if (!over)
-        {
-            // The GUI's cursors take the pointer back.
-            m_bridge->SetCursorTarget(&mouse);
-            m_inspectorBridge->SetCursorTarget(&mouse);
-        }
+            m_guiHost->ResetCursors(); // the GUI's cursors take the pointer back
     }
     if (over)
         mouse.SetCursor(shell::CursorType::ResizeEW);
@@ -1242,17 +1245,21 @@ bool GUISandbox::ResizeInspector(shell::IInputManager& input)
 void GUISandbox::ToggleInspector()
 {
     if (!m_inspector)
-    {
         m_inspector = MakeUnique<gui::inspector::Inspector>(AppRoot(), AppRoot(), m_gui, m_fontService.Get());
-        m_inspectorBridge = MakeUnique<gui::GuiInputBridge>(AppRoot(), m_inspector->GetRoot().GetEventDispatcher());
-        if (m_window != nullptr)
-            m_inspectorBridge->SetTextInputTarget(m_window);
-    }
     m_inspectorOpen = !m_inspectorOpen;
     if (m_inspectorOpen)
-        m_inspector->Inspect(m_root.Get(), &m_styles);
+        m_inspector->Inspect(m_root.Get(), m_styles);
     else
         m_inspector->SetPicking(false);
+    // A pane of the window at the right (once the window has the root: at start, OnStartup adds it).
+    if (m_guiHost && m_guiHost->WindowFor(m_root.Get()) != nullptr)
+    {
+        if (m_inspectorOpen)
+            m_guiHost->AddPane(*m_mainWindow, m_inspector->GetRootRef(), Rectangle{}, &m_inspector->GetStyles());
+        else
+            m_guiHost->RemovePane(m_inspector->GetRoot());
+        Layout();
+    }
     m_root->Invalidate();
 }
 
@@ -1274,7 +1281,7 @@ void GUISandbox::BuildMenu()
     m_menu = menu;
     String css(kMenuDir);
     css += StringView(u8"menu.css");
-    (void)m_styles.SetSubtreeSheet(*menu, gui::CSSParser::Parse(ReadText(css.AsView()).AsView(), css.AsView()));
+    (void)m_styles->SetSubtreeSheet(*menu, gui::CSSParser::Parse(ReadText(css.AsView()).AsView(), css.AsView()));
     // Leave: the menu fades out, then the sandbox comes back.
     RefPtr<gui::DataModel> model = m_gui->GetDataRef();
     menu->Bind([this, model]()
@@ -1436,52 +1443,38 @@ void GUISandbox::LayOutShell()
     }
 }
 
+// The panes' regions in the window: the root on show, and the inspector's pane at its right.
+void GUISandbox::Layout()
+{
+    if (!m_guiHost || m_guiHost->WindowFor(m_root.Get()) == nullptr)
+        return;
+    const f32 pane = InspectorPixels();
+    m_guiHost->SetPaneRegion(*m_root, Rectangle{0.0f, 0.0f, static_cast<f32>(m_width) - pane, static_cast<f32>(m_height)});
+    if (m_inspectorOpen)
+        m_guiHost->SetPaneRegion(m_inspector->GetRoot(), Rectangle{static_cast<f32>(m_width) - pane, 0.0f, pane, static_cast<f32>(m_height)});
+}
+
+// Before the host routes the frame's input: the boundary between the root on show and the pane.
 void GUISandbox::RouteInput()
 {
-    // A fullscreen InputSurface, gated by a router: the pointer through the surface, keys, text and
-    // the gamepad from the event stream, all to the root on show.
-    if (m_shell == nullptr || m_shell->Input() == nullptr || m_window == nullptr)
+    if (m_shell == nullptr || m_shell->Input() == nullptr)
         return;
-    shell::IInputManager& input = *m_shell->Input();
-    gui::GuiInputBridge& bridge = *m_bridge;
-    // The inspector's pane takes the window's right side; the root on show the rest.
-    const f32 pane = InspectorPixels();
-    const Rectangle region{0.0f, 0.0f, static_cast<f32>(m_width) - pane, static_cast<f32>(m_height)};
-    if (!m_inputSurface)
-    {
-        const ContentFit fit{region, Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}, FitMode::Stretch};
-        m_inputSurface = MakeUnique<shell::InputSurface>(AppRoot(), &input, m_window->Id(), fit);
-        m_router = MakeUnique<shell::InputRouter>(AppRoot(), &input);
-        m_router->AddSurface(m_inputSurface.Get());
-        m_bridge->SetTextInputTarget(m_window);
-        m_bridge->SetCursorTarget(input.Mouse()); // the pointer takes the look of what it is over
-    }
-    m_inputSurface->SetRegion(region);
-    m_inputSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)}); // places fingers
-    m_inputSurface->SetContentSize(Float2{region.width, region.height});
-    if (m_inspector && !m_inspectorSurface)
-    {
-        const ContentFit none{Rectangle{}, Float2{1.0f, 1.0f}, FitMode::Stretch};
-        m_inspectorSurface = MakeUnique<shell::InputSurface>(AppRoot(), &input, m_window->Id(), none);
-        m_router->AddSurface(m_inspectorSurface.Get());
-        m_inspectorBridge->SetCursorTarget(input.Mouse());
-    }
-    if (m_inspectorSurface)
-    {
-        // Its own root sits at its origin (drawn moved over): the pane maps to it from 0.
-        m_inspectorSurface->SetRegion(Rectangle{region.width, 0.0f, pane, static_cast<f32>(m_height)});
-        m_inspectorSurface->SetWindowSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
-        m_inspectorSurface->SetContentSize(Float2{Max(pane, 1.0f), static_cast<f32>(m_height)});
-    }
-    m_router->Update();
-    const bool resizing = ResizeInspector(input);
-    const bool picking = m_inspectorOpen && m_inspector->IsPicking();
+    (void)ResizeInspector(*m_shell->Input());
+    Layout();
+}
+
+bool GUISandbox::FilterPointer(gui::SceneRoot& pane, shell::InputSurface& surface)
+{
     // While the boundary has the pointer, neither root sees it.
-    if (picking && !resizing)
+    if (m_resizingInspector)
+        return true;
+    if (&pane != m_root.Get())
+        return false;
+    if (m_inspectorOpen && m_inspector->IsPicking())
     {
         // Picking: the pointer over the root on show goes to the inspector, not to it.
-        shell::IMouse& mouse = *m_inputSurface->Mouse();
-        if (m_inputSurface->MouseActive())
+        shell::IMouse& mouse = *surface.Mouse();
+        if (surface.MouseActive())
         {
             m_inspector->PickHover(Float2{mouse.X(), mouse.Y()});
             if (mouse.ScrollY() != 0.0f)
@@ -1489,39 +1482,9 @@ void GUISandbox::RouteInput()
             if (mouse.IsButtonPressed(shell::MouseButton::Left))
                 m_inspector->PickClick();
         }
+        return true;
     }
-    else if (!resizing && m_keys.Size() == 0) // a --keys script owns the pointer: the desk's mouse would move it back
-        bridge.PumpFromSurface(*m_inputSurface);
-    if (m_inspectorOpen && m_inspectorSurface && !resizing)
-        m_inspectorBridge->PumpFromSurface(*m_inspectorSurface);
-    // Files the OS dropped on the window go through the GUI's drag path (E7).
-    Array<shell::DroppedFile> drops(AppRoot());
-    m_shell->DrainDroppedFiles(drops);
-    for (const shell::DroppedFile& drop : drops) // said, for a desk test of a desktop's drops
-        std::printf("GUISandbox: OS drop on window %u (this %u) at %.0f, %.0f: %s\n", drop.window, m_window->Id(), drop.x, drop.y,
-                    reinterpret_cast<const char*>(drop.path.CStr()));
-    if (!drops.IsEmpty())
-        (void)bridge.DispatchFileDrops(drops, m_window->Id());
-    for (const shell::InputEvent& event : input.Events())
-    {
-        switch (event.kind)
-        {
-        case shell::InputEventKind::KeyDown:
-        case shell::InputEventKind::KeyUp:
-        case shell::InputEventKind::TextInput:
-        case shell::InputEventKind::GamepadButtonDown:
-        case shell::InputEventKind::GamepadButtonUp:
-        case shell::InputEventKind::GamepadAxis:
-            // Keys go to the pane while it has the focus (it was clicked last).
-            if (m_inspectorOpen && m_inspectorSurface && m_inspectorSurface->Focused())
-                m_inspectorBridge->Dispatch(event);
-            else
-                bridge.Dispatch(event);
-            break;
-        default:
-            break;
-        }
-    }
+    return m_keys.Size() != 0; // a --keys script owns the pointer: the desk's mouse would move it back
 }
 
 void GUISandbox::TypeKeys(gui::SceneRoot& root)
@@ -1671,8 +1634,8 @@ void GUISandbox::Settle()
 {
     LayOutShell();
     m_gui->Update(Duration::FromSeconds(1.0 / 60.0));
-    m_styles.SetMediaContext(m_root->GetMediaContext());
-    m_styles.ApplyTree(*m_root);
+    m_styles->SetMediaContext(m_root->GetMediaContext());
+    m_styles->ApplyTree(*m_root);
     m_root->UpdateLayout();
 }
 
@@ -1852,8 +1815,15 @@ void GUISandbox::UpdateMenu()
         CloseMenu();
 }
 
-void GUISandbox::OnRender()
+void GUISandbox::OnUpdate(runtime::IApplicationHost&, f32 deltaTime)
 {
+    if (!m_guiHost)
+        return;
+    m_deltaTime = deltaTime;
+    m_totalTime += deltaTime;
+    FinishScreenshot(); // last frame's, now the GPU has run it
+    m_width = m_window->Width();
+    m_height = m_window->Height();
     if (!m_benchPage.IsEmpty())
     {
         RunBench();
@@ -1869,6 +1839,9 @@ void GUISandbox::OnRender()
         MirrorAudit();
         return;
     }
+    if (shell::IInputManager* input = m_shell->Input(); input != nullptr && input->Keyboard() != nullptr &&
+                                                       input->Keyboard()->IsKeyPressed(shell::KeyCode::F12))
+        RequestScreenshot();
     RouteInput();
     TypeKeys(*m_root);
     // --scroll: once the GUI is up (held a few frames while the page settles).
@@ -1880,141 +1853,89 @@ void GUISandbox::OnRender()
         if (m_soakSeconds > 0.0f)
             SoakFrame();
     }
-
-    // A window moved to a monitor of another density takes its scale.
-    const Float2 viewport{static_cast<f32>(m_width) - InspectorPixels(), static_cast<f32>(m_height)};
-    if (m_window != nullptr && m_window->ContentScale() != m_root->GetDisplayScale())
-        m_root->SetDisplayScale(m_window->ContentScale());
-    m_root->SetViewportSize(viewport);
     LayOutShell();
-    m_gui->Update(Duration::FromSeconds(static_cast<f64>(m_deltaTime)));
     if (m_showingMenu)
         UpdateMenu();
-
-    // Style the root, then the layout styling moved.
-    gui::SceneRoot& drawn = *m_root;
-    m_styles.SetMediaContext(drawn.GetMediaContext());
-    m_styles.ApplyTree(drawn);
-    drawn.UpdateLayout();
-    bool paneNeeds = false;
     if (m_inspectorOpen)
     {
-        gui::SceneRoot& pane = m_inspector->GetRoot();
-        if (m_inspector->GetTarget() != &drawn)
-            m_inspector->Inspect(&drawn, &m_styles);
-        if (m_window != nullptr && m_window->ContentScale() != pane.GetDisplayScale())
-            pane.SetDisplayScale(m_window->ContentScale());
-        pane.SetViewportSize(Float2{InspectorPixels(), static_cast<f32>(m_height)});
+        if (m_inspector->GetTarget() != m_root.Get())
+            m_inspector->Inspect(m_root.Get(), m_styles);
         if (m_inspectSelector.Size() != 0 && m_frames == 10)
             (void)m_inspector->SelectQuery(m_inspectSelector.AsView());
         m_inspector->Refresh();
-        m_inspector->GetStyles().SetMediaContext(pane.GetMediaContext());
-        m_inspector->GetStyles().ApplyTree(pane);
-        pane.UpdateLayout();
-        paneNeeds = pane.NeedsFrame();
     }
+    // The host: each pane's input, the GUI's clock, styles and layout; whether a frame is needed.
+    m_guiHost->Update(deltaTime);
 
-    // Nothing changed, nothing animating: skip the frame (the last one stays on screen) and wait a
-    // little instead of spinning. --always-redraw draws every frame.
     ++m_frames;
     if (m_frameStats && m_totalTime >= m_nextStatsTime)
     {
-        std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
+        std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_guiHost->FramesDrawn()),
                     static_cast<unsigned long long>(m_frames));
         // The last drawn frame's costs and what asked for it (E8a).
-        std::printf("GUISandbox: last frame: %s\n", reinterpret_cast<const char*>(drawn.GetLastFrameStats().Describe().CStr()));
+        std::printf("GUISandbox: last frame: %s\n", reinterpret_cast<const char*>(m_root->GetLastFrameStats().Describe().CStr()));
         std::fflush(stdout);
         m_nextStatsTime = m_totalTime + 1.0f;
     }
     // The Stress page shows the last frame's costs, each second.
     if (m_stress && m_current.AsView() == StringView(u8"stress") && m_totalTime >= m_nextStressStatsTime)
     {
-        m_stress->ShowStats(drawn.GetLastFrameStats());
+        m_stress->ShowStats(m_root->GetLastFrameStats());
         m_nextStressStatsTime = m_totalTime + 1.0f;
     }
-    const bool drawnNeeds = drawn.NeedsFrame();
-    // The window system asked for a frame: on Wayland its new state takes effect only with one,
-    // and left idle the decorations' resize edges covered the GUI and kept the pointer from it.
-    bool exposed = false;
-    if (m_shell->WindowManager() != nullptr && m_window != nullptr)
-        for (const shell::WindowEvent& event : m_shell->WindowManager()->Events())
-            exposed = exposed || (event.type == shell::WindowEventType::Exposed && event.windowId == m_window->Id());
-    if (!m_alwaysRedraw && !drawnNeeds && !paneNeeds && !exposed && !ScreenshotPending())
-    {
-        SleepMilliseconds(8);
-        return;
-    }
-    ++m_drawnFrames;
-    DrawAndPresent(drawn);
+    if (m_alwaysRedraw)
+        m_root->Invalidate();
 }
 
-void GUISandbox::DrawAndPresent(gui::SceneRoot& root)
+void GUISandbox::OnRenderWindow(runtime::IApplicationHost&, graphics::FrameContext& frame)
 {
-    m_vg->Clear();
-    {
-        gui::DrawContext dc{*m_vg};
-        root.DrawFrame(dc); // timed and counted: --frame-stats prints it
-        if (m_inspectorOpen)
-        {
-            m_inspector->RecordFrame(root.GetLastFrameStats());
-            m_inspector->DrawOverTarget(dc);
-            // The pane, its root moved to the window's right side.
-            gui::DrawContext paneContext{*m_vg};
-            m_vg->PushState();
-            m_vg->Translate(static_cast<f32>(m_width) - InspectorPixels(), 0.0f);
-            m_inspector->GetRoot().DrawFrame(paneContext);
-            m_vg->PopState();
-            // The boundary, lit while the pointer is on it or drags it.
-            if (m_overInspectorEdge)
-                m_vg->FillRect(Rectangle{static_cast<f32>(m_width) - InspectorPixels() - 1.0f, 0.0f, 2.0f, static_cast<f32>(m_height)},
-                               Color{0.31f, 0.61f, 1.0f, 1.0f});
-        }
-    }
-    vg::VGBatch& batch = m_vg->GetBatch();
-
-    if (m_fenceVal > 0)
-        m_fence->Wait(m_fenceVal, ~0ull);
-    if (m_swapChain->AcquireNextImage() != ErrorCode::Ok)
+    if (!m_guiHost || !frame.valid)
         return;
-    m_renderer.BeginFrame(static_cast<i32>(m_frameIndex));
-    const vg::renderer::VGRenderSlice slice = m_renderer.Prepare(batch, static_cast<i32>(m_frameIndex), m_width, m_height);
-    m_pool->Reset();
-    rhi::CommandEncoder* enc = nullptr;
-    if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
+    m_guiHost->RenderWindow(frame);
+    if (frame.window != m_mainWindow || frame.encoder == nullptr)
         return;
-    enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
-    if (m_baker)
-        (void)m_baker->Record(*enc, static_cast<i32>(m_frameIndex)); // what this frame asked to bake, for the next
-    m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice); // layers draw in passes of their own, first
-
-    const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
-    rhi::RenderPassDesc rpd{};
-    if (m_targets.Matches(m_width, m_height))
+    // F12 or --screenshot: this frame, as presented.
+    ++m_presentedFrames;
+    if (m_screenshotOptions.Requested() && m_screenshotsTaken < m_screenshotOptions.count &&
+        (m_screenshotsTaken > 0 || m_screenshotOptions.Due(m_presentedFrames, m_totalTime)))
     {
-        rpd = m_targets.BeginPass(*enc, m_swapChain->CurrentTextureView(), clear);
+        m_screenshot.Request(m_screenshotOptions.PathFor(m_screenshotsTaken).AsView());
+        ++m_screenshotsTaken;
+        m_screenshotExitPending = m_screenshotOptions.exitAfter && m_screenshotsTaken == m_screenshotOptions.count;
     }
-    else
+    if (m_screenshot.Armed() &&
+        !m_screenshot.Record(*m_device, *frame.encoder, frame.backbuffer, m_mainWindow->Swap()->Format(), frame.width, frame.height) &&
+        m_screenshotExitPending)
     {
-        rhi::ColorAttachment ca{};
-        ca.view = m_swapChain->CurrentTextureView();
-        ca.loadOp = rhi::LoadOp::Clear;
-        ca.storeOp = rhi::StoreOp::Store;
-        ca.clearValue = clear;
-        rpd.colorAttachments.Add(ca);
+        std::fprintf(stderr, "GUISandbox: the screenshot could not be taken (this surface cannot be copied)\n");
+        Exit();
     }
-    rhi::RenderPassEncoder* rp = enc->BeginRenderPass(rpd);
-    m_renderer.Render(*rp, m_width, m_height, static_cast<i32>(m_frameIndex), slice);
-    rp->End();
+}
 
-    CaptureBackbuffer(*enc, m_swapChain->CurrentTexture()); // F12 or --screenshot: this frame, as presented
-    enc->TransitionTexture(m_swapChain->CurrentTexture(), rhi::ResourceState::RenderTarget, rhi::ResourceState::Present);
-    rhi::CommandBuffer* cb = enc->Finish();
-    ++m_fenceVal;
-    rhi::CommandBuffer* cbs[1] = {cb};
-    m_graphicsQueue->Submit(Span<rhi::CommandBuffer* const>(cbs, 1), m_fence, m_fenceVal);
-    m_swapChain->Present(m_graphicsQueue);
-    m_pool->DestroyEncoder(enc);
-    m_frameIndex = (m_frameIndex + 1) % kFrames;
+// F12: the next frame, to <user data>/screenshots.
+void GUISandbox::RequestScreenshot()
+{
+    const String dir = PathJoin(GetUserDataDirectory().AsView(), u8"screenshots");
+    if (!CreateDirectories(dir.AsView()))
+    {
+        std::fprintf(stderr, "GUISandbox: could not create the screenshots directory\n");
+        return;
+    }
+    m_screenshot.Request(PathJoin(dir.AsView(), Format(u8"gui-sandbox-{}-{}.png", ProcessId(), ++m_screenshotSerial).AsView()).AsView());
+}
+
+// A screenshot recorded last frame: once the GPU has run it (a one-off, so wait for all), map,
+// write, and honour --screenshot-exit.
+void GUISandbox::FinishScreenshot()
+{
+    if (!m_screenshot.Recorded())
+        return;
+    m_device->WaitIdle();
+    image::Image written;
+    if (m_screenshot.Complete(*m_device, AppRoot(), written).IsOk())
+        std::printf("GUISandbox: screenshot written to %s\n", reinterpret_cast<const char*>(String(m_screenshot.Path()).CStr()));
+    if (m_screenshotExitPending)
+        Exit();
 }
 
 // The image tests (E8g): each page shown, run on a fixed clock at a fixed size and scale 1, drawn
@@ -2034,7 +1955,7 @@ void GUISandbox::RunImageTests()
                 if (page.id.AsView() == StringView(u8"language"))
                     m_imagePages.PushBack(String(u8"language@ar")); // and right to left, in Arabic (E9e)
             }
-        if (!EnsureOffscreenTarget())
+        if (!m_offscreen || !m_offscreen->IsReady())
         {
             std::printf("GUISandbox: image tests: no offscreen target\n");
             Exit();
@@ -2072,8 +1993,8 @@ void GUISandbox::RunImageTests()
     m_root->SetViewportSize(Float2{static_cast<f32>(kImageWidth), static_cast<f32>(kImageHeight)});
     LayOutShell();
     m_gui->Update(Duration::FromSeconds(1.0 / 60.0));
-    m_styles.SetMediaContext(m_root->GetMediaContext());
-    m_styles.ApplyTree(*m_root);
+    m_styles->SetMediaContext(m_root->GetMediaContext());
+    m_styles->ApplyTree(*m_root);
     m_root->UpdateLayout();
     if (++m_imageFrame < kImageFrames)
         return;
@@ -2085,14 +2006,14 @@ void GUISandbox::RunImageTests()
     image::Image picture;
     // A frame first, uncaptured, when a picture is waiting to be baked: the capture shows the
     // page as every frame after its first does.
-    if (m_baker)
+    if (gui::GpuPictureBaker* baker = m_guiHost->Baker())
     {
-        const u64 bakes = m_baker->Generation();
-        (void)RenderOffscreen(*m_root, StringView{}, nullptr);
-        if (m_baker->Generation() != bakes)
+        const u64 bakes = baker->Generation();
+        (void)m_offscreen->Draw(*m_root);
+        if (baker->Generation() != bakes)
             (void)m_root->NeedsFrame(); // the root redraws from the bakes
     }
-    if (!RenderImage(*m_root, picturePath.AsView(), picture))
+    if (!m_offscreen->Picture(*m_root, picturePath.AsView(), picture))
     {
         std::printf("GUISandbox: image %s: could not be drawn\n", reinterpret_cast<const char*>(name.CStr()));
         ++m_imageFailures;
@@ -2139,28 +2060,13 @@ void GUISandbox::RunImageTests()
                 static_cast<unsigned long long>(result.Pixels), result.LargestDelta, reinterpret_cast<const char*>(diffPath.CStr()));
 }
 
-// The offscreen target the image tests and the bench draw into, made the first time.
-bool GUISandbox::EnsureOffscreenTarget()
-{
-    if (m_imageTarget != nullptr)
-        return true;
-    rhi::TextureDesc desc = rhi::TextureDesc::RenderTarget(m_swapChain->Format(), kImageWidth, kImageHeight);
-    desc.usage = desc.usage | rhi::TextureUsage::CopySrc;
-    if (m_device->CreateTexture(desc, m_imageTarget) != ErrorCode::Ok ||
-        m_device->CreateTextureView(m_imageTarget, rhi::TextureViewDesc{}, m_imageView) != ErrorCode::Ok)
-        return false;
-    m_imageTargets.Configure(*m_device);
-    (void)m_imageTargets.Create(m_swapChain->Format(), kImageWidth, kImageHeight);
-    return true;
-}
-
 // The bench (E15): settle the page, then time frames that each change the page title's text.
 void GUISandbox::RunBench()
 {
     constexpr u32 kSettle = 30;
     if (m_benchFrame == 0)
     {
-        if (!EnsureOffscreenTarget())
+        if (!m_offscreen || !m_offscreen->IsReady())
         {
             std::printf("GUISandbox: bench: no offscreen target\n");
             Exit();
@@ -2178,10 +2084,11 @@ void GUISandbox::RunBench()
                     title->SetText(Format(u8"{} {}", m_benchPage, measured).AsView());
     LayOutShell();
     m_gui->Update(Duration::FromSeconds(1.0 / 60.0));
-    m_styles.SetMediaContext(m_root->GetMediaContext());
-    m_styles.ApplyTree(*m_root);
+    m_styles->SetMediaContext(m_root->GetMediaContext());
+    m_styles->ApplyTree(*m_root);
     m_root->UpdateLayout();
-    if (!RenderOffscreen(*m_root, StringView{}, nullptr))
+    gui::GuiOffscreen::Times times;
+    if (!m_offscreen->Draw(*m_root, &times))
     {
         std::printf("GUISandbox: bench: a frame could not be drawn\n");
         Exit();
@@ -2191,8 +2098,8 @@ void GUISandbox::RunBench()
         return;
     const gui::FrameStats& stats = m_root->GetLastFrameStats();
     m_bench.Draw += stats.DrawMs;
-    m_bench.Prepare += m_lastPrepareMs;
-    m_bench.Gpu += m_lastGpuMs;
+    m_bench.Prepare += times.Prepare;
+    m_bench.Gpu += times.Gpu;
     m_bench.Vertices += stats.Vertices;
     m_bench.Commands += stats.Commands;
     m_bench.Drawn += stats.NodesDrawn;
@@ -2212,75 +2119,13 @@ void GUISandbox::RunBench()
     Exit();
 }
 
-// One picture of `root`, drawn into the offscreen target, read back and written to `path`.
-bool GUISandbox::RenderImage(gui::SceneRoot& root, StringView path, image::Image& out)
+void GUISandbox::OnShutdown(runtime::IApplicationHost&)
 {
-    return RenderOffscreen(root, path, &out);
-}
-
-bool GUISandbox::RenderOffscreen(gui::SceneRoot& root, StringView capture, image::Image* out)
-{
-    m_vg->Clear();
-    {
-        gui::DrawContext dc{*m_vg};
-        root.DrawFrame(dc);
-    }
-    vg::VGBatch& batch = m_vg->GetBatch();
-    if (m_fenceVal > 0)
-        m_fence->Wait(m_fenceVal, ~0ull);
-    m_renderer.BeginFrame(static_cast<i32>(m_frameIndex));
-    const Stopwatch prepareWatch = Stopwatch::StartNew();
-    const vg::renderer::VGRenderSlice slice = m_renderer.Prepare(batch, static_cast<i32>(m_frameIndex), kImageWidth, kImageHeight);
-    m_lastPrepareMs = prepareWatch.Elapsed().AsMilliseconds();
-    const Stopwatch gpuWatch = Stopwatch::StartNew();
-    m_pool->Reset();
-    rhi::CommandEncoder* enc = nullptr;
-    if (m_pool->CreateEncoder(enc) != ErrorCode::Ok || enc == nullptr)
-        return false;
-    enc->TransitionTexture(m_imageTarget, rhi::ResourceState::Undefined, rhi::ResourceState::RenderTarget);
-    if (m_baker)
-        (void)m_baker->Record(*enc, static_cast<i32>(m_frameIndex));
-    m_renderer.RenderLayers(*enc, static_cast<i32>(m_frameIndex), slice);
-    const rhi::ClearColor clear = rhi::ClearColor(0.07f, 0.07f, 0.09f, 1.0f);
-    rhi::RenderPassDesc rpd{};
-    if (m_imageTargets.Matches(kImageWidth, kImageHeight))
-        rpd = m_imageTargets.BeginPass(*enc, m_imageView, clear);
-    else
-    {
-        rhi::ColorAttachment ca{};
-        ca.view = m_imageView;
-        ca.loadOp = rhi::LoadOp::Clear;
-        ca.storeOp = rhi::StoreOp::Store;
-        ca.clearValue = clear;
-        rpd.colorAttachments.Add(ca);
-    }
-    rhi::RenderPassEncoder* rp = enc->BeginRenderPass(rpd);
-    m_renderer.Render(*rp, kImageWidth, kImageHeight, static_cast<i32>(m_frameIndex), slice);
-    rp->End();
-    const bool capturing = out != nullptr;
-    bool recorded = true;
-    if (capturing)
-    {
-        m_imageCapture.Request(capture);
-        recorded = m_imageCapture.Record(*m_device, *enc, m_imageTarget, m_swapChain->Format(), kImageWidth, kImageHeight);
-    }
-    rhi::CommandBuffer* cb = enc->Finish();
-    ++m_fenceVal;
-    rhi::CommandBuffer* cbs[1] = {cb};
-    m_graphicsQueue->Submit(Span<rhi::CommandBuffer* const>(cbs, 1), m_fence, m_fenceVal);
-    m_device->WaitIdle();
-    m_lastGpuMs = gpuWatch.Elapsed().AsMilliseconds();
-    m_pool->DestroyEncoder(enc);
-    m_frameIndex = (m_frameIndex + 1) % kFrames;
-    return !capturing || (recorded && m_imageCapture.Complete(*m_device, AppRoot(), *out).IsOk());
-}
-
-void GUISandbox::OnShutdown()
-{
-    std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_drawnFrames),
+    if (!m_guiHost)
+        return;
+    std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_guiHost->FramesDrawn()),
                 static_cast<unsigned long long>(m_frames));
-    if (m_device)
-        m_device->WaitIdle();
+    m_device->WaitIdle();
     // Scripts first: their handles and handlers reach the trees.
     const auto closeScript = [](RefPtr<script::IScriptContext>& context)
     {
@@ -2294,22 +2139,12 @@ void GUISandbox::OnShutdown()
         closeScript(page.script);
     closeScript(m_menuScript);
     m_scripts.Reset();
-    m_router.Reset();
-    if (m_device != nullptr)
-    {
-        m_device->WaitIdle();
-        if (m_imageView != nullptr)
-            m_device->DestroyTextureView(m_imageView);
-        if (m_imageTarget != nullptr)
-            m_device->DestroyTexture(m_imageTarget);
-        m_imageCapture.Release(*m_device); // its readback buffer
-    }
-    m_imageTargets.Destroy();
-    m_inspectorSurface.Reset();
-    m_inspectorBridge.Reset();
+    m_screenshot.Release(*m_device); // its readback buffer
+    m_offscreen.Reset();
+    // The window's panes leave the host (their renderer forgets the bakes) before the trees go.
+    if (m_guiHost->WindowFor(m_root.Get()) != nullptr)
+        m_guiHost->DetachWindow(*m_mainWindow);
     m_inspector.Reset(); // its root on the GUI's context, before the context
-    m_inputSurface.Reset();
-    m_bridge.Reset();
     m_pages.Clear();
     m_contextMenu.Reset();
     m_floating.Reset();
@@ -2323,16 +2158,10 @@ void GUISandbox::OnShutdown()
     m_listModel.Reset();
     m_treeModel.Reset();
     m_checker.Reset();
-    m_baker.Reset(); // its bakes leave the renderer first
-    m_renderer.Dispose();
-    m_targets.Destroy(); // before the framework releases the device
-    m_vg.Reset();
+    m_styles = nullptr;
+    m_guiHost.Reset(); // the context, the baker
     m_fontService.Reset();
-    if (m_fence)
-        m_device->DestroyFence(m_fence);
-    if (m_pool)
-        m_device->DestroyCommandPool(m_pool);
-    m_shaderHost.Shutdown(); // the shader modules are its
+    m_shaders.Reset(); // the shader modules are its, the host drew with them
 }
 
 int main(int argc, char** argv)
@@ -2425,5 +2254,18 @@ int main(int argc, char** argv)
         else if (arg == StringView(u8"--scroll") && i + 1 < argc)
             app.SetScroll(static_cast<f32>(std::atof(reinterpret_cast<const char*>(argv[++i]))));
     }
-    return app.ImageExitCode(app.Run(argc, argv));
+    app.SetScreenshots(rhi::ScreenshotOptionsFromArguments(argc, argv));
+
+    shell::WindowSettings settings;
+    settings.title = u8"GUI Sandbox";
+    settings.width = 960;
+    settings.height = 820;
+    settings.drawsTextComposition = true; // its fields show an IME's composition in place
+    UniquePtr<shell::IShell> shellPtr = shell::CreateShell(AppRoot(), settings);
+    if (shellPtr.Get() == nullptr || shellPtr->MainWindow() == nullptr)
+        return app.ImageExitCode(1);
+    Result<UniquePtr<graphics::GraphicsDevice>> device = graphics::CreateGraphicsDevice(graphics::DeviceDescFromArguments(argc, argv));
+    if (!device.HasValue())
+        return app.ImageExitCode(1); // 77 for the image tests and the sweep: no device to test
+    return app.ImageExitCode(runtime::RunApplication(app, *shellPtr, device.Value().Get()));
 }

@@ -94,6 +94,17 @@ GUI and its frame the host's: its pages, the inspector pane, the image tests, th
 the soak and `--keys` unchanged in what they do and show. Screen: every sandbox page's reference
 image unchanged.
 
+As built on `vg` (2026-10-20): GUISandbox is a `runtime::IApplication` run by `RunApplication`,
+as foundation.ui's UISandbox is; its window, input and frames are the host's. On the way the host
+took panes (several roots in one window, each over a region with its own input, for the inspector's
+pane, which is another GUI with its own styles), a pointer filter (the inspector picking, the pane's
+boundary, a `--keys` script), an overlay (the inspector's highlights over the page) and a drop
+observer. The image tests and the bench draw through `GuiOffscreen` and keep the window out of it
+(their fixed clock is the sandbox's own); F12 and `--screenshot` record on the frame's encoder. Every
+reference image is unchanged, and an idle page draws one frame in 151 (the runtime host presents
+every frame; the GUI's batch is encoded again, not redrawn). The sandbox blends in linear light as
+its references were drawn; the host's default is encoded, as foundation.ui's is.
+
 ### V1 The viewport
 
 `ViewportView`, a node that shows content drawn into a colour target (and depth) of its own, sized

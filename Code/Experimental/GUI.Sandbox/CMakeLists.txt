@@ -1,9 +1,11 @@
-# GUI Sandbox - first on-screen test of experimental.gui (widgets + CSS on the VG renderer).
+# GUI Sandbox - experimental.gui's widgets, styles, motion and input, an application on the runtime host
+# through the lab's GuiHost (GUI.Hosting).
 add_executable(GUISandbox Main.cpp)
 target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm) # the Stress page (E8a)
 target_link_libraries(GUISandbox PRIVATE
-    Foundation::Core Foundation::RHI Foundation::Shaders Foundation::Shaders.System
-    Samples::Framework
+    Foundation::Core Foundation::RHI Foundation::VFS
+    Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop
+    Foundation::Graphics Foundation::Graphics.Gpu
     Foundation::Shell Foundation::Image Foundation::Image.IO Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::Fonts.HarfBuzz Foundation::Xml.Serialization Foundation::Fonts.DistanceField.Baker
     Foundation::VG Foundation::VG.Renderer Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Inspector Experimental::GUI.Testing Experimental::GUI.Hosting Foundation::RHI.Capture
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT}) # the showcase (G6) runs AngelScript

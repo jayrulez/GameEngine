@@ -257,7 +257,17 @@ strip lying there. Each drop is the layout's move tried on a copy: refused, the 
 and nothing moves; accepted, a `dock-preview` panel stands where the panel would be (the split
 shares of the layout it would make; the separators' room is left out). The strip's drops reach the
 layout through two hooks the core's tab bar gained: a tab offered may be refused or described, and a
-dropped one taken over. Not yet: a stack's own grip, the keyboard, `dock.*` and the "Move to" menu.
+dropped one taken over.
+
+D4, the keyboard, as built on `vg` (2026-10-20): a tab of a strip in a group is picked up by
+`drag.pick` (the core's tabs) and dropped where the focus is, on a strip's tab at its place or into a
+stack (the bands are the pointer's aim; the keyboard has none). `DefineDockingCommands` defines
+`dock.focus-*` and `dock.move-*` by direction (into the nearest stack that way, else along the
+surface's edge, the focus going with the panel; left and right as the screen runs), `dock.maximize`
+(and back), `dock.close` and `dock.move-to`, with keys. "Move to" is a menu, from a tab's context
+menu or the command: into each other stack, beside one on each side, along the surface's edges,
+each place the layout refuses shown disabled; a list of the places, not yet a map of them. Not yet:
+a stack's own grip carrying the whole stack.
 
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

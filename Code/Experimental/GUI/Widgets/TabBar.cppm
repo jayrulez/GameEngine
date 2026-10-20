@@ -366,6 +366,15 @@ export namespace experimental::gui
                 return false;
             query.Accept(DropEffect::Move);
             query.Place = index;
+            if (m_onTabOffered)
+            {
+                m_onTabOffered(query, *const_cast<Tab*>(tab), index);
+                if (query.Refused)
+                {
+                    SetDropIndex(-1);
+                    return true; // answered: the walk ends with the reason
+                }
+            }
             SetDropIndex(index);
             return true;
         }
@@ -376,6 +385,13 @@ export namespace experimental::gui
         /// Takes the page of a tab dropped here from another view (a TabView's): the page goes
         /// to it at an index, and its tab comes with it.
         void SetPageAdopter(core::Function<void(Node& page, i32 index)> adopter) { m_pageAdopter = core::Move(adopter); }
+        /// Asked when a tab of its group is offered at `index` (accepted already): it may refuse it,
+        /// saying why, or say what the drop would do (the query's Reason). An owner that keeps where
+        /// tabs are elsewhere (docking) answers with its own rules.
+        void SetOnTabOffered(core::Function<void(DropQuery& query, Tab& tab, i32 index)> offered) { m_onTabOffered = core::Move(offered); }
+        /// Takes a dropped tab over: the bar moves nothing, the taker does (`index` counted with every
+        /// tab where it is, the dropped one too when it is this bar's).
+        void SetTabTaker(core::Function<void(Tab& tab, i32 index)> taker) { m_tabTaker = core::Move(taker); }
 
         // === Callbacks ===
         /// The user selected a tab (the `change` event's).
@@ -590,6 +606,8 @@ export namespace experimental::gui
         f32 m_tearDistance = 32.0f;
         i32 m_dropIndex = -1;
         core::Function<void(Node&, i32)> m_pageAdopter;
+        core::Function<void(DropQuery&, Tab&, i32)> m_onTabOffered;
+        core::Function<void(Tab&, i32)> m_tabTaker;
     };
 
     // === Tab ===
@@ -747,6 +765,11 @@ export namespace experimental::gui
         if (from == nullptr || index < 0)
             return;
         const core::RefPtr<Tab> keep(tab);
+        if (m_tabTaker)
+        {
+            m_tabTaker(*tab, index);
+            return;
+        }
         if (from == this)
         {
             // Within the strip: before the tab at `index` (its own place counted out).

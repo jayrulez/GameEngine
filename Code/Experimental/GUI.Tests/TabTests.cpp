@@ -526,6 +526,59 @@ TEST_CASE("tabs: a tab dragged out of its strip tears out as a drag that a strip
     CHECK(bottom->GetDropIndex() == -1);
 }
 
+TEST_CASE("tabs: an owner answers a tab offered to a strip (a refusal with its reason) and takes a dropped one over")
+{
+    auto root = MakeRoot();
+    auto top = BarAt(*root, 10.0f, u8"docs");
+    auto bottom = BarAt(*root, 150.0f, u8"docs");
+    Tab* a = AddSizedTab(*top, u8"A");
+    AddSizedTab(*top, u8"B");
+    AddSizedTab(*bottom, u8"X");
+    AddSizedTab(*bottom, u8"Y");
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    bool refuse = true;
+    Tab* offered = nullptr;
+    bottom->SetOnTabOffered([&](DropQuery& query, Tab& tab, core::i32 index)
+    {
+        offered = &tab;
+        if (refuse)
+            query.Refuse(core::StringView(u8"no room"));
+        else
+            query.Reason = core::Format(u8"to {}", index);
+    });
+    Tab* taken = nullptr;
+    core::i32 takenAt = -1;
+    bottom->SetTabTaker([&](Tab& tab, core::i32 index)
+    {
+        taken = &tab;
+        takenAt = index;
+    });
+
+    const core::Float2 start = CentreOf(*a);
+    d.InjectMouseDown(start, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{start.x, start.y + 60.0f});
+    REQUIRE(d.IsDragging());
+    const Rect y = bottom->GetTab(1)->GetScreenBounds();
+    const core::Float2 at{y.x + 10.0f, y.y + 10.0f};
+    d.InjectMouseMove(at);
+    CHECK(offered == a);
+    CHECK(d.GetDropTarget() == nullptr);
+    CHECK(d.GetDropReason() == core::StringView(u8"no room"));
+    CHECK(bottom->GetDropIndex() == -1); // no mark where it may not go
+    refuse = false;
+    d.InjectMouseMove(core::Float2{at.x + 1.0f, at.y});
+    CHECK(d.GetDropTarget() == bottom.Get());
+    CHECK(d.GetDropReason() == core::StringView(u8"to 1"));
+    CHECK(bottom->GetDropIndex() == 1);
+    d.InjectMouseUp(core::Float2{at.x + 1.0f, at.y}, MouseButton::Left);
+    CHECK(taken == a);
+    CHECK(takenAt == 1);
+    CHECK(top->GetTabCount() == 2); // the bar moved nothing
+    CHECK(bottom->GetTabCount() == 2);
+    CHECK(bottom->GetDropIndex() == -1);
+}
+
 TEST_CASE("tabs: a tab torn out of one tab view and dropped on another of its group brings its page")
 {
     auto root = MakeRoot();

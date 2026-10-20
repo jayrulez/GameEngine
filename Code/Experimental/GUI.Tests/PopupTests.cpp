@@ -556,3 +556,21 @@ TEST_CASE("popups: one sized by its content grows when its content does (a toolt
     (void)root->UpdateLayout();
     CHECK(popup->GetSize().x == doctest::Approx(150.0f));
 }
+
+TEST_CASE("popups: one open that goes back home on close does not keep its root alive")
+{
+    // Its home is the root itself, which owns the dispatcher holding the entry: a strong reference
+    // there would make a cycle, and a GUI closed with the popup open would never be freed.
+    auto root = Make<SceneRoot>(Make<GUIContext>());
+    const core::WeakRefPtr<SceneRoot> weak(root);
+    auto screen = Make<Panel>();
+    root->AddChild(screen.Get());
+    PopupOptions options;
+    options.Kind = PopupKind::Manual;
+    options.Modal = true;
+    options.ReturnHome = true;
+    root->GetEventDispatcher()->OpenPopup(*root, *screen, core::Move(options));
+    REQUIRE(root->GetEventDispatcher()->IsPopupOpen(*screen));
+    root = core::RefPtr<SceneRoot>{};
+    CHECK(weak.Expired());
+}

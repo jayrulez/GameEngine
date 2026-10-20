@@ -950,7 +950,7 @@ export namespace experimental::gui
             PopupEntry entry;
             if (options.ReturnHome && popup.GetParent() != nullptr)
             {
-                entry.Home = core::RefPtr<Node>(popup.GetParent());
+                entry.Home = popup.GetParent()->TakeElementRef();
                 entry.HomeIndex = popup.GetParent()->GetChildIndex(&popup);
             }
             if (popup.GetParent() != &owner)
@@ -2143,7 +2143,9 @@ export namespace experimental::gui
             mutable core::Float2 Size{0.0f, 0.0f}; // its own size, which placement shrinks from
             Array<Node::ElementRef> SavedFocus;  // the focus it took, then the nodes holding it
             NavScope ScopeBefore = NavScope::None;
-            core::RefPtr<Node> Home; // where it goes back to when it closes (ReturnHome)
+            // Where it goes back to when it closes (ReturnHome): weak, since it may be this root
+            // itself, which owns this dispatcher (a strong reference would keep the root alive).
+            Node::ElementRef Home{};
             usize HomeIndex = 0;
         };
         Array<PopupEntry> m_popups; // the top layer, bottom first
@@ -2379,8 +2381,9 @@ export namespace experimental::gui
             const bool focusInside = m_focusNode == nullptr || IsInSubtree(m_focusNode, popup.Get());
             Demote(*popup, entry);
             popup->RemoveFromParent(); // a closed popup leaves the tree; its owner keeps it
-            if (entry.Home) // or it goes back where it stood (ReturnHome)
-                (void)entry.Home->AddChildAt(popup.Get(), core::Min(entry.HomeIndex, entry.Home->ChildCount()));
+            // Or it goes back where it stood (ReturnHome), while that is still there.
+            if (Node* home = entry.Home.table != nullptr ? entry.Home.table->Resolve(entry.Home.slot, entry.Home.generation) : nullptr)
+                (void)home->AddChildAt(popup.Get(), core::Min(entry.HomeIndex, home->ChildCount()));
             if (focusInside && !entry.SavedFocus.IsEmpty())
                 RestoreFocus(entry, nullptr);
             if (entry.Options.OnClosed)

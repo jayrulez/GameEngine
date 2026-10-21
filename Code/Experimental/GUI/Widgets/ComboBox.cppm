@@ -13,6 +13,9 @@
 // focused on the current item, where the arrows move and Return picks; closed, Up and Down step the
 // selection (given back past the first and the last, so focus moves on), and a letter or a digit
 // selects the next item starting with it.
+//
+// With nothing selected (-1: none yet, or the values it stands for differ, a property grid's
+// mixed state) it shows its placeholder in the placeholder's colour.
 
 module;
 #include "Core/Prelude.h"
@@ -73,7 +76,7 @@ export namespace experimental::gui
             if (m_selected != -1)
             {
                 m_selected = -1;
-                m_text.SetString(core::StringView{});
+                ShowSelection();
                 m_selectedChanged.Notify();
                 Invalidate();
             }
@@ -93,14 +96,15 @@ export namespace experimental::gui
                        ? m_items[static_cast<usize>(m_selected)].AsView()
                        : core::StringView{};
         }
+        /// Selects `index`, or none with -1.
         void SetSelectedIndex(i32 index)
         {
-            if (index < 0 || index >= static_cast<i32>(m_items.Size()))
+            if (index < -1 || index >= static_cast<i32>(m_items.Size()))
                 return;
             if (index == m_selected)
                 return;
             m_selected = index;
-            m_text.SetString(m_items[static_cast<usize>(index)].AsView());
+            ShowSelection();
             Invalidate();
             m_selectedChanged.Notify();
             if (m_onChanged)
@@ -129,6 +133,19 @@ export namespace experimental::gui
         [[nodiscard]] ListBox* GetDropdown() const noexcept { return m_dropdown.Get(); }
         void SetItemHeight(f32 height) { m_itemHeight = height; }
 
+        /// What shows while nothing is selected (`placeholder`).
+        void SetPlaceholder(const core::String& text)
+        {
+            m_placeholder = text;
+            ShowSelection();
+        }
+        [[nodiscard]] core::String GetPlaceholder() const { return m_placeholder; }
+        void SetPlaceholderColor(Color color)
+        {
+            m_placeholderColor = color;
+            ShowSelection();
+        }
+
         /// Its widest item and the arrow beside it, one line of its font tall (E2).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
         {
@@ -154,7 +171,7 @@ export namespace experimental::gui
             m_text.SetFont(GetFont());
             m_text.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
             m_text.SetDirection(TextDirectionFor());
-            m_text.SetColor(GetTextColor());
+            ShowSelection();
             m_arrowColor = GetTextColor();
             if (m_dropdown)
                 ShareTextStyle(*m_dropdown, false);
@@ -245,6 +262,15 @@ export namespace experimental::gui
         }
 
     private:
+        // The selected item in the text's colour, or the placeholder in its own.
+        void ShowSelection()
+        {
+            const bool none = m_selected < 0 || static_cast<usize>(m_selected) >= m_items.Size();
+            m_text.SetString(none ? m_placeholder.AsView() : m_items[static_cast<usize>(m_selected)].AsView());
+            m_text.SetColor(none ? m_placeholderColor : GetTextColor());
+            Invalidate();
+        }
+
         void BuildDropdown()
         {
             if (m_dropdown)
@@ -297,6 +323,8 @@ export namespace experimental::gui
         f32 m_dropdownMaxHeight = 160.0f;
         Color m_boxColor{0.18f, 0.20f, 0.25f, 1.0f};
         Color m_arrowColor{0.75f, 0.80f, 0.86f, 1.0f};
+        Color m_placeholderColor{0.55f, 0.58f, 0.62f, 1.0f}; // a text field's
+        core::String m_placeholder;
         core::Function<void(i32)> m_onChanged;
         mutable Observable m_selectedChanged;
     };

@@ -163,6 +163,82 @@ TEST_CASE("number: a press and a drag scrubs it; Shift fine, Ctrl coarse")
     b.D().InjectMouseUp(core::Float2{70.0f, 12.0f}, MouseButton::Left);
 }
 
+TEST_CASE("number: Escape mid-scrub puts the value back and reports the cancel")
+{
+    Bed b;
+    b.field->SetValue(3.0);
+    int cancels = 0;
+    b.field->SetOnValueCancelled([&cancels]() { ++cancels; });
+    b.D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
+    b.D().InjectMouseMove(core::Float2{50.0f, 12.0f});
+    CHECK(b.field->GetValue() == doctest::Approx(8.0));
+    b.D().InjectKeyDown(Bed::K(KeyCode::Escape));
+    CHECK(b.field->GetValue() == doctest::Approx(3.0));
+    CHECK(b.field->GetText() == core::StringView(u8"3"));
+    CHECK(cancels == 1);
+    b.D().InjectMouseMove(core::Float2{90.0f, 12.0f}); // the press no longer scrubs
+    b.D().InjectMouseUp(core::Float2{90.0f, 12.0f}, MouseButton::Left);
+    CHECK(b.field->GetValue() == doctest::Approx(3.0));
+    CHECK(b.changes == 0);
+    CHECK_FALSE(b.field->IsEditing());
+
+    // Escape on a press not yet a scrub cancels nothing that changed.
+    b.D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
+    b.D().InjectKeyDown(Bed::K(KeyCode::Escape));
+    b.D().InjectMouseUp(core::Float2{30.0f, 12.0f}, MouseButton::Left);
+    CHECK(cancels == 1);
+}
+
+TEST_CASE("number: mixed, no number shows, and the user's next change commits even the value it held")
+{
+    Bed b;
+    b.field->SetPlaceholder(core::StringView(u8"Mixed"));
+    b.field->SetValue(4.0);
+    b.field->SetMixed(true);
+    CHECK(b.field->IsMixed());
+    CHECK(b.field->GetText().Size() == 0u);
+
+    // A press let go and Return with nothing typed: still mixed, nothing committed.
+    b.ClickToEdit();
+    b.D().InjectKeyDown(Bed::K(KeyCode::Return));
+    CHECK(b.field->IsMixed());
+    CHECK(b.changes == 0);
+
+    // Typed: the value it already held is committed all the same.
+    b.D().InjectText(core::StringView(u8"4"));
+    b.D().InjectKeyDown(Bed::K(KeyCode::Return));
+    CHECK_FALSE(b.field->IsMixed());
+    CHECK(b.field->GetValue() == doctest::Approx(4.0));
+    CHECK(b.changes == 1);
+
+    // A scrub from mixed, given up: mixed again.
+    b.field->SetValue(4.0);
+    b.field->SetMixed(true);
+    b.other->RequestFocus();
+    b.D().InjectMouseDown(core::Float2{30.0f, 12.0f}, MouseButton::Left);
+    b.D().InjectMouseMove(core::Float2{50.0f, 12.0f});
+    CHECK_FALSE(b.field->IsMixed());
+    b.D().InjectKeyDown(Bed::K(KeyCode::Escape));
+    CHECK(b.field->IsMixed());
+    CHECK(b.field->GetText().Size() == 0u);
+    b.D().InjectMouseUp(core::Float2{50.0f, 12.0f}, MouseButton::Left);
+
+    // SetValue clears it.
+    b.field->SetValue(2.0);
+    CHECK_FALSE(b.field->IsMixed());
+    CHECK(b.field->GetText() == core::StringView(u8"2"));
+}
+
+TEST_CASE("number: with wheel steps off, the wheel goes on to what scrolls")
+{
+    Bed b;
+    b.field->SetStepsOnWheel(false);
+    b.field->RequestFocus();
+    b.D().InjectMouseWheel(core::Float2{30.0f, 12.0f}, core::Float2{0.0f, 1.0f});
+    CHECK(b.field->GetValue() == doctest::Approx(0.0));
+    CHECK(b.changes == 0);
+}
+
 TEST_CASE("number: markup sets its range, its form and its value")
 {
     RegisterGuiElements();

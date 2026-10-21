@@ -17,6 +17,9 @@
 // - Its arrows (repeat buttons, the button core's) step it, as do Up and Down (Page Up and Down a
 //   page) and the wheel while it is focused.
 // - A value set from code reports nothing but to bindings, as a range's does.
+// - Mixed (several objects' values differing, a property grid's): no number shows, its placeholder
+//   does, and whatever the user does next sets one, even the value it holds.
+// - Escape during a scrub puts the value back as it was before the press and reports the cancel.
 
 module;
 #include "Core/Prelude.h"
@@ -211,6 +214,8 @@ export namespace experimental::gui
         /// Sets the value from code: constrained, shown, reported to bindings, no events.
         void SetValue(f64 value)
         {
+            m_mixed = false;
+            m_commitAlways = false;
             if (Apply(value))
                 m_committedValue = m_range.Value;
             ShowValue();
@@ -268,6 +273,23 @@ export namespace experimental::gui
         /// A change the user committed (a typed value, a step, a scrub's release).
         void SetOnValueChanged(core::Function<void(f64)> callback) { m_onChanged = core::Move(callback); }
 
+        /// Neither value shown: the values it stands for differ. Set after SetValue, which clears it.
+        void SetMixed(bool mixed)
+        {
+            if (m_mixed == mixed)
+                return;
+            m_mixed = mixed;
+            m_commitAlways = false;
+            m_committedValue = m_range.Value;
+            ShowValue();
+        }
+        [[nodiscard]] bool IsMixed() const noexcept { return m_mixed; }
+        /// Whether the wheel steps it while it is focused (on); off, the wheel goes on to what scrolls.
+        void SetStepsOnWheel(bool steps) noexcept { m_stepsOnWheel = steps; }
+        [[nodiscard]] bool StepsOnWheel() const noexcept { return m_stepsOnWheel; }
+        /// A scrub given up with Escape: the value is back as it was before it.
+        void SetOnValueCancelled(core::Function<void()> callback) { m_onCancelled = core::Move(callback); }
+
         /// Being edited as text (typed into, or a press let go on it); otherwise a press scrubs.
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
         [[nodiscard]] SpinButton* GetUpButton() const noexcept { return m_up.Get(); }
@@ -302,6 +324,8 @@ export namespace experimental::gui
                 text = Trim(text.SubStr(0, text.Size() - m_suffix.Size()));
             if (const Optional<f64> v = EvaluateExpression(text); v.HasValue())
                 ChangeByUser(v.Value(), false);
+            else if (m_mixed)
+                return; // nothing typed into a mixed field: still mixed
             ShowValue();
             CommitValue();
         }
@@ -311,6 +335,12 @@ export namespace experimental::gui
             if (event.Target == this && event.Modifiers == 0 && IsTreeEnabled())
             {
                 const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+                if (key == KeyCode::Escape && m_pressing)
+                {
+                    CancelScrub();
+                    event.Handled = true;
+                    return;
+                }
                 f64 by = 0.0;
                 if (key == KeyCode::Up)
                     by = m_range.KeyStep();
@@ -338,7 +368,7 @@ export namespace experimental::gui
         }
         void OnMouseWheel(const WheelEvent& event) override
         {
-            if (!IsFocused() || event.Delta.y == 0.0f)
+            if (!m_stepsOnWheel || !IsFocused() || event.Delta.y == 0.0f)
                 return;
             StepValue(m_range.KeyStep() * static_cast<f64>(event.Delta.y));
             event.Handled = true;
@@ -358,6 +388,7 @@ export namespace experimental::gui
             m_scrubbing = false;
             m_pressX = event.Position.x;
             m_scrubFrom = m_range.Value;
+            m_scrubFromMixed = m_mixed;
         }
         void OnMouseMove(const MouseEvent& event) override
         {
@@ -449,8 +480,9 @@ export namespace experimental::gui
             if (m_integer)
                 value = static_cast<f64>(static_cast<i64>(value + (value < 0.0 ? -0.5 : 0.5)));
             value = m_range.Constrain(value);
-            if (value == m_range.Value)
+            if (value == m_range.Value && !m_mixed)
                 return false;
+            m_mixed = false; // the user set one value, whatever it is
             m_range.Value = value;
             m_valueChanged.Notify();
             return true;
@@ -471,8 +503,11 @@ export namespace experimental::gui
         // The user moved it: `input`, and `change` now or at the gesture's end.
         void ChangeByUser(f64 value, bool reportInput)
         {
+            const bool wasMixed = m_mixed;
             if (!Apply(value))
                 return;
+            if (wasMixed)
+                m_commitAlways = true; // committed even at the value it held
             if (reportInput)
             {
                 if (m_onChanging)
@@ -482,8 +517,9 @@ export namespace experimental::gui
         }
         void CommitValue()
         {
-            if (m_range.Value == m_committedValue)
+            if (m_range.Value == m_committedValue && !m_commitAlways)
                 return;
+            m_commitAlways = false;
             m_committedValue = m_range.Value;
             if (m_onChanged)
                 m_onChanged(m_range.Value);
@@ -500,8 +536,27 @@ export namespace experimental::gui
             ShowValue();
             CommitValue();
         }
-        // The text shows the value (and is the committed text, so the field reports no edit).
-        void ShowValue() { SetText(FormatValue(m_range.Value).AsView()); }
+        // The text shows the value (and is the committed text, so the field reports no edit);
+        // mixed, it is empty and the placeholder shows.
+        void ShowValue() { SetText(m_mixed ? core::StringView{} : FormatValue(m_range.Value).AsView()); }
+        // Escape mid-scrub: the value and the mixed state back, the press over, the cancel told.
+        void CancelScrub()
+        {
+            const bool scrubbed = m_scrubbing;
+            m_pressing = false;
+            m_scrubbing = false;
+            if (EventDispatcher* dispatcher = GetEventDispatcher())
+                dispatcher->ReleasePointer(*this);
+            if (!scrubbed)
+                return;
+            Apply(m_scrubFrom);
+            m_mixed = m_scrubFromMixed;
+            m_commitAlways = false;
+            m_committedValue = m_range.Value;
+            ShowValue();
+            if (m_onCancelled)
+                m_onCancelled();
+        }
 
         RangeValue m_range;
         f64 m_committedValue = 0.0;
@@ -509,6 +564,10 @@ export namespace experimental::gui
         bool m_editing = false;
         bool m_pressing = false;  // a press not yet a click or a scrub
         bool m_scrubbing = false;
+        bool m_mixed = false;
+        bool m_scrubFromMixed = false;
+        bool m_commitAlways = false; // a mixed field's first change commits whatever its value
+        bool m_stepsOnWheel = true;
         f32 m_pressX = 0.0f;
         f64 m_scrubFrom = 0.0;
         core::String m_prefix;
@@ -518,5 +577,6 @@ export namespace experimental::gui
         core::RefPtr<SpinButton> m_down;
         core::Function<void(f64)> m_onChanging;
         core::Function<void(f64)> m_onChanged;
+        core::Function<void()> m_onCancelled;
     };
 }

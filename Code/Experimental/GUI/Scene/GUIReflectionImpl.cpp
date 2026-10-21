@@ -1418,6 +1418,9 @@ namespace experimental::gui
         builder.AccessorProperty<&ComboBox::GetSelectedIndex, &ComboBox::SetSelectedIndex>("selected")
             .PropAttribute("css", core::String(u8"selected"))
             .PropAttribute("twoWay", true); // the user picks: a binding may write it back
+        builder.AccessorProperty<&ComboBox::GetPlaceholder, &ComboBox::SetPlaceholder>("placeholder")
+            .PropAttribute("css", core::String(u8"placeholder"))
+            .PropAttribute("translatable", true);
         builder.Method<&ElementOf<ComboBox>, ComboBox, Node>("of");
         builder.Creator();
     }

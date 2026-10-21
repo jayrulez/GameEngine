@@ -51,6 +51,24 @@ TEST_CASE("combobox: item management and selection")
     CHECK(changes == 1);
 }
 
+TEST_CASE("combobox: -1 selects none, and its placeholder shows")
+{
+    auto cb = Make<ComboBox>();
+    cb->AddItem(core::StringView(u8"One"));
+    cb->AddItem(core::StringView(u8"Two"));
+    cb->SetPlaceholder(core::String(u8"Mixed"));
+    cb->SetSelectedIndex(1);
+    int changes = 0, last = 0;
+    cb->SetOnSelectionChanged([&](int i) { ++changes; last = i; });
+    cb->SetSelectedIndex(-1);
+    CHECK(cb->GetSelectedIndex() == -1);
+    CHECK(cb->GetSelectedText().Size() == 0u);
+    CHECK(changes == 1);
+    CHECK(last == -1);
+    cb->SetSelectedIndex(-2); // not an index: nothing
+    CHECK(changes == 1);
+}
+
 TEST_CASE("combobox: click opens the dropdown; it registers as the dispatcher popup")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

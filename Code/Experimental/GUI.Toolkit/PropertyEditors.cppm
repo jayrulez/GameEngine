@@ -12,7 +12,10 @@
 //   - string: a one-line field, committed on Return or on leaving it; Escape puts back what it had;
 //   - enum: a combo box of its choices;
 //   - flags: a button naming the flags set, opening a list of check boxes, a flag that differs
-//     between the objects indeterminate; each one set or cleared alone.
+//     between the objects indeterminate; each one set or cleared alone;
+//   - Float2, Float3 and Float4 (T2): a group hinted with Core's type name, a number field per child
+//     on its one row, each labelled with its child's name and editing its child's path, so each is
+//     mixed and scrubbed on its own.
 // Mixed, a field shows the placeholder "Mixed" and a button says so.
 
 module;
@@ -379,9 +382,97 @@ export namespace experimental::gui
         u64 m_mixedBits = 0;
     };
 
-    /// Registers the T1 editors with `registry`: bool, integer, float, string, enum and flags.
+    /// A group's number children side by side on its row (Float2, Float3, Float4): each a number
+    /// editor of its own path after its name.
+    class FloatsPropertyEditor : public PropertyEditor
+    {
+        RTTI_OBJECT(FloatsPropertyEditor, PropertyEditor)
+    public:
+        FloatsPropertyEditor() : m_labels(MemoryAllocator()), m_fields(MemoryAllocator())
+        {
+            AddClass(core::StringView(u8"floats"));
+            EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Row;
+                s.AlignItems = Align::Stretch;
+                s.ColumnGap = 6.0f;
+            });
+        }
+        [[nodiscard]] usize GetPartCount() const noexcept { return m_shown; }
+        [[nodiscard]] NumberPropertyEditor* GetPart(usize index) const { return index < m_shown ? m_fields[index].Get() : nullptr; }
+        [[nodiscard]] Label* GetPartLabel(usize index) const { return index < m_shown ? m_labels[index].Get() : nullptr; }
+
+    protected:
+        void OnBind(const PropertyInfo&, const PropertyValue&) override
+        {
+            IPropertyEditHost* host = GetHost();
+            m_shown = 0;
+            core::Array<PropertyInfo> parts(MemoryAllocator());
+            if (host != nullptr)
+                host->GetChildProperties(GetPath(), parts);
+            for (PropertyInfo& part : parts)
+            {
+                if (!part.Visible || (part.Kind != PropertyKind::Float && part.Kind != PropertyKind::Integer))
+                    continue;
+                if (m_shown == m_fields.Size())
+                    AddPart();
+                const core::String path = JoinPropertyPath(GetPath(), part.Name.AsView());
+                part.ReadOnly = part.ReadOnly || IsReadOnly();
+                m_labels[m_shown]->SetText(part.ShownName());
+                m_fields[m_shown]->Bind(*host, path.AsView(), part, host->ReadPropertyValue(path.AsView(), part.Kind));
+                ++m_shown;
+            }
+            for (usize i = 0; i < m_fields.Size(); ++i)
+            {
+                m_labels[i]->SetDisplayed(i < m_shown);
+                m_fields[i]->SetDisplayed(i < m_shown);
+            }
+        }
+        void OnTextStyleChange() override
+        {
+            for (usize i = 0; i < m_fields.Size(); ++i)
+            {
+                ShareTextStyle(*m_labels[i]);
+                ShareTextStyle(*m_fields[i]);
+            }
+        }
+
+    private:
+        void AddPart()
+        {
+            auto label = core::MakeRef<Label>(MemoryAllocator());
+            label->AddClass(core::StringView(u8"component"));
+            label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
+            label->SetHitTestVisible(false);
+            label->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
+            auto field = core::MakeRef<NumberPropertyEditor>(MemoryAllocator());
+            field->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Grow = 1.0f;
+                s.Shrink = 1.0f;
+                s.Basis = LayoutLength::Px(0.0f);
+                s.MinWidth = LayoutLength::Px(0.0f);
+            });
+            ShareTextStyle(*label);
+            ShareTextStyle(*field);
+            AddChild(label.Get());
+            AddChild(field.Get());
+            m_labels.PushBack(core::Move(label));
+            m_fields.PushBack(core::Move(field));
+        }
+
+        core::Array<core::RefPtr<Label>> m_labels;
+        core::Array<core::RefPtr<NumberPropertyEditor>> m_fields;
+        usize m_shown = 0;
+    };
+
+    /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
+    /// by kind (T1); Float2, Float3 and Float4 by hint (T2).
     inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
     {
+        const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
+        for (const core::StringView hint : floats)
+            registry.RegisterHint(hint, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FloatsPropertyEditor>(a); }, true);
         registry.RegisterKind(PropertyKind::Bool, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<BoolPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Integer, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<NumberPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Float, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<NumberPropertyEditor>(a); });

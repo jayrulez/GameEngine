@@ -33,6 +33,9 @@ export namespace experimental::gui
         virtual void PreviewPropertyEdit(core::StringView path, const PropertyWrite& write) = 0;
         virtual void CommitPropertyEdit(core::StringView path, const PropertyWrite& write) = 0;
         virtual void CancelPropertyEdit(core::StringView path) = 0;
+        /// What is under `path` and each one's value: what an editor covering its children shows.
+        virtual void GetChildProperties(core::StringView path, core::Array<PropertyInfo>& out) const = 0;
+        [[nodiscard]] virtual PropertyValue ReadPropertyValue(core::StringView path, PropertyKind kind) const = 0;
     };
 
     /// The value part of a property's row.
@@ -54,6 +57,8 @@ export namespace experimental::gui
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
 
     protected:
+        [[nodiscard]] IPropertyEditHost* GetHost() const noexcept { return m_host; }
+
         /// Shows a property and its value; read only, it shows and does not edit.
         virtual void OnBind(const PropertyInfo& info, const PropertyValue& value) = 0;
 
@@ -153,9 +158,14 @@ export namespace experimental::gui
         explicit PropertyEditorRegistry(core::IAllocator& allocator) : m_entries(allocator) {}
 
         /// The editor for properties hinted `hint`, before their kind's (replaces one of the hint).
-        void RegisterHint(core::StringView hint, PropertyEditorFactory factory) { Register(core::String(hint), false, PropertyKind::Group, core::Move(factory)); }
+        /// One that `coversChildren` shows what is under the property itself: its row has no
+        /// chevron and no rows under it (a Float3's three fields on one row).
+        void RegisterHint(core::StringView hint, PropertyEditorFactory factory, bool coversChildren = false)
+        {
+            Register(core::String(hint), false, PropertyKind::Group, core::Move(factory), coversChildren);
+        }
         /// The editor for properties of `kind` that no hint takes (replaces the kind's).
-        void RegisterKind(PropertyKind kind, PropertyEditorFactory factory) { Register(core::String{}, true, kind, core::Move(factory)); }
+        void RegisterKind(PropertyKind kind, PropertyEditorFactory factory) { Register(core::String{}, true, kind, core::Move(factory), false); }
 
         /// The editor `info` takes: by its hint, then its kind; kNoEditor when none.
         [[nodiscard]] u32 Choose(const PropertyInfo& info) const
@@ -169,6 +179,8 @@ export namespace experimental::gui
                     return static_cast<u32>(i + 1);
             return kNoEditor;
         }
+        /// Whether the editor of `type` shows what is under its property.
+        [[nodiscard]] bool CoversChildren(u32 type) const noexcept { return type != kNoEditor && type <= m_entries.Size() && m_entries[type - 1].CoversChildren; }
         /// A new editor of `type` (Choose's answer).
         [[nodiscard]] core::RefPtr<PropertyEditor> Create(u32 type, core::IAllocator& allocator) const
         {
@@ -187,17 +199,19 @@ export namespace experimental::gui
             bool ByKind = false;
             PropertyKind Kind = PropertyKind::Group;
             PropertyEditorFactory Factory;
+            bool CoversChildren = false;
         };
-        void Register(core::String hint, bool byKind, PropertyKind kind, PropertyEditorFactory factory)
+        void Register(core::String hint, bool byKind, PropertyKind kind, PropertyEditorFactory factory, bool coversChildren)
         {
             ++m_generation;
             for (Entry& entry : m_entries)
                 if (entry.ByKind == byKind && (byKind ? entry.Kind == kind : entry.Hint == hint))
                 {
                     entry.Factory = core::Move(factory);
+                    entry.CoversChildren = coversChildren;
                     return;
                 }
-            m_entries.PushBack(Entry{core::Move(hint), byKind, kind, core::Move(factory)});
+            m_entries.PushBack(Entry{core::Move(hint), byKind, kind, core::Move(factory), coversChildren});
         }
 
         core::Array<Entry> m_entries;

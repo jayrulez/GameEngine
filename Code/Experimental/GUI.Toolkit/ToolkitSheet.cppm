@@ -53,6 +53,7 @@ export namespace experimental::gui
             propertyeditor.unknown label { color: var(--text-dim); font-style: italic; }
             propertyeditor.flags button { background-color: var(--propertygrid-flags, var(--control)); color: var(--text-strong);
                                           padding: var(--space-s); text-align: start; }
+            propertyeditor.floats > label.component { color: var(--propertygrid-component, var(--text-dim)); font-size: var(--font-small); }
             propertyflagslist { background-color: var(--propertygrid-popup, var(--surface-raised)); border-radius: var(--radius-small);
                                 box-shadow: 0 4px 12px var(--shadow-color); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }

@@ -313,6 +313,17 @@ export namespace experimental::gui
         /// The path an edit is open on (empty: none).
         [[nodiscard]] core::StringView GetEditPath() const noexcept { return m_editPath.AsView(); }
 
+        // === IPropertyEditHost's reads ===
+        void GetChildProperties(core::StringView path, core::Array<PropertyInfo>& out) const override
+        {
+            if (m_source != nullptr)
+                m_source->GetProperties(path, out);
+        }
+        [[nodiscard]] PropertyValue ReadPropertyValue(core::StringView path, PropertyKind kind) const override
+        {
+            return m_source != nullptr ? experimental::gui::ReadPropertyValue(*m_source, path, kind) : PropertyValue{};
+        }
+
         // === IPropertySourceClient ===
         void OnPropertiesChanged() override { ReadProperties(); }
         void OnValuesChanged() override { m_rows.ValuesChanged(); }
@@ -388,6 +399,14 @@ export namespace experimental::gui
         bool SubtreeMatches(usize node) const;
         void AddRows(core::Array<PropertyRow>& rows, usize node, i32 depth, bool filtered) const;
         void BindRow(Node& content, const ModelIndex& index);
+        // An edit is open on `path` or on a part of it (a Float3's field).
+        [[nodiscard]] bool IsUnderEdit(core::StringView path) const
+        {
+            const core::StringView edit = m_editPath.AsView();
+            if (edit.Size() == 0 || edit.Size() < path.Size() || edit.SubStr(0, path.Size()) != path)
+                return false;
+            return edit.Size() == path.Size() || edit[path.Size()] == u8'.';
+        }
         void EndOpenEdit()
         {
             if (m_editPath.Size() == 0 || m_source == nullptr)
@@ -549,10 +568,10 @@ namespace experimental::gui
             return;
         // The row an edit is open on keeps what its editor shows: the source's values are its
         // previews, and the editor is mid-gesture.
-        const bool editing = m_editPath.Size() != 0 && m_editPath == row->Path && property->GetPath() == row->Path.AsView();
+        const bool editing = IsUnderEdit(row->Path.AsView()) && property->GetPath() == row->Path.AsView();
         property->Show(*row);
         if (PropertyEditor* editor = property->GetEditor(); editor != nullptr && !editing && m_source != nullptr)
-            editor->Bind(*this, row->Path.AsView(), row->Info, ReadPropertyValue(*m_source, row->Path.AsView(), row->Info.Kind));
+            editor->Bind(*this, row->Path.AsView(), row->Info, ReadPropertyValue(row->Path.AsView(), row->Info.Kind));
     }
 
     inline void PropertyGrid::ReadProperties()
@@ -625,10 +644,12 @@ namespace experimental::gui
         row.Path = node.Path;
         row.Info = node.Info;
         row.Depth = depth;
-        row.HasChildren = node.Info.Kind == PropertyKind::Group && !node.Children.IsEmpty();
-        row.Open = row.HasChildren && (IsOpen(node.Path.AsView()) || !matches);
-        // A group has no editor unless a hint asks for one (T2's vectors), which may be none.
+        // A group has no editor unless a hint asks for one (a Float3), which may be none; an
+        // editor covering the children shows them on this row, so none go under it.
         row.Type = node.Info.Kind == PropertyKind::Group && node.Info.Hint.Size() == 0 ? kGroupRow : m_editors.Choose(node.Info);
+        const bool covered = m_editors.CoversChildren(row.Type);
+        row.HasChildren = node.Info.Kind == PropertyKind::Group && !node.Children.IsEmpty() && !covered;
+        row.Open = row.HasChildren && (IsOpen(node.Path.AsView()) || !matches);
         row.Id = core::HashBytes(node.Path.Data(), node.Path.Size());
         rows.PushBack(core::Move(row));
         if (rows.Back().Open)

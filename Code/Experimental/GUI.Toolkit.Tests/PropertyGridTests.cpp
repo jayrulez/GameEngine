@@ -305,3 +305,50 @@ TEST_CASE("property grid: an application's editor for a hint, a hint none takes,
     CHECK(grid->GetLabelRatio() == doctest::Approx(0.3f));
     CHECK(grid->GetIndentWidth() == doctest::Approx(20.0f));
 }
+
+TEST_CASE("property grid: a Float3 is one row of a field per part, each mixed and edited on its own")
+{
+    Bed bed(2);
+    bed.Add(u8"position", PropertyKind::Group, {}, u8"Transform").Hint = core::String(u8"Float3");
+    bed.Add(u8"position.x", PropertyKind::Float, Variant(1.0)).DisplayName = core::String(u8"X");
+    bed.Add(u8"position.y", PropertyKind::Float, Variant(2.0)).DisplayName = core::String(u8"Y");
+    bed.Add(u8"position.z", PropertyKind::Float, Variant(3.0)).DisplayName = core::String(u8"Z");
+    bed.bag.SetValue(SV(u8"position.y"), 1, Variant(7.0)); // the objects differ in Y alone
+    core::Array<PropertyBag::Commit> commits(core::DefaultAllocator());
+    bed.bag.SetOnCommit([&commits](const PropertyBag::Commit& commit) { commits.PushBack(commit); });
+    bed.Show();
+
+    // One row, no chevron, nothing under it.
+    CHECK(Join(bed.Paths()) == core::String(u8"#Transform position"));
+    CHECK_FALSE(bed.grid->GetRow(1)->HasChildren);
+    FloatsPropertyEditor* editor = core::Cast<FloatsPropertyEditor>(bed.grid->FindEditor(SV(u8"position")));
+    REQUIRE(editor != nullptr);
+    REQUIRE(editor->GetPartCount() == 3u);
+    CHECK(editor->GetPartLabel(0)->GetText() == SV(u8"X"));
+    CHECK(editor->GetPartLabel(2)->GetText() == SV(u8"Z"));
+    NumberField& x = *editor->GetPart(0)->GetField();
+    CHECK_FALSE(x.IsMixed());
+    CHECK(x.GetValue() == doctest::Approx(1.0));
+    CHECK(editor->GetPart(1)->GetField()->IsMixed());
+    CHECK_FALSE(editor->GetPart(2)->GetField()->IsMixed());
+
+    // A scrub of X writes X alone, on both, and keeps the row while it goes.
+    x.SetStep(1.0);
+    const core::Float2 at = Centre(x) - core::Float2{10.0f, 0.0f};
+    bed.D().InjectMouseDown(at, MouseButton::Left);
+    bed.D().InjectMouseMove(at + core::Float2{8.0f, 0.0f});
+    bed.Frame();
+    CHECK(bed.grid->GetEditPath() == SV(u8"position.x"));
+    CHECK(bed.grid->FindEditor(SV(u8"position")) == editor);
+    bed.D().InjectMouseUp(at + core::Float2{8.0f, 0.0f}, MouseButton::Left);
+    bed.Frame();
+    REQUIRE(commits.Size() == 1u);
+    CHECK(commits[0].Path == core::String(u8"position.x"));
+    CHECK(bed.bag.GetValue(SV(u8"position.x"), 1).AsFloat() == doctest::Approx(3.0));
+    CHECK(bed.bag.GetValue(SV(u8"position.y"), 1).AsFloat() == doctest::Approx(7.0)); // Y kept its differences
+    CHECK(editor->GetPart(1)->GetField()->IsMixed());
+
+    // A search for a part shows the row that holds it.
+    bed.grid->SetFilter(SV(u8"position.z"));
+    CHECK(Join(bed.Paths()) == core::String(u8"#Transform position"));
+}

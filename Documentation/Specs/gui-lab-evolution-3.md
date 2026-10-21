@@ -569,6 +569,20 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     `XmlSerializer`), so GUI.Toolkit gains no dependency.
 - **T4 Colour.** An inline picker and a swatch editor on the engine's sRGB colour; HDR intensity in
   stops where a property has one; alpha; hex.
+
+  T4's design (approved by the user, 2026-10-21):
+  - **The core's** `ColorPicker` (a saturation and value square, a hue strip, an alpha strip, a hex
+    field, number fields) and `ColorSwatch` (a colour over a checkerboard, mixed as such) edit the
+    sRGB values an authored `Color` holds, in HSV; linear is never the storage. A perceptual model
+    may come later.
+  - **A colour is a value**: `PropertyKind::Color`, the `Variant`'s Color, one gesture; mixed is the
+    whole colour. Its editor is a swatch and a hex field; the swatch opens the picker as a popup,
+    a drag previews on every object, closing it puts the originals back and commits once (Godot's
+    rule), Escape cancels.
+  - **An HDR colour** (a reflected `Float4` with an `hdrColor` attribute: sRGB rgb, a linear
+    intensity in w) is a group of `color` and `intensity`, the intensity shown in exposure stops
+    (log2: 0 stops is x1), on one row: a swatch and a stops field, each its own gesture.
+  - **Alpha** shows where the colour has it: not an HDR colour's, nor a Color's with `noAlpha`.
 - **T5 Curves, gradients, the timeline.** On ruling 2's Core types, after that `master` work.
 - **T6 The node graph.** A view over a graph source.
 - **T7 The rest.** A breadcrumb bar; toasts, unless the gamekit's serve.

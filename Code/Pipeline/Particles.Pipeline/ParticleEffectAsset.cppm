@@ -85,8 +85,10 @@ export namespace pipeline{
         // v2 (2026-08-17): the cooked resource carries per-system meshRef + meshScale (Mesh render mode).
         // v3 (2026-08-18): + per-system materialRef (the effect-level material for Mesh render mode).
         // v4 (2026-08-18): materialRef -> materialRefs list (per-submesh, slot 0 = whole-mesh material).
+        // v5 (2026-10-21): curves of Core's keys and gradients; size over lifetime is `size`,
+        // `separateAxes` and `sizeY` (the cooked resource's data version 1).
         // Bumped so stale products re-cook with the new format (the strict reader needs the new keys).
-        [[nodiscard]] u32 Version() const override { return 4; }
+        [[nodiscard]] u32 Version() const override { return 5; }
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {
@@ -127,6 +129,9 @@ export namespace pipeline{
         RegisterSerializable<ParticleEffectAsset>();
     }
 
+    // Data version 0 still: version 0 cannot keep a legacy floor (ReadsDataVersionsFrom(0) is the
+    // current version only), so the old curve layout is told by its keys in the curves' and the
+    // size behaviour's Serialize until the samples are re-saved.
     RTTI_DEFINE_OBJECT(ParticleEffectAsset, "rtti::pipeline::particles")
 
     /// A new effect's content: one continuous fountain system.

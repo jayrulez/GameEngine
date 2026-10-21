@@ -259,23 +259,18 @@ namespace editor
             RowBool(g, fs.AsView(), &sh->emitFromShell, cat, page);
         }
 
-        // ---- CurveCanvas-backed float curve editor (1 or 2 channels) ----------------------------
-        // Hosts an interactive CurveCanvas as its editor view; edits write every key (value +
-        // Hermite tangents) back into the ParticleCurveFloat / ParticleCurveFloat2 and commit undo.
+        // ---- CurveCanvas-backed float curve editor ------------------------------------------
+        // Hosts an interactive CurveCanvas (foundation.ui's, which edits Hermite keys) as its editor
+        // view. A linear key goes to it with its segment's slope as both tangents, so it draws
+        // straight; edits come back as cubic keys (tangents as drawn) into the ParticleCurveFloat,
+        // and commit undo.
 
         class CurveFieldEditor final : public ui::toolkit::PropertyEditor
         {
         public:
-            // Single-channel (ParticleCurveFloat: Alpha / Rotation / Speed).
             CurveFieldEditor(StringView name, particles::ParticleCurveFloat* curve, Page page,
                              StringView key, StringView cat)
-                : ui::toolkit::PropertyEditor(name, cat), m_curve1(curve), m_page(page), m_key(key)
-            {
-            }
-            // Two-channel (ParticleCurveFloat2: Size X/Y, shared time).
-            CurveFieldEditor(StringView name, particles::ParticleCurveFloat2* curve, Page page,
-                             StringView key, StringView cat)
-                : ui::toolkit::PropertyEditor(name, cat), m_curve2(curve), m_page(page), m_key(key)
+                : ui::toolkit::PropertyEditor(name, cat), m_curve(curve), m_page(page), m_key(key)
             {
             }
 
@@ -289,25 +284,11 @@ namespace editor
                 canvas->AutoFitValueRange = true;
                 m_canvas = canvas.Get();
 
-                if (m_curve1 != nullptr)
-                {
-                    ui::toolkit::ChannelDescriptor ch;
-                    ch.Name = String(u8"V");
-                    ch.StrokeColor = Color{0.45f, 0.75f, 1.0f, 1.0f};
-                    canvas->SetChannels(Span<const ui::toolkit::ChannelDescriptor>{&ch, 1});
-                    PushFloat1(*canvas);
-                }
-                else if (m_curve2 != nullptr)
-                {
-                    canvas->LinkedTime = true;
-                    ui::toolkit::ChannelDescriptor chs[2];
-                    chs[0].Name = String(u8"X");
-                    chs[0].StrokeColor = Color{0.9f, 0.4f, 0.4f, 1.0f};
-                    chs[1].Name = String(u8"Y");
-                    chs[1].StrokeColor = Color{0.4f, 0.9f, 0.5f, 1.0f};
-                    canvas->SetChannels(Span<const ui::toolkit::ChannelDescriptor>{chs, 2});
-                    PushFloat2(*canvas);
-                }
+                ui::toolkit::ChannelDescriptor ch;
+                ch.Name = String(u8"V");
+                ch.StrokeColor = Color{0.45f, 0.75f, 1.0f, 1.0f};
+                canvas->SetChannels(Span<const ui::toolkit::ChannelDescriptor>{&ch, 1});
+                PushKeys(*canvas);
 
                 CurveFieldEditor* self = this;
                 canvas->OnEditEnd.Add([self]() { self->WriteBack(); });
@@ -327,14 +308,26 @@ namespace editor
             }
 
         private:
-            void PushFloat1(ui::toolkit::CurveCanvas& c)
+            void PushKeys(ui::toolkit::CurveCanvas& c)
             {
                 Array<ui::toolkit::CurveCanvas::Key> keys;
-                for (i32 i = 0; i < m_curve1->keyCount; ++i)
+                const i32 n = Min(m_curve->keyCount, particles::kMaxCurveKeys);
+                for (i32 i = 0; i < n; ++i)
                 {
-                    const particles::CurveKeyFloat& k = m_curve1->keys[i];
-                    keys.PushBack(
-                        ui::toolkit::CurveCanvas::Key{k.time, k.value, k.tangentIn, k.tangentOut});
+                    const CurveKey& k = m_curve->keys[i];
+                    f32 in = k.tangentIn, out = k.tangentOut;
+                    // A linear segment as a Hermite one: both its ends at its slope.
+                    const auto slope = [&](i32 a) -> f32
+                    {
+                        const CurveKey& x = m_curve->keys[a];
+                        const CurveKey& y = m_curve->keys[a + 1];
+                        return y.time - x.time > 1e-6f ? (y.value - x.value) / (y.time - x.time) : 0.0f;
+                    };
+                    if (k.interpolation != CurveKeyInterpolation::Cubic && i + 1 < n)
+                        out = slope(i);
+                    if (i > 0 && m_curve->keys[i - 1].interpolation != CurveKeyInterpolation::Cubic)
+                        in = slope(i - 1);
+                    keys.PushBack(ui::toolkit::CurveCanvas::Key{k.time, k.value, in, out});
                 }
                 if (keys.IsEmpty())
                 {
@@ -343,71 +336,33 @@ namespace editor
                 }
                 c.SetKeys(0, Span<const ui::toolkit::CurveCanvas::Key>{keys.Data(), keys.Size()});
             }
-            void PushFloat2(ui::toolkit::CurveCanvas& c)
-            {
-                Array<ui::toolkit::CurveCanvas::Key> kx, ky;
-                for (i32 i = 0; i < m_curve2->keyCount; ++i)
-                {
-                    kx.PushBack(ui::toolkit::CurveCanvas::Key{
-                        m_curve2->times[i], m_curve2->values[i].x, m_curve2->tangentsIn[i].x,
-                        m_curve2->tangentsOut[i].x});
-                    ky.PushBack(ui::toolkit::CurveCanvas::Key{
-                        m_curve2->times[i], m_curve2->values[i].y, m_curve2->tangentsIn[i].y,
-                        m_curve2->tangentsOut[i].y});
-                }
-                if (kx.IsEmpty())
-                {
-                    kx.PushBack(ui::toolkit::CurveCanvas::Key{0.0f, 0.1f});
-                    kx.PushBack(ui::toolkit::CurveCanvas::Key{1.0f, 0.1f});
-                    ky.PushBack(ui::toolkit::CurveCanvas::Key{0.0f, 0.1f});
-                    ky.PushBack(ui::toolkit::CurveCanvas::Key{1.0f, 0.1f});
-                }
-                c.SetKeys(0, Span<const ui::toolkit::CurveCanvas::Key>{kx.Data(), kx.Size()});
-                c.SetKeys(1, Span<const ui::toolkit::CurveCanvas::Key>{ky.Data(), ky.Size()});
-            }
             void WriteBack()
             {
                 if (m_canvas == nullptr)
                 {
                     return;
                 }
-                if (m_curve1 != nullptr)
+                const i32 n = Min(m_canvas->GetKeyCount(0), particles::kMaxCurveKeys);
+                m_curve->keyCount = n;
+                for (i32 i = 0; i < n; ++i)
                 {
-                    const i32 n = Min(m_canvas->GetKeyCount(0), particles::kMaxCurveKeys);
-                    m_curve1->keyCount = n;
-                    for (i32 i = 0; i < n; ++i)
-                    {
-                        const ui::toolkit::CurveCanvas::Key k = m_canvas->GetKey(0, i);
-                        m_curve1->keys[i] =
-                            particles::CurveKeyFloat{k.Time, k.Value, k.TangentIn, k.TangentOut};
-                    }
-                }
-                else if (m_curve2 != nullptr)
-                {
-                    const i32 n = Min(Min(m_canvas->GetKeyCount(0), m_canvas->GetKeyCount(1)),
-                                      particles::kMaxCurveKeys);
-                    m_curve2->keyCount = n;
-                    for (i32 i = 0; i < n; ++i)
-                    {
-                        const ui::toolkit::CurveCanvas::Key kx = m_canvas->GetKey(0, i);
-                        const ui::toolkit::CurveCanvas::Key ky = m_canvas->GetKey(1, i);
-                        m_curve2->times[i] = kx.Time;
-                        m_curve2->values[i] = Float2{kx.Value, ky.Value};
-                        m_curve2->tangentsIn[i] = Float2{kx.TangentIn, ky.TangentIn};
-                        m_curve2->tangentsOut[i] = Float2{kx.TangentOut, ky.TangentOut};
-                    }
+                    const ui::toolkit::CurveCanvas::Key k = m_canvas->GetKey(0, i);
+                    m_curve->keys[i] = CurveKey{k.Time, k.Value, k.TangentIn, k.TangentOut, CurveKeyInterpolation::Cubic,
+                                                CurveTangentMode::Broken};
                 }
                 m_page->CommitEdit(m_key.AsView());
             }
 
-            particles::ParticleCurveFloat* m_curve1 = nullptr;
-            particles::ParticleCurveFloat2* m_curve2 = nullptr;
+            particles::ParticleCurveFloat* m_curve = nullptr;
             Page m_page;
             String m_key;
             ui::toolkit::CurveCanvas* m_canvas = nullptr;
         };
 
         // ---- GradientEditor-backed color-over-lifetime editor -----------------------------------
+        // foundation.ui's GradientEditor pairs a colour with its alpha at each stop: the curve's
+        // colour and alpha stops go to it at every time either has one (sampled from the gradient),
+        // and come back as a colour stop and an alpha stop at each, its interpolation kept.
 
         class GradientFieldEditor final : public ui::toolkit::PropertyEditor
         {
@@ -426,12 +381,24 @@ namespace editor
                 grad->MaxStops = particles::kMaxCurveKeys;
                 m_grad = grad.Get();
 
-                Array<ui::toolkit::GradientEditor::Stop> stops;
-                for (i32 i = 0; i < m_curve->keyCount; ++i)
+                Array<f32> times;
+                const auto addTime = [&times](f32 t)
                 {
-                    stops.PushBack(ui::toolkit::GradientEditor::Stop{m_curve->keys[i].time,
-                                                                     m_curve->keys[i].color});
-                }
+                    for (const f32 known : times)
+                        if (Abs(known - t) < 1e-5f)
+                            return;
+                    usize at = times.Size();
+                    while (at > 0 && times[at - 1] > t)
+                        --at;
+                    times.Insert(at, t);
+                };
+                for (i32 i = 0; i < Min(m_curve->colorCount, particles::kMaxCurveKeys); ++i)
+                    addTime(m_curve->colors[i].time);
+                for (i32 i = 0; i < Min(m_curve->alphaCount, particles::kMaxCurveKeys); ++i)
+                    addTime(m_curve->alphas[i].time);
+                Array<ui::toolkit::GradientEditor::Stop> stops;
+                for (usize i = 0; i < times.Size() && stops.Size() < static_cast<usize>(particles::kMaxCurveKeys); ++i)
+                    stops.PushBack(ui::toolkit::GradientEditor::Stop{times[i], m_curve->Evaluate(times[i])});
                 if (stops.IsEmpty())
                 {
                     stops.PushBack(
@@ -464,12 +431,14 @@ namespace editor
                 {
                     return;
                 }
+                const GradientInterpolation interpolation = m_curve->interpolation;
+                *m_curve = particles::ParticleCurveColor{};
+                m_curve->interpolation = interpolation;
                 const i32 n = Min(m_grad->StopCount(), particles::kMaxCurveKeys);
-                m_curve->keyCount = n;
                 for (i32 i = 0; i < n; ++i)
                 {
                     const ui::toolkit::GradientEditor::Stop s = m_grad->GetStop(i);
-                    m_curve->keys[i] = particles::CurveKeyColor{s.Time, s.Color};
+                    m_curve->AddKey(s.Time, s.Color);
                 }
                 m_page->CommitEdit(m_key.AsView());
             }
@@ -482,16 +451,6 @@ namespace editor
 
         void RowCurveFloat(ui::toolkit::PropertyGrid& g, StringView name,
                            particles::ParticleCurveFloat* c, StringView cat, Page page)
-        {
-            String key(cat);
-            key.Append(name);
-            Add(g,
-                RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<CurveFieldEditor>(g.MemoryAllocator(), name, c, page, key.AsView(), cat)
-                        .Get()));
-        }
-        void RowCurveFloat2(ui::toolkit::PropertyGrid& g, StringView name,
-                            particles::ParticleCurveFloat2* c, StringView cat, Page page)
         {
             String key(cat);
             key.Append(name);
@@ -1953,7 +1912,10 @@ namespace editor
         }
         else if (auto* sizeCurveMod = Cast<particles::SizeOverLifetimeBehavior>(module))
         {
-            RowCurveFloat2(g, u8"Size", &sizeCurveMod->curve, cat, page);
+            // One curve for both axes; with Separate Axes, Size sets X and Size Y sets Y.
+            RowCurveFloat(g, u8"Size", &sizeCurveMod->size, cat, page);
+            RowBool(g, u8"Separate Axes", &sizeCurveMod->separateAxes, cat, page);
+            RowCurveFloat(g, u8"Size Y (separate axes)", &sizeCurveMod->sizeY, cat, page);
         }
         else if (auto* rotCurveMod = Cast<particles::RotationOverLifetimeBehavior>(module))
         {

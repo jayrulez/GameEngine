@@ -186,16 +186,43 @@ namespace foundation::particles
     }
 
     // ---- curves (count-bound key arrays) + the OverLifetime behaviors ------------------------
-    REFLECT_VALUE(CurveKeyFloat, "rtti::particles")
+    // Core's key and stop types, reflected here where the curves use them (enums by name).
+    REFLECT_ENUM(CurveKeyInterpolation, "rtti::particles")
     {
-        builder.Property<&CurveKeyFloat::time>("time")
-            .Property<&CurveKeyFloat::value>("value")
-            .Property<&CurveKeyFloat::tangentIn>("tangentIn")
-            .Property<&CurveKeyFloat::tangentOut>("tangentOut");
+        builder.Value("Constant", CurveKeyInterpolation::Constant);
+        builder.Value("Linear", CurveKeyInterpolation::Linear);
+        builder.Value("Cubic", CurveKeyInterpolation::Cubic);
     }
-    REFLECT_VALUE(CurveKeyColor, "rtti::particles")
+    REFLECT_ENUM(CurveTangentMode, "rtti::particles")
     {
-        builder.Property<&CurveKeyColor::time>("time").Property<&CurveKeyColor::color>("color");
+        builder.Value("Broken", CurveTangentMode::Broken);
+        builder.Value("Auto", CurveTangentMode::Auto);
+        builder.Value("Smooth", CurveTangentMode::Smooth);
+        builder.Value("Flat", CurveTangentMode::Flat);
+    }
+    REFLECT_ENUM(GradientInterpolation, "rtti::particles")
+    {
+        builder.Value("Srgb", GradientInterpolation::Srgb);
+        builder.Value("LinearLight", GradientInterpolation::LinearLight);
+        builder.Value("OkLab", GradientInterpolation::OkLab);
+        builder.Value("Constant", GradientInterpolation::Constant);
+    }
+    REFLECT_VALUE(CurveKey, "rtti::particles")
+    {
+        builder.Property<&CurveKey::time>("time")
+            .Property<&CurveKey::value>("value")
+            .Property<&CurveKey::tangentIn>("tangentIn")
+            .Property<&CurveKey::tangentOut>("tangentOut")
+            .Property<&CurveKey::interpolation>("interpolation")
+            .Property<&CurveKey::tangentMode>("tangentMode");
+    }
+    REFLECT_VALUE(GradientColorStop, "rtti::particles")
+    {
+        builder.Property<&GradientColorStop::time>("time").Property<&GradientColorStop::color>("color");
+    }
+    REFLECT_VALUE(GradientAlphaStop, "rtti::particles")
+    {
+        builder.Property<&GradientAlphaStop::time>("time").Property<&GradientAlphaStop::alpha>("alpha");
     }
     REFLECT_VALUE(ParticleCurveFloat, "rtti::particles")
     {
@@ -204,19 +231,11 @@ namespace foundation::particles
     }
     REFLECT_VALUE(ParticleCurveColor, "rtti::particles")
     {
-        builder.BoundedArray<&ParticleCurveColor::keys, &ParticleCurveColor::keyCount>("keys")
-            .Property<&ParticleCurveColor::keyCount>("keyCount");
-    }
-    REFLECT_VALUE(ParticleCurveFloat2, "rtti::particles")
-    {
-        // Parallel key arrays (times/values/tangents), all count-bound to keyCount.
-        builder.BoundedArray<&ParticleCurveFloat2::times, &ParticleCurveFloat2::keyCount>("times")
-            .BoundedArray<&ParticleCurveFloat2::values, &ParticleCurveFloat2::keyCount>("values")
-            .BoundedArray<&ParticleCurveFloat2::tangentsIn, &ParticleCurveFloat2::keyCount>(
-                "tangentsIn")
-            .BoundedArray<&ParticleCurveFloat2::tangentsOut, &ParticleCurveFloat2::keyCount>(
-                "tangentsOut")
-            .Property<&ParticleCurveFloat2::keyCount>("keyCount");
+        builder.BoundedArray<&ParticleCurveColor::colors, &ParticleCurveColor::colorCount>("colors")
+            .Property<&ParticleCurveColor::colorCount>("colorCount")
+            .BoundedArray<&ParticleCurveColor::alphas, &ParticleCurveColor::alphaCount>("alphas")
+            .Property<&ParticleCurveColor::alphaCount>("alphaCount")
+            .Property<&ParticleCurveColor::interpolation>("interpolation");
     }
 
     REFLECT_MEMBERS(ColorOverLifetimeBehavior, "rtti::particles")
@@ -232,7 +251,10 @@ namespace foundation::particles
     REFLECT_MEMBERS(SizeOverLifetimeBehavior, "rtti::particles")
     {
         builder.Attribute("displayName", String(u8"Size over Lifetime"))
-            .Nested<&SizeOverLifetimeBehavior::curve>("curve");
+            .Nested<&SizeOverLifetimeBehavior::size>("size")
+            .Property<&SizeOverLifetimeBehavior::separateAxes>("separateAxes")
+            .Nested<&SizeOverLifetimeBehavior::sizeY>("sizeY")
+            .PropAttribute("visibleWhen", String(u8"separateAxes"));
     }
     REFLECT_MEMBERS(RotationOverLifetimeBehavior, "rtti::particles")
     {
@@ -259,11 +281,14 @@ namespace foundation::particles
             RttiRegisterValue_CollisionPlane();
             RttiRegisterValue_CollisionSphere();
             RttiRegisterValue_CollisionBox();
-            RttiRegisterValue_CurveKeyFloat();
-            RttiRegisterValue_CurveKeyColor();
+            RttiRegisterEnum_CurveKeyInterpolation();
+            RttiRegisterEnum_CurveTangentMode();
+            RttiRegisterEnum_GradientInterpolation();
+            RttiRegisterValue_CurveKey();
+            RttiRegisterValue_GradientColorStop();
+            RttiRegisterValue_GradientAlphaStop();
             RttiRegisterValue_ParticleCurveFloat();
             RttiRegisterValue_ParticleCurveColor();
-            RttiRegisterValue_ParticleCurveFloat2();
             // The module arrays are polymorphic: register Array<RefPtr<Base>> as a polymorphic
             // container so tooling recurses into each module's concrete reflected type. Pass the
             // standard serialization create-by-type adapter (the factory flows in as function

@@ -3,10 +3,11 @@
 add_executable(Particles.Tests
     TestsMain.cpp
     ParticlesTests.cpp
+    ParticleCurveTests.cpp
 )
 
 target_link_libraries(Particles.Tests PRIVATE
-    Foundation::Particles doctest::doctest)
+    Foundation::Xml.Serialization Foundation::Particles doctest::doctest)
 
 target_compile_definitions(Particles.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

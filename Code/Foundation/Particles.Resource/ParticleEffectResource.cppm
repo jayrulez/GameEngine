@@ -368,7 +368,9 @@ export namespace foundation::particles
         RegisterSerializable<ParticleEffectResource>();
     }
 
-    RTTI_DEFINE_OBJECT(ParticleEffectResource, "rtti::particles")
+    // v1 (2026-10-21): curves of Core's keys and gradients, size as `size`/`separateAxes`/`sizeY`
+    // (cooked again: the builder's version moved).
+    RTTI_DEFINE_OBJECT_VERSIONED(ParticleEffectResource, "rtti::particles", 1)
 }
 
 export namespace foundation::particles

@@ -794,12 +794,36 @@ export namespace foundation::particles
         }
     };
 
+    // A particle's size over its life: `size` sets both axes, or, with `separateAxes`, X while
+    // `sizeY` sets Y (each a curve of its own keys). An absolute size, not a multiplier.
     class SizeOverLifetimeBehavior final : public ParticleBehavior
     {
         RTTI_OBJECT(SizeOverLifetimeBehavior, ParticleBehavior)
     public:
-        ParticleCurveFloat2 curve;
-        void Serialize(ISerializer& ar) override { core::Serialize(ar, "curve", curve); }
+        ParticleCurveFloat size;
+        bool separateAxes = false;
+        ParticleCurveFloat sizeY;
+        void Serialize(ISerializer& ar) override
+        {
+            if (ar.Mode() == SerializeMode::Read && !ar.HasKey("size"))
+            {
+                // LEGACY (removed once the samples are re-saved): one curve of Float2 keys, X and Y
+                // at shared times, written into the module's own object; every sample's X equals
+                // its Y, so X becomes `size`, and a Y that differs anywhere makes the axes separate.
+                ReadLegacyCurve(ar);
+                return;
+            }
+            // Each curve in an object of its own: a curve writes its keys into the object it is in.
+            ar.Key("size");
+            ar.BeginObject();
+            foundation::particles::Serialize(ar, size);
+            ar.EndObject();
+            core::Serialize(ar, "separateAxes", separateAxes);
+            ar.Key("sizeY");
+            ar.BeginObject();
+            foundation::particles::Serialize(ar, sizeY);
+            ar.EndObject();
+        }
         [[nodiscard]] BehaviorSupport Support() const noexcept override
         {
             return BehaviorSupport::Both;
@@ -810,19 +834,49 @@ export namespace foundation::particles
         }
         void Update(ParticleStreamContainer& streams, ParticleUpdateContext&) override
         {
-            if (!curve.IsActive())
+            if (!size.IsActive())
             {
                 return;
             }
-            CPUStream<Float2>* size = streams.Sizes();
-            if (size == nullptr)
+            CPUStream<Float2>* sizes = streams.Sizes();
+            if (sizes == nullptr)
             {
                 return;
             }
+            const bool separate = separateAxes && sizeY.IsActive();
             for (i32 i = 0; i < streams.aliveCount; ++i)
             {
-                (*size)[i] = curve.Evaluate(streams.GetLifeRatio(i));
+                const f32 t = streams.GetLifeRatio(i);
+                const f32 x = size.Evaluate(t);
+                (*sizes)[i] = Float2{x, separate ? sizeY.Evaluate(t) : x};
             }
+        }
+
+    private:
+        void ReadLegacyCurve(ISerializer& ar)
+        {
+            i32 count = 0;
+            core::Serialize(ar, "keyCount", count);
+            size = ParticleCurveFloat{};
+            sizeY = ParticleCurveFloat{};
+            separateAxes = false;
+            for (i32 i = 0; i < Clamp(count, 0, kMaxCurveKeys); ++i)
+            {
+                f32 time = 0.0f;
+                Float2 value{}, in{}, out{};
+                ar.Key("key");
+                ar.BeginObject();
+                core::Serialize(ar, "t", time);
+                core::Serialize(ar, "v", value);
+                core::Serialize(ar, "in", in);
+                core::Serialize(ar, "out", out);
+                ar.EndObject();
+                size.AddKey(time, value.x, in.x, out.x); // cubic, its tangents as stored
+                sizeY.AddKey(time, value.y, in.y, out.y);
+                separateAxes = separateAxes || value.x != value.y || in.x != in.y || out.x != out.y;
+            }
+            if (!separateAxes)
+                sizeY = ParticleCurveFloat{};
         }
     };
 

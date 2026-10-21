@@ -824,7 +824,7 @@ TEST_CASE("particle reflection (batch 4): curve behaviors reflect via BoundedArr
     CHECK(ContainerSize(keys, keysInst) == 2u);
     Variant key1 = ContainerGetAt(keys, keysInst, 1);
     const Instance keyInst(key1.ValuePointer(), key1.Type());
-    CHECK(GetProperty(*FindProperty(TypeOf<CurveKeyFloat>(), "value"), keyInst).Get<f32>() ==
+    CHECK(GetProperty(*FindProperty(TypeOf<CurveKey>(), "value"), keyInst).Get<f32>() ==
           doctest::Approx(10.0f));
 
     // CollisionBehavior's shape lists are BoundedArrays too (default: 1 ground plane).

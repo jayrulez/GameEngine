@@ -61,8 +61,8 @@ TEST_CASE("particles.pipeline: authored asset -> Build() -> cooked resource -> B
         sys.AddInitializer<LifetimeInitializer>().lifetime = RangeFloat(2.0f, 3.0f);
         sys.AddInitializer<SizeInitializer>().size = RangeFloat2::Constant(Float2{1.0f, 1.0f});
         sys.AddBehavior<DragBehavior>().drag = 0.3f;
-        sys.AddBehavior<SizeOverLifetimeBehavior>().curve =
-            ParticleCurveFloat2::Linear(Float2{1, 1}, Float2{3, 3});
+        sys.AddBehavior<SizeOverLifetimeBehavior>().size =
+            ParticleCurveFloat::Ease(1, 3); // an eased size, both axes
 
         ParticleEffectAssetBuilder builder;
         pipeline::AssetBuildContext ctx{DefaultAllocator()};

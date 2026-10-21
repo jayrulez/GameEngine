@@ -20,6 +20,7 @@ using namespace foundation::core;
 
 namespace pipeline
 {
+
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& fx)
     {
         namespace particles = foundation::particles;

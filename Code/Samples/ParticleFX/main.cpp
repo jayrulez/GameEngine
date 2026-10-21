@@ -416,9 +416,8 @@ namespace
             sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve =
                 particles::ParticleCurveColor::FadeAlpha(core::Float4{1.0f, 0.5f, 0.12f, 1.0f},
                                                          0.35f);
-            sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{0.4f, 0.4f},
-                                                       core::Float2{0.04f, 0.04f});
+            sys.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
+                particles::ParticleCurveFloat::Ease(0.4f, 0.04f); // an eased size, both axes
         }
 
         // Light-mode particles: slow warm embers drifting up; each contributes a point light so they
@@ -588,9 +587,8 @@ namespace
             sys.AddInitializer<particles::ColorInitializer>().color =
                 particles::RangeColor::Constant(core::Float4{1.0f, 0.9f, 0.5f, 1.0f});
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 1.5f; // flicker/curl
-            sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{1.0f * scale, 1.0f * scale},
-                                                       core::Float2{0.15f * scale, 0.15f * scale});
+            sys.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
+                particles::ParticleCurveFloat::Ease(1.0f * scale, 0.15f * scale); // an eased size, both axes
             // Colour ramp: white-hot -> yellow -> orange -> red, fading out at the tip.
             particles::ParticleCurveColor ramp;
             ramp.AddKey(0.0f, core::Float4{1.0f, 0.95f, 0.7f, 1.0f});
@@ -626,9 +624,8 @@ namespace
             sys.AddBehavior<particles::TurbulenceBehavior>().strength = 0.8f; // lazy drift
             sys.AddBehavior<particles::DragBehavior>().drag =
                 0.12f; // light drag -> the column keeps climbing off the floor
-            sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{1.0f * scale, 1.0f * scale},
-                                                       core::Float2{3.5f * scale, 3.5f * scale});
+            sys.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
+                particles::ParticleCurveFloat::Ease(1.0f * scale, 3.5f * scale); // an eased size, both axes
             // Fade in from nothing, hold fairly opaque, fade out (billows appear then dissipate).
             particles::ParticleCurveFloat a;
             a.AddKey(0.0f, 0.0f);
@@ -854,9 +851,8 @@ namespace
                 particles::RangeFloat2::Constant(core::Float2{1.0f, 1.0f});
             ring.AddInitializer<particles::ColorInitializer>().color =
                 particles::RangeColor::Constant(core::Float4{1.0f, 0.7f, 0.3f, 1.0f});
-            ring.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                particles::ParticleCurveFloat2::Linear(core::Float2{1.0f, 1.0f},
-                                                       core::Float2{9.0f, 9.0f});
+            ring.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
+                particles::ParticleCurveFloat::Ease(1.0f, 9.0f); // an eased size, both axes
             ring.AddBehavior<particles::AlphaOverLifetimeBehavior>().curve =
                 particles::ParticleCurveFloat::FadeOut(1.0f, 0.0f);
         }

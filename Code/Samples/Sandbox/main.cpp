@@ -444,9 +444,8 @@ namespace
                 sys.AddBehavior<particles::ColorOverLifetimeBehavior>().curve =
                     particles::ParticleCurveColor::FadeAlpha(core::Float4{1.0f, 0.45f, 0.1f, 1.0f},
                                                              0.3f);
-                sys.AddBehavior<particles::SizeOverLifetimeBehavior>().curve =
-                    particles::ParticleCurveFloat2::Linear(core::Float2{0.55f, 0.55f},
-                                                           core::Float2{0.08f, 0.08f});
+                sys.AddBehavior<particles::SizeOverLifetimeBehavior>().size =
+                    particles::ParticleCurveFloat::Ease(0.55f, 0.08f); // an eased size, both axes
             }
             {
                 particles::ParticleSystem& sys = m_campfire.AddSystem(600);

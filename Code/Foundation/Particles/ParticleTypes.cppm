@@ -122,85 +122,53 @@ export namespace foundation::particles
         }
     };
 
-    // ---- Curves (ParticleCurve.bf) -----------------------------------------------------------
-    // Fixed 8-key curves sampled by normalized lifetime. Float/Float2 are cubic Hermite;
-    // Color interpolates linearly between keys (it doubles as the color gradient); its values
-    // are authored sRGB, decoded to linear only when the particle is drawn. IsActive() gates the *OverLifetime
-    // behaviors (an empty curve is a no-op).
+    // ---- Curves --------------------------------------------------------------------------------
+    // Fixed 8-key curves sampled by normalized lifetime, of Core's types and evaluated by Core's
+    // functions (Specs/gui-lab-evolution-3.md ruling 2), so an editor drawing with the same
+    // functions shows what plays. A float curve's keys are CurveKeys (constant, linear or cubic,
+    // a tangent mode each); a colour curve is a gradient, its colour stops authored sRGB (decoded to
+    // linear only when the particle is drawn) and its alpha stops apart. IsActive() gates the
+    // *OverLifetime behaviors (an empty curve is a no-op). Values, not containers: reflected as
+    // count-bound arrays.
 
     inline constexpr i32 kMaxCurveKeys = 8;
 
-    // Cubic Hermite basis: p0 at t=0, p1 at t=1, tangents m0/m1 (already scaled by segment length).
-    [[nodiscard]] constexpr f32 HermiteFloat(f32 p0, f32 m0, f32 p1, f32 m1, f32 t) noexcept
-    {
-        const f32 t2 = t * t;
-        const f32 t3 = t2 * t;
-        return (2.0f * t3 - 3.0f * t2 + 1.0f) * p0 + (t3 - 2.0f * t2 + t) * m0 +
-               (-2.0f * t3 + 3.0f * t2) * p1 + (t3 - t2) * m1;
-    }
-
-    struct CurveKeyFloat
-    {
-        f32 time = 0.0f;
-        f32 value = 0.0f;
-        f32 tangentIn = 0.0f;
-        f32 tangentOut = 0.0f;
-    };
-
     struct ParticleCurveFloat
     {
-        CurveKeyFloat keys[kMaxCurveKeys]{};
+        CurveKey keys[kMaxCurveKeys]{};
         i32 keyCount = 0;
 
         [[nodiscard]] constexpr bool IsActive() const noexcept { return keyCount > 0; }
 
         [[nodiscard]] f32 Evaluate(f32 t) const noexcept
         {
-            if (keyCount <= 0)
-            {
-                return 0.0f;
-            }
-            if (keyCount == 1)
-            {
-                return keys[0].value;
-            }
-            if (t <= keys[0].time)
-            {
-                return keys[0].value;
-            }
-            if (t >= keys[keyCount - 1].time)
-            {
-                return keys[keyCount - 1].value;
-            }
-            i32 i = 0;
-            while (i < keyCount - 1 && t > keys[i + 1].time)
-            {
-                ++i;
-            }
-            const CurveKeyFloat& k0 = keys[i];
-            const CurveKeyFloat& k1 = keys[i + 1];
-            const f32 segLen = k1.time - k0.time;
-            const f32 localT = (segLen > 1e-6f) ? (t - k0.time) / segLen : 0.0f;
-            return HermiteFloat(k0.value, k0.tangentOut * segLen, k1.value, k1.tangentIn * segLen,
-                                localT);
+            return EvaluateCurve(Span<const CurveKey>(keys, static_cast<usize>(Clamp(keyCount, 0, kMaxCurveKeys))), t);
         }
 
-        // Sorted insert (drops silently once full - matches the fixed 8-key cap).
-        bool AddKey(f32 time, f32 value, f32 tangentIn = 0.0f, f32 tangentOut = 0.0f) noexcept
+        // Sorted insert (false once full: the fixed 8-key cap).
+        bool AddKey(const CurveKey& key) noexcept
         {
             if (keyCount >= kMaxCurveKeys)
             {
                 return false;
             }
             i32 idx = keyCount;
-            while (idx > 0 && keys[idx - 1].time > time)
+            while (idx > 0 && keys[idx - 1].time > key.time)
             {
                 keys[idx] = keys[idx - 1];
                 --idx;
             }
-            keys[idx] = CurveKeyFloat{time, value, tangentIn, tangentOut};
+            keys[idx] = key;
             ++keyCount;
             return true;
+        }
+        // A key as the particles' curves always made one: cubic, its tangents as given (flat by
+        // default, so a run of them eases from key to key); another interpolation when asked.
+        bool AddKey(f32 time, f32 value, f32 tangentIn = 0.0f, f32 tangentOut = 0.0f,
+                    CurveKeyInterpolation interpolation = CurveKeyInterpolation::Cubic,
+                    CurveTangentMode mode = CurveTangentMode::Broken) noexcept
+        {
+            return AddKey(CurveKey{time, value, tangentIn, tangentOut, interpolation, mode});
         }
 
         [[nodiscard]] static ParticleCurveFloat Constant(f32 value) noexcept
@@ -209,103 +177,86 @@ export namespace foundation::particles
             c.AddKey(0.0f, value);
             return c;
         }
+        // Straight from a to b.
         [[nodiscard]] static ParticleCurveFloat Linear(f32 a, f32 b) noexcept
         {
             ParticleCurveFloat c;
-            c.AddKey(0.0f, a, 0.0f, b - a);
-            c.AddKey(1.0f, b, b - a, 0.0f);
+            c.AddKey(0.0f, a, 0.0f, 0.0f, CurveKeyInterpolation::Linear);
+            c.AddKey(1.0f, b, 0.0f, 0.0f, CurveKeyInterpolation::Linear);
             return c;
         }
+        // From a to b, easing out of a and into b (flat at both ends: a smoothstep).
+        [[nodiscard]] static ParticleCurveFloat Ease(f32 a, f32 b) noexcept
+        {
+            ParticleCurveFloat c;
+            c.AddKey(0.0f, a, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
+            c.AddKey(1.0f, b, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
+            return c;
+        }
+        // Slow out of a, fast into b.
         [[nodiscard]] static ParticleCurveFloat EaseIn(f32 a, f32 b) noexcept
         {
             ParticleCurveFloat c;
-            c.AddKey(0.0f, a, 0.0f, 0.0f);
+            c.AddKey(0.0f, a, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
             c.AddKey(1.0f, b, 2.0f * (b - a), 0.0f);
             return c;
         }
+        // Fast out of a, slow into b.
         [[nodiscard]] static ParticleCurveFloat EaseOut(f32 a, f32 b) noexcept
         {
             ParticleCurveFloat c;
             c.AddKey(0.0f, a, 0.0f, 2.0f * (b - a));
-            c.AddKey(1.0f, b, 0.0f, 0.0f);
+            c.AddKey(1.0f, b, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
             return c;
         }
+        // Holds `value`, then eases to 0 over [fadeStart, 1].
         [[nodiscard]] static ParticleCurveFloat FadeOut(f32 value, f32 fadeStart = 0.75f) noexcept
         {
             ParticleCurveFloat c;
-            c.AddKey(0.0f, value);
-            c.AddKey(fadeStart, value);
-            c.AddKey(1.0f, 0.0f);
+            c.AddKey(0.0f, value, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
+            c.AddKey(fadeStart, value, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
+            c.AddKey(1.0f, 0.0f, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
             return c;
         }
+        // Eases from 0 up to `peakValue` at `peakTime` and back down to 0.
         [[nodiscard]] static ParticleCurveFloat PeakAt(f32 peakValue, f32 peakTime = 0.3f) noexcept
         {
             ParticleCurveFloat c;
-            c.AddKey(0.0f, 0.0f);
-            c.AddKey(peakTime, peakValue);
-            c.AddKey(1.0f, 0.0f);
+            c.AddKey(0.0f, 0.0f, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
+            c.AddKey(peakTime, peakValue, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
+            c.AddKey(1.0f, 0.0f, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Flat);
             return c;
         }
-    };
-
-    struct CurveKeyColor
-    {
-        f32 time = 0.0f;
-        Float4 color{1.0f, 1.0f, 1.0f, 1.0f};
     };
 
     struct ParticleCurveColor
     {
-        CurveKeyColor keys[kMaxCurveKeys]{};
-        i32 keyCount = 0;
+        GradientColorStop colors[kMaxCurveKeys]{};
+        i32 colorCount = 0;
+        GradientAlphaStop alphas[kMaxCurveKeys]{};
+        i32 alphaCount = 0;
+        GradientInterpolation interpolation = GradientInterpolation::Srgb;
 
-        [[nodiscard]] constexpr bool IsActive() const noexcept { return keyCount > 0; }
+        [[nodiscard]] constexpr bool IsActive() const noexcept { return colorCount > 0 || alphaCount > 0; }
 
+        // The sRGB colour and alpha at `t` (white, opaque, where it has no stops).
         [[nodiscard]] Float4 Evaluate(f32 t) const noexcept
         {
-            if (keyCount <= 0)
-            {
-                return Float4{1.0f, 1.0f, 1.0f, 1.0f};
-            }
-            if (keyCount == 1)
-            {
-                return keys[0].color;
-            }
-            if (t <= keys[0].time)
-            {
-                return keys[0].color;
-            }
-            if (t >= keys[keyCount - 1].time)
-            {
-                return keys[keyCount - 1].color;
-            }
-            i32 i = 0;
-            while (i < keyCount - 1 && t > keys[i + 1].time)
-            {
-                ++i;
-            }
-            const CurveKeyColor& k0 = keys[i];
-            const CurveKeyColor& k1 = keys[i + 1];
-            const f32 segLen = k1.time - k0.time;
-            const f32 localT = (segLen > 1e-6f) ? (t - k0.time) / segLen : 0.0f;
-            return k0.color + (k1.color - k0.color) * localT; // linear
+            const Color c = EvaluateGradient(Span<const GradientColorStop>(colors, static_cast<usize>(Clamp(colorCount, 0, kMaxCurveKeys))),
+                                             Span<const GradientAlphaStop>(alphas, static_cast<usize>(Clamp(alphaCount, 0, kMaxCurveKeys))),
+                                             interpolation, t);
+            return Float4{c.r, c.g, c.b, c.a};
         }
 
+        // Sorted inserts (false once full).
+        bool AddColor(f32 time, Color color) noexcept { return Insert(colors, colorCount, GradientColorStop{time, color}); }
+        bool AddAlpha(f32 time, f32 alpha) noexcept { return Insert(alphas, alphaCount, GradientAlphaStop{time, alpha}); }
+        // A colour stop and an alpha stop at one time, from an sRGB rgba.
         bool AddKey(f32 time, Float4 color) noexcept
         {
-            if (keyCount >= kMaxCurveKeys)
-            {
-                return false;
-            }
-            i32 idx = keyCount;
-            while (idx > 0 && keys[idx - 1].time > time)
-            {
-                keys[idx] = keys[idx - 1];
-                --idx;
-            }
-            keys[idx] = CurveKeyColor{time, color};
-            ++keyCount;
-            return true;
+            const bool c = AddColor(time, Color{color.x, color.y, color.z, 1.0f});
+            const bool a = AddAlpha(time, color.w);
+            return c && a;
         }
 
         [[nodiscard]] static ParticleCurveColor Constant(Float4 color) noexcept
@@ -322,96 +273,33 @@ export namespace foundation::particles
             return c;
         }
         // Constant RGB with alpha faded to 0 over [fadeStart, 1].
-        [[nodiscard]] static ParticleCurveColor FadeAlpha(Float4 color,
-                                                          f32 fadeStart = 0.75f) noexcept
+        [[nodiscard]] static ParticleCurveColor FadeAlpha(Float4 color, f32 fadeStart = 0.75f) noexcept
         {
             ParticleCurveColor c;
-            c.AddKey(0.0f, color);
-            c.AddKey(fadeStart, color);
-            c.AddKey(1.0f, Float4{color.x, color.y, color.z, 0.0f});
+            c.AddColor(0.0f, Color{color.x, color.y, color.z, 1.0f});
+            c.AddAlpha(0.0f, color.w);
+            c.AddAlpha(fadeStart, color.w);
+            c.AddAlpha(1.0f, 0.0f);
             return c;
         }
-    };
 
-    struct ParticleCurveFloat2
-    {
-        f32 times[kMaxCurveKeys]{};
-        Float2 values[kMaxCurveKeys]{};
-        Float2 tangentsIn[kMaxCurveKeys]{};
-        Float2 tangentsOut[kMaxCurveKeys]{};
-        i32 keyCount = 0;
-
-        [[nodiscard]] constexpr bool IsActive() const noexcept { return keyCount > 0; }
-
-        [[nodiscard]] Float2 Evaluate(f32 t) const noexcept
+    private:
+        template <typename Stop>
+        static bool Insert(Stop (&stops)[kMaxCurveKeys], i32& count, const Stop& stop) noexcept
         {
-            if (keyCount <= 0)
-            {
-                return Float2{0.0f, 0.0f};
-            }
-            if (keyCount == 1)
-            {
-                return values[0];
-            }
-            if (t <= times[0])
-            {
-                return values[0];
-            }
-            if (t >= times[keyCount - 1])
-            {
-                return values[keyCount - 1];
-            }
-            i32 i = 0;
-            while (i < keyCount - 1 && t > times[i + 1])
-            {
-                ++i;
-            }
-            const f32 segLen = times[i + 1] - times[i];
-            const f32 localT = (segLen > 1e-6f) ? (t - times[i]) / segLen : 0.0f;
-            return Float2{
-                HermiteFloat(values[i].x, tangentsOut[i].x * segLen, values[i + 1].x,
-                             tangentsIn[i + 1].x * segLen, localT),
-                HermiteFloat(values[i].y, tangentsOut[i].y * segLen, values[i + 1].y,
-                             tangentsIn[i + 1].y * segLen, localT),
-            };
-        }
-
-        bool AddKey(f32 time, Float2 value, Float2 tangentIn = Float2{0.0f, 0.0f},
-                    Float2 tangentOut = Float2{0.0f, 0.0f}) noexcept
-        {
-            if (keyCount >= kMaxCurveKeys)
+            if (count >= kMaxCurveKeys)
             {
                 return false;
             }
-            i32 idx = keyCount;
-            while (idx > 0 && times[idx - 1] > time)
+            i32 idx = count;
+            while (idx > 0 && stops[idx - 1].time > stop.time)
             {
-                times[idx] = times[idx - 1];
-                values[idx] = values[idx - 1];
-                tangentsIn[idx] = tangentsIn[idx - 1];
-                tangentsOut[idx] = tangentsOut[idx - 1];
+                stops[idx] = stops[idx - 1];
                 --idx;
             }
-            times[idx] = time;
-            values[idx] = value;
-            tangentsIn[idx] = tangentIn;
-            tangentsOut[idx] = tangentOut;
-            ++keyCount;
+            stops[idx] = stop;
+            ++count;
             return true;
-        }
-
-        [[nodiscard]] static ParticleCurveFloat2 Constant(Float2 value) noexcept
-        {
-            ParticleCurveFloat2 c;
-            c.AddKey(0.0f, value);
-            return c;
-        }
-        [[nodiscard]] static ParticleCurveFloat2 Linear(Float2 a, Float2 b) noexcept
-        {
-            ParticleCurveFloat2 c;
-            c.AddKey(0.0f, a);
-            c.AddKey(1.0f, b);
-            return c;
         }
     };
 
@@ -699,46 +587,78 @@ export namespace foundation::particles
         core::Serialize(ar, "max", v.max);
     }
 
+    // Curves in text name each field; LEGACY (named here, removed once the samples are re-saved):
+    // a float key written before Core's keys has no "interp" (it was always cubic Hermite, its
+    // tangents as stored), and a colour curve written before gradients has "keyCount" keys of an
+    // sRGB rgba each and no "interpolation" (now a colour stop and an alpha stop at its time). Only
+    // text can be old: a positional (binary) reader says it has every key, and binary is cooked
+    // again (the cook version moved).
     inline void Serialize(ISerializer& ar, ParticleCurveFloat& c)
     {
+        const bool reading = ar.Mode() == SerializeMode::Read;
         core::Serialize(ar, "keyCount", c.keyCount);
         const i32 n = Clamp(c.keyCount, 0, kMaxCurveKeys);
         for (i32 i = 0; i < n; ++i)
         {
+            CurveKey& key = c.keys[i];
             ar.Key("key");
             ar.BeginObject();
-            core::Serialize(ar, "t", c.keys[i].time);
-            core::Serialize(ar, "v", c.keys[i].value);
-            core::Serialize(ar, "in", c.keys[i].tangentIn);
-            core::Serialize(ar, "out", c.keys[i].tangentOut);
+            core::Serialize(ar, "t", key.time);
+            core::Serialize(ar, "v", key.value);
+            core::Serialize(ar, "in", key.tangentIn);
+            core::Serialize(ar, "out", key.tangentOut);
+            if (reading && !ar.HasKey("interp"))
+            {
+                key.interpolation = CurveKeyInterpolation::Cubic; // legacy: always Hermite
+                key.tangentMode = CurveTangentMode::Broken;
+            }
+            else
+            {
+                core::Serialize(ar, "interp", key.interpolation);
+                core::Serialize(ar, "mode", key.tangentMode);
+            }
             ar.EndObject();
         }
     }
     inline void Serialize(ISerializer& ar, ParticleCurveColor& c)
     {
-        core::Serialize(ar, "keyCount", c.keyCount);
-        const i32 n = Clamp(c.keyCount, 0, kMaxCurveKeys);
-        for (i32 i = 0; i < n; ++i)
+        const bool reading = ar.Mode() == SerializeMode::Read;
+        if (reading && !ar.HasKey("interpolation"))
         {
-            ar.Key("key");
+            // Legacy: keys of an sRGB rgba each, blended straight.
+            i32 count = 0;
+            core::Serialize(ar, "keyCount", count);
+            c = ParticleCurveColor{};
+            for (i32 i = 0; i < Clamp(count, 0, kMaxCurveKeys); ++i)
+            {
+                f32 time = 0.0f;
+                Float4 color{1.0f, 1.0f, 1.0f, 1.0f};
+                ar.Key("key");
+                ar.BeginObject();
+                core::Serialize(ar, "t", time);
+                core::Serialize(ar, "c", color);
+                ar.EndObject();
+                c.AddKey(time, color);
+            }
+            return;
+        }
+        core::Serialize(ar, "interpolation", c.interpolation);
+        core::Serialize(ar, "colorCount", c.colorCount);
+        for (i32 i = 0; i < Clamp(c.colorCount, 0, kMaxCurveKeys); ++i)
+        {
+            ar.Key("color");
             ar.BeginObject();
-            core::Serialize(ar, "t", c.keys[i].time);
-            core::Serialize(ar, "c", c.keys[i].color);
+            core::Serialize(ar, "t", c.colors[i].time);
+            core::Serialize(ar, "c", c.colors[i].color);
             ar.EndObject();
         }
-    }
-    inline void Serialize(ISerializer& ar, ParticleCurveFloat2& c)
-    {
-        core::Serialize(ar, "keyCount", c.keyCount);
-        const i32 n = Clamp(c.keyCount, 0, kMaxCurveKeys);
-        for (i32 i = 0; i < n; ++i)
+        core::Serialize(ar, "alphaCount", c.alphaCount);
+        for (i32 i = 0; i < Clamp(c.alphaCount, 0, kMaxCurveKeys); ++i)
         {
-            ar.Key("key");
+            ar.Key("alpha");
             ar.BeginObject();
-            core::Serialize(ar, "t", c.times[i]);
-            core::Serialize(ar, "v", c.values[i]);
-            core::Serialize(ar, "in", c.tangentsIn[i]);
-            core::Serialize(ar, "out", c.tangentsOut[i]);
+            core::Serialize(ar, "t", c.alphas[i].time);
+            core::Serialize(ar, "a", c.alphas[i].alpha);
             ar.EndObject();
         }
     }

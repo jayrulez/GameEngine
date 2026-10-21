@@ -63,6 +63,8 @@ export namespace foundation::shell
         }
         // One canvas, which opens no other window: no screens to place one on.
         [[nodiscard]] core::Span<const Screen> Screens() const noexcept override { return {}; }
+        // The page's one canvas, which it neither places nor gets a second of.
+        [[nodiscard]] WindowCapabilities Capabilities() const noexcept override { return {}; }
         void FlushDestroyed() override {}
 
         // Called from the shell's ProcessEvents: rebuild this frame's event list from a size poll.

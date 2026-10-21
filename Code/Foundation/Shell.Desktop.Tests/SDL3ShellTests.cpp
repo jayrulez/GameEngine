@@ -521,6 +521,10 @@ TEST_CASE("shell.desktop: the screens are read, one of them primary; a moved win
     CHECK(moved);
 
     shell.MainWindow()->Raise();
+    // Any number of windows, placed by the application but on Wayland (the dummy driver here).
+    const WindowCapabilities can = shell.WindowManager()->Capabilities();
+    CHECK(can.multipleWindows);
+    CHECK(can.placesWindows == (StringView(reinterpret_cast<const utf8char*>(SDL_GetCurrentVideoDriver())) != StringView(u8"wayland")));
     shell.MainWindow()->SetTitle(u8"Profiler + 2");
     CHECK(StringView(reinterpret_cast<const utf8char*>(SDL_GetWindowTitle(static_cast<SDL3Window*>(shell.MainWindow())->Handle()))) ==
           StringView(u8"Profiler + 2"));

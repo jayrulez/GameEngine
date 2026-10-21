@@ -473,6 +473,15 @@ namespace foundation::shell
         return core::Span<const Screen>(m_screens.Data(), m_screens.Size());
     }
 
+    WindowCapabilities SDL3WindowManager::Capabilities() const noexcept
+    {
+        // Any number of windows; placed by the application, and the global pointer read, except
+        // on Wayland, where a client does neither (the compositor places windows).
+        const char* driver = SDL_GetCurrentVideoDriver();
+        const bool wayland = driver != nullptr && SDL_strcmp(driver, "wayland") == 0;
+        return WindowCapabilities{true, !wayland};
+    }
+
     void SDL3WindowManager::ReadScreens()
     {
         m_screens.Clear();

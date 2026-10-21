@@ -233,6 +233,14 @@ export namespace foundation::shell
         core::i32 y = 0;      // Moved
     };
 
+    // What a window manager's windows can do, as its backend knows it: asked, never inferred from
+    // the window system's name.
+    struct WindowCapabilities
+    {
+        bool multipleWindows = false; // CreateWindow opens windows beside the main one
+        bool placesWindows = false;   // SetPosition and X/Y hold, and the global pointer is real
+    };
+
     // Owns the set of OS windows for a shell run. One manager per shell;
     // the main window is just the first one created. Windows can be created and
     // destroyed at runtime (the basis for detachable/dockable UI windows).
@@ -267,6 +275,10 @@ export namespace foundation::shell
         // rescaled is read again then): where floating windows may go, and how a saved place is
         // brought back onto a screen that is there. Empty where the system tells none.
         [[nodiscard]] virtual core::Span<const Screen> Screens() const noexcept = 0;
+
+        // What its windows can do: a floating panel's own window is opened only where windows
+        // beside the main one are, and placed by the application only where they hold a place.
+        [[nodiscard]] virtual WindowCapabilities Capabilities() const noexcept = 0;
 
         // Free windows marked by DestroyWindow(). Call once per frame, at end,
         // after the GPU has finished the frame that may have used them.

@@ -339,3 +339,14 @@ TEST_CASE("shell.null: no screens unless a test gives some; a raise is counted; 
     main->SetTitle(u8"Profiler + 2");
     CHECK(main->Title() == StringView(u8"Profiler + 2"));
 }
+
+TEST_CASE("shell.null: its windows are as many as are made and keep their places, unless a test says otherwise")
+{
+    NullShell shell(WindowSettings{});
+    auto* windows = static_cast<NullWindowManager*>(shell.WindowManager());
+    CHECK(windows->Capabilities().multipleWindows);
+    CHECK(windows->Capabilities().placesWindows);
+    windows->SetCapabilities(WindowCapabilities{true, false}); // as Wayland is
+    CHECK(windows->Capabilities().multipleWindows);
+    CHECK_FALSE(windows->Capabilities().placesWindows);
+}

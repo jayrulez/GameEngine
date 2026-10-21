@@ -127,6 +127,7 @@ export namespace foundation::shell
         [[nodiscard]] IWindow* GetWindow(core::u32 id) const noexcept override;
         [[nodiscard]] core::Span<const WindowEvent> Events() const noexcept override;
         [[nodiscard]] core::Span<const Screen> Screens() const noexcept override;
+        [[nodiscard]] WindowCapabilities Capabilities() const noexcept override;
 
         void FlushDestroyed() override;
 

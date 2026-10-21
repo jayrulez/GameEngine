@@ -167,6 +167,10 @@ export namespace foundation::shell
         /// A window event, as a pump would bring it (a test's: kept until ClearEvents).
         void PostEvent(const WindowEvent& event) { m_events.PushBack(event); }
         void ClearEvents() noexcept { m_events.Clear(); }
+        // Headless windows record where they are put, as many as are made.
+        [[nodiscard]] WindowCapabilities Capabilities() const noexcept override { return m_capabilities; }
+        /// What it says its windows can do (a test's: one that plays a system that places none).
+        void SetCapabilities(WindowCapabilities capabilities) noexcept { m_capabilities = capabilities; }
         /// The screens it reports (a test's).
         void SetScreens(core::Span<const Screen> screens)
         {
@@ -220,6 +224,7 @@ export namespace foundation::shell
         core::Array<core::u32> m_pendingDestroy; // window ids
         core::Array<WindowEvent> m_events;       // empty unless a test posts some (no OS event source)
         core::Array<Screen> m_screens;
+        WindowCapabilities m_capabilities{true, true};
         core::u32 m_nextId = 1;
         core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
     };

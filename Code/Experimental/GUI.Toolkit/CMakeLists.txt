@@ -12,5 +12,7 @@ target_sources(GUI.Toolkit
             ToolBar.cppm
             StatusBar.cppm
             PropertySource.cppm
+            PropertyEditor.cppm
+            PropertyEditors.cppm
     PRIVATE
         ToolkitReflection.cpp)

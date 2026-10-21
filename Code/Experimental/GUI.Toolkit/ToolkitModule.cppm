@@ -16,6 +16,8 @@ export import :sheet;    // the default sheet, over the theme's tokens
 export import :tool_bar;   // T0: tool bars over the command model
 export import :status_bar; // T0: status bars of registered items and messages
 export import :property_source; // T1: what a property grid reads and edits through
+export import :property_editor;  // T1: a grid's editors and how it chooses them
+export import :property_editors; // T1: the editors of bools, numbers, text, enums and flags
 
 export namespace experimental::gui
 {

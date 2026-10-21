@@ -52,6 +52,15 @@ namespace experimental::gui
         builder.Creator();
     }
 
+    RTTI_DEFINE_OBJECT(PropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(UnknownPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(SingleControlEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(BoolPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(NumberPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(StringPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(EnumPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(PropertyFlagsList, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(FlagsPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolMenuArrow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolBarOverflow, "rtti::gui::toolkit")
 

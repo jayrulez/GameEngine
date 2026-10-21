@@ -55,6 +55,9 @@ export namespace experimental::gui
         /// Whether it opens windows at all (an opener, and a shell that opens more than one): an
         /// application gives the area its floats as windows only then.
         [[nodiscard]] bool CanOpen() const noexcept { return m_host.CanOpenWindows(); }
+        /// Told of each window's root as it is made, before its window opens: an application styles
+        /// it as the page the area is on (a sheet scoped to that page reaches no other root).
+        void SetOnRootMade(Function<void(SceneRoot& root)> made) { m_onRootMade = core::Move(made); }
         /// The root a floating surface's window shows; null when it shows none.
         [[nodiscard]] SceneRoot* RootOf(DockSurfaceId surface) const noexcept
         {
@@ -68,6 +71,8 @@ export namespace experimental::gui
         {
             RefPtr<SceneRoot> root = MakeRef<SceneRoot>(m_allocator, m_host.ContextRef());
             root->AddChild(&content);
+            if (m_onRootMade)
+                m_onRootMade(*root);
             const String text(title);
             shell::WindowSettings settings;
             settings.title = text.AsView();
@@ -166,6 +171,7 @@ export namespace experimental::gui
         GuiHost& m_host;
         DockArea& m_area;
         Array<Shown> m_windows;
+        Function<void(SceneRoot&)> m_onRootMade;
         u32 m_listener = 0;
     };
 }

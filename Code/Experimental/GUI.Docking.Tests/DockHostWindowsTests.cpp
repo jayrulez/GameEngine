@@ -125,6 +125,8 @@ TEST_CASE("dock host windows: a float opens a window of its own at its bounds, t
     {
         DockHostWindows windows(DefaultAllocator(), *bed.host, *bed.area);
         REQUIRE(windows.CanOpen());
+        const SceneRoot* made = nullptr;
+        windows.SetOnRootMade([&](SceneRoot& root) { made = &root; });
         bed.area->SetWindows(&windows);
         REQUIRE(bed.host->WindowCount() == 2u);
         SceneRoot* root = windows.RootOf(floating);
@@ -138,6 +140,7 @@ TEST_CASE("dock host windows: a float opens a window of its own at its bounds, t
         CHECK(os.Width() == 300u);
         CHECK(os.Title() == SV(u8"Profiler"));
         CHECK(bed.area->WindowSpaceOf(floating)->GetRootNode() == root);
+        CHECK(made == root); // told, to style it
         bed.Frame();
 
         // Another panel in it: retitled. The layout moving it: placed there.

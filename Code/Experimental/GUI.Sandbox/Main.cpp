@@ -53,6 +53,7 @@ import foundation.shaders;         // the Viewport page's cube compiles its shad
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
 import gui.sandbox.lamps;  // the Toolkit page's property source (T1)
+import gui.sandbox.camera; // the Toolkit page's reflected object (T3)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -488,6 +489,9 @@ private:
     void FillDocking(gui::Node& host);
     void FillToolkit(gui::Node& frame);
     void FillProperties(gui::PropertyGrid& grid);
+    void FillReflected(gui::PropertyGrid& grid);
+    void SelectCameras(usize which);
+    void StepCameras(bool undo);
     // The Toolkit page's edit history: changes left to save, to undo and to redo.
     i32 m_toolkitUnsaved = 0;
     i32 m_toolkitDone = 0;
@@ -502,6 +506,22 @@ private:
     UniquePtr<sandbox::StressPage> m_stress;
     // The Toolkit page's lamps (T1): before the GUI, so the grid lets go of them first.
     UniquePtr<sandbox::LampSource> m_lamps;
+    // The Toolkit page's reflected cameras (T3), their source and its format, and the page's
+    // history of the source's changes (each with the cameras it was made on).
+    RefPtr<sandbox::CameraRig> m_cameras[2];
+    UniquePtr<sandbox::XmlTextFormat> m_cameraFormat;
+    UniquePtr<gui::ReflectedPropertySource> m_reflected;
+    struct CameraStep
+    {
+        gui::ReflectedChange Change;
+        usize Selection = 0;
+    };
+    Array<CameraStep> m_cameraUndo;
+    Array<CameraStep> m_cameraRedo;
+    usize m_cameraSelection = 0;
+    gui::Label* m_cameraSaid = nullptr;
+    gui::Button* m_cameraUndoButton = nullptr;
+    gui::Button* m_cameraRedoButton = nullptr;
 
     // The texts the Language and direction page shows (E9e), the GUI's localization: before the
     // GUI, which lets go of it when it goes. The narrating bridge likewise.
@@ -1014,6 +1034,9 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: the property grid over three lamps (T1).
     if (auto* grid = Cast<gui::PropertyGrid>(FindById(*m_shellNode, u8"props-grid")))
         FillProperties(*grid);
+    // Toolkit: a reflected object's grid (T3).
+    if (auto* grid = Cast<gui::PropertyGrid>(FindById(*m_shellNode, u8"reflected-grid")))
+        FillReflected(*grid);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -2302,6 +2325,102 @@ void GUISandbox::FillProperties(gui::PropertyGrid& grid)
             if (index >= 0)
                 lamps->SetSelection(static_cast<usize>(index));
         });
+}
+
+// The Toolkit page's reflected grid: two camera rigs, one or both edited, the source's changes kept
+// here for Undo and Redo.
+void GUISandbox::FillReflected(gui::PropertyGrid& grid)
+{
+    sandbox::RegisterCameraTypes(AppRoot());
+    const char8_t* const names[] = {u8"Camera A", u8"Camera B"};
+    for (usize i = 0; i < 2; ++i)
+    {
+        m_cameras[i] = MakeRef<sandbox::CameraRig>(AppRoot());
+        m_cameras[i]->name = String(names[i]);
+        m_cameras[i]->serial = 7001 + static_cast<u32>(i);
+    }
+    // The second differs, so both show mixed.
+    m_cameras[1]->fieldOfView = 45.0f;
+    m_cameras[1]->position.x = 3.0f;
+    m_cameras[1]->effects.PushBack(MakeRef<sandbox::BloomEffect>(AppRoot()));
+    m_cameraFormat = MakeUnique<sandbox::XmlTextFormat>(AppRoot(), AppRoot());
+    m_reflected = MakeUnique<gui::ReflectedPropertySource>(AppRoot(), AppRoot());
+    m_reflected->SetTextFormat(m_cameraFormat.Get());
+    SelectCameras(0);
+    grid.SetSource(m_reflected.Get());
+
+    gui::Node* section = grid.GetParent();
+    if (section == nullptr)
+        return;
+    m_cameraSaid = Cast<gui::Label>(FindById(*section, u8"reflected-said"));
+    m_cameraUndoButton = Cast<gui::Button>(FindById(*section, u8"reflected-undo"));
+    m_cameraRedoButton = Cast<gui::Button>(FindById(*section, u8"reflected-redo"));
+    GUISandbox* self = this;
+    const auto buttons = [self]()
+    {
+        if (self->m_cameraUndoButton != nullptr)
+            self->m_cameraUndoButton->SetEnabled(!self->m_cameraUndo.IsEmpty());
+        if (self->m_cameraRedoButton != nullptr)
+            self->m_cameraRedoButton->SetEnabled(!self->m_cameraRedo.IsEmpty());
+    };
+    buttons();
+    m_reflected->SetOnChange([self, buttons](const gui::ReflectedChange& change)
+    {
+        self->m_cameraUndo.PushBack(CameraStep{change, self->m_cameraSelection});
+        self->m_cameraRedo.Clear();
+        buttons();
+        if (self->m_cameraSaid != nullptr)
+            self->m_cameraSaid->SetText(change.Words.AsView());
+    });
+    if (m_cameraUndoButton != nullptr)
+        m_cameraUndoButton->SetOnClick([self, buttons]() { self->StepCameras(true); buttons(); });
+    if (m_cameraRedoButton != nullptr)
+        m_cameraRedoButton->SetOnClick([self, buttons]() { self->StepCameras(false); buttons(); });
+    grid.SetOnMessage([self](StringView words)
+    {
+        if (self->m_cameraSaid != nullptr)
+            self->m_cameraSaid->SetText(words);
+    });
+    if (auto* search = Cast<gui::TextField>(FindById(*section, u8"reflected-search")))
+    {
+        gui::PropertyGrid* shown = &grid;
+        search->SetOnTextChanging([shown](StringView text) { shown->SetFilter(text); });
+    }
+    if (auto* objects = Cast<gui::ComboBox>(FindById(*section, u8"reflected-objects")))
+        objects->SetOnSelectionChanged([self](i32 index)
+        {
+            if (index >= 0)
+                self->SelectCameras(static_cast<usize>(index));
+        });
+}
+
+// Camera A (0), Camera B (1) or both (2) in the reflected grid.
+void GUISandbox::SelectCameras(usize which)
+{
+    m_cameraSelection = which;
+    Instance objects[2];
+    usize count = 0;
+    for (usize i = 0; i < 2; ++i)
+        if (which == i || which >= 2)
+            objects[count++] = Instance(m_cameras[i].Get(), m_cameras[i]->GetType());
+    m_reflected->SetObjects(Span<const Instance>(objects, count));
+}
+
+// A change back (undo) or again (redo), on the cameras it was made on.
+void GUISandbox::StepCameras(bool undo)
+{
+    Array<CameraStep>& from = undo ? m_cameraUndo : m_cameraRedo;
+    Array<CameraStep>& to = undo ? m_cameraRedo : m_cameraUndo;
+    if (from.IsEmpty())
+        return;
+    CameraStep step = Move(from.Back());
+    from.PopBack();
+    if (step.Selection != m_cameraSelection)
+        SelectCameras(step.Selection);
+    (void)m_reflected->Restore(step.Change, undo);
+    if (m_cameraSaid != nullptr)
+        m_cameraSaid->SetText((undo ? Format(u8"Undid: {}", step.Change.Words) : Format(u8"Redid: {}", step.Change.Words)).AsView());
+    to.PushBack(Move(step));
 }
 
 // The Docking page's floats in OS windows of their own (`own`), or in the area. A window's root is

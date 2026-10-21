@@ -68,4 +68,19 @@
         <Label id="props-said" class="caption" text="No edits yet."/>
         <Label class="caption" white-space="normal" text="PropertyGrid (GUI.Toolkit) over an IPropertySource the page keeps, which copies with the engine's XmlSerializer; its editors are the core's check box, number field, text field and combo box, a list of check boxes for flags, a number field per part for Float2 and Float3, and a list's count and Add."/>
     </Panel>
+
+    <Panel class="section" gap="12">
+        <Label class="section-title" text="A reflected object"/>
+        <Label class="toolkit-note" white-space="normal"
+               text="Two camera rigs declared with core reflection and nothing written for the grid: ReflectedPropertySource reads their properties and attributes. The field of view shows for a perspective projection, the orthographic size for an orthographic one; the layers are flags by an attribute; the rotation is a Quaternion shown in Euler degrees; the background is a Color, shown as its parts until T4's colour editor. Effects add by type. Changed values are marked against the type's defaults; copying uses the engine's XmlSerializer, and Undo steps back through the source's changes."/>
+        <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
+            <TextField id="reflected-search" class="props-search" placeholder="Search properties"/>
+            <ComboBox id="reflected-objects" class="props-objects" items="Camera A|Camera B|Both" selected="0"/>
+            <Button id="reflected-undo" class="toolkit-button" text="Undo"/>
+            <Button id="reflected-redo" class="toolkit-button" text="Redo"/>
+        </Panel>
+        <PropertyGrid id="reflected-grid" class="props-grid"/>
+        <Label id="reflected-said" class="caption" text="No edits yet."/>
+        <Label class="caption" white-space="normal" text="ReflectedPropertySource (GUI.Toolkit) over sandbox::CameraRig, its text format the engine's XmlSerializer, its changes kept by the page for Undo."/>
+    </Panel>
 </Panel>

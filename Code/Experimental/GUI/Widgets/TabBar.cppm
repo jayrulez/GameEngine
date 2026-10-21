@@ -467,6 +467,9 @@ export namespace experimental::gui
         /// tab may be in another bar by then): an owner may hide or dim it meanwhile. A tab not
         /// displayed is no place for a drop.
         void SetOnTabTorn(core::Function<void(Tab& tab, bool torn)> torn) { m_onTabTorn = core::Move(torn); }
+        /// How the drag of a tab torn out of it ended (after it hears the tab is no longer torn): an
+        /// owner that does something with a tab let go outside every window (docking floats it).
+        void SetOnTabDragEnded(core::Function<void(Tab& tab, const DragResult& result)> ended) { m_onTabDragEnded = core::Move(ended); }
 
         // === Callbacks ===
         /// The user selected a tab (the `change` event's).
@@ -712,6 +715,7 @@ export namespace experimental::gui
         core::Function<void(DropQuery&, Tab&, i32)> m_onTabOffered;
         core::Function<void(Tab&, i32)> m_tabTaker;
         core::Function<void(Tab&, bool)> m_onTabTorn;
+        core::Function<void(Tab&, const DragResult&)> m_onTabDragEnded;
     };
 
     // === Tab ===
@@ -740,11 +744,13 @@ export namespace experimental::gui
         });
     }
 
-    inline void Tab::OnDragEnd(const DragResult&)
+    inline void Tab::OnDragEnd(const DragResult& result)
     {
         const core::RefPtr<TabBar> from = core::Move(m_tornFrom);
         if (from && from->m_onTabTorn)
             from->m_onTabTorn(*this, false);
+        if (from && from->m_onTabDragEnded)
+            from->m_onTabDragEnded(*this, result);
     }
 
     inline core::RefPtr<Node> Tab::CreateDragPreview(const DragPayload& payload)

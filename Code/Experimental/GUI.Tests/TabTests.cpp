@@ -763,6 +763,43 @@ TEST_CASE("tabs: a torn tab's ghost is the tab, held where it was grabbed; its b
     (void)a;
 }
 
+TEST_CASE("tabs: the bar a tab was torn from hears how its drag ended: cancelled, or let go outside the window")
+{
+    auto root = MakeRoot();
+    auto top = BarAt(*root, 10.0f, u8"docs");
+    AddSizedTab(*top, u8"A");
+    Tab* b = AddSizedTab(*top, u8"B");
+    (void)root->UpdateLayout();
+    EventDispatcher& d = *root->GetEventDispatcher();
+    int ends = 0;
+    DragResult last;
+    const Tab* whose = nullptr;
+    top->SetOnTabDragEnded([&](Tab& tab, const DragResult& result)
+    {
+        ++ends;
+        last = result;
+        whose = &tab;
+    });
+    const Rect from = b->GetScreenBounds();
+    const core::Float2 press{from.x + 7.0f, from.y + 5.0f};
+    d.InjectMouseDown(press, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{press.x, press.y + 60.0f});
+    REQUIRE(d.IsDragging());
+    d.InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    REQUIRE(ends == 1);
+    CHECK(whose == b);
+    CHECK(last.Cancelled);
+    CHECK_FALSE(last.Outside);
+
+    d.InjectMouseDown(press, MouseButton::Left);
+    d.InjectMouseMove(core::Float2{press.x, press.y + 60.0f});
+    d.InjectMouseMove(core::Float2{-40.0f, press.y}); // past the root's edge
+    d.InjectMouseUp(core::Float2{-40.0f, press.y}, MouseButton::Left);
+    REQUIRE(ends == 2);
+    CHECK(last.Outside);
+    CHECK(last.Target == nullptr);
+}
+
 TEST_CASE("tabs: a tab of a group is picked up from the keyboard and dropped on a strip's tab it is moved to")
 {
     auto root = MakeRoot();

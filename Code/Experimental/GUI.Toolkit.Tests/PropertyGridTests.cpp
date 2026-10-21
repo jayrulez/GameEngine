@@ -286,7 +286,8 @@ TEST_CASE("property grid: an application's editor for a hint, a hint none takes,
     bed.Frame();
     CHECK(core::Cast<BoolPropertyEditor>(bed.grid->FindEditor(SV(u8"look"))) != nullptr);
 
-    // A group hinted for an editor no one registered says so; one with no hint has no editor.
+    // A group hinted for an editor no one registered says so (a hinted group with rows of its own
+    // shows them instead); one with no hint has no editor.
     bed.Add(u8"falloff", PropertyKind::Group).Hint = core::String(u8"curve");
     bed.Add(u8"plain", PropertyKind::Group);
     bed.Frame();

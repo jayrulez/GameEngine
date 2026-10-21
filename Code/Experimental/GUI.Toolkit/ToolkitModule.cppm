@@ -19,6 +19,7 @@ export import :property_source; // T1: what a property grid reads and edits thro
 export import :property_editor;  // T1: a grid's editors and how it chooses them
 export import :property_editors; // T1: the editors of bools, numbers, text, enums and flags
 export import :property_grid;    // T1: the grid of a source's properties
+export import :reflected_source; // T3: core reflection as a property source
 
 export namespace experimental::gui
 {

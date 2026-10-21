@@ -885,6 +885,8 @@ namespace experimental::gui
         // A group has no editor unless a hint asks for one (a Float3), which may be none; an
         // editor covering the children shows them on this row, so none go under it.
         row.Type = node.Info.Kind == PropertyKind::Group && node.Info.Hint.Size() == 0 ? kGroupRow : m_editors.Choose(node.Info);
+        if (row.Type == PropertyEditorRegistry::kNoEditor && node.Info.Kind == PropertyKind::Group && !node.Children.IsEmpty())
+            row.Type = kGroupRow; // a hint no editor takes: its own rows, if it has any
         const bool covered = m_editors.CoversChildren(row.Type);
         const bool holds = node.Info.Kind == PropertyKind::Group || node.Info.Kind == PropertyKind::List;
         row.HasChildren = holds && !node.Children.IsEmpty() && !covered;

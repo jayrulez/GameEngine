@@ -341,5 +341,30 @@ an edge or floated, the central stack's panels going while it stays. In the core
 button may always show (`list-display`), and a `close-all` part asks to close every closable tab,
 by place, as an owner may make its tabs again after each close.
 
+D6, the plan (2026-10-20). What is there: GuiHost runs several OS windows, each with its roots, in
+one GUI; the shell makes windows at a screen place, moves and sizes them, reads the global pointer
+and says which window system it is. What is not: the screens (no display list, bounds or scale), a
+window raised, a host that opens a secondary window or hears its close, a drag that leaves its root,
+and the surface host. The layers, each with its tests:
+
+1. The shell: the screens (bounds, usable bounds, scale, name) and a window raised.
+2. Hosting: a secondary window opened and closed for a root, its moves, resizes and close requests
+   reported, and the root under a screen point.
+3. The core: a drag started in one root goes on over another root of the same GUI, its image and
+   the drop's preview in the window the pointer is in; let go over no window, it ends "outside".
+4. Docking's surface host: open, move, close and place a surface, and the screens. The floats in
+   the window become the virtual host (the web, one-window platforms); an OS host gives each float a
+   window and a root holding its dock space. A float's bounds are in screen units on its screen. A
+   tab or stack let go outside every window floats there; with Shift, at the pointer, as now. No
+   window follows the pointer: a preview shows, and the window is made or moved at the drop.
+5. The sandbox: the Docking page switches between floats in the window and floats as OS windows.
+
+The user's ruling (2026-10-20): an OS float has the platform's own frame on every system. Wayland
+needs it anyway (a client neither places its windows nor sees the global pointer), so one way of
+working, not two; the system moves, resizes and snaps the window; and a borderless window with the
+lab's title bar would have to be moved by the lab, which this design rules out. The cost: a float is
+not docked back by its OS title bar, but by its stack grips (a float of one stack is one grip) or Move
+to; on Wayland docking between windows is Move to.
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

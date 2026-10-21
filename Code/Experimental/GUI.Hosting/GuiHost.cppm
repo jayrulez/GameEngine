@@ -102,7 +102,7 @@ export namespace experimental::gui
         };
         /// Told what happens to a window the host serves, by the window's root: moved, resized, focus
         /// gained or lost, a close asked for (the host closes nothing itself: its owner decides).
-        using WindowEventHandler = Function<void(SceneRoot& root, const shell::WindowEvent& event)>;
+        using WindowEventListener = Function<void(SceneRoot& root, const shell::WindowEvent& event)>;
 
         /// `fonts` is the font service the GUI's text and an SVG's text draw with; `shaders` the VG
         /// shaders (a VgShaderLibrary's), which outlive the host. All borrowed.
@@ -321,7 +321,22 @@ export namespace experimental::gui
             DetachWindow(*window);
             m_opener.Close(*window);
         }
-        void SetOnWindowEvent(WindowEventHandler handler) { m_onWindowEvent = Move(handler); }
+        /// Adds a listener to the windows' events (the application's, docking's), each told in the
+        /// order added; the token removes it.
+        u32 AddWindowEventListener(WindowEventListener listener)
+        {
+            m_windowListeners.PushBack(WindowListener{m_nextWindowListener, Move(listener)});
+            return m_nextWindowListener++;
+        }
+        void RemoveWindowEventListener(u32 token)
+        {
+            for (usize i = 0; i < m_windowListeners.Size(); ++i)
+                if (m_windowListeners[i].Token == token)
+                {
+                    m_windowListeners.RemoveAt(i);
+                    return;
+                }
+        }
         /// Whether the window system lets the host place its windows and read the pointer across
         /// them (not Wayland, where a client does neither, nor the web's one canvas).
         [[nodiscard]] bool PlacesWindows() const noexcept
@@ -721,10 +736,13 @@ export namespace experimental::gui
                         }
                     m_focusOrder.Insert(0, event.windowId);
                 }
-                if (m_onWindowEvent)
+                const RefPtr<SceneRoot> root = attached->Data->Panes[0]->Root; // a listener may close it
+                for (usize l = 0; l < m_windowListeners.Size(); ++l) // by place: a listener may remove one
                 {
-                    const RefPtr<SceneRoot> root = attached->Data->Panes[0]->Root; // the handler may close it
-                    m_onWindowEvent(*root, event);
+                    const u32 token = m_windowListeners[l].Token;
+                    m_windowListeners[l].Listener(*root, event);
+                    if (l < m_windowListeners.Size() && m_windowListeners[l].Token != token)
+                        --l; // it removed itself: the next is at its place
                 }
             }
         }
@@ -853,7 +871,13 @@ export namespace experimental::gui
         Function<void(const shell::DroppedFile&)> m_dropObserver;
         u32 m_pressWindow = 0; // the window a held press began in
         WindowOpener m_opener;
-        WindowEventHandler m_onWindowEvent;
+        struct WindowListener
+        {
+            u32 Token = 0;
+            WindowEventListener Listener;
+        };
+        Array<WindowListener> m_windowListeners{m_allocator};
+        u32 m_nextWindowListener = 1;
         Places m_places{*this};
         Array<u32> m_focusOrder{m_allocator}; // window ids, the one focused last first
         f32 m_uiScale = 1.0f;

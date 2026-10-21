@@ -301,11 +301,13 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     // Its events, told by its root; a close asked for closes nothing by itself.
     Array<shell::WindowEvent> told;
     const SceneRoot* toldRoot = nullptr;
-    bed.host->SetOnWindowEvent([&](SceneRoot& root, const shell::WindowEvent& event)
+    int alsoTold = 0;
+    (void)bed.host->AddWindowEventListener([&](SceneRoot& root, const shell::WindowEvent& event)
     {
         toldRoot = &root;
         told.PushBack(event);
     });
+    const u32 also = bed.host->AddWindowEventListener([&](SceneRoot&, const shell::WindowEvent&) { ++alsoTold; });
     windows.PostEvent(shell::WindowEvent{shell::WindowEventType::Moved, window->Window().Id(), 0, 0, 40, 30});
     windows.PostEvent(shell::WindowEvent{shell::WindowEventType::CloseRequested, window->Window().Id()});
     windows.PostEvent(shell::WindowEvent{shell::WindowEventType::Moved, 999u}); // no window of its own
@@ -316,7 +318,14 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     CHECK(told[0].type == shell::WindowEventType::Moved);
     CHECK(told[0].x == 40);
     CHECK(told[1].type == shell::WindowEventType::CloseRequested);
+    CHECK(alsoTold == 2); // every listener is told
     CHECK(bed.host->WindowCount() == 2u);
+    bed.host->RemoveWindowEventListener(also);
+    windows.PostEvent(shell::WindowEvent{shell::WindowEventType::FocusLost, window->Window().Id()});
+    bed.Frame(bed.main.Get(), window);
+    windows.ClearEvents();
+    CHECK(told.Size() == 3u);
+    CHECK(alsoTold == 2); // removed: told no more
 
     bed.host->CloseWindow(*second);
     CHECK(closed == 1);

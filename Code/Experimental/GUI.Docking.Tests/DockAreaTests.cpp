@@ -8,7 +8,10 @@
 // dragged with Shift, Move to's Float and dock.float float a panel; a float dragged by its title
 // docks whole over a target, is only moved with Shift, and goes back on Escape; the dock keys reach
 // across the surfaces (past a float's edge, the surface cycle) and so does the Move to menu; a
-// stack's grip dragged with Shift floats the whole stack.
+// stack's grip dragged with Shift floats the whole stack. Floats as windows of their own (D6): each
+// floating surface a dock space in its window, titled and placed on the screen, its moves and close
+// heard back; a tab let go outside every window floats there; a window that cannot open takes the
+// area back to floats in it.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -573,4 +576,264 @@ TEST_CASE("dock area: a stack's grip dragged with Shift floats the whole stack a
     CHECK(bed.controller.GetLayout().StackOf(SV(u8"memory")) == kNoDock);
     bed.Lay();
     CHECK(bed.area->GetFloatCount() == 0u);
+}
+
+namespace
+{
+    // Windows of their own for the floats, each a root of the bed's GUI at a place on a screen, the
+    // area's root at 1000,500 on it; the GUI's root places as a host that places windows tells them.
+    struct FakeWindows final : IDockWindows, IRootPlaces
+    {
+        struct Shown
+        {
+            DockSurfaceId Surface = kNoDock;
+            core::RefPtr<SceneRoot> Root;
+            core::Rectangle Bounds;
+            core::String Title;
+            int Raises = 0;
+        };
+        Bed& bed;
+        core::Array<Shown> shown;
+        core::Float2 origin{1000.0f, 500.0f};
+        int opens = 0, closes = 0, places = 0;
+        bool refuse = false;
+
+        explicit FakeWindows(Bed& b) : bed(b) {}
+        Shown* Find(DockSurfaceId surface)
+        {
+            for (Shown& each : shown)
+                if (each.Surface == surface)
+                    return &each;
+            return nullptr;
+        }
+        bool Open(DockSurfaceId surface, Node& content, const core::Rectangle& bounds, core::StringView title) override
+        {
+            if (refuse)
+                return false;
+            Shown made;
+            made.Surface = surface;
+            made.Root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), bed.root->GetContextRef());
+            made.Root->SetSize(core::Float2{bounds.width, bounds.height});
+            made.Root->AddChild(&content);
+            made.Bounds = bounds;
+            made.Title = core::String(title);
+            (void)made.Root->UpdateLayout();
+            shown.PushBack(made);
+            ++opens;
+            return true;
+        }
+        void Close(DockSurfaceId surface) override
+        {
+            for (usize i = 0; i < shown.Size(); ++i)
+                if (shown[i].Surface == surface)
+                {
+                    shown[i].Root->RemoveAllChildren();
+                    shown.RemoveAt(i);
+                    ++closes;
+                    return;
+                }
+        }
+        void Place(DockSurfaceId surface, const core::Rectangle& bounds) override
+        {
+            if (Shown* each = Find(surface))
+                each->Bounds = bounds;
+            ++places;
+        }
+        void SetTitle(DockSurfaceId surface, core::StringView title) override
+        {
+            if (Shown* each = Find(surface))
+                each->Title = core::String(title);
+        }
+        void Raise(DockSurfaceId surface) override
+        {
+            if (Shown* each = Find(surface))
+                ++each->Raises;
+        }
+        bool ToScreen(const Node& node, core::Float2 local, core::Float2& screen) override
+        {
+            const core::Float2 world = node.ConvertToWorldSpace(local);
+            Node* top = const_cast<Node&>(node).GetRootNode();
+            if (top == bed.root.Get())
+            {
+                screen = core::Float2{origin.x + world.x, origin.y + world.y};
+                return true;
+            }
+            for (const Shown& each : shown)
+                if (top == each.Root.Get())
+                {
+                    screen = core::Float2{each.Bounds.x + world.x, each.Bounds.y + world.y};
+                    return true;
+                }
+            return false;
+        }
+        // IRootPlaces: the area's root and each window's.
+        EventDispatcher* DispatcherAt(core::Float2 screen, core::Float2& local) override
+        {
+            for (const Shown& each : shown)
+                if (screen.x >= each.Bounds.x && screen.y >= each.Bounds.y && screen.x < each.Bounds.x + each.Bounds.width &&
+                    screen.y < each.Bounds.y + each.Bounds.height)
+                {
+                    local = core::Float2{screen.x - each.Bounds.x, screen.y - each.Bounds.y};
+                    return each.Root->GetEventDispatcher();
+                }
+            if (screen.x >= origin.x && screen.y >= origin.y && screen.x < origin.x + 800.0f && screen.y < origin.y + 600.0f)
+            {
+                local = core::Float2{screen.x - origin.x, screen.y - origin.y};
+                return bed.root->GetEventDispatcher();
+            }
+            return nullptr;
+        }
+        bool ToScreen(const EventDispatcher& d, core::Float2 local, core::Float2& screen) override
+        {
+            if (&d == bed.root->GetEventDispatcher())
+            {
+                screen = core::Float2{origin.x + local.x, origin.y + local.y};
+                return true;
+            }
+            for (const Shown& each : shown)
+                if (&d == each.Root->GetEventDispatcher())
+                {
+                    screen = core::Float2{each.Bounds.x + local.x, each.Bounds.y + local.y};
+                    return true;
+                }
+            return false;
+        }
+    };
+}
+
+namespace
+{
+    // The area and the GUI let go of the windows however the test ends (before the windows go).
+    struct Unhook
+    {
+        Bed& bed;
+        ~Unhook()
+        {
+            bed.root->GetContext().SetRootPlaces(nullptr);
+            bed.area->SetWindows(nullptr);
+        }
+    };
+}
+
+TEST_CASE("dock area: given windows of their own, a float opens in one, titled and placed on the screen; its moves and close are heard; back again")
+{
+    Bed bed;
+    const DockSurfaceId floating = bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 300.0f, 200.0f});
+    REQUIRE(bed.area->GetFloatCount() == 1u);
+    FakeWindows windows(bed);
+    const Unhook unhook{bed};
+    bed.area->SetWindows(&windows);
+    CHECK(bed.area->GetFloatCount() == 0u); // no float in the area
+    REQUIRE(windows.opens == 1);
+    REQUIRE(windows.shown.Size() == 1u);
+    CHECK(windows.shown[0].Surface == floating);
+    CHECK(windows.shown[0].Title == SV(u8"Profiler"));
+    CHECK(windows.shown[0].Bounds.x == doctest::Approx(1100.0f)); // the area's 100, on the screen
+    CHECK(windows.shown[0].Bounds.y == doctest::Approx(580.0f));
+    CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.x == doctest::Approx(1100.0f));
+    DockSpace* space = bed.area->WindowSpaceOf(floating);
+    REQUIRE(space != nullptr);
+    CHECK(space->PageOf(SV(u8"profiler")) != nullptr);
+    CHECK(space->GetRootNode() == windows.shown[0].Root.Get());
+
+    // Moved by the user: the layout follows, and the window is not placed again.
+    bed.area->NoteWindowBounds(floating, core::Rectangle{1200.0f, 600.0f, 320.0f, 210.0f});
+    CHECK(bed.controller.GetLayout().FindSurface(floating)->Bounds.x == doctest::Approx(1200.0f));
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.StackOf(SV(u8"profiler"))); }).Ok());
+    CHECK(windows.shown[0].Title == SV(u8"Memory +1")); // the chosen panel's, and how many more
+    CHECK(windows.places == 0);
+    // A layout that places it, the window placed there.
+    bed.controller.NoteSurfaceBounds(floating, core::Rectangle{1300.0f, 650.0f, 320.0f, 210.0f});
+    bed.area->ShowLayout();
+    CHECK(windows.places == 1);
+    CHECK(windows.shown[0].Bounds.x == doctest::Approx(1300.0f));
+
+    // Floats in the area again: the window closes, the float comes back at the area's 300,150.
+    bed.area->SetWindows(nullptr);
+    CHECK(windows.closes == 1);
+    REQUIRE(bed.area->GetFloatCount() == 1u);
+    CHECK(bed.area->GetFloat(0)->GetPosition().x == doctest::Approx(300.0f));
+    CHECK(bed.area->GetFloat(0)->GetPosition().y == doctest::Approx(150.0f));
+
+    // In its own window again, closed by its window's close: its panels close, and the window.
+    bed.area->SetWindows(&windows);
+    REQUIRE(windows.shown.Size() == 1u);
+    bed.area->CloseFloat(floating);
+    CHECK(bed.controller.GetLayout().FindSurface(floating) == nullptr);
+    CHECK(windows.shown.Size() == 0u);
+    bed.area->SetWindows(nullptr);
+}
+
+TEST_CASE("dock area: in windows of their own, a tab let go outside every window floats there; with Shift, at the pointer, on the screen")
+{
+    Bed bed;
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"profiler"), l.CentralStack()); }).Ok());
+    REQUIRE(bed.controller.Edit([](DockLayout& l) { return l.InsertTab(SV(u8"memory"), l.CentralStack()); }).Ok());
+    bed.Lay();
+    FakeWindows windows(bed);
+    const Unhook unhook{bed};
+    bed.area->SetWindows(&windows);
+    bed.root->GetContext().SetRootPlaces(&windows);
+
+    // Past the area's left edge: outside every window, at the screen's 970,600.
+    Tab* tab = bed.TabOf(u8"profiler");
+    REQUIRE(tab != nullptr);
+    const Rect from = tab->GetScreenBounds();
+    const core::Float2 press{from.x + 10.0f, from.y + 10.0f};
+    bed.D().InjectMouseDown(press, MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{press.x, press.y + 40.0f});
+    bed.D().InjectMouseMove(core::Float2{-30.0f, 100.0f});
+    REQUIRE(bed.D().IsDragging());
+    CHECK(bed.D().GetDragOver() == nullptr);
+    bed.D().InjectMouseUp(core::Float2{-30.0f, 100.0f}, MouseButton::Left);
+    REQUIRE(windows.shown.Size() == 1u);
+    const DockSurfaceId out = windows.shown[0].Surface;
+    CHECK(bed.controller.GetLayout().SurfaceOf(bed.controller.GetLayout().StackOf(SV(u8"profiler"))) == out);
+    CHECK(windows.shown[0].Bounds.y == doctest::Approx(586.0f)); // its title bar under the pointer
+    CHECK(windows.shown[0].Bounds.x < 970.0f);
+    CHECK(windows.shown[0].Bounds.x + windows.shown[0].Bounds.width > 970.0f);
+
+    // Its window moved off the area by the user (the system moves it), out of the way.
+    windows.shown[0].Bounds.x = 3000.0f;
+    windows.shown[0].Bounds.y = 3000.0f;
+    bed.area->NoteWindowBounds(out, windows.shown[0].Bounds);
+
+    // With Shift over the area: the preview in the area, the window where it was, on the screen.
+    bed.Lay();
+    tab = bed.TabOf(u8"memory");
+    REQUIRE(tab != nullptr);
+    const Rect at = tab->GetScreenBounds();
+    const core::Float2 p{at.x + 10.0f, at.y + 10.0f};
+    const core::Float2 over{400.0f, 300.0f};
+    bed.D().InjectMouseDown(p, MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{p.x + 10.0f, p.y}, KeyModShift);
+    bed.D().InjectMouseMove(over, KeyModShift);
+    core::Rectangle preview;
+    REQUIRE(bed.area->GetFloatPreview(preview));
+    bed.D().InjectMouseUp(over, MouseButton::Left, KeyModShift);
+    REQUIRE(windows.shown.Size() == 2u);
+    CHECK(windows.shown[1].Bounds.x == doctest::Approx(preview.x + 1000.0f));
+    CHECK(windows.shown[1].Bounds.y == doctest::Approx(preview.y + 500.0f));
+
+    // The surface cycle raises the window it goes to.
+    bed.Lay();
+    bed.TabOf(u8"scene")->RequestFocus();
+    REQUIRE(bed.area->FocusNextSurface(false));
+    CHECK(windows.shown[0].Raises == 1);
+
+    bed.root->GetContext().SetRootPlaces(nullptr);
+    bed.area->SetWindows(nullptr);
+}
+
+TEST_CASE("dock area: a window that cannot be opened takes the area back to floats in it")
+{
+    Bed bed;
+    bed.Float(u8"profiler", core::Rectangle{100.0f, 80.0f, 300.0f, 200.0f});
+    FakeWindows windows(bed);
+    const Unhook unhook{bed};
+    windows.refuse = true;
+    bed.area->SetWindows(&windows);
+    CHECK(bed.area->GetWindows() == nullptr);
+    REQUIRE(bed.area->GetFloatCount() == 1u);
+    CHECK(bed.area->GetFloat(0)->GetPosition().x == doctest::Approx(100.0f)); // its place back in the area's units
 }

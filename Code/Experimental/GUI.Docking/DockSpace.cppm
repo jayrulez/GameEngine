@@ -420,6 +420,9 @@ export namespace experimental::gui
         {
             return !query.FromKeyboard && (query.Modifiers & KeyModShift) != 0;
         }
+        /// Told of a panel or a stack dragged from here and let go outside every window (a DockArea
+        /// floats it there, in OS windows, D6).
+        void SetOnDraggedOutside(Function<void(const DockDragged&, const DragResult&)> handler) { m_onDraggedOutside = core::Move(handler); }
         /// Where a panel floated from here (the menu, `dock.float`) stands: what the area it is in
         /// says (a DockArea sets it); none, a float placed where the area cascades them.
         void SetFloatPlacer(Function<Rectangle(core::StringView panel)> placer) { m_floatPlacer = core::Move(placer); }
@@ -903,8 +906,29 @@ export namespace experimental::gui
                 Node* grip = bar->GetListButton();
                 grip->SetDragSource([self, id](DragRequest& request) { return self->StartStackDrag(id, request); });
                 (void)grip->AddEventListener(EventType::DragStart, [grip](const Event&) { DimStackOf(*grip, true); });
-                grip->SetOnDragEnd([grip](const DragResult&) { DimStackOf(*grip, false); });
+                grip->SetOnDragEnd([self, id, grip](const DragResult& result)
+                {
+                    DimStackOf(*grip, false);
+                    if (result.Outside && self->m_onDraggedOutside)
+                    {
+                        const RefPtr<DockSpace> keep(self);
+                        self->m_onDraggedOutside(DockDragged{String{}, kNoDock, id}, result);
+                    }
+                });
                 bar->SetOnTabTorn([self, id](Tab& tab, bool torn) { self->NoteTorn(id, tab, torn); });
+                // A tab let go outside every window: its panel, to whoever floats it there (D6).
+                bar->SetOnTabDragEnded([self](Tab& tab, const DragResult& result)
+                {
+                    if (!result.Outside || !self->m_onDraggedOutside)
+                        return;
+                    const Node* page = tab.GetPage();
+                    const String* panel = page != nullptr ? self->PanelOf(*page) : nullptr;
+                    if (panel == nullptr)
+                        return;
+                    const DockDragged dragged{*panel, kNoDock, kNoDock};
+                    const RefPtr<DockSpace> keep(self); // the float it makes may end this space's surface
+                    self->m_onDraggedOutside(dragged, result);
+                });
                 (void)bar->AddEventListener(EventType::DragLeave, [self, bar](const Event&) { self->Withdraw(*bar); });
                 made->SetGroup(String(u8"dock"));
                 made->SetReorderable(true);
@@ -1256,6 +1280,7 @@ export namespace experimental::gui
         RefPtr<Panel> m_preview;
         RefPtr<Menu> m_moveMenu;
         Rect m_previewBounds{};
+        Function<void(const DockDragged&, const DragResult&)> m_onDraggedOutside;
         Node* m_offerOwner = nullptr; // what offered the drop shown (non-owning; compared only)
         Offered m_offer;
     };

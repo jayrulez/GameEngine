@@ -74,6 +74,7 @@ target_sources(Core
             Math/Transform.cppm
             Math/Easings.cppm
             Math/Curve.cppm
+            Math/Gradient.cppm
             Math/AABB.cppm
             Math/Plane.cppm
             Math/BoundingVolumes.cppm

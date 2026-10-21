@@ -55,6 +55,7 @@ export import :quaternion;
 export import :transform;
 export import :easings;
 export import :curve;
+export import :gradient;
 export import :aabb;
 export import :plane;
 export import :bounds;

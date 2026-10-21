@@ -21,6 +21,7 @@ add_executable(Core.Tests
     FormatLogTests.cpp
     MathTests.cpp
     CurveTests.cpp
+    GradientTests.cpp
     RandomTests.cpp
     GuidTests.cpp
     RttiTests.cpp

@@ -16,3 +16,4 @@ export import :document; // D2: the layout as the serializer reads and writes it
 export import :controller; // D3: the layout and its panels
 export import :dock_space; // D3: the widget that shows a surface
 export import :dock_area;  // D5: the main surface and the floating ones over it, in one window
+export import :dock_host_windows; // D6: the floats in OS windows the host opens

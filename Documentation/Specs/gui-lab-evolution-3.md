@@ -544,6 +544,29 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     Ctrl+V on the focused row, and no format.
 - **T3 The reflected source.** Core reflection and its attributes (display name, range, enum,
   `visibleWhen`) as a property source; the sandbox edits a reflected object on the lab's undo stack.
+
+  T3's design (approved by the user, 2026-10-21), GUI.Toolkit's `:reflected_source`:
+  - **Over reflected instances** of one type (several entities' components are several objects).
+    bool, every integer width, `f32`, `f64` and `String` are value rows; an enum is choices from its
+    enumerators, or flags with a `flags` attribute (its value read and written as an integer through
+    the property's address); `ReadOnly` is a read-only row.
+  - `Float2`, `Float3`, `Float4` are groups hinted with their names; a `Quaternion` is a `Float3`
+    group of Euler degrees the source converts; `Nested` structs are groups, to any depth.
+  - `Array<T>` and `BoundedArray` are lists (reflection's `emplaceDefault`, `removeAt`,
+    `moveElement`; a bounded array's capacity its most); `Array<RefPtr<Base>>` adds by type
+    (`createElement`, `canCreateElement`), the types' `displayName` its menu.
+  - **The attributes the inspector reads**: `displayName` (else the name made readable),
+    `description`, `range` (min, max, step), `visibleWhen` (`"prop"` or `"prop=1,2"`, evaluated by
+    the source), a type's `displayName`; and `flags`.
+  - **Any other type** is a row hinted with its type's name, for an application's editor (`Color`
+    until T4, `Ref<T>`, `EntityRef`), else the row saying no editor fits.
+  - **Defaults**: the type's, from an instance its creator makes; an application stacks its own
+    providers over it (a prefab's).
+  - **Writes** go through `SetProperty`, or the address for what a `Variant` cannot carry; each
+    commit, list change, revert and paste is told to the application as one record, before and
+    after, and the undo is the application's (ruling 1): the sandbox keeps a history of them.
+  - **Copy and paste** use a serializer the application hands the source (the sandbox's
+    `XmlSerializer`), so GUI.Toolkit gains no dependency.
 - **T4 Colour.** An inline picker and a swatch editor on the engine's sRGB colour; HDR intensity in
   stops where a property has one; alpha; hex.
 - **T5 Curves, gradients, the timeline.** On ruling 2's Core types, after that `master` work.

@@ -21,6 +21,11 @@
 // needs a frame (E8a's NeedsFrame: something changed, an animation runs, a bake landed); otherwise
 // its window re-encodes the batch it drew last, since the runtime host presents every frame.
 //
+// Windows of its own (D6): given an opener (the application's), the host opens an OS window for a
+// root and closes it, tells its owner what happens to each window by its root (moved, resized,
+// focus, a close asked for), and says which root is under a screen point and where a root's point is
+// on the screen, where the window system lets it place windows (not Wayland).
+//
 // Order of teardown: detach a window before its RenderWindow goes (its renderer leaves the baker's
 // targets), and let the host go before the shader library whose modules it draws with.
 
@@ -88,6 +93,16 @@ export namespace experimental::gui
         using PointerFilter = Function<bool(SceneRoot& pane, shell::InputSurface& surface)>;
         /// Draws over a window after its panes, in the window's pixels.
         using Overlay = Function<void(graphics::RenderWindow& window, DrawContext& context)>;
+        /// Opens and closes the OS windows the host makes for a root: the application's (its
+        /// IApplicationHost's OpenWindow and CloseWindow), which owns them.
+        struct WindowOpener
+        {
+            Function<graphics::RenderWindow*(const shell::WindowSettings&)> Open;
+            Function<void(graphics::RenderWindow&)> Close;
+        };
+        /// Told what happens to a window the host serves, by the window's root: moved, resized, focus
+        /// gained or lost, a close asked for (the host closes nothing itself: its owner decides).
+        using WindowEventHandler = Function<void(SceneRoot& root, const shell::WindowEvent& event)>;
 
         /// `fonts` is the font service the GUI's text and an SVG's text draw with; `shaders` the VG
         /// shaders (a VgShaderLibrary's), which outlive the host. All borrowed.
@@ -274,6 +289,99 @@ export namespace experimental::gui
                     }
         }
 
+        // === Windows of its own (D6) ===
+        /// How the host opens a window for a root; without one it opens none.
+        void SetWindowOpener(WindowOpener opener) { m_opener = Move(opener); }
+        [[nodiscard]] bool CanOpenWindows() const noexcept { return m_opener.Open && m_opener.Close; }
+        /// Opens an OS window as `settings` say and gives it `root` (made with Context()); the window,
+        /// or null when it opens none.
+        graphics::RenderWindow* OpenWindow(RefPtr<SceneRoot> root, const shell::WindowSettings& settings)
+        {
+            if (!CanOpenWindows() || !root)
+                return nullptr;
+            graphics::RenderWindow* window = m_opener.Open(settings);
+            if (window == nullptr)
+                return nullptr;
+            AttachWindow(*window, Move(root));
+            if (Find(window) == nullptr)
+            {
+                m_opener.Close(*window); // attaching failed: no window without its GUI
+                return nullptr;
+            }
+            return window;
+        }
+        /// Closes the window OpenWindow opened for `root`: detached, then closed by its opener.
+        void CloseWindow(const SceneRoot& root)
+        {
+            graphics::RenderWindow* window = WindowFor(&root);
+            if (window == nullptr || !CanOpenWindows())
+                return;
+            DetachWindow(*window);
+            m_opener.Close(*window);
+        }
+        void SetOnWindowEvent(WindowEventHandler handler) { m_onWindowEvent = Move(handler); }
+        /// Whether the window system lets the host place its windows and read the pointer across
+        /// them (not Wayland, where a client does neither, nor the web's one canvas).
+        [[nodiscard]] bool PlacesWindows() const noexcept
+        {
+            const shell::IWindow* main = m_shell.MainWindow();
+            const shell::WindowSystem system = main != nullptr ? main->Native().system : shell::WindowSystem::Unknown;
+            return system != shell::WindowSystem::Wayland && system != shell::WindowSystem::Web;
+        }
+        /// The root under `screen` (screen units), the pane on top in the window focused last where
+        /// windows overlap, and the point in it (`local`, the root's pointer units); null over none.
+        /// Where the host cannot place windows, every window's place is unknown: null.
+        SceneRoot* RootAt(Float2 screen, Float2* local = nullptr)
+        {
+            if (!PlacesWindows())
+                return nullptr;
+            const auto under = [&](const Attached& attached) -> SceneRoot*
+            {
+                const shell::IWindow& window = attached.Window->Window();
+                const Float2 at{screen.x - static_cast<f32>(window.X()), screen.y - static_cast<f32>(window.Y())};
+                if (at.x < 0.0f || at.y < 0.0f || at.x >= static_cast<f32>(window.Width()) || at.y >= static_cast<f32>(window.Height()) ||
+                    window.IsMinimized())
+                    return nullptr;
+                for (usize i = attached.Data->Panes.Size(); i-- > 0;) // the pane drawn last is on top
+                {
+                    const GuiWindowData::Pane& pane = *attached.Data->Panes[i];
+                    const Rectangle area = AreaOf(*attached.Window, pane.Region);
+                    if (at.x >= area.x && at.y >= area.y && at.x < area.x + area.width && at.y < area.y + area.height)
+                    {
+                        if (local != nullptr)
+                            *local = Float2{at.x - area.x, at.y - area.y};
+                        return pane.Root.Get();
+                    }
+                }
+                return nullptr;
+            };
+            for (const u32 id : m_focusOrder) // the window focused last first
+                if (const Attached* attached = FindById(id))
+                    if (SceneRoot* root = under(*attached))
+                        return root;
+            for (const Attached& attached : m_attached)
+                if (SceneRoot* root = under(attached))
+                    return root;
+            return nullptr;
+        }
+        /// Where `local` (a point in `root`, its pointer units) is on the screen; false when the root
+        /// is in no window or the host cannot place windows.
+        bool ToScreen(const SceneRoot& root, Float2 local, Float2& screen)
+        {
+            if (!PlacesWindows())
+                return false;
+            for (const Attached& attached : m_attached)
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    if (pane->Root.Get() == &root)
+                    {
+                        const shell::IWindow& window = attached.Window->Window();
+                        const Rectangle area = AreaOf(*attached.Window, pane->Region);
+                        screen = Float2{static_cast<f32>(window.X()) + area.x + local.x, static_cast<f32>(window.Y()) + area.y + local.y};
+                        return true;
+                    }
+            return false;
+        }
+
         /// Stops drawing and feeding the window's panes, and lets their roots go; its renderer forgets
         /// the bakes. The rest of the payload stays on the RenderWindow, which frees it when it goes
         /// (after the GPU is idle).
@@ -286,6 +394,12 @@ export namespace experimental::gui
                     m_attached.RemoveAt(i);
                     if (m_pressWindow == window.Window().Id())
                         m_pressWindow = 0;
+                    for (usize f = 0; f < m_focusOrder.Size(); ++f)
+                        if (m_focusOrder[f] == window.Window().Id())
+                        {
+                            m_focusOrder.RemoveAt(f);
+                            break;
+                        }
                     return;
                 }
         }
@@ -306,6 +420,7 @@ export namespace experimental::gui
         void Update(f32 deltaTime)
         {
             m_router->Update();
+            ReportWindowEvents();
             RouteInput();
             m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
             for (const Attached& attached : m_attached)
@@ -581,6 +696,36 @@ export namespace experimental::gui
                 m_baker->RemoveTarget(attached.Data->Renderer);
         }
 
+        // What happened to the windows it serves since the last pump: the focus order kept (where
+        // windows overlap, the one focused last is on top), and each told by its root.
+        void ReportWindowEvents()
+        {
+            const shell::IWindowManager* windows = m_shell.WindowManager();
+            if (windows == nullptr)
+                return;
+            for (const shell::WindowEvent& event : windows->Events())
+            {
+                const Attached* attached = FindById(event.windowId);
+                if (attached == nullptr || attached->Data->Panes.IsEmpty())
+                    continue;
+                if (event.type == shell::WindowEventType::FocusGained)
+                {
+                    for (usize f = 0; f < m_focusOrder.Size(); ++f)
+                        if (m_focusOrder[f] == event.windowId)
+                        {
+                            m_focusOrder.RemoveAt(f);
+                            break;
+                        }
+                    m_focusOrder.Insert(0, event.windowId);
+                }
+                if (m_onWindowEvent)
+                {
+                    const RefPtr<SceneRoot> root = attached->Data->Panes[0]->Root; // the handler may close it
+                    m_onWindowEvent(*root, event);
+                }
+            }
+        }
+
         void RouteInput()
         {
             shell::IInputManager* input = m_shell.Input();
@@ -681,6 +826,9 @@ export namespace experimental::gui
         Overlay m_overlay;
         Function<void(const shell::DroppedFile&)> m_dropObserver;
         u32 m_pressWindow = 0; // the window a held press began in
+        WindowOpener m_opener;
+        WindowEventHandler m_onWindowEvent;
+        Array<u32> m_focusOrder{m_allocator}; // window ids, the one focused last first
         f32 m_uiScale = 1.0f;
         vg::VGBlendSpace m_blendSpace = vg::VGBlendSpace::Encoded;
         Color m_clear{0.07f, 0.07f, 0.09f, 1.0f};

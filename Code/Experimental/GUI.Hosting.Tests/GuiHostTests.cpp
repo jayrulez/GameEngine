@@ -4,7 +4,9 @@
 // GUI.Hosting - GuiHost on the Null RHI backend and the null shell: a window's root gets the
 // window's size and its own renderer; a root is drawn when it needs a frame and its last batch
 // encoded again when not; the baker serves every window's renderer and a detached window's forgets
-// its bakes. (The null shell injects no input: routing is checked by the sandbox on the host.)
+// its bakes; a window opened for a root through the application's opener, its events told by root,
+// the root under a screen point, and closed again (D6). (The null shell injects no input: routing is
+// checked by the sandbox on the host.)
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -222,4 +224,98 @@ TEST_CASE("gui.hosting: a pane is another root over a region of a window, laid o
     bed.host->RemovePane(*pane);
     CHECK(bed.host->WindowFor(pane.Get()) == nullptr);
     CHECK(bed.host->WindowFor(root.Get()) == bed.main.Get());
+}
+
+TEST_CASE("gui.hosting: a window opened for a root, its events told by its root, the root under a screen point, closed again")
+{
+    Bed bed;
+    RefPtr<SceneRoot> mainRoot = bed.MakeRoot();
+    bed.host->AttachWindow(*bed.main, mainRoot);
+    CHECK_FALSE(bed.host->CanOpenWindows());
+    CHECK(bed.host->OpenWindow(bed.MakeRoot(), shell::WindowSettings{}) == nullptr); // no opener, no window
+
+    auto& windows = *static_cast<shell::NullWindowManager*>(bed.shell.WindowManager());
+    Array<UniquePtr<graphics::RenderWindow>> opened;
+    int closed = 0;
+    GuiHost::WindowOpener opener;
+    opener.Open = [&](const shell::WindowSettings& settings) -> graphics::RenderWindow*
+    {
+        Result<shell::IWindow*> made = windows.CreateWindow(settings);
+        if (!made.HasValue())
+            return nullptr;
+        opened.PushBack(bed.device->CreateRenderWindow(*made.Value(), graphics::RenderWindowDesc{}).Value());
+        return opened.Back().Get();
+    };
+    opener.Close = [&](graphics::RenderWindow& window)
+    {
+        ++closed;
+        windows.DestroyWindow(&window.Window());
+    };
+    bed.host->SetWindowOpener(Move(opener));
+    REQUIRE(bed.host->CanOpenWindows());
+    CHECK(bed.host->PlacesWindows()); // the null shell is no Wayland
+
+    shell::WindowSettings settings;
+    settings.positioned = true;
+    settings.x = 1500;
+    settings.y = 100;
+    settings.width = 300;
+    settings.height = 200;
+    RefPtr<SceneRoot> second = bed.MakeRoot();
+    graphics::RenderWindow* window = bed.host->OpenWindow(second, settings);
+    REQUIRE(window != nullptr);
+    CHECK(bed.host->WindowCount() == 2u);
+    CHECK(bed.host->WindowFor(second.Get()) == window);
+    bed.Frame(bed.main.Get(), window);
+    CHECK(second->GetViewportSize().x == doctest::Approx(300.0f));
+
+    // Where each root is on the screen.
+    Float2 local;
+    CHECK(bed.host->RootAt(Float2{1550.0f, 150.0f}, &local) == second.Get());
+    CHECK(local.x == doctest::Approx(50.0f));
+    CHECK(local.y == doctest::Approx(50.0f));
+    CHECK(bed.host->RootAt(Float2{10.0f, 10.0f}) == mainRoot.Get());
+    CHECK(bed.host->RootAt(Float2{-50.0f, -50.0f}) == nullptr);
+    Float2 screen;
+    REQUIRE(bed.host->ToScreen(*second, Float2{5.0f, 6.0f}, screen));
+    CHECK(screen.x == doctest::Approx(1505.0f));
+    CHECK(screen.y == doctest::Approx(106.0f));
+
+    // Overlapping, the window focused last is on top.
+    window->Window().SetPosition(5, 5);
+    windows.PostEvent(shell::WindowEvent{shell::WindowEventType::FocusGained, window->Window().Id()});
+    bed.Frame(bed.main.Get(), window);
+    windows.ClearEvents();
+    CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == second.Get());
+    windows.PostEvent(shell::WindowEvent{shell::WindowEventType::FocusGained, bed.main->Window().Id()});
+    bed.Frame(bed.main.Get(), window);
+    windows.ClearEvents();
+    CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == mainRoot.Get());
+
+    // Its events, told by its root; a close asked for closes nothing by itself.
+    Array<shell::WindowEvent> told;
+    const SceneRoot* toldRoot = nullptr;
+    bed.host->SetOnWindowEvent([&](SceneRoot& root, const shell::WindowEvent& event)
+    {
+        toldRoot = &root;
+        told.PushBack(event);
+    });
+    windows.PostEvent(shell::WindowEvent{shell::WindowEventType::Moved, window->Window().Id(), 0, 0, 40, 30});
+    windows.PostEvent(shell::WindowEvent{shell::WindowEventType::CloseRequested, window->Window().Id()});
+    windows.PostEvent(shell::WindowEvent{shell::WindowEventType::Moved, 999u}); // no window of its own
+    bed.Frame(bed.main.Get(), window);
+    windows.ClearEvents();
+    REQUIRE(told.Size() == 2u);
+    CHECK(toldRoot == second.Get());
+    CHECK(told[0].type == shell::WindowEventType::Moved);
+    CHECK(told[0].x == 40);
+    CHECK(told[1].type == shell::WindowEventType::CloseRequested);
+    CHECK(bed.host->WindowCount() == 2u);
+
+    bed.host->CloseWindow(*second);
+    CHECK(closed == 1);
+    CHECK(bed.host->WindowCount() == 1u);
+    CHECK(bed.host->WindowFor(second.Get()) == nullptr);
+    CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == mainRoot.Get());
+    bed.Frame(bed.main.Get());
 }

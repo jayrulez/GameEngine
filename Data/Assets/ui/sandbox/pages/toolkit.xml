@@ -1,0 +1,56 @@
+<Panel id="page-toolkit" class="page" gap="18">
+    <Label class="page-title" text="Toolkit"/>
+    <Label class="page-lead" white-space="normal"
+           text="Editor widgets from GUI.Toolkit. A tool bar's buttons name commands, as menu items and shortcuts do: one command greys its button, its row in a menu and its keys together, and a tooltip says the keys and why a command is disabled. What does not fit goes into the menu at the bar's end. A status bar holds items in a start and an end zone and a message; right-click it to hide or show the items with a title."/>
+
+    <Panel class="section" gap="12">
+        <Label class="section-title" text="Tool bars and a status bar"/>
+        <Panel id="toolkit-frame" class="toolkit-frame" key-context="toolkit">
+            <ToolBar id="toolkit-bar">
+                <ToolButton command="toolkit.new" icon="Assets/ui/sandbox/icons/new.svg"/>
+                <ToolButton command="toolkit.open" icon="Assets/ui/sandbox/icons/open.svg"/>
+                <ToolButton command="toolkit.save" icon="Assets/ui/sandbox/icons/save.svg"/>
+                <Separator/>
+                <ToolButton command="toolkit.undo" icon="Assets/ui/sandbox/icons/undo.svg"/>
+                <ToolButton command="toolkit.redo" icon="Assets/ui/sandbox/icons/redo.svg"/>
+                <Separator/>
+                <ToolButton command="toolkit.grid" toggle="true" icon="Assets/ui/sandbox/icons/grid.svg" overflow-priority="1"/>
+                <ToolButton command="toolkit.snap" toggle="true" icon="Assets/ui/sandbox/icons/snap.svg"/>
+                <Separator/>
+                <ToolMenuButton command="toolkit.play" split="true" shows-text="true" icon="Assets/ui/sandbox/icons/play.svg" overflow-priority="2">
+                    <MenuItem command="toolkit.play-here"/>
+                    <MenuItem command="toolkit.play-window"/>
+                </ToolMenuButton>
+                <ToolMenuButton text="Add" shows-text="true" icon="Assets/ui/sandbox/icons/add.svg">
+                    <MenuItem command="toolkit.add-cube"/>
+                    <MenuItem command="toolkit.add-sphere"/>
+                    <MenuItem command="toolkit.add-light"/>
+                </ToolMenuButton>
+                <Spacer/>
+                <ToolButton command="toolkit.settings" icon="Assets/ui/sandbox/icons/settings.svg" overflow-priority="3"/>
+            </ToolBar>
+            <Panel class="toolkit-middle" flex-direction="row">
+                <ToolBar id="toolkit-tools" orientation="vertical">
+                    <ToolButton name="toolkit-tool" toggle="true" checked="true" icon="Assets/ui/sandbox/icons/select.svg" tooltip="Select"/>
+                    <ToolButton name="toolkit-tool" toggle="true" icon="Assets/ui/sandbox/icons/move.svg" tooltip="Move"/>
+                    <ToolButton name="toolkit-tool" toggle="true" icon="Assets/ui/sandbox/icons/rotate.svg" tooltip="Rotate"/>
+                    <ToolButton name="toolkit-tool" toggle="true" icon="Assets/ui/sandbox/icons/scale.svg" tooltip="Scale"/>
+                </ToolBar>
+                <Panel id="toolkit-canvas" class="toolkit-canvas">
+                    <Label class="toolkit-note" white-space="normal"
+                           text="Save, Undo and Redo start disabled: hover them for why. Make a change to enable them. Ctrl+N, Ctrl+O, Ctrl+S, Ctrl+Z and Ctrl+Y run them while the focus is in this frame."/>
+                </Panel>
+            </Panel>
+            <StatusBar id="toolkit-status">
+                <StatusItem id="toolkit-branch" title="Branch"><Label text="main"/></StatusItem>
+                <StatusItem id="toolkit-cursor" zone="end" title="Cursor"><Label text="Ln 4, Col 12"/></StatusItem>
+                <StatusItem id="toolkit-grid" zone="end" title="Grid"><Label id="toolkit-grid-state" text="Grid on"/></StatusItem>
+            </StatusBar>
+        </Panel>
+        <Panel class="toolkit-buttons" flex-direction="row" gap="10">
+            <Button id="toolkit-change" class="toolkit-button" text="Make a change" command="toolkit.change"/>
+            <Button id="toolkit-narrow" class="toolkit-button" text="Narrow the tool bar" command="toolkit.narrow"/>
+        </Panel>
+        <Label class="caption" white-space="normal" text="ToolBar, ToolButton, ToolMenuButton (a drop-down, or split) and StatusBar (GUI.Toolkit) over the core's commands and keymap; the default sheet styles them through the theme's tokens."/>
+    </Panel>
+</Panel>

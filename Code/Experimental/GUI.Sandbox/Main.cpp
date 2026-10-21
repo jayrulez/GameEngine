@@ -48,6 +48,7 @@ import experimental.gui.testing;   // --keys targets by selector or text (E8f), 
 import experimental.gui.hosting;   // the host: the window's GUI, offscreen pictures, the picture baker
 import experimental.gui.viewport;  // the Viewport page's widget
 import experimental.gui.docking;   // the Docking page's dock space
+import experimental.gui.toolkit;   // the Toolkit page's tool and status bars
 import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
@@ -484,6 +485,11 @@ private:
     Array<String> m_dockPanels; // the registered panels' ids, for "Show the closed panels"
     u32 m_dockMade[8]{};        // how often each panel's content was made (its close policy shows)
     void FillDocking(gui::Node& host);
+    void FillToolkit(gui::Node& frame);
+    // The Toolkit page's edit history: changes left to save, to undo and to redo.
+    i32 m_toolkitUnsaved = 0;
+    i32 m_toolkitDone = 0;
+    i32 m_toolkitUndone = 0;
     void RegisterDockPanel(StringView id, StringView title, gui::DockClosePolicy close, StringView line);
 
     // === Fonts ===
@@ -618,6 +624,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     }
     m_dataFileSystem = MakeUnique<vfs::NativeFileSystem>(AppRoot(), m_dataRoot.AsView(), AppRoot());
     gui::RegisterGuiElements(); // the lab's widgets, creatable by tag from markup
+    gui::RegisterToolkitElements(); // and the toolkit's
     m_shaders = MakeUnique<gui::VgShaderLibrary>(AppRoot(), AppRoot());
     if (!m_shaders->Load(*m_device, *m_dataFileSystem))
     {
@@ -997,6 +1004,9 @@ void GUISandbox::FillNativeHosts()
     // Docking: a dock space over a controller (D3, D4).
     if (gui::Node* host = FindById(*m_shellNode, u8"docking-host"))
         FillDocking(*host);
+    // Toolkit: the tool bars' commands, their keys and the status bar's messages (T0).
+    if (gui::Node* frame = FindById(*m_shellNode, u8"toolkit-frame"))
+        FillToolkit(*frame);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -1256,7 +1266,7 @@ void GUISandbox::ApplySandboxSheet()
 {
     // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
     // page's own sheet over that, styling its page alone.
-    const String theme = Format(u8"{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS()); // docking's over the widgets'
+    const String theme = Format(u8"{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS()); // the satellites' over the widgets'
     m_styles->SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
@@ -2111,6 +2121,132 @@ void GUISandbox::FillDocking(gui::Node& host)
                                 if (auto* button = page != nullptr ? Cast<gui::Button>(FindById(*page, u8"docking-torn")) : nullptr)
                                     button->SetText(dim ? u8"A torn tab dims" : u8"A torn tab closes up");
                             });
+}
+
+// The Toolkit page's commands: Save, Undo and Redo disabled until there is something to do, with
+// the reason a tooltip shows; Grid and Snap checked; Play and Add saying what they did on the
+// status bar; Narrow showing the tool bar's overflow.
+void GUISandbox::FillToolkit(gui::Node& frame)
+{
+    gui::GUIContext& context = m_root->GetContext();
+    struct Named
+    {
+        const char8_t* id;
+        const char8_t* label;
+        const char8_t* keys;
+    };
+    const Named kCommands[] = {
+        {u8"toolkit.new", u8"New", u8"ctrl-n"},         {u8"toolkit.open", u8"Open", u8"ctrl-o"},
+        {u8"toolkit.save", u8"Save", u8"ctrl-s"},       {u8"toolkit.undo", u8"Undo", u8"ctrl-z"},
+        {u8"toolkit.redo", u8"Redo", u8"ctrl-y"},       {u8"toolkit.grid", u8"Grid", nullptr},
+        {u8"toolkit.snap", u8"Snap", nullptr},          {u8"toolkit.play", u8"Play", u8"f5"},
+        {u8"toolkit.play-here", u8"Play from here", nullptr}, {u8"toolkit.play-window", u8"Play in a window", nullptr},
+        {u8"toolkit.add-cube", u8"Cube", nullptr},      {u8"toolkit.add-sphere", u8"Sphere", nullptr},
+        {u8"toolkit.add-light", u8"Light", nullptr},    {u8"toolkit.settings", u8"Settings", nullptr},
+    };
+    for (const Named& named : kCommands)
+    {
+        context.DefineCommand(named.id).SetLabel(named.label);
+        if (named.keys != nullptr)
+            (void)context.GetKeymap().Bind(named.keys, named.id, u8"toolkit"); // while the focus is in the frame
+    }
+    context.DefineCommand(u8"toolkit.grid").SetChecked(true);
+    // The canvas takes the focus a click gives it, as an editor's view does: the frame's keys run
+    // while the focus is in it.
+    if (gui::Node* canvas = FindById(frame, u8"toolkit-canvas"))
+        canvas->SetTabFocusable(true);
+
+    GUISandbox* self = this;
+    gui::Node* page = &frame;
+    const auto status = [page](StringView text)
+    {
+        if (auto* bar = Cast<gui::StatusBar>(FindById(*page, u8"toolkit-status")))
+            bar->ShowMessage(text, 3.0f);
+    };
+    // Save, Undo and Redo over an edit history of counts: what is left to save, undo and redo.
+    const auto update = [self]()
+    {
+        gui::GUIContext& c = self->m_root->GetContext();
+        gui::Command& save = c.DefineCommand(u8"toolkit.save");
+        save.SetEnabled(self->m_toolkitUnsaved > 0);
+        save.SetDisabledReason(u8"Nothing to save: make a change first");
+        gui::Command& undo = c.DefineCommand(u8"toolkit.undo");
+        undo.SetEnabled(self->m_toolkitDone > 0);
+        undo.SetDisabledReason(u8"Nothing to undo");
+        gui::Command& redo = c.DefineCommand(u8"toolkit.redo");
+        redo.SetEnabled(self->m_toolkitUndone > 0);
+        redo.SetDisabledReason(u8"Nothing to redo");
+    };
+    update();
+    const auto on = [self](const char8_t* id, Function<void()> run)
+    { (void)self->m_root->OnCommand(id, [run = Move(run)](gui::CommandEvent&) { run(); }); };
+    on(u8"toolkit.change", [self, update, status]()
+    {
+        ++self->m_toolkitUnsaved;
+        ++self->m_toolkitDone;
+        self->m_toolkitUndone = 0;
+        update();
+        status(u8"Changed the scene");
+    });
+    on(u8"toolkit.save", [self, update, status]()
+    {
+        self->m_toolkitUnsaved = 0;
+        update();
+        status(u8"Saved");
+    });
+    on(u8"toolkit.undo", [self, update, status]()
+    {
+        --self->m_toolkitDone;
+        ++self->m_toolkitUndone;
+        ++self->m_toolkitUnsaved;
+        update();
+        status(u8"Undid the change");
+    });
+    on(u8"toolkit.redo", [self, update, status]()
+    {
+        --self->m_toolkitUndone;
+        ++self->m_toolkitDone;
+        ++self->m_toolkitUnsaved;
+        update();
+        status(u8"Redid the change");
+    });
+    on(u8"toolkit.new", [status]() { status(u8"A new scene"); });
+    on(u8"toolkit.open", [status]() { status(u8"Opened a scene"); });
+    on(u8"toolkit.settings", [status]() { status(u8"Settings would open here"); });
+    on(u8"toolkit.grid", [self, page, status]()
+    {
+        gui::Command& grid = self->m_root->GetContext().DefineCommand(u8"toolkit.grid");
+        grid.SetChecked(!grid.IsChecked());
+        if (auto* label = Cast<gui::Label>(FindById(*page, u8"toolkit-grid-state")))
+            label->SetText(grid.IsChecked() ? u8"Grid on" : u8"Grid off");
+        status(grid.IsChecked() ? u8"The grid shows" : u8"The grid hides");
+    });
+    on(u8"toolkit.snap", [self, status]()
+    {
+        gui::Command& snap = self->m_root->GetContext().DefineCommand(u8"toolkit.snap");
+        snap.SetChecked(!snap.IsChecked());
+        status(snap.IsChecked() ? u8"Snapping to the grid" : u8"Not snapping");
+    });
+    on(u8"toolkit.play", [status]() { status(u8"Playing"); });
+    on(u8"toolkit.play-here", [status]() { status(u8"Playing from here"); });
+    on(u8"toolkit.play-window", [status]() { status(u8"Playing in a window"); });
+    on(u8"toolkit.add-cube", [status]() { status(u8"Added a cube"); });
+    on(u8"toolkit.add-sphere", [status]() { status(u8"Added a sphere"); });
+    on(u8"toolkit.add-light", [status]() { status(u8"Added a light"); });
+    on(u8"toolkit.narrow", [page]()
+    {
+        auto* holder = Cast<gui::UIWidget>(page);
+        if (holder == nullptr)
+            return;
+        const bool narrow = !holder->HasClass(u8"narrow");
+        if (narrow)
+            holder->AddClass(u8"narrow");
+        else
+            holder->RemoveClass(u8"narrow");
+        gui::Node* section = page->GetParent();
+        if (auto* button = section != nullptr ? Cast<gui::Button>(FindById(*section, u8"toolkit-narrow")) : nullptr)
+            button->SetText(narrow ? u8"Widen the tool bar" : u8"Narrow the tool bar");
+    });
 }
 
 // The Docking page's floats in OS windows of their own (`own`), or in the area. A window's root is

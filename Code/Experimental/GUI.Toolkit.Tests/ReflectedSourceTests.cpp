@@ -81,6 +81,8 @@ namespace reflected
         core::Quaternion rotation = core::Quaternion::Identity;
         LampShape shape;
         core::Color tint{1.0f, 1.0f, 1.0f, 1.0f};
+        core::Color edge{0.2f, 0.2f, 0.2f, 1.0f};
+        core::Float4 glow{1.0f, 0.5f, 0.0f, 4.0f}; // sRGB rgb, a linear intensity in w
         i64 id = 101;
         core::Array<f32> weights;
         core::Array<core::RefPtr<TestEffect>> effects;
@@ -142,6 +144,8 @@ namespace reflected
         builder.Property<&TestLamp::rotation>("rotation");
         builder.Property<&TestLamp::shape>("shape");
         builder.Property<&TestLamp::tint>("tint");
+        builder.Property<&TestLamp::edge>("edge").PropAttribute("noAlpha", true);
+        builder.Property<&TestLamp::glow>("glow").PropAttribute("hdrColor", true);
         builder.Property<&TestLamp::id>("id", core::PropertyFlags::ReadOnly);
         builder.AccessorProperty<&TestLamp::GetExposure, &TestLamp::SetExposure>("exposure");
         builder.Nested<&TestLamp::weights>("weights");
@@ -237,7 +241,7 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     Bed bed;
     core::Array<PropertyInfo> rows(core::DefaultAllocator());
     bed.source.GetProperties(SV(u8""), rows);
-    REQUIRE(rows.Size() == 19u);
+    REQUIRE(rows.Size() == 21u);
     CHECK(rows[0].Name == core::String(u8"name"));
     CHECK(rows[0].DisplayName == core::String(u8"Name"));
     CHECK(rows[0].Description == core::String(u8"What the scene calls it"));
@@ -262,7 +266,10 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     CHECK(bed.Find(rows, u8"rotation")->Hint == core::String(u8"Float3")); // Euler degrees
     CHECK(bed.Find(rows, u8"shape")->Kind == PropertyKind::Group);
     CHECK(bed.Find(rows, u8"shape")->Hint == core::String(u8"LampShape")); // no editor takes it: its rows
-    CHECK(bed.Find(rows, u8"tint")->Hint == core::String(u8"Color")); // for T4, or an application's editor
+    CHECK(bed.Find(rows, u8"tint")->Kind == PropertyKind::Color);
+    CHECK(bed.Find(rows, u8"tint")->ShowsAlpha);
+    CHECK_FALSE(bed.Find(rows, u8"edge")->ShowsAlpha);
+    CHECK(bed.Find(rows, u8"glow")->Hint == core::String(u8"ColorHdr"));
     CHECK(bed.Find(rows, u8"id")->ReadOnly);
     CHECK(bed.Find(rows, u8"exposure")->Kind == PropertyKind::Float); // a setter's
 
@@ -374,7 +381,8 @@ TEST_CASE("reflected source: the grid shows it")
     (void)root->UpdateLayout();
     CHECK(core::Cast<FloatsPropertyEditor>(grid->FindEditor(SV(u8"position"))) != nullptr);
     CHECK(core::Cast<FloatsPropertyEditor>(grid->FindEditor(SV(u8"rotation"))) != nullptr);
-    CHECK(grid->FindEditor(SV(u8"tint")) == nullptr); // a Color no editor takes yet (T4): its r, g, b, a
+    CHECK(core::Cast<ColorPropertyEditor>(grid->FindEditor(SV(u8"tint"))) != nullptr);
+    CHECK(core::Cast<HdrColorPropertyEditor>(grid->FindEditor(SV(u8"glow"))) != nullptr);
     CHECK(grid->FindEditor(SV(u8"shape")) == nullptr); // a struct no editor takes: a group of its rows
     CHECK(grid->GetRow(grid->FindRow(SV(u8"shape")))->HasChildren);
     CHECK(core::Cast<EnumPropertyEditor>(grid->FindEditor(SV(u8"kind"))) != nullptr);
@@ -560,4 +568,68 @@ TEST_CASE("reflected source: copy and paste through the text format, one change,
     // A paste undoes in one.
     CHECK(bed.source.Restore(bed.changes.Back(), true));
     CHECK(bed.b->weights.IsEmpty());
+}
+
+TEST_CASE("reflected source: a Color is a colour; an HDR colour its colour and its intensity, in stops on its row")
+{
+    Bed bed(true);
+    reflected::BlobFormat format;
+    bed.source.SetTextFormat(&format);
+    CHECK(bed.source.GetValue(SV(u8"tint"), 0).AsColor().r == doctest::Approx(1.0f));
+    bed.b->tint = core::Color{0.0f, 1.0f, 0.0f, 1.0f};
+    CHECK(ReadPropertyValue(bed.source, SV(u8"tint"), PropertyKind::Color).Mixed);
+    bed.Commit(u8"tint", Variant(core::Color{0.2f, 0.4f, 0.6f, 0.5f}));
+    CHECK(bed.b->tint.g == doctest::Approx(0.4f));
+    CHECK(bed.source.Restore(bed.changes.Back(), true));
+    CHECK(bed.b->tint.g == doctest::Approx(1.0f));
+
+    core::Array<PropertyInfo> parts(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8"glow"), parts);
+    REQUIRE(parts.Size() == 2u);
+    CHECK(parts[0].Kind == PropertyKind::Color);
+    CHECK_FALSE(parts[0].ShowsAlpha);
+    CHECK(parts[1].Hint == core::String(u8"stops"));
+    CHECK(bed.source.GetValue(SV(u8"glow.color"), 0).AsColor().g == doctest::Approx(0.5f));
+    CHECK(bed.source.GetValue(SV(u8"glow.intensity"), 0).AsFloat() == doctest::Approx(4.0));
+    bed.Commit(u8"glow.color", Variant(core::Color{0.0f, 0.0f, 1.0f, 1.0f}));
+    CHECK(bed.a->glow.z == doctest::Approx(1.0f));
+    CHECK(bed.a->glow.w == doctest::Approx(4.0f)); // its intensity kept
+    bed.Commit(u8"glow.intensity", Variant(8.0));
+    CHECK(bed.b->glow.w == doctest::Approx(8.0f));
+    CHECK(bed.b->glow.z == doctest::Approx(1.0f));
+
+    // A colour copied pastes onto an HDR colour's colour part; reverted, the type's comes back.
+    const core::String tint = bed.source.CopyValue(SV(u8"tint"));
+    core::String reason;
+    REQUIRE(bed.source.PasteValue(SV(u8"glow.color"), tint.AsView(), reason));
+    CHECK(bed.a->glow.x == doctest::Approx(1.0f));
+    REQUIRE(bed.source.Revert(SV(u8"glow")));
+    CHECK(bed.a->glow.y == doctest::Approx(0.5f));
+    CHECK(bed.b->glow.w == doctest::Approx(4.0f));
+}
+
+TEST_CASE("reflected source: the stops editor shows log2 of the intensity and writes 2 to its stops")
+{
+    Bed bed;
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 900.0f});
+    root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
+    auto grid = core::MakeRef<PropertyGrid>(core::DefaultAllocator());
+    grid->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(360.0f);
+        s.Height = LayoutLength::Px(860.0f);
+    });
+    root->AddChild(grid.Get());
+    grid->SetSource(&bed.source);
+    (void)root->UpdateLayout();
+    HdrColorPropertyEditor* glow = core::Cast<HdrColorPropertyEditor>(grid->FindEditor(SV(u8"glow")));
+    REQUIRE(glow != nullptr);
+    NumberField& stops = *glow->GetIntensityPart()->GetField();
+    CHECK(stops.GetValue() == doctest::Approx(2.0)); // 4 is two stops
+    stops.RequestFocus();
+    for (int i = 0; i < 10; ++i)
+        root->GetEventDispatcher()->InjectKeyDown(static_cast<core::u32>(KeyCode::Up)); // a stop more
+    CHECK(bed.a->glow.w == doctest::Approx(8.0f).epsilon(0.01));
+    grid->SetSource(nullptr);
 }

@@ -19,6 +19,10 @@
 //   - colours (T4): a swatch and a hex field; the swatch opens the core's picker as a popup, a
 //     drag previewing on every object and the picker's closing committing once (the originals
 //     put back first), Escape cancelling; the hex field commits what is typed;
+//   - an intensity in exposure stops (hint "stops", T4): a number field of log2 of the value, so
+//     0 stops is x1, writing 2^stops;
+//   - an HDR colour (hint "ColorHdr", T4): its `color` part's editor and its `intensity` part's
+//     stops on one row, each its own gesture;
 //   - lists (T2): the count (mixed when the objects' differ) and an Add button, a menu of the types
 //     when the list takes several; an element added at the end.
 // Mixed, a field shows the placeholder "Mixed" and a button says so.
@@ -635,6 +639,130 @@ export namespace experimental::gui
         bool m_picking = false; // a gesture under way in the open picker
     };
 
+    /// An intensity shown in exposure stops: log2 of its value (0 stops: x1), 2^stops written.
+    class StopsPropertyEditor : public SingleControlEditor
+    {
+        RTTI_OBJECT(StopsPropertyEditor, SingleControlEditor)
+    public:
+        StopsPropertyEditor()
+        {
+            AddClass(core::StringView(u8"stops"));
+            m_field = core::MakeRef<NumberField>(MemoryAllocator());
+            m_field->SetStepsOnWheel(false);
+            m_field->SetPlaceholder(MixedValueText());
+            m_field->SetSuffix(core::String(u8" EV"));
+            m_field->SetMin(-16.0);
+            m_field->SetMax(16.0);
+            m_field->SetStep(0.1);
+            StopsPropertyEditor* self = this;
+            m_field->SetOnValueChanging([self](f64 stops)
+            {
+                self->Begin();
+                self->PreviewEdit(PropertyWrite{Variant(static_cast<f64>(core::Pow(2.0f, static_cast<f32>(stops))))});
+            });
+            m_field->SetOnValueChanged([self](f64 stops)
+            {
+                self->Begin();
+                self->m_begun = false;
+                self->CommitEdit(PropertyWrite{Variant(static_cast<f64>(core::Pow(2.0f, static_cast<f32>(stops))))});
+            });
+            m_field->SetOnValueCancelled([self]()
+            {
+                if (!self->m_begun)
+                    return;
+                self->m_begun = false;
+                self->CancelEdit();
+            });
+            Hold(*m_field);
+        }
+        [[nodiscard]] NumberField* GetField() const noexcept { return m_field.Get(); }
+
+    protected:
+        void OnBind(const PropertyInfo&, const PropertyValue& value) override
+        {
+            m_begun = false;
+            const f64 linear = value.Value.AsFloat();
+            m_field->SetValue(linear > 0.0 ? static_cast<f64>(core::Log(static_cast<f32>(linear)) / core::Log(2.0f)) : -16.0);
+            m_field->SetMixed(value.Mixed);
+            m_field->SetEnabled(!IsReadOnly());
+        }
+
+    private:
+        void Begin()
+        {
+            if (m_begun)
+                return;
+            m_begun = true;
+            BeginEdit();
+        }
+
+        core::RefPtr<NumberField> m_field;
+        bool m_begun = false;
+    };
+
+    /// An HDR colour on one row: its `color` part's swatch and hex, its `intensity` part's stops.
+    class HdrColorPropertyEditor : public PropertyEditor
+    {
+        RTTI_OBJECT(HdrColorPropertyEditor, PropertyEditor)
+    public:
+        HdrColorPropertyEditor()
+        {
+            AddClass(core::StringView(u8"colorhdr"));
+            EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Row;
+                s.AlignItems = Align::Stretch;
+                s.ColumnGap = 6.0f;
+            });
+            m_color = core::MakeRef<ColorPropertyEditor>(MemoryAllocator());
+            m_color->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Grow = 3.0f;
+                s.Basis = LayoutLength::Px(0.0f);
+                s.MinWidth = LayoutLength::Px(0.0f);
+            });
+            AddChild(m_color.Get());
+            m_stops = core::MakeRef<StopsPropertyEditor>(MemoryAllocator());
+            m_stops->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Grow = 2.0f;
+                s.Basis = LayoutLength::Px(0.0f);
+                s.MinWidth = LayoutLength::Px(0.0f);
+            });
+            AddChild(m_stops.Get());
+        }
+        [[nodiscard]] ColorPropertyEditor* GetColorPart() const noexcept { return m_color.Get(); }
+        [[nodiscard]] StopsPropertyEditor* GetIntensityPart() const noexcept { return m_stops.Get(); }
+
+    protected:
+        void OnBind(const PropertyInfo&, const PropertyValue&) override
+        {
+            IPropertyEditHost* host = GetHost();
+            if (host == nullptr)
+                return;
+            core::Array<PropertyInfo> parts(MemoryAllocator());
+            host->GetChildProperties(GetPath(), parts);
+            for (PropertyInfo& part : parts)
+            {
+                const core::String path = JoinPropertyPath(GetPath(), part.Name.AsView());
+                part.ReadOnly = part.ReadOnly || IsReadOnly();
+                if (part.Kind == PropertyKind::Color)
+                    m_color->Bind(*host, path.AsView(), part, host->ReadPropertyValue(path.AsView(), part.Kind));
+                else if (part.Kind == PropertyKind::Float)
+                    m_stops->Bind(*host, path.AsView(), part, host->ReadPropertyValue(path.AsView(), part.Kind));
+            }
+        }
+        void OnTextStyleChange() override
+        {
+            ShareTextStyle(*m_color);
+            ShareTextStyle(*m_stops);
+        }
+
+    private:
+        core::RefPtr<ColorPropertyEditor> m_color;
+        core::RefPtr<StopsPropertyEditor> m_stops;
+    };
+
     /// A list's row: how many elements, and Add.
     class ListPropertyEditor : public PropertyEditor
     {
@@ -722,7 +850,8 @@ export namespace experimental::gui
     };
 
     /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
-    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2); colours by kind (T4).
+    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2); colours by kind, stops
+    /// and HDR colours by hint (T4).
     inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
     {
         const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
@@ -734,6 +863,9 @@ export namespace experimental::gui
         registry.RegisterKind(PropertyKind::String, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Enum, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<EnumPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Color, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ColorPropertyEditor>(a); });
+        registry.RegisterHint(core::StringView(u8"stops"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StopsPropertyEditor>(a); });
+        registry.RegisterHint(core::StringView(u8"ColorHdr"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<HdrColorPropertyEditor>(a); },
+                              true);
         registry.RegisterKind(PropertyKind::List, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ListPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Flags, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FlagsPropertyEditor>(a); });
     }

@@ -8,6 +8,9 @@
 //   - bool, every integer width, f32, f64 and String are values; an enum is choices from its
 //     enumerators, or flags with a `flags` attribute (read and written as an integer through the
 //     property's address); a ReadOnly property is read only.
+//   - A Color is a colour (T4), its alpha hidden with `noAlpha`; a Float4 with `hdrColor` (sRGB
+//     rgb, a linear intensity in w) is an HDR colour, hinted "ColorHdr", its parts `color` and
+//     `intensity` (shown in stops).
 //   - Float2, Float3 and Float4 are groups hinted with their names, their parts x, y, z, w; a
 //     Quaternion is a Float3 group of Euler degrees (pitch, yaw, roll) the source converts, as the
 //     editor's Transform row does; a Nested struct, or a reflected value struct, is a group.
@@ -170,7 +173,9 @@ export namespace experimental::gui
                 ListElements(parent, out);
                 return;
             }
-            if (target.Part < 0 && (shape == Shape::Float2 || shape == Shape::Float3 || shape == Shape::Float4 || shape == Shape::Quaternion))
+            if (target.Part < 0 && target.Hdr)
+                ListHdrParts(out);
+            else if (target.Part < 0 && (shape == Shape::Float2 || shape == Shape::Float3 || shape == Shape::Float4 || shape == Shape::Quaternion))
                 ListParts(shape, out);
         }
 
@@ -365,6 +370,7 @@ export namespace experimental::gui
             Float3,
             Float4,
             Quaternion,
+            Color,
             Group, // a nested or value struct, an object
             List,
             Other,
@@ -382,6 +388,7 @@ export namespace experimental::gui
             usize Index = 0;
             bool Element = false;
             i32 Part = -1;                              // a part of the Float or Quaternion above
+            bool Hdr = false;                           // a Float4 that is an HDR colour
             bool ReadOnly = false;
         };
 
@@ -405,6 +412,8 @@ export namespace experimental::gui
                 return Shape::Float4;
             if (is.template operator()<core::Quaternion>())
                 return Shape::Quaternion;
+            if (is.template operator()<core::Color>())
+                return Shape::Color;
             if (core::IsEnum(type))
                 return Shape::Enum;
             if (type.container != nullptr)
@@ -463,6 +472,7 @@ export namespace experimental::gui
                 next.Type = property->type;
                 next.Address = property->address != nullptr ? property->address(owner) : nullptr;
                 next.ReadOnly = at.ReadOnly || (static_cast<u32>(property->flags) & static_cast<u32>(core::PropertyFlags::ReadOnly)) != 0;
+                next.Hdr = core::FindAttribute(*property, core::StringView(u8"hdrColor")) != nullptr && ShapeOf(*property->type) == Shape::Float4;
                 at = next;
                 return true;
             }
@@ -491,7 +501,7 @@ export namespace experimental::gui
                 at = next;
                 return true;
             }
-            const i32 part = PartIndex(shape, segment);
+            const i32 part = at.Hdr ? HdrPartIndex(segment) : PartIndex(shape, segment);
             if (part >= 0)
             {
                 at.Part = part;
@@ -506,6 +516,14 @@ export namespace experimental::gui
                     if (core::StringView(reinterpret_cast<const char8_t*>(t->properties[i].name)) == name)
                         return &t->properties[i];
             return nullptr;
+        }
+        // An HDR colour's parts: its colour (rgb), its intensity (w).
+        static constexpr i32 kHdrColorPart = 10;
+        [[nodiscard]] static i32 HdrPartIndex(core::StringView segment)
+        {
+            if (segment == core::StringView(u8"color"))
+                return kHdrColorPart;
+            return segment == core::StringView(u8"intensity") ? 3 : -1;
         }
         [[nodiscard]] static i32 PartIndex(Shape shape, core::StringView segment)
         {
@@ -552,6 +570,10 @@ export namespace experimental::gui
                 info.Description = *description;
             info.ReadOnly = group.ReadOnly || (static_cast<u32>(property.flags) & static_cast<u32>(core::PropertyFlags::ReadOnly)) != 0;
             DescribeType(*property.type, core::FindAttribute(property, core::StringView(u8"flags")) != nullptr, info);
+            if (info.Kind == PropertyKind::Color)
+                info.ShowsAlpha = core::FindAttribute(property, core::StringView(u8"noAlpha")) == nullptr;
+            if (ShapeOf(*property.type) == Shape::Float4 && core::FindAttribute(property, core::StringView(u8"hdrColor")) != nullptr)
+                info.Hint = core::String(u8"ColorHdr");
             if (const core::Attribute* range = core::FindAttribute(property, core::StringView(u8"range")))
                 if (const core::Float4* bounds = range->value.TryGet<core::Float4>())
                 {
@@ -601,6 +623,9 @@ export namespace experimental::gui
             case Shape::Quaternion:
                 info.Kind = PropertyKind::Group;
                 info.Hint = core::String(u8"Float3"); // Euler degrees
+                break;
+            case Shape::Color:
+                info.Kind = PropertyKind::Color;
                 break;
             case Shape::Group: // its type's name, for an editor of its own (a Color in T4); else its rows
                 info.Kind = PropertyKind::Group;
@@ -706,6 +731,21 @@ export namespace experimental::gui
             }
             return true;
         }
+        static void ListHdrParts(core::Array<PropertyInfo>& out)
+        {
+            PropertyInfo color;
+            color.Name = core::String(u8"color");
+            color.DisplayName = core::String(u8"Color");
+            color.Kind = PropertyKind::Color;
+            color.ShowsAlpha = false;
+            out.PushBack(core::Move(color));
+            PropertyInfo intensity;
+            intensity.Name = core::String(u8"intensity");
+            intensity.DisplayName = core::String(u8"Intensity");
+            intensity.Kind = PropertyKind::Float;
+            intensity.Hint = core::String(u8"stops");
+            out.PushBack(core::Move(intensity));
+        }
         static void ListParts(Shape shape, core::Array<PropertyInfo>& out)
         {
             const char8_t* const floats[] = {u8"x", u8"y", u8"z", u8"w"};
@@ -733,6 +773,11 @@ export namespace experimental::gui
             if (target.Type == nullptr)
                 return Variant{};
             const Shape shape = ShapeOf(*target.Type);
+            if (target.Part == kHdrColorPart)
+            {
+                core::Float4 parts{};
+                return ReadCompound(target, shape, parts) ? Variant(core::Color{parts.x, parts.y, parts.z, 1.0f}) : Variant{};
+            }
             if (target.Part >= 0)
                 return Variant(PartOf(target, shape));
             if (shape == Shape::List)
@@ -752,6 +797,14 @@ export namespace experimental::gui
             if (target.Type == nullptr || target.ReadOnly || value.IsEmpty())
                 return false;
             const Shape shape = ShapeOf(*target.Type);
+            if (target.Part == kHdrColorPart)
+            {
+                core::Float4 parts{};
+                if (!ReadCompound(target, shape, parts))
+                    return false;
+                const core::Color color = value.AsColor();
+                return WriteCompound(target, shape, core::Float4{color.r, color.g, color.b, parts.w});
+            }
             if (target.Part >= 0)
                 return SetPart(target, shape, value.AsFloat());
             if (target.Address != nullptr)
@@ -804,6 +857,8 @@ export namespace experimental::gui
                 return Variant(static_cast<const core::String*>(address)->AsView());
             case Shape::Enum:
                 return Variant(core::ReadEnumValue(address, type));
+            case Shape::Color:
+                return Variant(*static_cast<const core::Color*>(address));
             default:
                 return Variant{};
             }
@@ -849,6 +904,9 @@ export namespace experimental::gui
             case Shape::Enum:
                 core::WriteEnumValue(address, type, value.AsInt());
                 return true;
+            case Shape::Color:
+                *static_cast<core::Color*>(address) = value.AsColor();
+                return true;
             default:
                 return false;
             }
@@ -883,6 +941,8 @@ export namespace experimental::gui
                 return is.template operator()<f32>() ? core::Variant::From<f32>(static_cast<f32>(value.AsFloat())) : core::Variant::From<f64>(value.AsFloat());
             case Shape::String:
                 return core::Variant::From<core::String>(core::String(value.AsString()));
+            case Shape::Color:
+                return core::Variant::From<core::Color>(value.AsColor());
             default:
                 return core::Variant{}; // an enum or a compound: through its address alone
             }
@@ -1007,6 +1067,14 @@ export namespace experimental::gui
                 return;
             const bool reading = ar.Mode() == core::SerializeMode::Read;
             const Shape shape = ShapeOf(*target.Type);
+            if (target.Part == kHdrColorPart)
+            {
+                core::Color value = Read(target).AsColor();
+                core::Serialize(ar, key, value);
+                if (reading)
+                    (void)WriteTarget(target, Variant(value));
+                return;
+            }
             if (target.Part >= 0)
             {
                 f64 value = PartOf(target, shape);
@@ -1048,6 +1116,14 @@ export namespace experimental::gui
                 core::Serialize(ar, key, value);
                 if (reading)
                     (void)WriteTarget(target, Variant(value.AsView()));
+                return;
+            }
+            case Shape::Color:
+            {
+                core::Color value = Read(target).AsColor();
+                core::Serialize(ar, key, value);
+                if (reading)
+                    (void)WriteTarget(target, Variant(value));
                 return;
             }
             case Shape::Float2:
@@ -1237,8 +1313,12 @@ export namespace experimental::gui
         // a value's kind.
         [[nodiscard]] static core::String ShapeTag(const Target& target)
         {
+            if (target.Part == kHdrColorPart)
+                return core::String(u8"Color");
             if (target.Part >= 0)
                 return core::String(u8"number");
+            if (target.Hdr)
+                return core::String(u8"ColorHdr");
             switch (ShapeOf(*target.Type))
             {
             case Shape::Bool:
@@ -1257,6 +1337,8 @@ export namespace experimental::gui
                 return core::String(u8"Float3");
             case Shape::Float4:
                 return core::String(u8"Float4");
+            case Shape::Color:
+                return core::String(u8"Color");
             case Shape::Group:
                 return core::String(reinterpret_cast<const char8_t*>(target.Type->name));
             case Shape::List:

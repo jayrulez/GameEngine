@@ -75,6 +75,8 @@ namespace experimental::gui
     RTTI_DEFINE_OBJECT(ListPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ColorPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyColorPopup, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(StopsPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(HdrColorPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyGrip, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolMenuArrow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolBarOverflow, "rtti::gui::toolkit")

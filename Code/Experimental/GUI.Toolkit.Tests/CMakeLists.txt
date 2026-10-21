@@ -3,6 +3,7 @@ add_executable(GUI.Toolkit.Tests
     StatusBarTests.cpp
     PropertySourceTests.cpp
     PropertyEditorTests.cpp
+    PropertyGridTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Toolkit.Tests PRIVATE Experimental::GUI.Toolkit Experimental::GUI Foundation::Xml doctest::doctest)

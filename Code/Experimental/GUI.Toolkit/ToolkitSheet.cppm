@@ -45,6 +45,16 @@ export namespace experimental::gui
                         font-size: var(--font-small); }
             statusbar label { color: var(--statusbar-text, var(--text-dim)); }
             statusbar label.message { color: var(--statusbar-message, var(--text)); }
+            propertygrid { background-color: var(--propertygrid-background, var(--surface)); color: var(--text); }
+            propertycategory { background-color: var(--propertygrid-category, var(--surface-header)); color: var(--text-strong);
+                               font-weight: bold; }
+            propertyrow:hover { background-color: var(--propertygrid-row-hover, var(--row-hover)); }
+            propertyname { color: var(--propertygrid-name, var(--text-dim)); }
+            propertyeditor.unknown label { color: var(--text-dim); font-style: italic; }
+            propertyeditor.flags button { background-color: var(--propertygrid-flags, var(--control)); color: var(--text-strong);
+                                          padding: var(--space-s); text-align: start; }
+            propertyflagslist { background-color: var(--propertygrid-popup, var(--surface-raised)); border-radius: var(--radius-small);
+                                box-shadow: 0 4px 12px var(--shadow-color); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

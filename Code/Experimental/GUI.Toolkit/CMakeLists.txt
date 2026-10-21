@@ -14,5 +14,6 @@ target_sources(GUI.Toolkit
             PropertySource.cppm
             PropertyEditor.cppm
             PropertyEditors.cppm
+            PropertyGrid.cppm
     PRIVATE
         ToolkitReflection.cpp)

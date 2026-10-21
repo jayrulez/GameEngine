@@ -52,6 +52,16 @@ namespace experimental::gui
         builder.Creator();
     }
 
+    REFLECT_MEMBERS(PropertyGrid, "rtti::gui::toolkit")
+    {
+        builder.AccessorProperty<&PropertyGrid::GetLabelRatio, &PropertyGrid::SetLabelRatio>("labelRatio").PropAttribute("css", core::String(u8"label-ratio"));
+        builder.AccessorProperty<&PropertyGrid::GetIndentWidth, &PropertyGrid::SetIndentWidth>("indentWidth").PropAttribute("css", core::String(u8"indent-width"));
+        builder.Creator();
+    }
+
+    RTTI_DEFINE_OBJECT(PropertySplitHandle, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(PropertyCategoryContent, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(PropertyRowContent, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(UnknownPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(SingleControlEditor, "rtti::gui::toolkit")
@@ -74,6 +84,7 @@ namespace experimental::gui
                 &ToolBar::StaticType(),
                 &StatusItem::StaticType(),
                 &StatusBar::StaticType(),
+                &PropertyGrid::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)ElementTypes::Register(*type);

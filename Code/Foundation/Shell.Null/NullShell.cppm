@@ -160,6 +160,9 @@ export namespace foundation::shell
         {
             return core::Span<const Screen>(m_screens.Data(), m_screens.Size());
         }
+        /// A window event, as a pump would bring it (a test's: kept until ClearEvents).
+        void PostEvent(const WindowEvent& event) { m_events.PushBack(event); }
+        void ClearEvents() noexcept { m_events.Clear(); }
         /// The screens it reports (a test's).
         void SetScreens(core::Span<const Screen> screens)
         {
@@ -211,7 +214,7 @@ export namespace foundation::shell
         core::Array<core::UniquePtr<NullWindow>> m_owned;
         core::Array<IWindow*> m_live;            // borrowed parallel pointers for the span
         core::Array<core::u32> m_pendingDestroy; // window ids
-        core::Array<WindowEvent> m_events;       // always empty (no OS event source)
+        core::Array<WindowEvent> m_events;       // empty unless a test posts some (no OS event source)
         core::Array<Screen> m_screens;
         core::u32 m_nextId = 1;
         core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none

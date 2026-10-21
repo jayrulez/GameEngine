@@ -50,7 +50,8 @@ first three: hosting, the viewport, then docking.
 | GUI.Hosting | `experimental.gui.hosting` | The host on `foundation.graphics`: one GUI, a root per window, each window's VG context, renderer, targets and input; the frame; offscreen pictures; the picture baker | UI.Runtime | Built (H1 to H3) |
 | GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | Built (V1, V2) |
 | GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D6) |
-| GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: the property grid, colour pickers, curves, node graphs, tool and status bars | UI.Toolkit less docking | Empty (round two's ruling 4) |
+| GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs | UI.Toolkit less docking and the code editor | Designed (T0 to T7) |
+| GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Not this round (ruling T3) |
 | GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts, toasts | UI.Gamekit | Empty |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
 | GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Empty |
@@ -385,3 +386,111 @@ a float's window asking for a float with Shift, and screens clamping a restored 
 
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).
+
+### T The toolkit (approved by the user, 2026-10-21)
+
+What the editor uses of foundation.ui's toolkit (81 of its files, counted 2026-10-21): the property
+grid and its editors (33 files), SplitView (19, the core's Splitter now), the draggable tree (9), the
+code editor (8), tool bars built from the editor's action registry (5), the timeline (5), floating
+panels (4), the curve canvas (3), a toast host, the gradient editor, the breadcrumb bar and the
+status bar; the node graph only in the animation state machine. Its standalone colour pickers, HDR
+picker and vector fields the editor does not use. The lab's core already has the item views (tree,
+table, list), number fields, sliders, menus, tabs, expanders, windows, an undo stack, commands and a
+keymap.
+
+The survey (2026-10-21) read ezEngine, Godot, the Zero editor, Lumix, traktor, doriax, LunarSong and
+zed for property grids, colour, curves and gradients, node graphs, and tool and status bars.
+Findings that decide the design:
+
+- **An edit is a gesture.** Begin, preview, then restore the original and commit once as one undo
+  entry, or cancel (Zero, LunarSong, whose gesture cancels itself if dropped). Godot merges edits
+  made within 800 ms of each other and Lumix every repeat edit of a property, even separate ones.
+- **Editors chosen in layers**: the property's hint, then its type, then a fallback that says why
+  nothing fits (ezEngine, Zero), not one switch over every type.
+- **The selection behind one accessor**, so one object and several share code, with mixed values
+  recorded per component (Zero, ezEngine). Neither foundation.ui nor the editor has mixed values.
+- **Defaults from a stack of providers** (the type's default, then a prefab's), giving revert and a
+  marker on a changed value (ezEngine).
+- **State outside the rows**: fold state by property path, search over an index, virtualised rows
+  (zed); the wheel scrolls and never changes a value (ezEngine).
+- **Colour**: HDR as an intensity in exposure stops beside the colour (Godot, ezEngine, traktor),
+  one undoable commit when a picker closes, after restoring the original (Godot). foundation.ui's
+  HDR picker runs HSV on linear values. The engine's own rule (`Color`): an authored colour is
+  sRGB, decoded to linear where it reaches the GPU, so the picker edits sRGB values; linear is a
+  display, not the storage.
+- **Curves**: the editor draws with the runtime's own evaluator (LunarSong); this engine has three
+  copies of one cubic Hermite (Core's `Curve`, the particles' curves, foundation.ui's CurveCanvas).
+  Several curves on one canvas, box select, framing, constrained drags, tangent modes (ezEngine); a
+  gradient's interpolation space chosen (Godot), alpha stops apart from colour stops.
+- **A node graph is a view over a model** with stable ids, its edits requests its owner applies
+  (Godot, ezEngine); foundation.ui's copies the graph into the widget and maps indices. A connection
+  asked for returns its cardinality and whether it replaces one, shown on pins while dragging
+  (ezEngine); connections culled to the view (Godot, traktor); frames and comments.
+- **One command registry** feeds menus, tool bars and shortcuts (ezEngine, Lumix, Zero); a tool
+  bar's overflow is designed (zed shrinks and clips its left side); a status bar is registered items
+  in left and right zones with timed messages; a tooltip shows the shortcut and why a command is
+  disabled.
+
+#### Rulings (user, 2026-10-21)
+
+1. **The reflected source is the toolkit's.** The property grid reads a property source; the
+   toolkit has a source over core reflection and its attributes, and the application supplies the
+   writes and the undo (as ezEngine and Zero do). Today the editor's inspector maps reflection to
+   rows in about 3,000 lines of its own.
+2. **One curve, one gradient, in Core.** The runtime's types are the editors' model; the toolkit
+   has no curve or gradient model of its own. On `master`, before T5:
+   - `foundation.core` `:curve` gains `EvaluateCurve(Span<const CurveKey>, f32 time)`, the one
+     Hermite, which `Curve::Evaluate` calls. `CurveKey` gains a tangent mode (auto, smooth,
+     broken, flat) the editors keep, and `:curve` the function that sets tangents by their modes,
+     so an editor and an importer agree. PropertyAnimation's resource reads and writes the mode
+     (its version bumped).
+   - A new `:gradient` partition: colour stops (time, sRGB `Color` without alpha), alpha stops
+     (time, alpha), an interpolation (constant, sRGB values as today, linear light, OKLab), and
+     `EvaluateGradient` over spans of each.
+   - Particles keep their fixed eight keys (value types, reflected as bounded arrays), but of
+     Core's: `ParticleCurveFloat` holds `CurveKey`s and evaluates with `EvaluateCurve`, so it gains
+     constant and linear keys; `ParticleCurveColor` becomes
+     a fixed gradient evaluated by `EvaluateGradient`. `HermiteFloat` goes.
+   - `ParticleCurveFloat2` goes too. Its one user, size over lifetime, holds `size` (a
+     `ParticleCurveFloat` setting both axes) and `separateAxes`, with which X follows `size` and
+     Y a second curve, `sizeY`, of keys of its own. Every use in the samples (nine) sets X equal
+     to Y at every key, so each becomes `size` alone; a uniform size is one curve to edit and one
+     search per particle, and nothing needs linked key times (foundation.ui's CurveCanvas has
+     `LinkedTime` for this type only).
+   - The particle format's version is bumped; the samples' effects and the three authoring scripts
+     that write them (PaperKid's `fx.py`, Lamplight's `effects.py`, Snowline's `particles.py`) are
+     migrated, and the editor's particle page follows.
+   - Not folded in: Animation's sampler (glTF cubic splines over vectors and quaternions, with
+     glTF's tangent convention, imported rather than authored) and `Foundation/Spline` (paths in
+     space). foundation.ui's CurveCanvas and GradientEditor keep their copies until the editor
+     leaves foundation.ui.
+3. **The code editor is a satellite of its own**, `GUI.Code`: about 4,000 lines, used by eight of the
+   editor's files, and independent of the rest. Its plan comes later.
+4. **Several objects and mixed values from T1.** The editor edits only its primary selection today;
+   the protocol carries several from the start, since adding them later reworks it.
+5. **The core covers the generic trees and floats**, verified before T1: the core's TreeView with
+   drag and drop for the toolkit's draggable tree, the core's Window and docking's floats for its
+   floating panels. A tree specific to one use (a scene's hierarchy, an asset browser) is the
+   editor's, its own widget on the core's TreeView, not a toolkit widget.
+
+#### Phases
+
+Each a layer with its tests, the sandbox's Toolkit page growing with them.
+
+- **T0 Bars.** A tool bar from command ids: buttons, toggles, split and drop-down buttons, groups,
+  an overflow menu, tooltips with the shortcut and the reason a command is disabled. A status bar:
+  items registered in left and right zones, hideable, with timed messages.
+- **T1 The grid.** The property source protocol (rows by path, each object's value, mixed state,
+  read only, visibility), categories, folding by path, search, the label split, virtualised rows,
+  the edit gesture; the editors chosen in layers; bool, numbers with drag to scrub, text, enum and
+  flags.
+- **T2 Compound editors.** Vectors with mixed values per component; containers (add, remove,
+  reorder); nested objects; default providers with revert and the changed marker; copying and
+  pasting values.
+- **T3 The reflected source.** Core reflection and its attributes (display name, range, enum,
+  `visibleWhen`) as a property source; the sandbox edits a reflected object on the lab's undo stack.
+- **T4 Colour.** An inline picker and a swatch editor on the engine's sRGB colour; HDR intensity in
+  stops where a property has one; alpha; hex.
+- **T5 Curves, gradients, the timeline.** On ruling 2's Core types, after that `master` work.
+- **T6 The node graph.** A view over a graph source.
+- **T7 The rest.** A breadcrumb bar; toasts, unless the gamekit's serve.

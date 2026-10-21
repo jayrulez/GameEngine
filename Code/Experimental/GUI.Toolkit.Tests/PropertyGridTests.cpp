@@ -561,3 +561,51 @@ TEST_CASE("property grid: a row differing from its default is marked, so is what
         if (MenuItem* item = core::Cast<MenuItem>(bed.grid->GetRowMenu()->GetChildAt(i)); item != nullptr)
             CHECK_FALSE(item->IsEnabled());
 }
+
+namespace
+{
+    class MemoryClipboard : public IClipboard
+    {
+    public:
+        [[nodiscard]] bool HasText() const override { return m_text.Size() != 0; }
+        [[nodiscard]] core::String GetText() const override { return m_text; }
+        void SetText(core::StringView text) override { m_text = core::String(text); }
+
+    private:
+        core::String m_text;
+    };
+}
+
+TEST_CASE("property grid: Copy and Paste go through the source, from the menu or the keys; a refusal says why")
+{
+    Bed bed(2);
+    MemoryClipboard clipboard;
+    bed.D().SetClipboard(&clipboard);
+    bed.Add(u8"speed", PropertyKind::Float, Variant(2.5));
+    bed.Add(u8"slow", PropertyKind::Float, Variant(0.5));
+    bed.Add(u8"name", PropertyKind::String, Variant(SV(u8"Lamp")));
+    core::String said;
+    bed.grid->SetOnMessage([&said](core::StringView text) { said = core::String(text); });
+    int commits = 0;
+    bed.bag.SetOnCommit([&commits](const PropertyBag::Commit&) { ++commits; });
+    bed.Show();
+
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"speed")), core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Copy"));
+    CHECK(clipboard.GetText() == core::String(u8"2.5"));
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"slow")), core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Paste"));
+    CHECK(bed.bag.GetValue(SV(u8"slow"), 1).AsFloat() == doctest::Approx(2.5)); // into each object
+    CHECK(commits == 1); // one undo entry
+
+    // The keys on the focused row: Ctrl+C on the name, Ctrl+V on the speed, which refuses it.
+    bed.grid->SetSelectedItem(bed.grid->FindRow(SV(u8"name")));
+    bed.grid->RequestFocus();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::C), KeyModCtrl);
+    CHECK(clipboard.GetText() == core::String(u8"Lamp"));
+    bed.grid->SetSelectedItem(bed.grid->FindRow(SV(u8"speed")));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::V), KeyModCtrl);
+    CHECK(bed.bag.GetValue(SV(u8"speed"), 0).AsFloat() == doctest::Approx(2.5));
+    CHECK(said == core::String(u8"\"Lamp\" is no number"));
+    CHECK(commits == 1);
+}

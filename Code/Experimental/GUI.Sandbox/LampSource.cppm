@@ -154,6 +154,8 @@ export namespace sandbox
         [[nodiscard]] gui::Variant GetDefault(StringView, usize) const override { return gui::Variant{}; } // nor defaults
         bool Revert(StringView) override { return false; }
         [[nodiscard]] String GetRevertText(StringView) const override { return String(u8"Revert to default"); }
+        [[nodiscard]] String CopyValue(StringView) const override { return String{}; } // nor copying
+        bool PasteValue(StringView, StringView, String&) override { return false; }
         void CancelEdit(StringView path) override
         {
             if (const Original* original = FindOriginal(path))

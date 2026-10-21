@@ -15,6 +15,9 @@
 // A source may say each object's default for a path: the grid marks what differs from it, and a
 // revert puts each object's own back, one undo entry.
 //
+// Copying and pasting go through the source as edits do: it writes a path and what is under it as
+// text and reads it back, one undo entry; the grid has the menu and the keys, and no format.
+//
 // A list's elements are its children by index, and a change to one (an insert, a removal, a move)
 // is one call, one undo entry, made in each object.
 //
@@ -151,6 +154,13 @@ export namespace experimental::gui
         virtual bool Revert(core::StringView path) = 0;
         /// What a revert of `path` is called ("Revert to default", "Revert to prefab").
         [[nodiscard]] virtual core::String GetRevertText(core::StringView path) const = 0;
+
+        /// `path` and what is under it as text for the clipboard (the engine's serialization is a
+        /// source's to use); empty when it cannot be copied.
+        [[nodiscard]] virtual core::String CopyValue(core::StringView path) const = 0;
+        /// Reads `text` (CopyValue's) into `path` in each object, one undo entry; false, with
+        /// `reason` filled, when it does not fit.
+        virtual bool PasteValue(core::StringView path, core::StringView text, core::String& reason) = 0;
 
         void SetClient(IPropertySourceClient* client) noexcept { m_client = client; }
         [[nodiscard]] IPropertySourceClient* GetClient() const noexcept { return m_client; }
@@ -457,6 +467,48 @@ export namespace experimental::gui
         }
         [[nodiscard]] core::String GetRevertText(core::StringView) const override { return core::String(u8"Revert to default"); }
 
+        // A single value as its text, the first object's; a group or a list is not copied here.
+        [[nodiscard]] core::String CopyValue(core::StringView path) const override
+        {
+            const Variant* slot = const_cast<PropertyBag*>(this)->Slot(path, 0);
+            return slot != nullptr ? slot->ToString() : core::String{};
+        }
+        bool PasteValue(core::StringView path, core::StringView text, core::String& reason) override
+        {
+            const PropertyKind kind = KindAt(path);
+            Variant value;
+            switch (kind)
+            {
+            case PropertyKind::Bool:
+                if (text == core::StringView(u8"true") || text == core::StringView(u8"false"))
+                    value = Variant(text == core::StringView(u8"true"));
+                break;
+            case PropertyKind::Integer:
+            case PropertyKind::Enum:
+            case PropertyKind::Flags:
+                if (const Optional<i64> number = core::ParseInt(core::Trim(text)); number.HasValue())
+                    value = Variant(number.Value());
+                break;
+            case PropertyKind::Float:
+                if (const Optional<f64> number = core::ParseFloat(core::Trim(text)); number.HasValue())
+                    value = Variant(number.Value());
+                break;
+            case PropertyKind::String:
+                value = Variant(text);
+                break;
+            default:
+                break;
+            }
+            if (value.IsEmpty() || IsReadOnly(path) || Slot(path, 0) == nullptr)
+            {
+                reason = core::Format(u8"\"{}\" is no {}", text, PropertyKindLabel(kind));
+                return false;
+            }
+            BeginEdit(path);
+            CommitEdit(path, PropertyWrite{value});
+            return true;
+        }
+
         bool EditList(core::StringView path, const ListEdit& edit) override
         {
             Entry* list = Find(path);
@@ -551,6 +603,31 @@ export namespace experimental::gui
         {
             const Variant* slot = Slot(path, object);
             return slot != nullptr ? *slot : Variant{};
+        }
+        [[nodiscard]] PropertyKind KindAt(core::StringView path) const
+        {
+            if (const Entry* entry = Find(path))
+                return entry->Info.Kind;
+            const Entry* list = Find(ParentPropertyPath(path));
+            return list != nullptr && list->Info.Kind == PropertyKind::List ? list->ElementKind : PropertyKind::Group;
+        }
+        static core::StringView PropertyKindLabel(PropertyKind kind) noexcept
+        {
+            switch (kind)
+            {
+            case PropertyKind::Bool:
+                return core::StringView(u8"bool");
+            case PropertyKind::Integer:
+            case PropertyKind::Enum:
+            case PropertyKind::Flags:
+                return core::StringView(u8"integer");
+            case PropertyKind::Float:
+                return core::StringView(u8"number");
+            case PropertyKind::String:
+                return core::StringView(u8"text");
+            default:
+                return core::StringView(u8"value it can take");
+            }
         }
         [[nodiscard]] bool IsReadOnly(core::StringView path) const
         {

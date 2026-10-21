@@ -424,6 +424,42 @@ export namespace experimental::gui
             return m_source->Revert(at.AsView());
         }
 
+        // === Copying ===
+        /// Copies `path` (and what is under it) to the clipboard through the source; false when
+        /// the source cannot.
+        bool CopyProperty(core::StringView path)
+        {
+            EventDispatcher* dispatcher = GetEventDispatcher();
+            IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
+            if (m_source == nullptr || clipboard == nullptr)
+                return false;
+            const core::String text = m_source->CopyValue(path);
+            if (text.Size() == 0)
+                return false;
+            clipboard->SetText(text.AsView());
+            return true;
+        }
+        /// Pastes the clipboard's text into `path` through the source; refused, the reason goes to
+        /// SetOnMessage's callback.
+        bool PasteProperty(core::StringView path)
+        {
+            EventDispatcher* dispatcher = GetEventDispatcher();
+            IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
+            if (m_source == nullptr || clipboard == nullptr || !clipboard->HasText())
+                return false;
+            EndOpenEdit();
+            const core::String at(path);
+            const core::String text = clipboard->GetText();
+            core::String reason;
+            if (m_source->PasteValue(at.AsView(), text.AsView(), reason))
+                return true;
+            if (m_onMessage)
+                m_onMessage(reason.Size() != 0 ? reason.AsView() : core::StringView(u8"Cannot paste that here"));
+            return false;
+        }
+        /// Told what the grid has to say: why a paste was refused (for a status bar).
+        void SetOnMessage(core::Function<void(core::StringView)> onMessage) { m_onMessage = core::Move(onMessage); }
+
         /// The path an edit is open on (empty: none).
         [[nodiscard]] core::StringView GetEditPath() const noexcept { return m_editPath.AsView(); }
 
@@ -492,6 +528,14 @@ export namespace experimental::gui
         // Right opens a category or a group, Left closes it (mirrored right to left).
         bool OnExtraKey(KeyCode key, u32 modifiers) override
         {
+            if (modifiers == KeyModCtrl && (key == KeyCode::C || key == KeyCode::V))
+            {
+                const PropertyRow* current = GetRow(GetCurrentItem());
+                if (current == nullptr || current->Category)
+                    return false;
+                const core::String path = current->Path;
+                return key == KeyCode::C ? CopyProperty(path.AsView()) : PasteProperty(path.AsView());
+            }
             if (modifiers != 0 || (key != KeyCode::Left && key != KeyCode::Right))
                 return false;
             const PropertyRow* row = GetRow(GetCurrentItem());
@@ -550,6 +594,7 @@ export namespace experimental::gui
         core::String m_filter;
         core::String m_editPath;
         core::RefPtr<Menu> m_menu;
+        core::Function<void(core::StringView)> m_onMessage;
         // A grip's drag: the list, the element's index, where it would go, and the line's row.
         core::String m_reorderList;
         i32 m_reorderFrom = -1;
@@ -1018,6 +1063,13 @@ namespace experimental::gui
                 m_menu->AddSeparator();
             PropertyGrid* self = this;
             const core::String path = row.Path;
+            EventDispatcher* dispatcher = GetEventDispatcher();
+            IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
+            MenuItem* copy = m_menu->AddItem(core::StringView(u8"Copy"), [self, path]() { (void)self->CopyProperty(path.AsView()); });
+            copy->SetEnabled(clipboard != nullptr && m_source->CopyValue(path.AsView()).Size() != 0);
+            MenuItem* paste = m_menu->AddItem(core::StringView(u8"Paste"), [self, path]() { (void)self->PasteProperty(path.AsView()); });
+            paste->SetEnabled(clipboard != nullptr && clipboard->HasText() && !row.Info.ReadOnly);
+            m_menu->AddSeparator();
             MenuItem* revert = m_menu->AddItem(m_source->GetRevertText(path.AsView()).AsView(), [self, path]() { (void)self->RevertProperty(path.AsView()); });
             revert->SetEnabled(row.Node < m_nodes.Size() && IsChanged(row.Node));
             any = true;

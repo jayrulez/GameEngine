@@ -52,6 +52,7 @@ import experimental.gui.toolkit;   // the Toolkit page's tool and status bars
 import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
+import gui.sandbox.lamps;  // the Toolkit page's property source (T1)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -486,6 +487,7 @@ private:
     u32 m_dockMade[8]{};        // how often each panel's content was made (its close policy shows)
     void FillDocking(gui::Node& host);
     void FillToolkit(gui::Node& frame);
+    void FillProperties(gui::PropertyGrid& grid);
     // The Toolkit page's edit history: changes left to save, to undo and to redo.
     i32 m_toolkitUnsaved = 0;
     i32 m_toolkitDone = 0;
@@ -498,6 +500,8 @@ private:
 
     // The Stress page's builder and its views' models: before the GUI, so it outlives the views.
     UniquePtr<sandbox::StressPage> m_stress;
+    // The Toolkit page's lamps (T1): before the GUI, so the grid lets go of them first.
+    UniquePtr<sandbox::LampSource> m_lamps;
 
     // The texts the Language and direction page shows (E9e), the GUI's localization: before the
     // GUI, which lets go of it when it goes. The narrating bridge likewise.
@@ -1007,6 +1011,9 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: the tool bars' commands, their keys and the status bar's messages (T0).
     if (gui::Node* frame = FindById(*m_shellNode, u8"toolkit-frame"))
         FillToolkit(*frame);
+    // Toolkit: the property grid over three lamps (T1).
+    if (auto* grid = Cast<gui::PropertyGrid>(FindById(*m_shellNode, u8"props-grid")))
+        FillProperties(*grid);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -2247,6 +2254,49 @@ void GUISandbox::FillToolkit(gui::Node& frame)
         if (auto* button = section != nullptr ? Cast<gui::Button>(FindById(*section, u8"toolkit-narrow")) : nullptr)
             button->SetText(narrow ? u8"Widen the tool bar" : u8"Narrow the tool bar");
     });
+}
+
+// The Toolkit page's property grid: three lamps behind a selection, a search, and the page's undo.
+void GUISandbox::FillProperties(gui::PropertyGrid& grid)
+{
+    m_lamps = MakeUnique<sandbox::LampSource>(AppRoot(), AppRoot());
+    grid.SetSource(m_lamps.Get());
+    gui::Node* section = grid.GetParent();
+    if (section == nullptr)
+        return;
+    auto* undo = Cast<gui::Button>(FindById(*section, u8"props-undo"));
+    auto* redo = Cast<gui::Button>(FindById(*section, u8"props-redo"));
+    auto* said = Cast<gui::Label>(FindById(*section, u8"props-said"));
+    sandbox::LampSource* lamps = m_lamps.Get();
+    const auto history = [lamps, undo, redo]()
+    {
+        if (undo != nullptr)
+            undo->SetEnabled(lamps->CanUndo());
+        if (redo != nullptr)
+            redo->SetEnabled(lamps->CanRedo());
+    };
+    history();
+    lamps->SetOnHistoryChanged([history, said](StringView words)
+    {
+        history();
+        if (said != nullptr)
+            said->SetText(words);
+    });
+    if (undo != nullptr)
+        undo->SetOnClick([lamps]() { lamps->Undo(); });
+    if (redo != nullptr)
+        redo->SetOnClick([lamps]() { lamps->Redo(); });
+    if (auto* search = Cast<gui::TextField>(FindById(*section, u8"props-search")))
+    {
+        gui::PropertyGrid* shown = &grid;
+        search->SetOnTextChanging([shown](StringView text) { shown->SetFilter(text); });
+    }
+    if (auto* objects = Cast<gui::ComboBox>(FindById(*section, u8"props-objects")))
+        objects->SetOnSelectionChanged([lamps](i32 index)
+        {
+            if (index >= 0)
+                lamps->SetSelection(static_cast<usize>(index));
+        });
 }
 
 // The Docking page's floats in OS windows of their own (`own`), or in the area. A window's root is

@@ -1,7 +1,7 @@
 # GUI Sandbox - experimental.gui's widgets, styles, motion and input, an application on the runtime host
 # through the lab's GuiHost (GUI.Hosting).
 add_executable(GUISandbox Main.cpp)
-target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm) # the Stress page (E8a)
+target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm LampSource.cppm) # the Stress page (E8a), the Toolkit page's lamps (T1)
 target_link_libraries(GUISandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::VFS
     Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop

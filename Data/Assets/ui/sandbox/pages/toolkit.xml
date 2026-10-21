@@ -53,4 +53,19 @@
         </Panel>
         <Label class="caption" white-space="normal" text="ToolBar, ToolButton, ToolMenuButton (a drop-down, or split) and StatusBar (GUI.Toolkit) over the core's commands and keymap; the default sheet styles them through the theme's tokens."/>
     </Panel>
+
+    <Panel class="section" gap="12">
+        <Label class="section-title" text="A property grid"/>
+        <Label class="toolkit-note" white-space="normal"
+               text="Three lamps, an application's own objects: edit one, or all three, where values that differ show as mixed. Drag across a number to scrub it (Escape gives the scrub up), drag the line between the names and the values, fold the categories and the position, and search by name or path. Each edit is one step of Undo, however long its drag. The spot angle shows only when every lamp edited is a spot; the falloff asks for an editor that does not exist yet."/>
+        <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
+            <TextField id="props-search" class="props-search" placeholder="Search properties"/>
+            <ComboBox id="props-objects" class="props-objects" items="Lamp A|Lamp B|Lamp C|All three" selected="0"/>
+            <Button id="props-undo" class="toolkit-button" text="Undo"/>
+            <Button id="props-redo" class="toolkit-button" text="Redo"/>
+        </Panel>
+        <PropertyGrid id="props-grid" class="props-grid"/>
+        <Label id="props-said" class="caption" text="No edits yet."/>
+        <Label class="caption" white-space="normal" text="PropertyGrid (GUI.Toolkit) over an IPropertySource the page keeps; its editors are the core's check box, number field, text field and combo box, and a list of check boxes for flags."/>
+    </Panel>
 </Panel>

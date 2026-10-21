@@ -6,3 +6,7 @@
 .toolkit-note { font-family: Roboto; font-size: 13px; color: var(--muted); }
 .toolkit-button { height: 34px; padding: 0 14px; font-family: Roboto; font-size: 14px; }
 statusbar { height: 24px; font-family: Roboto; font-size: 12px; }
+.props-bar { width: 590px; }
+.props-search { width: 220px; height: 30px; font-family: Roboto; font-size: 14px; }
+.props-objects { width: 140px; height: 30px; font-family: Roboto; font-size: 14px; }
+.props-grid { width: 590px; height: 300px; border: 1px solid var(--border); font-family: Roboto; font-size: 13px; }

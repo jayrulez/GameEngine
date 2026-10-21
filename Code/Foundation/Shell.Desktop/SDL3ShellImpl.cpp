@@ -281,6 +281,14 @@ namespace foundation::shell
             (void)SDL_RaiseWindow(m_window);
     }
 
+    void SDL3Window::SetTitle(core::StringView title)
+    {
+        if (m_window == nullptr)
+            return;
+        const core::String text(title); // SDL takes a terminated string
+        (void)SDL_SetWindowTitle(m_window, reinterpret_cast<const char*>(text.CStr()));
+    }
+
     bool SDL3Window::PresentPixels(core::Span<const core::u8> rgba, core::u32 width, core::u32 height)
     {
         if (m_window == nullptr || rgba.Size() < static_cast<core::usize>(width) * height * 4)

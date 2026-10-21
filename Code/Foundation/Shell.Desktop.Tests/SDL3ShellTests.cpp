@@ -477,7 +477,7 @@ TEST_CASE("shell.desktop: keypad and function scancodes map (KP_ENTER was silent
     }
 }
 
-TEST_CASE("shell.desktop: the screens are read, one of them primary; a moved window is reported; a raise is safe")
+TEST_CASE("shell.desktop: the screens are read, one of them primary; a moved window is reported; a raise is safe; a title is set")
 {
     SDL3Shell shell(DefaultAllocator());
     if (shell.MainWindow() == nullptr)
@@ -521,4 +521,7 @@ TEST_CASE("shell.desktop: the screens are read, one of them primary; a moved win
     CHECK(moved);
 
     shell.MainWindow()->Raise();
+    shell.MainWindow()->SetTitle(u8"Profiler + 2");
+    CHECK(StringView(reinterpret_cast<const utf8char*>(SDL_GetWindowTitle(static_cast<SDL3Window*>(shell.MainWindow())->Handle()))) ==
+          StringView(u8"Profiler + 2"));
 }

@@ -61,6 +61,7 @@ export namespace foundation::shell
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
         void Close() override { m_open = false; }
         void Raise() override {} // the page's one canvas: nothing to bring forward
+        void SetTitle(core::StringView) override {} // the page's title is the page's, not the canvas's
 
         void StartTextInput(TextInputKind kind) override
         {

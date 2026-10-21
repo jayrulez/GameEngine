@@ -28,7 +28,7 @@ export namespace foundation::shell
     public:
         NullWindow(core::u32 id, const WindowSettings& settings) noexcept
             : m_id(id), m_width(settings.width), m_height(settings.height),
-              m_x(settings.positioned ? settings.x : 0), m_y(settings.positioned ? settings.y : 0)
+              m_x(settings.positioned ? settings.x : 0), m_y(settings.positioned ? settings.y : 0), m_title(settings.title)
         {
         }
 
@@ -56,6 +56,7 @@ export namespace foundation::shell
         [[nodiscard]] bool IsMinimized() const noexcept override { return m_minimized; }
         void Close() override { m_open = false; }
         void Raise() override { ++m_raised; } // headless: just count
+        void SetTitle(core::StringView title) override { m_title = core::String(title); } // headless: just record
 
         void StartTextInput(TextInputKind kind) override
         {
@@ -83,6 +84,8 @@ export namespace foundation::shell
             m_height = h;
         }
         void SetMinimized(bool m) noexcept { m_minimized = m; }
+        /// What SetTitle was last told (the settings' title until then).
+        [[nodiscard]] core::StringView Title() const noexcept { return m_title.AsView(); }
         /// How many times Raise was called.
         [[nodiscard]] core::u32 RaiseCount() const noexcept { return m_raised; }
 
@@ -98,6 +101,7 @@ export namespace foundation::shell
         TextInputKind m_textInputKind = TextInputKind::Text;
         TextInputArea m_textInputArea{};
         core::u32 m_raised = 0;
+        core::String m_title;
     };
 
     class NullWindowManager final : public IWindowManager

@@ -308,7 +308,7 @@ TEST_CASE("shell: an input event's text keeps whole characters when it is cut to
     CHECK(StringView(e.text).Size() == 0u);
 }
 
-TEST_CASE("shell.null: no screens unless a test gives some; a raise is counted")
+TEST_CASE("shell.null: no screens unless a test gives some; a raise is counted; a title is kept")
 {
     NullShell shell(WindowSettings{});
     auto* windows = static_cast<NullWindowManager*>(shell.WindowManager());
@@ -335,4 +335,7 @@ TEST_CASE("shell.null: no screens unless a test gives some; a raise is counted")
     CHECK(main->RaiseCount() == 0u);
     main->Raise();
     CHECK(main->RaiseCount() == 1u);
+    CHECK(main->Title() == StringView(u8"Shell")); // the settings' until told otherwise
+    main->SetTitle(u8"Profiler + 2");
+    CHECK(main->Title() == StringView(u8"Profiler + 2"));
 }

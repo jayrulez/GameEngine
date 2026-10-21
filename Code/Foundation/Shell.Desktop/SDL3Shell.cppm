@@ -90,6 +90,7 @@ export namespace foundation::shell
         void SetIcon(core::Span<const WindowIconImage> images) override;
         void Show() override;
         void Raise() override;
+        void SetTitle(core::StringView title) override;
         bool PresentPixels(core::Span<const core::u8> rgba, core::u32 width, core::u32 height) override;
 
         [[nodiscard]] SDL_Window* Handle() const noexcept { return m_window; }

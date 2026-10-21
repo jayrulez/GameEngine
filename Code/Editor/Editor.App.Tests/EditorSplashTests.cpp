@@ -64,6 +64,7 @@ namespace
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
         void Close() override {}
         void Raise() override {}
+        void SetTitle(foundation::core::StringView) override {}
         void StartTextInput(shell::TextInputKind) override {}
         void StopTextInput() override {}
         [[nodiscard]] bool IsTextInputActive() const noexcept override { return false; }

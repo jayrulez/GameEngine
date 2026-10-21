@@ -185,6 +185,8 @@ export namespace foundation::shell
 
         // Show a window created hidden (WindowSettings::hidden). A no-op when shown already.
         virtual void Show() {}
+        // Its title bar's text from now on (a floating panel's window follows the panels it holds).
+        virtual void SetTitle(core::StringView title) = 0;
         // Brings the window in front of the others and asks for the keyboard: a floating panel's
         // window gone behind the main one, come back. A system may only flag it for attention
         // (Wayland gives the keyboard away only on the user's own action).

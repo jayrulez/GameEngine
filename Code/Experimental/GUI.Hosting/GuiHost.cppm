@@ -294,7 +294,9 @@ export namespace experimental::gui
         // === Windows of its own (D6) ===
         /// How the host opens a window for a root; without one it opens none.
         void SetWindowOpener(WindowOpener opener) { m_opener = Move(opener); }
-        [[nodiscard]] bool CanOpenWindows() const noexcept { return m_opener.Open && m_opener.Close; }
+        /// It opens windows of its own: it has an opener, and the shell opens windows beside the main
+        /// one (not the web's one canvas).
+        [[nodiscard]] bool CanOpenWindows() const noexcept { return m_opener.Open && m_opener.Close && Capabilities().multipleWindows; }
         /// Opens an OS window as `settings` say and gives it `root` (made with Context()); the window,
         /// or null when it opens none.
         graphics::RenderWindow* OpenWindow(RefPtr<SceneRoot> root, const shell::WindowSettings& settings)
@@ -316,7 +318,7 @@ export namespace experimental::gui
         void CloseWindow(const SceneRoot& root)
         {
             graphics::RenderWindow* window = WindowFor(&root);
-            if (window == nullptr || !CanOpenWindows())
+            if (window == nullptr || !m_opener.Close)
                 return;
             DetachWindow(*window);
             m_opener.Close(*window);
@@ -337,13 +339,14 @@ export namespace experimental::gui
                     return;
                 }
         }
-        /// Whether the window system lets the host place its windows and read the pointer across
-        /// them (not Wayland, where a client does neither, nor the web's one canvas).
-        [[nodiscard]] bool PlacesWindows() const noexcept
+        /// Whether its windows hold the places it gives them and the pointer is read across them, as
+        /// the shell says (not Wayland, where a client does neither, nor the web's one canvas).
+        [[nodiscard]] bool PlacesWindows() const noexcept { return Capabilities().placesWindows; }
+        /// The screens there are, as the shell last read them.
+        [[nodiscard]] Span<const shell::Screen> Screens() const noexcept
         {
-            const shell::IWindow* main = m_shell.MainWindow();
-            const shell::WindowSystem system = main != nullptr ? main->Native().system : shell::WindowSystem::Unknown;
-            return system != shell::WindowSystem::Wayland && system != shell::WindowSystem::Web;
+            const shell::IWindowManager* windows = m_shell.WindowManager();
+            return windows != nullptr ? windows->Screens() : Span<const shell::Screen>{};
         }
         /// The root under `screen` (screen units), the pane on top in the window focused last where
         /// windows overlap, and the point in it (`local`, the root's pointer units); null over none.
@@ -569,6 +572,12 @@ export namespace experimental::gui
 
     private:
         friend class GuiOffscreen; // draws with the host's device, shaders and baker
+
+        [[nodiscard]] shell::WindowCapabilities Capabilities() const noexcept
+        {
+            const shell::IWindowManager* windows = m_shell.WindowManager();
+            return windows != nullptr ? windows->Capabilities() : shell::WindowCapabilities{};
+        }
 
         // The panes' roots at their regions' sizes and the window's scale; whether one changed.
         bool SizePanes(GuiWindowData& data, graphics::RenderWindow& window, f32 scale)

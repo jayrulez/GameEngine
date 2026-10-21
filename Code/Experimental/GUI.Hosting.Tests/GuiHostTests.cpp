@@ -327,6 +327,18 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     CHECK(told.Size() == 3u);
     CHECK(alsoTold == 2); // removed: told no more
 
+    // Where the shell's windows hold no place (Wayland), nothing is said of where roots are.
+    windows.SetCapabilities(shell::WindowCapabilities{true, false});
+    CHECK_FALSE(bed.host->PlacesWindows());
+    CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == nullptr);
+    CHECK_FALSE(bed.host->ToScreen(*second, Float2{5.0f, 6.0f}, screen));
+    CHECK(bed.host->CanOpenWindows());
+    // Where it opens no window beside the main one (the web), the host opens none.
+    windows.SetCapabilities(shell::WindowCapabilities{false, false});
+    CHECK_FALSE(bed.host->CanOpenWindows());
+    CHECK(bed.host->OpenWindow(bed.MakeRoot(), settings) == nullptr);
+    windows.SetCapabilities(shell::WindowCapabilities{true, true});
+
     bed.host->CloseWindow(*second);
     CHECK(closed == 1);
     CHECK(bed.host->WindowCount() == 1u);

@@ -484,6 +484,33 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
   read only, visibility), categories, folding by path, search, the label split, virtualised rows,
   the edit gesture; the editors chosen in layers; bool, numbers with drag to scrub, text, enum and
   flags.
+
+  T1's design (approved by the user, 2026-10-21), in GUI.Toolkit's `:property_source`,
+  `:property_editor` (an editor's base and the registry), `:property_editors` and `:property_grid`:
+  - **A row is a property of one value**: a bool, an integer, a float, a string, an enum or flags,
+    the core's `Variant` (an enum and flags are integers, their names in the property's
+    description). A compound value (a vector in T2, a nested object) is a property with children
+    by path (`position.x`), so mixed values are per component without a value type of parts.
+  - **The source** (`IPropertySource`): the object count; the properties under a path (name,
+    display name, category, kind, hint, range and step, enum items, read only, visible, each read
+    afresh, so `visibleWhen` is the source's); a value by path and object; `BeginEdit`,
+    `PreviewEdit` (every object, live), `CommitEdit` (the originals restored, then one undo
+    entry), `CancelEdit` (the originals restored). The undo is the source's; the grid has none,
+    and does not merge edits by time. A client hears that the properties or the values changed.
+  - **The grid is an `ItemView`**: categories and properties flattened into virtualised rows, a
+    row type for a category and one per editor kind, their editors pooled. Folding is a set of
+    paths (a category's `#Category`); search filters by display name and path, keeping a match's
+    ancestors and opening them while it searches, the stored folding untouched; one label split
+    for the grid, dragged at any row's boundary, mirrored right to left; the wheel scrolls and
+    never changes a value.
+  - **Editors in layers**: a registry by the property's hint, then its kind, then a row that says
+    no editor fits; an application registers its own.
+  - **T1's editors**: bool (a check box, mixed its indeterminate state), integer and float (the
+    core's NumberField, scrubbed), text (one line, committed on Return or leaving it), enum (a
+    ComboBox), flags (a drop-down of check rows, a flag that differs partly checked). Mixed shows
+    the placeholder "Mixed".
+  - Core first: NumberField's mixed state, Escape cancelling a scrub, its wheel steps optional;
+    ComboBox's none (-1) and placeholder.
 - **T2 Compound editors.** Vectors with mixed values per component; containers (add, remove,
   reorder); nested objects; default providers with revert and the changed marker; copying and
   pasting values.

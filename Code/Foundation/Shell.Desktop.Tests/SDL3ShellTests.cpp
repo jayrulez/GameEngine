@@ -476,3 +476,49 @@ TEST_CASE("shell.desktop: keypad and function scancodes map (KP_ENTER was silent
         CHECK_FALSE(kb->IsKeyDown(c.key));
     }
 }
+
+TEST_CASE("shell.desktop: the screens are read, one of them primary; a moved window is reported; a raise is safe")
+{
+    SDL3Shell shell(DefaultAllocator());
+    if (shell.MainWindow() == nullptr)
+    {
+        MESSAGE("SDL video init/window creation unavailable; skipping");
+        return;
+    }
+    const Span<const Screen> screens = shell.WindowManager()->Screens();
+    REQUIRE(screens.Size() > 0u); // the dummy driver has a display of its own
+    usize primaries = 0;
+    for (const Screen& screen : screens)
+    {
+        CHECK(screen.id != 0u);
+        CHECK(screen.width > 0u);
+        CHECK(screen.height > 0u);
+        CHECK(screen.scale > 0.0f);
+        // The usable room lies within the bounds.
+        CHECK(screen.usableX >= screen.x);
+        CHECK(screen.usableY >= screen.y);
+        CHECK(screen.usableWidth <= screen.width);
+        CHECK(screen.usableHeight <= screen.height);
+        primaries += screen.primary ? 1u : 0u;
+    }
+    CHECK(primaries == 1u);
+
+    SDL_Event event{};
+    event.type = SDL_EVENT_WINDOW_MOVED;
+    event.window.windowID = SDL_GetWindowID(static_cast<SDL3Window*>(shell.MainWindow())->Handle());
+    event.window.data1 = 210;
+    event.window.data2 = 140;
+    SDL_PushEvent(&event);
+    shell.ProcessEvents();
+    bool moved = false;
+    for (const WindowEvent& e : shell.WindowManager()->Events())
+        if (e.type == WindowEventType::Moved && e.windowId == shell.MainWindow()->Id())
+        {
+            moved = true;
+            CHECK(e.x == 210);
+            CHECK(e.y == 140);
+        }
+    CHECK(moved);
+
+    shell.MainWindow()->Raise();
+}

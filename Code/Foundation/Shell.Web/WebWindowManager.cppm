@@ -61,6 +61,8 @@ export namespace foundation::shell
         {
             return core::Span<const WindowEvent>(m_events.Data(), m_events.Size());
         }
+        // One canvas, which opens no other window: no screens to place one on.
+        [[nodiscard]] core::Span<const Screen> Screens() const noexcept override { return {}; }
         void FlushDestroyed() override {}
 
         // Called from the shell's ProcessEvents: rebuild this frame's event list from a size poll.

@@ -55,6 +55,7 @@ export namespace foundation::shell
         [[nodiscard]] bool IsOpen() const noexcept override { return m_open; }
         [[nodiscard]] bool IsMinimized() const noexcept override { return m_minimized; }
         void Close() override { m_open = false; }
+        void Raise() override { ++m_raised; } // headless: just count
 
         void StartTextInput(TextInputKind kind) override
         {
@@ -82,6 +83,8 @@ export namespace foundation::shell
             m_height = h;
         }
         void SetMinimized(bool m) noexcept { m_minimized = m; }
+        /// How many times Raise was called.
+        [[nodiscard]] core::u32 RaiseCount() const noexcept { return m_raised; }
 
     private:
         core::u32 m_id;
@@ -94,6 +97,7 @@ export namespace foundation::shell
         bool m_textInputActive = false;
         TextInputKind m_textInputKind = TextInputKind::Text;
         TextInputArea m_textInputArea{};
+        core::u32 m_raised = 0;
     };
 
     class NullWindowManager final : public IWindowManager
@@ -151,6 +155,19 @@ export namespace foundation::shell
             return core::Span<const WindowEvent>(m_events.Data(), m_events.Size());
         }
 
+        // Headless: no screens unless a test gives some.
+        [[nodiscard]] core::Span<const Screen> Screens() const noexcept override
+        {
+            return core::Span<const Screen>(m_screens.Data(), m_screens.Size());
+        }
+        /// The screens it reports (a test's).
+        void SetScreens(core::Span<const Screen> screens)
+        {
+            m_screens.Clear();
+            for (const Screen& screen : screens)
+                m_screens.PushBack(screen);
+        }
+
         void FlushDestroyed() override
         {
             for (core::u32 id : m_pendingDestroy)
@@ -195,6 +212,7 @@ export namespace foundation::shell
         core::Array<IWindow*> m_live;            // borrowed parallel pointers for the span
         core::Array<core::u32> m_pendingDestroy; // window ids
         core::Array<WindowEvent> m_events;       // always empty (no OS event source)
+        core::Array<Screen> m_screens;
         core::u32 m_nextId = 1;
         core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
     };

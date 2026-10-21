@@ -307,3 +307,32 @@ TEST_CASE("shell: an input event's text keeps whole characters when it is cut to
     CopyEventText(e.text, nullptr);
     CHECK(StringView(e.text).Size() == 0u);
 }
+
+TEST_CASE("shell.null: no screens unless a test gives some; a raise is counted")
+{
+    NullShell shell(WindowSettings{});
+    auto* windows = static_cast<NullWindowManager*>(shell.WindowManager());
+    CHECK(windows->Screens().Size() == 0u); // headless: nothing to place a window on
+    Screen left;
+    left.id = 1;
+    left.name = String(u8"left");
+    left.width = 1920;
+    left.height = 1080;
+    left.primary = true;
+    Screen right = left;
+    right.id = 2;
+    right.name = String(u8"right");
+    right.x = 1920;
+    right.scale = 2.0f;
+    right.primary = false;
+    const Screen both[] = {left, right};
+    windows->SetScreens(Span<const Screen>(both, 2));
+    REQUIRE(windows->Screens().Size() == 2u);
+    CHECK(windows->Screens()[1].x == 1920);
+    CHECK(windows->Screens()[1].scale == doctest::Approx(2.0f));
+
+    auto* main = static_cast<NullWindow*>(shell.MainWindow());
+    CHECK(main->RaiseCount() == 0u);
+    main->Raise();
+    CHECK(main->RaiseCount() == 1u);
+}

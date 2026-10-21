@@ -89,6 +89,7 @@ export namespace foundation::shell
 
         void SetIcon(core::Span<const WindowIconImage> images) override;
         void Show() override;
+        void Raise() override;
         bool PresentPixels(core::Span<const core::u8> rgba, core::u32 width, core::u32 height) override;
 
         [[nodiscard]] SDL_Window* Handle() const noexcept { return m_window; }
@@ -124,6 +125,7 @@ export namespace foundation::shell
         [[nodiscard]] IWindow* MainWindow() const noexcept override;
         [[nodiscard]] IWindow* GetWindow(core::u32 id) const noexcept override;
         [[nodiscard]] core::Span<const WindowEvent> Events() const noexcept override;
+        [[nodiscard]] core::Span<const Screen> Screens() const noexcept override;
 
         void FlushDestroyed() override;
 
@@ -131,6 +133,8 @@ export namespace foundation::shell
         SDL3Window* Find(core::u32 id) noexcept;
         void ClearEvents() noexcept { m_events.Clear(); }
         void PushEvent(const WindowEvent& e) { m_events.PushBack(e); }
+        // Reads the screens again (at start, and when the pump sees a display event).
+        void ReadScreens();
 
         // Destroy every window immediately (SDL3Window dtors call
         // SDL_DestroyWindow). The shell calls this before SDL_Quit().
@@ -147,6 +151,7 @@ export namespace foundation::shell
         core::Array<IWindow*> m_live;
         core::Array<core::u32> m_pendingDestroy;
         core::Array<WindowEvent> m_events;
+        core::Array<Screen> m_screens;
         core::u32 m_mainWindowId = 0; // id of the main window (first created); 0 = none
     };
 

@@ -113,6 +113,7 @@ namespace foundation::shell
             return;
         }
         m_initialized = true;
+        m_windows.ReadScreens();
 
         core::Result<IWindow*> main = m_windows.CreateWindow(settings);
         if (!main.HasValue())
@@ -272,6 +273,12 @@ namespace foundation::shell
         {
             (void)SDL_ShowWindow(m_window);
         }
+    }
+
+    void SDL3Window::Raise()
+    {
+        if (m_window != nullptr)
+            (void)SDL_RaiseWindow(m_window);
     }
 
     bool SDL3Window::PresentPixels(core::Span<const core::u8> rgba, core::u32 width, core::u32 height)
@@ -451,6 +458,46 @@ namespace foundation::shell
     core::Span<const WindowEvent> SDL3WindowManager::Events() const noexcept
     {
         return core::Span<const WindowEvent>(m_events.Data(), m_events.Size());
+    }
+
+    core::Span<const Screen> SDL3WindowManager::Screens() const noexcept
+    {
+        return core::Span<const Screen>(m_screens.Data(), m_screens.Size());
+    }
+
+    void SDL3WindowManager::ReadScreens()
+    {
+        m_screens.Clear();
+        int count = 0;
+        SDL_DisplayID* displays = SDL_GetDisplays(&count);
+        if (displays == nullptr)
+            return;
+        const SDL_DisplayID primary = SDL_GetPrimaryDisplay();
+        for (int i = 0; i < count; ++i)
+        {
+            SDL_Rect bounds{};
+            if (!SDL_GetDisplayBounds(displays[i], &bounds))
+                continue;
+            SDL_Rect usable = bounds;
+            (void)SDL_GetDisplayUsableBounds(displays[i], &usable);
+            Screen screen;
+            screen.id = static_cast<core::u32>(displays[i]);
+            if (const char* name = SDL_GetDisplayName(displays[i]))
+                screen.name = core::String(core::StringView(reinterpret_cast<const core::utf8char*>(name)));
+            screen.x = bounds.x;
+            screen.y = bounds.y;
+            screen.width = static_cast<core::u32>(bounds.w);
+            screen.height = static_cast<core::u32>(bounds.h);
+            screen.usableX = usable.x;
+            screen.usableY = usable.y;
+            screen.usableWidth = static_cast<core::u32>(usable.w);
+            screen.usableHeight = static_cast<core::u32>(usable.h);
+            const float scale = SDL_GetDisplayContentScale(displays[i]);
+            screen.scale = scale > 0.0f ? scale : 1.0f; // 0 when the system does not say
+            screen.primary = displays[i] == primary;
+            m_screens.PushBack(core::Move(screen));
+        }
+        SDL_free(displays);
     }
 
     void SDL3WindowManager::FlushDestroyed()
@@ -1046,6 +1093,19 @@ namespace foundation::shell
                 }
                 break;
             }
+            case SDL_EVENT_WINDOW_MOVED:
+                m_windows.PushEvent(WindowEvent{WindowEventType::Moved, static_cast<core::u32>(event.window.windowID), 0, 0,
+                                                static_cast<core::i32>(event.window.data1), static_cast<core::i32>(event.window.data2)});
+                break;
+            case SDL_EVENT_DISPLAY_ORIENTATION:
+            case SDL_EVENT_DISPLAY_ADDED:
+            case SDL_EVENT_DISPLAY_REMOVED:
+            case SDL_EVENT_DISPLAY_MOVED:
+            case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
+            case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+            case SDL_EVENT_DISPLAY_USABLE_BOUNDS_CHANGED:
+                m_windows.ReadScreens(); // a screen came, went, moved or was rescaled
+                break;
             case SDL_EVENT_WINDOW_EXPOSED:
                 m_windows.PushEvent(WindowEvent{WindowEventType::Exposed, static_cast<core::u32>(event.window.windowID)});
                 break;

@@ -60,6 +60,7 @@ export namespace foundation::shell
         [[nodiscard]] bool IsOpen() const noexcept override { return m_open; }
         [[nodiscard]] bool IsMinimized() const noexcept override { return false; }
         void Close() override { m_open = false; }
+        void Raise() override {} // the page's one canvas: nothing to bring forward
 
         void StartTextInput(TextInputKind kind) override
         {

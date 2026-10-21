@@ -112,6 +112,19 @@ export namespace foundation::shell
         Secret,
     };
 
+    // A screen (a display), in the global frame windows are placed in (IWindow::X/Y, SetPosition).
+    struct Screen
+    {
+        core::u32 id = 0; // the platform's, stable while it is connected; 0 is never one
+        core::String name;
+        core::i32 x = 0, y = 0;            // its bounds: top-left and size
+        core::u32 width = 0, height = 0;
+        core::i32 usableX = 0, usableY = 0; // the room windows get: less the taskbar and panels
+        core::u32 usableWidth = 0, usableHeight = 0;
+        core::f32 scale = 1.0f; // content scale (logical-to-physical, 1.0 at 100%)
+        bool primary = false;
+    };
+
     class IWindow
     {
     public:
@@ -172,6 +185,10 @@ export namespace foundation::shell
 
         // Show a window created hidden (WindowSettings::hidden). A no-op when shown already.
         virtual void Show() {}
+        // Brings the window in front of the others and asks for the keyboard: a floating panel's
+        // window gone behind the main one, come back. A system may only flag it for attention
+        // (Wayland gives the keyboard away only on the user's own action).
+        virtual void Raise() = 0;
 
         // Put an image on a software window (WindowSettings::softwareSurface): tightly packed
         // 8-bit RGBA rows, `width` x `height`, scaled to the window when the sizes differ. False
@@ -193,7 +210,7 @@ export namespace foundation::shell
     enum class WindowEventType : core::u8
     {
         Resized,
-        Moved,
+        Moved, // by the user or the system: x, y the new top-left in screen coordinates
         FocusGained,
         FocusLost,
         CloseRequested,
@@ -243,6 +260,11 @@ export namespace foundation::shell
         // Window events accumulated during the last ProcessEvents() pump. Valid
         // until the next pump. Drained by the runner/Application each frame.
         [[nodiscard]] virtual core::Span<const WindowEvent> Events() const noexcept = 0;
+
+        // The screens there are, as of the last pump (a screen connected, removed, moved or
+        // rescaled is read again then): where floating windows may go, and how a saved place is
+        // brought back onto a screen that is there. Empty where the system tells none.
+        [[nodiscard]] virtual core::Span<const Screen> Screens() const noexcept = 0;
 
         // Free windows marked by DestroyWindow(). Call once per frame, at end,
         // after the GPU has finished the frame that may have used them.

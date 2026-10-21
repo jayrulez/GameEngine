@@ -486,8 +486,17 @@ export namespace foundation::shell
                                     rawMouse->IsButtonPressed(MouseButton::Middle);
 
             InputSurface* const capturedBefore = m_captured;
+            // The surface whose capture the buttons' release ends this frame: it still takes this
+            // frame's input, so it reads the release wherever the pointer is (outside every
+            // surface, another window). Dropped first, it would never see the release, and a
+            // reader of button edges (a GUI's press and release) would stay pressed.
+            InputSurface* releasing = nullptr;
             if (m_captured != nullptr && (!anyDown || m_extMouseCapture))
             {
+                if (!m_extMouseCapture)
+                {
+                    releasing = m_captured;
+                }
                 m_captured = nullptr;
             }
             if (!m_extMouseCapture && m_captured == nullptr && m_hovered != nullptr && anyPressed)
@@ -521,7 +530,7 @@ export namespace foundation::shell
                 m_captureNoButtonFrames = 0;
             }
 
-            InputSurface* target = (m_captured != nullptr) ? m_captured : m_hovered;
+            InputSurface* target = m_captured != nullptr ? m_captured : releasing != nullptr ? releasing : m_hovered;
 
             // Focus resolution. An external overlay capturing the keyboard (e.g. an ImGui text field) drops
             // surface focus so typing doesn't also drive the viewport (WASD etc.).
@@ -546,7 +555,7 @@ export namespace foundation::shell
             for (InputSurface* s : m_surfaces)
             {
                 const bool hovered = (s == m_hovered);
-                const bool captured = (s == m_captured);
+                const bool captured = (s == m_captured) || (s == releasing);
                 const bool focused = (s == m_focused);
 
                 core::Float2 content = s->ContentMouse(); // keep last if not over this surface

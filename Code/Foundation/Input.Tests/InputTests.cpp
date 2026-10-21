@@ -553,6 +553,69 @@ TEST_CASE("input: a turned surface reads the mouse and fingers in the game's fra
     router.RemoveSurface(&surface);
 }
 
+TEST_CASE("input: a surface pressed on reads the release wherever the pointer is let go")
+{
+    class Manager final : public shell::IInputManager
+    {
+    public:
+        FakeKeyboard keyboard;
+        FakeMouse mouse;
+        FakeTouch touch;
+        u32 hover = 1u;
+        [[nodiscard]] shell::IKeyboard* Keyboard() override { return &keyboard; }
+        [[nodiscard]] shell::IMouse* Mouse() override { return &mouse; }
+        [[nodiscard]] shell::ITouch* Touch() override { return &touch; }
+        [[nodiscard]] i32 GamepadCount() const override { return 0; }
+        [[nodiscard]] shell::IGamepad* GetGamepad(i32) override { return nullptr; }
+        [[nodiscard]] Span<const shell::InputEvent> Events() const override { return {}; }
+        [[nodiscard]] u32 HoverWindow() const override { return hover; }
+        [[nodiscard]] u32 FocusedWindow() const override { return 1u; }
+        void Update() override {}
+    };
+    Manager manager;
+    shell::InputSurface surface(&manager, 1u, ContentFit{});
+    surface.SetRegion(Rectangle{100.0f, 100.0f, 800.0f, 600.0f});
+    surface.SetContentSize(Float2{800.0f, 600.0f});
+    surface.SetWindowSize(Float2{1920.0f, 1080.0f});
+    shell::InputRouter router(&manager);
+    router.AddSurface(&surface);
+    shell::IMouse* mouse = surface.Mouse();
+    const u32 left = static_cast<u32>(shell::MouseButton::Left) & 7;
+    const auto frame = [&](f32 x, f32 y, bool down, bool edge)
+    {
+        manager.mouse.x = x;
+        manager.mouse.y = y;
+        manager.mouse.buttons[left] = down;
+        manager.mouse.pressed[left] = edge && down;
+        manager.mouse.released[left] = edge && !down;
+        router.Update();
+    };
+
+    // Pressed inside, dragged out: held, the surface keeps the pointer.
+    frame(500.0f, 400.0f, true, true);
+    CHECK(mouse->IsButtonPressed(shell::MouseButton::Left));
+    frame(40.0f, 40.0f, true, false);
+    CHECK(mouse->IsButtonDown(shell::MouseButton::Left));
+
+    // Let go outside the surface: it reads the release (the frame the capture ends).
+    frame(40.0f, 40.0f, false, true);
+    CHECK(mouse->IsButtonReleased(shell::MouseButton::Left));
+    CHECK(router.Hovered() == nullptr);
+
+    // The next frame it is just a surface the pointer is not over.
+    frame(40.0f, 40.0f, false, false);
+    CHECK_FALSE(mouse->IsButtonReleased(shell::MouseButton::Left));
+    CHECK_FALSE(surface.MouseActive());
+
+    // Let go over another window: the same.
+    frame(500.0f, 400.0f, true, true);
+    manager.hover = 2u;
+    frame(500.0f, 400.0f, true, false);
+    frame(500.0f, 400.0f, false, true);
+    CHECK(mouse->IsButtonReleased(shell::MouseButton::Left));
+    router.RemoveSurface(&surface);
+}
+
 TEST_CASE("input: touch - region buttons and the floating virtual stick")
 {
     InputMap map;

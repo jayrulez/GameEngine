@@ -39,6 +39,8 @@ namespace
     public:
         f32 x = 0, y = 0, dx = 0, dy = 0, wheel = 0;
         bool buttons[8] = {};
+        bool pressed[8] = {};  ///< this frame's presses (edges)
+        bool released[8] = {}; ///< this frame's releases (edges)
         [[nodiscard]] f32 X() const override { return x; }
         [[nodiscard]] f32 Y() const override { return y; }
         [[nodiscard]] f32 GlobalX() const override { return 0; }
@@ -51,8 +53,8 @@ namespace
         {
             return buttons[static_cast<u32>(b) & 7];
         }
-        [[nodiscard]] bool IsButtonPressed(shell::MouseButton) const override { return false; }
-        [[nodiscard]] bool IsButtonReleased(shell::MouseButton) const override { return false; }
+        [[nodiscard]] bool IsButtonPressed(shell::MouseButton b) const override { return pressed[static_cast<u32>(b) & 7]; }
+        [[nodiscard]] bool IsButtonReleased(shell::MouseButton b) const override { return released[static_cast<u32>(b) & 7]; }
         [[nodiscard]] bool RelativeMode() const override { return false; }
         void SetRelativeMode(bool) override {}
         [[nodiscard]] bool CursorVisible() const override { return true; }

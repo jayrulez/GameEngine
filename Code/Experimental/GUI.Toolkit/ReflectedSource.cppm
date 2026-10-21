@@ -20,6 +20,9 @@
 //   - The attributes the editor's inspector reads: `displayName` (else the name made readable),
 //     `description`, `range` (a Float4 of min, max, step), `visibleWhen` ("prop", or "prop=1,2" of
 //     its raw integer, a sibling's; shown when it holds for every object), and `flags`.
+// Defaults: the type's, read from an instance its creator makes, under any an application stacks
+// over it (a prefab's, by path and object); a revert puts each object's own back, a list whole
+// from the type's instance.
 // Writes go through the property's address, or its setter for a computed one. Each commit is told
 // to the application as one change: what, where, and each object's value there before and after as
 // text, written with the text format the application gives (its serializer), which Restore reads
@@ -93,7 +96,10 @@ export namespace experimental::gui
     class ReflectedPropertySource : public IPropertySource
     {
     public:
-        explicit ReflectedPropertySource(core::IAllocator& allocator) : m_allocator(allocator), m_objects(allocator), m_originals(allocator) {}
+        explicit ReflectedPropertySource(core::IAllocator& allocator)
+            : m_allocator(allocator), m_objects(allocator), m_originals(allocator), m_providers(allocator)
+        {
+        }
 
         /// The instances it stands for, all of one type (several components: several objects).
         void SetObjects(core::Span<const core::Instance> objects)
@@ -103,6 +109,8 @@ export namespace experimental::gui
                 if (!object.IsEmpty())
                     m_objects.PushBack(object);
             m_originals.Clear();
+            // The type's defaults: an instance its creator makes (none for a type without one).
+            m_typeDefault = m_objects.IsEmpty() ? core::RefPtr<core::Object>{} : core::CreateObject(*m_objects[0].Type(), m_allocator);
             NotifyPropertiesChanged();
         }
         [[nodiscard]] core::Span<const core::Instance> GetObjects() const noexcept { return m_objects.AsSpan(); }
@@ -123,6 +131,21 @@ export namespace experimental::gui
             NotifyPropertiesChanged(); // a list's count may have changed back
             return ok;
         }
+        /// A default for a path and an object (empty: it has none there), over the type's own.
+        using DefaultProvider = core::Function<Variant(core::StringView path, usize object)>;
+        /// Stacks `provider` over the defaults (the last stacked asks first); a revert is then
+        /// called `revertText` ("Revert to prefab").
+        void PushDefaults(DefaultProvider provider, core::StringView revertText)
+        {
+            m_providers.PushBack(Provider{core::Move(provider), core::String(revertText)});
+            NotifyValuesChanged();
+        }
+        void ClearDefaults()
+        {
+            m_providers.Clear();
+            NotifyValuesChanged();
+        }
+
         /// Tells the grid the objects changed from outside it (an undo the application made).
         void Refresh() { NotifyPropertiesChanged(); }
 
@@ -229,9 +252,39 @@ export namespace experimental::gui
                 m_onChange(change);
             return true;
         }
-        [[nodiscard]] Variant GetDefault(core::StringView, usize) const override { return Variant{}; }
-        bool Revert(core::StringView) override { return false; }
-        [[nodiscard]] core::String GetRevertText(core::StringView) const override { return core::String(u8"Revert to default"); }
+        [[nodiscard]] Variant GetDefault(core::StringView path, usize object) const override
+        {
+            Target target;
+            if (!Resolve(object, path, target) || target.ReadOnly)
+                return Variant{}; // nothing to put back where nothing is written
+            for (usize i = m_providers.Size(); i > 0; --i)
+                if (const Variant value = m_providers[i - 1].Default(path, object); !value.IsEmpty())
+                    return value;
+            Target byDefault;
+            return m_typeDefault && ResolveIn(core::Instance(m_typeDefault.Get(), m_objects[0].Type()), path, byDefault) ? Read(byDefault) : Variant{};
+        }
+        bool Revert(core::StringView path) override
+        {
+            ReflectedChange change{core::Format(u8"Reverted {}", path), core::String(path), core::Array<core::String>(m_allocator),
+                                   core::Array<core::String>(m_allocator)};
+            bool changed = false;
+            for (usize o = 0; o < m_objects.Size(); ++o)
+            {
+                change.Before.PushBack(WriteState(path, o));
+                changed = RevertUnder(path, o) || changed;
+                change.After.PushBack(WriteState(path, o));
+            }
+            if (!changed)
+                return false;
+            NotifyPropertiesChanged();
+            if (m_onChange)
+                m_onChange(change);
+            return true;
+        }
+        [[nodiscard]] core::String GetRevertText(core::StringView) const override
+        {
+            return m_providers.IsEmpty() ? core::String(u8"Revert to default") : m_providers.Back().RevertText;
+        }
         [[nodiscard]] core::String CopyValue(core::StringView) const override { return core::String{}; }
         bool PasteValue(core::StringView, core::StringView, core::String& reason) override
         {
@@ -309,11 +362,13 @@ export namespace experimental::gui
         // The place `path` names in object `object`.
         bool Resolve(usize object, core::StringView path, Target& out) const
         {
-            if (object >= m_objects.Size())
-                return false;
+            return object < m_objects.Size() && ResolveIn(m_objects[object], path, out);
+        }
+        bool ResolveIn(const core::Instance& root, core::StringView path, Target& out) const
+        {
             Target at;
-            at.Type = m_objects[object].Type();
-            at.Address = m_objects[object].Pointer();
+            at.Type = root.Type();
+            at.Address = root.Pointer();
             usize start = 0;
             while (start < path.Size())
             {
@@ -1080,6 +1135,43 @@ export namespace experimental::gui
             return key;
         }
 
+        // Each value at `path` and under it in object `object` given its default; a list whole, as
+        // the type's instance has it. Whether anything changed.
+        bool RevertUnder(core::StringView path, usize object)
+        {
+            Target target;
+            if (!Resolve(object, path, target) || target.Type == nullptr || target.ReadOnly)
+                return false;
+            const Shape shape = target.Part >= 0 ? Shape::Float : ShapeOf(*target.Type);
+            if (shape == Shape::List)
+            {
+                if (!m_typeDefault || m_format == nullptr)
+                    return false;
+                const core::String before = WriteState(path, object);
+                Target byDefault;
+                if (!ResolveIn(core::Instance(m_typeDefault.Get(), m_objects[0].Type()), path, byDefault))
+                    return false;
+                const ReflectedPropertySource* self = this;
+                const core::String text = m_format->Write([self, byDefault](core::ISerializer& ar) mutable { self->SerializeTarget(ar, "value", byDefault); });
+                (void)ReadState(path, object, text.AsView());
+                return WriteState(path, object) != before;
+            }
+            core::Array<PropertyInfo> children(m_allocator);
+            if (shape == Shape::Group || shape == Shape::Float2 || shape == Shape::Float3 || shape == Shape::Float4 || shape == Shape::Quaternion)
+            {
+                GetProperties(path, children);
+                bool changed = false;
+                for (const PropertyInfo& child : children)
+                    changed = RevertUnder(JoinPropertyPath(path, child.Name.AsView()).AsView(), object) || changed;
+                return changed;
+            }
+            const Variant byDefault = GetDefault(path, object);
+            const Variant now = Read(target);
+            if (byDefault.IsEmpty() || now.Compare(byDefault) == 0)
+                return false;
+            return WriteTarget(target, byDefault);
+        }
+
         // One object's list changed as `edit` asks.
         bool ChangeList(const Target& target, const ListEdit& edit) const
         {
@@ -1150,6 +1242,13 @@ export namespace experimental::gui
         core::Array<core::Instance> m_objects;
         core::Array<Original> m_originals;
         IPropertyTextFormat* m_format = nullptr; // not owned
+        struct Provider
+        {
+            DefaultProvider Default;
+            core::String RevertText;
+        };
+        core::Array<Provider> m_providers;
+        core::RefPtr<core::Object> m_typeDefault; // the type's defaults, made by its creator
         core::Function<void(const ReflectedChange&)> m_onChange;
     };
 }

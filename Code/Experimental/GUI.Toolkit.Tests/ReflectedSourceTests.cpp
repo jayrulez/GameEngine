@@ -484,3 +484,44 @@ TEST_CASE("reflected source: a polymorphic list adds by type, its elements' own 
     REQUIRE(back != nullptr);
     CHECK(back->period == doctest::Approx(5.0f));
 }
+
+TEST_CASE("reflected source: the type's defaults from its creator, providers over them, and a revert of each object's own")
+{
+    Bed bed(true);
+    reflected::BlobFormat format;
+    bed.source.SetTextFormat(&format);
+    CHECK(bed.source.GetDefault(SV(u8"intensity"), 0).AsFloat() == doctest::Approx(5.0));
+    CHECK(bed.source.GetDefault(SV(u8"position.z"), 1).AsFloat() == doctest::Approx(3.0));
+    CHECK(bed.source.GetDefault(SV(u8"weights"), 0).AsInt() == 0);
+    CHECK(bed.source.GetDefault(SV(u8"id"), 0).IsEmpty()); // read only: nothing to put back
+    CHECK(bed.source.GetRevertText(SV(u8"intensity")) == core::String(u8"Revert to default"));
+
+    // A prefab for the second object: its intensity 9.
+    bed.source.PushDefaults([](core::StringView path, usize object) -> Variant
+                            { return object == 1 && path == core::StringView(u8"intensity") ? Variant(9.0) : Variant{}; },
+                            SV(u8"Revert to prefab"));
+    CHECK(bed.source.GetDefault(SV(u8"intensity"), 1).AsFloat() == doctest::Approx(9.0));
+    CHECK(bed.source.GetDefault(SV(u8"intensity"), 0).AsFloat() == doctest::Approx(5.0));
+    CHECK(bed.source.GetRevertText(SV(u8"intensity")) == core::String(u8"Revert to prefab"));
+
+    bed.a->intensity = 1.0f;
+    bed.b->intensity = 1.0f;
+    bed.a->shape.radius = 7.0f;
+    bed.b->position.x = 8.0f;
+    bed.a->weights.PushBack(0.5f);
+    REQUIRE(bed.source.Revert(SV(u8"intensity")));
+    CHECK(bed.a->intensity == doctest::Approx(5.0f));
+    CHECK(bed.b->intensity == doctest::Approx(9.0f)); // each its own
+    REQUIRE(bed.source.Revert(SV(u8"shape")));
+    CHECK(bed.a->shape.radius == doctest::Approx(1.0f));
+    REQUIRE(bed.source.Revert(SV(u8"position")));
+    CHECK(bed.b->position.x == doctest::Approx(1.0f));
+    REQUIRE(bed.source.Revert(SV(u8"weights")));
+    CHECK(bed.a->weights.IsEmpty());
+    CHECK_FALSE(bed.source.Revert(SV(u8"weights"))); // nothing left
+    CHECK(bed.changes.Size() == 4u); // one change each
+
+    // An undo of a revert puts the edit back.
+    CHECK(bed.source.Restore(bed.changes[0], true));
+    CHECK(bed.b->intensity == doctest::Approx(1.0f));
+}

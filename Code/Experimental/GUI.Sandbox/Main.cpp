@@ -479,6 +479,8 @@ private:
     // === The Docking page (D3 and D4 of Specs/gui-lab-evolution-3.md) ===
     UniquePtr<gui::DockController> m_dock;
     RefPtr<gui::DockArea> m_dockArea;
+    UniquePtr<gui::DockHostWindows> m_dockWindows; // the floats in OS windows (D6), while switched on
+    void SetDockWindows(bool own);
     Array<String> m_dockPanels; // the registered panels' ids, for "Show the closed panels"
     u32 m_dockMade[8]{};        // how often each panel's content was made (its close policy shows)
     void FillDocking(gui::Node& host);
@@ -636,6 +638,15 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     m_guiHost = MakeUnique<gui::GuiHost>(AppRoot(), AppRoot(), *host.Graphics(), *m_shell, m_fontService.Get(), m_shaders->Set());
     m_guiHost->SetBlendSpace(vg::VGBlendSpace::Linear);
     m_styles = &m_guiHost->Styles();
+    // The windows the host opens for a root (the Docking page's floats in OS windows) are the
+    // runtime host's.
+    {
+        runtime::IApplicationHost* runtimeHost = &host;
+        gui::GuiHost::WindowOpener opener;
+        opener.Open = [runtimeHost](const shell::WindowSettings& settings) { return runtimeHost->OpenWindow(settings, graphics::RenderWindowDesc{}); };
+        opener.Close = [runtimeHost](graphics::RenderWindow& window) { runtimeHost->CloseWindow(&window); };
+        m_guiHost->SetWindowOpener(Move(opener));
+    }
 
 #ifdef OPTION_HAS_ANGELSCRIPT
     RegisterCoreTypes();
@@ -2057,7 +2068,18 @@ void GUISandbox::FillDocking(gui::Node& host)
     m_dockArea->Show(*m_dock);
 
     GUISandbox* self = this;
-    (void)m_root->OnCommand(u8"docking.reset", [self](gui::CommandEvent&) { (void)self->m_dock->Adopt(DefaultDockLayout()); });
+    (void)m_root->OnCommand(u8"docking.reset",
+                            [self](gui::CommandEvent&)
+                            {
+                                // The default layout's float stands in the area's units: adopted
+                                // there, then taken back to its own window when floats are.
+                                const bool own = self->m_dockWindows.Get() != nullptr;
+                                self->SetDockWindows(false);
+                                (void)self->m_dock->Adopt(DefaultDockLayout());
+                                self->SetDockWindows(own);
+                            });
+    // The floats in the area or in OS windows of their own (D6), where the host opens windows.
+    (void)m_root->OnCommand(u8"docking.os-windows", [self](gui::CommandEvent&) { self->SetDockWindows(self->m_dockWindows.Get() == nullptr); });
     (void)m_root->OnCommand(u8"docking.show-closed",
                             [self](gui::CommandEvent&)
                             {
@@ -2089,6 +2111,37 @@ void GUISandbox::FillDocking(gui::Node& host)
                                 if (auto* button = page != nullptr ? Cast<gui::Button>(FindById(*page, u8"docking-torn")) : nullptr)
                                     button->SetText(dim ? u8"A torn tab dims" : u8"A torn tab closes up");
                             });
+}
+
+// The Docking page's floats in OS windows of their own (`own`), or in the area. A window's root is
+// styled as the page is, its sheet scoped to the page reaching no other root.
+void GUISandbox::SetDockWindows(bool own)
+{
+    if (!m_dockArea || own == (m_dockWindows.Get() != nullptr))
+        return;
+    if (own)
+    {
+        if (!m_guiHost->CanOpenWindows())
+            return;
+        m_dockWindows = MakeUnique<gui::DockHostWindows>(AppRoot(), AppRoot(), *m_guiHost, *m_dockArea);
+        GUISandbox* self = this;
+        m_dockWindows->SetOnRootMade([self](gui::SceneRoot& root)
+        {
+            for (const Page& page : self->m_pages)
+                if (page.id == StringView(u8"docking"))
+                    (void)self->m_styles->SetSubtreeSheet(root, gui::CSSParser::Parse(page.sheet.AsView(), u8"pages/docking.css"));
+        });
+        m_dockArea->SetWindows(m_dockWindows.Get());
+        if (m_dockArea->GetWindows() == nullptr)
+            m_dockWindows.Reset(); // a window would not open: the floats stayed in the area
+    }
+    else
+    {
+        m_dockArea->SetWindows(nullptr);
+        m_dockWindows.Reset();
+    }
+    if (auto* button = m_root ? Cast<gui::Button>(FindById(*m_root, u8"docking-windows")) : nullptr)
+        button->SetText(m_dockWindows ? u8"Floats in OS windows" : u8"Floats in the window");
 }
 
 // The Viewport page's camera, framing the cube.
@@ -2334,6 +2387,8 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
         m_cubeCompiler->Destroy();
     m_cubeCompiler = nullptr;
     m_offscreen.Reset();
+    // The Docking page's float windows close first (their roots on the GUI's context).
+    SetDockWindows(false);
     // The window's panes leave the host (their renderer forgets the bakes) before the trees go.
     if (m_guiHost->WindowFor(m_root.Get()) != nullptr)
         m_guiHost->DetachWindow(*m_mainWindow);

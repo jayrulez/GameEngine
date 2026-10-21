@@ -366,5 +366,22 @@ lab's title bar would have to be moved by the lab, which this design rules out. 
 not docked back by its OS title bar, but by its stack grips (a float of one stack is one grip) or Move
 to; on Wayland docking between windows is Move to.
 
+D6 as built on `vg` (2026-10-20). The shell lists the screens, raises a window, reports a moved one
+(SDL never turned its event into the shell's), retitles a window, and says what its windows can do
+(more than one; placed where the application puts them), the last four on `master`. The host opens
+a window for a root through the application's opener, tells any number of listeners each window's
+events by its root, and says which root is under a screen point, where its windows hold their
+places. A drag goes on over another root of one GUI (the GUIContext's IRootPlaces, the host's), its
+preview moving into that root's top layer, and one let go over no root ends outside with the screen
+point; a tab strip hands its owner how a torn tab's drag ended. A DockArea takes an IDockWindows:
+each float a dock space in a window of its own, its bounds on the screen, retitled and placed as the
+layout has it, the user's moves and closes heard back; a tab or stack let go outside every window
+floats there, Shift and Move to's Float place it on the screen, the surface cycle raises its window,
+and a window that will not open takes the area back to floats in it. DockHostWindows is that on
+GuiHost, and GUI.Docking links GUI.Hosting for it (the user agreed, 2026-10-20: docking is the whole
+feature). The sandbox's Docking page switches between floats in the window and in OS windows. Not
+yet: a float's whole surface docked back by a drag (its stack grips and Move to do it), a drag over
+a float's window asking for a float with Shift, and screens clamping a restored layout's floats.
+
 Not in scope: the editor moving off foundation.ui's docking. It needs the toolkit too, which is not
 written, and the lab's libraries proven stable first (the user, 2026-10-20).

@@ -11,6 +11,9 @@
 //   - Float2, Float3 and Float4 are groups hinted with their names, their parts x, y, z, w; a
 //     Quaternion is a Float3 group of Euler degrees (pitch, yaw, roll) the source converts, as the
 //     editor's Transform row does; a Nested struct, or a reflected value struct, is a group.
+//   - Array<T> and a BoundedArray are lists (reflection's emplaceDefault, removeAt, moveElement),
+//     their elements by index; an Array<RefPtr<Base>> adds by type, the types that derive from
+//     its base and its factory can make, by their displayName.
 //   - A struct's group carries its type's name as its hint, and so does any other type, for an
 //     application's editor (a Color until T4, a Ref, an EntityRef); a struct no editor takes shows
 //     its own rows, anything else the grid's row saying no editor fits.
@@ -25,6 +28,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include <array> // a serializer key, null-terminated
 
 export module experimental.gui.toolkit:reflected_source;
 
@@ -138,6 +142,11 @@ export namespace experimental::gui
                 return;
             }
             const Shape shape = ShapeOf(*target.Type);
+            if (target.Part < 0 && shape == Shape::List)
+            {
+                ListElements(parent, out);
+                return;
+            }
             if (target.Part < 0 && (shape == Shape::Float2 || shape == Shape::Float3 || shape == Shape::Float4 || shape == Shape::Quaternion))
                 ListParts(shape, out);
         }
@@ -201,7 +210,25 @@ export namespace experimental::gui
             NotifyValuesChanged();
         }
 
-        bool EditList(core::StringView, const ListEdit&) override { return false; }
+        bool EditList(core::StringView path, const ListEdit& edit) override
+        {
+            ReflectedChange change{ListWords(path, edit), core::String(path), core::Array<core::String>(m_allocator), core::Array<core::String>(m_allocator)};
+            bool changed = false;
+            for (usize o = 0; o < m_objects.Size(); ++o)
+            {
+                change.Before.PushBack(WriteState(path, o));
+                Target target;
+                if (Resolve(o, path, target) && target.Type != nullptr && ShapeOf(*target.Type) == Shape::List && !target.ReadOnly && target.Address != nullptr)
+                    changed = ChangeList(target, edit) || changed;
+                change.After.PushBack(WriteState(path, o));
+            }
+            if (!changed)
+                return false;
+            NotifyPropertiesChanged();
+            if (m_onChange)
+                m_onChange(change);
+            return true;
+        }
         [[nodiscard]] Variant GetDefault(core::StringView, usize) const override { return Variant{}; }
         bool Revert(core::StringView) override { return false; }
         [[nodiscard]] core::String GetRevertText(core::StringView) const override { return core::String(u8"Revert to default"); }
@@ -324,6 +351,31 @@ export namespace experimental::gui
                 at = next;
                 return true;
             }
+            if (shape == Shape::List)
+            {
+                const core::Optional<i64> index = core::ParseInt(segment);
+                const core::ContainerInfo& container = *at.Type->container;
+                if (!index.HasValue() || index.Value() < 0 || at.Address == nullptr)
+                    return false;
+                const core::Instance list(at.Address, at.Type);
+                const usize i = static_cast<usize>(index.Value());
+                if (i >= core::ContainerSize(container, list))
+                    return false;
+                Target next;
+                next.List = list;
+                next.Index = i;
+                next.Element = true;
+                next.ReadOnly = at.ReadOnly;
+                next.Type = container.elementType;
+                const core::Instance element = core::ContainerAddressAt(container, list, i);
+                if (!element.IsEmpty())
+                {
+                    next.Address = element.Pointer();
+                    next.Type = element.Type(); // a polymorphic element's own type
+                }
+                at = next;
+                return true;
+            }
             const i32 part = PartIndex(shape, segment);
             if (part >= 0)
             {
@@ -384,7 +436,22 @@ export namespace experimental::gui
             if (const core::String* description = StringAttribute(property, u8"description"))
                 info.Description = *description;
             info.ReadOnly = group.ReadOnly || (static_cast<u32>(property.flags) & static_cast<u32>(core::PropertyFlags::ReadOnly)) != 0;
-            const core::TypeInfo& type = *property.type;
+            DescribeType(*property.type, core::FindAttribute(property, core::StringView(u8"flags")) != nullptr, info);
+            if (const core::Attribute* range = core::FindAttribute(property, core::StringView(u8"range")))
+                if (const core::Float4* bounds = range->value.TryGet<core::Float4>())
+                {
+                    info.HasRange = true;
+                    info.Min = bounds->x;
+                    info.Max = bounds->y;
+                    info.Step = bounds->z;
+                }
+            if (const core::String* condition = StringAttribute(property, u8"visibleWhen"))
+                info.Visible = Holds(path, condition->AsView());
+            return true;
+        }
+        // A type's kind as a row (flags: an enum read as flags), what a property or an element is.
+        void DescribeType(const core::TypeInfo& type, bool flags, PropertyInfo& info) const
+        {
             switch (ShapeOf(type))
             {
             case Shape::Bool:
@@ -400,7 +467,7 @@ export namespace experimental::gui
                 info.Kind = PropertyKind::String;
                 break;
             case Shape::Enum:
-                info.Kind = core::FindAttribute(property, core::StringView(u8"flags")) != nullptr ? PropertyKind::Flags : PropertyKind::Enum;
+                info.Kind = flags ? PropertyKind::Flags : PropertyKind::Enum;
                 for (const core::EnumValue& value : core::Enumerators(type))
                     info.Choices.PushBack(PropertyChoice{ReadablePropertyName(core::StringView(reinterpret_cast<const char8_t*>(value.name))), value.value});
                 break;
@@ -425,23 +492,65 @@ export namespace experimental::gui
                 info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
                 break;
             case Shape::List:
-                return false; // lists come with their layer
+            {
+                info.Kind = PropertyKind::List;
+                const core::ContainerInfo& container = *type.container;
+                const bool polymorphic = core::IsPolymorphicContainer(container);
+                if (!info.ReadOnly)
+                    info.ListOps = static_cast<u8>(((polymorphic ? container.createElement != nullptr : container.emplaceDefault != nullptr) ? PropertyListAdd : 0) |
+                                                   (container.removeAt != nullptr ? PropertyListRemove : 0) |
+                                                   (container.moveElement != nullptr ? PropertyListMove : 0));
+                if (polymorphic && container.elementType != nullptr)
+                    for (const core::TypeInfo* concrete : CreatableTypes(container))
+                        info.ElementTypes.PushBack(core::String(TypeShownName(*concrete)));
+                break;
+            }
             case Shape::Other:
                 info.Kind = PropertyKind::Group;
                 info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
                 break;
             }
-            if (const core::Attribute* range = core::FindAttribute(property, core::StringView(u8"range")))
-                if (const core::Float4* bounds = range->value.TryGet<core::Float4>())
-                {
-                    info.HasRange = true;
-                    info.Min = bounds->x;
-                    info.Max = bounds->y;
-                    info.Step = bounds->z;
-                }
-            if (const core::String* condition = StringAttribute(property, u8"visibleWhen"))
-                info.Visible = Holds(path, condition->AsView());
-            return true;
+        }
+        // A polymorphic list's types an add makes: those deriving from its base its factory takes.
+        [[nodiscard]] core::Array<const core::TypeInfo*> CreatableTypes(const core::ContainerInfo& container) const
+        {
+            core::Array<const core::TypeInfo*> derived(m_allocator);
+            core::Array<const core::TypeInfo*> out(m_allocator);
+            if (container.elementType == nullptr)
+                return out;
+            core::EnumerateDerived(*container.elementType, derived);
+            for (const core::TypeInfo* type : derived)
+                if (core::ContainerCanCreateElement(container, *type))
+                    out.PushBack(type);
+            return out;
+        }
+        [[nodiscard]] static core::StringView TypeShownName(const core::TypeInfo& type)
+        {
+            return core::TypeAttrString(type, "displayName", core::StringView(reinterpret_cast<const char8_t*>(type.name)));
+        }
+        // A list's elements, the fewest any object has, each named by its index (and an object's
+        // by its type's name).
+        void ListElements(core::StringView path, core::Array<PropertyInfo>& out) const
+        {
+            usize count = ~usize{0};
+            for (usize o = 0; o < m_objects.Size(); ++o)
+                count = core::Min(count, static_cast<usize>(GetValue(path, o).AsInt()));
+            if (m_objects.IsEmpty())
+                return;
+            for (usize i = 0; i < count; ++i)
+            {
+                const core::String element = core::Format(u8"{}.{}", path, i);
+                Target target;
+                if (!Resolve(0, element.AsView(), target) || target.Type == nullptr)
+                    continue;
+                PropertyInfo info;
+                info.Name = core::Format(u8"{}", i);
+                info.ReadOnly = target.ReadOnly;
+                DescribeType(*target.Type, false, info);
+                const bool object = info.Kind == PropertyKind::Group && target.Address != nullptr;
+                info.DisplayName = object ? core::Format(u8"{} {}", TypeShownName(*target.Type), i + 1) : core::Format(u8"Element {}", i + 1);
+                out.PushBack(core::Move(info));
+            }
         }
         [[nodiscard]] static const core::String* StringAttribute(const core::PropertyInfo& property, const char8_t* key)
         {
@@ -511,8 +620,13 @@ export namespace experimental::gui
             const Shape shape = ShapeOf(*target.Type);
             if (target.Part >= 0)
                 return Variant(PartOf(target, shape));
+            if (shape == Shape::List)
+                return target.Address != nullptr ? Variant(static_cast<i64>(core::ContainerSize(*target.Type->container, core::Instance(target.Address, target.Type))))
+                                                 : Variant{};
             if (target.Address != nullptr)
                 return ReadAt(target.Address, *target.Type, shape);
+            if (target.Element && !target.List.IsEmpty())
+                return FromCore(core::ContainerGetAt(*target.List.Type()->container, target.List, target.Index), shape, *target.Type);
             if (target.Property != nullptr && target.Property->get != nullptr && !target.Owner.IsEmpty())
                 return FromCore(target.Property->get(target.Owner), shape, *target.Type);
             return Variant{};
@@ -527,6 +641,11 @@ export namespace experimental::gui
                 return SetPart(target, shape, value.AsFloat());
             if (target.Address != nullptr)
                 return WriteAt(target.Address, *target.Type, shape, value);
+            if (target.Element && !target.List.IsEmpty())
+            {
+                const core::Variant boxed = ToCore(value, shape, *target.Type);
+                return boxed.Type() != nullptr && core::ContainerSetAt(*target.List.Type()->container, target.List, target.Index, boxed).IsOk();
+            }
             if (target.Property != nullptr && !target.Owner.IsEmpty())
             {
                 const core::Variant boxed = ToCore(value, shape, *target.Type);
@@ -841,6 +960,13 @@ export namespace experimental::gui
                     (void)WriteCompound(target, shape, parts);
                 return;
             }
+            case Shape::List:
+            {
+                if (target.Address == nullptr)
+                    return;
+                SerializeList(ar, key, target);
+                return;
+            }
             case Shape::Group:
             {
                 if (target.Address == nullptr)
@@ -869,6 +995,128 @@ export namespace experimental::gui
             }
             default:
                 return;
+            }
+        }
+
+        // A list either way: its count, each polymorphic element's type, then each element. Read,
+        // the list takes the count (made or removed at its end) before its elements are read.
+        void SerializeList(core::ISerializer& ar, const char* key, const Target& target) const
+        {
+            const bool reading = ar.Mode() == core::SerializeMode::Read;
+            const core::ContainerInfo& container = *target.Type->container;
+            const core::Instance list(target.Address, target.Type);
+            const bool polymorphic = core::IsPolymorphicContainer(container);
+            ar.Key(key);
+            ar.BeginObject();
+            i64 count = static_cast<i64>(core::ContainerSize(container, list));
+            core::Serialize(ar, "count", count);
+            if (reading && !target.ReadOnly)
+            {
+                // Polymorphic: rebuilt from the types written; homogeneous: grown or cut to the count.
+                if (polymorphic)
+                {
+                    while (core::ContainerSize(container, list) != 0)
+                        (void)core::ContainerRemoveAt(container, list, core::ContainerSize(container, list) - 1);
+                    for (i64 i = 0; i < count; ++i)
+                    {
+                        core::String type;
+                        const std::array<char, 24> typeKey = ElementKey(i, true);
+                        core::Serialize(ar, typeKey.data(), type);
+                        for (const core::TypeInfo* concrete : CreatableTypes(container))
+                            if (core::StringView(reinterpret_cast<const char8_t*>(concrete->name)) == type.AsView())
+                            {
+                                (void)core::ContainerCreateElement(container, list, static_cast<usize>(i), *concrete);
+                                break;
+                            }
+                    }
+                }
+                else
+                {
+                    while (static_cast<i64>(core::ContainerSize(container, list)) > count && count >= 0)
+                        (void)core::ContainerRemoveAt(container, list, core::ContainerSize(container, list) - 1);
+                    while (static_cast<i64>(core::ContainerSize(container, list)) < count)
+                        if (core::ContainerEmplaceDefault(container, list, core::ContainerSize(container, list)).IsEmpty())
+                            break; // a bounded array at its most
+                }
+            }
+            else if (polymorphic)
+                for (i64 i = 0; i < count; ++i)
+                {
+                    const core::Instance element = core::ContainerAddressAt(container, list, static_cast<usize>(i));
+                    core::String type(element.IsEmpty() ? core::StringView{} : core::StringView(reinterpret_cast<const char8_t*>(element.Type()->name)));
+                    const std::array<char, 24> typeKey = ElementKey(i, true);
+                    core::Serialize(ar, typeKey.data(), type);
+                }
+            const usize size = core::ContainerSize(container, list);
+            for (usize i = 0; i < size; ++i)
+            {
+                Target element;
+                element.List = list;
+                element.Index = i;
+                element.Element = true;
+                element.ReadOnly = target.ReadOnly;
+                element.Type = container.elementType;
+                const core::Instance at = core::ContainerAddressAt(container, list, i);
+                if (!at.IsEmpty())
+                {
+                    element.Address = at.Pointer();
+                    element.Type = at.Type();
+                }
+                const std::array<char, 24> elementKey = ElementKey(static_cast<i64>(i), false);
+                if (reading && !ar.HasKey(elementKey.data()))
+                    continue;
+                SerializeTarget(ar, elementKey.data(), element);
+            }
+            ar.EndObject();
+        }
+        // "e3" for element 3, "t3" for its type: keys the serializer reads as C strings.
+        [[nodiscard]] static std::array<char, 24> ElementKey(i64 index, bool type)
+        {
+            std::array<char, 24> key{};
+            key[0] = type ? 't' : 'e';
+            const core::String digits = core::Format(u8"{}", index);
+            for (usize i = 0; i < digits.Size() && i + 2 < key.size(); ++i)
+                key[i + 1] = static_cast<char>(digits[i]);
+            return key;
+        }
+
+        // One object's list changed as `edit` asks.
+        bool ChangeList(const Target& target, const ListEdit& edit) const
+        {
+            const core::ContainerInfo& container = *target.Type->container;
+            const core::Instance list(target.Address, target.Type);
+            const usize size = core::ContainerSize(container, list);
+            switch (edit.Kind)
+            {
+            case ListEdit::Op::Insert:
+            {
+                const usize at = core::Min(edit.Index, size);
+                if (core::IsPolymorphicContainer(container))
+                {
+                    for (const core::TypeInfo* concrete : CreatableTypes(container))
+                        if (TypeShownName(*concrete) == edit.ElementType.AsView() || (edit.ElementType.Size() == 0))
+                            return !core::ContainerCreateElement(container, list, at, *concrete).IsEmpty();
+                    return false;
+                }
+                return !core::ContainerEmplaceDefault(container, list, at).IsEmpty();
+            }
+            case ListEdit::Op::Remove:
+                return edit.Index < size && core::ContainerRemoveAt(container, list, edit.Index).IsOk();
+            case ListEdit::Op::Move:
+                return edit.Index < size && edit.To < size && edit.Index != edit.To && core::ContainerMoveElement(container, list, edit.Index, edit.To).IsOk();
+            }
+            return false;
+        }
+        [[nodiscard]] static core::String ListWords(core::StringView path, const ListEdit& edit)
+        {
+            switch (edit.Kind)
+            {
+            case ListEdit::Op::Insert:
+                return core::Format(u8"Added to {}", path);
+            case ListEdit::Op::Remove:
+                return core::Format(u8"Removed from {}", path);
+            default:
+                return core::Format(u8"Moved in {}", path);
             }
         }
 

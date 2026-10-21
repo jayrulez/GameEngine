@@ -44,6 +44,25 @@ namespace reflected
         f32 softness = 0.5f;
     };
 
+    class TestEffect : public core::Object
+    {
+        RTTI_OBJECT(TestEffect, core::Object)
+    public:
+        f32 strength = 1.0f;
+    };
+    class TestFlicker : public TestEffect
+    {
+        RTTI_OBJECT(TestFlicker, TestEffect)
+    public:
+        f32 speed = 4.0f;
+    };
+    class TestPulse : public TestEffect
+    {
+        RTTI_OBJECT(TestPulse, TestEffect)
+    public:
+        f32 period = 2.0f;
+    };
+
     class TestLamp : public core::Object
     {
         RTTI_OBJECT(TestLamp, core::Object)
@@ -63,6 +82,10 @@ namespace reflected
         LampShape shape;
         core::Color tint{1.0f, 1.0f, 1.0f, 1.0f};
         i64 id = 101;
+        core::Array<f32> weights;
+        core::Array<core::RefPtr<TestEffect>> effects;
+        f32 steps[3] = {1.0f, 2.0f, 0.0f};
+        i32 stepCount = 2;
 
         [[nodiscard]] f32 GetExposure() const { return m_exposure; }
         void SetExposure(f32 exposure) { m_exposure = exposure; }
@@ -87,6 +110,22 @@ namespace reflected
     {
         builder.Property<&LampShape::radius>("radius").Property<&LampShape::softness>("softness");
     }
+    REFLECT_MEMBERS(TestEffect, "rtti::tests::reflected")
+    {
+        builder.Property<&TestEffect::strength>("strength");
+    }
+    REFLECT_MEMBERS(TestFlicker, "rtti::tests::reflected")
+    {
+        builder.Attribute("displayName", core::String(u8"Flicker"));
+        builder.Property<&TestFlicker::speed>("speed");
+        builder.Creator();
+    }
+    REFLECT_MEMBERS(TestPulse, "rtti::tests::reflected")
+    {
+        builder.Attribute("displayName", core::String(u8"Pulse"));
+        builder.Property<&TestPulse::period>("period");
+        builder.Creator();
+    }
     REFLECT_MEMBERS(TestLamp, "rtti::tests::reflected")
     {
         builder.Property<&TestLamp::name>("name").PropAttribute("description", core::String(u8"What the scene calls it"));
@@ -105,8 +144,18 @@ namespace reflected
         builder.Property<&TestLamp::tint>("tint");
         builder.Property<&TestLamp::id>("id", core::PropertyFlags::ReadOnly);
         builder.AccessorProperty<&TestLamp::GetExposure, &TestLamp::SetExposure>("exposure");
+        builder.Nested<&TestLamp::weights>("weights");
+        builder.Nested<&TestLamp::effects>("effects");
+        builder.BoundedArray<&TestLamp::steps, &TestLamp::stepCount>("steps");
         builder.Creator();
     }
+
+    core::RefPtr<TestEffect> CreateEffect(const core::TypeInfo& type)
+    {
+        core::RefPtr<core::Object> made = core::CreateObject(type, core::DefaultAllocator());
+        return core::RefPtr<TestEffect>(core::Cast<TestEffect>(made.Get()));
+    }
+    bool CanCreateEffect(const core::TypeInfo& type) { return type.creator != nullptr; }
 
     void Register()
     {
@@ -114,6 +163,16 @@ namespace reflected
         RttiRegisterEnum_LampKind();
         RttiRegisterEnum_LampLayers();
         RttiRegisterValue_LampShape();
+        core::RegisterArrayType<f32>();
+        core::RegisterPolymorphicArrayType<TestEffect>(&CreateEffect, &CanCreateEffect);
+        static const bool once = []()
+        {
+            core::GlobalTypeRegistry().Register(TestEffect::StaticType());
+            core::GlobalTypeRegistry().Register(TestFlicker::StaticType());
+            core::GlobalTypeRegistry().Register(TestPulse::StaticType());
+            return true;
+        }();
+        (void)once;
     }
 
     // A format of its own for the tests: Core's binary serializer, its bytes held as the text.
@@ -178,7 +237,7 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     Bed bed;
     core::Array<PropertyInfo> rows(core::DefaultAllocator());
     bed.source.GetProperties(SV(u8""), rows);
-    REQUIRE(rows.Size() == 16u);
+    REQUIRE(rows.Size() == 19u);
     CHECK(rows[0].Name == core::String(u8"name"));
     CHECK(rows[0].DisplayName == core::String(u8"Name"));
     CHECK(rows[0].Description == core::String(u8"What the scene calls it"));
@@ -322,4 +381,106 @@ TEST_CASE("reflected source: the grid shows it")
     CHECK(core::Cast<FlagsPropertyEditor>(grid->FindEditor(SV(u8"layers"))) != nullptr);
     CHECK(grid->FindRow(SV(u8"coneAngle")) < 0);
     grid->SetSource(nullptr);
+}
+
+TEST_CASE("reflected source: arrays and bounded arrays are lists, elements by index, changed in each object as one change")
+{
+    Bed bed(true);
+    reflected::BlobFormat format;
+    bed.source.SetTextFormat(&format);
+    bed.a->weights.PushBack(0.5f);
+    bed.a->weights.PushBack(0.25f);
+    bed.b->weights.PushBack(0.5f);
+    bed.b->weights.PushBack(0.75f);
+    bed.b->weights.PushBack(1.0f);
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8""), rows);
+    const PropertyInfo& weights = *bed.Find(rows, u8"weights");
+    CHECK(weights.Kind == PropertyKind::List);
+    CHECK(weights.ListOps == (PropertyListAdd | PropertyListRemove | PropertyListMove));
+    CHECK(ReadPropertyValue(bed.source, SV(u8"weights"), PropertyKind::List).Mixed); // two and three
+    core::Array<PropertyInfo> elements(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8"weights"), elements);
+    REQUIRE(elements.Size() == 2u); // the fewest
+    CHECK(elements[1].Kind == PropertyKind::Float);
+    CHECK(elements[1].DisplayName == core::String(u8"Element 2"));
+    CHECK(ReadPropertyValue(bed.source, SV(u8"weights.1"), PropertyKind::Float).Mixed);
+
+    bed.Commit(u8"weights.1", Variant(2.0));
+    CHECK(bed.b->weights[1] == doctest::Approx(2.0f));
+    ListEdit move;
+    move.Kind = ListEdit::Op::Move;
+    move.Index = 1;
+    move.To = 0;
+    REQUIRE(bed.source.EditList(SV(u8"weights"), move));
+    CHECK(bed.a->weights[0] == doctest::Approx(2.0f));
+    CHECK(bed.b->weights[2] == doctest::Approx(1.0f)); // b's third stays
+    ListEdit add;
+    add.Kind = ListEdit::Op::Insert;
+    add.Index = 99;
+    REQUIRE(bed.source.EditList(SV(u8"weights"), add));
+    CHECK(bed.a->weights.Size() == 3u);
+    CHECK(bed.b->weights.Size() == 4u);
+
+    // An undo of the add puts each object's list back as it was.
+    CHECK(bed.source.Restore(bed.changes.Back(), true));
+    CHECK(bed.a->weights.Size() == 2u);
+    CHECK(bed.b->weights.Size() == 3u);
+    CHECK(bed.b->weights[2] == doctest::Approx(1.0f));
+
+    // A bounded array: its count, at most its capacity.
+    elements.Clear();
+    bed.source.GetProperties(SV(u8"steps"), elements);
+    CHECK(elements.Size() == 2u);
+    REQUIRE(bed.source.EditList(SV(u8"steps"), add));
+    CHECK(bed.a->stepCount == 3);
+    CHECK_FALSE(bed.source.EditList(SV(u8"steps"), add)); // full
+}
+
+TEST_CASE("reflected source: a polymorphic list adds by type, its elements' own properties, and an undo rebuilds it")
+{
+    Bed bed;
+    reflected::BlobFormat format;
+    bed.source.SetTextFormat(&format);
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8""), rows);
+    const PropertyInfo& effects = *bed.Find(rows, u8"effects");
+    REQUIRE(effects.ElementTypes.Size() == 2u);
+    CHECK(effects.ElementTypes[0] == core::String(u8"Flicker"));
+    CHECK(effects.ElementTypes[1] == core::String(u8"Pulse"));
+
+    ListEdit add;
+    add.Kind = ListEdit::Op::Insert;
+    add.ElementType = core::String(u8"Pulse");
+    REQUIRE(bed.source.EditList(SV(u8"effects"), add));
+    add.Index = 1;
+    add.ElementType = core::String(u8"Flicker");
+    REQUIRE(bed.source.EditList(SV(u8"effects"), add));
+    REQUIRE(bed.a->effects.Size() == 2u);
+    CHECK(core::Cast<reflected::TestPulse>(bed.a->effects[0].Get()) != nullptr);
+
+    core::Array<PropertyInfo> elements(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8"effects"), elements);
+    REQUIRE(elements.Size() == 2u);
+    CHECK(elements[0].DisplayName == core::String(u8"Pulse 1"));
+    core::Array<PropertyInfo> pulse(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8"effects.0"), pulse);
+    REQUIRE(pulse.Size() == 2u); // its base's strength, then its period
+    CHECK(pulse[1].Name == core::String(u8"period"));
+    bed.Commit(u8"effects.0.period", Variant(5.0));
+    CHECK(core::Cast<reflected::TestPulse>(bed.a->effects[0].Get())->period == doctest::Approx(5.0f));
+
+    // Removing the pulse and undoing it makes a pulse again, with its period.
+    const usize before = bed.changes.Size();
+    ListEdit remove;
+    remove.Kind = ListEdit::Op::Remove;
+    remove.Index = 0;
+    REQUIRE(bed.source.EditList(SV(u8"effects"), remove));
+    REQUIRE(bed.changes.Size() == before + 1);
+    CHECK(core::Cast<reflected::TestFlicker>(bed.a->effects[0].Get()) != nullptr);
+    CHECK(bed.source.Restore(bed.changes.Back(), true));
+    REQUIRE(bed.a->effects.Size() == 2u);
+    reflected::TestPulse* back = core::Cast<reflected::TestPulse>(bed.a->effects[0].Get());
+    REQUIRE(back != nullptr);
+    CHECK(back->period == doctest::Approx(5.0f));
 }

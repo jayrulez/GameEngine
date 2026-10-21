@@ -16,6 +16,9 @@
 //   - Float2, Float3 and Float4 (T2): a group hinted with Core's type name, a number field per child
 //     on its one row, each labelled with its child's name and editing its child's path, so each is
 //     mixed and scrubbed on its own;
+//   - colours (T4): a swatch and a hex field; the swatch opens the core's picker as a popup, a
+//     drag previewing on every object and the picker's closing committing once (the originals
+//     put back first), Escape cancelling; the hex field commits what is typed;
 //   - lists (T2): the count (mixed when the objects' differ) and an Add button, a menu of the types
 //     when the list takes several; an element added at the end.
 // Mixed, a field shows the placeholder "Mixed" and a button says so.
@@ -468,6 +471,170 @@ export namespace experimental::gui
         usize m_shown = 0;
     };
 
+    /// The popup a colour editor opens: the core's picker on a panel.
+    class PropertyColorPopup : public UIWidget
+    {
+        RTTI_OBJECT(PropertyColorPopup, UIWidget)
+    public:
+        PropertyColorPopup()
+        {
+            SetTag(core::StringView(u8"propertycolorpopup"));
+            SetPadding(Thickness{8.0f, 8.0f, 8.0f, 8.0f});
+            EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(300.0f); });
+            m_picker = core::MakeRef<ColorPicker>(MemoryAllocator());
+            AddChild(m_picker.Get());
+        }
+        [[nodiscard]] ColorPicker& GetPicker() const noexcept { return *m_picker; }
+
+    protected:
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            if (!BoxFills())
+                ctx.VG().FillRect(localBounds.ToRectangle(), Color{0.18f, 0.20f, 0.25f, 1.0f});
+            UIWidget::OnDraw(ctx, localBounds);
+        }
+
+    private:
+        core::RefPtr<ColorPicker> m_picker;
+    };
+
+    class ColorPropertyEditor : public PropertyEditor
+    {
+        RTTI_OBJECT(ColorPropertyEditor, PropertyEditor)
+    public:
+        ColorPropertyEditor()
+        {
+            AddClass(core::StringView(u8"color"));
+            EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Row;
+                s.AlignItems = Align::Stretch;
+                s.ColumnGap = 6.0f;
+            });
+            ColorPropertyEditor* self = this;
+            m_swatch = core::MakeRef<ColorSwatch>(MemoryAllocator());
+            m_swatch->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Width = LayoutLength::Px(40.0f);
+                s.Shrink = 0.0f;
+            });
+            m_swatch->SetOnClick([self]() { self->OpenPicker(); });
+            AddChild(m_swatch.Get());
+            m_hex = core::MakeRef<TextField>(MemoryAllocator());
+            m_hex->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Grow = 1.0f;
+                s.Basis = LayoutLength::Px(0.0f);
+                s.MinWidth = LayoutLength::Px(0.0f);
+            });
+            m_hex->SetOnTextChanged([self](core::StringView text) { self->TypedHex(text); });
+            AddChild(m_hex.Get());
+            m_popup = core::MakeRef<PropertyColorPopup>(MemoryAllocator());
+            m_popup->GetPicker().SetOnColorChanging([self](Color color) { self->Picked(color); });
+            m_popup->GetPicker().SetOnColorChanged([self](Color color) { self->Picked(color); });
+        }
+        [[nodiscard]] ColorSwatch* GetSwatch() const noexcept { return m_swatch.Get(); }
+        [[nodiscard]] TextField* GetHexField() const noexcept { return m_hex.Get(); }
+        /// The picker, while it is open.
+        [[nodiscard]] ColorPicker* GetPicker() const
+        {
+            const EventDispatcher* dispatcher = m_popup->GetEventDispatcher();
+            return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_popup) ? &m_popup->GetPicker() : nullptr;
+        }
+        /// Opens the picker on the colour shown; its drags preview, its closing commits.
+        void OpenPicker()
+        {
+            EventDispatcher* dispatcher = GetEventDispatcher();
+            if (dispatcher == nullptr || IsReadOnly() || GetPicker() != nullptr)
+                return;
+            ShareTextStyle(*m_popup, false);
+            m_popup->GetPicker().SetShowsAlpha(m_showsAlpha);
+            m_popup->GetPicker().SetColor(m_color);
+            m_picking = false;
+            m_picked = m_color;
+            PopupOptions options;
+            options.Anchor = m_swatch.Get();
+            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 2.0f, true};
+            options.TakesFocus = true;
+            options.FitContent = true;
+            ColorPropertyEditor* self = this;
+            options.OnClosed = [self](PopupCloseReason reason) { self->Closed(reason == PopupCloseReason::Escape); };
+            dispatcher->OpenPopup(*this, *m_popup, core::Move(options));
+        }
+
+    protected:
+        void OnBind(const PropertyInfo& info, const PropertyValue& value) override
+        {
+            m_showsAlpha = info.ShowsAlpha;
+            m_color = value.Value.GetType() == Variant::Type::Color ? value.Value.AsColor() : Color{};
+            if (!m_showsAlpha)
+                m_color.a = 1.0f;
+            m_swatch->SetColor(m_color);
+            m_swatch->SetMixed(value.Mixed);
+            m_swatch->SetShowsAlpha(m_showsAlpha);
+            m_swatch->SetEnabled(!IsReadOnly());
+            m_hex->SetPlaceholder(value.Mixed ? MixedValueText() : core::StringView{});
+            m_hex->SetText(value.Mixed ? core::StringView{} : FormatHexColor(m_color, m_showsAlpha).AsView());
+            m_hex->SetReadOnly(IsReadOnly());
+        }
+        void OnTextStyleChange() override
+        {
+            ShareTextStyle(*m_swatch);
+            ShareTextStyle(*m_hex);
+        }
+
+    private:
+        // A step of the picker: the gesture begun on the first, each previewed.
+        void Picked(Color color)
+        {
+            if (!m_showsAlpha)
+                color.a = 1.0f;
+            if (!m_picking)
+            {
+                m_picking = true;
+                BeginEdit();
+            }
+            m_picked = color;
+            m_swatch->SetColor(color);
+            m_swatch->SetMixed(false);
+            m_hex->SetPlaceholder(core::StringView{});
+            m_hex->SetText(FormatHexColor(color, m_showsAlpha).AsView()); // the row shows the pick as it goes
+            PreviewEdit(PropertyWrite{Variant(color)});
+        }
+        // The picker closed: what it picked committed once, or given up with Escape.
+        void Closed(bool escaped)
+        {
+            if (!m_picking)
+                return;
+            m_picking = false;
+            if (escaped)
+                CancelEdit();
+            else
+                CommitEdit(PropertyWrite{Variant(m_picked)});
+        }
+        void TypedHex(core::StringView text)
+        {
+            const Optional<Color> parsed = ParseColor(core::Trim(text));
+            if (!parsed.HasValue())
+            {
+                m_hex->SetText(FormatHexColor(m_color, m_showsAlpha).AsView()); // not a colour: what it was
+                return;
+            }
+            Color color = parsed.Value();
+            if (!m_showsAlpha)
+                color.a = 1.0f;
+            ApplyEdit(PropertyWrite{Variant(color)});
+        }
+
+        core::RefPtr<ColorSwatch> m_swatch;
+        core::RefPtr<TextField> m_hex;
+        core::RefPtr<PropertyColorPopup> m_popup;
+        Color m_color{};
+        Color m_picked{};
+        bool m_showsAlpha = true;
+        bool m_picking = false; // a gesture under way in the open picker
+    };
+
     /// A list's row: how many elements, and Add.
     class ListPropertyEditor : public PropertyEditor
     {
@@ -555,7 +722,7 @@ export namespace experimental::gui
     };
 
     /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
-    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2).
+    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2); colours by kind (T4).
     inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
     {
         const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
@@ -566,6 +733,7 @@ export namespace experimental::gui
         registry.RegisterKind(PropertyKind::Float, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<NumberPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::String, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Enum, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<EnumPropertyEditor>(a); });
+        registry.RegisterKind(PropertyKind::Color, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ColorPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::List, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ListPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Flags, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FlagsPropertyEditor>(a); });
     }

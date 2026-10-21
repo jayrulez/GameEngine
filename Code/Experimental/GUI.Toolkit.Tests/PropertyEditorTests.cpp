@@ -276,3 +276,77 @@ TEST_CASE("property editors: flags name what is set and write one flag alone; a 
     editor->Bind(bed.host, SV(u8"shadows"), info, value);
     CHECK(editor->GetButton()->GetText() == SV(u8"None"));
 }
+
+TEST_CASE("property editors: a colour's picker previews its drags and commits once on closing, or cancels on Escape")
+{
+    Bed bed;
+    PropertyInfo info = Info(PropertyKind::Color);
+    auto editor = bed.Editor<ColorPropertyEditor>(info, Value(Variant(core::Color{1.0f, 0.0f, 0.0f, 1.0f})), SV(u8"tint"));
+    CHECK(editor->GetHexField()->GetText() == SV(u8"#FF0000"));
+    CHECK(editor->GetPicker() == nullptr);
+    bed.Click(Centre(*editor->GetSwatch()));
+    ColorPicker* picker = editor->GetPicker();
+    REQUIRE(picker != nullptr);
+    CHECK(picker->GetColor().r == doctest::Approx(1.0f));
+    CHECK(bed.host.calls.IsEmpty()); // opening is not editing
+
+    // Two steps of the plane: begun, previewed twice; still open, nothing committed.
+    ColorPickerArea& plane = *picker->GetPlane();
+    const Rect r = plane.GetScreenBounds();
+    bed.D().InjectMouseDown(core::Float2{r.x + r.width * 0.5f, r.y + r.height * 0.5f}, MouseButton::Left);
+    bed.D().InjectMouseUp(core::Float2{r.x + r.width * 0.5f, r.y + r.height * 0.5f}, MouseButton::Left);
+    REQUIRE(bed.host.calls.Size() == 3u);
+    CHECK(bed.host.calls[0] == core::String(u8"begin tint"));
+    CHECK(bed.host.calls[1].AsView().SubStr(0, 13) == SV(u8"preview tint="));
+    // Closed (a press elsewhere): committed once.
+    bed.D().ClosePopup(*editor->GetPicker()->GetParent());
+    REQUIRE(bed.host.calls.Size() == 4u);
+    CHECK(bed.host.Last().SubStr(0, 12) == SV(u8"commit tint="));
+
+    // Escape gives the pick up.
+    bed.host.calls.Clear();
+    bed.Click(Centre(*editor->GetSwatch()));
+    REQUIRE(editor->GetPicker() != nullptr);
+    bed.D().InjectMouseDown(core::Float2{r.x + 5.0f, r.y + 5.0f}, MouseButton::Left);
+    bed.D().InjectMouseUp(core::Float2{r.x + 5.0f, r.y + 5.0f}, MouseButton::Left);
+    bed.D().InjectKeyDown(Bed::K(KeyCode::Escape));
+    CHECK(editor->GetPicker() == nullptr);
+    CHECK(bed.host.Last() == SV(u8"cancel tint"));
+}
+
+TEST_CASE("property editors: a colour's hex field commits what is typed; mixed is hatched; without alpha none shows")
+{
+    Bed bed;
+    PropertyInfo info = Info(PropertyKind::Color);
+    info.ShowsAlpha = false;
+    auto editor = bed.Editor<ColorPropertyEditor>(info, Value(Variant(core::Color{0.0f, 0.0f, 1.0f, 0.5f})), SV(u8"tint"));
+    CHECK(editor->GetHexField()->GetText() == SV(u8"#0000FF")); // no alpha shown
+    TextField& hex = *editor->GetHexField();
+    hex.RequestFocus();
+    hex.GetModel().SelectAll();
+    bed.D().InjectText(SV(u8"#00FF0080"));
+    bed.D().InjectKeyDown(Bed::K(KeyCode::Return));
+    REQUIRE(bed.host.calls.Size() == 2u);
+    CHECK(bed.host.calls[1] == core::String(u8"commit tint=#00FF00FF")); // its alpha left out
+
+    editor->Bind(bed.host, SV(u8"tint"), info, Value(Variant(core::Color{}), true));
+    CHECK(editor->GetSwatch()->IsMixed());
+    CHECK(editor->GetHexField()->GetPlaceholder() == MixedValueText());
+}
+
+TEST_CASE("property editors: a colour's row shows the pick as it goes, and the picker's channel fields have room")
+{
+    Bed bed;
+    auto editor = bed.Editor<ColorPropertyEditor>(Info(PropertyKind::Color), Value(Variant(core::Color{1.0f, 0.0f, 0.0f, 1.0f})), SV(u8"tint"));
+    bed.Click(Centre(*editor->GetSwatch()));
+    ColorPicker* picker = editor->GetPicker();
+    REQUIRE(picker != nullptr);
+    (void)bed.root->UpdateLayout();
+    const Rect r = picker->GetPlane()->GetScreenBounds();
+    bed.D().InjectMouseDown(core::Float2{r.x + 2.0f, r.y + 2.0f}, MouseButton::Left); // near white
+    CHECK(editor->GetHexField()->GetText() != SV(u8"#FF0000"));
+    CHECK(editor->GetHexField()->GetText() == picker->GetHexField()->GetText());
+    bed.D().InjectMouseUp(core::Float2{r.x + 2.0f, r.y + 2.0f}, MouseButton::Left);
+    for (int i = 0; i < 4; ++i)
+        CHECK(picker->GetChannelField(i)->GetScreenBounds().width >= 44.0f); // "255" beside its arrows
+}

@@ -119,6 +119,8 @@ export namespace experimental::gui
             return core::StringView(u8"flags");
         case PropertyKind::List:
             return core::StringView(u8"list");
+        case PropertyKind::Color:
+            return core::StringView(u8"colour");
         }
         return core::StringView(u8"value");
     }

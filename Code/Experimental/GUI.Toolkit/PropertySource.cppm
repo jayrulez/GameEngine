@@ -47,6 +47,7 @@ export namespace experimental::gui
         Enum,    ///< an integer, one of its choices
         Flags,   ///< an integer, any of its choices' bits
         List,    ///< its elements are its children by index (`tags.0`); its value is their count
+        Color,   ///< a colour, its sRGB values (T4)
     };
 
     /// What a list allows (PropertyInfo::ListOps).
@@ -81,6 +82,7 @@ export namespace experimental::gui
         core::Array<PropertyChoice> Choices; ///< an enum's values, flags' bits
         bool ReadOnly = false;
         bool Visible = true;
+        bool ShowsAlpha = true;   ///< a colour's alpha is edited (not an HDR colour's, nor one with `noAlpha`)
         u8 ListOps = 0;           ///< a list's: PropertyListOps
         u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's); 0: no limit
         core::Array<core::String> ElementTypes; ///< a list's types an add chooses from; empty: its one
@@ -496,6 +498,10 @@ export namespace experimental::gui
             case PropertyKind::String:
                 value = Variant(text);
                 break;
+            case PropertyKind::Color:
+                if (const Optional<Color> color = ParseColor(core::Trim(text)); color.HasValue())
+                    value = Variant(color.Value());
+                break;
             default:
                 break;
             }
@@ -625,6 +631,8 @@ export namespace experimental::gui
                 return core::StringView(u8"number");
             case PropertyKind::String:
                 return core::StringView(u8"text");
+            case PropertyKind::Color:
+                return core::StringView(u8"colour");
             default:
                 return core::StringView(u8"value it can take");
             }

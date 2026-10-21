@@ -4,7 +4,7 @@
 // GUISandbox - the Toolkit page's reflected object (T3 of Specs/gui-lab-evolution-3.md): a camera
 // rig declared with core reflection and nothing else, which the toolkit's ReflectedPropertySource
 // shows: values with ranges and names, an enum, flags by attribute, a Float3, a Quaternion as Euler
-// degrees, a Color (a struct until T4's editor), a nested lens, a list of stops, a polymorphic list
+// degrees, a Color, an HDR glow (a colour and an intensity in stops), a nested lens, a list of stops, a polymorphic list
 // of effects added by type, a read-only serial and a field shown only for one projection. Its text
 // format is the engine's XmlSerializer.
 
@@ -82,6 +82,7 @@ export namespace sandbox
         Float3 position{0.0f, 2.0f, -6.0f};
         Quaternion rotation = Quaternion::Identity;
         Color background{0.1f, 0.12f, 0.16f, 1.0f};
+        Float4 glow{1.0f, 0.75f, 0.4f, 2.0f}; // an HDR colour: sRGB rgb, a linear intensity in w
         Lens lens;
         Array<f32> exposureStops;
         Array<RefPtr<CameraEffect>> effects;

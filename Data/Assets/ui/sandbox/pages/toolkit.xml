@@ -72,7 +72,7 @@
     <Panel class="section" gap="12">
         <Label class="section-title" text="A reflected object"/>
         <Label class="toolkit-note" white-space="normal"
-               text="Two camera rigs declared with core reflection and nothing written for the grid: ReflectedPropertySource reads their properties and attributes. The field of view shows for a perspective projection, the orthographic size for an orthographic one; the layers are flags by an attribute; the rotation is a Quaternion shown in Euler degrees; the background is a Color, shown as its parts until T4's colour editor. Effects add by type. Changed values are marked against the type's defaults; copying uses the engine's XmlSerializer, and Undo steps back through the source's changes."/>
+               text="Two camera rigs declared with core reflection and nothing written for the grid: ReflectedPropertySource reads their properties and attributes. The field of view shows for a perspective projection, the orthographic size for an orthographic one; the layers are flags by an attribute; the rotation is a Quaternion shown in Euler degrees; the background is a Color (click the swatch for the picker: a drag previews, closing commits, Escape gives it up); the glow is an HDR colour, its intensity in exposure stops. Effects add by type. Changed values are marked against the type's defaults; copying uses the engine's XmlSerializer, and Undo steps back through the source's changes."/>
         <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
             <TextField id="reflected-search" class="props-search" placeholder="Search properties"/>
             <ComboBox id="reflected-objects" class="props-objects" items="Camera A|Camera B|Both" selected="0"/>

@@ -49,7 +49,7 @@ namespace sandbox
     {
         builder.Attribute("displayName", String(u8"Vignette"));
         builder.Property<&VignetteEffect::radius>("radius");
-        builder.Property<&VignetteEffect::tint>("tint");
+        builder.Property<&VignetteEffect::tint>("tint").PropAttribute("noAlpha", true);
         builder.Creator();
     }
 
@@ -67,7 +67,10 @@ namespace sandbox
         builder.Property<&CameraRig::layers>("layers").PropAttribute("flags", true).PropAttribute("description", String(u8"What it draws"));
         builder.Property<&CameraRig::position>("position");
         builder.Property<&CameraRig::rotation>("rotation").PropAttribute("description", String(u8"A Quaternion, shown in Euler degrees"));
-        builder.Property<&CameraRig::background>("background").PropAttribute("description", String(u8"A Color: its parts until T4's colour editor"));
+        builder.Property<&CameraRig::background>("background").PropAttribute("description", String(u8"A Color, its sRGB values"));
+        builder.Property<&CameraRig::glow>("glow")
+            .PropAttribute("hdrColor", true)
+            .PropAttribute("description", String(u8"An HDR colour: its colour, and its intensity in exposure stops"));
         builder.Property<&CameraRig::lens>("lens");
         builder.Nested<&CameraRig::exposureStops>("exposureStops");
         builder.Nested<&CameraRig::effects>("effects");

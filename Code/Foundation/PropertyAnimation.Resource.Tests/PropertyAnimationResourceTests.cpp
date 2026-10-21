@@ -160,3 +160,26 @@ TEST_CASE("propanim.resource: a malformed wire yields a safe partial clip, never
     REQUIRE(clip.tracks.Size() == 1u);
     CHECK(clip.tracks[0].channels[0].KeyCount() == 0u); // no keys materialized from the bad run
 }
+
+TEST_CASE("propanim.resource: a key's tangent mode round-trips; a wire without modes reads Broken")
+{
+    PropertyAnimationClip original = MakeClip();
+    original.tracks[0].channels[0].Keys()[0].tangentMode = CurveTangentMode::Auto;
+    original.tracks[0].channels[1].Keys()[0].tangentMode = CurveTangentMode::Flat;
+    PropertyAnimationClipSource src;
+    PropertyAnimationClipSource::FromClip(original, src);
+    CHECK(src.keyTangentMode.Size() == src.keyTime.Size());
+
+    PropertyAnimationClip rebuilt;
+    src.FillClip(rebuilt);
+    REQUIRE(rebuilt.tracks.Size() == original.tracks.Size());
+    CHECK(rebuilt.tracks[0].channels[0].Keys()[0].tangentMode == CurveTangentMode::Auto);
+    CHECK(rebuilt.tracks[0].channels[1].Keys()[0].tangentMode == CurveTangentMode::Flat);
+
+    // A clip saved before modes: every key keeps its tangents as stored.
+    src.keyTangentMode.Clear();
+    PropertyAnimationClip older;
+    src.FillClip(older);
+    CHECK(older.tracks[0].channels[0].Keys()[0].tangentMode == CurveTangentMode::Broken);
+    CHECK(older.tracks[0].channels[0].Keys()[0].tangentOut == doctest::Approx(2.0f));
+}

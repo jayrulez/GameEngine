@@ -63,6 +63,7 @@ export namespace foundation::propertyanimation
         Array<f32> keyTangentIn;
         Array<f32> keyTangentOut;
         Array<u8> keyInterp; // CurveKeyInterpolation
+        Array<u8> keyTangentMode; // CurveTangentMode, what an editor keeps (appended: older wires have none)
 
         // Per track: quat key run (0 count for non-Quat tracks).
         Array<u32> trackQuatStart;
@@ -87,6 +88,7 @@ export namespace foundation::propertyanimation
             foundation::core::Serialize(ar, "trackQuatCount", trackQuatCount);
             foundation::core::Serialize(ar, "quatTime", quatTime);
             foundation::core::Serialize(ar, "quatValue", quatValue);
+            foundation::core::SerializeAppended(ar, "keyTangentMode", keyTangentMode);
         }
 
         // Flatten a runtime clip into the wire (cook side). Channels are appended in track-then-channel
@@ -104,6 +106,7 @@ export namespace foundation::propertyanimation
             out.keyTangentIn.Clear();
             out.keyTangentOut.Clear();
             out.keyInterp.Clear();
+            out.keyTangentMode.Clear();
             out.trackQuatStart.Clear();
             out.trackQuatCount.Clear();
             out.quatTime.Clear();
@@ -128,6 +131,7 @@ export namespace foundation::propertyanimation
                         out.keyTangentIn.PushBack(k.tangentIn);
                         out.keyTangentOut.PushBack(k.tangentOut);
                         out.keyInterp.PushBack(static_cast<u8>(k.interpolation));
+                        out.keyTangentMode.PushBack(static_cast<u8>(k.tangentMode));
                     }
                 }
 
@@ -187,6 +191,11 @@ export namespace foundation::propertyanimation
                             keyInterp[idx] <= static_cast<u8>(CurveKeyInterpolation::Cubic))
                         {
                             k.interpolation = static_cast<CurveKeyInterpolation>(keyInterp[idx]);
+                        }
+                        // A wire without modes, or a mode out of range: Broken, the tangents as stored.
+                        if (idx < keyTangentMode.Size() && keyTangentMode[idx] <= static_cast<u8>(CurveTangentMode::Flat))
+                        {
+                            k.tangentMode = static_cast<CurveTangentMode>(keyTangentMode[idx]);
                         }
                         if (c < kMaxChannels)
                         {

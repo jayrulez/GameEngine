@@ -55,7 +55,8 @@ export namespace pipeline
             return &propanim::PropertyAnimationClipSource::StaticType();
         }
         // v2: dropped the dead `loop` source field (loop is the animator component's loopMode).
-        [[nodiscard]] u32 Version() const override { return 2; }
+        // v3: each key's tangent mode (keyTangentMode).
+        [[nodiscard]] u32 Version() const override { return 3; }
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {

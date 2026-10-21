@@ -126,3 +126,43 @@ TEST_CASE("curve: coincident keys jump to the later value")
     // At/just before the coincident pair, the segment is degenerate -> later value.
     CHECK(c.Evaluate(1.0f) == doctest::Approx(50.0f));
 }
+
+TEST_CASE("curve: EvaluateCurve over a span of keys is the curve's own sampling")
+{
+    const CurveKey keys[] = {Key(0.0f, 0.0f, CurveKeyInterpolation::Cubic), Key(1.0f, 2.0f, CurveKeyInterpolation::Constant), Key(2.0f, 4.0f)};
+    Curve curve;
+    for (const CurveKey& k : keys)
+        curve.AddKey(k);
+    for (f32 t = -0.5f; t <= 2.5f; t += 0.25f)
+        CHECK(EvaluateCurve(Span<const CurveKey>(keys, 3), t) == doctest::Approx(curve.Evaluate(t)));
+    CHECK(EvaluateCurve(Span<const CurveKey>{}, 1.0f) == doctest::Approx(0.0f));
+    CHECK(HermiteBasis(1.0f, 0.0f, 3.0f, 0.0f, 0.5f) == doctest::Approx(2.0f));
+}
+
+TEST_CASE("curve: tangent modes set the tangents: auto from the neighbours, smooth in from out, flat zero, broken kept")
+{
+    CurveKey keys[] = {Key(0.0f, 0.0f, CurveKeyInterpolation::Cubic), Key(1.0f, 1.0f, CurveKeyInterpolation::Cubic),
+                       Key(3.0f, 5.0f, CurveKeyInterpolation::Cubic), Key(4.0f, 5.0f, CurveKeyInterpolation::Cubic)};
+    for (CurveKey& k : keys)
+        k.tangentMode = CurveTangentMode::Auto;
+    keys[2].tangentMode = CurveTangentMode::Smooth;
+    keys[2].tangentIn = 9.0f;
+    keys[2].tangentOut = 0.5f;
+    keys[3].tangentMode = CurveTangentMode::Broken;
+    keys[3].tangentIn = 7.0f;
+    keys[3].tangentOut = -7.0f;
+    ApplyTangentModes(Span<CurveKey>(keys, 4));
+    CHECK(keys[0].tangentOut == doctest::Approx(1.0f)); // an end: the slope to its one neighbour
+    CHECK(keys[1].tangentIn == doctest::Approx(5.0f / 3.0f)); // (5 - 0) / (3 - 0)
+    CHECK(keys[1].tangentOut == doctest::Approx(5.0f / 3.0f));
+    CHECK(keys[2].tangentIn == doctest::Approx(0.5f)); // smooth: in follows out
+    CHECK(keys[3].tangentIn == doctest::Approx(7.0f)); // broken: as set
+    CHECK(keys[3].tangentOut == doctest::Approx(-7.0f));
+
+    Curve curve;
+    curve.AddKey(Key(0.0f, 0.0f, CurveKeyInterpolation::Cubic, 3.0f, 3.0f));
+    curve.Keys()[0].tangentMode = CurveTangentMode::Flat;
+    curve.ApplyTangentModes();
+    CHECK(curve.Keys()[0].tangentOut == doctest::Approx(0.0f));
+    CHECK(CurveKey{}.tangentMode == CurveTangentMode::Broken); // a key read from older data keeps its tangents
+}

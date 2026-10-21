@@ -616,6 +616,98 @@ TEST_CASE("input: a surface pressed on reads the release wherever the pointer is
     router.RemoveSurface(&surface);
 }
 
+TEST_CASE("input: a router locks the pointer for the surface it is pinned to, while it asks, and only undoes its own lock; a drag from another passes over")
+{
+    class Manager final : public shell::IInputManager
+    {
+    public:
+        FakeKeyboard keyboard;
+        FakeMouse mouse;
+        FakeTouch touch;
+        [[nodiscard]] shell::IKeyboard* Keyboard() override { return &keyboard; }
+        [[nodiscard]] shell::IMouse* Mouse() override { return &mouse; }
+        [[nodiscard]] shell::ITouch* Touch() override { return &touch; }
+        [[nodiscard]] i32 GamepadCount() const override { return 0; }
+        [[nodiscard]] shell::IGamepad* GetGamepad(i32) override { return nullptr; }
+        [[nodiscard]] Span<const shell::InputEvent> Events() const override { return {}; }
+        [[nodiscard]] u32 HoverWindow() const override { return 1u; }
+        [[nodiscard]] u32 FocusedWindow() const override { return 1u; }
+        void Update() override {}
+    };
+    Manager manager;
+    // Two pages, each its router and its viewport, side by side in one window.
+    shell::InputSurface left(&manager, 1u, ContentFit{});
+    left.SetRegion(Rectangle{0.0f, 0.0f, 400.0f, 400.0f});
+    left.SetContentSize(Float2{400.0f, 400.0f});
+    left.SetWindowSize(Float2{800.0f, 400.0f});
+    shell::InputSurface right(&manager, 1u, ContentFit{});
+    right.SetRegion(Rectangle{400.0f, 0.0f, 400.0f, 400.0f});
+    right.SetContentSize(Float2{400.0f, 400.0f});
+    right.SetWindowSize(Float2{800.0f, 400.0f});
+    shell::InputRouter leftRouter(&manager);
+    leftRouter.AddSurface(&left);
+    shell::InputRouter rightRouter(&manager);
+    rightRouter.AddSurface(&right);
+    const u32 rmb = static_cast<u32>(shell::MouseButton::Right) & 7;
+    const auto frame = [&](f32 x, bool down, bool edge)
+    {
+        manager.mouse.x = x;
+        manager.mouse.y = 200.0f;
+        manager.mouse.buttons[rmb] = down;
+        manager.mouse.pressed[rmb] = edge && down;
+        manager.mouse.released[rmb] = edge && !down;
+        leftRouter.Update();
+        rightRouter.Update();
+    };
+
+    // Asking with no press: nothing.
+    left.SetPointerLock(true);
+    frame(200.0f, false, false);
+    CHECK_FALSE(manager.mouse.relative);
+    CHECK(leftRouter.PointerLockedBy() == nullptr);
+
+    // Pressed on the left viewport, which asks: locked once, hidden.
+    frame(200.0f, true, true);
+    CHECK(manager.mouse.relative);
+    CHECK_FALSE(manager.mouse.cursorVisible);
+    CHECK(leftRouter.PointerLockedBy() == &left);
+    CHECK(manager.mouse.relativeChanges == 1);
+    // The drag carries the pointer over the other page: neither router changes it.
+    frame(600.0f, true, false);
+    frame(600.0f, true, false);
+    CHECK(manager.mouse.relative);
+    CHECK(manager.mouse.relativeChanges == 1);
+    CHECK(rightRouter.PointerLockedBy() == nullptr);
+    // Nor does the other page take the drag passing over it as its own.
+    CHECK_FALSE(right.Hovered());
+    CHECK_FALSE(right.MouseActive());
+    CHECK_FALSE(right.Mouse()->IsButtonDown(shell::MouseButton::Right));
+    CHECK(left.Mouse()->IsButtonDown(shell::MouseButton::Right));
+
+    // Let go: unlocked, shown; the page under the pointer is hovered again.
+    frame(600.0f, false, true);
+    CHECK(right.Hovered());
+    CHECK_FALSE(manager.mouse.relative);
+    CHECK(manager.mouse.cursorVisible);
+    CHECK(manager.mouse.relativeChanges == 2);
+
+    // A lock it did not take (a game's mouselook) it never undoes.
+    manager.mouse.relative = true;
+    frame(200.0f, false, false);
+    frame(600.0f, true, true);
+    frame(600.0f, false, true);
+    CHECK(manager.mouse.relative);
+
+    // A surface taken out while it holds the lock takes the lock with it.
+    manager.mouse.relative = false;
+    frame(200.0f, true, true);
+    REQUIRE(leftRouter.PointerLockedBy() == &left);
+    leftRouter.RemoveSurface(&left);
+    CHECK_FALSE(manager.mouse.relative);
+    CHECK(leftRouter.PointerLockedBy() == nullptr);
+    rightRouter.RemoveSurface(&right);
+}
+
 TEST_CASE("input: touch - region buttons and the floating virtual stick")
 {
     InputMap map;

@@ -169,9 +169,18 @@ namespace editor
                 false, m_impl->viewport->HostKeyboardFocusElsewhere());
             m_impl->router->Update();
         }
-        if (m_impl->viewport->IsHovered() || m_impl->viewport->IsFocused())
+        foundation::shell::InputSurface* surface = m_impl->viewport->Surface();
+        if (m_impl->viewport->IsHovered() || m_impl->viewport->IsFocused() || (surface != nullptr && surface->Captured()))
         {
             m_impl->camera.Update(m_impl->viewport->Keyboard(), m_impl->viewport->Mouse(), dt);
+            if (surface != nullptr)
+            {
+                surface->SetPointerLock(m_impl->camera.WantsPointerLock()); // an orbit, look or pan drag
+            }
+        }
+        else if (surface != nullptr)
+        {
+            surface->SetPointerLock(false);
         }
     }
 

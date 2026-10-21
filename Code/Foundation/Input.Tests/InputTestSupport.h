@@ -41,6 +41,9 @@ namespace
         bool buttons[8] = {};
         bool pressed[8] = {};  ///< this frame's presses (edges)
         bool released[8] = {}; ///< this frame's releases (edges)
+        bool relative = false;
+        bool cursorVisible = true;
+        i32 relativeChanges = 0; ///< SetRelativeMode calls that changed it
         [[nodiscard]] f32 X() const override { return x; }
         [[nodiscard]] f32 Y() const override { return y; }
         [[nodiscard]] f32 GlobalX() const override { return 0; }
@@ -55,10 +58,14 @@ namespace
         }
         [[nodiscard]] bool IsButtonPressed(shell::MouseButton b) const override { return pressed[static_cast<u32>(b) & 7]; }
         [[nodiscard]] bool IsButtonReleased(shell::MouseButton b) const override { return released[static_cast<u32>(b) & 7]; }
-        [[nodiscard]] bool RelativeMode() const override { return false; }
-        void SetRelativeMode(bool) override {}
-        [[nodiscard]] bool CursorVisible() const override { return true; }
-        void SetCursorVisible(bool) override {}
+        [[nodiscard]] bool RelativeMode() const override { return relative; }
+        void SetRelativeMode(bool enabled) override
+        {
+            relativeChanges += enabled != relative ? 1 : 0;
+            relative = enabled;
+        }
+        [[nodiscard]] bool CursorVisible() const override { return cursorVisible; }
+        void SetCursorVisible(bool visible) override { cursorVisible = visible; }
         void SetCursor(shell::CursorType) override {}
         void SetGlobalCapture(bool) override {}
     };

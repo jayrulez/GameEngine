@@ -182,6 +182,14 @@ export namespace foundation::shell
         [[nodiscard]] bool Captured() const noexcept { return m_captured; }
         [[nodiscard]] bool MouseActive() const noexcept { return m_hovered || m_captured; }
 
+        // --- pointer lock (asked by the surface's user; granted by InputRouter) ---
+        /// Asks for the pointer locked (hidden, held in place, only its movement read) while this
+        /// surface holds a press: a camera's look or orbit, which would otherwise stop at the
+        /// screen's edge. The router grants it only to the surface its pointer is pinned to, and
+        /// takes it back when the press ends, the ask is withdrawn or the surface goes.
+        void SetPointerLock(bool lock) noexcept { m_wantsLock = lock; }
+        [[nodiscard]] bool WantsPointerLock() const noexcept { return m_wantsLock; }
+
         [[nodiscard]] core::Float2 ContentMouse() const noexcept { return m_contentMouse; }
         [[nodiscard]] core::Float2 ContentDelta() const noexcept { return m_contentDelta; }
 
@@ -219,6 +227,7 @@ export namespace foundation::shell
         bool m_hovered = false, m_focused = false, m_captured = false;
         core::Float2 m_contentMouse{0, 0};
         core::Float2 m_contentDelta{0, 0};
+        bool m_wantsLock = false;
 
         SurfaceMouse m_mouse{this};
         SurfaceKeyboard m_keyboard{this};
@@ -404,6 +413,9 @@ export namespace foundation::shell
     {
     public:
         explicit InputRouter(IInputManager* raw) noexcept : m_raw(raw) {}
+        InputRouter(const InputRouter&) = delete;
+        InputRouter& operator=(const InputRouter&) = delete;
+        ~InputRouter() { Unlock(); }
 
         void AddSurface(InputSurface* s)
         {
@@ -430,7 +442,14 @@ export namespace foundation::shell
             {
                 m_captured = nullptr;
             }
+            if (m_lockedBy == s)
+            {
+                Unlock(); // a lock never outlives its surface
+            }
         }
+
+        /// The surface the pointer is locked for, or null.
+        [[nodiscard]] InputSurface* PointerLockedBy() const noexcept { return m_lockedBy; }
 
         // When on, hovering a surface also focuses it (keyboard/gamepad follow the
         // pointer). Off (default): focus changes on a click over a surface.
@@ -502,6 +521,13 @@ export namespace foundation::shell
             if (!m_extMouseCapture && m_captured == nullptr && m_hovered != nullptr && anyPressed)
             {
                 m_captured = m_hovered;
+            }
+            // A drag that began elsewhere (another router's surface, as two pages' viewports side by
+            // side, or the UI around them) only passes over this router's surfaces: none is hovered
+            // until its buttons are let go, so none reads the held buttons as its own.
+            if (anyDown && m_captured == nullptr)
+            {
+                m_hovered = nullptr;
             }
 
             // Capture-leak watchdog ("scene view mouse capture never released" was a real,
@@ -576,14 +602,51 @@ export namespace foundation::shell
 
                 s->ApplyGate(hovered, focused, captured, content, cdelta);
             }
+
+            // Pointer lock: only for the surface the pointer is pinned to, while it asks. This
+            // router changes the mouse's relative mode only when it locked it itself, so another
+            // router's surfaces (another page's viewport) and whatever else locks the window's
+            // mouse (a game's mouselook) are never undone from here.
+            InputSurface* const locker = m_captured != nullptr && m_captured->WantsPointerLock() ? m_captured : nullptr;
+            if (locker != m_lockedBy)
+            {
+                if (locker == nullptr)
+                {
+                    Unlock();
+                }
+                else
+                {
+                    if (m_lockedBy == nullptr)
+                    {
+                        rawMouse->SetRelativeMode(true);
+                        rawMouse->SetCursorVisible(false);
+                    }
+                    m_lockedBy = locker;
+                }
+            }
         }
 
     private:
+        void Unlock()
+        {
+            if (m_lockedBy == nullptr)
+            {
+                return;
+            }
+            m_lockedBy = nullptr;
+            if (IMouse* mouse = m_raw != nullptr ? m_raw->Mouse() : nullptr)
+            {
+                mouse->SetRelativeMode(false);
+                mouse->SetCursorVisible(true);
+            }
+        }
+
         IInputManager* m_raw;
         core::Array<InputSurface*> m_surfaces;
         InputSurface* m_hovered = nullptr;
         InputSurface* m_focused = nullptr;
         InputSurface* m_captured = nullptr;
+        InputSurface* m_lockedBy = nullptr; // the surface this router locked the pointer for
         bool m_focusFollowsHover = false;
         bool m_extMouseCapture = false;    // external overlay (ImGui) owns the mouse this frame
         bool m_extKeyboardCapture = false; // external overlay owns the keyboard this frame

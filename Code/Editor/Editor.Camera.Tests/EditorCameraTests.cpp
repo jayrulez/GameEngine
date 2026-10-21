@@ -42,6 +42,7 @@ namespace
     public:
         bool rmb = false;
         f32 dx = 0.0f, dy = 0.0f, scroll = 0.0f;
+        int relativeCalls = 0; ///< the camera never sets the window's mouse for a drag itself
 
         [[nodiscard]] f32 X() const override { return 0.0f; }
         [[nodiscard]] f32 Y() const override { return 0.0f; }
@@ -58,7 +59,7 @@ namespace
         [[nodiscard]] bool IsButtonPressed(shell::MouseButton) const override { return false; }
         [[nodiscard]] bool IsButtonReleased(shell::MouseButton) const override { return false; }
         [[nodiscard]] bool RelativeMode() const override { return false; }
-        void SetRelativeMode(bool) override {}
+        void SetRelativeMode(bool) override { ++relativeCalls; }
         [[nodiscard]] bool CursorVisible() const override { return true; }
         void SetCursorVisible(bool) override {}
         void SetCursor(shell::CursorType) override {}
@@ -356,4 +357,37 @@ TEST_CASE("EditorCamera orthographic: a snap to an axis turns it on, and turning
     manual.autoOrthographic = false;
     manual.SnapToAxis(0.0f, 0.0f);
     CHECK_FALSE(manual.orthographic);
+}
+
+
+TEST_CASE("EditorCamera asks for the pointer locked while its mouse drags it, and never locks the mouse itself")
+{
+    editor::EditorCamera cam;
+    StubKeyboard kb;
+    StubMouse mouse;
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK_FALSE(cam.WantsPointerLock());
+
+    mouse.rmb = true; // a look drag
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK(cam.WantsPointerLock());
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK(cam.WantsPointerLock());
+    CHECK(mouse.relativeCalls == 0); // the viewport's router locks it, for this surface alone
+
+    mouse.rmb = false; // let go
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK_FALSE(cam.WantsPointerLock());
+
+    // Held by Tab, the mouse is locked already: no ask for a drag.
+    cam.mouseCaptured = true;
+    mouse.rmb = true;
+    cam.Update(&kb, &mouse, 0.016f);
+    CHECK_FALSE(cam.WantsPointerLock());
+    // No input this frame (the keyboard gone): no ask left over.
+    cam.mouseCaptured = false;
+    cam.Update(&kb, &mouse, 0.016f);
+    REQUIRE(cam.WantsPointerLock());
+    cam.Update(nullptr, &mouse, 0.016f);
+    CHECK_FALSE(cam.WantsPointerLock());
 }

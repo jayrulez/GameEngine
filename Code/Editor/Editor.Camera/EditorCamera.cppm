@@ -228,6 +228,12 @@ export namespace editor
 
         [[nodiscard]] bool IsGliding() const noexcept { return m_gliding; }
 
+        /// Whether the last Update's mouse drags the camera (an Alt+LMB orbit, an RMB look, an MMB
+        /// pan): its viewport asks for the pointer locked meanwhile (InputSurface::SetPointerLock),
+        /// so the drag never stops at the screen's edge. Not while Tab holds the mouse (already
+        /// locked by it).
+        [[nodiscard]] bool WantsPointerLock() const noexcept { return m_wantsLock; }
+
         /// Force-exit Tab-capture, restoring the OS cursor. The I2 stuck-mouse bug: Update()
         /// (the only place Tab toggles capture OFF) runs only while the viewport is
         /// hovered/focused - but relative mode makes LOSING that state easy, wedging the OS
@@ -255,6 +261,7 @@ export namespace editor
         {
             namespace shell = foundation::shell;
             zoomedThisUpdate = false;
+            m_wantsLock = false;
             if (kb == nullptr)
             {
                 return;
@@ -274,6 +281,9 @@ export namespace editor
                 }
                 const bool alt = kb->IsKeyDown(shell::KeyCode::LeftAlt) ||
                                  kb->IsKeyDown(shell::KeyCode::RightAlt);
+                m_wantsLock = !mouseCaptured && ((alt && mouse->IsButtonDown(shell::MouseButton::Left)) ||
+                                                 mouse->IsButtonDown(shell::MouseButton::Right) ||
+                                                 mouse->IsButtonDown(shell::MouseButton::Middle));
 
                 if (alt && mouse->IsButtonDown(shell::MouseButton::Left))
                 {
@@ -378,6 +388,7 @@ export namespace editor
 
         bool m_orthographicFromSnap = false;
         bool m_gliding = false;
+        bool m_wantsLock = false; // the last Update's mouse drags the camera
         f32 m_glideElapsed = 0.0f;
         Float3 m_glideFrom{};
         Float3 m_glideTo{};

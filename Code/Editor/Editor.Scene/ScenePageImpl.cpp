@@ -116,7 +116,10 @@ namespace editor
         // never fire while the user is typing into an editor widget.
         m_router->SetExternalCapture(false, m_viewport->HostKeyboardFocusElsewhere());
         m_router->Update();
-        const bool viewportActive = m_viewport->IsHovered() || m_viewport->IsFocused();
+        // A press held on the viewport keeps it the input owner wherever the pointer goes (a look
+        // drag, its pointer locked and hidden, may drift off it).
+        const bool viewportActive = m_viewport->IsHovered() || m_viewport->IsFocused() ||
+                                    (m_viewport->Surface() != nullptr && m_viewport->Surface()->Captured());
         if (viewportActive)
         {
             // First-consumer rule: a modal viewport tool (a brush) owns SHIFT + wheel to resize
@@ -129,6 +132,12 @@ namespace editor
                                    (keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) ||
                                     keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift));
             m_camera.Update(keyboard, m_viewport->Mouse(), dt, !(modalToolActive && shiftDown));
+            // An orbit, look or pan drag: the pointer locked meanwhile, granted by the router to
+            // this surface alone and ended with the press.
+            if (foundation::shell::InputSurface* surface = m_viewport->Surface())
+            {
+                surface->SetPointerLock(m_camera.WantsPointerLock());
+            }
             if (m_camera.zoomedThisUpdate)
             {
                 m_zoomReadout.Zoomed();
@@ -140,6 +149,10 @@ namespace editor
             // branch, and relative mode makes losing activity easy - release the OS grab the
             // moment the viewport stops being the input owner.
             m_camera.ReleaseCapture(m_viewport->Mouse());
+            if (foundation::shell::InputSurface* surface = m_viewport->Surface())
+            {
+                surface->SetPointerLock(false);
+            }
         }
         // A frame glides on whether or not the viewport has the input (a hierarchy double-click
         // frames while the mouse is over the hierarchy).

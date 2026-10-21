@@ -239,6 +239,10 @@ export namespace foundation::shell
         core::f32 m_x = 0, m_y = 0, m_dx = 0, m_dy = 0, m_sx = 0, m_sy = 0;
         ButtonLatch m_buttons[kMouseButtonCount] = {};
         bool m_relative = false;
+        // Where relative mode began (the window the pointer was in, and its place there), to put
+        // the cursor back when it ends: SDL leaves it wherever the hidden movement carried it.
+        core::u32 m_relativeWindow = 0; // by id: the window may close while locked
+        float m_relativeX = 0.0f, m_relativeY = 0.0f;
         bool m_cursorVisible = true;
         bool m_globalCapture = false;
         CursorType m_cursor = CursorType::Default;

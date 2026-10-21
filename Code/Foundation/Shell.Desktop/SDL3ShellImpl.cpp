@@ -608,9 +608,34 @@ namespace foundation::shell
 
     void SDL3Mouse::SetRelativeMode(bool enabled)
     {
-        if (m_window != nullptr)
+        if (enabled == m_relative)
         {
-            SDL_SetWindowRelativeMouseMode(m_window, enabled);
+            return; // SDL is told only of a change
+        }
+        if (enabled)
+        {
+            // The window the pointer is in (a float's, not only the main one), and where in it.
+            SDL_Window* window = SDL_GetMouseFocus();
+            if (window == nullptr)
+            {
+                window = m_window;
+            }
+            (void)SDL_GetMouseState(&m_relativeX, &m_relativeY);
+            m_relativeWindow = window != nullptr ? static_cast<core::u32>(SDL_GetWindowID(window)) : 0u;
+            if (window != nullptr)
+            {
+                SDL_SetWindowRelativeMouseMode(window, true);
+            }
+        }
+        else if (SDL_Window* window = m_relativeWindow != 0 ? SDL_GetWindowFromID(static_cast<SDL_WindowID>(m_relativeWindow)) : nullptr)
+        {
+            SDL_SetWindowRelativeMouseMode(window, false);
+            // Back where the lock began, as the hand left it (not where the hidden motion went).
+            SDL_WarpMouseInWindow(window, m_relativeX, m_relativeY);
+        }
+        if (!enabled)
+        {
+            m_relativeWindow = 0;
         }
         m_relative = enabled;
     }

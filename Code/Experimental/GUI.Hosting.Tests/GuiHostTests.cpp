@@ -381,3 +381,123 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     CHECK(bed.host->RootAt(Float2{50.0f, 50.0f}) == mainRoot.Get());
     bed.Frame(bed.main.Get());
 }
+
+namespace
+{
+    // A mouse the test moves and presses, with this frame's edges.
+    class DrivenMouse final : public shell::IMouse
+    {
+    public:
+        f32 x = 0.0f, y = 0.0f;
+        bool down = false, pressed = false, released = false;
+        [[nodiscard]] f32 X() const override { return x; }
+        [[nodiscard]] f32 Y() const override { return y; }
+        [[nodiscard]] f32 GlobalX() const override { return x; }
+        [[nodiscard]] f32 GlobalY() const override { return y; }
+        [[nodiscard]] f32 DeltaX() const override { return 0.0f; }
+        [[nodiscard]] f32 DeltaY() const override { return 0.0f; }
+        [[nodiscard]] f32 ScrollX() const override { return 0.0f; }
+        [[nodiscard]] f32 ScrollY() const override { return 0.0f; }
+        [[nodiscard]] bool IsButtonDown(shell::MouseButton b) const override { return b == shell::MouseButton::Left && down; }
+        [[nodiscard]] bool IsButtonPressed(shell::MouseButton b) const override { return b == shell::MouseButton::Left && pressed; }
+        [[nodiscard]] bool IsButtonReleased(shell::MouseButton b) const override { return b == shell::MouseButton::Left && released; }
+        [[nodiscard]] bool RelativeMode() const override { return false; }
+        void SetRelativeMode(bool) override {}
+        [[nodiscard]] bool CursorVisible() const override { return true; }
+        void SetCursorVisible(bool) override {}
+        void SetCursor(shell::CursorType) override {}
+        void SetGlobalCapture(bool) override {}
+    };
+    class DrivenInput final : public shell::IInputManager
+    {
+    public:
+        shell::NullKeyboard keyboard;
+        DrivenMouse mouse;
+        shell::NullTouch touch;
+        u32 hover = 0;
+        [[nodiscard]] shell::IKeyboard* Keyboard() override { return &keyboard; }
+        [[nodiscard]] shell::IMouse* Mouse() override { return &mouse; }
+        [[nodiscard]] shell::ITouch* Touch() override { return &touch; }
+        [[nodiscard]] i32 GamepadCount() const override { return 0; }
+        [[nodiscard]] shell::IGamepad* GetGamepad(i32) override { return nullptr; }
+        [[nodiscard]] Span<const shell::InputEvent> Events() const override { return {}; }
+        [[nodiscard]] u32 HoverWindow() const override { return hover; }
+        [[nodiscard]] u32 FocusedWindow() const override { return hover; }
+        void Update() override {}
+    };
+    // The null shell with input the test drives.
+    class DrivenShell final : public shell::IShell
+    {
+    public:
+        shell::NullShell inner;
+        DrivenInput input;
+        [[nodiscard]] shell::IWindowManager* WindowManager() noexcept override { return inner.WindowManager(); }
+        [[nodiscard]] shell::IWindow* MainWindow() noexcept override { return inner.MainWindow(); }
+        [[nodiscard]] shell::IInputManager* Input() noexcept override { return &input; }
+        [[nodiscard]] shell::IDialogService* Dialogs() noexcept override { return inner.Dialogs(); }
+        void ProcessEvents() override { inner.ProcessEvents(); }
+        [[nodiscard]] bool IsRunning() const noexcept override { return inner.IsRunning(); }
+        void RequestExit() override { inner.RequestExit(); }
+        void SetClipboardText(StringView text) override { inner.SetClipboardText(text); }
+        [[nodiscard]] String GetClipboardText() const override { return inner.GetClipboardText(); }
+        [[nodiscard]] bool HasClipboardText() const noexcept override { return inner.HasClipboardText(); }
+    };
+}
+
+TEST_CASE("gui.hosting: a press's release reaches its window though the pointer is over no window, with others open")
+{
+    DrivenShell shellDriven;
+    UniquePtr<graphics::GraphicsDevice> device = graphics::CreateNullGraphicsDevice(2).Value();
+    rhi::ShaderModule* vs = MakeModule(*device->Raw());
+    rhi::ShaderModule* fs = MakeModule(*device->Raw());
+    {
+        UniquePtr<graphics::RenderWindow> main = device->CreateRenderWindow(*shellDriven.MainWindow(), graphics::RenderWindowDesc{}).Value();
+        auto& windows = *static_cast<shell::NullWindowManager*>(shellDriven.WindowManager());
+        shell::WindowSettings settings;
+        settings.width = 200;
+        settings.height = 150;
+        UniquePtr<graphics::RenderWindow> other = device->CreateRenderWindow(*windows.CreateWindow(settings).Value(), graphics::RenderWindowDesc{}).Value();
+        VgShaderSet shaders;
+        shaders.Vertex = vs;
+        shaders.Fragment = fs;
+        UniquePtr<GuiHost> host = MakeUnique<GuiHost>(DefaultAllocator(), DefaultAllocator(), *device, shellDriven, nullptr, shaders);
+        RefPtr<SceneRoot> mainRoot = MakeRef<SceneRoot>(DefaultAllocator(), host->ContextRef());
+        RefPtr<SceneRoot> otherRoot = MakeRef<SceneRoot>(DefaultAllocator(), host->ContextRef());
+        RefPtr<Panel> panel = MakeRef<Panel>(DefaultAllocator());
+        panel->EditLayoutStyle([](LayoutStyle& s) {
+            s.Width = LayoutLength::Px(100.0f);
+            s.Height = LayoutLength::Px(100.0f);
+        });
+        mainRoot->AddChild(panel.Get());
+        int downs = 0, ups = 0;
+        panel->AddEventListener(EventType::MouseDown, [&](const Event&) { ++downs; });
+        panel->AddEventListener(EventType::MouseUp, [&](const Event&) { ++ups; });
+        host->AttachWindow(*main, mainRoot);
+        host->AttachWindow(*other, otherRoot);
+        DrivenMouse& mouse = shellDriven.input.mouse;
+        const auto frame = [&](u32 hover, f32 x, f32 y, bool down, bool edge)
+        {
+            shellDriven.input.hover = hover;
+            mouse.x = x;
+            mouse.y = y;
+            mouse.pressed = edge && down;
+            mouse.released = edge && !down;
+            mouse.down = down;
+            host->Update(1.0f / 60.0f);
+            device->AdvanceFrame();
+        };
+        const u32 mainId = main->Window().Id();
+        frame(mainId, 50.0f, 50.0f, false, false); // laid out, the pointer over the panel
+        frame(mainId, 50.0f, 50.0f, true, true);   // pressed on it
+        CHECK(downs == 1);
+        frame(0, 900.0f, 50.0f, true, false);      // dragged off every window
+        frame(0, 900.0f, 50.0f, false, true);      // let go there
+        CHECK(ups == 1);
+        host->DetachWindow(*other);
+        host->DetachWindow(*main);
+        host.Reset();
+    }
+    device->Raw()->DestroyShaderModule(fs);
+    device->Raw()->DestroyShaderModule(vs);
+}
+

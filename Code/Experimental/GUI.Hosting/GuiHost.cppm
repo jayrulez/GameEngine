@@ -813,7 +813,9 @@ export namespace experimental::gui
             shell::IInputManager* input = m_shell.Input();
             if (input == nullptr || m_attached.IsEmpty())
                 return;
-            // The pointer: the window a press began in while any button is held, else the one under it.
+            // The pointer: the window a press began in while any button is held, and on the frame
+            // they are let go (wherever the pointer is then: outside every window, over another),
+            // else the one under it.
             bool held = false;
             if (shell::IMouse* mouse = input->Mouse())
             {
@@ -821,8 +823,6 @@ export namespace experimental::gui
                        mouse->IsButtonDown(shell::MouseButton::Right);
                 mouse->SetGlobalCapture(held); // its events keep coming past the window's edge
             }
-            if (!held)
-                m_pressWindow = 0;
             const Attached* pointer = FindById(m_pressWindow);
             if (pointer == nullptr)
                 pointer = FindById(input->HoverWindow());
@@ -844,6 +844,8 @@ export namespace experimental::gui
                 if (held && m_pressWindow == 0)
                     m_pressWindow = window.Window().Id();
             }
+            if (!held)
+                m_pressWindow = 0; // its release was routed above
             // Keys, text and the gamepad: the focused window's pane clicked last, else its first.
             const Attached* focused = FindById(input->FocusedWindow());
             if (focused == nullptr)

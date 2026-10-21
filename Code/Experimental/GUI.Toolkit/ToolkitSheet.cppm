@@ -41,6 +41,10 @@ export namespace experimental::gui
             }
             toolbutton > icon, toolmenubutton > icon { width: var(--toolbar-icon, 16px); height: var(--toolbar-icon, 16px); }
             toolbutton > text, toolmenubutton > text { padding: 0 2px; }
+            statusbar { background-color: var(--statusbar-background, var(--chrome)); color: var(--statusbar-text, var(--text-dim));
+                        font-size: var(--font-small); }
+            statusbar label { color: var(--statusbar-text, var(--text-dim)); }
+            statusbar label.message { color: var(--statusbar-message, var(--text)); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

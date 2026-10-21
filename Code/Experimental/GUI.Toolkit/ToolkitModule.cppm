@@ -13,7 +13,8 @@ module;
 export module experimental.gui.toolkit;
 
 export import :sheet;    // the default sheet, over the theme's tokens
-export import :tool_bar; // T0: tool bars over the command model
+export import :tool_bar;   // T0: tool bars over the command model
+export import :status_bar; // T0: status bars of registered items and messages
 
 export namespace experimental::gui
 {

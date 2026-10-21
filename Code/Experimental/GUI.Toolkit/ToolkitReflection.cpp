@@ -39,6 +39,19 @@ namespace experimental::gui
         builder.Creator();
     }
 
+    REFLECT_MEMBERS(StatusItem, "rtti::gui::toolkit")
+    {
+        builder.AccessorProperty<&StatusItem::GetZoneName, &StatusItem::SetZoneName>("zone").PropAttribute("css", core::String(u8"zone"));
+        builder.AccessorProperty<&StatusItem::GetTitleString, &StatusItem::SetTitleString>("title").PropAttribute("css", core::String(u8"title")).PropAttribute("translatable", true);
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(StatusBar, "rtti::gui::toolkit")
+    {
+        builder.Attribute("accessRole", core::String(u8"group")); // the core has no status role yet
+        builder.Creator();
+    }
+
     RTTI_DEFINE_OBJECT(ToolMenuArrow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolBarOverflow, "rtti::gui::toolkit")
 
@@ -50,6 +63,8 @@ namespace experimental::gui
                 &ToolButton::StaticType(),
                 &ToolMenuButton::StaticType(),
                 &ToolBar::StaticType(),
+                &StatusItem::StaticType(),
+                &StatusBar::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)ElementTypes::Register(*type);

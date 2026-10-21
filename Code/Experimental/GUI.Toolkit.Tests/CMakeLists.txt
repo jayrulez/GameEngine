@@ -1,5 +1,6 @@
 add_executable(GUI.Toolkit.Tests
     ToolBarTests.cpp
+    StatusBarTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Toolkit.Tests PRIVATE Experimental::GUI.Toolkit Experimental::GUI Foundation::Xml doctest::doctest)

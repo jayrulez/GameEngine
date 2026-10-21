@@ -10,5 +10,6 @@ target_sources(GUI.Toolkit
             ToolkitModule.cppm
             ToolkitSheet.cppm
             ToolBar.cppm
+            StatusBar.cppm
     PRIVATE
         ToolkitReflection.cpp)

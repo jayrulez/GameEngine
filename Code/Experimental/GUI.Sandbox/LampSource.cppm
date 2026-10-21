@@ -151,6 +151,9 @@ export namespace sandbox
                 m_onHistory(Format(u8"Set {}", path).AsView());
         }
         bool EditList(StringView, const gui::ListEdit&) override { return false; } // the lamps have no lists yet
+        [[nodiscard]] gui::Variant GetDefault(StringView, usize) const override { return gui::Variant{}; } // nor defaults
+        bool Revert(StringView) override { return false; }
+        [[nodiscard]] String GetRevertText(StringView) const override { return String(u8"Revert to default"); }
         void CancelEdit(StringView path) override
         {
             if (const Original* original = FindOriginal(path))

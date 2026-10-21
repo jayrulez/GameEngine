@@ -12,6 +12,9 @@
 // edit applied once, one undo entry) or cancelled (the originals put back). The undo is the
 // source's (an application's, as ezEngine's and Zero's), never the grid's.
 //
+// A source may say each object's default for a path: the grid marks what differs from it, and a
+// revert puts each object's own back, one undo entry.
+//
 // A list's elements are its children by index, and a change to one (an insert, a removal, a move)
 // is one call, one undo entry, made in each object.
 //
@@ -140,6 +143,15 @@ export namespace experimental::gui
         /// Changes the list `path` in each object, one undo entry; false when nothing changed.
         virtual bool EditList(core::StringView path, const ListEdit& edit) = 0;
 
+        /// What object `object` would hold at `path` by default (the type's, a prefab's: the
+        /// source's to say); empty when it has none.
+        [[nodiscard]] virtual Variant GetDefault(core::StringView path, usize object) const = 0;
+        /// Puts each object's own default back at `path` and under it, one undo entry; false when
+        /// nothing changed.
+        virtual bool Revert(core::StringView path) = 0;
+        /// What a revert of `path` is called ("Revert to default", "Revert to prefab").
+        [[nodiscard]] virtual core::String GetRevertText(core::StringView path) const = 0;
+
         void SetClient(IPropertySourceClient* client) noexcept { m_client = client; }
         [[nodiscard]] IPropertySourceClient* GetClient() const noexcept { return m_client; }
 
@@ -230,7 +242,7 @@ export namespace experimental::gui
         };
 
         explicit PropertyBag(core::IAllocator& allocator, usize objects = 1)
-            : m_allocator(&allocator), m_properties(allocator), m_originals(allocator), m_objects(objects)
+            : m_allocator(&allocator), m_properties(allocator), m_originals(allocator), m_defaults(allocator), m_objects(objects)
         {
         }
 
@@ -304,6 +316,28 @@ export namespace experimental::gui
             const Entry* entry = Find(path);
             return entry != nullptr && object < entry->Elements.Size() ? entry->Elements[object].Size() : 0;
         }
+
+        /// Object `object`'s default at `path` (a property's or an element's); every object's with
+        /// kAllObjects.
+        static constexpr usize kAllObjects = ~usize{0};
+        void SetDefault(core::StringView path, const Variant& value, usize object = kAllObjects)
+        {
+            for (Default& known : m_defaults)
+                if (known.Path.AsView() == path && (object == kAllObjects || known.Object == object))
+                    known.Value = value;
+            for (usize i = 0; i < m_objects; ++i)
+                if (object == kAllObjects || object == i)
+                {
+                    bool found = false;
+                    for (const Default& known : m_defaults)
+                        found = found || (known.Path.AsView() == path && known.Object == i);
+                    if (!found)
+                        m_defaults.PushBack(Default{core::String(path), i, value});
+                }
+            NotifyValuesChanged();
+        }
+        /// Told each revert (the path), to keep it for undo.
+        void SetOnReverted(core::Function<void(core::StringView)> onReverted) { m_onReverted = core::Move(onReverted); }
 
         /// Told each commit, to keep it for undo.
         void SetOnCommit(core::Function<void(const Commit&)> onCommit) { m_onCommit = core::Move(onCommit); }
@@ -393,6 +427,36 @@ export namespace experimental::gui
             EndEdit(path);
             NotifyValuesChanged();
         }
+        [[nodiscard]] Variant GetDefault(core::StringView path, usize object) const override
+        {
+            for (const Default& known : m_defaults)
+                if (known.Object == object && known.Path.AsView() == path)
+                    return known.Value;
+            return Variant{};
+        }
+        bool Revert(core::StringView path) override
+        {
+            bool changed = false;
+            for (const Default& known : m_defaults)
+            {
+                const core::StringView at = known.Path.AsView();
+                const bool under = at == path || (at.Size() > path.Size() && at.SubStr(0, path.Size()) == path && at[path.Size()] == u8'.');
+                Variant* slot = under ? Slot(at, known.Object) : nullptr;
+                if (slot != nullptr && (slot->GetType() != known.Value.GetType() || slot->Compare(known.Value) != 0))
+                {
+                    *slot = known.Value;
+                    changed = true;
+                }
+            }
+            if (!changed)
+                return false;
+            NotifyValuesChanged();
+            if (m_onReverted)
+                m_onReverted(path);
+            return true;
+        }
+        [[nodiscard]] core::String GetRevertText(core::StringView) const override { return core::String(u8"Revert to default"); }
+
         bool EditList(core::StringView path, const ListEdit& edit) override
         {
             Entry* list = Find(path);
@@ -453,6 +517,12 @@ export namespace experimental::gui
             core::String Path;
             core::Array<Variant> Values;
         };
+        struct Default
+        {
+            core::String Path;
+            usize Object = 0;
+            Variant Value;
+        };
 
         const Entry* Find(core::StringView path) const
         {
@@ -509,8 +579,10 @@ export namespace experimental::gui
         core::IAllocator* m_allocator;
         core::Array<Entry> m_properties;
         core::Array<Original> m_originals;
+        core::Array<Default> m_defaults;
         usize m_objects;
         core::Function<void(const Commit&)> m_onCommit;
         core::Function<void(core::StringView, const ListEdit&)> m_onListEdited;
+        core::Function<void(core::StringView)> m_onReverted;
     };
 }

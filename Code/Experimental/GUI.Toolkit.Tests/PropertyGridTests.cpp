@@ -524,3 +524,40 @@ TEST_CASE("property grid: an element's grip drags it to another place in its lis
     bed.D().InjectMouseUp(core::Float2{Centre(last).x, 400.0f}, MouseButton::Left);
     CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 3 1 4"));
 }
+
+TEST_CASE("property grid: a row differing from its default is marked, so is what holds it, and Revert puts each object's back")
+{
+    Bed bed(2);
+    bed.Add(u8"size", PropertyKind::Float, Variant(1.0));
+    bed.Add(u8"offset", PropertyKind::Group, {}, u8"Shape");
+    bed.Add(u8"offset.x", PropertyKind::Float, Variant(0.0));
+    bed.bag.SetDefault(SV(u8"size"), Variant(1.0));
+    bed.bag.SetDefault(SV(u8"offset.x"), Variant(0.0), 0);
+    bed.bag.SetDefault(SV(u8"offset.x"), Variant(4.0), 1); // the second's default differs
+    bed.Show();
+    CHECK_FALSE(bed.grid->IsRowChanged(SV(u8"size")));
+    CHECK(bed.grid->IsRowChanged(SV(u8"offset"))); // the second object's x is not its default
+    bed.grid->SetOpen(SV(u8"offset"), true);
+    CHECK(bed.grid->IsRowChanged(SV(u8"offset.x")));
+
+    // Changed, the row's content says so.
+    bed.bag.SetValue(SV(u8"size"), 0, Variant(3.0));
+    bed.Frame();
+    CHECK(bed.grid->IsRowChanged(SV(u8"size")));
+    ItemRow* row = bed.grid->RowForItem(bed.grid->FindRow(SV(u8"size")));
+    REQUIRE(row != nullptr);
+    CHECK(core::Cast<PropertyRowContent>(row->GetContent())->IsChanged());
+
+    // The group's Revert puts back each object's own default.
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"offset")), core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Revert to default"));
+    bed.Frame();
+    CHECK(bed.bag.GetValue(SV(u8"offset.x"), 1).AsFloat() == doctest::Approx(4.0));
+    CHECK_FALSE(bed.grid->IsRowChanged(SV(u8"offset")));
+
+    // Unchanged, its Revert is disabled.
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"offset.x")), core::Float2{20.0f, 20.0f}));
+    for (usize i = 0; i < bed.grid->GetRowMenu()->ChildCount(); ++i)
+        if (MenuItem* item = core::Cast<MenuItem>(bed.grid->GetRowMenu()->GetChildAt(i)); item != nullptr)
+            CHECK_FALSE(item->IsEnabled());
+}

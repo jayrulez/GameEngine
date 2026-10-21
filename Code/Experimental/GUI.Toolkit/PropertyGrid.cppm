@@ -47,6 +47,7 @@ export namespace experimental::gui
         usize Index = 0;
         u8 ListOps = 0;
         usize Count = 0; ///< an element's: how many its list shows
+        usize Node = ~usize{0}; ///< the property it shows, in the grid's tree
     };
 
     namespace detail
@@ -203,10 +204,36 @@ export namespace experimental::gui
         [[nodiscard]] Label* GetLabel() const noexcept { return m_label.Get(); }
         [[nodiscard]] PropertySplitHandle* GetSplitHandle() const noexcept { return m_split.Get(); }
         [[nodiscard]] PropertyGrip* GetGrip() const noexcept { return m_grip.Get(); }
+        /// Marked: an object's value here, or under here, differs from its default.
+        void SetChanged(bool changed)
+        {
+            if (changed == m_changed)
+                return;
+            m_changed = changed;
+            if (changed)
+                AddClass(core::StringView(u8"changed"));
+            else
+                RemoveClass(core::StringView(u8"changed"));
+            Invalidate();
+        }
+        [[nodiscard]] bool IsChanged() const noexcept { return m_changed; }
+        void CollectStyleParts(core::Array<core::StringView>& out) const override { out.PushBack(core::StringView(u8"marker")); }
         [[nodiscard]] core::StringView GetTooltipText() const override { return m_description.AsView(); }
 
     protected:
         void OnLayout() override;
+        // The changed marker: a bar at the row's inline start, `::marker`'s colour.
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            UIWidget::OnDraw(ctx, localBounds);
+            if (!m_changed)
+                return;
+            const PartStyle& marker = GetPartStyle(u8"marker");
+            Color color = marker.HasBackground ? marker.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
+            color.a *= marker.Opacity;
+            const Rect bar = MirroredIn(Rect{localBounds.x, localBounds.y + 2.0f, 3.0f, core::Max(0.0f, localBounds.height - 4.0f)}, localBounds, IsRightToLeft());
+            ctx.VG().FillRect(bar.ToRectangle(), color);
+        }
         void OnTextStyleChange() override
         {
             ShareTextStyle(*m_label);
@@ -227,6 +254,7 @@ export namespace experimental::gui
         core::String m_description;
         i32 m_depth = 0;
         bool m_movable = false; // an element its list lets move: its grip shows
+        bool m_changed = false;
     };
 
     class PropertyGrid : public ItemView, public IPropertySourceClient, public IPropertyEditHost
@@ -379,6 +407,23 @@ export namespace experimental::gui
             PropertyRowContent* content = row != nullptr ? core::Cast<PropertyRowContent>(row->GetContent()) : nullptr;
             return content != nullptr ? content->GetEditor() : nullptr;
         }
+        // === Defaults ===
+        /// Whether `path`'s row shows: an object differs from its default there, or under there.
+        [[nodiscard]] bool IsRowChanged(core::StringView path) const
+        {
+            const PropertyRow* row = GetRow(FindRow(path));
+            return row != nullptr && row->Node < m_nodes.Size() && IsChanged(row->Node);
+        }
+        /// Puts each object's default back at `path` and under it, through the source.
+        bool RevertProperty(core::StringView path)
+        {
+            if (m_source == nullptr)
+                return false;
+            EndOpenEdit();
+            const core::String at(path);
+            return m_source->Revert(at.AsView());
+        }
+
         /// The path an edit is open on (empty: none).
         [[nodiscard]] core::StringView GetEditPath() const noexcept { return m_editPath.AsView(); }
 
@@ -475,6 +520,7 @@ export namespace experimental::gui
         void Fold();
         bool Matches(const PropertyNode& node) const;
         bool SubtreeMatches(usize node) const;
+        bool IsChanged(usize node) const;
         void AddRows(core::Array<PropertyRow>& rows, usize node, i32 depth, bool filtered, const PropertyNode* parent = nullptr) const;
         void BindRow(Node& content, const ModelIndex& index);
         // An edit is open on `path` or on a part of it (a Float3's field).
@@ -694,6 +740,7 @@ namespace experimental::gui
         // previews, and the editor is mid-gesture.
         const bool editing = IsUnderEdit(row->Path.AsView()) && property->GetPath() == row->Path.AsView();
         property->Show(*row);
+        property->SetChanged(row->Node < m_nodes.Size() && IsChanged(row->Node));
         if (PropertyEditor* editor = property->GetEditor(); editor != nullptr && !editing && m_source != nullptr)
             editor->Bind(*this, row->Path.AsView(), row->Info, ReadPropertyValue(row->Path.AsView(), row->Info.Kind));
     }
@@ -744,6 +791,27 @@ namespace experimental::gui
         };
         return contains(node.Info.ShownName()) || contains(node.Path.AsView());
     }
+    // An object differs from its default here (a value, a list's count), or under here.
+    inline bool PropertyGrid::IsChanged(usize node) const
+    {
+        if (m_source == nullptr)
+            return false;
+        const PropertyNode& at = m_nodes[node];
+        if (at.Info.Kind != PropertyKind::Group)
+            for (usize i = 0; i < m_source->ObjectCount(); ++i)
+            {
+                const Variant byDefault = m_source->GetDefault(at.Path.AsView(), i);
+                if (byDefault.IsEmpty())
+                    continue;
+                if (m_source->GetValue(at.Path.AsView(), i).Compare(byDefault) != 0) // an int and a float by value
+                    return true;
+            }
+        for (const usize child : at.Children)
+            if (IsChanged(child))
+                return true;
+        return false;
+    }
+
     inline bool PropertyGrid::SubtreeMatches(usize node) const
     {
         if (!m_nodes[node].Info.Visible)
@@ -786,6 +854,7 @@ namespace experimental::gui
         }
         row.Open = row.HasChildren && (IsOpen(node.Path.AsView()) || !matches);
         row.Id = core::HashBytes(node.Path.Data(), node.Path.Size());
+        row.Node = index;
         rows.PushBack(core::Move(row));
         if (rows.Back().Open)
             for (const usize child : node.Children)
@@ -908,7 +977,7 @@ namespace experimental::gui
         ctx.PopClip();
     }
 
-    // An element's menu: insert before it, remove it, move it up or down.
+    // A row's menu: an element's insert before it, remove it, move it up or down; any row's revert.
     inline bool PropertyGrid::OpenRowMenu(i32 item, core::Float2 position)
     {
         const PropertyRow* found = GetRow(item);
@@ -941,6 +1010,16 @@ namespace experimental::gui
             up->SetEnabled((row.ListOps & PropertyListMove) != 0 && index > 0);
             MenuItem* down = m_menu->AddItem(core::StringView(u8"Move down"), [edit, index]() { edit(ListEdit::Op::Move, index, index + 1); });
             down->SetEnabled((row.ListOps & PropertyListMove) != 0 && index + 1 < row.Count);
+            any = true;
+        }
+        if (m_source != nullptr)
+        {
+            if (any)
+                m_menu->AddSeparator();
+            PropertyGrid* self = this;
+            const core::String path = row.Path;
+            MenuItem* revert = m_menu->AddItem(m_source->GetRevertText(path.AsView()).AsView(), [self, path]() { (void)self->RevertProperty(path.AsView()); });
+            revert->SetEnabled(row.Node < m_nodes.Size() && IsChanged(row.Node));
             any = true;
         }
         if (!any)

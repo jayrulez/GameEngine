@@ -50,6 +50,8 @@ export namespace experimental::gui
                                font-weight: bold; }
             propertyrow:hover { background-color: var(--propertygrid-row-hover, var(--row-hover)); }
             propertyname { color: var(--propertygrid-name, var(--text-dim)); }
+            propertyrowcontent.changed > propertyname { color: var(--propertygrid-changed-name, var(--text-strong)); font-weight: bold; }
+            propertyrowcontent::marker { background-color: var(--propertygrid-changed, var(--accent)); }
             propertyeditor.unknown label { color: var(--text-dim); font-style: italic; }
             propertyeditor.flags button { background-color: var(--propertygrid-flags, var(--control)); color: var(--text-strong);
                                           padding: var(--space-s); text-align: start; }

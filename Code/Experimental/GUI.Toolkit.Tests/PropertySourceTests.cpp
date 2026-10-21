@@ -161,3 +161,27 @@ TEST_CASE("property source: a list's elements are its children by index, changed
     info.ListOps = PropertyListAdd; // may only add
     CHECK_FALSE(bag.EditList(SV(u8"tags"), remove));
 }
+
+TEST_CASE("property source: each object's own default, and a revert of a path and what is under it")
+{
+    PropertyBag bag(core::DefaultAllocator(), 2);
+    bag.Add(SV(u8"offset"), PropertyKind::Group);
+    bag.Add(SV(u8"offset.x"), PropertyKind::Float, Variant(5.0));
+    bag.Add(SV(u8"offset.y"), PropertyKind::Float, Variant(6.0));
+    bag.SetDefault(SV(u8"offset.x"), Variant(0.0));
+    bag.SetDefault(SV(u8"offset.y"), Variant(1.0), 0); // the objects' defaults differ (two prefabs)
+    bag.SetDefault(SV(u8"offset.y"), Variant(2.0), 1);
+    CHECK(bag.GetDefault(SV(u8"offset.y"), 1).AsFloat() == doctest::Approx(2.0));
+    CHECK(bag.GetDefault(SV(u8"offset"), 0).IsEmpty());
+    int reverts = 0;
+    bag.SetOnReverted([&reverts](core::StringView) { ++reverts; });
+
+    CHECK(bag.Revert(SV(u8"offset")));
+    CHECK(bag.GetValue(SV(u8"offset.x"), 1).AsFloat() == doctest::Approx(0.0));
+    CHECK(bag.GetValue(SV(u8"offset.y"), 0).AsFloat() == doctest::Approx(1.0));
+    CHECK(bag.GetValue(SV(u8"offset.y"), 1).AsFloat() == doctest::Approx(2.0));
+    CHECK(reverts == 1);
+    CHECK_FALSE(bag.Revert(SV(u8"offset"))); // nothing left to put back
+    CHECK(reverts == 1);
+    CHECK(bag.GetRevertText(SV(u8"offset")) == core::String(u8"Revert to default"));
+}

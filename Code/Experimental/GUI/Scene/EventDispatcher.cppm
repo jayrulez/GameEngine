@@ -116,6 +116,21 @@ export namespace experimental::gui
         core::Array<Placed> m_placed;
     };
 
+    class EventDispatcher;
+
+    /// Where a GUI's roots are on the screen, told by a host that places its windows (D6): a drag
+    /// goes on over another root of the GUI, and one let go over no root ends outside, at a screen
+    /// point. Points are each root's pointer units (as input arrives).
+    class IRootPlaces
+    {
+    public:
+        virtual ~IRootPlaces() = default;
+        /// The dispatcher of the root under `screen`, and the point in it; null over none.
+        virtual EventDispatcher* DispatcherAt(core::Float2 screen, core::Float2& local) = 0;
+        /// Where `local` in `dispatcher`'s root is on the screen; false when that is not known.
+        virtual bool ToScreen(const EventDispatcher& dispatcher, core::Float2 local, core::Float2& screen) = 0;
+    };
+
     class EventDispatcher
     {
     public:
@@ -837,6 +852,28 @@ export namespace experimental::gui
         /// Starts a drag from code (Godot's force_drag): `source` gives no request itself.
         void StartDrag(Node& source, DragRequest request) { BeginDrag(source, core::Move(request), m_mousePos); }
         [[nodiscard]] bool IsDragging() const noexcept { return m_dragActive; }
+        /// Where the GUI's roots are on the screen (its GUIContext's, set by the host); null: this
+        /// root alone, a drag past its edge outside.
+        void SetRootPlaces(IRootPlaces* places) noexcept { m_rootPlaces = places; }
+        /// The dispatcher whose root a drag from here is over now (its own, or another root's of the
+        /// GUI); null while it is over none (outside every root) or no drag goes.
+        [[nodiscard]] EventDispatcher* GetDragOver() const noexcept { return m_dragActive && !m_dragOutside ? m_dragOver : nullptr; }
+        /// Another root of the GUI goes: a drag from here over it is over none until it moves, and
+        /// forgets the target and the layer it had there.
+        void ForgetRoot(const EventDispatcher& gone) noexcept
+        {
+            if (&gone == this)
+                return;
+            if (m_dragOver == &gone)
+            {
+                m_dragOver = this;
+                m_dragOutside = true;
+                if (m_dropTarget != nullptr && m_dropTarget->GetRootNode() == gone.m_root)
+                    m_dropTarget = nullptr; // its tree goes with it: nothing to tell
+            }
+            if (m_dragLayerIn == &gone)
+                m_dragLayerIn = nullptr;
+        }
         [[nodiscard]] const DragPayload& GetDragPayload() const noexcept { return m_dragPayload; }
         [[nodiscard]] Node* GetDragSource() const noexcept { return m_dragSource; }
         [[nodiscard]] Node* GetDropTarget() const noexcept { return m_dropTarget; }
@@ -1874,7 +1911,10 @@ export namespace experimental::gui
                 options.Kind = PopupKind::Manual;
                 options.PassesPointer = true;
                 OpenPopup(*m_root, *m_dragLayer, core::Move(options));
+                m_dragLayerIn = this;
             }
+            m_dragOver = this;
+            m_dragOutside = false;
 
             DragEvent started(EventType::DragStart, &source, m_dragPayload);
             started.Position = RootPoint(at);
@@ -1883,13 +1923,68 @@ export namespace experimental::gui
             QueryDrop(at);
         }
 
-        // What a drop at `at` would do: asked of the node there and up its ancestors.
+        // Where a drag's pointer is: over this root, over another root of the GUI (a window of its
+        // own), or outside every root. Where the roots' places are not known (Wayland, no host),
+        // past its own root's edge is outside (a drop nothing there takes ends outside).
+        void LocateDrag(core::Float2 at)
+        {
+            m_dragOver = this;
+            m_dragOverAt = at;
+            m_dragOutside = false;
+            m_dragScreenKnown = false;
+            if (m_dragFromKeyboard)
+                return; // the focus is what is asked
+            core::Float2 screen;
+            if (m_rootPlaces != nullptr && m_rootPlaces->ToScreen(*this, at, screen))
+            {
+                m_dragScreenKnown = true;
+                m_dragScreen = screen;
+                core::Float2 local;
+                if (EventDispatcher* over = m_rootPlaces->DispatcherAt(screen, local))
+                {
+                    m_dragOver = over;
+                    m_dragOverAt = local;
+                }
+                else
+                    m_dragOutside = true;
+                return;
+            }
+            if (m_root != nullptr)
+            {
+                const core::Float2 p = RootPoint(at);
+                const core::Float2 size = m_root->GetSize();
+                m_dragOutside = p.x < 0.0f || p.y < 0.0f || p.x >= size.x || p.y >= size.y;
+            }
+        }
+        // The drag's layer (its preview and hint) in the root the pointer is over, a popup there.
+        void MoveDragLayerTo(EventDispatcher& over)
+        {
+            if (!m_dragLayer || m_dragLayerIn == &over || over.m_root == nullptr)
+                return;
+            if (m_dragLayerIn != nullptr && m_dragLayerIn->IsPopupOpen(*m_dragLayer))
+                (void)m_dragLayerIn->ClosePopup(*m_dragLayer, PopupCloseReason::Code);
+            m_dragLayer->SetSize(over.m_root->GetSize());
+            PopupOptions options;
+            options.Kind = PopupKind::Manual;
+            options.PassesPointer = true;
+            over.OpenPopup(*over.m_root, *m_dragLayer, core::Move(options));
+            m_dragLayerIn = &over;
+        }
+
+        // What a drop at `at` would do: asked of the node there and up its ancestors (in the root
+        // the pointer is over, which may be another root's of the GUI).
         void QueryDrop(core::Float2 at)
         {
             m_mousePos = at;
             if (m_dragFollow)
                 m_dragFollow(RootPoint(at)); // the source moves first: what it leaves is asked
-            Node* hit = HitTest(at);
+            LocateDrag(at);
+            if (!m_dragOutside)
+                MoveDragLayerTo(*m_dragOver);
+            const core::Float2 overAt = m_dragOverAt;
+            // Over no root of the placed ones: nothing to ask. Past its own root's edge where the
+            // places are not known, what lies there is still asked (a node may reach past it).
+            Node* hit = m_dragOutside && m_dragScreenKnown ? nullptr : m_dragOver->HitTest(overAt);
             NoteDragRest(hit);
             DropQuery query{m_dragPayload, core::Float2{0.0f, 0.0f}, 0, DropEffect::Move, false, DropEffect::None, core::String{}, false, 0};
             query.Modifiers = m_dragModifiers;
@@ -1899,7 +1994,7 @@ export namespace experimental::gui
             {
                 if (!n->IsTreeEnabled())
                     break;
-                query.Local = n->ConvertToNodeSpace(at);
+                query.Local = n->ConvertToNodeSpace(overAt);
                 query.Effect = DropEffect::None;
                 n->HandleDragQuery(query);
                 if (query.Effect != DropEffect::None)
@@ -1915,7 +2010,8 @@ export namespace experimental::gui
 
         void SetDropTarget(Node* target, const DropQuery& query, core::Float2 at)
         {
-            const core::Float2 rootAt = RootPoint(at);
+            (void)at;
+            const core::Float2 rootAt = DragRootPoint();
             const auto event = [&](EventType type, Node* node)
             {
                 DragEvent e(type, node, m_dragPayload);
@@ -2001,7 +2097,7 @@ export namespace experimental::gui
             const core::RefPtr<Node> pin{target};
             DragEvent dropped(EventType::Drop, target, m_dragPayload);
             dropped.Effect = effect;
-            dropped.Position = RootPoint(m_mousePos);
+            dropped.Position = DragRootPoint();
             dropped.Modifiers = m_dragModifiers;
             dropped.Place = m_dropPlace;
             target->HandleDragEvent(dropped);
@@ -2023,13 +2119,19 @@ export namespace experimental::gui
                 if (target == nullptr)
                 {
                     DragEvent leave(EventType::DragLeave, left, payload);
-                    leave.Position = RootPoint(m_mousePos);
+                    leave.Position = DragRootPoint();
                     left->HandleDragEvent(leave);
                 }
             }
-            if (m_dragLayer && IsPopupOpen(*m_dragLayer))
-                (void)ClosePopup(*m_dragLayer, PopupCloseReason::Code);
+            if (m_dragLayer && m_dragLayerIn != nullptr && m_dragLayerIn->IsPopupOpen(*m_dragLayer))
+                (void)m_dragLayerIn->ClosePopup(*m_dragLayer, PopupCloseReason::Code);
             m_dragLayer = core::RefPtr<DragLayer>{};
+            m_dragLayerIn = nullptr;
+            const bool outside = m_dragOutside && target == nullptr && !cancelled;
+            const bool screenKnown = m_dragScreenKnown;
+            const core::Float2 screen = m_dragScreen;
+            m_dragOver = nullptr;
+            m_dragOutside = false;
             m_dragPreview = core::RefPtr<Node>{};
             m_dragFollow = {};
             m_dropHint = core::RefPtr<Node>{};
@@ -2042,7 +2144,7 @@ export namespace experimental::gui
             if (source)
             {
                 source->SetDragSourceState(false);
-                DragResult result{effect, target, cancelled};
+                DragResult result{effect, target, cancelled, outside, screenKnown, screen};
                 DragEvent ended(EventType::DragEnd, source.Get(), payload);
                 ended.Effect = effect;
                 ended.Position = RootPoint(m_mousePos);
@@ -2054,6 +2156,8 @@ export namespace experimental::gui
         // can move that way), and a drag resting on a node a moment opens it.
         void TickDrag(f32 seconds)
         {
+            if (m_dragOver != this || m_dragOutside)
+                return; // over another root (whose own content it does not scroll) or none
             Node* hit = HitTest(m_mousePos);
             bool moved = false;
             for (Node* n = hit; n != nullptr && !moved; n = n->GetParent())
@@ -2150,6 +2254,13 @@ export namespace experimental::gui
         [[nodiscard]] core::Float2 RootPoint(core::Float2 at) const
         {
             return m_root != nullptr ? m_root->ConvertToNodeSpace(at) : at;
+        }
+        // The drag's pointer in the root it is over (this root's when outside every root).
+        [[nodiscard]] core::Float2 DragRootPoint() const
+        {
+            if (m_dragOver != nullptr && m_dragOver != this && !m_dragOutside)
+                return m_dragOver->RootPoint(m_dragOverAt);
+            return RootPoint(m_mousePos);
         }
 
         struct PopupEntry
@@ -2569,6 +2680,13 @@ export namespace experimental::gui
         f32 m_dragScrollSpeed = 900.0f;
         f32 m_dragHoverOpenDelay = 0.6f;
         Node* m_dragRestNode = nullptr; // non-owning: compared, never followed
+        IRootPlaces* m_rootPlaces = nullptr;   // the GUI's (its host's); not owned
+        EventDispatcher* m_dragOver = nullptr; // the root's a drag is over (this, or another root's)
+        core::Float2 m_dragOverAt{};           // the pointer in that root
+        bool m_dragOutside = false;            // over no root
+        bool m_dragScreenKnown = false;        // where on the screen is known (a host placed the roots)
+        core::Float2 m_dragScreen{};
+        EventDispatcher* m_dragLayerIn = nullptr; // where the drag's layer is a popup
         f32 m_dragRest = 0.0f;
         bool m_dragRestOpened = false;
         Node* m_dragSource = nullptr;                // non-owning

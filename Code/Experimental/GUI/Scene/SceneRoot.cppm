@@ -106,6 +106,11 @@ export namespace experimental::gui
         [[nodiscard]] CommandSet& GetCommands() noexcept { return m_commands; }
         Command& DefineCommand(core::StringView id) { return m_commands.Define(id, MemoryAllocator()); }
         [[nodiscard]] Keymap& GetKeymap() noexcept { return m_keymap; }
+        /// Where its roots are on the screen, the host's (one that places its windows, D6): a drag goes
+        /// on from root to root, and one let go over none ends outside. Not owned; null: each root
+        /// alone.
+        void SetRootPlaces(IRootPlaces* places);
+        [[nodiscard]] IRootPlaces* GetRootPlaces() const noexcept { return m_rootPlaces; }
         /// The fonts and resources its text asks for (a rich text's own faces and its icons); not owned.
         void SetFontService(fonts::IFontService* fonts) noexcept { m_fontService = fonts; }
         /// What the host knows of the user's preferences (its platform's dark mode, contrast and
@@ -256,19 +261,10 @@ export namespace experimental::gui
         Observable m_activeChanged;
         u32 m_lastBindingCount = 0;
 
-        void AddRoot(SceneRoot& root) { m_roots.PushBack(&root); }
+        IRootPlaces* m_rootPlaces = nullptr; // the host's
+        void AddRoot(SceneRoot& root); // after SceneRoot: it hands the root's dispatcher the places
         void LanguageChanged(); // after SceneRoot, which it restyles
-        void RemoveRoot(SceneRoot& root)
-        {
-            for (usize i = 0; i < m_roots.Size(); ++i)
-                if (m_roots[i] == &root)
-                {
-                    m_roots.RemoveAt(i);
-                    break;
-                }
-            if (m_active == &root)
-                SetActiveRoot(nullptr);
-        }
+        void RemoveRoot(SceneRoot& root); // after SceneRoot: the others' drags forget it
     };
 
     class SceneRoot : public Node
@@ -756,6 +752,31 @@ export namespace experimental::gui
         for (SceneRoot* root : m_roots)
             root->UpdateLayout();
         FlushAccessibility();
+    }
+
+    inline void GUIContext::AddRoot(SceneRoot& root)
+    {
+        m_roots.PushBack(&root);
+        root.GetEventDispatcher()->SetRootPlaces(m_rootPlaces);
+    }
+    inline void GUIContext::RemoveRoot(SceneRoot& root)
+    {
+        for (usize i = 0; i < m_roots.Size(); ++i)
+            if (m_roots[i] == &root)
+            {
+                m_roots.RemoveAt(i);
+                break;
+            }
+        for (SceneRoot* other : m_roots)
+            other->GetEventDispatcher()->ForgetRoot(*root.GetEventDispatcher());
+        if (m_active == &root)
+            SetActiveRoot(nullptr);
+    }
+    inline void GUIContext::SetRootPlaces(IRootPlaces* places)
+    {
+        m_rootPlaces = places;
+        for (SceneRoot* root : m_roots)
+            root->GetEventDispatcher()->SetRootPlaces(places);
     }
 
     inline void GUIContext::LanguageChanged()

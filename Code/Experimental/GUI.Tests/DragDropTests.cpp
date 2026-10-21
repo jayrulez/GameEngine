@@ -6,7 +6,9 @@
 // under the pointer and up its ancestors what a drop would do (an effect, a reason, a place); the
 // cursor, the preview and a hint show it; a release drops, Escape, a right press or the source
 // leaving cancels; the source is told how it ended; a finger drags after a long press; a source
-// may follow the drag itself, with no preview.
+// may follow the drag itself, with no preview. Across roots of one GUI (D6), where a host tells where
+// they are: a drag goes on over another root, its targets asked there, and one let go over none ends
+// outside, where on the screen said; a root gone mid-drag is forgotten.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -847,4 +849,109 @@ TEST_CASE("dnd: a dragquery listener that takes the event takes the drop")
     CHECK(s.D().GetDropTarget() == s.target.Get());
     s.D().InjectMouseUp(core::Float2{250.0f, 50.0f}, MouseButton::Left);
     CHECK(s.ended.Effect == DropEffect::Move);
+}
+
+namespace
+{
+    // Two roots of one GUI side by side on a screen: the scene's at 0,0 (400 by 300) and another at
+    // 500,0 (300 by 300), as a host that places its windows would tell.
+    struct TwoPlaces final : IRootPlaces
+    {
+        EventDispatcher* first = nullptr;
+        EventDispatcher* second = nullptr;
+        EventDispatcher* DispatcherAt(core::Float2 screen, core::Float2& local) override
+        {
+            if (screen.y < 0.0f || screen.y >= 300.0f)
+                return nullptr;
+            if (screen.x >= 0.0f && screen.x < 400.0f)
+            {
+                local = screen;
+                return first;
+            }
+            if (second != nullptr && screen.x >= 500.0f && screen.x < 800.0f)
+            {
+                local = core::Float2{screen.x - 500.0f, screen.y};
+                return second;
+            }
+            return nullptr;
+        }
+        bool ToScreen(const EventDispatcher& d, core::Float2 local, core::Float2& screen) override
+        {
+            if (&d == first)
+                screen = local;
+            else if (second != nullptr && &d == second)
+                screen = core::Float2{local.x + 500.0f, local.y};
+            else
+                return false;
+            return true;
+        }
+    };
+}
+
+TEST_CASE("dnd: across roots of one GUI, a drag goes on over another root; let go over none it ends outside, where said")
+{
+    Scene s;
+    core::RefPtr<SceneRoot> other = core::MakeRef<SceneRoot>(core::DefaultAllocator(), s.root->GetContextRef());
+    other->SetSize(core::Float2{300.0f, 300.0f});
+    core::RefPtr<Panel> far = Box(*other, 50.0f, 20.0f, 100.0f, 100.0f);
+    far->SetDropTypes(core::String(u8"card"));
+    int enters = 0, drops = 0;
+    (void)far->AddEventListener(EventType::DragEnter, [&](const Event&) { ++enters; });
+    (void)far->AddEventListener(EventType::Drop, [&](const Event&) { ++drops; });
+    (void)other->UpdateLayout();
+    TwoPlaces places;
+    places.first = &s.D();
+    places.second = other->GetEventDispatcher();
+    s.root->GetContext().SetRootPlaces(&places);
+    CHECK(other->GetEventDispatcher() != nullptr);
+
+    // Over the other root (its 100,50: the screen's 600,50, past this root's edge).
+    s.DragTo(core::Float2{600.0f, 50.0f});
+    REQUIRE(s.D().IsDragging());
+    CHECK(s.D().GetDragOver() == other->GetEventDispatcher());
+    CHECK(s.D().GetDropTarget() == far.Get());
+    CHECK(enters == 1);
+    s.D().InjectMouseUp(core::Float2{600.0f, 50.0f}, MouseButton::Left);
+    CHECK(drops == 1);
+    REQUIRE(s.ends == 1);
+    CHECK(s.ended.Target == far.Get());
+    CHECK_FALSE(s.ended.Outside);
+
+    // Between the two: over no root, outside, at the screen's 450,50.
+    s.DragTo(core::Float2{450.0f, 50.0f});
+    CHECK(s.D().GetDragOver() == nullptr);
+    CHECK(s.D().GetDropTarget() == nullptr);
+    s.D().InjectMouseUp(core::Float2{450.0f, 50.0f}, MouseButton::Left);
+    REQUIRE(s.ends == 2);
+    CHECK(s.ended.Target == nullptr);
+    CHECK(s.ended.Outside);
+    CHECK(s.ended.ScreenKnown);
+    CHECK(s.ended.Screen.x == doctest::Approx(450.0f));
+
+    // The other root goes while the drag is over it: forgotten, and let go it is outside.
+    s.DragTo(core::Float2{600.0f, 50.0f});
+    REQUIRE(s.D().GetDropTarget() == far.Get());
+    places.second = nullptr;
+    far.Reset();
+    other.Reset();
+    CHECK(s.D().GetDropTarget() == nullptr);
+    s.D().InjectMouseUp(core::Float2{600.0f, 50.0f}, MouseButton::Left);
+    REQUIRE(s.ends == 3);
+    CHECK(s.ended.Outside);
+    s.root->GetContext().SetRootPlaces(nullptr);
+}
+
+TEST_CASE("dnd: where no host tells the roots' places, a drag let go past its root's edge ends outside, nowhere said")
+{
+    Scene s;
+    s.DragTo(core::Float2{-30.0f, 20.0f});
+    s.D().InjectMouseUp(core::Float2{-30.0f, 20.0f}, MouseButton::Left);
+    REQUIRE(s.ends == 1);
+    CHECK(s.ended.Outside);
+    CHECK_FALSE(s.ended.ScreenKnown);
+    // Let go over its own root where nothing takes it: not outside.
+    s.DragTo(core::Float2{150.0f, 200.0f});
+    s.D().InjectMouseUp(core::Float2{150.0f, 200.0f}, MouseButton::Left);
+    REQUIRE(s.ends == 2);
+    CHECK_FALSE(s.ended.Outside);
 }

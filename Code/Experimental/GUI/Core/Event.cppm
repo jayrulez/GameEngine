@@ -589,6 +589,9 @@ export namespace experimental::gui
         DropEffect Effect = DropEffect::None;
         Node* Target = nullptr;
         bool Cancelled = false;
+        bool Outside = false;     ///< let go over no root of the GUI (D6): no window of its own there
+        bool ScreenKnown = false; ///< Screen is known (a host placed the roots)
+        core::Float2 Screen{};    ///< where on the screen the pointer was when it ended
     };
 
     using EventCallback = core::Function<void(const Event&)>;

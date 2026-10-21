@@ -87,28 +87,37 @@ def drag(amount):
     return module("DragBehavior", el("f32", "drag", float(amount)))
 
 
-def alpha_over_life(*keys):
-    """keys: (t, alpha) pairs, linear."""
+CUBIC, FLAT = 2, 3  # CurveKeyInterpolation::Cubic, CurveTangentMode::Flat
+
+
+def curve_keys(keys):
+    """A float curve's fields, written into the object it is in: Core's keys, each cubic with flat
+    tangents, so the curve eases from key to key."""
     out = [el("i32", "keyCount", len(keys))]
     for t, v in keys:
         k = el("object", "key")
         for n, x in (("t", t), ("v", v), ("in", 0.0), ("out", 0.0)):
             k.append(el("f32", n, float(x)))
+        k.append(el("u8", "interp", CUBIC))
+        k.append(el("u8", "mode", FLAT))
         out.append(k)
-    return module("AlphaOverLifetimeBehavior", *out)
+    return out
+
+
+def alpha_over_life(*keys):
+    """keys: (t, alpha) pairs, eased between them."""
+    return module("AlphaOverLifetimeBehavior", *curve_keys(keys))
 
 
 def size_over_life(*keys):
-    """keys: (t, scale) pairs, the size's multiplier on both axes."""
-    out = [el("i32", "keyCount", len(keys))]
-    for t, v in keys:
-        k = el("object", "key")
-        k.append(el("f32", "t", float(t)))
-        k.append(vec("v", (v, v), "xy"))
-        k.append(vec("in", (0, 0), "xy"))
-        k.append(vec("out", (0, 0), "xy"))
-        out.append(k)
-    return module("SizeOverLifetimeBehavior", *out)
+    """keys: (t, size) pairs, the particle's size on both axes (absolute, not a multiplier), eased
+    between them."""
+    size = el("object", "size")
+    for f in curve_keys(keys):
+        size.append(f)
+    size_y = el("object", "sizeY")
+    size_y.append(el("i32", "keyCount", 0))
+    return module("SizeOverLifetimeBehavior", size, el("bool", "separateAxes", False), size_y)
 
 
 ALPHA, ADDITIVE = 0, 1

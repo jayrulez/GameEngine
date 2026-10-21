@@ -139,46 +139,42 @@
 							<f32 name="v">0.75</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">1</f32>
 							<f32 name="v">0</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 					</object>
 					<object>
 						<u64 name="type">8964188442505035549</u64>
-						<i32 name="keyCount">2</i32>
-						<object name="key">
-							<f32 name="t">0</f32>
-							<object name="v">
-								<f32 name="x">0.7</f32>
-								<f32 name="y">0.7</f32>
+						<object name="size">
+							<i32 name="keyCount">2</i32>
+							<object name="key">
+								<f32 name="t">0</f32>
+								<f32 name="v">0.7</f32>
+								<f32 name="in">0</f32>
+								<f32 name="out">0</f32>
+								<u8 name="interp">2</u8>
+								<u8 name="mode">0</u8>
 							</object>
-							<object name="in">
-								<f32 name="x">0</f32>
-								<f32 name="y">0</f32>
-							</object>
-							<object name="out">
-								<f32 name="x">0</f32>
-								<f32 name="y">0</f32>
+							<object name="key">
+								<f32 name="t">1</f32>
+								<f32 name="v">1.5</f32>
+								<f32 name="in">0</f32>
+								<f32 name="out">0</f32>
+								<u8 name="interp">2</u8>
+								<u8 name="mode">0</u8>
 							</object>
 						</object>
-						<object name="key">
-							<f32 name="t">1</f32>
-							<object name="v">
-								<f32 name="x">1.5</f32>
-								<f32 name="y">1.5</f32>
-							</object>
-							<object name="in">
-								<f32 name="x">0</f32>
-								<f32 name="y">0</f32>
-							</object>
-							<object name="out">
-								<f32 name="x">0</f32>
-								<f32 name="y">0</f32>
-							</object>
+						<bool name="separateAxes">false</bool>
+						<object name="sizeY">
+							<i32 name="keyCount">0</i32>
 						</object>
 					</object>
 				</array>

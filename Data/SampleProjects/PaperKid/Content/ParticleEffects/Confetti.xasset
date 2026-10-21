@@ -160,18 +160,24 @@
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">0.75</f32>
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">1</f32>
 							<f32 name="v">0</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 					</object>
 				</array>
@@ -326,18 +332,24 @@
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">0.75</f32>
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">1</f32>
 							<f32 name="v">0</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 					</object>
 				</array>
@@ -492,18 +504,24 @@
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">0.75</f32>
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">1</f32>
 							<f32 name="v">0</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 					</object>
 				</array>
@@ -658,18 +676,24 @@
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">0.75</f32>
 							<f32 name="v">1</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 						<object name="key">
 							<f32 name="t">1</f32>
 							<f32 name="v">0</f32>
 							<f32 name="in">0</f32>
 							<f32 name="out">0</f32>
+							<u8 name="interp">2</u8>
+							<u8 name="mode">0</u8>
 						</object>
 					</object>
 				</array>

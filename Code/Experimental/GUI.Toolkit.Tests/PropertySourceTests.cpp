@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// GUI.Toolkit - the property source (T1 of Specs/gui-lab-evolution-3.md): properties by path, each
+// object's value and the mixed state read over them, flags mixed per bit, and an edit as a gesture
+// (previewed on every object, committed once from the originals, or cancelled back to them).
+#include <doctest/doctest.h>
+#include "Core/Prelude.h"
+import foundation.core;
+import experimental.gui;
+import experimental.gui.toolkit;
+
+using namespace experimental::gui;
+namespace core = foundation::core;
+using core::i64;
+using core::u64;
+
+namespace
+{
+    core::StringView SV(const char8_t* s) { return core::StringView(s); }
+
+    struct Client : IPropertySourceClient
+    {
+        int properties = 0, values = 0;
+        void OnPropertiesChanged() override { ++properties; }
+        void OnValuesChanged() override { ++values; }
+    };
+}
+
+TEST_CASE("property source: paths join and part, and a bag lists the properties under a path")
+{
+    CHECK(JoinPropertyPath(SV(u8""), SV(u8"position")) == core::String(u8"position"));
+    CHECK(JoinPropertyPath(SV(u8"position"), SV(u8"x")) == core::String(u8"position.x"));
+    CHECK(ParentPropertyPath(SV(u8"position.x")) == SV(u8"position"));
+    CHECK(ParentPropertyPath(SV(u8"position")).Size() == 0u);
+
+    PropertyBag bag(core::DefaultAllocator());
+    bag.Add(SV(u8"name"), PropertyKind::String, Variant(SV(u8"Lamp")));
+    bag.Add(SV(u8"position"), PropertyKind::Group);
+    bag.Add(SV(u8"position.x"), PropertyKind::Float, Variant(1.0));
+    bag.Add(SV(u8"position.y"), PropertyKind::Float, Variant(2.0)).DisplayName = core::String(u8"Y");
+
+    core::Array<PropertyInfo> top(core::DefaultAllocator());
+    bag.GetProperties(SV(u8""), top);
+    REQUIRE(top.Size() == 2u);
+    CHECK(top[0].Name == core::String(u8"name"));
+    CHECK(top[1].Kind == PropertyKind::Group);
+    core::Array<PropertyInfo> parts(core::DefaultAllocator());
+    bag.GetProperties(SV(u8"position"), parts);
+    REQUIRE(parts.Size() == 2u);
+    CHECK(parts[0].Name == core::String(u8"x"));
+    CHECK(parts[0].ShownName() == SV(u8"x"));
+    CHECK(parts[1].ShownName() == SV(u8"Y"));
+    CHECK(bag.GetValue(SV(u8"position.y"), 0).AsFloat() == doctest::Approx(2.0));
+}
+
+TEST_CASE("property source: a value over several objects is mixed when any differs; flags per bit")
+{
+    PropertyBag bag(core::DefaultAllocator(), 3);
+    bag.Add(SV(u8"speed"), PropertyKind::Float, Variant(1.0));
+    bag.Add(SV(u8"layers"), PropertyKind::Flags, Variant(i64{0b0101}));
+    CHECK_FALSE(ReadPropertyValue(bag, SV(u8"speed"), PropertyKind::Float).Mixed);
+
+    bag.SetValue(SV(u8"speed"), 2, Variant(3.0));
+    const PropertyValue speed = ReadPropertyValue(bag, SV(u8"speed"), PropertyKind::Float);
+    CHECK(speed.Mixed);
+    CHECK(speed.Value.AsFloat() == doctest::Approx(1.0)); // the first object's
+
+    bag.SetValue(SV(u8"layers"), 1, Variant(i64{0b0111}));
+    const PropertyValue layers = ReadPropertyValue(bag, SV(u8"layers"), PropertyKind::Flags);
+    CHECK(layers.Mixed);
+    CHECK(layers.MixedBits == u64{0b0010});
+
+    // A flag set on all of them leaves the bit they differ in as each had it.
+    bag.BeginEdit(SV(u8"layers"));
+    bag.CommitEdit(SV(u8"layers"), PropertyWrite{Variant(i64{0b1000}), u64{0b1000}});
+    CHECK(bag.GetValue(SV(u8"layers"), 0).AsInt() == 0b1101);
+    CHECK(bag.GetValue(SV(u8"layers"), 1).AsInt() == 0b1111);
+    CHECK(ReadPropertyValue(bag, SV(u8"layers"), PropertyKind::Flags).MixedBits == u64{0b0010});
+}
+
+TEST_CASE("property source: an edit previews on every object, commits once from the originals, or cancels back")
+{
+    PropertyBag bag(core::DefaultAllocator(), 2);
+    Client client;
+    bag.SetClient(&client);
+    bag.Add(SV(u8"size"), PropertyKind::Float, Variant(1.0));
+    CHECK(client.properties == 1);
+    bag.SetValue(SV(u8"size"), 1, Variant(4.0));
+    core::Array<PropertyBag::Commit> commits(core::DefaultAllocator());
+    bag.SetOnCommit([&commits](const PropertyBag::Commit& commit) { commits.PushBack(commit); });
+
+    bag.BeginEdit(SV(u8"size"));
+    CHECK(bag.OpenEdits() == 1u);
+    bag.PreviewEdit(SV(u8"size"), PropertyWrite{Variant(2.0)});
+    bag.PreviewEdit(SV(u8"size"), PropertyWrite{Variant(3.0)});
+    CHECK(bag.GetValue(SV(u8"size"), 0).AsFloat() == doctest::Approx(3.0));
+    CHECK(bag.GetValue(SV(u8"size"), 1).AsFloat() == doctest::Approx(3.0));
+    CHECK(commits.IsEmpty()); // previews are not edits of their own
+    bag.CommitEdit(SV(u8"size"), PropertyWrite{Variant(5.0)});
+    CHECK(bag.OpenEdits() == 0u);
+    REQUIRE(commits.Size() == 1u);
+    CHECK(commits[0].Before[0].AsFloat() == doctest::Approx(1.0)); // from before the previews
+    CHECK(commits[0].Before[1].AsFloat() == doctest::Approx(4.0));
+    CHECK(commits[0].After[1].AsFloat() == doctest::Approx(5.0));
+
+    bag.BeginEdit(SV(u8"size"));
+    bag.PreviewEdit(SV(u8"size"), PropertyWrite{Variant(9.0)});
+    const int before = client.values;
+    bag.CancelEdit(SV(u8"size"));
+    CHECK(client.values == before + 1);
+    CHECK(bag.GetValue(SV(u8"size"), 0).AsFloat() == doctest::Approx(5.0));
+    CHECK(commits.Size() == 1u);
+
+    // Read only: nothing written.
+    bag.FindInfo(SV(u8"size"))->ReadOnly = true;
+    bag.BeginEdit(SV(u8"size"));
+    bag.PreviewEdit(SV(u8"size"), PropertyWrite{Variant(7.0)});
+    bag.CommitEdit(SV(u8"size"), PropertyWrite{Variant(7.0)});
+    CHECK(bag.GetValue(SV(u8"size"), 1).AsFloat() == doctest::Approx(5.0));
+    CHECK(bag.OpenEdits() == 0u);
+}

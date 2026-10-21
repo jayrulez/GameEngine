@@ -587,15 +587,10 @@ export namespace foundation::particles
         core::Serialize(ar, "max", v.max);
     }
 
-    // Curves in text name each field; LEGACY (named here, removed once the samples are re-saved):
-    // a float key written before Core's keys has no "interp" (it was always cubic Hermite, its
-    // tangents as stored), and a colour curve written before gradients has "keyCount" keys of an
-    // sRGB rgba each and no "interpolation" (now a colour stop and an alpha stop at its time). Only
-    // text can be old: a positional (binary) reader says it has every key, and binary is cooked
-    // again (the cook version moved).
+    // A curve writes its fields into the object it is in; a float key names its interpolation and
+    // tangent mode, a colour curve its interpolation and its colour and alpha stops.
     inline void Serialize(ISerializer& ar, ParticleCurveFloat& c)
     {
-        const bool reading = ar.Mode() == SerializeMode::Read;
         core::Serialize(ar, "keyCount", c.keyCount);
         const i32 n = Clamp(c.keyCount, 0, kMaxCurveKeys);
         for (i32 i = 0; i < n; ++i)
@@ -607,41 +602,13 @@ export namespace foundation::particles
             core::Serialize(ar, "v", key.value);
             core::Serialize(ar, "in", key.tangentIn);
             core::Serialize(ar, "out", key.tangentOut);
-            if (reading && !ar.HasKey("interp"))
-            {
-                key.interpolation = CurveKeyInterpolation::Cubic; // legacy: always Hermite
-                key.tangentMode = CurveTangentMode::Broken;
-            }
-            else
-            {
-                core::Serialize(ar, "interp", key.interpolation);
-                core::Serialize(ar, "mode", key.tangentMode);
-            }
+            core::Serialize(ar, "interp", key.interpolation);
+            core::Serialize(ar, "mode", key.tangentMode);
             ar.EndObject();
         }
     }
     inline void Serialize(ISerializer& ar, ParticleCurveColor& c)
     {
-        const bool reading = ar.Mode() == SerializeMode::Read;
-        if (reading && !ar.HasKey("interpolation"))
-        {
-            // Legacy: keys of an sRGB rgba each, blended straight.
-            i32 count = 0;
-            core::Serialize(ar, "keyCount", count);
-            c = ParticleCurveColor{};
-            for (i32 i = 0; i < Clamp(count, 0, kMaxCurveKeys); ++i)
-            {
-                f32 time = 0.0f;
-                Float4 color{1.0f, 1.0f, 1.0f, 1.0f};
-                ar.Key("key");
-                ar.BeginObject();
-                core::Serialize(ar, "t", time);
-                core::Serialize(ar, "c", color);
-                ar.EndObject();
-                c.AddKey(time, color);
-            }
-            return;
-        }
         core::Serialize(ar, "interpolation", c.interpolation);
         core::Serialize(ar, "colorCount", c.colorCount);
         for (i32 i = 0; i < Clamp(c.colorCount, 0, kMaxCurveKeys); ++i)

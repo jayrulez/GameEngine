@@ -129,9 +129,8 @@ export namespace pipeline{
         RegisterSerializable<ParticleEffectAsset>();
     }
 
-    // Data version 0 still: version 0 cannot keep a legacy floor (ReadsDataVersionsFrom(0) is the
-    // current version only), so the old curve layout is told by its keys in the curves' and the
-    // size behaviour's Serialize until the samples are re-saved.
+    // Data version 0: the curve layout of 2026-10-21 (Core's keys, gradients, size as one curve)
+    // moved by re-saving every sample through Tools.Mcp, version 0 having no legacy floor to keep.
     RTTI_DEFINE_OBJECT(ParticleEffectAsset, "rtti::pipeline::particles")
 
     /// A new effect's content: one continuous fountain system.

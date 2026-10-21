@@ -3,8 +3,7 @@
 
 // Particle curves on Core's types (ruling 2 of Specs/gui-lab-evolution-3.md): float curves of
 // CurveKeys sampled by EvaluateCurve, colour curves as gradients, size over lifetime as `size` with
-// `separateAxes` and `sizeY`; and the legacy reader of text written before them (old float keys,
-// old colour keys, the old Float2 size curve).
+// `separateAxes` and `sizeY`; the layout round-tripped through text.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -118,42 +117,4 @@ TEST_CASE("particle curves: the new layout round-trips through text")
     CHECK(colorBack.curve.interpolation == GradientInterpolation::OkLab);
     CHECK(colorBack.curve.alphaCount == 3);
     CHECK(colorBack.curve.colors[0].color.b == doctest::Approx(0.6f));
-}
-
-TEST_CASE("particle curves: text written before Core's types reads on (the legacy reader)")
-{
-    // An old alpha curve: keys without "interp", always Hermite.
-    particles::AlphaOverLifetimeBehavior alpha;
-    REQUIRE(ReadXml(u8R"(<root><i32 name="keyCount">2</i32>
-        <object name="key"><f32 name="t">0</f32><f32 name="v">1</f32><f32 name="in">0</f32><f32 name="out">0</f32></object>
-        <object name="key"><f32 name="t">1</f32><f32 name="v">0</f32><f32 name="in">0</f32><f32 name="out">0</f32></object></root>)",
-                    [&](ISerializer& ar) { alpha.Serialize(ar); }));
-    REQUIRE(alpha.curve.keyCount == 2);
-    CHECK(alpha.curve.keys[0].interpolation == CurveKeyInterpolation::Cubic);
-    CHECK(alpha.curve.Evaluate(0.25f) == doctest::Approx(1.0f - 0.15625f)); // eased, as it played
-
-    // An old colour curve: keys of an rgba each.
-    particles::ColorOverLifetimeBehavior color;
-    REQUIRE(ReadXml(u8R"(<root><i32 name="keyCount">2</i32>
-        <object name="key"><f32 name="t">0</f32><object name="c"><f32 name="x">1</f32><f32 name="y">0.5</f32><f32 name="z">0</f32><f32 name="w">1</f32></object></object>
-        <object name="key"><f32 name="t">1</f32><object name="c"><f32 name="x">0</f32><f32 name="y">0</f32><f32 name="z">0</f32><f32 name="w">0</f32></object></object></root>)",
-                    [&](ISerializer& ar) { color.Serialize(ar); }));
-    CHECK(color.curve.colorCount == 2);
-    CHECK(color.curve.alphaCount == 2);
-    CHECK(color.curve.Evaluate(0.5f).x == doctest::Approx(0.5f));
-    CHECK(color.curve.Evaluate(0.5f).w == doctest::Approx(0.5f));
-
-    // An old size curve of Float2 keys, X equal to Y: one curve, both axes.
-    particles::SizeOverLifetimeBehavior size;
-    REQUIRE(ReadXml(u8R"(<root><i32 name="keyCount">2</i32>
-        <object name="key"><f32 name="t">0</f32><object name="v"><f32 name="x">0.6</f32><f32 name="y">0.6</f32></object>
-            <object name="in"><f32 name="x">0</f32><f32 name="y">0</f32></object><object name="out"><f32 name="x">0</f32><f32 name="y">0</f32></object></object>
-        <object name="key"><f32 name="t">1</f32><object name="v"><f32 name="x">1.4</f32><f32 name="y">1.4</f32></object>
-            <object name="in"><f32 name="x">0</f32><f32 name="y">0</f32></object><object name="out"><f32 name="x">0</f32><f32 name="y">0</f32></object></object></root>)",
-                    [&](ISerializer& ar) { size.Serialize(ar); }));
-    CHECK_FALSE(size.separateAxes);
-    REQUIRE(size.size.keyCount == 2);
-    CHECK(size.size.keys[1].value == doctest::Approx(1.4f));
-    CHECK(size.size.Evaluate(0.5f) == doctest::Approx(1.0f));
-    CHECK_FALSE(size.sizeY.IsActive());
 }

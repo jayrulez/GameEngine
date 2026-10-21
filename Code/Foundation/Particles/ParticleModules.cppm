@@ -805,14 +805,6 @@ export namespace foundation::particles
         ParticleCurveFloat sizeY;
         void Serialize(ISerializer& ar) override
         {
-            if (ar.Mode() == SerializeMode::Read && !ar.HasKey("size"))
-            {
-                // LEGACY (removed once the samples are re-saved): one curve of Float2 keys, X and Y
-                // at shared times, written into the module's own object; every sample's X equals
-                // its Y, so X becomes `size`, and a Y that differs anywhere makes the axes separate.
-                ReadLegacyCurve(ar);
-                return;
-            }
             // Each curve in an object of its own: a curve writes its keys into the object it is in.
             ar.Key("size");
             ar.BeginObject();
@@ -850,33 +842,6 @@ export namespace foundation::particles
                 const f32 x = size.Evaluate(t);
                 (*sizes)[i] = Float2{x, separate ? sizeY.Evaluate(t) : x};
             }
-        }
-
-    private:
-        void ReadLegacyCurve(ISerializer& ar)
-        {
-            i32 count = 0;
-            core::Serialize(ar, "keyCount", count);
-            size = ParticleCurveFloat{};
-            sizeY = ParticleCurveFloat{};
-            separateAxes = false;
-            for (i32 i = 0; i < Clamp(count, 0, kMaxCurveKeys); ++i)
-            {
-                f32 time = 0.0f;
-                Float2 value{}, in{}, out{};
-                ar.Key("key");
-                ar.BeginObject();
-                core::Serialize(ar, "t", time);
-                core::Serialize(ar, "v", value);
-                core::Serialize(ar, "in", in);
-                core::Serialize(ar, "out", out);
-                ar.EndObject();
-                size.AddKey(time, value.x, in.x, out.x); // cubic, its tangents as stored
-                sizeY.AddKey(time, value.y, in.y, out.y);
-                separateAxes = separateAxes || value.x != value.y || in.x != in.y || out.x != out.y;
-            }
-            if (!separateAxes)
-                sizeY = ParticleCurveFloat{};
         }
     };
 

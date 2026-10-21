@@ -514,6 +514,34 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
 - **T2 Compound editors.** Vectors with mixed values per component; containers (add, remove,
   reorder); nested objects; default providers with revert and the changed marker; copying and
   pasting values.
+
+  T2's design (approved by the user, 2026-10-21; the editor's inspector surveyed first: Float2, Float3
+  and Float4 editors by type, lists that add a default element and move it, nested structs not shown,
+  one "Revert to Prefab" per component, whole components copied, edits of a field merged across drags):
+  - **Float2, Float3, Float4 on one row**: a group hinted with Core's type name (`Float2`, `Float3`,
+    `Float4`) takes an editor of a number field per child, each its child's path (mixed per component,
+    each scrub its own gesture), labelled with the children's display names. An editor registered as
+    covering its children gives its row no chevron and no rows under it; a search matching a child
+    shows the row. A Quaternion is a source's `Float3` group of Euler degrees, converted by the source.
+  - **Lists**: `PropertyKind::List`, its elements the children `items.0`, `items.1`, named by the
+    source; its info says what it allows (add, remove, move), its most elements (a `BoundedArray`),
+    and the types an add chooses from (a polymorphic array). A change is one call, `EditList(path,
+    edit)` (insert, remove, move; the element's type), one undo entry. Its row shows the count, mixed
+    when the objects' differ, and an Add button (a menu of types when there are several); an element
+    has a grip to drag it to another place and a menu (insert above, remove, move up, move down).
+    Over several objects the elements shown are the fewest any has, and each change is made to each.
+  - **Nested objects** are groups, to any depth. A polymorphic single field is not in T2 (reflection
+    has none outside arrays).
+  - **Defaults**: `GetDefault(path, object)` (empty: none) and `Revert(path)`, each object's own
+    default back for the path and what is under it, one undo entry, the source naming it ("Revert to
+    prefab"); the providers (the type's default, a prefab's) are the source's. A row is marked
+    changed (an accent bar at its start, its name bold) when any object differs from its default; a
+    group or a list when anything under it does.
+  - **Copy and paste** go through the source as the edits do: `CopyValue(path)` writes the path and
+    what is under it with the engine's serialization (`XmlSerializer`: the clipboard holds text),
+    `PasteValue(path, text)` reads it back as one undo entry, or refuses with a reason the grid
+    passes to the application (its status bar shows it). The grid has the row's menu and Ctrl+C and
+    Ctrl+V on the focused row, and no format.
 - **T3 The reflected source.** Core reflection and its attributes (display name, range, enum,
   `visibleWhen`) as a property source; the sandbox edits a reflected object on the lab's undo stack.
 - **T4 Colour.** An inline picker and a swatch editor on the engine's sRGB colour; HDR intensity in

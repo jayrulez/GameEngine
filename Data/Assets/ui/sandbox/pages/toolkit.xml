@@ -57,7 +57,7 @@
     <Panel class="section" gap="12">
         <Label class="section-title" text="A property grid"/>
         <Label class="toolkit-note" white-space="normal"
-               text="Three lamps, an application's own objects: edit one, or all three, where values that differ show as mixed. Drag across a number to scrub it (Escape gives the scrub up), drag the line between the names and the values, fold the categories and the position, and search by name or path. Each edit is one step of Undo, however long its drag. The spot angle shows only when every lamp edited is a spot; the falloff asks for an editor that does not exist yet."/>
+               text="Three lamps, an application's own objects: edit one, or all three, where values that differ show as mixed (each part of a Float3 on its own). Drag across a number to scrub it (Escape gives the scrub up), drag the line between the names and the values, fold the categories, and search by name or path. Each edit is one step of Undo, however long its drag. Tags and Effects are lists: Add (a menu of types for Effects), drag an element's grip, or right-click it. A bar and a bold name mark what differs from how the lamp started; right-click to revert it, or to copy a value and paste it onto another of its shape. The cone shows only when every lamp edited is a spot; the falloff asks for an editor that does not exist yet."/>
         <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
             <TextField id="props-search" class="props-search" placeholder="Search properties"/>
             <ComboBox id="props-objects" class="props-objects" items="Lamp A|Lamp B|Lamp C|All three" selected="0"/>
@@ -66,6 +66,6 @@
         </Panel>
         <PropertyGrid id="props-grid" class="props-grid"/>
         <Label id="props-said" class="caption" text="No edits yet."/>
-        <Label class="caption" white-space="normal" text="PropertyGrid (GUI.Toolkit) over an IPropertySource the page keeps; its editors are the core's check box, number field, text field and combo box, and a list of check boxes for flags."/>
+        <Label class="caption" white-space="normal" text="PropertyGrid (GUI.Toolkit) over an IPropertySource the page keeps, which copies with the engine's XmlSerializer; its editors are the core's check box, number field, text field and combo box, a list of check boxes for flags, a number field per part for Float2 and Float3, and a list's count and Add."/>
     </Panel>
 </Panel>

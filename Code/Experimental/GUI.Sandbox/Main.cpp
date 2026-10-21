@@ -2286,6 +2286,11 @@ void GUISandbox::FillProperties(gui::PropertyGrid& grid)
         undo->SetOnClick([lamps]() { lamps->Undo(); });
     if (redo != nullptr)
         redo->SetOnClick([lamps]() { lamps->Redo(); });
+    grid.SetOnMessage([said](StringView words) // why a paste was refused
+    {
+        if (said != nullptr)
+            said->SetText(words);
+    });
     if (auto* search = Cast<gui::TextField>(FindById(*section, u8"props-search")))
     {
         gui::PropertyGrid* shown = &grid;

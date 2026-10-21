@@ -285,11 +285,71 @@ export namespace experimental::gui
         {
             return m_providers.IsEmpty() ? core::String(u8"Revert to default") : m_providers.Back().RevertText;
         }
-        [[nodiscard]] core::String CopyValue(core::StringView) const override { return core::String{}; }
-        bool PasteValue(core::StringView, core::StringView, core::String& reason) override
+        // The first object's value at `path` in the text format: its shape, then the value.
+        [[nodiscard]] core::String CopyValue(core::StringView path) const override
         {
-            reason = core::String(u8"Pasting is not here yet");
-            return false;
+            Target target;
+            if (m_format == nullptr || !Resolve(0, path, target) || target.Type == nullptr)
+                return core::String{};
+            core::String shape = ShapeTag(target);
+            if (shape.Size() == 0)
+                return core::String{};
+            const ReflectedPropertySource* self = this;
+            return m_format->Write([self, target, shape](core::ISerializer& ar) mutable
+            {
+                core::Serialize(ar, "shape", shape);
+                self->SerializeTarget(ar, "value", target);
+            });
+        }
+        // Into each object, one change; refused when the shape differs or nothing can be written.
+        bool PasteValue(core::StringView path, core::StringView text, core::String& reason) override
+        {
+            Target target;
+            if (m_format == nullptr || !Resolve(0, path, target) || target.Type == nullptr)
+            {
+                reason = core::String(u8"Nothing to paste into");
+                return false;
+            }
+            if (target.ReadOnly)
+            {
+                reason = core::Format(u8"{} is read only", path);
+                return false;
+            }
+            core::String copied;
+            const bool read = m_format->Read(text, [&copied](core::ISerializer& ar) { core::Serialize(ar, "shape", copied); });
+            if (!read || copied.Size() == 0)
+            {
+                reason = core::String(u8"The clipboard holds no copied property");
+                return false;
+            }
+            const core::String expected = ShapeTag(target);
+            if (copied != expected)
+            {
+                reason = core::Format(u8"A {} does not paste onto a {}", copied, expected);
+                return false;
+            }
+            ReflectedChange change{core::Format(u8"Pasted {}", path), core::String(path), core::Array<core::String>(m_allocator),
+                                   core::Array<core::String>(m_allocator)};
+            for (usize o = 0; o < m_objects.Size(); ++o)
+            {
+                change.Before.PushBack(WriteState(path, o));
+                Target into;
+                if (Resolve(o, path, into))
+                {
+                    const ReflectedPropertySource* self = this;
+                    (void)m_format->Read(text, [self, into](core::ISerializer& ar) mutable
+                    {
+                        core::String shape;
+                        core::Serialize(ar, "shape", shape);
+                        self->SerializeTarget(ar, "value", into);
+                    });
+                }
+                change.After.PushBack(WriteState(path, o));
+            }
+            NotifyPropertiesChanged();
+            if (m_onChange)
+                m_onChange(change);
+            return true;
         }
 
     protected:
@@ -1170,6 +1230,43 @@ export namespace experimental::gui
             if (byDefault.IsEmpty() || now.Compare(byDefault) == 0)
                 return false;
             return WriteTarget(target, byDefault);
+        }
+
+        // What a copy is, so a paste takes only its like: a Float's name (a Quaternion's Euler
+        // degrees a Float3, as the grid shows it), a struct's type, a list of its elements' type,
+        // a value's kind.
+        [[nodiscard]] static core::String ShapeTag(const Target& target)
+        {
+            if (target.Part >= 0)
+                return core::String(u8"number");
+            switch (ShapeOf(*target.Type))
+            {
+            case Shape::Bool:
+                return core::String(u8"bool");
+            case Shape::Integer:
+            case Shape::Enum:
+                return core::String(u8"integer");
+            case Shape::Float:
+                return core::String(u8"number");
+            case Shape::String:
+                return core::String(u8"text");
+            case Shape::Float2:
+                return core::String(u8"Float2");
+            case Shape::Float3:
+            case Shape::Quaternion:
+                return core::String(u8"Float3");
+            case Shape::Float4:
+                return core::String(u8"Float4");
+            case Shape::Group:
+                return core::String(reinterpret_cast<const char8_t*>(target.Type->name));
+            case Shape::List:
+            {
+                const core::TypeInfo* element = target.Type->container->elementType;
+                return core::Format(u8"list of {}", element != nullptr ? core::StringView(reinterpret_cast<const char8_t*>(element->name)) : core::StringView(u8"?"));
+            }
+            default:
+                return core::String{};
+            }
         }
 
         // One object's list changed as `edit` asks.

@@ -525,3 +525,39 @@ TEST_CASE("reflected source: the type's defaults from its creator, providers ove
     CHECK(bed.source.Restore(bed.changes[0], true));
     CHECK(bed.b->intensity == doctest::Approx(1.0f));
 }
+
+TEST_CASE("reflected source: copy and paste through the text format, one change, its like only")
+{
+    Bed bed(true);
+    reflected::BlobFormat format;
+    bed.source.SetTextFormat(&format);
+    bed.a->position = core::Float3{4.0f, 5.0f, 6.0f};
+    const core::String position = bed.source.CopyValue(SV(u8"position"));
+    REQUIRE(position.Size() != 0);
+
+    // A Float3 onto a rotation's Euler degrees: each object turned the same.
+    core::String reason;
+    REQUIRE(bed.source.PasteValue(SV(u8"rotation"), position.AsView(), reason));
+    CHECK(bed.source.GetValue(SV(u8"rotation.pitch"), 1).AsFloat() == doctest::Approx(4.0).epsilon(0.001));
+    CHECK(bed.changes.Size() == 1u);
+    // Onto a Float2: refused, saying why.
+    CHECK_FALSE(bed.source.PasteValue(SV(u8"cone"), position.AsView(), reason));
+    CHECK(reason == core::String(u8"A Float3 does not paste onto a Float2"));
+    CHECK_FALSE(bed.source.PasteValue(SV(u8"id"), position.AsView(), reason));
+
+    // A struct whole, and a list with its elements.
+    bed.a->shape.radius = 3.0f;
+    const core::String shape = bed.source.CopyValue(SV(u8"shape"));
+    REQUIRE(bed.source.PasteValue(SV(u8"shape"), shape.AsView(), reason));
+    CHECK(bed.b->shape.radius == doctest::Approx(3.0f));
+    bed.a->weights.PushBack(0.1f);
+    bed.a->weights.PushBack(0.2f);
+    const core::String weights = bed.source.CopyValue(SV(u8"weights"));
+    REQUIRE(bed.source.PasteValue(SV(u8"weights"), weights.AsView(), reason));
+    REQUIRE(bed.b->weights.Size() == 2u);
+    CHECK(bed.b->weights[1] == doctest::Approx(0.2f));
+
+    // A paste undoes in one.
+    CHECK(bed.source.Restore(bed.changes.Back(), true));
+    CHECK(bed.b->weights.IsEmpty());
+}

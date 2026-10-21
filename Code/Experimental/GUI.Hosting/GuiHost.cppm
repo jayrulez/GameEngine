@@ -112,6 +112,7 @@ export namespace experimental::gui
               m_context(MakeRef<GUIContext>(allocator)), m_attached(allocator), m_contents(allocator)
         {
             m_context->SetFontService(fonts);
+            m_context->SetRootPlaces(&m_places); // a drag goes on from window to window
             m_styles.SetFontService(fonts);
             m_clipboard = MakeUnique<ShellClipboard>(allocator, &shellRef);
             m_router = MakeUnique<shell::InputRouter>(allocator, shellRef.Input());
@@ -131,6 +132,7 @@ export namespace experimental::gui
         }
         ~GuiHost()
         {
+            m_context->SetRootPlaces(nullptr);
             for (Hosted& hosted : m_contents)
                 Unbind(hosted);
             m_contents.Clear();
@@ -365,7 +367,8 @@ export namespace experimental::gui
             return nullptr;
         }
         /// Where `local` (a point in `root`, its pointer units) is on the screen; false when the root
-        /// is in no window or the host cannot place windows.
+        /// is in no window or the host cannot place windows. (What its GUI's drags ask, as
+        /// IRootPlaces.)
         bool ToScreen(const SceneRoot& root, Float2 local, Float2& screen)
         {
             if (!PlacesWindows())
@@ -806,6 +809,29 @@ export namespace experimental::gui
             return rhi::ClearColor(SrgbToLinear(m_clear.r), SrgbToLinear(m_clear.g), SrgbToLinear(m_clear.b), m_clear.a);
         }
 
+        // The GUI's roots' places, as its drags ask them: the host's windows.
+        class Places final : public IRootPlaces
+        {
+        public:
+            explicit Places(GuiHost& host) noexcept : m_host(host) {}
+            EventDispatcher* DispatcherAt(Float2 screen, Float2& local) override
+            {
+                SceneRoot* root = m_host.RootAt(screen, &local);
+                return root != nullptr ? root->GetEventDispatcher() : nullptr;
+            }
+            bool ToScreen(const EventDispatcher& dispatcher, Float2 local, Float2& screen) override
+            {
+                for (const Attached& attached : m_host.m_attached)
+                    for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                        if (pane->Root->GetEventDispatcher() == &dispatcher)
+                            return m_host.ToScreen(*pane->Root, local, screen);
+                return false;
+            }
+
+        private:
+            GuiHost& m_host;
+        };
+
         IAllocator& m_allocator;
         graphics::GraphicsDevice& m_device;
         shell::IShell& m_shell;
@@ -828,6 +854,7 @@ export namespace experimental::gui
         u32 m_pressWindow = 0; // the window a held press began in
         WindowOpener m_opener;
         WindowEventHandler m_onWindowEvent;
+        Places m_places{*this};
         Array<u32> m_focusOrder{m_allocator}; // window ids, the one focused last first
         f32 m_uiScale = 1.0f;
         vg::VGBlendSpace m_blendSpace = vg::VGBlendSpace::Encoded;

@@ -280,6 +280,12 @@ TEST_CASE("gui.hosting: a window opened for a root, its events told by its root,
     REQUIRE(bed.host->ToScreen(*second, Float2{5.0f, 6.0f}, screen));
     CHECK(screen.x == doctest::Approx(1505.0f));
     CHECK(screen.y == doctest::Approx(106.0f));
+    // The same, as its GUI's drags ask it.
+    IRootPlaces* places = bed.host->Context().GetRootPlaces();
+    REQUIRE(places != nullptr);
+    CHECK(places->DispatcherAt(Float2{1550.0f, 150.0f}, local) == second->GetEventDispatcher());
+    REQUIRE(places->ToScreen(*second->GetEventDispatcher(), Float2{5.0f, 6.0f}, screen));
+    CHECK(screen.x == doctest::Approx(1505.0f));
 
     // Overlapping, the window focused last is on top.
     window->Window().SetPosition(5, 5);

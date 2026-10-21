@@ -283,11 +283,11 @@ export namespace experimental::gui
             ApplyText(label);
             m_textFromCommand = true;
         }
-        void OnBoundCommandState(bool available, bool checked) override
+        void OnBoundCommandState(const BoundCommandState& state) override
         {
-            SetEnabled(available);
+            SetEnabled(state.Available);
             if (m_toggle)
-                ApplyChecked(checked);
+                ApplyChecked(state.Checked);
         }
 
         [[nodiscard]] u32 GetWidgetStates() const override

@@ -68,6 +68,8 @@ export namespace experimental::gui
         static void DefineCommand(core::StringView id, core::StringView label);
         static void SetCommandEnabled(core::StringView id, bool enabled);
         static void SetCommandChecked(core::StringView id, bool checked);
+        /// Why it is disabled, which a control bound to it shows while it is (a tool bar's tooltip).
+        static void SetCommandDisabledReason(core::StringView id, core::StringView reason);
         [[nodiscard]] static bool IsCommandChecked(core::StringView id);
         static bool RunCommand(core::StringView id);
         /// Binds `keys` ("ctrl-s", "pad-east", a chord) to `command` where `context` holds (empty:

@@ -187,11 +187,11 @@ export namespace experimental::gui
             m_checked = checked;
             Invalidate();
         } // no callback (init)
-        void OnBoundCommandState(bool available, bool checked) override
+        void OnBoundCommandState(const BoundCommandState& state) override
         {
-            SetEnabled(available);
+            SetEnabled(state.Available);
             if (m_checkable)
-                SetCheckedSilently(checked);
+                SetCheckedSilently(state.Checked);
         }
         void SetOnToggled(core::Function<void(bool)> callback)
         {

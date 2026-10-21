@@ -538,6 +538,11 @@ namespace experimental::gui
         if (SceneRoot* root = ScriptRoot())
             root->GetContext().DefineCommand(id).SetChecked(checked);
     }
+    void Gui::SetCommandDisabledReason(StringView id, StringView reason)
+    {
+        if (SceneRoot* root = ScriptRoot())
+            root->GetContext().DefineCommand(id).SetDisabledReason(reason);
+    }
     bool Gui::IsCommandChecked(StringView id)
     {
         SceneRoot* root = ScriptRoot();
@@ -1446,6 +1451,7 @@ namespace experimental::gui
         builder.Method<&Gui::DefineCommand>("defineCommand");
         builder.Method<&Gui::SetCommandEnabled>("setCommandEnabled");
         builder.Method<&Gui::SetCommandChecked>("setCommandChecked");
+        builder.Method<&Gui::SetCommandDisabledReason>("setCommandDisabledReason");
         builder.Method<&Gui::IsCommandChecked>("isCommandChecked");
         builder.Method<&Gui::RunCommand>("runCommand");
         builder.Method<&Gui::BindKey>("bindKey");

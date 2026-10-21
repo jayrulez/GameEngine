@@ -2388,12 +2388,8 @@ export namespace experimental::gui
         /// Runs the bound command along the focus path; false with none, or none ran.
         bool RunBoundCommand();
         /// The bound command's state reached the control: enabled by availability; a checkable
-        /// control shows `checked` too.
-        virtual void OnBoundCommandState(bool available, bool checked)
-        {
-            (void)checked;
-            SetEnabled(available);
-        }
+        /// control shows its checked state too, and one with a tooltip the reason.
+        virtual void OnBoundCommandState(const BoundCommandState& state) { SetEnabled(state.Available); }
         /// What the bound command shows reached the control (E5): its label, its icon (an image
         /// path) and its keys as text ("Ctrl+S"), each followed as it changes. A button or a menu
         /// item with no text of its own takes the label; a menu item, the keys and the icon.

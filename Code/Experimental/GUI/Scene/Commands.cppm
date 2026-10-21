@@ -43,6 +43,10 @@ export namespace experimental::gui
         void SetEnabled(bool enabled) { m_enabled.Set(enabled); }
         [[nodiscard]] bool IsChecked() const { return m_checked.Get(); }
         void SetChecked(bool checked) { m_checked.Set(checked); }
+        /// Why it is disabled ("Nothing to save"), which a control bound to it shows while it is
+        /// (a tool bar's tooltip); a read a binding follows.
+        [[nodiscard]] core::StringView GetDisabledReason() const { return m_disabledReason.Get().AsView(); }
+        void SetDisabledReason(core::StringView reason) { m_disabledReason.Set(core::String(reason)); }
 
     private:
         core::String m_id;
@@ -50,6 +54,7 @@ export namespace experimental::gui
         Property<core::String> m_icon;
         Property<bool> m_enabled{true};
         Property<bool> m_checked{false};
+        Property<core::String> m_disabledReason;
     };
 
     /// When a node's handler runs: on the way down from the root, or on the way up from the focused
@@ -70,6 +75,16 @@ export namespace experimental::gui
     };
 
     using CommandHandler = core::Function<void(CommandEvent&)>;
+
+    /// What a control bound to a command is told of its state (Node::OnBoundCommandState).
+    struct BoundCommandState
+    {
+        bool Available = false; ///< Enabled, with a handler on the focus path.
+        bool Checked = false;
+        /// Why it is not available: the command's disabled reason while it is disabled, else empty
+        /// (no handler where the focus is says nothing a user could act on).
+        core::StringView Reason;
+    };
 
     /// A GUI's commands, by id.
     class CommandSet

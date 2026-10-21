@@ -53,8 +53,12 @@ namespace experimental::gui
                  // Availability on the active root's focus path (the window the user is in).
                  const bool available = root->GetContext().IsCommandAvailable(commandId.AsView());
                  const Command* command = root->GetContext().GetCommands().Find(commandId.AsView());
-                 const bool checked = command != nullptr && command->IsChecked();
-                 Untracked([&] { OnBoundCommandState(available, checked); });
+                 BoundCommandState state;
+                 state.Available = available;
+                 state.Checked = command != nullptr && command->IsChecked();
+                 const core::String reason(command != nullptr && !command->IsEnabled() ? command->GetDisabledReason() : core::StringView{});
+                 state.Reason = reason.AsView();
+                 Untracked([&] { OnBoundCommandState(state); });
              });
         // A second follows what the control shows of it: its label and icon, and its keys (E5).
         Bind([this]()

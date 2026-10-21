@@ -235,6 +235,7 @@ namespace
         bed.Run(u8"switchOff");
         bed.Update();
         CHECK_FALSE(box->IsEnabled());
+        CHECK(bed.root->GetContext().GetCommands().Find(StringView(u8"music"))->GetDisabledReason() == StringView(u8"No sound device"));
         CHECK(bed.Number(u8"runIt") == doctest::Approx(0.0)); // disabled: nothing runs
         CHECK(bed.errors.count == 0);
     }
@@ -256,7 +257,7 @@ TEST_CASE("gui-script: AngelScript defines, handles and runs commands")
         u8"  box.command = \"music\";\n"
         u8"  gui::bindKey(\"f5\", \"music\", \"\");\n"
         u8"}\n"
-        u8"void switchOff() { gui::setCommandEnabled(\"music\", false); }\n"
+        u8"void switchOff() { gui::setCommandEnabled(\"music\", false); gui::setCommandDisabledReason(\"music\", \"No sound device\"); }\n"
         u8"double runIt() { return gui::runCommand(\"music\") ? 1 : 0; }\n",
         u8"main");
     REQUIRE(loaded.IsOk());
@@ -276,7 +277,7 @@ TEST_CASE("gui-script: Luau defines, handles and runs commands")
         u8"local box = root:add(\"CheckBox\")\n"
         u8"box.command = \"music\"\n"
         u8"gui.bindKey(\"f5\", \"music\", \"\")\n"
-        u8"function switchOff() gui.setCommandEnabled(\"music\", false) end\n"
+        u8"function switchOff() gui.setCommandEnabled(\"music\", false); gui.setCommandDisabledReason(\"music\", \"No sound device\") end\n"
         u8"function runIt() return gui.runCommand(\"music\") and 1 or 0 end\n",
         u8"main");
     REQUIRE(loaded.IsOk());

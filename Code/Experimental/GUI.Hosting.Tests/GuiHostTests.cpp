@@ -103,6 +103,41 @@ TEST_CASE("gui.hosting: a window's root takes the window's size and a renderer o
     CHECK(root->GetViewportSize().y == doctest::Approx(360.0f));
 }
 
+TEST_CASE("gui.hosting: a window's multisampled targets follow the backbuffer each frame draws into, not the window, and never wait")
+{
+    Bed bed;
+    RefPtr<SceneRoot> root = bed.MakeRoot();
+    bed.host->AttachWindow(*bed.main, root);
+    bed.Frame(bed.main.Get());
+    const foundation::vg::renderer::VGPassTargets* targets = bed.host->PassTargetsFor(bed.main.Get());
+    REQUIRE(targets != nullptr); // the null device takes the multisampled pass
+    const u32 width = bed.main->Swap()->Width();
+    const u32 height = bed.main->Swap()->Height();
+    CHECK(targets->Matches(width, height));
+
+    // Resized, the swapchain not yet (a live resize: the backbuffer lags the window). The frame
+    // draws at the backbuffer's size, the targets with it.
+    static_cast<shell::NullWindow*>(bed.shell.MainWindow())->Resize(640, 360);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.main->Swap()->Width() == width);
+    CHECK(targets->Matches(width, height));
+
+    CHECK(bed.host->RetiredTargetsFor(bed.main.Get()) == 0u); // nothing replaced
+
+    // The swapchain catches up: new targets at its size, made without waiting for the GPU; the old
+    // kept while the frames in flight (two) may still draw into them.
+    REQUIRE(bed.main->SyncSize());
+    bed.Frame(bed.main.Get());
+    targets = bed.host->PassTargetsFor(bed.main.Get());
+    REQUIRE(targets != nullptr);
+    CHECK(targets->Matches(640u, 360u));
+    CHECK(bed.host->RetiredTargetsFor(bed.main.Get()) == 1u);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->RetiredTargetsFor(bed.main.Get()) == 1u);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->RetiredTargetsFor(bed.main.Get()) == 0u);
+}
+
 TEST_CASE("gui.hosting: SizePanes gives the roots a resized window's size before the frame's update")
 {
     Bed bed;

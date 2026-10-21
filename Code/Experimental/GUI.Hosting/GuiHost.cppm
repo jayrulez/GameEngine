@@ -72,12 +72,20 @@ export namespace experimental::gui
             UniquePtr<GuiInputBridge> Bridge;
         };
 
-        explicit GuiWindowData(IAllocator& allocator, IAllocator& panes) noexcept : Panes(panes), Renderer(allocator) {}
+        explicit GuiWindowData(IAllocator& allocator, IAllocator& panes) noexcept : Panes(panes), Renderer(allocator), Retired(allocator) {}
 
         Array<UniquePtr<Pane>> Panes; ///< the first is the window's root
         UniquePtr<vg::VGContext> Canvas;
         vg::renderer::VGRenderer Renderer;
-        vg::renderer::VGPassTargets Targets; // none: a plain single-sampled pass
+        UniquePtr<vg::renderer::VGPassTargets> Targets; ///< null: a plain single-sampled pass
+        bool Multisampled = false; ///< its renderer draws the multisampled pass (its targets were made), never the plain one
+        /// Targets a resize replaced, kept until the frames in flight that drew into them are done.
+        struct RetiredTargets
+        {
+            UniquePtr<vg::renderer::VGPassTargets> Targets;
+            u32 FramesLeft = 0;
+        };
+        Array<RetiredTargets> Retired;
         bool Encoded = false; ///< blends encoded values, through the backbuffer's UNORM view
         rhi::TextureFormat DrawFormat = rhi::TextureFormat::Undefined;
         bool NeedsFrame = true; ///< Update's verdict: the panes draw this frame, else the last batch is encoded
@@ -211,9 +219,10 @@ export namespace experimental::gui
                                : data->Encoded         ? window.Swap()->AlternateViewFormat()
                                                        : window.Swap()->Format();
             const u32 width = window.Window().Width(), height = window.Window().Height();
-            data->Targets.Configure(*m_device.Raw());
-            const bool targets = data->Targets.Create(data->DrawFormat, width, height);
-            vg::renderer::VGTargetConfig config = targets ? data->Targets.ConfigFor() : vg::renderer::VGTargetConfig{};
+            data->Targets = MakeTargets(data->DrawFormat, width, height);
+            const bool targets = data->Targets.Get() != nullptr;
+            data->Multisampled = targets;
+            vg::renderer::VGTargetConfig config = targets ? data->Targets->ConfigFor() : vg::renderer::VGTargetConfig{};
             config.blendSpace = data->Encoded ? vg::VGBlendSpace::Encoded : vg::VGBlendSpace::Linear;
             if (!data->Renderer
                      .Initialize(*m_device.Raw(), *m_shaders.Vertex, *m_shaders.Fragment, data->DrawFormat,
@@ -448,14 +457,7 @@ export namespace experimental::gui
             {
                 GuiWindowData& data = *attached.Data;
                 graphics::RenderWindow& window = *attached.Window;
-                const u32 width = window.Window().Width(), height = window.Window().Height();
                 const f32 scale = window.Window().ContentScale() * m_uiScale;
-                // The targets follow the window, outside any frame (in flight ones use them).
-                if (data.Targets.NeedsResize(width, height))
-                {
-                    m_device.Raw()->WaitIdle();
-                    (void)data.Targets.Resize(width, height);
-                }
                 bool needs = SizePanes(data, window, scale) || data.NeedsFrame;
                 for (const UniquePtr<GuiWindowData::Pane>& pane : data.Panes)
                 {
@@ -514,9 +516,21 @@ export namespace experimental::gui
             data->Renderer.RenderLayers(*frame.encoder, slot, slice);
             const rhi::ClearColor clear = ClearFor(data->Encoded);
             rhi::TextureView* view = data->Encoded ? frame.backbufferAlternateView : frame.backbufferView;
-            if (data->Targets.Matches(frame.width, frame.height))
+            // The targets follow the backbuffer this frame draws into, not the window: while a window
+            // is resized its swapchain need not match it, and a pass resolves only into its own size.
+            // New ones are made at once and the old retired, freed once the frames in flight that drew
+            // into them are done: no wait for the GPU, which on the web would yield to the browser
+            // with the canvas's texture taken.
+            RetireTargets(*data);
+            if (data->Multisampled && (data->Targets.Get() == nullptr || !data->Targets->Matches(frame.width, frame.height)))
             {
-                const rhi::RenderPassDesc pass = data->Targets.BeginPass(*frame.encoder, view, clear, u8"GUI");
+                if (data->Targets.Get() != nullptr)
+                    data->Retired.PushBack(GuiWindowData::RetiredTargets{Move(data->Targets), m_device.FramesInFlight()});
+                data->Targets = MakeTargets(data->DrawFormat, frame.width, frame.height);
+            }
+            if (data->Targets.Get() != nullptr && data->Targets->Matches(frame.width, frame.height))
+            {
+                const rhi::RenderPassDesc pass = data->Targets->BeginPass(*frame.encoder, view, clear, u8"GUI");
                 if (rhi::RenderPassEncoder* encoder = frame.encoder->BeginRenderPass(pass))
                 {
                     data->Renderer.Render(*encoder, frame.width, frame.height, slot, slice);
@@ -524,9 +538,31 @@ export namespace experimental::gui
                 }
                 return;
             }
+            // A renderer made for the multisampled pass cannot draw the plain one (its pipelines'
+            // sample count is the targets'): with no targets at this size the frame is only cleared,
+            // and the next draws again.
             if (rhi::RenderPassEncoder* encoder = frame.BeginBackbufferPass(clear, view))
-                data->Renderer.Render(*encoder, frame.width, frame.height, slot, slice);
+            {
+                if (!data->Multisampled)
+                    data->Renderer.Render(*encoder, frame.width, frame.height, slot, slice);
+                else
+                    data->NeedsFrame = true;
+            }
             frame.EndBackbufferPass();
+        }
+
+        /// The multisampled targets `window`'s GUI draws into, sized to its backbuffer as each frame
+        /// draws; null when it has none (a plain single-sampled pass).
+        [[nodiscard]] const vg::renderer::VGPassTargets* PassTargetsFor(const graphics::RenderWindow* window) noexcept
+        {
+            GuiWindowData* data = Find(window);
+            return data != nullptr && data->Multisampled ? data->Targets.Get() : nullptr;
+        }
+        /// How many replaced targets `window` still keeps for the frames in flight.
+        [[nodiscard]] usize RetiredTargetsFor(const graphics::RenderWindow* window) noexcept
+        {
+            GuiWindowData* data = Find(window);
+            return data != nullptr ? data->Retired.Size() : 0;
         }
 
         /// The renderer drawing `window`'s GUI (where a viewport registers its target); null when it
@@ -625,6 +661,22 @@ export namespace experimental::gui
             if (region.width > 0.0f && region.height > 0.0f)
                 return region;
             return Rectangle{0.0f, 0.0f, static_cast<f32>(window.Window().Width()), static_cast<f32>(window.Window().Height())};
+        }
+        // A window's multisampled targets at `width` x `height`; null when the device takes none.
+        [[nodiscard]] UniquePtr<vg::renderer::VGPassTargets> MakeTargets(rhi::TextureFormat format, u32 width, u32 height)
+        {
+            UniquePtr<vg::renderer::VGPassTargets> targets = MakeUnique<vg::renderer::VGPassTargets>(m_allocator);
+            targets->Configure(*m_device.Raw());
+            if (!targets->Create(format, width, height))
+                return UniquePtr<vg::renderer::VGPassTargets>{};
+            return targets;
+        }
+        // One of `data`'s frames begins: the retired targets age, those no frame in flight uses go.
+        static void RetireTargets(GuiWindowData& data)
+        {
+            for (usize i = data.Retired.Size(); i > 0; --i)
+                if (data.Retired[i - 1].FramesLeft-- <= 1)
+                    data.Retired.RemoveAt(i - 1);
         }
         [[nodiscard]] GuiWindowData* Find(const graphics::RenderWindow* window) noexcept
         {

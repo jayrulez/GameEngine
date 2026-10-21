@@ -6,7 +6,8 @@
 // Variant: a small tagged value a Model hands to a view for a cell - the currency of the MVC
 // layer. Modeled on eepp's Models::Variant (role only, common subset): empty / bool / int /
 // float / string / color. Stored as a plain struct (no union) for simplicity and safety;
-// ToString renders it for display and Compare orders it for sorting.
+// ToString renders it for display (a colour as #RRGGBBAA) and Compare orders it for sorting (a
+// colour channel by channel, so differing colours never compare equal).
 
 module;
 #include "Core/Prelude.h"
@@ -79,7 +80,17 @@ export namespace experimental::gui
             case Type::String:
                 return m_string;
             case Type::Color:
-                return core::String{}; // colors have no textual form here
+            {
+                // #RRGGBBAA, as a hex code writes it.
+                const u32 packed = m_color.ToRGBA8();
+                char8_t text[9] = {u8'#'};
+                for (i32 i = 0; i < 8; ++i)
+                {
+                    const u32 nibble = (packed >> ((7 - i) * 4)) & 0xFu;
+                    text[1 + i] = static_cast<char8_t>(nibble < 10 ? u8'0' + nibble : u8'A' + nibble - 10);
+                }
+                return core::String(core::StringView(text, 9));
+            }
             }
             return core::String{};
         }
@@ -111,7 +122,15 @@ export namespace experimental::gui
             case Type::String:
                 return CompareStrings(m_string.AsView(), other.m_string.AsView());
             case Type::Color:
+            {
+                // Channel by channel, so two colours are equal only when they are the same.
+                const f32 a[] = {m_color.r, m_color.g, m_color.b, m_color.a};
+                const f32 b[] = {other.m_color.r, other.m_color.g, other.m_color.b, other.m_color.a};
+                for (i32 i = 0; i < 4; ++i)
+                    if (a[i] != b[i])
+                        return a[i] < b[i] ? -1 : 1;
                 return 0;
+            }
             }
             return 0;
         }

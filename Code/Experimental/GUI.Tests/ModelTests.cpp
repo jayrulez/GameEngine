@@ -50,6 +50,14 @@ TEST_CASE("variant: Compare orders numbers and strings")
     CHECK(Variant(static_cast<core::i64>(2)).Compare(Variant(2.0)) == 0);
 }
 
+TEST_CASE("variant: a colour is written as its hex code, and differing colours never compare equal")
+{
+    CHECK(Variant(core::Color{1.0f, 0.5f, 0.0f, 1.0f}).ToString() == SV(u8"#FF8000FF"));
+    CHECK(Variant(core::Color{0.1f, 0.2f, 0.3f, 1.0f}).Compare(Variant(core::Color{0.1f, 0.2f, 0.3f, 1.0f})) == 0);
+    CHECK(Variant(core::Color{0.1f, 0.2f, 0.3f, 1.0f}).Compare(Variant(core::Color{0.1f, 0.25f, 0.3f, 1.0f})) < 0);
+    CHECK(Variant(core::Color{0.1f, 0.2f, 0.3f, 1.0f}).Compare(Variant(core::Color{0.1f, 0.2f, 0.3f, 0.5f})) > 0);
+}
+
 TEST_CASE("model-index: validity + equality")
 {
     CHECK_FALSE(ModelIndex{}.IsValid()); // default row -1

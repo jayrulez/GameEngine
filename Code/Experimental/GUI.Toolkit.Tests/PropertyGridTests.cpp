@@ -352,3 +352,175 @@ TEST_CASE("property grid: a Float3 is one row of a field per part, each mixed an
     bed.grid->SetFilter(SV(u8"position.z"));
     CHECK(Join(bed.Paths()) == core::String(u8"#Transform position"));
 }
+
+namespace
+{
+    core::String Elements(const PropertyBag& bag, core::StringView list, usize object)
+    {
+        core::String out;
+        for (usize i = 0; i < bag.ElementCount(list, object); ++i)
+        {
+            if (out.Size() != 0)
+                out.Append(SV(u8" "));
+            out.Append(bag.GetValue(core::Format(u8"{}.{}", list, i).AsView(), object).ToString().AsView());
+        }
+        return out;
+    }
+    void Activate(Menu& menu, core::StringView text)
+    {
+        for (usize i = 0; i < menu.ChildCount(); ++i)
+            if (MenuItem* item = core::Cast<MenuItem>(menu.GetChildAt(i)); item != nullptr && item->GetText() == text)
+            {
+                (void)item->HandleActivate();
+                return;
+            }
+        FAIL("no such item");
+    }
+}
+
+TEST_CASE("property grid: a list shows its elements, the fewest any object has, and its count mixed")
+{
+    Bed bed(2);
+    bed.bag.AddList(SV(u8"weights"), PropertyKind::Float, Variant(0.5), 3);
+    bed.Show();
+    ListPropertyEditor* list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"weights")));
+    REQUIRE(list != nullptr);
+    CHECK(list->GetCountLabel()->GetText() == SV(u8"3 elements"));
+    CHECK(Join(bed.Paths()) == core::String(u8"weights")); // a list starts folded
+    bed.grid->SetOpen(SV(u8"weights"), true);
+    CHECK(Join(bed.Paths()) == core::String(u8"weights weights.0 weights.1 weights.2"));
+    CHECK(bed.grid->GetRow(1)->Element);
+    CHECK(bed.grid->GetRow(1)->Depth == 1);
+
+    // The second object with one more: the count is mixed, and the three both have show.
+    bed.bag.ResizeList(SV(u8"weights"), 1, 4);
+    bed.Frame();
+    list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"weights")));
+    REQUIRE(list != nullptr);
+    CHECK(list->GetCountLabel()->GetText() == MixedValueText());
+    CHECK(Join(bed.Paths()) == core::String(u8"weights weights.0 weights.1 weights.2"));
+}
+
+TEST_CASE("property grid: Add puts an element at the end of each object's list and opens it; a full list cannot")
+{
+    Bed bed(2);
+    PropertyInfo& info = bed.bag.AddList(SV(u8"tags"), PropertyKind::String, Variant(SV(u8"new")), 1);
+    info.MaxCount = 3;
+    bed.Show();
+    ListPropertyEditor* list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"tags")));
+    REQUIRE(list != nullptr);
+    CHECK(list->GetCountLabel()->GetText() == SV(u8"1 element"));
+    bed.D().InjectMouseMove(Centre(*list->GetAddButton()));
+    bed.D().InjectMouseDown(Centre(*list->GetAddButton()), MouseButton::Left);
+    bed.D().InjectMouseUp(Centre(*list->GetAddButton()), MouseButton::Left);
+    bed.Frame();
+    CHECK(bed.bag.ElementCount(SV(u8"tags"), 0) == 2u);
+    CHECK(bed.bag.ElementCount(SV(u8"tags"), 1) == 2u);
+    CHECK(bed.grid->IsOpen(SV(u8"tags")));
+    CHECK(bed.grid->FindRow(SV(u8"tags.1")) >= 0);
+
+    list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"tags")));
+    REQUIRE(list != nullptr);
+    bed.D().InjectMouseDown(Centre(*list->GetAddButton()), MouseButton::Left);
+    bed.D().InjectMouseUp(Centre(*list->GetAddButton()), MouseButton::Left);
+    bed.Frame();
+    list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"tags")));
+    REQUIRE(list != nullptr);
+    CHECK(bed.bag.ElementCount(SV(u8"tags"), 0) == 3u);
+    CHECK_FALSE(list->GetAddButton()->IsEnabled()); // its most
+}
+
+TEST_CASE("property grid: a list of several types adds the one picked from a menu")
+{
+    Bed bed;
+    PropertyInfo& info = bed.bag.AddList(SV(u8"effects"), PropertyKind::String, Variant(SV(u8"")));
+    info.ElementTypes.PushBack(core::String(u8"Flicker"));
+    info.ElementTypes.PushBack(core::String(u8"Pulse"));
+    core::String asked;
+    bed.bag.SetOnListEdited([&asked](core::StringView, const ListEdit& edit) { asked = edit.ElementType; });
+    bed.Show();
+    ListPropertyEditor* list = core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"effects")));
+    REQUIRE(list != nullptr);
+    bed.D().InjectMouseDown(Centre(*list->GetAddButton()), MouseButton::Left);
+    bed.D().InjectMouseUp(Centre(*list->GetAddButton()), MouseButton::Left);
+    bed.Frame();
+    REQUIRE(list->GetTypeMenu() != nullptr);
+    Activate(*list->GetTypeMenu(), SV(u8"Pulse"));
+    CHECK(asked == core::String(u8"Pulse"));
+    CHECK(bed.bag.ElementCount(SV(u8"effects"), 0) == 1u);
+}
+
+TEST_CASE("property grid: an element's menu inserts, removes and moves it")
+{
+    Bed bed;
+    bed.bag.AddList(SV(u8"steps"), PropertyKind::Integer, Variant(core::i64{0}), 3);
+    for (core::i64 i = 0; i < 3; ++i)
+        bed.bag.SetValue(core::Format(u8"steps.{}", i).AsView(), 0, Variant(i + 1));
+    bed.Show();
+    bed.grid->SetOpen(SV(u8"steps"), true);
+    bed.Frame();
+    CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"1 2 3"));
+
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"steps.0")), core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Move down"));
+    CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 1 3"));
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"steps.2")), core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Remove"));
+    CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 1"));
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"steps.1")), core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Insert above"));
+    CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 0 1"));
+
+    // A list that may not move: its elements' Move items are disabled, and they show no grip.
+    bed.bag.FindInfo(SV(u8"steps"))->ListOps = PropertyListAdd | PropertyListRemove;
+    bed.bag.PropertiesChanged();
+    bed.Frame();
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"steps.0")), core::Float2{20.0f, 20.0f}));
+    for (usize i = 0; i < bed.grid->GetRowMenu()->ChildCount(); ++i)
+        if (MenuItem* item = core::Cast<MenuItem>(bed.grid->GetRowMenu()->GetChildAt(i)); item != nullptr && item->GetText() == SV(u8"Move down"))
+            CHECK_FALSE(item->IsEnabled());
+    ItemRow* row = bed.grid->RowForItem(bed.grid->FindRow(SV(u8"steps.0")));
+    REQUIRE(row != nullptr);
+    CHECK_FALSE(core::Cast<PropertyRowContent>(row->GetContent())->GetGrip()->IsDisplayed());
+}
+
+TEST_CASE("property grid: an element's grip drags it to another place in its list")
+{
+    Bed bed;
+    bed.bag.AddList(SV(u8"steps"), PropertyKind::Integer, Variant(core::i64{0}), 4);
+    for (core::i64 i = 0; i < 4; ++i)
+        bed.bag.SetValue(core::Format(u8"steps.{}", i).AsView(), 0, Variant(i + 1));
+    bed.Show();
+    bed.grid->SetOpen(SV(u8"steps"), true);
+    bed.Frame();
+
+    const auto grip = [&bed](const char8_t* path) -> PropertyGrip&
+    {
+        ItemRow* row = bed.grid->RowForItem(bed.grid->FindRow(SV(path)));
+        REQUIRE(row != nullptr);
+        return *core::Cast<PropertyRowContent>(row->GetContent())->GetGrip();
+    };
+    const auto lower = [&bed](const char8_t* path)
+    {
+        const Rect r = bed.grid->RowForItem(bed.grid->FindRow(SV(path)))->GetScreenBounds();
+        return core::Float2{r.x + 100.0f, r.y + r.height * 0.75f};
+    };
+    PropertyGrip& first = grip(u8"steps.0");
+    CHECK(first.IsDisplayed());
+    const core::Float2 from = Centre(first);
+    bed.D().InjectMouseMove(from);
+    bed.D().InjectMouseDown(from, MouseButton::Left);
+    bed.D().InjectMouseMove(lower(u8"steps.2")); // below the third: it goes third
+    CHECK(bed.grid->GetReorderTarget() == 2);
+    bed.D().InjectMouseUp(lower(u8"steps.2"), MouseButton::Left);
+    bed.Frame();
+    CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 3 1 4"));
+
+    // Let go off the list: nothing moves.
+    PropertyGrip& last = grip(u8"steps.3");
+    bed.D().InjectMouseDown(Centre(last), MouseButton::Left);
+    bed.D().InjectMouseMove(core::Float2{Centre(last).x, 400.0f});
+    CHECK(bed.grid->GetReorderTarget() == -1);
+    bed.D().InjectMouseUp(core::Float2{Centre(last).x, 400.0f}, MouseButton::Left);
+    CHECK(Elements(bed.bag, SV(u8"steps"), 0) == core::String(u8"2 3 1 4"));
+}

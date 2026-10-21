@@ -150,6 +150,7 @@ export namespace sandbox
             if (m_onHistory)
                 m_onHistory(Format(u8"Set {}", path).AsView());
         }
+        bool EditList(StringView, const gui::ListEdit&) override { return false; } // the lamps have no lists yet
         void CancelEdit(StringView path) override
         {
             if (const Original* original = FindOriginal(path))

@@ -15,7 +15,9 @@
 //     between the objects indeterminate; each one set or cleared alone;
 //   - Float2, Float3 and Float4 (T2): a group hinted with Core's type name, a number field per child
 //     on its one row, each labelled with its child's name and editing its child's path, so each is
-//     mixed and scrubbed on its own.
+//     mixed and scrubbed on its own;
+//   - lists (T2): the count (mixed when the objects' differ) and an Add button, a menu of the types
+//     when the list takes several; an element added at the end.
 // Mixed, a field shows the placeholder "Mixed" and a button says so.
 
 module;
@@ -466,8 +468,94 @@ export namespace experimental::gui
         usize m_shown = 0;
     };
 
+    /// A list's row: how many elements, and Add.
+    class ListPropertyEditor : public PropertyEditor
+    {
+        RTTI_OBJECT(ListPropertyEditor, PropertyEditor)
+    public:
+        ListPropertyEditor() : m_types(MemoryAllocator())
+        {
+            AddClass(core::StringView(u8"list"));
+            EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Row;
+                s.AlignItems = Align::Center;
+                s.ColumnGap = 8.0f;
+            });
+            m_count = core::MakeRef<Label>(MemoryAllocator());
+            m_count->AddClass(core::StringView(u8"count"));
+            m_count->SetHitTestVisible(false);
+            m_count->EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
+            AddChild(m_count.Get());
+            m_add = core::MakeRef<Button>(MemoryAllocator());
+            m_add->AddClass(core::StringView(u8"add"));
+            m_add->SetText(core::StringView(u8"Add"));
+            ListPropertyEditor* self = this;
+            m_add->SetOnClick([self]() { self->Add(); });
+            AddChild(m_add.Get());
+        }
+        [[nodiscard]] Label* GetCountLabel() const noexcept { return m_count.Get(); }
+        [[nodiscard]] Button* GetAddButton() const noexcept { return m_add.Get(); }
+        /// The menu of the types an add chooses from, while it is open.
+        [[nodiscard]] Menu* GetTypeMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
+
+    protected:
+        void OnBind(const PropertyInfo& info, const PropertyValue& value) override
+        {
+            m_size = static_cast<usize>(value.Value.AsInt() < 0 ? 0 : value.Value.AsInt());
+            m_types = info.ElementTypes;
+            if (value.Mixed)
+                m_count->SetText(MixedValueText());
+            else
+                m_count->SetText((m_size == 1 ? core::String(u8"1 element") : core::Format(u8"{} elements", m_size)).AsView());
+            const bool full = info.MaxCount != 0 && !value.Mixed && m_size >= info.MaxCount;
+            m_add->SetDisplayed((info.ListOps & PropertyListAdd) != 0);
+            m_add->SetEnabled(!IsReadOnly() && !full);
+        }
+        void OnTextStyleChange() override
+        {
+            ShareTextStyle(*m_count);
+            ShareTextStyle(*m_add);
+        }
+
+    private:
+        // At the end; of a type picked from a menu when the list takes several.
+        void Add()
+        {
+            if (m_types.Size() <= 1)
+            {
+                Insert(m_types.IsEmpty() ? core::StringView{} : m_types[0].AsView());
+                return;
+            }
+            m_menu = core::MakeRef<Menu>(MemoryAllocator());
+            ShareTextStyle(*m_menu, false);
+            m_menu->SetAutoWidth(true);
+            ListPropertyEditor* self = this;
+            for (const core::String& type : m_types)
+                (void)m_menu->AddItem(type.AsView(), [self, type]() { self->Insert(type.AsView()); });
+            const Rect below = m_add->GetScreenBounds();
+            Node* top = GetRootNode();
+            if (top != nullptr)
+                m_menu->Open(*this, top->ConvertToNodeSpace(core::Float2{below.x, below.y + below.height}));
+        }
+        void Insert(core::StringView type)
+        {
+            ListEdit edit;
+            edit.Kind = ListEdit::Op::Insert;
+            edit.Index = m_size;
+            edit.ElementType = core::String(type);
+            (void)EditList(edit);
+        }
+
+        core::RefPtr<Label> m_count;
+        core::RefPtr<Button> m_add;
+        core::RefPtr<Menu> m_menu;
+        core::Array<core::String> m_types;
+        usize m_size = 0;
+    };
+
     /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
-    /// by kind (T1); Float2, Float3 and Float4 by hint (T2).
+    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2).
     inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
     {
         const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
@@ -478,6 +566,7 @@ export namespace experimental::gui
         registry.RegisterKind(PropertyKind::Float, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<NumberPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::String, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Enum, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<EnumPropertyEditor>(a); });
+        registry.RegisterKind(PropertyKind::List, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ListPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Flags, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FlagsPropertyEditor>(a); });
     }
 }

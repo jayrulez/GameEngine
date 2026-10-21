@@ -38,6 +38,11 @@ namespace
                 calls.PushBack(core::Format(u8"commit {}={}&{}", path, write.Value.ToString().AsView(), write.Mask));
         }
         void CancelPropertyEdit(core::StringView path) override { calls.PushBack(core::Format(u8"cancel {}", path)); }
+        bool EditPropertyList(core::StringView path, const ListEdit& edit) override
+        {
+            calls.PushBack(core::Format(u8"list {} {} {}", path, static_cast<int>(edit.Kind), edit.Index));
+            return true;
+        }
         void GetChildProperties(core::StringView, core::Array<PropertyInfo>&) const override {}
         [[nodiscard]] PropertyValue ReadPropertyValue(core::StringView, PropertyKind) const override { return {}; }
         [[nodiscard]] core::StringView Last() const { return calls.IsEmpty() ? core::StringView{} : calls.Back().AsView(); }

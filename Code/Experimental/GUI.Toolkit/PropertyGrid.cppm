@@ -43,6 +43,10 @@ export namespace experimental::gui
         i32 Depth = 0;
         u32 Type = 0; ///< its pool: an editor's type, or a header's
         ItemId Id = kNoItem;
+        bool Element = false; ///< an element of a list: its index, and what its list allows
+        usize Index = 0;
+        u8 ListOps = 0;
+        usize Count = 0; ///< an element's: how many its list shows
     };
 
     namespace detail
@@ -116,6 +120,42 @@ export namespace experimental::gui
         bool m_dragging = false;
     };
 
+    /// A list element's grip: dragged, it moves the element to another place in its list.
+    class PropertyGrip : public UIWidget
+    {
+        RTTI_OBJECT(PropertyGrip, UIWidget)
+    public:
+        explicit PropertyGrip(PropertyGrid& grid) : m_grid(grid)
+        {
+            SetTag(core::StringView(u8"propertygrip"));
+            SetCursor(Cursor::Grab);
+        }
+        void SetPath(core::StringView path) { m_path = core::String(path); }
+
+    protected:
+        void OnMouseDown(const MouseEvent& event) override;
+        void OnMouseMove(const MouseEvent& event) override;
+        void OnMouseUp(const MouseEvent& event) override;
+        void OnPointerCancel(const MouseEvent& event) override;
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override
+        {
+            // Two columns of three dots.
+            const PartStyle& dots = GetPartStyle(u8"dots");
+            Color color = dots.HasBackground ? dots.Box.BackgroundColor : Color{0.55f, 0.58f, 0.62f, 1.0f};
+            color.a *= dots.Opacity;
+            const f32 cx = localBounds.x + localBounds.width * 0.5f, cy = localBounds.y + localBounds.height * 0.5f;
+            for (i32 col = 0; col < 2; ++col)
+                for (i32 row = -1; row <= 1; ++row)
+                    ctx.VG().FillRect(Rectangle{cx - 3.0f + static_cast<f32>(col) * 4.0f, cy - 1.0f + static_cast<f32>(row) * 4.0f, 2.0f, 2.0f}, color);
+        }
+        void CollectStyleParts(core::Array<core::StringView>& out) const override { out.PushBack(core::StringView(u8"dots")); }
+
+    private:
+        PropertyGrid& m_grid;
+        core::String m_path;
+        bool m_dragging = false;
+    };
+
     /// A category's header: its chevron and its name across the row.
     class PropertyCategoryContent : public UIWidget
     {
@@ -162,6 +202,7 @@ export namespace experimental::gui
         [[nodiscard]] PropertyEditor* GetEditor() const noexcept { return m_editor.Get(); }
         [[nodiscard]] Label* GetLabel() const noexcept { return m_label.Get(); }
         [[nodiscard]] PropertySplitHandle* GetSplitHandle() const noexcept { return m_split.Get(); }
+        [[nodiscard]] PropertyGrip* GetGrip() const noexcept { return m_grip.Get(); }
         [[nodiscard]] core::StringView GetTooltipText() const override { return m_description.AsView(); }
 
     protected:
@@ -175,14 +216,17 @@ export namespace experimental::gui
 
     private:
         static constexpr f32 kArrow = 16.0f;
+        static constexpr f32 kGrip = 12.0f;
         PropertyGrid& m_grid;
         core::RefPtr<TreeArrow> m_arrow;
         core::RefPtr<Label> m_label;
         core::RefPtr<PropertySplitHandle> m_split;
+        core::RefPtr<PropertyGrip> m_grip;
         core::RefPtr<PropertyEditor> m_editor;
         core::String m_path;
         core::String m_description;
         i32 m_depth = 0;
+        bool m_movable = false; // an element its list lets move: its grip shows
     };
 
     class PropertyGrid : public ItemView, public IPropertySourceClient, public IPropertyEditHost
@@ -288,6 +332,31 @@ export namespace experimental::gui
         }
         [[nodiscard]] f32 GetIndentWidth() const noexcept { return m_indentWidth; }
 
+        // === Lists ===
+        /// Changes the list `path` through the source (an open edit ends first); an insert opens it.
+        bool EditPropertyList(core::StringView path, const ListEdit& edit) override
+        {
+            if (m_source == nullptr)
+                return false;
+            EndOpenEdit();
+            const core::String list(path);
+            if (!m_source->EditList(list.AsView(), edit))
+                return false;
+            if (edit.Kind == ListEdit::Op::Insert)
+                SetOpen(list.AsView(), true);
+            return true;
+        }
+        /// A grip's drag: the element at `path` picked up, moved over the rows, let go (or given up).
+        void BeginReorder(core::StringView path);
+        void MoveReorder(core::Float2 screen);
+        void EndReorder(bool drop);
+        /// The place the element would go now (its index after the move), or -1.
+        [[nodiscard]] i32 GetReorderTarget() const noexcept { return m_reorderTo; }
+        /// The row's menu, while it is open.
+        [[nodiscard]] Menu* GetRowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
+        /// Opens the menu of the row `item` at `position` (in the root's space); false when it has none.
+        bool OpenRowMenu(i32 item, core::Float2 position);
+
         // === The rows ===
         [[nodiscard]] usize GetRowCount() const noexcept { return m_rows.Rows().Size(); }
         [[nodiscard]] const PropertyRow* GetRow(i32 item) const
@@ -366,6 +435,15 @@ export namespace experimental::gui
         [[nodiscard]] core::RefPtr<Node> CreateContent(u32) override { return {}; }
         void BindContent(Node&, i32, const ModelIndex&) override {}
         [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"propertyrow"); }
+        void OnContextMenu(const MouseEvent& event) override
+        {
+            ItemView::OnContextMenu(event); // the row selected
+            const i32 item = ItemAt(event.Position);
+            Node* top = GetRootNode();
+            if (item >= 0 && top != nullptr && OpenRowMenu(item, top->ConvertToNodeSpace(event.Position)))
+                event.Handled = true;
+        }
+        void OnDrawAbove(DrawContext& ctx) override;
         // Right opens a category or a group, Left closes it (mirrored right to left).
         bool OnExtraKey(KeyCode key, u32 modifiers) override
         {
@@ -397,7 +475,7 @@ export namespace experimental::gui
         void Fold();
         bool Matches(const PropertyNode& node) const;
         bool SubtreeMatches(usize node) const;
-        void AddRows(core::Array<PropertyRow>& rows, usize node, i32 depth, bool filtered) const;
+        void AddRows(core::Array<PropertyRow>& rows, usize node, i32 depth, bool filtered, const PropertyNode* parent = nullptr) const;
         void BindRow(Node& content, const ModelIndex& index);
         // An edit is open on `path` or on a part of it (a Float3's field).
         [[nodiscard]] bool IsUnderEdit(core::StringView path) const
@@ -425,6 +503,13 @@ export namespace experimental::gui
         core::HashSet<core::String> m_toggled; // paths folded unlike their default
         core::String m_filter;
         core::String m_editPath;
+        core::RefPtr<Menu> m_menu;
+        // A grip's drag: the list, the element's index, where it would go, and the line's row.
+        core::String m_reorderList;
+        i32 m_reorderFrom = -1;
+        i32 m_reorderTo = -1;
+        i32 m_reorderLine = -1;
+        bool m_reorderAfter = false;
         f32 m_labelRatio = 0.4f;
         f32 m_indentWidth = 12.0f;
     };
@@ -490,6 +575,8 @@ namespace experimental::gui
         AddChild(m_label.Get());
         if (m_editor)
             AddChild(m_editor.Get());
+        m_grip = core::MakeRef<PropertyGrip>(MemoryAllocator(), grid);
+        AddChild(m_grip.Get());
         m_split = core::MakeRef<PropertySplitHandle>(MemoryAllocator(), grid);
         AddChild(m_split.Get()); // last: over the editor's edge
     }
@@ -501,6 +588,9 @@ namespace experimental::gui
         m_arrow->SetVisible(row.HasChildren);
         m_arrow->SetExpanded(row.Open);
         m_label->SetText(row.Info.ShownName());
+        m_movable = row.Element && (row.ListOps & PropertyListMove) != 0 && row.Count > 1;
+        m_grip->SetDisplayed(m_movable);
+        m_grip->SetPath(row.Path.AsView());
         RequestLayout();
     }
     inline void PropertyRowContent::OnLayout()
@@ -510,11 +600,45 @@ namespace experimental::gui
         const f32 split = core::Floor(box.width * m_grid.GetLabelRatio());
         const f32 indent = static_cast<f32>(m_depth) * m_grid.GetIndentWidth();
         m_arrow->Arrange(MirroredIn(Rect{box.x + indent, box.y, kArrow, box.height}, box, rtl));
+        if (m_movable) // in the indent before the element
+            m_grip->Arrange(MirroredIn(Rect{box.x + core::Max(0.0f, indent - kGrip), box.y, kGrip, box.height}, box, rtl));
         const f32 textX = indent + kArrow + 2.0f;
         m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), box.height}, box, rtl));
         if (m_editor)
             m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, core::Max(0.0f, box.width - split - 2.0f), core::Max(0.0f, box.height - 2.0f)}, box, rtl));
         m_split->Arrange(MirroredIn(Rect{box.x + split - 3.0f, box.y, 6.0f, box.height}, box, rtl));
+    }
+
+    inline void PropertyGrip::OnMouseDown(const MouseEvent& event)
+    {
+        if (event.Button != MouseButton::Left)
+            return;
+        event.Handled = true;
+        m_dragging = true;
+        SetCursor(Cursor::Grabbing);
+        m_grid.BeginReorder(m_path.AsView());
+    }
+    inline void PropertyGrip::OnMouseMove(const MouseEvent& event)
+    {
+        if (m_dragging)
+            m_grid.MoveReorder(event.Position);
+    }
+    inline void PropertyGrip::OnMouseUp(const MouseEvent& event)
+    {
+        (void)event;
+        if (!m_dragging)
+            return;
+        m_dragging = false;
+        SetCursor(Cursor::Grab);
+        m_grid.EndReorder(true);
+    }
+    inline void PropertyGrip::OnPointerCancel(const MouseEvent&)
+    {
+        if (!m_dragging)
+            return;
+        m_dragging = false;
+        SetCursor(Cursor::Grab);
+        m_grid.EndReorder(false);
     }
 
     // === The grid ===
@@ -593,7 +717,8 @@ namespace experimental::gui
             PropertyNode node{JoinPropertyPath(parent, info.Name.AsView()), core::Move(info), core::Array<usize>(MemoryAllocator())};
             m_nodes.PushBack(core::Move(node));
             into.PushBack(at);
-            if (m_nodes[at].Info.Kind == PropertyKind::Group && depth < 32) // a cycle in a source stops here
+            const PropertyKind kind = m_nodes[at].Info.Kind;
+            if ((kind == PropertyKind::Group || kind == PropertyKind::List) && depth < 32) // a cycle in a source stops here
             {
                 core::Array<usize> children(MemoryAllocator());
                 const core::String path = m_nodes[at].Path;
@@ -632,7 +757,7 @@ namespace experimental::gui
     }
 
     // `filtered`: only what matches, and what holds it, shows (an ancestor matched clears it).
-    inline void PropertyGrid::AddRows(core::Array<PropertyRow>& rows, usize index, i32 depth, bool filtered) const
+    inline void PropertyGrid::AddRows(core::Array<PropertyRow>& rows, usize index, i32 depth, bool filtered, const PropertyNode* parent) const
     {
         const PropertyNode& node = m_nodes[index];
         if (!node.Info.Visible)
@@ -648,13 +773,23 @@ namespace experimental::gui
         // editor covering the children shows them on this row, so none go under it.
         row.Type = node.Info.Kind == PropertyKind::Group && node.Info.Hint.Size() == 0 ? kGroupRow : m_editors.Choose(node.Info);
         const bool covered = m_editors.CoversChildren(row.Type);
-        row.HasChildren = node.Info.Kind == PropertyKind::Group && !node.Children.IsEmpty() && !covered;
+        const bool holds = node.Info.Kind == PropertyKind::Group || node.Info.Kind == PropertyKind::List;
+        row.HasChildren = holds && !node.Children.IsEmpty() && !covered;
+        if (parent != nullptr && parent->Info.Kind == PropertyKind::List)
+        {
+            row.Element = true;
+            row.ListOps = parent->Info.ReadOnly ? u8{0} : parent->Info.ListOps;
+            row.Count = parent->Children.Size();
+            for (usize i = 0; i < parent->Children.Size(); ++i)
+                if (parent->Children[i] == index)
+                    row.Index = i;
+        }
         row.Open = row.HasChildren && (IsOpen(node.Path.AsView()) || !matches);
         row.Id = core::HashBytes(node.Path.Data(), node.Path.Size());
         rows.PushBack(core::Move(row));
         if (rows.Back().Open)
             for (const usize child : node.Children)
-                AddRows(rows, child, depth + 1, !matches);
+                AddRows(rows, child, depth + 1, !matches, &node);
     }
 
     inline void PropertyGrid::Fold()
@@ -702,5 +837,115 @@ namespace experimental::gui
                         AddRows(rows, top, 0, filtered);
         }
         m_rows.SetRows(core::Move(rows));
+    }
+
+    // === Lists ===
+
+    inline void PropertyGrid::BeginReorder(core::StringView path)
+    {
+        const i32 item = FindRow(path);
+        const PropertyRow* row = GetRow(item);
+        if (row == nullptr || !row->Element || (row->ListOps & PropertyListMove) == 0)
+            return;
+        EndOpenEdit();
+        m_reorderList = core::String(ParentPropertyPath(path));
+        m_reorderFrom = static_cast<i32>(row->Index);
+        m_reorderTo = -1;
+        m_reorderLine = -1;
+    }
+    // Over an element of the same list: before it or after it, by its halves.
+    inline void PropertyGrid::MoveReorder(core::Float2 screen)
+    {
+        if (m_reorderFrom < 0)
+            return;
+        m_reorderTo = -1;
+        m_reorderLine = -1;
+        const i32 item = ItemAt(screen);
+        const PropertyRow* row = GetRow(item);
+        if (row != nullptr && row->Element && ParentPropertyPath(row->Path.AsView()) == m_reorderList.AsView())
+        {
+            const Rect bounds = ItemBounds(item);
+            const f32 y = ConvertToNodeSpace(screen).y + GetScrollOffset().y;
+            m_reorderAfter = y > bounds.y + bounds.height * 0.5f;
+            const i32 slot = static_cast<i32>(row->Index) + (m_reorderAfter ? 1 : 0); // a gap between elements
+            m_reorderTo = slot > m_reorderFrom ? slot - 1 : slot;
+            m_reorderLine = item;
+        }
+        Invalidate();
+    }
+    inline void PropertyGrid::EndReorder(bool drop)
+    {
+        const core::String list = core::Move(m_reorderList);
+        m_reorderList.Clear();
+        const i32 from = m_reorderFrom, to = m_reorderTo;
+        m_reorderFrom = m_reorderTo = m_reorderLine = -1;
+        Invalidate();
+        if (drop && from >= 0 && to >= 0 && to != from)
+        {
+            ListEdit edit;
+            edit.Kind = ListEdit::Op::Move;
+            edit.Index = static_cast<usize>(from);
+            edit.To = static_cast<usize>(to);
+            (void)EditPropertyList(list.AsView(), edit);
+        }
+    }
+
+    // The line where a dragged element would go.
+    inline void PropertyGrid::OnDrawAbove(DrawContext& ctx)
+    {
+        ItemView::OnDrawAbove(ctx);
+        if (m_reorderLine < 0 || m_reorderTo < 0)
+            return;
+        const PartStyle& part = GetPartStyle(u8"drop-indicator");
+        const Color color = part.HasBackground ? part.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
+        const Rect box = GetContentBounds();
+        Rect row = ItemBounds(m_reorderLine);
+        row.x -= GetScrollOffset().x;
+        row.y -= GetScrollOffset().y;
+        const f32 y = m_reorderAfter ? row.y + row.height - 1.0f : row.y - 1.0f;
+        ctx.PushClip(box);
+        ctx.VG().FillRect(Rectangle{row.x, y, row.width, 2.0f}, color);
+        ctx.PopClip();
+    }
+
+    // An element's menu: insert before it, remove it, move it up or down.
+    inline bool PropertyGrid::OpenRowMenu(i32 item, core::Float2 position)
+    {
+        const PropertyRow* found = GetRow(item);
+        if (found == nullptr || found->Category)
+            return false;
+        const PropertyRow row = *found; // the rows change under the menu's actions
+        m_menu = core::MakeRef<Menu>(MemoryAllocator());
+        ShareTextStyle(*m_menu, false);
+        m_menu->SetAutoWidth(true);
+        bool any = false;
+        if (row.Element)
+        {
+            PropertyGrid* self = this;
+            const core::String list(ParentPropertyPath(row.Path.AsView()));
+            const auto edit = [self, list](ListEdit::Op op, usize index, usize to)
+            {
+                ListEdit change;
+                change.Kind = op;
+                change.Index = index;
+                change.To = to;
+                (void)self->EditPropertyList(list.AsView(), change);
+            };
+            const usize index = row.Index;
+            MenuItem* insert = m_menu->AddItem(core::StringView(u8"Insert above"), [edit, index]() { edit(ListEdit::Op::Insert, index, 0); });
+            insert->SetEnabled((row.ListOps & PropertyListAdd) != 0);
+            MenuItem* remove = m_menu->AddItem(core::StringView(u8"Remove"), [edit, index]() { edit(ListEdit::Op::Remove, index, 0); });
+            remove->SetEnabled((row.ListOps & PropertyListRemove) != 0);
+            m_menu->AddSeparator();
+            MenuItem* up = m_menu->AddItem(core::StringView(u8"Move up"), [edit, index]() { edit(ListEdit::Op::Move, index, index - 1); });
+            up->SetEnabled((row.ListOps & PropertyListMove) != 0 && index > 0);
+            MenuItem* down = m_menu->AddItem(core::StringView(u8"Move down"), [edit, index]() { edit(ListEdit::Op::Move, index, index + 1); });
+            down->SetEnabled((row.ListOps & PropertyListMove) != 0 && index + 1 < row.Count);
+            any = true;
+        }
+        if (!any)
+            return false;
+        m_menu->Open(*this, position);
+        return true;
     }
 }

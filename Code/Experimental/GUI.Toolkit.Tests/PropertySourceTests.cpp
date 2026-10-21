@@ -120,3 +120,44 @@ TEST_CASE("property source: an edit previews on every object, commits once from 
     CHECK(bag.GetValue(SV(u8"size"), 1).AsFloat() == doctest::Approx(5.0));
     CHECK(bag.OpenEdits() == 0u);
 }
+
+TEST_CASE("property source: a list's elements are its children by index, changed in each object by one call")
+{
+    PropertyBag bag(core::DefaultAllocator(), 2);
+    PropertyInfo& info = bag.AddList(SV(u8"tags"), PropertyKind::String, Variant(SV(u8"new")), 2);
+    info.MaxCount = 3;
+    bag.SetValue(SV(u8"tags.0"), 0, Variant(SV(u8"a")));
+    bag.SetValue(SV(u8"tags.1"), 0, Variant(SV(u8"b")));
+    CHECK(bag.GetValue(SV(u8"tags"), 0).AsInt() == 2); // a list's value is its count
+    core::Array<PropertyInfo> elements(core::DefaultAllocator());
+    bag.GetProperties(SV(u8"tags"), elements);
+    REQUIRE(elements.Size() == 2u);
+    CHECK(elements[1].Name == core::String(u8"1"));
+    CHECK(elements[1].Kind == PropertyKind::String);
+
+    // An element edits as any property does.
+    bag.BeginEdit(SV(u8"tags.1"));
+    bag.CommitEdit(SV(u8"tags.1"), PropertyWrite{Variant(SV(u8"c"))});
+    CHECK(bag.GetValue(SV(u8"tags.1"), 1).AsString() == SV(u8"c"));
+
+    ListEdit move;
+    move.Kind = ListEdit::Op::Move;
+    move.Index = 1;
+    move.To = 0;
+    CHECK(bag.EditList(SV(u8"tags"), move));
+    CHECK(bag.GetValue(SV(u8"tags.0"), 0).AsString() == SV(u8"c"));
+    ListEdit insert;
+    insert.Kind = ListEdit::Op::Insert;
+    insert.Index = 9; // past the end: at the end
+    CHECK(bag.EditList(SV(u8"tags"), insert));
+    CHECK(bag.GetValue(SV(u8"tags.2"), 1).AsString() == SV(u8"new"));
+    CHECK_FALSE(bag.EditList(SV(u8"tags"), insert)); // at its most
+    ListEdit remove;
+    remove.Kind = ListEdit::Op::Remove;
+    remove.Index = 0;
+    CHECK(bag.EditList(SV(u8"tags"), remove));
+    CHECK(bag.ElementCount(SV(u8"tags"), 0) == 2u);
+
+    info.ListOps = PropertyListAdd; // may only add
+    CHECK_FALSE(bag.EditList(SV(u8"tags"), remove));
+}

@@ -12,6 +12,9 @@
 // edit applied once, one undo entry) or cancelled (the originals put back). The undo is the
 // source's (an application's, as ezEngine's and Zero's), never the grid's.
 //
+// A list's elements are its children by index, and a change to one (an insert, a removal, a move)
+// is one call, one undo entry, made in each object.
+//
 // PropertyBag is a source of its own values in memory: what tests and a page without objects of
 // its own edit, its commits told to whoever keeps the undo.
 
@@ -37,6 +40,15 @@ export namespace experimental::gui
         String,
         Enum,    ///< an integer, one of its choices
         Flags,   ///< an integer, any of its choices' bits
+        List,    ///< its elements are its children by index (`tags.0`); its value is their count
+    };
+
+    /// What a list allows (PropertyInfo::ListOps).
+    enum PropertyListOps : u8
+    {
+        PropertyListAdd = 1u << 0,
+        PropertyListRemove = 1u << 1,
+        PropertyListMove = 1u << 2,
     };
 
     /// An enum's value or a flag's bit, and what it is called.
@@ -63,6 +75,9 @@ export namespace experimental::gui
         core::Array<PropertyChoice> Choices; ///< an enum's values, flags' bits
         bool ReadOnly = false;
         bool Visible = true;
+        u8 ListOps = 0;           ///< a list's: PropertyListOps
+        u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's); 0: no limit
+        core::Array<core::String> ElementTypes; ///< a list's types an add chooses from; empty: its one
 
         [[nodiscard]] core::StringView ShownName() const noexcept { return DisplayName.Size() != 0 ? DisplayName.AsView() : Name.AsView(); }
     };
@@ -73,6 +88,22 @@ export namespace experimental::gui
     {
         Variant Value;
         u64 Mask = ~u64{0};
+    };
+
+    /// A change to a list: an element inserted at Index (of ElementType, for a list of several), the
+    /// one at Index removed, or moved to To (its place after the move).
+    struct ListEdit
+    {
+        enum class Op : u8
+        {
+            Insert,
+            Remove,
+            Move,
+        };
+        Op Kind = Op::Insert;
+        usize Index = 0;
+        usize To = 0;
+        core::String ElementType;
     };
 
     /// What a source tells its grid.
@@ -106,6 +137,8 @@ export namespace experimental::gui
         virtual void CommitEdit(core::StringView path, const PropertyWrite& write) = 0;
         /// The edit is given up: the originals put back.
         virtual void CancelEdit(core::StringView path) = 0;
+        /// Changes the list `path` in each object, one undo entry; false when nothing changed.
+        virtual bool EditList(core::StringView path, const ListEdit& edit) = 0;
 
         void SetClient(IPropertySourceClient* client) noexcept { m_client = client; }
         [[nodiscard]] IPropertySourceClient* GetClient() const noexcept { return m_client; }
@@ -183,8 +216,9 @@ export namespace experimental::gui
     }
 
     /// A source of its own values in memory: properties declared by path, each object's values
-    /// kept here. A commit is told (path, each object's value before, each after) to whoever keeps
-    /// the undo, which puts values back with SetValue.
+    /// kept here, and lists of values (each object's elements its own). A commit is told (path,
+    /// each object's value before, each after) to whoever keeps the undo, which puts values back
+    /// with SetValue; a list's change is told as it was asked.
     class PropertyBag : public IPropertySource
     {
     public:
@@ -204,17 +238,34 @@ export namespace experimental::gui
         /// `value` for every object; returns its info to fill in.
         PropertyInfo& Add(core::StringView path, PropertyKind kind, const Variant& value = {})
         {
-            Entry entry;
+            Entry entry(*m_allocator);
             entry.Path = core::String(path);
             const usize parent = ParentPropertyPath(path).Size();
             entry.Info.Name = core::String(parent == 0 ? path : path.SubStr(parent + 1, path.Size() - parent - 1));
             entry.Info.Kind = kind;
-            entry.Values = core::Array<Variant>(*m_allocator);
             for (usize i = 0; i < m_objects; ++i)
+            {
                 entry.Values.PushBack(value);
+                entry.Elements.PushBack(core::Array<Variant>(*m_allocator));
+            }
             m_properties.PushBack(core::Move(entry));
             NotifyPropertiesChanged();
             return m_properties.Back().Info;
+        }
+        /// Declares the list `path` of values of `elementKind` (a new element `element`), with
+        /// `count` elements in every object; returns its info to fill in (by default it may add,
+        /// remove and move its elements).
+        PropertyInfo& AddList(core::StringView path, PropertyKind elementKind, const Variant& element, usize count = 0)
+        {
+            PropertyInfo& info = Add(path, PropertyKind::List);
+            info.ListOps = PropertyListAdd | PropertyListRemove | PropertyListMove;
+            Entry& entry = m_properties.Back();
+            entry.ElementKind = elementKind;
+            entry.ElementDefault = element;
+            for (core::Array<Variant>& elements : entry.Elements)
+                for (usize i = 0; i < count; ++i)
+                    elements.PushBack(element);
+            return info;
         }
         /// The info of `path`, to change; NotifyPropertiesChanged after.
         [[nodiscard]] PropertyInfo* FindInfo(core::StringView path)
@@ -225,67 +276,109 @@ export namespace experimental::gui
         /// Tells the grid what FindInfo's changes were.
         void PropertiesChanged() { NotifyPropertiesChanged(); }
 
-        /// Sets object `object`'s value at `path` from code (an undo, a page's own change).
+        /// Sets object `object`'s value at `path` (a property's or an element's) from code.
         void SetValue(core::StringView path, usize object, const Variant& value)
         {
-            Entry* entry = Find(path);
-            if (entry == nullptr || object >= entry->Values.Size())
+            if (Variant* slot = Slot(path, object))
+            {
+                *slot = value;
+                NotifyValuesChanged();
+            }
+        }
+        /// Gives object `object`'s list `path` `count` elements from code (new ones its default).
+        void ResizeList(core::StringView path, usize object, usize count)
+        {
+            Entry* list = Find(path);
+            if (list == nullptr || list->Info.Kind != PropertyKind::List || object >= list->Elements.Size())
                 return;
-            entry->Values[object] = value;
-            NotifyValuesChanged();
+            core::Array<Variant>& elements = list->Elements[object];
+            while (elements.Size() > count)
+                elements.PopBack();
+            while (elements.Size() < count)
+                elements.PushBack(list->ElementDefault);
+            NotifyPropertiesChanged();
+        }
+        /// How many elements object `object`'s list `path` has.
+        [[nodiscard]] usize ElementCount(core::StringView path, usize object) const
+        {
+            const Entry* entry = Find(path);
+            return entry != nullptr && object < entry->Elements.Size() ? entry->Elements[object].Size() : 0;
         }
 
         /// Told each commit, to keep it for undo.
         void SetOnCommit(core::Function<void(const Commit&)> onCommit) { m_onCommit = core::Move(onCommit); }
+        /// Told each list change made.
+        void SetOnListEdited(core::Function<void(core::StringView, const ListEdit&)> onEdited) { m_onListEdited = core::Move(onEdited); }
         /// The edits begun and not yet ended.
         [[nodiscard]] usize OpenEdits() const noexcept { return m_originals.Size(); }
 
         [[nodiscard]] usize ObjectCount() const override { return m_objects; }
         void GetProperties(core::StringView parent, core::Array<PropertyInfo>& out) const override
         {
+            // A list's elements: as many as the fewest any object has.
+            if (const Entry* list = Find(parent); list != nullptr && list->Info.Kind == PropertyKind::List)
+            {
+                usize count = ~usize{0};
+                for (const core::Array<Variant>& elements : list->Elements)
+                    count = core::Min(count, elements.Size());
+                for (usize i = 0; i < count && i != ~usize{0}; ++i)
+                {
+                    PropertyInfo info;
+                    info.Name = core::Format(u8"{}", i);
+                    info.Kind = list->ElementKind;
+                    info.ReadOnly = list->Info.ReadOnly;
+                    out.PushBack(core::Move(info));
+                }
+                return;
+            }
             for (const Entry& entry : m_properties)
                 if (ParentPropertyPath(entry.Path.AsView()) == parent)
                     out.PushBack(entry.Info);
         }
         [[nodiscard]] Variant GetValue(core::StringView path, usize object) const override
         {
-            const Entry* entry = Find(path);
-            return entry != nullptr && object < entry->Values.Size() ? entry->Values[object] : Variant{};
+            if (const Entry* list = Find(path); list != nullptr && list->Info.Kind == PropertyKind::List)
+                return object < list->Elements.Size() ? Variant(static_cast<i64>(list->Elements[object].Size())) : Variant{};
+            const Variant* slot = const_cast<PropertyBag*>(this)->Slot(path, object);
+            return slot != nullptr ? *slot : Variant{};
         }
 
         void BeginEdit(core::StringView path) override
         {
-            Entry* entry = Find(path);
-            if (entry == nullptr || FindOriginal(path) != nullptr)
+            if (FindOriginal(path) != nullptr || Slot(path, 0) == nullptr)
                 return;
-            Original original;
-            original.Path = core::String(path);
-            original.Values = entry->Values;
+            Original original{core::String(path), core::Array<Variant>(*m_allocator)};
+            for (usize i = 0; i < m_objects; ++i)
+                original.Values.PushBack(Read(path, i));
             m_originals.PushBack(core::Move(original));
         }
         void PreviewEdit(core::StringView path, const PropertyWrite& write) override
         {
-            Entry* entry = Find(path);
-            if (entry == nullptr || entry->Info.ReadOnly)
+            if (IsReadOnly(path))
                 return;
-            Write(*entry, write);
+            for (usize i = 0; i < m_objects; ++i)
+                if (Variant* slot = Slot(path, i))
+                    *slot = ApplyPropertyWrite(*slot, write);
             NotifyValuesChanged();
         }
         void CommitEdit(core::StringView path, const PropertyWrite& write) override
         {
-            Entry* entry = Find(path);
-            if (entry == nullptr || entry->Info.ReadOnly)
+            if (IsReadOnly(path) || Slot(path, 0) == nullptr)
             {
                 EndEdit(path);
                 return;
             }
-            Commit commit;
-            commit.Path = core::String(path);
+            Commit commit{core::String(path), core::Array<Variant>(*m_allocator), core::Array<Variant>(*m_allocator)};
             const Original* original = FindOriginal(path);
-            commit.Before = original != nullptr ? original->Values : entry->Values;
-            entry->Values = commit.Before; // the originals back, then the one change
-            Write(*entry, write);
-            commit.After = entry->Values;
+            for (usize i = 0; i < m_objects; ++i)
+            {
+                Variant* slot = Slot(path, i);
+                const Variant before = original != nullptr && i < original->Values.Size() ? original->Values[i] : (slot != nullptr ? *slot : Variant{});
+                commit.Before.PushBack(before);
+                if (slot != nullptr)
+                    *slot = ApplyPropertyWrite(before, write); // from the original, not the previews
+                commit.After.PushBack(slot != nullptr ? *slot : Variant{});
+            }
             EndEdit(path);
             NotifyValuesChanged();
             if (m_onCommit)
@@ -293,20 +386,67 @@ export namespace experimental::gui
         }
         void CancelEdit(core::StringView path) override
         {
-            Entry* entry = Find(path);
-            const Original* original = FindOriginal(path);
-            if (entry != nullptr && original != nullptr)
-                entry->Values = original->Values;
+            if (const Original* original = FindOriginal(path))
+                for (usize i = 0; i < m_objects && i < original->Values.Size(); ++i)
+                    if (Variant* slot = Slot(path, i))
+                        *slot = original->Values[i];
             EndEdit(path);
             NotifyValuesChanged();
+        }
+        bool EditList(core::StringView path, const ListEdit& edit) override
+        {
+            Entry* list = Find(path);
+            if (list == nullptr || list->Info.Kind != PropertyKind::List || list->Info.ReadOnly)
+                return false;
+            const u8 needs = edit.Kind == ListEdit::Op::Insert ? PropertyListAdd : (edit.Kind == ListEdit::Op::Remove ? PropertyListRemove : PropertyListMove);
+            if ((list->Info.ListOps & needs) == 0)
+                return false;
+            bool changed = false;
+            for (core::Array<Variant>& elements : list->Elements)
+                switch (edit.Kind)
+                {
+                case ListEdit::Op::Insert:
+                    if (list->Info.MaxCount == 0 || elements.Size() < list->Info.MaxCount)
+                    {
+                        elements.Insert(core::Min(edit.Index, elements.Size()), list->ElementDefault);
+                        changed = true;
+                    }
+                    break;
+                case ListEdit::Op::Remove:
+                    if (edit.Index < elements.Size())
+                    {
+                        elements.RemoveAt(edit.Index);
+                        changed = true;
+                    }
+                    break;
+                case ListEdit::Op::Move:
+                    if (edit.Index < elements.Size() && edit.To < elements.Size() && edit.Index != edit.To)
+                    {
+                        Variant moved = elements[edit.Index];
+                        elements.RemoveAt(edit.Index);
+                        elements.Insert(edit.To, core::Move(moved));
+                        changed = true;
+                    }
+                    break;
+                }
+            if (!changed)
+                return false;
+            NotifyPropertiesChanged();
+            if (m_onListEdited)
+                m_onListEdited(path, edit);
+            return true;
         }
 
     private:
         struct Entry
         {
+            explicit Entry(core::IAllocator& allocator) : Values(allocator), Elements(allocator) {}
             core::String Path;
             PropertyInfo Info;
-            core::Array<Variant> Values;
+            core::Array<Variant> Values;                 // each object's
+            core::Array<core::Array<Variant>> Elements;  // a list's: each object's elements
+            PropertyKind ElementKind = PropertyKind::Float;
+            Variant ElementDefault;
         };
         struct Original
         {
@@ -322,6 +462,33 @@ export namespace experimental::gui
             return nullptr;
         }
         Entry* Find(core::StringView path) { return const_cast<Entry*>(static_cast<const PropertyBag*>(this)->Find(path)); }
+        // Object `object`'s value at `path`: a property's, or an element of a list ("tags.2").
+        Variant* Slot(core::StringView path, usize object)
+        {
+            if (object >= m_objects)
+                return nullptr;
+            if (Entry* entry = Find(path))
+                return entry->Info.Kind == PropertyKind::List ? nullptr : &entry->Values[object];
+            const core::StringView parent = ParentPropertyPath(path);
+            Entry* list = parent.Size() != 0 ? Find(parent) : nullptr;
+            if (list == nullptr || list->Info.Kind != PropertyKind::List)
+                return nullptr;
+            const Optional<i64> index = core::ParseInt(path.SubStr(parent.Size() + 1, path.Size() - parent.Size() - 1));
+            core::Array<Variant>& elements = list->Elements[object];
+            return index.HasValue() && index.Value() >= 0 && static_cast<usize>(index.Value()) < elements.Size() ? &elements[static_cast<usize>(index.Value())] : nullptr;
+        }
+        [[nodiscard]] Variant Read(core::StringView path, usize object)
+        {
+            const Variant* slot = Slot(path, object);
+            return slot != nullptr ? *slot : Variant{};
+        }
+        [[nodiscard]] bool IsReadOnly(core::StringView path) const
+        {
+            if (const Entry* entry = Find(path))
+                return entry->Info.ReadOnly;
+            const Entry* list = Find(ParentPropertyPath(path));
+            return list != nullptr && list->Info.ReadOnly;
+        }
         const Original* FindOriginal(core::StringView path) const
         {
             for (const Original& original : m_originals)
@@ -338,16 +505,12 @@ export namespace experimental::gui
                     return;
                 }
         }
-        static void Write(Entry& entry, const PropertyWrite& write)
-        {
-            for (Variant& value : entry.Values)
-                value = ApplyPropertyWrite(value, write);
-        }
 
         core::IAllocator* m_allocator;
         core::Array<Entry> m_properties;
         core::Array<Original> m_originals;
         usize m_objects;
         core::Function<void(const Commit&)> m_onCommit;
+        core::Function<void(core::StringView, const ListEdit&)> m_onListEdited;
     };
 }

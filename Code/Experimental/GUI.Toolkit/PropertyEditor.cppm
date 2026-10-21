@@ -33,6 +33,8 @@ export namespace experimental::gui
         virtual void PreviewPropertyEdit(core::StringView path, const PropertyWrite& write) = 0;
         virtual void CommitPropertyEdit(core::StringView path, const PropertyWrite& write) = 0;
         virtual void CancelPropertyEdit(core::StringView path) = 0;
+        /// Changes a list (an insert, a removal, a move): one call, one undo entry.
+        virtual bool EditPropertyList(core::StringView path, const ListEdit& edit) = 0;
         /// What is under `path` and each one's value: what an editor covering its children shows.
         virtual void GetChildProperties(core::StringView path, core::Array<PropertyInfo>& out) const = 0;
         [[nodiscard]] virtual PropertyValue ReadPropertyValue(core::StringView path, PropertyKind kind) const = 0;
@@ -88,6 +90,7 @@ export namespace experimental::gui
             BeginEdit();
             CommitEdit(write);
         }
+        bool EditList(const ListEdit& edit) { return m_host != nullptr && !m_readOnly && m_host->EditPropertyList(m_path.AsView(), edit); }
 
     private:
         IPropertyEditHost* m_host = nullptr;
@@ -114,6 +117,8 @@ export namespace experimental::gui
             return core::StringView(u8"enum");
         case PropertyKind::Flags:
             return core::StringView(u8"flags");
+        case PropertyKind::List:
+            return core::StringView(u8"list");
         }
         return core::StringView(u8"value");
     }

@@ -72,6 +72,8 @@ namespace experimental::gui
     RTTI_DEFINE_OBJECT(PropertyFlagsList, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(FlagsPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(FloatsPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(ListPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(PropertyGrip, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolMenuArrow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(ToolBarOverflow, "rtti::gui::toolkit")
 

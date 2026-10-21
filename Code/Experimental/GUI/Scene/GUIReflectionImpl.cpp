@@ -721,7 +721,7 @@ namespace experimental::gui
                 &MenuItem::StaticType(),       &MenuSeparator::StaticType(), &MenuBar::StaticType(),
                 &TreeView::StaticType(),       &TreeItem::StaticType(),      &TableView::StaticType(),
                 &TableItem::StaticType(),      &ScrollBar::StaticType(),     &MessageBox::StaticType(),
-                &Splitter::StaticType(),
+                &Splitter::StaticType(),       &ColorSwatch::StaticType(),   &ColorPicker::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -1005,6 +1005,27 @@ namespace experimental::gui
         builder.Method<&ElementOf<RadioButton>, RadioButton, Node>("of");
         builder.Creator();
     }
+
+    REFLECT_MEMBERS(ColorSwatch, "rtti::gui")
+    {
+        builder.Attribute("accessRole", core::String(u8"button")); // a screen reader may press it
+        builder.Attribute("accessActivate", true);
+        builder.AccessorProperty<&ColorSwatch::GetColor, &ColorSwatch::SetColor>("color").PropAttribute("css", core::String(u8"color-value"));
+        builder.Method<&ElementOf<ColorSwatch>, ColorSwatch, Node>("of");
+        builder.Creator();
+    }
+
+    REFLECT_MEMBERS(ColorPicker, "rtti::gui")
+    {
+        builder.Attribute("accessRole", core::String(u8"group"));
+        builder.AccessorProperty<&ColorPicker::GetColor, &ColorPicker::SetColor>("color").PropAttribute("css", core::String(u8"color-value"))
+            .PropAttribute("twoWay", true);
+        builder.AccessorProperty<&ColorPicker::ShowsAlpha, &ColorPicker::SetShowsAlpha>("showsAlpha").PropAttribute("css", core::String(u8"shows-alpha"));
+        builder.Method<&ElementOf<ColorPicker>, ColorPicker, Node>("of");
+        builder.Creator();
+    }
+
+    RTTI_DEFINE_OBJECT(ColorPickerArea, "rtti::gui")
 
     REFLECT_MEMBERS(ToggleSwitch, "rtti::gui")
     {

@@ -105,6 +105,7 @@ export import :combo_box;
 export import :menu;
 export import :menu_bar;
 export import :tooltip;
+export import :color_picker;
 
 // MVC data layer (Phase 8: models + model-backed views)
 export import :variant;

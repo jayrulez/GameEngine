@@ -63,6 +63,7 @@ target_sources(GUI
             Widgets/CheckBox.cppm
             Widgets/Radio.cppm
             Widgets/ToggleSwitch.cppm
+            Widgets/ColorPicker.cppm
             Widgets/RangeValue.cppm
             Widgets/RangeWidget.cppm
             Widgets/Slider.cppm

@@ -91,6 +91,7 @@ add_executable(GUI.Tests
     WindowTests.cpp
     MessageBoxTests.cpp
     NumberFieldTests.cpp
+    ColorPickerTests.cpp
     ComboBoxTests.cpp
     MenuTests.cpp
     MenuBarTests.cpp

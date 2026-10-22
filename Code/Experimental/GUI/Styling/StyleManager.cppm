@@ -841,6 +841,35 @@ export namespace experimental::gui
                 if (ensure())
                     animation->StartTransition(name, from, p.Typed, *spec);
             }
+            // A property no rule sets any more (a class taken off: a toast's `.entering`) goes back
+            // to its initial value, transitioned there as CSS does, not snapped: toward the table's
+            // initial value (`none` for a transform). Inherited ones take their parent's: not here.
+            for (const ResolvedProperty& p : previous.Properties())
+            {
+                const core::StringView name = p.Name.AsView();
+                if (ResolvedStyle::IsCustomProperty(name) || p.Typed.Kind == StyleValueKind::None || resolved.Value(name) != nullptr)
+                    continue;
+                const StylePropertySpec* property = FindStyleProperty(name);
+                if (property == nullptr || property->Inherited)
+                    continue;
+                const core::StringView initial = property->Initial != nullptr          ? core::StringView(property->Initial)
+                                                 : property->Grammar == StyleGrammar::Transforms ? core::StringView(u8"none")
+                                                                                                 : core::StringView{};
+                StyleValue to;
+                if (initial.Size() == 0 || !ParseStyleValue(property->Grammar, initial, to))
+                    continue;
+                const TransitionSpec* spec = nullptr;
+                for (const TransitionSpec& t : transitions)
+                    if (t.Property.AsView() == name || (t.Property.AsView() == core::StringView(u8"all") && IsTransitionable(name)))
+                        spec = &t;
+                if (spec == nullptr || spec->Duration <= 0.0f)
+                    continue;
+                StyleValue from = p.Typed;
+                if (animation)
+                    (void)animation->TrackValue(name, from);
+                if (ensure())
+                    animation->StartTransition(name, from, to, *spec);
+            }
         }
 
         // The states the sheets read through an ancestor and through a sibling (LearnRelations).

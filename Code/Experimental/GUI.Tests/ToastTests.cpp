@@ -9,6 +9,7 @@
 #include "Core/Prelude.h"
 #include <thread>
 import foundation.core;
+import foundation.fonts;
 import experimental.gui;
 
 using namespace experimental::gui;
@@ -19,6 +20,37 @@ using core::usize;
 namespace
 {
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
+    namespace fonts = foundation::fonts;
+
+    // A mock font: 6px a byte, 12px a line.
+    class SixFont : public fonts::IFont
+    {
+    public:
+        core::StringView FamilyName() const override { return SV(u8"six"); }
+        core::Span<const core::u8> SourceData() const override { return {}; }
+        fonts::FontMetrics Metrics() const override
+        {
+            fonts::FontMetrics m;
+            m.ascent = 10.0f;
+            m.descent = -2.0f;
+            m.lineHeight = 12.0f;
+            m.pixelHeight = 10.0f;
+            m.scale = 1.0f;
+            return m;
+        }
+        core::f32 PixelHeight() const override { return 10.0f; }
+        fonts::GlyphInfo GetGlyphInfo(core::i32 cp) const override
+        {
+            fonts::GlyphInfo g;
+            g.codepoint = cp;
+            g.advanceWidth = 6.0f;
+            return g;
+        }
+        core::f32 GetKerning(core::i32, core::i32) const override { return 0.0f; }
+        bool HasGlyph(core::i32) const override { return true; }
+        core::f32 MeasureString(core::StringView text) const override { return static_cast<core::f32>(text.Size()) * 6.0f; }
+        core::f32 MeasureString(core::StringView text, core::Array<fonts::GlyphPosition>&) const override { return MeasureString(text); }
+    };
 
     class Narrator : public IAccessibilityBridge
     {
@@ -284,6 +316,28 @@ TEST_CASE("toast: posted from another thread, it waits for the host's frame, its
     CHECK(card->GetContent() != nullptr);
     CHECK(madeOn == gui);
     CHECK(card->HasClass(SV(u8"warning")));
+}
+
+TEST_CASE("toast: under the theme, its text wraps at the card's width, a path longer than a line broken inside it")
+{
+    Bed bed;
+    fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
+    const ToastId id = bed.host->Post(Bed::Text(u8"Content/Models/Characters/Fox/Hoooooooooooooooooooo is not in the asset tree, so the bar stays where it was.",
+                                                ToastSeverity::Warning, u8"No such folder"));
+    ToastCard* card = bed.host->GetCard(id);
+    REQUIRE(card != nullptr);
+    StyleManager styles; // the theme says how a toast's text wraps
+    styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
+    styles.ApplyTree(*bed.root);
+    card->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(240.0f); });
+    card->GetMessagePart()->SetFont(&font);
+    card->GetTitlePart()->SetFont(&font);
+    bed.Frame();
+    const Label& message = *card->GetMessagePart();
+    CHECK(message.GetScreenBounds().Right() <= card->GetScreenBounds().Right() + 0.5f);
+    CHECK(message.GetSize().y >= 36.0f); // three lines and more, not one running past the card
+    card->GetMessagePart()->SetFont(nullptr);
+    card->GetTitlePart()->SetFont(nullptr);
 }
 
 TEST_CASE("toast: a host markup places")

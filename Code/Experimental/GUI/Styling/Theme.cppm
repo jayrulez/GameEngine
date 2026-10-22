@@ -143,6 +143,8 @@ export namespace experimental::gui
             toast.success toastmark { background-color: var(--toast-success, var(--success)); }
             toast.warning toastmark { background-color: var(--toast-warning, var(--warning)); }
             toast.error toastmark { background-color: var(--toast-error, var(--danger)); }
+            /* Its text wraps at the card, a word longer than a line (a path) broken inside it. */
+            toast label.title, toast label.message { white-space: normal; overflow-wrap: break-word; }
             toast label.title { color: var(--text-strong); font-weight: bold; }
             toast label.count { color: var(--text-dim); }
             toast button.close { background-color: transparent; color: var(--text-dim); padding: 0 var(--space-s); }

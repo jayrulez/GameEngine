@@ -465,7 +465,7 @@ export namespace experimental::gui
                 card.m_body->AddChild(card.m_message.Get());
                 if (!said.IsEmpty() && !request.Message.IsEmpty())
                     said.Append(core::StringView(u8": "));
-                said.Append(request.Rich ? card.m_message->GetTextLayout().GetString() : request.Message.AsView());
+                said.Append(card.m_message->GetTextLayout().PlainText()); // a rich message without its markup
             }
             card.m_announcement = !request.Announcement.IsEmpty() ? request.Announcement
                                   : card.m_content                ? card.m_content->GetAccessLabel()

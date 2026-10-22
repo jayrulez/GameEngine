@@ -119,6 +119,11 @@ TEST_CASE("toast: each severity stays its time on the GUI's clock, an error unti
     const ToastId info = bed.host->Post(Bed::Text(u8"Info"));
     const ToastId warning = bed.host->Post(Bed::Text(u8"Careful", ToastSeverity::Warning));
     const ToastId error = bed.host->Post(Bed::Text(u8"Broken", ToastSeverity::Error));
+    ToastRequest rich = Bed::Text(u8"the [b]fur[/b] material", ToastSeverity::Info, u8"Missing");
+    rich.Rich = true;
+    const ToastId richId = bed.host->Post(core::Move(rich));
+    CHECK(bed.narrator.said.Back() == core::String(u8"Missing: the fur material")); // said without its markup
+    CHECK(bed.host->GetCard(richId)->GetMessagePart()->IsRich());
     ToastRequest brief = Bed::Text(u8"Brief");
     brief.Duration = 2.0f;
     const ToastId shortOne = bed.host->Post(core::Move(brief));
@@ -133,6 +138,7 @@ TEST_CASE("toast: each severity stays its time on the GUI's clock, an error unti
     CHECK_FALSE(bed.host->IsShown(warning));
     bed.Frame(100.0f);
     CHECK(bed.host->IsShown(error));
+    CHECK(bed.narrator.said[2] == core::String(u8"Broken"));
 
     // The pointer on a toast: none of them counts down.
     bed.host->SetDefaultDuration(ToastSeverity::Info, 1.0f);

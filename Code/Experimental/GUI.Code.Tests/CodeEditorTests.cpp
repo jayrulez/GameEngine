@@ -349,6 +349,71 @@ TEST_CASE("code editor: two editors over one document see each other's edits")
     CHECK(bed.Text() == core::String(u8"shared")); // its own, as it was
 }
 
+TEST_CASE("code editor: the gutter's marks stay with their lines; a click in their column is the host's")
+{
+    Bed bed(u8"zero\none\ntwo\nthree");
+    const u32 breakpoint = bed.editor->AddMarker(2, SV(u8"breakpoint"));
+    const u32 bookmark = bed.editor->AddMarker(3, SV(u8"bookmark"));
+    CHECK(bed.editor->HasMarker(2, SV(u8"breakpoint")));
+    bed.editor->GetDocument().Insert(At(0, 0), SV(u8"new\n"));
+    CHECK(bed.editor->MarkerLine(breakpoint) == 3u);
+    // Return at its line's start: the mark goes down with the text.
+    bed.editor->SetCaret(At(3, 0));
+    bed.Run(TextEditCommand::InsertNewline);
+    CHECK(bed.editor->MarkerLine(breakpoint) == 4u);
+    bed.editor->RemoveMarker(breakpoint);
+    CHECK_FALSE(bed.editor->HasMarker(4, SV(u8"breakpoint")));
+    CHECK(bed.editor->MarkerLine(bookmark) == 5u);
+    bed.editor->ClearMarkers(SV(u8"bookmark"));
+    CHECK(bed.editor->MarkerLine(bookmark) == ~u32(0));
+
+    // A click in the marker column: told its line, the caret staying.
+    core::Array<u32> clicked{core::DefaultAllocator()};
+    bed.editor->SetOnGutterClick([&clicked](u32 line) { clicked.PushBack(line); });
+    bed.editor->SetCaret(At(0, 1));
+    const Rect row = bed.editor->CaretRect(At(2, 0));
+    bed.Click(core::Float2{bed.editor->GetContentBounds().x + 4.0f, row.y + row.height * 0.5f});
+    REQUIRE(clicked.Size() == 1);
+    CHECK(clicked[0] == 2u);
+    CHECK(bed.Caret() == At(0, 1));
+}
+
+TEST_CASE("code editor: diagnostics keep their places through edits; the worst on a line; their messages on hover")
+{
+    Bed bed(u8"int a = b;\nfloat c;");
+    const CodeDiagnostic set[] = {
+        CodeDiagnostic{CodeRange{At(0, 8), At(0, 9)}, CodeSeverity::Error, core::String(u8"'b' is not declared")},
+        CodeDiagnostic{CodeRange{At(1, 6), At(1, 6)}, CodeSeverity::Warning, core::String(u8"'c' is never used")},
+    };
+    bed.editor->SetDiagnostics(set);
+    CodeSeverity worst = CodeSeverity::Hint;
+    REQUIRE(bed.editor->WorstOn(0, worst));
+    CHECK(worst == CodeSeverity::Error);
+    REQUIRE(bed.editor->WorstOn(1, worst));
+    CHECK(worst == CodeSeverity::Warning);
+    CHECK_FALSE(bed.editor->WorstOn(2, worst));
+    // An edit before them moves them.
+    bed.editor->GetDocument().Insert(At(0, 0), SV(u8"// x\n"));
+    const core::Array<CodeDiagnostic> moved = bed.editor->GetDiagnostics();
+    REQUIRE(moved.Size() == 2);
+    CHECK(moved[0].Range == CodeRange{At(1, 8), At(1, 9)});
+    CHECK(moved[1].Range.Start == At(2, 6));
+    // An empty one marks its word.
+    CHECK(bed.editor->DiagnosticsAt(At(2, 7)) == core::String(u8"'c' is never used"));
+    CHECK(bed.editor->DiagnosticsAt(At(1, 8)) == core::String(u8"'b' is not declared"));
+    CHECK(bed.editor->DiagnosticsAt(At(1, 2)).IsEmpty());
+    // The pointer over one: its message for the tooltip; in the gutter, its line's.
+    bed.Frame();
+    const Rect at = bed.editor->CaretRect(At(1, 8));
+    bed.D().InjectMouseMove(core::Float2{at.x + 3.0f, at.y + at.height * 0.5f});
+    CHECK(bed.editor->GetTooltipText() == SV(u8"'b' is not declared"));
+    bed.D().InjectMouseMove(core::Float2{bed.editor->GetContentBounds().x + 4.0f, bed.editor->CaretRect(At(2, 0)).y + 6.0f});
+    CHECK(bed.editor->GetTooltipText() == SV(u8"'c' is never used"));
+    // A new set replaces them.
+    bed.editor->SetDiagnostics({});
+    CHECK(bed.editor->GetDiagnostics().IsEmpty());
+}
+
 TEST_CASE("code editor: an element markup places")
 {
     RegisterGuiElements();

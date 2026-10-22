@@ -34,6 +34,8 @@ export namespace experimental::gui
                 --code-tag: #f07178; --code-attribute: #ffcb6b; --code-property: #82aaff; --code-selector: #c792ea;
                 --code-invalid: #ff5370; --code-bracket-match: #2c3442;
                 --code-find-match: #4a3d1e; --code-find-current: #7a5a1a; --code-find-bar: #232831;
+                --code-error: #ff5370; --code-warning: #ffcb6b; --code-info: #82aaff; --code-hint: #6b7586;
+                --code-breakpoint: #e5534b; --code-execution: #ffcb6b; --code-execution-line: #2c2a1c; --code-bookmark: #82aaff;
             }
             @media (prefers-color-scheme: light) {
                 :root {
@@ -46,6 +48,8 @@ export namespace experimental::gui
                     --code-tag: #116329; --code-attribute: #953800; --code-property: #0550ae; --code-selector: #8250df;
                     --code-invalid: #cf222e; --code-bracket-match: #dde6f2;
                     --code-find-match: #fbe9b7; --code-find-current: #f5cf6b; --code-find-bar: #eef1f5;
+                    --code-error: #cf222e; --code-warning: #9a6700; --code-info: #0969da; --code-hint: #6e7781;
+                    --code-breakpoint: #cf222e; --code-execution: #bf8700; --code-execution-line: #fff5d1; --code-bookmark: #0969da;
                 }
             }
             codeeditor { background-color: var(--code-background); color: var(--code-text); padding: 4px 0; }
@@ -59,6 +63,15 @@ export namespace experimental::gui
             codeeditor::bracket-match { background-color: var(--code-bracket-match); }
             codeeditor::find-match { background-color: var(--code-find-match); }
             codeeditor::find-current { background-color: var(--code-find-current); }
+            codeeditor::error { background-color: var(--code-error); }
+            codeeditor::warning { background-color: var(--code-warning); }
+            codeeditor::info { background-color: var(--code-info); }
+            codeeditor::hint { background-color: var(--code-hint); }
+            codeeditor::breakpoint { background-color: var(--code-breakpoint); }
+            codeeditor::execution { background-color: var(--code-execution); }
+            codeeditor::execution-line { background-color: var(--code-execution-line); }
+            codeeditor::bookmark { background-color: var(--code-bookmark); }
+            codeeditor::marker { background-color: var(--code-line-number); }
             codefindbar { background-color: var(--code-find-bar); border-radius: var(--radius-small);
                           box-shadow: 0 2px 8px var(--shadow-color); font-size: var(--font-small); }
             codefindbar label.count { color: var(--text-dim); padding: 0 4px; }

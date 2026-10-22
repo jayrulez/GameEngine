@@ -32,6 +32,7 @@ export module experimental.gui.code:code_editor;
 
 import foundation.core;
 import foundation.fonts;
+import foundation.vg; // PathBuilder (a diagnostic's wave, a marker's shapes)
 import experimental.gui;
 import :code_document;
 import :code_language;
@@ -40,6 +41,7 @@ import :code_find_bar;
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
+namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
@@ -103,6 +105,34 @@ export namespace experimental::gui
             (void)keymap.Bind(core::StringView(b.Keys), command, finding ? core::StringView(u8"codeeditor") : kItself);
         }
     }
+
+    /// How bad a diagnostic is: each draws in its part's colour (`codeeditor::error`).
+    enum class CodeSeverity : u8
+    {
+        Hint,
+        Info,
+        Warning,
+        Error,
+    };
+    [[nodiscard]] inline core::StringView CodeSeverityName(CodeSeverity severity) noexcept
+    {
+        switch (severity)
+        {
+        case CodeSeverity::Error: return core::StringView(u8"error");
+        case CodeSeverity::Warning: return core::StringView(u8"warning");
+        case CodeSeverity::Info: return core::StringView(u8"info");
+        case CodeSeverity::Hint:
+        default: return core::StringView(u8"hint");
+        }
+    }
+
+    /// What a host says of a run of the code: a compiler's error, a warning.
+    struct CodeDiagnostic
+    {
+        CodeRange Range;
+        CodeSeverity Severity = CodeSeverity::Error;
+        core::String Message;
+    };
 
     class CodeEditor : public UIWidget
     {
@@ -328,6 +358,116 @@ export namespace experimental::gui
             return 0;
         }
 
+        // === C5: the gutter's markers, diagnostics ===
+        /// Marks `line` as `kind` ("breakpoint", "execution", "bookmark", or a host's own, drawn by
+        /// the `marker` part); the mark stays with its line through edits. An id for RemoveMarker.
+        u32 AddMarker(u32 line, core::StringView kind)
+        {
+            const CodeAnchorId anchor = m_doc->AddAnchor(CodePosition{line, 0}, CodeBias::Right);
+            m_markers.PushBack(Marker{++m_lastMarker, anchor, core::String(kind)});
+            Invalidate();
+            return m_lastMarker;
+        }
+        void RemoveMarker(u32 id)
+        {
+            for (usize i = 0; i < m_markers.Size(); ++i)
+                if (m_markers[i].Id == id)
+                {
+                    m_doc->RemoveAnchor(m_markers[i].Anchor);
+                    m_markers.RemoveAt(i);
+                    Invalidate();
+                    return;
+                }
+        }
+        /// Takes away every mark of `kind` (empty: every mark).
+        void ClearMarkers(core::StringView kind = {})
+        {
+            for (usize i = m_markers.Size(); i-- > 0;)
+                if (kind.Size() == 0 || m_markers[i].Kind.AsView() == kind)
+                {
+                    m_doc->RemoveAnchor(m_markers[i].Anchor);
+                    m_markers.RemoveAt(i);
+                }
+            Invalidate();
+        }
+        /// The line a mark is on now.
+        [[nodiscard]] u32 MarkerLine(u32 id) const
+        {
+            for (const Marker& marker : m_markers)
+                if (marker.Id == id)
+                    return m_doc->GetAnchor(marker.Anchor).Line;
+            return ~u32(0);
+        }
+        [[nodiscard]] bool HasMarker(u32 line, core::StringView kind) const
+        {
+            for (const Marker& marker : m_markers)
+                if (marker.Kind.AsView() == kind && m_doc->GetAnchor(marker.Anchor).Line == line)
+                    return true;
+            return false;
+        }
+        /// Told a click in the gutter's marker column, with its line (a host toggles a breakpoint there).
+        void SetOnGutterClick(core::Function<void(u32 line)> callback) { m_onGutterClick = core::Move(callback); }
+
+        /// Sets the diagnostics (a host's whole set, each time it has one); they keep their places
+        /// through edits until the next set.
+        void SetDiagnostics(core::Span<const CodeDiagnostic> diagnostics)
+        {
+            ClearDiagnosticAnchors();
+            for (const CodeDiagnostic& d : diagnostics)
+            {
+                const CodeRange r = CodeRange::Ordered(m_doc->Clamp(d.Range.Start), m_doc->Clamp(d.Range.End));
+                m_diagnostics.PushBack(Diagnostic{m_doc->AddAnchor(r.Start, CodeBias::Left), m_doc->AddAnchor(r.End, CodeBias::Right),
+                                                  d.Severity, d.Message});
+            }
+            Invalidate();
+        }
+        /// The diagnostics where they are now.
+        [[nodiscard]] core::Array<CodeDiagnostic> GetDiagnostics() const
+        {
+            core::Array<CodeDiagnostic> out(const_cast<CodeEditor*>(this)->MemoryAllocator());
+            for (const Diagnostic& d : m_diagnostics)
+                out.PushBack(CodeDiagnostic{CodeRange{m_doc->GetAnchor(d.Start), m_doc->GetAnchor(d.End)}, d.Severity, d.Message});
+            return out;
+        }
+        /// The worst severity on `line`; false when it has none.
+        [[nodiscard]] bool WorstOn(u32 line, CodeSeverity& out) const
+        {
+            bool any = false;
+            for (const Diagnostic& d : m_diagnostics)
+            {
+                const CodePosition start = m_doc->GetAnchor(d.Start), end = m_doc->GetAnchor(d.End);
+                if (start.Line <= line && line <= end.Line && (!any || d.Severity > out))
+                {
+                    out = d.Severity;
+                    any = true;
+                }
+            }
+            return any;
+        }
+        /// The messages of the diagnostics over `at` (an empty one's word counting), a line each.
+        [[nodiscard]] core::String DiagnosticsAt(CodePosition at) const
+        {
+            core::String out;
+            for (const Diagnostic& d : m_diagnostics)
+            {
+                const CodeRange r = MarkedRange(d);
+                if (r.Start <= at && at <= r.End)
+                {
+                    if (!out.IsEmpty())
+                        out.Append(core::StringView(u8"\n"));
+                    out.Append(d.Message.AsView());
+                }
+            }
+            return out;
+        }
+        /// On hover: the diagnostics under the pointer, else its own tooltip.
+        [[nodiscard]] core::StringView GetTooltipText() const override
+        {
+            if (!m_hoverTip.IsEmpty())
+                return m_hoverTip.AsView();
+            return UIWidget::GetTooltipText();
+        }
+
         // === Geometry (its own space) ===
         [[nodiscard]] f32 LineHeight() const
         {
@@ -341,7 +481,7 @@ export namespace experimental::gui
             u32 digits = 1;
             for (u32 n = m_doc->LineCount(); n >= 10; n /= 10)
                 ++digits;
-            return static_cast<f32>(core::Max(digits, 3u)) * DigitWidth() + 2.0f * kGutterPad + kTextGap;
+            return kMarkerColumn + static_cast<f32>(core::Max(digits, 3u)) * DigitWidth() + 2.0f * kGutterPad + kTextGap;
         }
         /// The position nearest a point.
         [[nodiscard]] CodePosition PositionAt(core::Float2 local) const;
@@ -376,6 +516,10 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"bracket-match"));
             out.PushBack(core::StringView(u8"find-match"));
             out.PushBack(core::StringView(u8"find-current"));
+            static constexpr const char8_t* kMarks[] = {u8"marker", u8"breakpoint", u8"execution", u8"execution-line", u8"bookmark",
+                                                        u8"error", u8"warning", u8"info", u8"hint"};
+            for (const char8_t* part : kMarks)
+                out.PushBack(core::StringView(part));
             for (usize i = 1; i < static_cast<usize>(CodeToken::Count); ++i)
                 out.PushBack(CodeTokenName(static_cast<CodeToken>(i)));
         }
@@ -488,6 +632,7 @@ export namespace experimental::gui
 
     private:
         static constexpr f32 kGutterPad = 6.0f;
+        static constexpr f32 kMarkerColumn = 16.0f; // the gutter's start: markers and diagnostics' icons
         static constexpr f32 kTextGap = 8.0f;
 
         struct LineLex
@@ -524,7 +669,13 @@ export namespace experimental::gui
         void Detach()
         {
             if (m_doc != nullptr)
+            {
                 m_doc->RemoveChangeListener(m_listener);
+                ClearDiagnosticAnchors(); // its marks are the document's places: they go with it
+                for (const Marker& marker : m_markers)
+                    m_doc->RemoveAnchor(marker.Anchor);
+                m_markers.Clear();
+            }
         }
         void DocumentChanged(const CodeChange& change)
         {
@@ -1024,8 +1175,49 @@ export namespace experimental::gui
             }
         }
 
+        struct Marker
+        {
+            u32 Id = 0;
+            CodeAnchorId Anchor = 0;
+            core::String Kind;
+        };
+        struct Diagnostic
+        {
+            CodeAnchorId Start = 0;
+            CodeAnchorId End = 0;
+            CodeSeverity Severity = CodeSeverity::Error;
+            core::String Message;
+        };
+        void ClearDiagnosticAnchors()
+        {
+            for (const Diagnostic& d : m_diagnostics)
+            {
+                m_doc->RemoveAnchor(d.Start);
+                m_doc->RemoveAnchor(d.End);
+            }
+            m_diagnostics.Clear();
+        }
+        // A diagnostic's run as marked: an empty one marks the word at it (or a character).
+        [[nodiscard]] CodeRange MarkedRange(const Diagnostic& d) const
+        {
+            CodeRange r{m_doc->GetAnchor(d.Start), m_doc->GetAnchor(d.End)};
+            if (r.IsEmpty())
+            {
+                const core::StringView text = m_doc->LineText(r.Start.Line);
+                const TextRange word = WordRangeAt(text, r.Start.Column);
+                r = word.End > word.Start ? CodeRange{CodePosition{r.Start.Line, static_cast<u32>(word.Start)}, CodePosition{r.Start.Line, static_cast<u32>(word.End)}}
+                                          : CodeRange{r.Start, m_doc->NextCharacter(r.Start)};
+            }
+            return r;
+        }
+
         CodeDocument m_own;
         CodeDocument* m_doc = nullptr;
+        core::Array<Marker> m_markers;
+        u32 m_lastMarker = 0;
+        core::Array<Diagnostic> m_diagnostics;
+        core::Function<void(u32)> m_onGutterClick;
+        core::String m_hoverTip; // the diagnostics under the pointer
         u32 m_listener = 0; // its change listener's token on m_doc
         core::RefPtr<CodeFindBar> m_findBar;
         mutable core::Array<CodeRange> m_matches;
@@ -2046,6 +2238,14 @@ export namespace experimental::gui
         RequestFocus();
         const core::Float2 local = ConvertToNodeSpace(event.Position);
         const CodePosition at = PositionAt(local);
+        // The marker column: the host's (a breakpoint toggled), the caret staying.
+        const Rect content = GetContentBounds();
+        if (local.x >= content.x && local.x < content.x + kMarkerColumn)
+        {
+            if (m_onGutterClick)
+                m_onGutterClick(at.Line);
+            return;
+        }
         m_dragUnit = event.ClickCount >= 3 ? 3u : event.ClickCount == 2 ? 2u : 1u;
         CodeRange unit{at, at};
         if (m_dragUnit == 2)
@@ -2091,7 +2291,26 @@ export namespace experimental::gui
     inline void CodeEditor::OnMouseMove(const MouseEvent& event)
     {
         if (!m_dragging)
+        {
+            // Hovering: the diagnostics under the pointer, or on its line in the gutter, for the tooltip.
+            const core::Float2 hover = ConvertToNodeSpace(event.Position);
+            const CodePosition over = PositionAt(hover);
+            core::String tip;
+            if (hover.x < TextLeft())
+            {
+                for (const Diagnostic& d : m_diagnostics)
+                    if (m_doc->GetAnchor(d.Start).Line <= over.Line && over.Line <= m_doc->GetAnchor(d.End).Line)
+                    {
+                        if (!tip.IsEmpty())
+                            tip.Append(core::StringView(u8"\n"));
+                        tip.Append(d.Message.AsView());
+                    }
+            }
+            else
+                tip = DiagnosticsAt(over);
+            m_hoverTip = core::Move(tip);
             return;
+        }
         const core::Float2 local = ConvertToNodeSpace(event.Position);
         const CodePosition at = PositionAt(local);
         if (m_dragAdds && m_dragUnit == 1 && at.Line != m_columnLine)
@@ -2172,6 +2391,14 @@ export namespace experimental::gui
         // The primary caret's line, across the whole view.
         if (GetPrimary().IsEmpty() && primary.Line >= first && primary.Line <= last && currentLine.a > 0.0f)
             ctx.VG().FillRect(Rectangle{content.x, rowTop(primary.Line), content.width, lh}, currentLine);
+        // The line the debugger stands on, across the view.
+        for (const Marker& marker : m_markers)
+            if (marker.Kind.AsView() == core::StringView(u8"execution"))
+            {
+                const u32 line = m_doc->GetAnchor(marker.Anchor).Line;
+                if (line >= first && line <= last)
+                    ctx.VG().FillRect(Rectangle{content.x, rowTop(line), content.width, lh}, partColor(u8"execution-line", Color{0.9f, 0.75f, 0.2f, 0.15f}));
+            }
         ctx.PushClip(textArea);
         // The find bar's matches in view, the current one stronger.
         if (m_findBar->IsDisplayed() && m_findBar->GetMode() != CodeFindBar::Mode::GoToLine)
@@ -2228,6 +2455,30 @@ export namespace experimental::gui
             const TextLayout& layout = view.Glyphs.LayoutFor(Rect{});
             view.Glyphs.DrawLayout(ctx, layout, core::Float2{textX, rowTop(line) + (lh - layout.Height) * 0.5f});
         }
+        // The diagnostics: a wave under each run, the worse over the lesser.
+        for (u32 pass = 0; pass < 4; ++pass)
+            for (const Diagnostic& d : m_diagnostics)
+            {
+                if (static_cast<u32>(d.Severity) != pass)
+                    continue;
+                const CodeRange r = MarkedRange(d);
+                if (r.End.Line < first || r.Start.Line > last)
+                    continue;
+                const Color color = partColor(CodeSeverityName(d.Severity).Data(), d.Severity == CodeSeverity::Error ? Color{0.95f, 0.33f, 0.4f, 1.0f}
+                                                                                     : Color{0.95f, 0.8f, 0.4f, 1.0f});
+                for (u32 line = core::Max(r.Start.Line, first); line <= core::Min(r.End.Line, last); ++line)
+                {
+                    const f32 x0 = textX + (line == r.Start.Line ? XOf(r.Start) : 0.0f);
+                    const f32 x1 = textX + (line == r.End.Line ? XOf(r.End) : XOf(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())}));
+                    const f32 y = rowTop(line) + lh - 2.0f;
+                    vg::PathBuilder wave;
+                    wave.MoveTo(x0, y);
+                    bool up = true;
+                    for (f32 x = x0 + 2.0f; x <= core::Max(x1, x0 + 4.0f); x += 2.0f, up = !up)
+                        wave.LineTo(x, up ? y - 1.5f : y);
+                    ctx.VG().StrokePath(wave.ToPath(), color, vg::StrokeStyle(1.0f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+                }
+            }
         // An IME's composition at the primary caret, underlined.
         if (!m_composition.IsEmpty() && IsFocused())
         {
@@ -2250,6 +2501,40 @@ export namespace experimental::gui
         // The gutter: still across, the numbers right aligned.
         if (gutterColor.a > 0.0f)
             ctx.VG().FillRect(Rectangle{content.x, content.y, gutter, content.height}, gutterColor);
+        // The marker column: a line's worst diagnostic, then its marks over it (an execution arrow last).
+        for (u32 line = first; line <= last; ++line)
+        {
+            const f32 cx = content.x + kMarkerColumn * 0.5f, cy = rowTop(line) + lh * 0.5f;
+            const f32 radius = core::Min(lh, kMarkerColumn) * 0.28f;
+            CodeSeverity worst = CodeSeverity::Hint;
+            if (WorstOn(line, worst) && worst >= CodeSeverity::Info)
+                ctx.VG().FillCircle(core::Float2{cx, cy}, radius * 0.75f, partColor(CodeSeverityName(worst).Data(), Color{0.95f, 0.33f, 0.4f, 1.0f}));
+            for (int layer = 0; layer < 2; ++layer)
+                for (const Marker& marker : m_markers)
+                {
+                    if (m_doc->GetAnchor(marker.Anchor).Line != line)
+                        continue;
+                    const core::StringView kind = marker.Kind.AsView();
+                    const bool execution = kind == core::StringView(u8"execution");
+                    if (execution != (layer == 1))
+                        continue;
+                    if (kind == core::StringView(u8"breakpoint"))
+                        ctx.VG().FillCircle(core::Float2{cx, cy}, radius, partColor(u8"breakpoint", Color{0.9f, 0.33f, 0.3f, 1.0f}));
+                    else if (execution)
+                    {
+                        vg::PathBuilder arrow;
+                        arrow.MoveTo(cx - radius, cy - radius);
+                        arrow.LineTo(cx + radius, cy);
+                        arrow.LineTo(cx - radius, cy + radius);
+                        arrow.Close();
+                        ctx.VG().FillPath(arrow.ToPath(), partColor(u8"execution", Color{0.95f, 0.8f, 0.3f, 1.0f}));
+                    }
+                    else if (kind == core::StringView(u8"bookmark"))
+                        ctx.VG().FillRect(Rectangle{cx - radius * 0.6f, cy - radius, radius * 1.2f, radius * 2.0f}, partColor(u8"bookmark", Color{0.5f, 0.67f, 1.0f, 1.0f}));
+                    else
+                        ctx.VG().FillRect(Rectangle{cx - radius * 0.7f, cy - radius * 0.7f, radius * 1.4f, radius * 1.4f}, partColor(u8"marker", Color{0.6f, 0.65f, 0.75f, 1.0f}));
+                }
+        }
         for (u32 line = first; line <= last; ++line)
         {
             LineView& view = View(line);

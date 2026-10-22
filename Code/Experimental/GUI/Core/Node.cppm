@@ -1860,6 +1860,12 @@ export namespace experimental::gui
         /// Tab and Shift+Tab reach it as keys rather than moving focus (CSS-like `tab-captures`, E12:
         /// a code editor, a terminal); Ctrl+Tab and Ctrl+Shift+Tab move focus from it instead.
         void SetTabCaptures(bool captures) noexcept { m_tabCaptures = captures; }
+        /// A press in it leaves the focus where it is, rather than moving it to what was pressed or
+        /// clearing it (the web's prevented `mousedown`): a code editor's completion list, whose
+        /// row a click picks while the editor keeps the keys. A focusable widget inside it still
+        /// takes the focus.
+        void SetKeepsFocus(bool keeps) noexcept { m_keepsFocus = keeps; }
+        [[nodiscard]] bool GetKeepsFocus() const noexcept { return m_keepsFocus; }
         [[nodiscard]] bool GetTabCaptures() const noexcept { return m_tabCaptures; }
         [[nodiscard]] i32 GetTabIndex() const noexcept { return m_tabIndex; }
 
@@ -2981,6 +2987,7 @@ export namespace experimental::gui
         u32 m_changedStyleStates = 0; // the StyleStates that changed since the last style pass // focused descendants (one at most; a count survives odd orders)
         bool m_focusVisible = false; // focused by the keyboard or a gamepad
         bool m_tabFocusable = false;
+        bool m_keepsFocus = false; // a press in it leaves the focus where it is
         i32 m_tabIndex = 0; // where Tab reaches it: positive first, 0 in tree order, below 0 never
         bool m_tabCaptures = false; // Tab is its key, not focus's
         bool m_hitTestVisible = true;

@@ -1136,6 +1136,20 @@ export namespace experimental::gui
             popup.SetSize(size);
             PlacePopups();
         }
+        /// The rectangle (root space) an open popup is placed against moved (a code editor's caret,
+        /// scrolled or typed on): placed against it from now on. False when it is not open.
+        bool SetPopupAnchorRect(const Node& popup, Rect anchor)
+        {
+            const i32 index = FindPopup(popup);
+            if (index < 0)
+                return false;
+            PopupOptions& options = m_popups[static_cast<usize>(index)].Options;
+            options.Anchor = nullptr;
+            options.AnchorRect = anchor;
+            options.HasAnchorRect = true;
+            PlacePopups();
+            return true;
+        }
 
         /// Draws the top layer (the root's draw does, after its tree): each popup in opening order,
         /// a modal one over its backdrop (its `::backdrop` part, over a dim of the whole root).
@@ -1383,11 +1397,21 @@ export namespace experimental::gui
             SetPressPath(hit);
             // Click-to-focus: the nearest widget that takes focus, at or above what was hit; none
             // (a click on a backdrop or a label) clears focus, as browsers do, so navigation
-            // starts again from the GUI's entry rather than from the backdrop.
+            // starts again from the GUI's entry rather than from the backdrop. A node that keeps
+            // the focus, met first, leaves it where it is (a completion list's row).
             Node* focusable = hit;
+            bool keep = false;
             while (focusable != nullptr && !(focusable->IsTabFocusable() && focusable->IsTreeEnabled()))
+            {
+                if (focusable->GetKeepsFocus())
+                {
+                    keep = true;
+                    break;
+                }
                 focusable = focusable->GetParent();
-            SetFocusNode(focusable);
+            }
+            if (!keep)
+                SetFocusNode(focusable);
             // A disabled widget still takes the press (nothing behind it does) but is not told.
             bool used = false;
             if (hit != nullptr && hit->IsTreeEnabled())
@@ -2280,6 +2304,7 @@ export namespace experimental::gui
         // Tooltips: the node whose text shows or waits, the content shown, the clock.
         Node* m_tipProvider = nullptr;
         core::RefPtr<Node> m_tip;
+        core::String m_tipText; // what the shown one says, to see its provider's change
         f32 m_tipTimer = 0.0f;
         f32 m_tipDelay = 0.5f;
         f32 m_tipHiddenAt = -1000.0f;
@@ -2336,6 +2361,10 @@ export namespace experimental::gui
                 m_tipTimer = 0.0f;
                 m_tipSuppressed = false;
             }
+            // The same provider with other text (a code editor's word under the pointer): hidden,
+            // so the new text shows at once, warm, by the pointer where it is now.
+            if (provider != nullptr && !m_tipInteractive && GetShownTooltip() != nullptr && provider->GetTooltipText() != m_tipText.AsView())
+                HideTooltip();
             if (provider == nullptr || m_tipSuppressed || m_touchActive || GetShownTooltip() != nullptr)
                 return;
             m_tipTimer += seconds;
@@ -2350,6 +2379,7 @@ export namespace experimental::gui
             core::RefPtr<Node> content = provider.CreateTooltipContent(provider.GetTooltipText());
             if (!content)
                 return;
+            m_tipText = core::String(provider.GetTooltipText());
             // The root holds it, but it reads and opens as its provider runs.
             const bool rightToLeft = provider.IsRightToLeft();
             content->SetLayoutDirection(rightToLeft ? Node::LayoutDirection::RightToLeft : Node::LayoutDirection::LeftToRight);

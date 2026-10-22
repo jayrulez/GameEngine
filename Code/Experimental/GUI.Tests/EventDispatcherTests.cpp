@@ -83,6 +83,34 @@ TEST_CASE("dispatch: press+release on the same node is a click and focuses it")
     CHECK(d->GetFocusNode() == child.Get());
 }
 
+TEST_CASE("dispatch: a press in a node that keeps the focus leaves it where it is")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto field = MakePanel(core::Float2{10.0f, 10.0f}, core::Float2{50.0f, 50.0f});
+    field->SetTabFocusable(true);
+    root->AddChild(field.Get());
+    auto list = MakePanel(core::Float2{100.0f, 100.0f}, core::Float2{80.0f, 80.0f});
+    list->SetKeepsFocus(true); // a completion list
+    root->AddChild(list.Get());
+    auto row = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{80.0f, 20.0f});
+    list->AddChild(row.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    field->RequestFocus();
+    REQUIRE(d->GetFocusNode() == field.Get());
+    int clicks = 0;
+    row->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
+    d->InjectMouseDown(core::Float2{110.0f, 105.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{110.0f, 105.0f}, MouseButton::Left);
+    CHECK(clicks == 1);
+    CHECK(d->GetFocusNode() == field.Get()); // kept
+    // A focusable widget inside it still takes the focus.
+    auto button = MakePanel(core::Float2{0.0f, 40.0f}, core::Float2{80.0f, 20.0f});
+    button->SetTabFocusable(true);
+    list->AddChild(button.Get());
+    d->InjectMouseDown(core::Float2{110.0f, 145.0f}, MouseButton::Left);
+    CHECK(d->GetFocusNode() == button.Get());
+}
+
 TEST_CASE("dispatch: mouse event payload is accessible via static_cast")
 {
     auto root = MakeScene(core::Float2{200.0f, 200.0f});

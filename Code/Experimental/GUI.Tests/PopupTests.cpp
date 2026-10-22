@@ -557,6 +557,22 @@ TEST_CASE("popups: one sized by its content grows when its content does (a toolt
     CHECK(popup->GetSize().x == doctest::Approx(150.0f));
 }
 
+TEST_CASE("popups: one placed against a rectangle follows it when its owner moves it")
+{
+    Bed bed;
+    auto popup = Make<Panel>();
+    popup->SetSize(core::Float2{60.0f, 40.0f});
+    PopupOptions options = At(core::Float2{50.0f, 50.0f}, PopupKind::Manual);
+    bed.d().OpenPopup(*bed.root, *popup, core::Move(options));
+    CHECK(popup->GetPosition().x == doctest::Approx(50.0f));
+    // A code editor's caret, scrolled: its list goes with it.
+    CHECK(bed.d().SetPopupAnchorRect(*popup, Rect{120.0f, 80.0f, 0.0f, 16.0f}));
+    CHECK(popup->GetPosition().x == doctest::Approx(120.0f));
+    CHECK(popup->GetPosition().y == doctest::Approx(96.0f)); // below it
+    (void)bed.d().ClosePopup(*popup);
+    CHECK_FALSE(bed.d().SetPopupAnchorRect(*popup, Rect{0.0f, 0.0f, 0.0f, 0.0f})); // not open
+}
+
 TEST_CASE("popups: one open that goes back home on close does not keep its root alive")
 {
     // Its home is the root itself, which owns the dispatcher holding the entry: a strong reference

@@ -89,6 +89,21 @@ TEST_CASE("tooltip: moving to another hides it, and the next shows at once while
     CHECK(bed.d().GetShownTooltip() == nullptr); // the full delay again
 }
 
+TEST_CASE("tooltip: its provider's text changing under the pointer shows the new text at once")
+{
+    Bed bed;
+    bed.d().InjectMouseMove(core::Float2{20.0f, 20.0f});
+    bed.Frames(6);
+    REQUIRE(bed.Shown() == SV(u8"The panel"));
+    bed.panel->SetTooltip(SV(u8"The panel, elsewhere")); // as a code editor's word under the pointer
+    bed.d().InjectMouseMove(core::Float2{30.0f, 22.0f});
+    bed.Frames(1);
+    CHECK(bed.Shown() == SV(u8"The panel, elsewhere"));
+    CHECK(bed.d().GetShownTooltip()->GetPosition().x == doctest::Approx(42.0f)); // by the pointer now
+    bed.Frames(3);
+    CHECK(bed.Shown() == SV(u8"The panel, elsewhere")); // the same text stays
+}
+
 TEST_CASE("tooltip: a press hides it until the pointer moves to another node")
 {
     Bed bed;

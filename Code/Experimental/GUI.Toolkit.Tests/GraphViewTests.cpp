@@ -1079,7 +1079,7 @@ TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a fr
     CHECK(bed.view->GetSelectedFrames().IsEmpty());
 }
 
-TEST_CASE("GraphView: a comment typed past its frame's bottom stops at the edge, its text area scrolling")
+TEST_CASE("GraphView: a comment longer than its frame scrolls there: edited, its text area; committed, its box under the wheel")
 {
     Bed bed;
     const GraphId frame = Framed(bed);
@@ -1097,18 +1097,33 @@ TEST_CASE("GraphView: a comment typed past its frame's bottom stops at the edge,
         bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
     }
     (void)bed.root->UpdateLayout();
-    const Rect body{widget.GetBodyLabel().GetPosition().x, widget.GetBodyLabel().GetPosition().y, widget.GetBodyLabel().GetSize().x,
-                    widget.GetBodyLabel().GetSize().y};
-    CHECK(body.Bottom() <= widget.GetContentBounds().Bottom() + 0.5f);
-    CHECK(body.height > 100.0f);
+    UIWidget& box = widget.GetBodyBox();
+    EditableLabel& label = widget.GetBodyLabel();
+    const Rect frameAt = widget.GetScreenBounds();
+    CHECK(label.GetScreenBounds().Bottom() <= box.GetScreenBounds().Bottom() + 0.5f);
+    CHECK(box.GetScreenBounds().Bottom() <= frameAt.Bottom() - 7.5f); // the frame's padding below it
+    CHECK(label.GetSize().y > 100.0f);
     CHECK(area->GetScrollY() > 0.0f); // the caret's line in view
     CHECK(widget.ClipsChildren());
-    REQUIRE(widget.GetBodyLabel().EndEdit(true));
-    // Committed, it reads from its top: its first line under the title, the rest cut at the edge.
+
+    // Committed, it is as tall as its text, the box scrolling it; it reads from its top.
+    REQUIRE(label.EndEdit(true));
     (void)bed.root->UpdateLayout();
-    EditableLabel& label = widget.GetBodyLabel();
-    CHECK(label.GetSize().y < 200.0f);
+    CHECK(label.GetSize().y == doctest::Approx(30.0f * 12.0f + 12.0f));
     CHECK(label.BaselineAt(label.GetSize()) == doctest::Approx(label.GetChrome().Top + 10.0f));
-    widget.GetBodyLabel().SetFont(nullptr);
+    REQUIRE(box.IsScrollContainer());
+    CHECK(box.GetScrollOffset().y == doctest::Approx(0.0f));
+    const f32 zoom = bed.view->GetZoom();
+    const Rect boxAt = box.GetScreenBounds();
+    const core::Float2 over{boxAt.x + 200.0f, boxAt.y + 40.0f}; // between A and B
+    bed.D().InjectMouseMove(over);
+    (void)bed.D().InjectMouseWheel(over, core::Float2{0.0f, -1.0f});
+    CHECK(box.GetScrollTarget().y > 0.0f);
+    CHECK(bed.view->GetZoom() == doctest::Approx(zoom)); // the box took it
+    // At its top, the wheel up is the view's zoom again.
+    box.SetScrollOffset(core::Float2{0.0f, 0.0f});
+    (void)bed.D().InjectMouseWheel(over, core::Float2{0.0f, 1.0f});
+    CHECK(bed.view->GetZoom() > zoom);
+    label.SetFont(nullptr);
     (void)bed.root->UpdateLayout();
 }

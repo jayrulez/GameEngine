@@ -28,6 +28,10 @@
 // completion list below the word, a popup that leaves it the focus; while it shows, the editor
 // declares "completing" beside "codeeditor", so the list's keys win; the service's word under the
 // pointer joins the tooltip after the diagnostics.
+//
+// Folding (C7): ranges from the language's brackets, its indentation or its regions, or the host's;
+// a folded range's lines hide. One map from lines to rows serves the carets, the pointer, the
+// scroll and the drawing, so a fold is one row.
 
 module;
 #include "Core/Prelude.h"
@@ -70,6 +74,10 @@ export namespace experimental::gui
     inline constexpr const char8_t* kCodeFindNext = u8"code.find-next";
     inline constexpr const char8_t* kCodeFindPrevious = u8"code.find-previous";
     inline constexpr const char8_t* kCodeComplete = u8"code.complete";
+    inline constexpr const char8_t* kCodeFold = u8"code.fold";
+    inline constexpr const char8_t* kCodeUnfold = u8"code.unfold";
+    inline constexpr const char8_t* kCodeFoldAll = u8"code.fold-all";
+    inline constexpr const char8_t* kCodeUnfoldAll = u8"code.unfold-all";
     inline constexpr const char8_t* kCodeCompletionNext = u8"code.completion-next";
     inline constexpr const char8_t* kCodeCompletionPrevious = u8"code.completion-previous";
     inline constexpr const char8_t* kCodeCompletionPageDown = u8"code.completion-page-down";
@@ -109,6 +117,10 @@ export namespace experimental::gui
             {u8"f3", kCodeFindNext},
             {u8"shift-f3", kCodeFindPrevious},
             {u8"ctrl-space", kCodeComplete},
+            {u8"ctrl-shift-leftbracket", kCodeFold},
+            {u8"ctrl-shift-rightbracket", kCodeUnfold},
+            {u8"ctrl-k ctrl-0", kCodeFoldAll},
+            {u8"ctrl-k ctrl-j", kCodeUnfoldAll},
         };
         for (const Binding& b : kBindings)
         {
@@ -133,6 +145,14 @@ export namespace experimental::gui
     }
 
     /// How bad a diagnostic is: each draws in its part's colour (`codeeditor::error`).
+    /// A fold (C7): its first line stays in view; folded, the lines after it to its last hide.
+    struct CodeFoldRange
+    {
+        u32 First = 0;
+        u32 Last = 0;
+        [[nodiscard]] constexpr bool operator==(const CodeFoldRange&) const noexcept = default;
+    };
+
     enum class CodeSeverity : u8
     {
         Hint,
@@ -213,6 +233,20 @@ export namespace experimental::gui
             command(kCodeFindNext, [this]() { (void)FindNext(false); });
             command(kCodeFindPrevious, [this]() { (void)FindNext(true); });
             command(kCodeComplete, [this]() { (void)TriggerCompletion(true); });
+            command(kCodeFold, [this]()
+            {
+                const core::Array<CodeSelection> at = m_selections;
+                for (const CodeSelection& sel : at)
+                    (void)Fold(sel.Head.Line);
+            });
+            command(kCodeUnfold, [this]()
+            {
+                const core::Array<CodeSelection> at = m_selections;
+                for (const CodeSelection& sel : at)
+                    (void)Unfold(sel.Head.Line);
+            });
+            command(kCodeFoldAll, [this]() { FoldAll(); });
+            command(kCodeUnfoldAll, [this]() { UnfoldAll(); });
             command(kCodeCompletionNext, [this]() { m_completion->MoveSelection(1, true); });
             command(kCodeCompletionPrevious, [this]() { m_completion->MoveSelection(-1, true); });
             command(kCodeCompletionPageDown, [this]() { m_completion->MoveSelection(CodeCompletionList::PageRows(), false); });
@@ -259,6 +293,8 @@ export namespace experimental::gui
         /// The language its code is in (its owner keeps it, Prepared); null: plain text.
         void SetLanguage(const CodeLanguage* language)
         {
+            m_foldRangesVersion = ~u64(0);
+            ++m_foldStamp;
             m_language = language;
             m_lex.Clear();
             m_cleanTo = 0;
@@ -504,6 +540,56 @@ export namespace experimental::gui
         }
 
         // === Geometry (its own space) ===
+        // === Folding (C7) ===
+        /// The ranges that fold, by first line (one per line, the widest): the host's when it set
+        /// them, else from the language: its brackets (outside strings and comments), or by
+        /// indentation (a language that folds so, or none), and its regions.
+        [[nodiscard]] core::Span<const CodeFoldRange> GetFoldRanges() const
+        {
+            EnsureFoldRanges();
+            return m_foldRanges.AsSpan();
+        }
+        /// The host's ranges in place of the language's (carried through edits until set again).
+        void SetFoldRanges(core::Span<const CodeFoldRange> ranges)
+        {
+            m_hostFolds = true;
+            m_hostRanges.Clear();
+            for (const CodeFoldRange& r : ranges)
+                m_hostRanges.PushBack(r);
+            m_foldRangesVersion = ~u64(0);
+            FoldsChanged();
+        }
+        /// Back to the language's ranges.
+        void UseLanguageFolds()
+        {
+            m_hostFolds = false;
+            m_hostRanges.Clear();
+            m_foldRangesVersion = ~u64(0);
+            FoldsChanged();
+        }
+        /// Folds the innermost open range at `line` (starting on it, or holding it), its carets moved
+        /// out to its first line. False when none is open there.
+        bool Fold(u32 line);
+        /// Unfolds every folded range holding `line` (or starting on it).
+        bool Unfold(u32 line);
+        /// Folds or unfolds the range starting on `line` (the gutter's click).
+        bool ToggleFold(u32 line);
+        void FoldAll();
+        void UnfoldAll();
+        [[nodiscard]] bool IsFolded(u32 firstLine) const;
+        /// Inside a folded range, out of view.
+        [[nodiscard]] bool IsLineHidden(u32 line) const
+        {
+            EnsureRows();
+            return line < m_doc->LineCount() && m_rowStart[line + 1] == m_rowStart[line];
+        }
+        /// The rows shown (each line in view one, with none hidden).
+        [[nodiscard]] u32 RowCount() const
+        {
+            EnsureRows();
+            return m_rowStart.Back();
+        }
+
         // === The language service (C6) ===
         /// Asks `service` (its host's, which outlives it here; null: none) for completions and for
         /// what to say of the word under the pointer.
@@ -545,7 +631,7 @@ export namespace experimental::gui
             u32 digits = 1;
             for (u32 n = m_doc->LineCount(); n >= 10; n /= 10)
                 ++digits;
-            return kMarkerColumn + static_cast<f32>(core::Max(digits, 3u)) * DigitWidth() + 2.0f * kGutterPad + kTextGap;
+            return kMarkerColumn + static_cast<f32>(core::Max(digits, 3u)) * DigitWidth() + 2.0f * kGutterPad + kFoldColumn + kTextGap;
         }
         /// The position nearest a point.
         [[nodiscard]] CodePosition PositionAt(core::Float2 local) const;
@@ -580,6 +666,8 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"bracket-match"));
             out.PushBack(core::StringView(u8"find-match"));
             out.PushBack(core::StringView(u8"find-current"));
+            out.PushBack(core::StringView(u8"fold"));
+            out.PushBack(core::StringView(u8"fold-placeholder"));
             static constexpr const char8_t* kMarks[] = {u8"marker", u8"breakpoint", u8"execution", u8"execution-line", u8"bookmark",
                                                         u8"error", u8"warning", u8"info", u8"hint"};
             for (const char8_t* part : kMarks)
@@ -601,6 +689,8 @@ export namespace experimental::gui
             };
             style(m_measure);
             m_measure.SetString(core::StringView(u8"0000000000"));
+            style(m_foldText);
+            m_foldText.SetString(core::StringView(u8"..."));
             m_styleText = style;
             m_views.Clear();
             RequestLayout();
@@ -629,7 +719,7 @@ export namespace experimental::gui
             }
             const Rect content = GetContentBounds();
             const f32 width = GutterWidth() + core::Max(m_estimated, m_widest) + digit * 2.0f;
-            const f32 height = static_cast<f32>(m_doc->LineCount()) * LineHeight() + core::Max(0.0f, content.height - LineHeight());
+            const f32 height = static_cast<f32>(RowCount()) * LineHeight() + core::Max(0.0f, content.height - LineHeight());
             SetScrollExtent(core::Float2{width, height});
             // The find bar over the top end corner, still as the code scrolls under it.
             if (m_findBar->IsDisplayed())
@@ -674,6 +764,15 @@ export namespace experimental::gui
         }
         void OnMouseDown(const MouseEvent& event) override;
         void OnMouseMove(const MouseEvent& event) override;
+        void OnMouseLeave(const MouseEvent& event) override
+        {
+            UIWidget::OnMouseLeave(event);
+            if (m_gutterHover)
+            {
+                m_gutterHover = false;
+                Invalidate();
+            }
+        }
         void OnMouseUp(const MouseEvent& event) override;
         void OnTextInput(const TextInputEvent& event) override
         {
@@ -701,6 +800,7 @@ export namespace experimental::gui
         static constexpr f32 kGutterPad = 6.0f;
         static constexpr f32 kMarkerColumn = 16.0f; // the gutter's start: markers and diagnostics' icons
         static constexpr f32 kTextGap = 8.0f;
+        static constexpr f32 kFoldColumn = 14.0f; // the gutter's end: a fold's chevron
 
         struct LineLex
         {
@@ -728,6 +828,8 @@ export namespace experimental::gui
         {
             m_doc = &document;
             m_views.Clear();
+            m_foldRangesVersion = ~u64(0);
+            m_rowsVersion = ~u64(0);
             m_widestVersion = ~u64(0);
             m_widest = 0.0f;
             CodeEditor* self = this;
@@ -742,6 +844,9 @@ export namespace experimental::gui
                 for (const Marker& marker : m_markers)
                     m_doc->RemoveAnchor(marker.Anchor);
                 m_markers.Clear();
+                for (const CodeAnchorId anchor : m_folded)
+                    m_doc->RemoveAnchor(anchor);
+                m_folded.Clear();
             }
         }
         void DocumentChanged(const CodeChange& change)
@@ -755,6 +860,15 @@ export namespace experimental::gui
             for (u32 i = 0; i < change.InsertedLines && lexFirst <= m_lex.Size(); ++i)
                 m_lex.Insert(lexFirst, LineLex{});
             m_cleanTo = core::Min<u32>(m_cleanTo, change.FirstLine);
+            // The host's fold ranges go with their lines.
+            for (usize i = m_hostRanges.Size(); i-- > 0;)
+            {
+                CodeFoldRange& r = m_hostRanges[i];
+                r.First = CodeDocument::Moved(CodePosition{r.First, 0}, CodeBias::Right, change.Replaced, change.End).Line;
+                r.Last = CodeDocument::Moved(CodePosition{r.Last, 0}, CodeBias::Right, change.Replaced, change.End).Line;
+                if (r.Last <= r.First)
+                    m_hostRanges.RemoveAt(i);
+            }
             // Its selections go through the edit (one another view made; its own edits set them after).
             for (CodeSelection& sel : m_selections)
                 sel = CodeSelection{CodeDocument::Moved(sel.Anchor, CodeBias::Right, change.Replaced, change.End),
@@ -851,12 +965,262 @@ export namespace experimental::gui
         }
         void SelectionsChanged()
         {
+            RevealCarets();
             ResetBlink();
             ScrollToCaret();
             Invalidate();
             if (m_completing)
                 UpdateCompletion();
         }
+        // === Folding ===
+        // The fold ranges, computed again when the text changed.
+        void EnsureFoldRanges() const
+        {
+            if (m_foldRangesVersion == m_doc->GetVersion())
+                return;
+            m_foldRangesVersion = m_doc->GetVersion();
+            m_foldRanges.Clear();
+            const u32 count = m_doc->LineCount();
+            if (m_hostFolds)
+            {
+                for (const CodeFoldRange& r : m_hostRanges)
+                    if (r.First < r.Last && r.Last < count)
+                        m_foldRanges.PushBack(r);
+            }
+            else if (m_language != nullptr && !m_language->FoldByIndent && !m_language->Brackets.IsEmpty())
+                BracketFolds();
+            else
+                IndentFolds();
+            if (m_language != nullptr && !m_language->RegionStart.IsEmpty() && !m_language->RegionEnd.IsEmpty())
+            {
+                // A region from its start's line through its end's.
+                core::Array<u32> open(const_cast<CodeEditor*>(this)->MemoryAllocator());
+                for (u32 line = 0; line < count; ++line)
+                {
+                    const core::StringView text = m_doc->LineText(line);
+                    const core::StringView trimmed = text.SubStr(IndentOf(text), text.Size() - IndentOf(text));
+                    if (trimmed.StartsWith(m_language->RegionStart.AsView()))
+                        open.PushBack(line);
+                    else if (trimmed.StartsWith(m_language->RegionEnd.AsView()) && !open.IsEmpty())
+                    {
+                        if (line > open.Back())
+                            m_foldRanges.PushBack(CodeFoldRange{open.Back(), line});
+                        open.PopBack();
+                    }
+                }
+            }
+            // By first line, the widest of those starting on one line.
+            m_foldRanges.Sort([](const CodeFoldRange& a, const CodeFoldRange& b)
+            {
+                return a.First != b.First ? a.First < b.First : a.Last > b.Last;
+            });
+            for (usize i = m_foldRanges.Size(); i-- > 1;)
+                if (m_foldRanges[i].First == m_foldRanges[i - 1].First)
+                    m_foldRanges.RemoveAt(i);
+        }
+        // From each bracket's line to the line before its close's (its close's own when something
+        // comes before it there), past strings and comments.
+        void BracketFolds() const
+        {
+            const u32 count = m_doc->LineCount();
+            EnsureLexed(count - 1);
+            struct Open
+            {
+                char8_t Close;
+                u32 Line;
+            };
+            core::Array<Open> stack(const_cast<CodeEditor*>(this)->MemoryAllocator());
+            for (u32 line = 0; line < count; ++line)
+            {
+                const core::StringView text = m_doc->LineText(line);
+                const u32 indent = IndentOf(text);
+                for (const CodeSpan& span : m_lex[line].Spans)
+                {
+                    if (span.Token == CodeToken::String || span.Token == CodeToken::Comment || span.Token == CodeToken::Escape)
+                        continue;
+                    for (u32 i = span.Start; i < span.End && i < text.Size(); ++i)
+                        for (const CodePair& pair : m_language->Brackets)
+                        {
+                            if (pair.Open.Size() != 1 || pair.Close.Size() != 1)
+                                continue;
+                            if (text[i] == pair.Open[0])
+                                stack.PushBack(Open{pair.Close[0], line});
+                            else if (text[i] == pair.Close[0])
+                            {
+                                while (!stack.IsEmpty() && stack.Back().Close != text[i])
+                                    stack.PopBack(); // an unclosed one inside: dropped
+                                if (stack.IsEmpty())
+                                    break;
+                                const u32 first = stack.Back().Line;
+                                stack.PopBack();
+                                const u32 last = i == indent ? line - (line > 0 ? 1u : 0u) : line;
+                                if (last > first)
+                                    m_foldRanges.PushBack(CodeFoldRange{first, last});
+                            }
+                        }
+                }
+            }
+        }
+        // From a line to the last after it indented further (blank lines between kept, those after
+        // the last left out).
+        void IndentFolds() const
+        {
+            struct Open
+            {
+                u32 Indent;
+                u32 Line;
+            };
+            core::Array<Open> stack(const_cast<CodeEditor*>(this)->MemoryAllocator());
+            const u32 count = m_doc->LineCount();
+            u32 lastText = 0;
+            const auto close = [&](u32 indent)
+            {
+                while (!stack.IsEmpty() && stack.Back().Indent >= indent)
+                {
+                    if (lastText > stack.Back().Line)
+                        m_foldRanges.PushBack(CodeFoldRange{stack.Back().Line, lastText});
+                    stack.PopBack();
+                }
+            };
+            for (u32 line = 0; line < count; ++line)
+            {
+                const core::StringView text = m_doc->LineText(line);
+                const u32 bytes = IndentOf(text);
+                if (bytes == text.Size())
+                    continue; // blank
+                const u32 indent = IndentColumns(text.SubStr(0, bytes));
+                close(indent);
+                stack.PushBack(Open{indent, line});
+                lastText = line;
+            }
+            close(0);
+        }
+        // Each line's first row, a line in a folded range none (its next line's); the total last.
+        void EnsureRows() const
+        {
+            if (m_rowsVersion == m_doc->GetVersion() && m_rowsStamp == m_foldStamp)
+                return;
+            m_rowsVersion = m_doc->GetVersion();
+            m_rowsStamp = m_foldStamp;
+            const u32 count = m_doc->LineCount();
+            m_rowStart.Clear();
+            core::Array<CodeFoldRange> folded(const_cast<CodeEditor*>(this)->MemoryAllocator());
+            if (!m_folded.IsEmpty())
+            {
+                EnsureFoldRanges();
+                // A fold whose range is gone (its bracket deleted) is forgotten.
+                for (usize i = m_folded.Size(); i-- > 0;)
+                {
+                    const CodeFoldRange* r = RangeStarting(m_doc->GetAnchor(m_folded[i]).Line);
+                    if (r == nullptr)
+                    {
+                        m_doc->RemoveAnchor(m_folded[i]);
+                        m_folded.RemoveAt(i);
+                    }
+                    else
+                        folded.PushBack(*r);
+                }
+                folded.Sort([](const CodeFoldRange& a, const CodeFoldRange& b) { return a.First < b.First; });
+            }
+            u32 row = 0;
+            i64 hiddenTo = -1;
+            usize next = 0;
+            for (u32 line = 0; line < count; ++line)
+            {
+                m_rowStart.PushBack(row);
+                if (static_cast<i64>(line) <= hiddenTo)
+                    continue;
+                ++row;
+                for (; next < folded.Size() && folded[next].First <= line; ++next)
+                    if (folded[next].First == line)
+                        hiddenTo = core::Max<i64>(hiddenTo, folded[next].Last);
+            }
+            m_rowStart.PushBack(row);
+        }
+        [[nodiscard]] const CodeFoldRange* RangeStarting(u32 line) const
+        {
+            EnsureFoldRanges();
+            for (const CodeFoldRange& r : m_foldRanges)
+                if (r.First == line)
+                    return &r;
+            return nullptr;
+        }
+        // A line's row; a hidden line's, its fold's.
+        [[nodiscard]] u32 RowOfLine(u32 line) const
+        {
+            EnsureRows();
+            line = core::Min(line, m_doc->LineCount() - 1);
+            const u32 row = m_rowStart[line];
+            return m_rowStart[line + 1] == row && row > 0 ? row - 1 : row;
+        }
+        // The line shown on `row` (the last line starting at or before it: a hidden one starts
+        // where the line after its fold does, so this is that line).
+        [[nodiscard]] u32 LineOfRow(u32 row) const
+        {
+            EnsureRows();
+            usize low = 0, high = m_doc->LineCount(); // the first line starting after the row
+            while (low < high)
+            {
+                const usize mid = (low + high) / 2;
+                if (m_rowStart[mid] <= row)
+                    low = mid + 1;
+                else
+                    high = mid;
+            }
+            u32 line = static_cast<u32>(low == 0 ? 0 : low - 1);
+            while (line > 0 && m_rowStart[line + 1] == m_rowStart[line])
+                --line; // past the end, in a fold: its first line
+            return line;
+        }
+        void FoldsChanged()
+        {
+            ++m_foldStamp;
+            RequestLayout();
+            Invalidate();
+        }
+        // A folded line's placeholder, after its text (local space).
+        [[nodiscard]] Rect PlaceholderRect(u32 line) const
+        {
+            const Rect end = CaretRect(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())});
+            const f32 width = m_foldText.LayoutFor(Rect{}).Width + 8.0f;
+            return Rect{end.x + DigitWidth() * 0.5f, end.y + 1.0f, width, end.height - 2.0f};
+        }
+        // Folds `range` (not folded yet), its carets out to the line it stays on.
+        void FoldRange(const CodeFoldRange& range)
+        {
+            m_folded.PushBack(m_doc->AddAnchor(CodePosition{range.First, 0}, CodeBias::Right));
+            FoldsChanged();
+            CaretsOutOfFolds();
+        }
+        // Each caret in a folded range to the end of the line its fold stays on.
+        void CaretsOutOfFolds()
+        {
+            bool moved = false;
+            for (CodeSelection& sel : m_selections)
+                if (IsLineHidden(sel.Head.Line))
+                {
+                    const u32 line = LineOfRow(RowOfLine(sel.Head.Line));
+                    const CodePosition end{line, static_cast<u32>(m_doc->LineText(line).Size())};
+                    sel = CodeSelection{end, end};
+                    moved = true;
+                }
+            if (!moved)
+                return;
+            Normalize();
+            ResetGoals();
+            SelectionsChanged();
+        }
+        // A caret in a folded range unfolds it (a match found, a line gone to, a step into it).
+        void RevealCarets()
+        {
+            if (m_folded.IsEmpty())
+                return;
+            for (const CodeSelection& sel : m_selections)
+                while (IsLineHidden(sel.Head.Line) && Unfold(sel.Head.Line))
+                {
+                }
+        }
+
         // === Completion ===
         // An event from the open list, on its way up through its owner.
         [[nodiscard]] bool FromCompletion(const Event& event) const
@@ -1258,12 +1622,12 @@ export namespace experimental::gui
         {
             if (goal < 0.0f)
                 goal = XOf(at);
-            const i64 target = static_cast<i64>(at.Line) + lines;
+            const i64 target = static_cast<i64>(RowOfLine(at.Line)) + lines; // by rows: a fold is one
             if (target < 0)
                 return CodePosition{0, 0};
-            if (target >= static_cast<i64>(m_doc->LineCount()))
+            if (target >= static_cast<i64>(RowCount()))
                 return m_doc->End();
-            const u32 line = static_cast<u32>(target);
+            const u32 line = LineOfRow(static_cast<u32>(target));
             return CodePosition{line, ColumnAtX(line, goal)};
         }
         [[nodiscard]] i32 PageLines() const { return core::Max(1, static_cast<i32>(GetContentBounds().height / LineHeight()) - 1); }
@@ -1394,6 +1758,19 @@ export namespace experimental::gui
         core::RefPtr<CodeCompletionList> m_completion; // its child while open (a popup)
         bool m_completing = false;
         CodePosition m_wordStart;  // where the word the list completes begins
+        // Folding: the ranges (the host's or computed), the folded (anchors on their first lines),
+        // and each line's first row.
+        mutable core::Array<CodeFoldRange> m_foldRanges;
+        mutable u64 m_foldRangesVersion = ~u64(0);
+        bool m_hostFolds = false;
+        core::Array<CodeFoldRange> m_hostRanges;
+        mutable core::Array<CodeAnchorId> m_folded;
+        u64 m_foldStamp = 0;
+        mutable core::Array<u32> m_rowStart;
+        mutable u64 m_rowsVersion = ~u64(0);
+        mutable u64 m_rowsStamp = ~u64(0);
+        bool m_gutterHover = false;
+        Text m_foldText; // a folded line's placeholder
         bool m_completedEmpty = false; // it opened on no word (a trigger): an empty word keeps it
         CodeRange m_hoverWord;     // the word the service last spoke of
         u64 m_hoverVersion = ~u64(0);
@@ -1541,9 +1918,9 @@ export namespace experimental::gui
         const Rect content = GetContentBounds();
         const f32 top = ScrollShift().y;
         const f32 lh = LineHeight();
-        const u32 count = m_doc->LineCount();
-        first = core::Min(static_cast<u32>(core::Max(0.0f, top / lh)), count - 1);
-        last = core::Min(static_cast<u32>(core::Max(0.0f, (top + content.height) / lh)), count - 1);
+        const u32 rows = RowCount();
+        first = LineOfRow(core::Min(static_cast<u32>(core::Max(0.0f, top / lh)), rows - 1));
+        last = LineOfRow(core::Min(static_cast<u32>(core::Max(0.0f, (top + content.height) / lh)), rows - 1));
     }
 
     inline CodePosition CodeEditor::PositionAt(core::Float2 local) const
@@ -1553,9 +1930,9 @@ export namespace experimental::gui
         const f32 row = (local.y - content.y + shift.y) / LineHeight();
         if (row < 0.0f)
             return CodePosition{0, 0};
-        const u32 line = static_cast<u32>(row);
-        if (line >= m_doc->LineCount())
+        if (static_cast<u32>(row) >= RowCount())
             return m_doc->End();
+        const u32 line = LineOfRow(static_cast<u32>(row));
         return CodePosition{line, ColumnAtX(line, local.x - TextLeft() + shift.x)};
     }
 
@@ -1565,7 +1942,7 @@ export namespace experimental::gui
         const Rect content = GetContentBounds();
         const core::Float2 shift = ScrollShift();
         const f32 lh = LineHeight();
-        return Rect{TextLeft() + XOf(at) - shift.x, content.y + static_cast<f32>(at.Line) * lh - shift.y, 1.5f, lh};
+        return Rect{TextLeft() + XOf(at) - shift.x, content.y + static_cast<f32>(RowOfLine(at.Line)) * lh - shift.y, 1.5f, lh};
     }
 
     inline void CodeEditor::ScrollToCaret()
@@ -1576,7 +1953,7 @@ export namespace experimental::gui
         const CodePosition at = m_doc->Clamp(GetPrimary().Head);
         const f32 lh = LineHeight();
         core::Float2 offset = GetScrollOffset();
-        const f32 top = static_cast<f32>(at.Line) * lh;
+        const f32 top = static_cast<f32>(RowOfLine(at.Line)) * lh;
         if (top < offset.y)
             offset.y = top;
         else if (top + lh > offset.y + content.height)
@@ -1824,6 +2201,84 @@ export namespace experimental::gui
         });
         m_doc->BreakMerge();
         return true;
+    }
+
+    inline bool CodeEditor::IsFolded(u32 firstLine) const
+    {
+        for (const CodeAnchorId anchor : m_folded)
+            if (m_doc->GetAnchor(anchor).Line == firstLine)
+                return RangeStarting(firstLine) != nullptr;
+        return false;
+    }
+
+    inline bool CodeEditor::Fold(u32 line)
+    {
+        EnsureFoldRanges();
+        const CodeFoldRange* best = nullptr;
+        for (const CodeFoldRange& r : m_foldRanges)
+            if (r.First <= line && line <= r.Last && !IsFolded(r.First) && (best == nullptr || r.Last - r.First < best->Last - best->First))
+                best = &r;
+        if (best == nullptr)
+            return false;
+        FoldRange(*best);
+        return true;
+    }
+
+    inline bool CodeEditor::Unfold(u32 line)
+    {
+        EnsureFoldRanges();
+        bool any = false;
+        for (usize i = m_folded.Size(); i-- > 0;)
+        {
+            const CodeFoldRange* r = RangeStarting(m_doc->GetAnchor(m_folded[i]).Line);
+            if (r != nullptr && r->First <= line && line <= r->Last)
+            {
+                m_doc->RemoveAnchor(m_folded[i]);
+                m_folded.RemoveAt(i);
+                any = true;
+            }
+        }
+        if (any)
+            FoldsChanged();
+        return any;
+    }
+
+    inline bool CodeEditor::ToggleFold(u32 line)
+    {
+        const CodeFoldRange* r = RangeStarting(line);
+        if (r == nullptr)
+            return false;
+        if (!IsFolded(line))
+        {
+            FoldRange(*r);
+            return true;
+        }
+        for (usize i = m_folded.Size(); i-- > 0;)
+            if (m_doc->GetAnchor(m_folded[i]).Line == line)
+            {
+                m_doc->RemoveAnchor(m_folded[i]);
+                m_folded.RemoveAt(i);
+            }
+        FoldsChanged();
+        return true;
+    }
+
+    inline void CodeEditor::FoldAll()
+    {
+        EnsureFoldRanges();
+        for (const CodeFoldRange& r : m_foldRanges)
+            if (!IsFolded(r.First))
+                m_folded.PushBack(m_doc->AddAnchor(CodePosition{r.First, 0}, CodeBias::Right));
+        FoldsChanged();
+        CaretsOutOfFolds();
+    }
+
+    inline void CodeEditor::UnfoldAll()
+    {
+        for (const CodeAnchorId anchor : m_folded)
+            m_doc->RemoveAnchor(anchor);
+        m_folded.Clear();
+        FoldsChanged();
     }
 
     inline core::StringView CodeEditor::HoverAt(CodePosition at)
@@ -2525,6 +2980,19 @@ export namespace experimental::gui
                 m_onGutterClick(at.Line);
             return;
         }
+        // The fold column: a fold's chevron folds or unfolds it.
+        const f32 foldX = content.x + GutterWidth() - kTextGap - kFoldColumn;
+        if (local.x >= foldX && local.x < foldX + kFoldColumn)
+        {
+            (void)ToggleFold(at.Line);
+            return;
+        }
+        // A folded line's placeholder unfolds it.
+        if (IsFolded(at.Line) && PlaceholderRect(at.Line).Contains(local))
+        {
+            (void)Unfold(at.Line);
+            return;
+        }
         m_dragUnit = event.ClickCount >= 3 ? 3u : event.ClickCount == 2 ? 2u : 1u;
         CodeRange unit{at, at};
         if (m_dragUnit == 2)
@@ -2577,6 +3045,11 @@ export namespace experimental::gui
             // tooltip; over a word, what the service says of it after them.
             const core::Float2 hover = ConvertToNodeSpace(event.Position);
             const CodePosition over = PositionAt(hover);
+            if (const bool gutter = hover.x < TextLeft(); gutter != m_gutterHover)
+            {
+                m_gutterHover = gutter; // the folds' chevrons show
+                Invalidate();
+            }
             core::String tip;
             if (hover.x < TextLeft())
             {
@@ -2617,7 +3090,8 @@ export namespace experimental::gui
             core::Array<CodeSelection> next(MemoryAllocator());
             const u32 from = core::Min(m_columnLine, at.Line), to = core::Max(m_columnLine, at.Line);
             for (u32 line = from; line <= to; ++line)
-                next.PushBack(CodeSelection{CodePosition{line, ColumnAtX(line, m_columnX)}, CodePosition{line, ColumnAtX(line, x)}});
+                if (!IsLineHidden(line))
+                    next.PushBack(CodeSelection{CodePosition{line, ColumnAtX(line, m_columnX)}, CodePosition{line, ColumnAtX(line, x)}});
             m_selections = core::Move(next);
             m_primary = m_selections.Size() - 1;
             Normalize();
@@ -2680,7 +3154,7 @@ export namespace experimental::gui
         u32 first = 0, last = 0;
         VisibleLines(first, last);
         const CodePosition primary = m_doc->Clamp(GetPrimary().Head);
-        const auto rowTop = [&](u32 line) { return content.y + static_cast<f32>(line) * lh - shift.y; };
+        const auto rowTop = [&](u32 line) { return content.y + static_cast<f32>(RowOfLine(line)) * lh - shift.y; };
         const f32 textX = textArea.x - shift.x;
 
         ctx.PushClip(content);
@@ -2692,7 +3166,7 @@ export namespace experimental::gui
             if (marker.Kind.AsView() == core::StringView(u8"execution"))
             {
                 const u32 line = m_doc->GetAnchor(marker.Anchor).Line;
-                if (line >= first && line <= last)
+                if (line >= first && line <= last && !IsLineHidden(line))
                     ctx.VG().FillRect(Rectangle{content.x, rowTop(line), content.width, lh}, partColor(u8"execution-line", Color{0.9f, 0.75f, 0.2f, 0.15f}));
             }
         ctx.PushClip(textArea);
@@ -2711,6 +3185,8 @@ export namespace experimental::gui
                     break;
                 for (u32 line = core::Max(r.Start.Line, first); line <= core::Min(r.End.Line, last); ++line)
                 {
+                    if (IsLineHidden(line))
+                        continue;
                     const f32 x0 = line == r.Start.Line ? XOf(r.Start) : 0.0f;
                     const f32 x1 = line == r.End.Line ? XOf(r.End) : XOf(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())});
                     ctx.VG().FillRect(Rectangle{textX + x0, rowTop(line), core::Max(1.0f, x1 - x0), lh}, r == current ? currentColor : matchColor);
@@ -2725,6 +3201,8 @@ export namespace experimental::gui
             const CodeRange r = s.Range();
             for (u32 line = core::Max(r.Start.Line, first); line <= core::Min(r.End.Line, last); ++line)
             {
+                if (IsLineHidden(line))
+                    continue;
                 const f32 x0 = line == r.Start.Line ? XOf(r.Start) : 0.0f;
                 const f32 x1 = line == r.End.Line ? XOf(r.End) : XOf(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())}) + DigitWidth() * 0.5f;
                 ctx.VG().FillRect(Rectangle{textX + x0, rowTop(line), core::Max(0.0f, x1 - x0), lh}, selectionColor);
@@ -2738,7 +3216,7 @@ export namespace experimental::gui
                 const Color mark = partColor(u8"bracket-match", Color{0.5f, 0.6f, 0.75f, 0.35f});
                 const CodeRange both[] = {bracket, match};
                 for (const CodeRange& r : both)
-                    if (r.Start.Line >= first && r.Start.Line <= last)
+                    if (r.Start.Line >= first && r.Start.Line <= last && !IsLineHidden(r.Start.Line))
                     {
                         const f32 x0 = XOf(r.Start), x1 = XOf(r.End);
                         ctx.VG().FillRect(Rectangle{textX + x0, rowTop(r.Start.Line), x1 - x0, lh}, mark);
@@ -2747,9 +3225,21 @@ export namespace experimental::gui
         }
         for (u32 line = first; line <= last; ++line)
         {
+            if (IsLineHidden(line))
+                continue;
             LineView& view = View(line);
             const TextLayout& layout = view.Glyphs.LayoutFor(Rect{});
             view.Glyphs.DrawLayout(ctx, layout, core::Float2{textX, rowTop(line) + (lh - layout.Height) * 0.5f});
+            // A folded line's placeholder after its text.
+            if (IsFolded(line))
+            {
+                const Rect box = PlaceholderRect(line);
+                ctx.VG().FillRoundedRect(Rectangle{box.x, box.y, box.width, box.height}, 3.0f,
+                                         partColor(u8"fold-placeholder", Color{0.5f, 0.55f, 0.65f, 0.25f}));
+                m_foldText.SetColor(numberColor);
+                const TextLayout& dots = m_foldText.LayoutFor(Rect{});
+                m_foldText.DrawLayout(ctx, dots, core::Float2{box.x + (box.width - dots.Width) * 0.5f, box.y + (box.height - dots.Height) * 0.5f});
+            }
         }
         // The diagnostics: a wave under each run, the worse over the lesser.
         for (u32 pass = 0; pass < 4; ++pass)
@@ -2764,6 +3254,8 @@ export namespace experimental::gui
                                                                                      : Color{0.95f, 0.8f, 0.4f, 1.0f});
                 for (u32 line = core::Max(r.Start.Line, first); line <= core::Min(r.End.Line, last); ++line)
                 {
+                    if (IsLineHidden(line))
+                        continue;
                     const f32 x0 = textX + (line == r.Start.Line ? XOf(r.Start) : 0.0f);
                     const f32 x1 = textX + (line == r.End.Line ? XOf(r.End) : XOf(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())}));
                     const f32 y = rowTop(line) + lh - 2.0f;
@@ -2789,7 +3281,7 @@ export namespace experimental::gui
             for (const CodeSelection& s : m_selections)
             {
                 const CodePosition at = m_doc->Clamp(s.Head);
-                if (at.Line < first || at.Line > last)
+                if (at.Line < first || at.Line > last || IsLineHidden(at.Line))
                     continue;
                 ctx.VG().FillRect(Rectangle{textX + XOf(at) + (at == primary ? ComposedWidth() : 0.0f), rowTop(at.Line), 1.5f, lh}, caretColor);
             }
@@ -2800,6 +3292,8 @@ export namespace experimental::gui
         // The marker column: a line's worst diagnostic, then its marks over it (an execution arrow last).
         for (u32 line = first; line <= last; ++line)
         {
+            if (IsLineHidden(line))
+                continue;
             const f32 cx = content.x + kMarkerColumn * 0.5f, cy = rowTop(line) + lh * 0.5f;
             const f32 radius = core::Min(lh, kMarkerColumn) * 0.28f;
             CodeSeverity worst = CodeSeverity::Hint;
@@ -2831,8 +3325,38 @@ export namespace experimental::gui
                         ctx.VG().FillRect(Rectangle{cx - radius * 0.7f, cy - radius * 0.7f, radius * 1.4f, radius * 1.4f}, partColor(u8"marker", Color{0.6f, 0.65f, 0.75f, 1.0f}));
                 }
         }
+        // The fold column: a folded range's chevron always, an open one's while the pointer is over
+        // the gutter (VS Code's), worked out only then.
+        const bool chevrons = m_gutterHover || !m_folded.IsEmpty();
+        const Color foldColor = textColor(u8"fold", numberColor);
+        for (u32 line = first; line <= last && chevrons; ++line)
+        {
+            if (IsLineHidden(line) || RangeStarting(line) == nullptr)
+                continue;
+            const bool folded = IsFolded(line);
+            if (!folded && !m_gutterHover)
+                continue;
+            const f32 cx = content.x + gutter - kTextGap - kFoldColumn * 0.5f, cy = rowTop(line) + lh * 0.5f;
+            const f32 r = core::Min(lh, kFoldColumn) * 0.2f;
+            vg::PathBuilder chevron;
+            if (folded)
+            {
+                chevron.MoveTo(cx - r * 0.5f, cy - r);
+                chevron.LineTo(cx + r * 0.5f, cy);
+                chevron.LineTo(cx - r * 0.5f, cy + r);
+            }
+            else
+            {
+                chevron.MoveTo(cx - r, cy - r * 0.5f);
+                chevron.LineTo(cx, cy + r * 0.5f);
+                chevron.LineTo(cx + r, cy - r * 0.5f);
+            }
+            ctx.VG().StrokePath(chevron.ToPath(), foldColor, vg::StrokeStyle(1.25f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+        }
         for (u32 line = first; line <= last; ++line)
         {
+            if (IsLineHidden(line))
+                continue;
             LineView& view = View(line);
             if (view.NumberOf != line)
             {
@@ -2843,7 +3367,7 @@ export namespace experimental::gui
             }
             view.Number.SetColor(line == primary.Line ? currentNumber : numberColor);
             const TextLayout& layout = view.Number.LayoutFor(Rect{});
-            view.Number.DrawLayout(ctx, layout, core::Float2{content.x + gutter - kTextGap - kGutterPad - layout.Width, rowTop(line) + (lh - layout.Height) * 0.5f});
+            view.Number.DrawLayout(ctx, layout, core::Float2{content.x + gutter - kTextGap - kFoldColumn - kGutterPad - layout.Width, rowTop(line) + (lh - layout.Height) * 0.5f});
         }
         ctx.PopClip();
     }

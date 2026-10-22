@@ -171,6 +171,10 @@ export namespace experimental::gui
         core::Array<CodePair> AutoClose;      ///< typing the open puts the close ("(" ")", "\"" "\"")
         core::String IndentAfter;             ///< what, ending a line, indents the next (space-separated: "{ ( [", Luau's "then do")
         core::String OutdentFirst;            ///< what, first on its line, outdents it ("}", Luau's "end else until")
+        // How it folds (C7):
+        bool FoldByIndent = false;            ///< by indentation rather than by its brackets (Luau's blocks, markup)
+        core::String RegionStart;             ///< a line beginning with it opens a fold to its RegionEnd ("#pragma region")
+        core::String RegionEnd;
 
         /// Resolves what refers by name (a rule's context, the words), once after it is filled in or
         /// read; tokenizing asks it first.
@@ -494,6 +498,9 @@ export namespace experimental::gui
         detail::Optional(ar, "autoClose", language.AutoClose);
         detail::Optional(ar, "indentAfter", language.IndentAfter);
         detail::Optional(ar, "outdentFirst", language.OutdentFirst);
+        detail::Optional(ar, "foldByIndent", language.FoldByIndent);
+        detail::Optional(ar, "regionStart", language.RegionStart);
+        detail::Optional(ar, "regionEnd", language.RegionEnd);
         ar.EndObject();
         if (ar.Mode() == SerializeMode::Read)
             language.Prepare();

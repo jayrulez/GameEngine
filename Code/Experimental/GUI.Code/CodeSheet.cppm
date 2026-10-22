@@ -74,6 +74,8 @@ export namespace experimental::gui
             codeeditor::execution-line { background-color: var(--code-execution-line); }
             codeeditor::bookmark { background-color: var(--code-bookmark); }
             codeeditor::marker { background-color: var(--code-line-number); }
+            codeeditor::fold { color: var(--code-line-number); }
+            codeeditor::fold-placeholder { background-color: var(--code-bracket-match); }
             codefindbar { background-color: var(--code-find-bar); border-radius: var(--radius-small);
                           box-shadow: 0 2px 8px var(--shadow-color); font-size: var(--font-small); }
             codefindbar label.count { color: var(--text-dim); padding: 0 4px; }

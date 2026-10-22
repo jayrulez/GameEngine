@@ -214,5 +214,8 @@
 		</array>
 		<string name="indentAfter">{ ( [ then do function else repeat</string>
 		<string name="outdentFirst">} ) ] end else elseif until</string>
+		<bool name="foldByIndent">true</bool>
+		<string name="regionStart">--#region</string>
+		<string name="regionEnd">--#endregion</string>
 	</object>
 </root>

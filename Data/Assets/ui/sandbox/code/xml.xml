@@ -192,5 +192,6 @@
 				<string name="close">'</string>
 			</object>
 		</array>
+		<bool name="foldByIndent">true</bool>
 	</object>
 </root>

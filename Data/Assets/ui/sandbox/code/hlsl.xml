@@ -160,5 +160,7 @@
 		</array>
 		<string name="indentAfter">{ ( [</string>
 		<string name="outdentFirst">} ) ]</string>
+		<string name="regionStart">#pragma region</string>
+		<string name="regionEnd">#pragma endregion</string>
 	</object>
 </root>

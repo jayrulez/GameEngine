@@ -45,6 +45,8 @@ import :aabb;
 import :plane;
 import :rectangle;
 import :guid;
+import :curve;
+import :gradient;
 
 namespace foundation::core
 {
@@ -340,6 +342,47 @@ namespace foundation::core
 
     // Public Core enums (scripting-relevant). Internal enums (PropertyFlags,
     // HashMap::State, BufferedStream::Mode) are deliberately not reflected.
+    // A curve's keys and a gradient's stops: Core's, so every tool that edits a curve or a gradient
+    // (a particle effect's, a clip's, an editor's) reads them by reflection without the runtime
+    // that holds them.
+    REFLECT_ENUM(CurveKeyInterpolation, "rtti::core")
+    {
+        builder.Value("Constant", CurveKeyInterpolation::Constant)
+            .Value("Linear", CurveKeyInterpolation::Linear)
+            .Value("Cubic", CurveKeyInterpolation::Cubic);
+    }
+    REFLECT_ENUM(CurveTangentMode, "rtti::core")
+    {
+        builder.Value("Broken", CurveTangentMode::Broken)
+            .Value("Auto", CurveTangentMode::Auto)
+            .Value("Smooth", CurveTangentMode::Smooth)
+            .Value("Flat", CurveTangentMode::Flat);
+    }
+    REFLECT_ENUM(GradientInterpolation, "rtti::core")
+    {
+        builder.Value("Srgb", GradientInterpolation::Srgb)
+            .Value("LinearLight", GradientInterpolation::LinearLight)
+            .Value("OkLab", GradientInterpolation::OkLab)
+            .Value("Constant", GradientInterpolation::Constant);
+    }
+    REFLECT_VALUE(CurveKey, "rtti::core")
+    {
+        builder.Property<&CurveKey::time>("time")
+            .Property<&CurveKey::value>("value")
+            .Property<&CurveKey::tangentIn>("tangentIn")
+            .Property<&CurveKey::tangentOut>("tangentOut")
+            .Property<&CurveKey::interpolation>("interpolation")
+            .Property<&CurveKey::tangentMode>("tangentMode");
+    }
+    REFLECT_VALUE(GradientColorStop, "rtti::core")
+    {
+        builder.Property<&GradientColorStop::time>("time").Property<&GradientColorStop::color>("color");
+    }
+    REFLECT_VALUE(GradientAlphaStop, "rtti::core")
+    {
+        builder.Property<&GradientAlphaStop::time>("time").Property<&GradientAlphaStop::alpha>("alpha");
+    }
+
     REFLECT_ENUM(LogLevel, "rtti::core")
     {
         builder.Value("Trace", LogLevel::Trace)
@@ -446,6 +489,18 @@ namespace foundation::core
         GlobalTypeRegistry().Register(TypeOf<Rectangle>());
         RttiRegisterValue_Guid();
         GlobalTypeRegistry().Register(TypeOf<Guid>());
+        RttiRegisterEnum_CurveKeyInterpolation();
+        GlobalTypeRegistry().Register(TypeOf<CurveKeyInterpolation>());
+        RttiRegisterEnum_CurveTangentMode();
+        GlobalTypeRegistry().Register(TypeOf<CurveTangentMode>());
+        RttiRegisterEnum_GradientInterpolation();
+        GlobalTypeRegistry().Register(TypeOf<GradientInterpolation>());
+        RttiRegisterValue_CurveKey();
+        GlobalTypeRegistry().Register(TypeOf<CurveKey>());
+        RttiRegisterValue_GradientColorStop();
+        GlobalTypeRegistry().Register(TypeOf<GradientColorStop>());
+        RttiRegisterValue_GradientAlphaStop();
+        GlobalTypeRegistry().Register(TypeOf<GradientAlphaStop>());
 
         // Free-standing (namespace-level) math constants.
         ConstantRegistry& constants = GlobalConstantRegistry();

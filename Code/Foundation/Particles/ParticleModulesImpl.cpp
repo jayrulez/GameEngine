@@ -186,44 +186,7 @@ namespace foundation::particles
     }
 
     // ---- curves (count-bound key arrays) + the OverLifetime behaviors ------------------------
-    // Core's key and stop types, reflected here where the curves use them (enums by name).
-    REFLECT_ENUM(CurveKeyInterpolation, "rtti::particles")
-    {
-        builder.Value("Constant", CurveKeyInterpolation::Constant);
-        builder.Value("Linear", CurveKeyInterpolation::Linear);
-        builder.Value("Cubic", CurveKeyInterpolation::Cubic);
-    }
-    REFLECT_ENUM(CurveTangentMode, "rtti::particles")
-    {
-        builder.Value("Broken", CurveTangentMode::Broken);
-        builder.Value("Auto", CurveTangentMode::Auto);
-        builder.Value("Smooth", CurveTangentMode::Smooth);
-        builder.Value("Flat", CurveTangentMode::Flat);
-    }
-    REFLECT_ENUM(GradientInterpolation, "rtti::particles")
-    {
-        builder.Value("Srgb", GradientInterpolation::Srgb);
-        builder.Value("LinearLight", GradientInterpolation::LinearLight);
-        builder.Value("OkLab", GradientInterpolation::OkLab);
-        builder.Value("Constant", GradientInterpolation::Constant);
-    }
-    REFLECT_VALUE(CurveKey, "rtti::particles")
-    {
-        builder.Property<&CurveKey::time>("time")
-            .Property<&CurveKey::value>("value")
-            .Property<&CurveKey::tangentIn>("tangentIn")
-            .Property<&CurveKey::tangentOut>("tangentOut")
-            .Property<&CurveKey::interpolation>("interpolation")
-            .Property<&CurveKey::tangentMode>("tangentMode");
-    }
-    REFLECT_VALUE(GradientColorStop, "rtti::particles")
-    {
-        builder.Property<&GradientColorStop::time>("time").Property<&GradientColorStop::color>("color");
-    }
-    REFLECT_VALUE(GradientAlphaStop, "rtti::particles")
-    {
-        builder.Property<&GradientAlphaStop::time>("time").Property<&GradientAlphaStop::alpha>("alpha");
-    }
+    // Their keys and stops are Core's, reflected by RegisterCoreTypes.
     REFLECT_VALUE(ParticleCurveFloat, "rtti::particles")
     {
         builder.BoundedArray<&ParticleCurveFloat::keys, &ParticleCurveFloat::keyCount>("keys")
@@ -281,12 +244,7 @@ namespace foundation::particles
             RttiRegisterValue_CollisionPlane();
             RttiRegisterValue_CollisionSphere();
             RttiRegisterValue_CollisionBox();
-            RttiRegisterEnum_CurveKeyInterpolation();
-            RttiRegisterEnum_CurveTangentMode();
-            RttiRegisterEnum_GradientInterpolation();
-            RttiRegisterValue_CurveKey();
-            RttiRegisterValue_GradientColorStop();
-            RttiRegisterValue_GradientAlphaStop();
+            RegisterCoreTypes(); // the curves' keys and stops (Core's), before the curves
             RttiRegisterValue_ParticleCurveFloat();
             RttiRegisterValue_ParticleCurveColor();
             // The module arrays are polymorphic: register Array<RefPtr<Base>> as a polymorphic

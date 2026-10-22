@@ -60,3 +60,15 @@ TEST_CASE("gradient: alpha stops apart from the colours, straight between them, 
     CHECK(At(c, a, GradientInterpolation::Constant, 0.75f).a == doctest::Approx(1.0f));
     CHECK(At(c, a, GradientInterpolation::LinearLight, 2.0f).a == doctest::Approx(0.0f));
 }
+
+TEST_CASE("gradient: Core reflects its stops and a curve's keys, so a tool reads them without the runtime holding them")
+{
+    RegisterCoreTypes();
+    CHECK(FindProperty(TypeOf<CurveKey>(), "tangentMode") != nullptr);
+    CHECK(FindProperty(TypeOf<GradientColorStop>(), "color") != nullptr);
+    CHECK(FindProperty(TypeOf<GradientAlphaStop>(), "alpha") != nullptr);
+    CHECK(StringView(reinterpret_cast<const char8_t*>(TypeOf<CurveKey>().namespaceName)) == StringView(u8"rtti::core"));
+    CHECK(Enumerators(TypeOf<GradientInterpolation>()).Size() == 4u);
+    CHECK(Enumerators(TypeOf<CurveTangentMode>()).Size() == 4u);
+    CHECK(GlobalTypeRegistry().FindByName("rtti::core", "CurveKey") == &TypeOf<CurveKey>());
+}

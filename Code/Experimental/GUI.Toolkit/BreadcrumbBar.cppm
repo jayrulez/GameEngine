@@ -132,7 +132,6 @@ export namespace experimental::gui
             }
             m_overflow = core::MakeRef<Button>(MemoryAllocator());
             m_overflow->SetTag(core::StringView(u8"crumboverflow"));
-            m_overflow->SetText(core::StringView(u8"…"));
             m_overflow->SetVisible(false);
             BreadcrumbBar* self = this;
             m_overflow->SetOnClick([self]() { self->OpenOverflow(); });
@@ -417,6 +416,8 @@ export namespace experimental::gui
                 if (i > 0)
                     separators.PushBack(Natural(*m_separators[i - 1]));
             }
+            // "…" where the font draws it, else three full stops (a baked atlas may lack it).
+            m_overflow->SetText(EllipsisFor(m_overflow->GetFont()));
             const core::Float2 overflow = Natural(*m_overflow);
             const core::Float2 overflowSeparator = Natural(*m_overflowSeparator);
             // What segments `first` to the last take, with the "…" and its separator before them
@@ -643,14 +644,15 @@ export namespace experimental::gui
             for (const core::RefPtr<BreadcrumbSegment>& segment : m_segments)
                 segment->SetTabFocusable(segment.Get() == m_roving);
         }
-        // Its border box with its margins, as it would be with nothing in its way.
+        // Its border box with its margins, as it would be with nothing in its way, a whole number of
+        // pixels across: placed on the pixel grid, a fraction short would cut its text with an ellipsis.
         [[nodiscard]] static core::Float2 Natural(Node& node)
         {
             LayoutConstraints constraints;
             constraints.Max = core::Float2{kUnbounded, kUnbounded};
             const core::Float2 size = node.Measure(constraints);
             const Thickness m = node.GetLayoutStyle().Margin;
-            return core::Float2{size.x + m.TotalHorizontal(), size.y + m.TotalVertical()};
+            return core::Float2{core::Ceil(size.x + m.TotalHorizontal()), size.y + m.TotalVertical()};
         }
 
         core::Array<BreadcrumbItem> m_items;

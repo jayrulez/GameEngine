@@ -109,6 +109,18 @@ namespace experimental::gui
         builder.AccessorProperty<&GraphView::GetGridSize, &GraphView::SetGridSize>("gridSize").PropAttribute("css", core::String(u8"grid-size"));
         builder.Creator();
     }
+    // T7's bar: an element markup places, whose items the application gives in code.
+    REFLECT_MEMBERS(BreadcrumbSegment, "rtti::gui::toolkit")
+    {
+        builder.ComputedProperty<&BreadcrumbSegment::GetAccessDescription>("description")
+            .PropAttribute("access", core::String(u8"description"));
+    }
+    RTTI_DEFINE_OBJECT(BreadcrumbSeparator, "rtti::gui::toolkit")
+    REFLECT_MEMBERS(BreadcrumbBar, "rtti::gui::toolkit")
+    {
+        builder.Attribute("accessRole", core::String(u8"group")); // the core has no navigation role yet
+        builder.Creator();
+    }
     RTTI_DEFINE_OBJECT(PropertyViewPopup, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyValuePreview, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(CurvePropertyEditor, "rtti::gui::toolkit")
@@ -132,6 +144,7 @@ namespace experimental::gui
                 &GradientView::StaticType(),
                 &Dopesheet::StaticType(),
                 &GraphView::StaticType(),
+                &BreadcrumbBar::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)ElementTypes::Register(*type);

@@ -1,4 +1,4 @@
-# Experimental::GUI.Toolkit - `experimental.gui.toolkit`: editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs. Docking is not here (GUI.Docking), nor the code editor (GUI.Code).
+# Experimental::GUI.Toolkit - `experimental.gui.toolkit`: editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs, the breadcrumb bar. Docking is not here (GUI.Docking), nor the code editor (GUI.Code).
 # foundation.ui's counterpart: UI.Toolkit less docking and the code editor. Specs/gui-lab-evolution-3.md.
 util_add_engine_library(GUI.Toolkit ALIAS Experimental::GUI.Toolkit)
 target_link_libraries(GUI.Toolkit
@@ -26,5 +26,6 @@ target_sources(GUI.Toolkit
             GraphSource.cppm
             GraphNodePicker.cppm
             GraphView.cppm
+            BreadcrumbBar.cppm
     PRIVATE
         ToolkitReflection.cpp)

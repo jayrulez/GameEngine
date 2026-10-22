@@ -30,6 +30,7 @@ export import :curve_editors;    // T5: the grid's curve and gradient editors, a
 export import :graph_source;     // T6: what a graph view reads and edits through
 export import :graph_node_picker; // T6: the kinds of node a graph view adds, with a search
 export import :graph_view;       // T6: a graph source's nodes on a canvas
+export import :breadcrumb_bar;   // T7: where a view is, as segments to navigate by
 
 export namespace experimental::gui
 {

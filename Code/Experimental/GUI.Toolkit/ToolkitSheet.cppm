@@ -126,6 +126,18 @@ export namespace experimental::gui
             graphnodeheader label { color: var(--graphnode-title, #ffffff); }
             graphnodeheader label.subtitle { opacity: 0.75; }
             graphpin label { color: var(--graphpin-text, var(--text)); }
+            breadcrumbbar { color: var(--breadcrumb-text, var(--text-dim)); }
+            crumb, crumboverflow {
+                background-color: transparent; color: var(--breadcrumb-text, var(--text-dim));
+                padding: 2px 4px; border-radius: var(--radius-small);
+            }
+            crumb:hover, crumboverflow:hover { background-color: var(--breadcrumb-hover, var(--control-hover)); color: var(--text-strong); }
+            crumb:active, crumboverflow:active { background-color: var(--breadcrumb-pressed, var(--control-raised)); }
+            crumb.current, crumb.current:hover, crumb.current:active {
+                background-color: transparent; color: var(--breadcrumb-current, var(--text-strong));
+            }
+            crumb:focus-visible, crumboverflow:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            crumbseparator { color: var(--breadcrumb-separator, var(--text-dim)); opacity: 0.7; }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

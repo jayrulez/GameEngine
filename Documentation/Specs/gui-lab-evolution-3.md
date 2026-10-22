@@ -606,7 +606,8 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     size, which is gone).
   - **The gradient view**, `GradientView`, edits one Core gradient as a value: a bar of
     `EvaluateGradient` over a checkerboard, alpha stops above it and colour stops below; a click adds
-    a stop of the colour there, a drag moves one and a drag off the bar removes it; a double click on
+    a stop of what is there (an alpha stop on the upper half, a colour stop on the lower), a drag
+    moves one and a drag off the bar removes it (never a kind's last, as Unity keeps one); a double click on
     a colour stop opens T4's picker as a popup, an alpha stop has a number field; the interpolation
     is a drop-down.
   - **In the property grid**, `CurvePropertyEditor` and `GradientPropertyEditor`: a preview on the row,

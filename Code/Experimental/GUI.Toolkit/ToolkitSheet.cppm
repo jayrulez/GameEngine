@@ -73,6 +73,10 @@ export namespace experimental::gui
             curveview::playhead { background-color: var(--timeline-playhead, var(--accent)); }
             curveview::selection-box { background-color: var(--curveview-selection-box, var(--selection)); opacity: 0.5; }
             curveview:focus-visible { box-shadow: inset 0 0 0 var(--focus-width) var(--focus-ring); }
+            gradientview { color: var(--text); }
+            gradientstrip { color: var(--gradient-stop-edge, var(--text-dim)); }
+            gradientstrip::selected { background-color: var(--gradient-stop-selected, var(--accent)); }
+            gradientview:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

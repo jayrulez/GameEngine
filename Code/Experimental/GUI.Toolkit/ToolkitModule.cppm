@@ -23,6 +23,7 @@ export import :reflected_source; // T3: core reflection as a property source
 export import :time_axis;        // T5: one time axis and its ruler
 export import :curve_source;     // T5: what a curve view reads and edits through
 export import :curve_view;       // T5: a source's curves on one canvas
+export import :gradient_view;    // T5: a gradient's stops, edited as a value
 
 export namespace experimental::gui
 {

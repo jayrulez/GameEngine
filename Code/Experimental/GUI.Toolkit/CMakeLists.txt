@@ -19,5 +19,6 @@ target_sources(GUI.Toolkit
             TimeAxis.cppm
             CurveSource.cppm
             CurveView.cppm
+            GradientView.cppm
     PRIVATE
         ToolkitReflection.cpp)

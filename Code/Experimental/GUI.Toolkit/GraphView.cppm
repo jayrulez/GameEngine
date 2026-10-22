@@ -446,11 +446,21 @@ export namespace experimental::gui
                 });
                 SetPadding(Thickness{8.0f, 4.0f, 8.0f, 6.0f});
             }
+            SetClipChildren(true); // a comment longer than the frame is cut at its edge
             m_title = core::MakeRef<EditableLabel>(MemoryAllocator());
             m_title->AddClass(core::StringView(u8"title"));
+            {
+                StyleWriteScope defaults(*m_title);
+                m_title->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
+            }
             AddChild(m_title.Get());
+            // The comment takes what room the frame has left: typed past it, its text area scrolls.
             m_body = core::MakeRef<EditableLabel>(MemoryAllocator());
             m_body->AddClass(core::StringView(u8"body"));
+            {
+                StyleWriteScope defaults(*m_body);
+                m_body->EditLayoutStyle([](LayoutStyle& s) { s.MinHeight = LayoutLength::Px(0.0f); });
+            }
             m_body->SetMultiline(true);
             m_body->SetDisplayed(false);
             AddChild(m_body.Get());

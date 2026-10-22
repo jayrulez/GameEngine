@@ -18,6 +18,7 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
+import foundation.fonts;
 import experimental.gui;
 import experimental.gui.toolkit;
 
@@ -887,6 +888,35 @@ namespace
                 return at;
         return GraphFrameInfo{};
     }
+    // A mock font: 6px a byte, 12px a line.
+    class SixFont : public foundation::fonts::IFont
+    {
+    public:
+        core::StringView FamilyName() const override { return core::StringView(u8"six"); }
+        core::Span<const core::u8> SourceData() const override { return {}; }
+        foundation::fonts::FontMetrics Metrics() const override
+        {
+            foundation::fonts::FontMetrics m;
+            m.ascent = 10.0f;
+            m.descent = -2.0f;
+            m.lineHeight = 12.0f;
+            m.pixelHeight = 10.0f;
+            m.scale = 1.0f;
+            return m;
+        }
+        core::f32 PixelHeight() const override { return 10.0f; }
+        foundation::fonts::GlyphInfo GetGlyphInfo(core::i32 cp) const override
+        {
+            foundation::fonts::GlyphInfo g;
+            g.codepoint = cp;
+            g.advanceWidth = 6.0f;
+            return g;
+        }
+        core::f32 GetKerning(core::i32, core::i32) const override { return 0.0f; }
+        bool HasGlyph(core::i32) const override { return true; }
+        core::f32 MeasureString(core::StringView text) const override { return static_cast<core::f32>(text.Size()) * 6.0f; }
+        core::f32 MeasureString(core::StringView text, core::Array<foundation::fonts::GlyphPosition>&) const override { return MeasureString(text); }
+    };
     usize ChildIndex(experimental::gui::Node& parent, experimental::gui::Node* child)
     {
         for (usize i = 0; i < parent.ChildCount(); ++i)
@@ -1047,4 +1077,33 @@ TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a fr
     CHECK(bed.changes.Back().Words == core::String(u8"Deleted a frame"));
     CHECK(bed.NodeCount() == 3);
     CHECK(bed.view->GetSelectedFrames().IsEmpty());
+}
+
+TEST_CASE("GraphView: a comment typed past its frame's bottom stops at the edge, its text area scrolling")
+{
+    Bed bed;
+    const GraphId frame = Framed(bed);
+    GraphFrameWidget& widget = *bed.view->GetFrameWidget(frame);
+    foundation::fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
+    widget.GetBodyLabel().SetFont(&font);
+    widget.EditBody();
+    TextArea* area = core::Cast<TextArea>(widget.GetBodyLabel().GetEditor());
+    REQUIRE(area != nullptr);
+    REQUIRE(area->IsFocused());
+    // Thirty lines of 12 in a frame 200 tall.
+    for (int i = 0; i < 30; ++i)
+    {
+        bed.D().InjectText(core::StringView(u8"line"));
+        bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    }
+    (void)bed.root->UpdateLayout();
+    const Rect body{widget.GetBodyLabel().GetPosition().x, widget.GetBodyLabel().GetPosition().y, widget.GetBodyLabel().GetSize().x,
+                    widget.GetBodyLabel().GetSize().y};
+    CHECK(body.Bottom() <= widget.GetContentBounds().Bottom() + 0.5f);
+    CHECK(body.height > 100.0f);
+    CHECK(area->GetScrollY() > 0.0f); // the caret's line in view
+    CHECK(widget.ClipsChildren());
+    REQUIRE(widget.GetBodyLabel().EndEdit(true));
+    widget.GetBodyLabel().SetFont(nullptr);
+    (void)bed.root->UpdateLayout();
 }

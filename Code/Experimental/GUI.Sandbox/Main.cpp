@@ -2419,8 +2419,8 @@ void GUISandbox::SelectCameras(usize which)
     m_reflected->SetObjects(Span<const Instance>(objects, count));
 }
 
-// The Toolkit page's clip: four tracks of the lamps' values ("Lamp A.intensity" and the rest, the
-// dopesheet folding them by lamp), a ruler, a dopesheet and a curve view on one axis. Scrubbing plays
+// The Toolkit page's clip: eight tracks of the lamps' values ("Lamp A.intensity", "Lamp A.position.y"
+// and the rest, the dopesheet folding them by lamp and property, more rows than it shows at once), a ruler, a dopesheet and a curve view on one axis. Scrubbing plays
 // the tracks into the lamps, so the grid above follows; each edit of the clip is a step of its Undo.
 void GUISandbox::FillClip(gui::Node& section)
 {
@@ -2441,6 +2441,10 @@ void GUISandbox::FillClip(gui::Node& section)
         {u8"Lamp A.range", Color{0.45f, 0.8f, 0.55f, 1.0f}, {key(0.0f, 10.0f), key(2.0f, 16.0f), key(4.0f, 10.0f)}, 3},
         {u8"Lamp B.intensity", Color{0.45f, 0.65f, 1.0f, 1.0f}, {key(0.0f, 12.5f), key(1.5f, 4.0f), key(3.0f, 12.5f)}, 3},
         {u8"Lamp C.intensity", Color{0.9f, 0.45f, 0.6f, 1.0f}, {key(0.5f, 5.0f), key(2.0f, 18.0f), key(3.5f, 5.0f)}, 3},
+        {u8"Lamp A.position.y", Color{0.7f, 0.55f, 0.95f, 1.0f}, {key(0.0f, 3.0f), key(2.0f, 6.0f), key(4.0f, 3.0f)}, 3},
+        {u8"Lamp B.range", Color{0.4f, 0.85f, 0.85f, 1.0f}, {key(0.0f, 10.0f), key(1.0f, 7.0f), key(3.0f, 15.0f), key(4.0f, 10.0f)}, 4},
+        {u8"Lamp B.position.y", Color{0.85f, 0.85f, 0.45f, 1.0f}, {key(0.5f, 3.0f), key(2.5f, 1.0f), key(4.0f, 3.0f)}, 3},
+        {u8"Lamp C.range", Color{0.95f, 0.6f, 0.4f, 1.0f}, {key(0.0f, 10.0f), key(2.0f, 4.0f), key(4.0f, 10.0f)}, 3},
     };
     for (const Track& track : tracks)
     {

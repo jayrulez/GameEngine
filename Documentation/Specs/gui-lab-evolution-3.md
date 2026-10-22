@@ -618,9 +618,8 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     edit setting it on each (as a colour). It travels as one (the user, 2026-10-22): the `Variant`
     carries Core's keys (`Curve`) or a `ColorGradient` (`Gradient`), as it carries a `Color`, of
     `PropertyKind::Curve` and `::Gradient`; the reflected source takes the registrations
-    (`RegisterCurveType`, `RegisterGradientType`: a type's name, its parts' properties and its most,
-    since reflection does not say a bounded array's capacity) and reads and writes the parts itself,
-    so an undo does not need Core's key reflected where the application runs.
+    (`RegisterCurveType`, `RegisterGradientType`: a type's name and its parts' properties, its most
+    the lists' capacity, which Core's reflection says) and reads and writes the parts itself.
   - **The dopesheet**, `Dopesheet` over an `ITimelineSource`: rows folded by path (component, property,
     channel), a parent row the sum of the keys under it; keys addressed by (row, index), an edit
     returning the moved keys' new addresses so the selection survives the source's sorting. A click

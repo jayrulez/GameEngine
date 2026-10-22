@@ -493,7 +493,11 @@ TEST_CASE("reflected source: arrays and bounded arrays are lists, elements by in
     CHECK(bed.b->weights.Size() == 3u);
     CHECK(bed.b->weights[2] == doctest::Approx(1.0f));
 
-    // A bounded array: its count, at most its capacity.
+    // A bounded array: its count, at most its capacity, which its row says; an Array has no most.
+    core::Array<PropertyInfo> top(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8""), top);
+    CHECK(bed.Find(top, u8"steps")->MaxCount == 3u);
+    CHECK(bed.Find(top, u8"weights")->MaxCount == 0u);
     elements.Clear();
     bed.source.GetProperties(SV(u8"steps"), elements);
     CHECK(elements.Size() == 2u);
@@ -705,9 +709,9 @@ namespace
         EmitterBed()
         {
             reflected::Register();
-            source.RegisterCurveType(SV(u8"TestCurve"), ReflectedCurveParts{core::String(u8"keys"), 4});
+            source.RegisterCurveType(SV(u8"TestCurve"), ReflectedCurveParts{core::String(u8"keys")});
             source.RegisterGradientType(SV(u8"TestGradient"), ReflectedGradientParts{core::String(u8"colors"), core::String(u8"alphas"),
-                                                                                    core::String(u8"interpolation"), 3});
+                                                                                    core::String(u8"interpolation")});
             core::Instance objects[] = {core::Instance(a.Get(), a->GetType()), core::Instance(b.Get(), b->GetType())};
             source.SetObjects(objects);
             source.SetTextFormat(&format);
@@ -727,7 +731,7 @@ namespace
     }
 }
 
-TEST_CASE("reflected source: a registered curve and gradient are one value each, of their kind, their most from the registration")
+TEST_CASE("reflected source: a registered curve and gradient are one value each, of their kind, their most their lists' capacity")
 {
     EmitterBed bed;
     core::Array<PropertyInfo> rows(core::DefaultAllocator());

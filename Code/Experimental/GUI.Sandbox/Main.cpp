@@ -2358,8 +2358,7 @@ void GUISandbox::FillReflected(gui::PropertyGrid& grid)
     m_reflected = MakeUnique<gui::ReflectedPropertySource>(AppRoot(), AppRoot());
     m_reflected->SetTextFormat(m_cameraFormat.Get());
     // The sky is a gradient: its stops and blend, as the application says (T5).
-    m_reflected->RegisterGradientType(u8"SkyGradient", gui::ReflectedGradientParts{String(u8"colors"), String(u8"alphas"), String(u8"interpolation"),
-                                                                                  static_cast<u32>(sandbox::SkyGradient::kMostStops)});
+    m_reflected->RegisterGradientType(u8"SkyGradient", gui::ReflectedGradientParts{String(u8"colors"), String(u8"alphas"), String(u8"interpolation")});
     SelectCameras(0);
     grid.SetSource(m_reflected.Get());
 

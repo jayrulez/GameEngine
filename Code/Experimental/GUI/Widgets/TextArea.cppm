@@ -9,7 +9,7 @@
 // shows, keeping the column they started from, and page up and down by as many as fit; Home and End
 // go to a shown line's ends. It is `rows` lines tall unless something sizes it, and scrolls down to
 // keep the caret in view (the wheel scrolls it too). It declares "textinput multiline", the context
-// the multiline keys are bound in.
+// the multiline keys are bound in; Ctrl+Return submits it.
 
 module;
 #include "Core/Prelude.h"
@@ -24,6 +24,8 @@ import :text;
 import :text_segmentation; // TextRange
 import :text_edit_model;   // ITextLines
 import :text_edit_base;
+import :commands;          // CommandEvent
+import :text_editing_keys; // kTextSubmitCommand
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -42,6 +44,7 @@ export namespace experimental::gui
             HintText().SetWhiteSpace(TextWhiteSpace::Normal);
             GetModel().SetMultiline(true);
             GetModel().SetLines(&m_lines);
+            (void)OnCommand(core::StringView(kTextSubmitCommand), [this](CommandEvent&) { Submit(); });
         }
         TextArea(const TextArea&) = delete;
         TextArea& operator=(const TextArea&) = delete;
@@ -61,6 +64,16 @@ export namespace experimental::gui
         {
             const f32 line = ShownText().GetFont() != nullptr ? ShownText().GetLineHeight() : 20.0f;
             return core::Float2{240.0f, line * static_cast<f32>(m_rows)};
+        }
+        /// The size its text takes wrapped at `width` (widest line by total height), at least a line
+        /// tall: what a box that grows with what is typed measures (an editable label editing).
+        [[nodiscard]] core::Float2 MeasureText(f32 width) const
+        {
+            const f32 line = ShownText().GetFont() != nullptr ? ShownText().GetLineHeight() : 20.0f;
+            if (GetText().Size() == 0 || ShownText().GetFont() == nullptr)
+                return core::Float2{0.0f, line};
+            const core::Float2 size = ShownText().MeasureWrapped(width);
+            return core::Float2{size.x, core::Max(size.y, line)};
         }
         /// Its first line's baseline.
         [[nodiscard]] f32 BaselineAt(core::Float2 size) const override

@@ -451,6 +451,7 @@ export namespace experimental::gui
             AddChild(m_title.Get());
             m_body = core::MakeRef<EditableLabel>(MemoryAllocator());
             m_body->AddClass(core::StringView(u8"body"));
+            m_body->SetMultiline(true);
             m_body->SetDisplayed(false);
             AddChild(m_body.Get());
             GraphFrameWidget* self = this;

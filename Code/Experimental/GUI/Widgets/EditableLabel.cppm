@@ -6,6 +6,8 @@
 // EditableLabel: a label that becomes a field in place (E6 of Specs/gui-lab-evolution.md), a
 // layer's name or a file's in a list. A double-click, or F2 while it is focused, edits it: a text
 // field over its text, all of it selected. Return commits, as does focus leaving; Escape cancels.
+// A multiline one (a comment) edits in a text area, where Return breaks a line and Ctrl+Return
+// commits, its box growing and shrinking with the lines typed.
 // A validator may refuse what was typed: Return then keeps it editing (the field marked
 // `.invalid`), and focus leaving puts the old text back. A committed change reports `change`.
 
@@ -19,8 +21,11 @@ import foundation.core; // Function, Move, String, RefPtr
 import :rect;
 import :event;
 import :draw_context;
+import :text; // TextWhiteSpace
 import :label;
+import :text_edit_base;
 import :text_field;
+import :text_area;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -36,6 +41,26 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"editablelabel"));
             SetTabFocusable(true);
         }
+
+        /// Whether it edits in a text area (Return breaks a line, Ctrl+Return commits) rather than a
+        /// field; its text keeps its line breaks and wraps (white-space: pre-wrap, unless a sheet says).
+        /// Set while it is not editing.
+        void SetMultiline(bool multiline)
+        {
+            if (multiline == m_multiline || m_editing)
+                return;
+            m_multiline = multiline;
+            {
+                StyleWriteScope defaults(*this);
+                SetWhiteSpace(multiline ? TextWhiteSpace::PreWrap : TextWhiteSpace::Normal);
+            }
+            if (m_editor)
+            {
+                RemoveChild(m_editor.Get());
+                m_editor = nullptr;
+            }
+        }
+        [[nodiscard]] bool IsMultiline() const noexcept { return m_multiline; }
 
         /// Starts editing (as a double-click or F2 does).
         void BeginEdit()
@@ -69,6 +94,7 @@ export namespace experimental::gui
             m_editor->SetDisplayed(false);
             if (hadFocus)
                 RequestFocus(); // the label keeps the focus the field had
+            RequestLayout(); // its box is its own text's again
             if (commit && typed.AsView() != GetText())
             {
                 SetText(typed.AsView());
@@ -80,8 +106,8 @@ export namespace experimental::gui
             return true;
         }
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
-        /// The field it edits in (null until it first edits).
-        [[nodiscard]] TextField* GetEditor() const noexcept { return m_editor.Get(); }
+        /// The field it edits in, a text area when multiline (null until it first edits).
+        [[nodiscard]] TextEditBase* GetEditor() const noexcept { return m_editor.Get(); }
 
         /// Decides whether typed text may be committed (false: it stays editing).
         void SetValidator(core::Function<bool(core::StringView)> validator) { m_validator = core::Move(validator); }
@@ -124,6 +150,13 @@ export namespace experimental::gui
             if (m_editor)
                 ShareTextStyle(*m_editor);
         }
+        // While a text area edits it, its box is the typed text's, so it grows with the lines.
+        [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
+        {
+            if (m_editing && m_multiline)
+                return static_cast<const TextArea*>(m_editor.Get())->MeasureText(available.x);
+            return Label::MeasureContent(available);
+        }
         // The field's text lies where the label's was: its content box on the label's, its padding
         // and border reaching past the label's box. Over the whole box alone, a field's padding
         // would leave a label one line tall no room to show what is typed.
@@ -142,10 +175,17 @@ export namespace experimental::gui
         {
             if (m_editor)
                 return;
-            m_editor = core::MakeRef<TextField>(MemoryAllocator());
+            EditableLabel* self = this;
+            if (m_multiline)
+            {
+                core::RefPtr<TextArea> area = core::MakeRef<TextArea>(MemoryAllocator());
+                area->SetOnTextChanging([self](core::StringView) { self->RequestLayout(); });
+                m_editor = area;
+            }
+            else
+                m_editor = core::MakeRef<TextField>(MemoryAllocator());
             m_editor->AddClass(core::StringView(u8"editor"));
             ShareTextStyle(*m_editor);
-            EditableLabel* self = this;
             m_editor->SetOnSubmit([self](core::StringView) { (void)self->EndEdit(true); });
             (void)m_editor->AddEventListener(EventType::FocusLost, [self](const Event&)
             {
@@ -156,8 +196,9 @@ export namespace experimental::gui
             AddChild(m_editor.Get());
         }
 
-        core::RefPtr<TextField> m_editor;
+        core::RefPtr<TextEditBase> m_editor;
         bool m_editing = false;
+        bool m_multiline = false;
         core::Function<bool(core::StringView)> m_validator;
         core::Function<void(core::StringView)> m_onCommitted;
     };

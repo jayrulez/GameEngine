@@ -88,5 +88,8 @@ export namespace experimental::gui
                               core::StringView(u8"textinput && multiline"));
         (void)keymap.Bind(core::StringView(u8"enter"), core::StringView(kTextSubmitCommand),
                           core::StringView(u8"textinput && !multiline"));
+        // Where Return breaks a line, Ctrl+Return submits (a comment's or a message's way).
+        (void)keymap.Bind(core::StringView(u8"ctrl-enter"), core::StringView(kTextSubmitCommand),
+                          core::StringView(u8"textinput && multiline"));
     }
 }

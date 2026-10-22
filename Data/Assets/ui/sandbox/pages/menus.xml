@@ -71,6 +71,7 @@
             <Button id="toast-bare" class="btn" text="Achievement"/>
             <Button id="toast-thread" class="btn" text="Thread"/>
             <Button id="toast-clear" class="btn" text="Clear"/>
+            <Button id="toast-script" class="btn" text="From the script"/>
         </Panel>
         <Label id="toast-said" class="caption" text="No toasts yet."/>
         <Label class="caption toast-note" white-space="normal" text="ToastHost (the core GUI: one host for a game and an editor) over the whole window, in the shell."/>

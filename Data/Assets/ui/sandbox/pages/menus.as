@@ -1,7 +1,7 @@
 // Menus and windows: the menus written in markup say what was picked. An item's `activate`
 // bubbles, through its menu to what opened it, so one listener on the section hears them all;
 // the event's id names the item. And what the script builds itself (E16): a menu of sixty items,
-// longer than the window, which scrolls, and a window of its own.
+// longer than the window, which scrolls, and a window of its own; and a toast it fills in and posts.
 
 funcdef bool EventHandler(GuiEvent e);
 
@@ -44,10 +44,32 @@ bool openWindow(GuiEvent e)
     return true;
 }
 
+// A toast the script fills in and posts (T7 of round three), its action heard as an `activate`.
+bool postToast(GuiEvent e)
+{
+    ToastRequest request;
+    request.title = "From menus.as";
+    request.message = "The page's script filled in this request and posted it.";
+    request.severity = ToastSeverity::Success;
+    request.classes = "pop";
+    request.addAction("again", "Again", "");
+    ToastHost::nearest(gui::root()).post(request);
+    return true;
+}
+
+bool toastAction(GuiEvent e)
+{
+    if (e.id == "again")
+        Label::of(gui::root().find("toast-said")).text = "The script heard its toast's action: " + e.id + ".";
+    return true;
+}
+
 void main()
 {
     Node@ root = gui::root();
     root.find("menus-markup").on("activate", EventHandler(picked));
+    root.find("toast-script").on("click", EventHandler(postToast));
+    ToastHost::nearest(root).on("activate", EventHandler(toastAction));
 
     // A menu longer than the window: it scrolls.
     @longMenu = root.find("menus-long").add("Menu");

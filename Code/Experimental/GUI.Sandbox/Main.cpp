@@ -492,6 +492,8 @@ private:
     void FillReflected(gui::PropertyGrid& grid);
     void SelectCameras(usize which);
     void StepCameras(bool undo);
+    void FillClip(gui::Node& section);
+    void PlayClip(f32 time);
     // The Toolkit page's edit history: changes left to save, to undo and to redo.
     i32 m_toolkitUnsaved = 0;
     i32 m_toolkitDone = 0;
@@ -506,6 +508,12 @@ private:
     UniquePtr<sandbox::StressPage> m_stress;
     // The Toolkit page's lamps (T1): before the GUI, so the grid lets go of them first.
     UniquePtr<sandbox::LampSource> m_lamps;
+    // The Toolkit page's clip (T5): tracks of the lamps' values, before the GUI too, its axis, and
+    // the page's history of its changes.
+    UniquePtr<gui::CurveSet> m_clip;
+    RefPtr<gui::TimeAxis> m_clipAxis;
+    Array<gui::CurveChange> m_clipUndo;
+    Array<gui::CurveChange> m_clipRedo;
     // The Toolkit page's reflected cameras (T3), their source and its format, and the page's
     // history of the source's changes (each with the cameras it was made on).
     RefPtr<sandbox::CameraRig> m_cameras[2];
@@ -1037,6 +1045,9 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: a reflected object's grid (T3).
     if (auto* grid = Cast<gui::PropertyGrid>(FindById(*m_shellNode, u8"reflected-grid")))
         FillReflected(*grid);
+    // Toolkit: a clip of the lamps' values in a dopesheet and a curve view (T5), after the lamps.
+    if (gui::Node* section = FindById(*m_shellNode, u8"clip-section"))
+        FillClip(*section);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -2346,6 +2357,9 @@ void GUISandbox::FillReflected(gui::PropertyGrid& grid)
     m_cameraFormat = MakeUnique<sandbox::XmlTextFormat>(AppRoot(), AppRoot());
     m_reflected = MakeUnique<gui::ReflectedPropertySource>(AppRoot(), AppRoot());
     m_reflected->SetTextFormat(m_cameraFormat.Get());
+    // The sky is a gradient: its stops and blend, as the application says (T5).
+    m_reflected->RegisterGradientType(u8"SkyGradient", gui::ReflectedGradientParts{String(u8"colors"), String(u8"alphas"), String(u8"interpolation"),
+                                                                                  static_cast<u32>(sandbox::SkyGradient::kMostStops)});
     SelectCameras(0);
     grid.SetSource(m_reflected.Get());
 
@@ -2404,6 +2418,141 @@ void GUISandbox::SelectCameras(usize which)
         if (which == i || which >= 2)
             objects[count++] = Instance(m_cameras[i].Get(), m_cameras[i]->GetType());
     m_reflected->SetObjects(Span<const Instance>(objects, count));
+}
+
+// The Toolkit page's clip: four tracks of the lamps' values ("Lamp A.intensity" and the rest, the
+// dopesheet folding them by lamp), a ruler, a dopesheet and a curve view on one axis. Scrubbing plays
+// the tracks into the lamps, so the grid above follows; each edit of the clip is a step of its Undo.
+void GUISandbox::FillClip(gui::Node& section)
+{
+    if (!m_lamps)
+        return;
+    using K = CurveKey;
+    const auto key = [](f32 time, f32 value) { return K{time, value, 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Auto}; };
+    m_clip = MakeUnique<gui::CurveSet>(AppRoot());
+    struct Track
+    {
+        const char8_t* Path;
+        Color Stroke;
+        K Keys[4];
+        usize Count;
+    };
+    const Track tracks[] = {
+        {u8"Lamp A.intensity", Color{0.95f, 0.75f, 0.3f, 1.0f}, {key(0.0f, 5.0f), key(1.0f, 14.0f), key(2.5f, 3.0f), key(4.0f, 5.0f)}, 4},
+        {u8"Lamp A.range", Color{0.45f, 0.8f, 0.55f, 1.0f}, {key(0.0f, 10.0f), key(2.0f, 16.0f), key(4.0f, 10.0f)}, 3},
+        {u8"Lamp B.intensity", Color{0.45f, 0.65f, 1.0f, 1.0f}, {key(0.0f, 12.5f), key(1.5f, 4.0f), key(3.0f, 12.5f)}, 3},
+        {u8"Lamp C.intensity", Color{0.9f, 0.45f, 0.6f, 1.0f}, {key(0.5f, 5.0f), key(2.0f, 18.0f), key(3.5f, 5.0f)}, 3},
+    };
+    for (const Track& track : tracks)
+    {
+        gui::CurveInfo info;
+        info.Name = String(track.Path);
+        info.StrokeColor = track.Stroke;
+        info.HasRange = true;
+        info.Min = 0.0f;
+        info.Max = 20.0f;
+        K keys[4];
+        for (usize i = 0; i < track.Count; ++i)
+            keys[i] = track.Keys[i];
+        ApplyTangentModes(Span<K>(keys, track.Count));
+        m_clip->AddCurve(info, Span<const K>(keys, track.Count));
+    }
+    m_clipAxis = MakeRef<gui::TimeAxis>(AppRoot());
+    m_clipAxis->SetDuration(4.0f);
+    m_clipAxis->SetPixelsPerSecond(100.0f);
+    m_clipAxis->SetFrameRate(30.0f);
+    auto* ruler = Cast<gui::TimeRuler>(FindById(section, u8"clip-ruler"));
+    auto* sheet = Cast<gui::Dopesheet>(FindById(section, u8"clip-sheet"));
+    auto* curves = Cast<gui::CurveView>(FindById(section, u8"clip-curves"));
+    if (ruler != nullptr)
+        ruler->SetTimeAxis(m_clipAxis);
+    if (sheet != nullptr)
+    {
+        sheet->SetTimeAxis(m_clipAxis);
+        sheet->SetSource(m_clip.Get());
+    }
+    if (curves != nullptr)
+    {
+        curves->SetTimeAxis(m_clipAxis);
+        curves->SetValueRange(-1.0f, 21.0f);
+        curves->SetSource(m_clip.Get());
+    }
+    GUISandbox* self = this;
+    auto* said = Cast<gui::Label>(FindById(section, u8"clip-said"));
+    auto* undo = Cast<gui::Button>(FindById(section, u8"clip-undo"));
+    auto* redo = Cast<gui::Button>(FindById(section, u8"clip-redo"));
+    const auto buttons = [self, undo, redo]()
+    {
+        if (undo != nullptr)
+            undo->SetEnabled(!self->m_clipUndo.IsEmpty());
+        if (redo != nullptr)
+            redo->SetEnabled(!self->m_clipRedo.IsEmpty());
+    };
+    buttons();
+    m_clipAxis->SetOnPlayheadChanged([self, said](f32 time)
+    {
+        self->PlayClip(time);
+        if (said != nullptr)
+            said->SetText(Format(u8"At frame {} ({} s): the lamps above show the tracks there.", static_cast<i64>(Round(time * 30.0f)), gui::FormatStepped(time, 0.01f))
+                              .AsView());
+    });
+    m_clip->SetOnCommit([self, buttons, said](const gui::CurveChange& change)
+    {
+        self->m_clipUndo.PushBack(change);
+        self->m_clipRedo.Clear();
+        buttons();
+        self->PlayClip(self->m_clipAxis->Playhead());
+        if (said != nullptr)
+            said->SetText(Format(u8"Changed {} track(s).", change.Curves.Size()).AsView());
+    });
+    const auto step = [self, buttons, said](bool back)
+    {
+        Array<gui::CurveChange>& from = back ? self->m_clipUndo : self->m_clipRedo;
+        Array<gui::CurveChange>& to = back ? self->m_clipRedo : self->m_clipUndo;
+        if (from.IsEmpty())
+            return;
+        gui::CurveChange change = Move(from.Back());
+        from.PopBack();
+        self->m_clip->Apply(change, back);
+        to.PushBack(Move(change));
+        buttons();
+        self->PlayClip(self->m_clipAxis->Playhead());
+        if (said != nullptr)
+            said->SetText(back ? StringView(u8"Undid a clip change.") : StringView(u8"Redid a clip change."));
+    };
+    if (undo != nullptr)
+        undo->SetOnClick([step]() { step(true); });
+    if (redo != nullptr)
+        redo->SetOnClick([step]() { step(false); });
+    if (auto* frame = Cast<gui::Button>(FindById(section, u8"clip-frame")))
+    {
+        gui::CurveView* view = curves;
+        frame->SetOnClick([view]()
+        {
+            if (view != nullptr)
+                view->FrameAll();
+        });
+    }
+}
+
+// The clip's tracks at `time` played into the lamps they name ("Lamp B.intensity": Lamp B's intensity).
+void GUISandbox::PlayClip(f32 time)
+{
+    if (!m_clip || !m_lamps)
+        return;
+    for (usize c = 0; c < m_clip->CurveCount(); ++c)
+    {
+        const String path = m_clip->GetChannelPath(c);
+        usize dot = 0;
+        while (dot < path.Size() && path[dot] != u8'.')
+            ++dot;
+        if (dot >= path.Size())
+            continue;
+        const usize lamp = m_lamps->FindLamp(path.AsView().SubStr(0, dot));
+        const Span<const CurveKey> keys = m_clip->GetKeys(c);
+        if (!keys.IsEmpty())
+            m_lamps->SetAnimatedValue(lamp, path.AsView().SubStr(dot + 1, path.Size() - dot - 1), static_cast<f64>(EvaluateCurve(keys, time)));
+    }
 }
 
 // A change back (undo) or again (redo), on the cameras it was made on.

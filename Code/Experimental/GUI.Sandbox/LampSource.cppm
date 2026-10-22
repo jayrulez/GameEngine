@@ -11,10 +11,12 @@
 //     the type tells the grid its properties changed);
 //   - tags, a list of text of at most four; effects, a list of two types (Flicker, Pulse), each a
 //     group of its own values;
-//   - falloff, hinted "curve", which no editor takes.
+//   - flicker, a curve of Core's keys (T5): its row a preview, its editor the toolkit's curve view;
+//   - falloff, hinted "falloff", which no editor takes.
 // Each lamp's defaults are how it started; a revert puts them back. Copying writes a path and what
 // is under it with the engine's XmlSerializer, a shape first, so a paste refuses another shape.
-// Until T3's reflected source, the page's model of one.
+// The page's clip writes sampled values into the lamps (SetAnimatedValue) as it is scrubbed, with no
+// history: the grid follows.
 
 module;
 #include "Core/Prelude.h"
@@ -55,6 +57,12 @@ export namespace sandbox
                 lamp.Position[0] = static_cast<f64>(i) * 2.0;
                 lamp.Position[1] = 3.0;
                 lamp.Tags.PushBack(String(u8"indoor"));
+                // A flicker over a second: bright, a dip, a recovery, a smaller dip.
+                const f32 times[] = {0.0f, 0.15f, 0.3f, 0.55f, 0.8f, 1.0f};
+                const f32 values[] = {1.0f, 0.4f, 0.9f, 0.55f, 1.0f, 0.8f};
+                for (usize k = 0; k < 6; ++k)
+                    lamp.FlickerCurve.PushBack(CurveKey{times[k], values[k], 0.0f, 0.0f, CurveKeyInterpolation::Cubic, CurveTangentMode::Auto});
+                ApplyTangentModes(lamp.FlickerCurve.AsSpan());
             }
             // The second differs in intensity, type, a shadow flag, its turn and its effects, so
             // all three show them mixed.
@@ -83,6 +91,22 @@ export namespace sandbox
         [[nodiscard]] bool CanRedo() const noexcept { return !m_redo.IsEmpty(); }
         void Undo() { Step(m_undo, m_redo, true); }
         void Redo() { Step(m_redo, m_undo, false); }
+        /// A value the page's clip plays into lamp `lamp` at `path`: shown, kept in no history.
+        void SetAnimatedValue(usize lamp, StringView path, f64 value)
+        {
+            if (lamp >= kLamps)
+                return;
+            Write(m_lamps[lamp], path, gui::Variant(value));
+            NotifyValuesChanged();
+        }
+        /// The lamp named `name` (Lamp A, B or C); kLamps when none is.
+        [[nodiscard]] usize FindLamp(StringView name) const
+        {
+            for (usize i = 0; i < kLamps; ++i)
+                if (m_lamps[i].Name.AsView() == name)
+                    return i;
+            return kLamps;
+        }
         /// Told when the history changes (to enable Undo and Redo) and what changed, in words.
         void SetOnHistoryChanged(Function<void(StringView)> changed) { m_onHistory = core::Move(changed); }
 
@@ -161,6 +185,12 @@ export namespace sandbox
             intensity.Step = 0.5;
             intensity.Description = String(u8"Drag across it to scrub; Escape gives the scrub up");
             Add(out, u8"range", K::Float, u8"Light", u8"Range").Step = 0.25;
+            gui::PropertyInfo& flicker = Add(out, u8"flicker", K::Curve, u8"Light", u8"Flicker");
+            flicker.HasRange = true;
+            flicker.Min = 0.0;
+            flicker.Max = 1.5;
+            flicker.MaxCount = 8;
+            flicker.Description = String(u8"Its brightness over a second: click for the curve");
             gui::PropertyInfo& cone = Add(out, u8"cone", K::Group, u8"Light", u8"Cone");
             cone.Hint = String(u8"Float2");
             cone.Visible = AllSpots();
@@ -183,8 +213,8 @@ export namespace sandbox
             effects.ElementTypes.PushBack(String(u8"Pulse"));
             Add(out, u8"bounces", K::Integer, u8"Advanced", u8"Bounces").Description = String(u8"An integer: no range, snapped to whole numbers");
             gui::PropertyInfo& falloff = Add(out, u8"falloff", K::Group, u8"Advanced", u8"Falloff");
-            falloff.Hint = String(u8"curve"); // a curve is no value of T2's: no editor takes it
-            falloff.Description = String(u8"A hint no editor takes yet");
+            falloff.Hint = String(u8"falloff"); // a hint no editor takes: the row says so
+            falloff.Description = String(u8"A hint no editor takes");
         }
 
         [[nodiscard]] gui::Variant GetValue(StringView path, usize object) const override
@@ -414,7 +444,7 @@ export namespace sandbox
         static Effect Pulse() { return Effect{1, 1.0, 0.5, 2.0}; }
         struct Lamp
         {
-            explicit Lamp(IAllocator& allocator) : Tags(allocator), Effects(allocator) {}
+            explicit Lamp(IAllocator& allocator) : Tags(allocator), Effects(allocator), FlickerCurve(allocator) {}
             String Name;
             i64 Id = 0;
             bool Enabled = true;
@@ -428,6 +458,7 @@ export namespace sandbox
             Array<String> Tags;
             Array<Effect> Effects;
             i64 Bounces = 2;
+            Array<CurveKey> FlickerCurve;
         };
         struct Original
         {
@@ -527,6 +558,8 @@ export namespace sandbox
                 return gui::Variant(lamp.Shadows);
             if (path == StringView(u8"bounces"))
                 return gui::Variant(lamp.Bounces);
+            if (path == StringView(u8"flicker"))
+                return gui::Variant::FromCurve(lamp.FlickerCurve.AsSpan());
             if (path == StringView(u8"position.x"))
                 return gui::Variant(lamp.Position[0]);
             if (path == StringView(u8"position.y"))
@@ -577,6 +610,12 @@ export namespace sandbox
                 lamp.Shadows = value.AsInt();
             else if (path == StringView(u8"bounces"))
                 lamp.Bounces = value.AsInt();
+            else if (path == StringView(u8"flicker") && value.GetType() == gui::Variant::Type::Curve)
+            {
+                lamp.FlickerCurve.Clear();
+                for (const CurveKey& key : value.AsCurve())
+                    lamp.FlickerCurve.PushBack(key);
+            }
             else if (path == StringView(u8"position.x"))
                 lamp.Position[0] = value.AsFloat();
             else if (path == StringView(u8"position.y"))
@@ -682,7 +721,8 @@ export namespace sandbox
         {
             if (a.Name != b.Name || a.Enabled != b.Enabled || a.Type != b.Type || a.Intensity != b.Intensity || a.Range != b.Range ||
                 a.Cone[0] != b.Cone[0] || a.Cone[1] != b.Cone[1] || a.Shadows != b.Shadows || a.Bounces != b.Bounces ||
-                a.Tags.Size() != b.Tags.Size() || a.Effects.Size() != b.Effects.Size())
+                a.Tags.Size() != b.Tags.Size() || a.Effects.Size() != b.Effects.Size() ||
+                gui::Variant::FromCurve(a.FlickerCurve.AsSpan()).Compare(gui::Variant::FromCurve(b.FlickerCurve.AsSpan())) != 0)
                 return false;
             for (usize i = 0; i < 3; ++i)
                 if (a.Position[i] != b.Position[i])
@@ -721,6 +761,8 @@ export namespace sandbox
                 return String(u8"number");
             case gui::Variant::Type::String:
                 return String(u8"text");
+            case gui::Variant::Type::Curve:
+                return String(u8"curve");
             default:
                 return String(u8"value");
             }
@@ -802,6 +844,41 @@ export namespace sandbox
                 String v(value.AsString());
                 Serialize(ar, key, v);
                 value = gui::Variant(v.AsView());
+                break;
+            }
+            case gui::Variant::Type::Curve:
+            {
+                // Its count, then each key's fields, under the key's own object.
+                Array<CurveKey> keys;
+                for (const CurveKey& k : value.AsCurve())
+                    keys.PushBack(k);
+                ar.Key(key);
+                ar.BeginObject();
+                i64 count = static_cast<i64>(keys.Size());
+                Serialize(ar, "count", count);
+                count = core::Clamp<i64>(count, 0, 64);
+                while (static_cast<i64>(keys.Size()) < count)
+                    keys.PushBack(CurveKey{});
+                while (static_cast<i64>(keys.Size()) > count)
+                    keys.PopBack();
+                for (usize i = 0; i < keys.Size(); ++i)
+                {
+                    ar.Key(Key(Format(u8"k{}", i)).data());
+                    ar.BeginObject();
+                    Serialize(ar, "time", keys[i].time);
+                    Serialize(ar, "value", keys[i].value);
+                    Serialize(ar, "tangentIn", keys[i].tangentIn);
+                    Serialize(ar, "tangentOut", keys[i].tangentOut);
+                    i64 interpolation = static_cast<i64>(keys[i].interpolation);
+                    i64 mode = static_cast<i64>(keys[i].tangentMode);
+                    Serialize(ar, "interpolation", interpolation);
+                    Serialize(ar, "tangentMode", mode);
+                    keys[i].interpolation = static_cast<CurveKeyInterpolation>(interpolation);
+                    keys[i].tangentMode = static_cast<CurveTangentMode>(mode);
+                    ar.EndObject();
+                }
+                ar.EndObject();
+                value = gui::Variant::FromCurve(keys.AsSpan());
                 break;
             }
             default:

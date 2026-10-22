@@ -83,4 +83,22 @@
         <Label id="reflected-said" class="caption" text="No edits yet."/>
         <Label class="caption" white-space="normal" text="ReflectedPropertySource (GUI.Toolkit) over sandbox::CameraRig, its text format the engine's XmlSerializer, its changes kept by the page for Undo."/>
     </Panel>
+
+    <Panel id="clip-section" class="section" gap="12">
+        <Label class="section-title" text="Curves, a gradient and a clip"/>
+        <Label class="toolkit-note" white-space="normal"
+               text="Each lamp's Flicker above is a curve and each camera's Sky a gradient: click the row's picture for its view, where every edit shows on the objects, closing it is one step of Undo and Escape gives it all up. In a curve view, click or box-select keys, drag them (Shift keeps to one axis), drag a selected key's handles, double-click the curve to add a key, right-click a key for its interpolation, tangent mode or Delete. In a gradient, click above the bar for an alpha stop and below it for a colour stop, drag one along or off the bar, double-click a colour stop for the picker. Below, a clip of the lamps' values: drag on the ruler to scrub (the lamps above follow), click a lamp's name to fold its tracks, select keys in the dopesheet or the curve view and drag them; the wheel zooms about the pointer and a middle drag pans."/>
+        <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
+            <Button id="clip-undo" class="toolkit-button" text="Undo"/>
+            <Button id="clip-redo" class="toolkit-button" text="Redo"/>
+            <Button id="clip-frame" class="toolkit-button" text="Frame the curves"/>
+        </Panel>
+        <Panel class="clip-frame" flex-direction="column">
+            <TimeRuler id="clip-ruler" class="clip-ruler"/>
+            <Dopesheet id="clip-sheet" class="clip-sheet" label-width="160"/>
+            <CurveView id="clip-curves" class="clip-curves"/>
+        </Panel>
+        <Label id="clip-said" class="caption" text="Scrub the ruler to play the clip into the lamps."/>
+        <Label class="caption" white-space="normal" text="TimeRuler, Dopesheet and CurveView (GUI.Toolkit) on one TimeAxis over a CurveSet, Core's keys drawn with Core's EvaluateCurve; the grid's Flicker and Sky rows are its CurvePropertyEditor and GradientPropertyEditor, the sky a type the page registers with the reflected source."/>
+    </Panel>
 </Panel>

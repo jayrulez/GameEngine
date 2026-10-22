@@ -35,6 +35,15 @@ namespace sandbox
         builder.Property<&Lens::autoFocus>("autoFocus");
     }
 
+    REFLECT_VALUE(SkyGradient, "rtti::sandbox")
+    {
+        builder.BoundedArray<&SkyGradient::colors, &SkyGradient::colorCount>("colors")
+            .Property<&SkyGradient::colorCount>("colorCount")
+            .BoundedArray<&SkyGradient::alphas, &SkyGradient::alphaCount>("alphas")
+            .Property<&SkyGradient::alphaCount>("alphaCount")
+            .Property<&SkyGradient::interpolation>("interpolation");
+    }
+
     REFLECT_MEMBERS(CameraEffect, "rtti::sandbox")
     {
         builder.Property<&CameraEffect::strength>("strength").PropAttribute("range", Float4{0.0f, 1.0f, 0.05f, 0.0f});
@@ -72,6 +81,7 @@ namespace sandbox
             .PropAttribute("hdrColor", true)
             .PropAttribute("description", String(u8"An HDR colour: its colour, and its intensity in exposure stops"));
         builder.Property<&CameraRig::lens>("lens");
+        builder.Property<&CameraRig::sky>("sky").PropAttribute("description", String(u8"Its colour over a day: click for the gradient"));
         builder.Nested<&CameraRig::exposureStops>("exposureStops");
         builder.Nested<&CameraRig::effects>("effects");
         builder.Property<&CameraRig::serial>("serial", PropertyFlags::ReadOnly).PropAttribute("description", String(u8"Given by the scene: read only"));
@@ -101,6 +111,7 @@ namespace sandbox
             RttiRegisterEnum_Projection();
             RttiRegisterEnum_CameraLayers();
             RttiRegisterValue_Lens();
+            RttiRegisterValue_SkyGradient();
             RegisterArrayType<f32>();
             RegisterPolymorphicArrayType<CameraEffect>(&CreateEffect, &CanCreateEffect);
             GlobalTypeRegistry().Register(CameraEffect::StaticType());

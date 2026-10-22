@@ -5,8 +5,9 @@
 // rig declared with core reflection and nothing else, which the toolkit's ReflectedPropertySource
 // shows: values with ranges and names, an enum, flags by attribute, a Float3, a Quaternion as Euler
 // degrees, a Color, an HDR glow (a colour and an intensity in stops), a nested lens, a list of stops, a polymorphic list
-// of effects added by type, a read-only serial and a field shown only for one projection. Its text
-// format is the engine's XmlSerializer.
+// of effects added by type, a read-only serial, a field shown only for one projection, and a sky
+// over the day (T5): Core's gradient stops in fixed arrays, which the page registers with the source
+// as a gradient. Its text format is the engine's XmlSerializer.
 
 module;
 #include "Core/Prelude.h"
@@ -47,6 +48,24 @@ export namespace sandbox
         bool autoFocus = true;
     };
 
+    /// The sky's colour over a day, 0 midnight to 1 the next: Core's stops in fixed arrays, as a
+    /// particle effect's colour over life keeps them; the page registers it as a gradient.
+    struct SkyGradient
+    {
+        static constexpr i32 kMostStops = 6;
+        GradientColorStop colors[kMostStops] = {
+            {0.0f, Color{0.03f, 0.04f, 0.12f, 1.0f}},
+            {0.25f, Color{0.95f, 0.55f, 0.3f, 1.0f}},
+            {0.5f, Color{0.45f, 0.7f, 1.0f, 1.0f}},
+            {0.75f, Color{0.9f, 0.4f, 0.35f, 1.0f}},
+            {1.0f, Color{0.03f, 0.04f, 0.12f, 1.0f}},
+        };
+        i32 colorCount = 5;
+        GradientAlphaStop alphas[kMostStops] = {{0.0f, 1.0f}};
+        i32 alphaCount = 1;
+        GradientInterpolation interpolation = GradientInterpolation::OkLab;
+    };
+
     class CameraEffect : public Object
     {
         RTTI_OBJECT(CameraEffect, Object)
@@ -84,6 +103,7 @@ export namespace sandbox
         Color background{0.1f, 0.12f, 0.16f, 1.0f};
         Float4 glow{1.0f, 0.75f, 0.4f, 2.0f}; // an HDR colour: sRGB rgb, a linear intensity in w
         Lens lens;
+        SkyGradient sky;
         Array<f32> exposureStops;
         Array<RefPtr<CameraEffect>> effects;
         u32 serial = 0;

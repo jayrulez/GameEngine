@@ -1,5 +1,6 @@
 add_executable(GUI.Code.Tests
     CodeDocumentTests.cpp
+    CodeEditorTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Code.Tests PRIVATE Experimental::GUI.Code Experimental::GUI doctest::doctest)

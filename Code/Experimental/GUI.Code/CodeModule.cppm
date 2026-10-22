@@ -11,3 +11,11 @@ module;
 export module experimental.gui.code;
 
 export import :code_document; // C0: lines, positions, anchors, edits, undo with selections
+export import :code_editor;   // C1: the view: shaped lines in view, several carets, the keymap's text commands
+
+export namespace experimental::gui
+{
+    /// Registers the code editor's element types (ElementTypes::Register), once: a host calls it at
+    /// start-up beside RegisterGuiElements, so markup and scripts can make them.
+    void RegisterCodeElements();
+}

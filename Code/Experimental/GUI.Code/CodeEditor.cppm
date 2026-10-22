@@ -1177,9 +1177,14 @@ export namespace experimental::gui
             return color;
         };
         const Color gutterColor = partColor(u8"gutter", Color{0.0f, 0.0f, 0.0f, 0.0f});
-        const Color numberColor = partColor(u8"line-number", Color{0.5f, 0.53f, 0.6f, 1.0f});
-        const Color currentNumber = partColor(u8"current-line-number", Color{0.85f, 0.87f, 0.9f, 1.0f});
-        const Color currentLine = partColor(u8"current-line", Color{1.0f, 1.0f, 1.0f, 0.04f});
+        const auto textColor = [this](const char8_t* name, Color fallback)
+        {
+            const PartStyle& part = GetPartStyle(name);
+            return part.HasColor ? part.TextColor : fallback;
+        };
+        const Color numberColor = textColor(u8"line-number", Color{0.5f, 0.53f, 0.6f, 1.0f});
+        const Color currentNumber = textColor(u8"current-line-number", GetTextColor());
+        const Color currentLine = partColor(u8"current-line", Color{0.0f, 0.0f, 0.0f, 0.0f}); // the sheet's (none by default)
         const Color selectionColor = partColor(u8"selection", Color{0.25f, 0.45f, 0.8f, 0.45f});
         const Color caretColor = partColor(u8"caret", GetTextColor());
 

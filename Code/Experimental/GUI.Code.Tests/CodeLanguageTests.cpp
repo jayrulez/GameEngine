@@ -7,6 +7,9 @@
 // editor keeps each line's tokens, tokenizing again only what changed or what a change reaches.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include <fstream>
+#include <sstream>
+#include <string>
 import foundation.core;
 import foundation.xml;
 import foundation.xml.serialization;
@@ -224,4 +227,68 @@ TEST_CASE("code editor: keeps each line's tokens, tokenizing again only what cha
     // Closing it: back as they were.
     editor.GetDocument().Insert(CodePosition{5, 2}, SV(u8"*/"));
     CHECK(editor.TokensOf(8)[0].Token == CodeToken::Type);
+}
+
+namespace
+{
+    // One of the sandbox's definitions (Data/Assets/ui/sandbox/code), read as the sandbox reads it.
+    bool LoadSandboxLanguage(const char* id, CodeLanguage& out)
+    {
+        std::ifstream file(std::string(GUI_CODE_SANDBOX_LANGUAGES) + "/" + id + ".xml", std::ios::binary);
+        if (!file)
+            return false;
+        std::stringstream text;
+        text << file.rdbuf();
+        const std::string bytes = text.str();
+        xml::XmlDocument doc(core::DefaultAllocator());
+        if (doc.Parse(core::StringView(reinterpret_cast<const char8_t*>(bytes.data()), bytes.size())) != xml::XmlResult::Ok)
+            return false;
+        xml::XmlSerializer reader(doc);
+        Serialize(reader, out);
+        return reader.IsOk() && !out.Contexts.IsEmpty();
+    }
+}
+
+TEST_CASE("code language: the sandbox's definitions read, each tokenizing its language")
+{
+    CodeLanguage as, luau, hlsl, markup, css;
+    REQUIRE(LoadSandboxLanguage("angelscript", as));
+    REQUIRE(LoadSandboxLanguage("luau", luau));
+    REQUIRE(LoadSandboxLanguage("hlsl", hlsl));
+    REQUIRE(LoadSandboxLanguage("xml", markup));
+    REQUIRE(LoadSandboxLanguage("css", css));
+    CHECK(as.Name == core::String(u8"AngelScript"));
+    REQUIRE(luau.Extensions.Size() == 2);
+
+    CodeLexState state;
+    CHECK_RUNS(Runs(as, SV(u8"int x = 3; // set"), state), u8"type:int text:x operator:= number:3 punctuation:; comment:// set");
+    CHECK_RUNS(Runs(as, SV(u8"string s = \"a\\\"b\";"), state), u8"type:string text:s operator:= string:\"a escape:\\\" string:b\" punctuation:;");
+    CHECK_RUNS(Runs(as, SV(u8"x = \"\"\"long"), state), u8"text:x operator:= string:\"\"\"long");
+    CHECK(state.Depth == 1); // a triple-quoted string goes on
+    CHECK_RUNS(Runs(as, SV(u8"text\"\"\" + y"), state), u8"string:text\"\"\" operator:+ text:y");
+
+    state = CodeLexState{};
+    CHECK_RUNS(Runs(luau, SV(u8"local t = {} -- note"), state), u8"keyword:local text:t operator:= punctuation:{} comment:-- note");
+    CHECK_RUNS(Runs(luau, SV(u8"--[[ a long"), state), u8"comment:--[[ a long");
+    CHECK(state.Depth == 1);
+    CHECK_RUNS(Runs(luau, SV(u8"comment ]] print(1)"), state), u8"comment:comment ]] builtin:print punctuation:( number:1 punctuation:)");
+    CHECK_RUNS(Runs(luau, SV(u8"s = a .. [==[x]==]"), state), u8"text:s operator:= text:a operator:.. string:[==[x]==]");
+
+    state = CodeLexState{};
+    CHECK_RUNS(Runs(hlsl, SV(u8"float4 main(float2 uv : TEXCOORD0) : SV_Target"), state),
+               u8"type:float4 text:main punctuation:( type:float2 text:uv punctuation:: text:TEXCOORD0 punctuation:) punctuation:: builtin:SV_Target");
+    CHECK_RUNS(Runs(hlsl, SV(u8"#include \"common.hlsl\""), state), u8"preprocessor:#include \"common.hlsl\"");
+    CHECK_RUNS(Runs(hlsl, SV(u8"properties { Color tint; }"), state), u8"keyword:properties punctuation:{ type:Color text:tint punctuation:; punctuation:}");
+
+    state = CodeLexState{};
+    CHECK_RUNS(Runs(markup, SV(u8"<Button id=\"go\" text='Go'/> <!-- c -->"), state),
+               u8"punctuation:< tag:Button attribute:id punctuation:= string:\"go\" attribute:text punctuation:= string:'Go' punctuation:/> comment:<!-- c -->");
+    CHECK_RUNS(Runs(markup, SV(u8"</Panel>&amp;"), state), u8"punctuation:</ tag:Panel punctuation:> escape:&amp;");
+
+    state = CodeLexState{};
+    CHECK_RUNS(Runs(css, SV(u8".btn:hover { color: #ff8000; width: 12px !important; }"), state),
+               u8"punctuation:. selector:btn punctuation:: selector:hover punctuation:{ property:color punctuation:: constant:#ff8000 punctuation:; property:width punctuation:: number:12px keyword:!important punctuation:; punctuation:}");
+    CHECK(state.Depth == 0);
+    CHECK_RUNS(Runs(css, SV(u8"toast { background: var(--toast-background, #222); }"), state),
+               u8"selector:toast punctuation:{ property:background punctuation:: builtin:var punctuation:( text:--toast-background punctuation:, constant:#222 punctuation:); punctuation:}");
 }

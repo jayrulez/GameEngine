@@ -7,8 +7,8 @@
 // built in code or read from a file through the engine's serialization (a script module's for its
 // language, the sandbox's for its pages); the library ships none. A definition is contexts, each a
 // list of rules tried in turn at each place of a line: a literal, an identifier (looked up in the
-// language's words: keywords, types, constants), a number, one of some characters, the rest of the
-// line, and a long bracket's open or close (Luau's `[==[`). A rule gives its text a token, and may
+// language's words: keywords, types, constants), a number, one of some characters or a run of them,
+// the rest of the line, and a long bracket's open or close (Luau's `[==[`). A rule gives its text a token, and may
 // enter a context (a string, a comment, a tag) or leave some; what no rule takes is its context's
 // token, an escape character taking the next with it. A context may end at the line's end (a line
 // comment, a preprocessor line).
@@ -80,6 +80,7 @@ export namespace experimental::gui
         Identifier, ///< a name (letters, digits, underscores; not first a digit), looked up in the words
         Number,     ///< a number: decimal, 0x hex, with a fraction, an exponent, a suffix
         AnyOf,      ///< one of its text's characters
+        Run,        ///< one or more of its text's characters (a CSS colour's `#1a2b3c`)
         LineRest,   ///< the rest of the line
         LongOpen,   ///< its text's character, '='s, the character again (Luau's `[==[`), the '='s kept
         LongClose,  ///< its text's character, as many '='s as the open's, the character again
@@ -87,7 +88,7 @@ export namespace experimental::gui
     namespace detail
     {
         inline constexpr const char8_t* kCodeMatchNames[] = {
-            u8"literal", u8"identifier", u8"number", u8"any-of", u8"line-rest", u8"long-open", u8"long-close",
+            u8"literal", u8"identifier", u8"number", u8"any-of", u8"run", u8"line-rest", u8"long-open", u8"long-close",
         };
     }
 
@@ -153,7 +154,7 @@ export namespace experimental::gui
         core::String Id;   ///< what its owners register it by ("angelscript")
         core::String Name; ///< what it is called ("AngelScript")
         core::Array<core::String> Extensions; ///< file name endings it is for ("as")
-        bool IdentifierDashes = false;        ///< names may hold '-' (CSS's)
+        bool IdentifierDashes = false;        ///< names may hold '-' and begin with it (CSS's)
         core::Array<CodeWords> Words;
         core::Array<CodeContext> Contexts;    ///< the first is where a file starts
 
@@ -288,6 +289,13 @@ export namespace experimental::gui
                     return false;
             return true;
         }
+        [[nodiscard]] static bool Holds(core::StringView set, char8_t c) noexcept
+        {
+            for (char8_t in : set)
+                if (in == c)
+                    return true;
+            return false;
+        }
         [[nodiscard]] static bool IsDigit(char8_t c) noexcept { return c >= u8'0' && c <= u8'9'; }
         [[nodiscard]] static bool IsNameStart(char8_t c) noexcept
         {
@@ -301,7 +309,11 @@ export namespace experimental::gui
             case CodeMatch::Literal: return StartsAt(line, pos, rule.Text.AsView()) ? rule.Text.Size() : 0;
             case CodeMatch::Identifier:
             {
-                if (!IsNameStart(line[pos]) || (pos > 0 && IsNamePart(line[pos - 1])))
+                // With dashes (CSS), a name may begin with them: `-webkit-x`, `--token`.
+                usize start = pos;
+                while (IdentifierDashes && start < line.Size() && line[start] == u8'-')
+                    ++start;
+                if (start >= line.Size() || !IsNameStart(line[start]) || (pos > 0 && IsNamePart(line[pos - 1])))
                     return 0;
                 usize end = pos + 1;
                 while (end < line.Size() && IsNamePart(line[end]))
@@ -348,11 +360,14 @@ export namespace experimental::gui
                     ++end; // a suffix: 1.0f, 10u, 2ull
                 return end - pos;
             }
-            case CodeMatch::AnyOf:
-                for (char8_t c : rule.Text.AsView())
-                    if (line[pos] == c)
-                        return 1;
-                return 0;
+            case CodeMatch::AnyOf: return Holds(rule.Text.AsView(), line[pos]) ? 1 : 0;
+            case CodeMatch::Run:
+            {
+                usize end = pos;
+                while (end < line.Size() && Holds(rule.Text.AsView(), line[end]))
+                    ++end;
+                return end - pos;
+            }
             case CodeMatch::LineRest: return line.Size() - pos;
             case CodeMatch::LongOpen:
             {

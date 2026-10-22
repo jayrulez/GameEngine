@@ -1383,8 +1383,8 @@ export namespace experimental::gui
     }
 
     // Apply a resolved pseudo-element style to a widget part (slider::thumb, checkbox::box,
-    // window::title, ...): its box properties and opacity, each aspect marked where the sheet
-    // gives it, so the widget's own look shows through the rest.
+    // window::title, ...): its box properties, opacity and colour (a part that is text), each
+    // aspect marked where the sheet gives it, so the widget's own look shows through the rest.
     inline void ApplyPartStyle(UINode& node, core::StringView part, const ResolvedStyle& input,
                                IResourceProvider* resources = nullptr, const LengthContext& lengths = {})
     {
@@ -1417,6 +1417,11 @@ export namespace experimental::gui
         out.HasShadows = style.Has(u8"box-shadow");
         if (const StyleValue* o = style.Value(u8"opacity"))
             out.Opacity = o->Number;
+        if (const StyleValue* c = style.Value(u8"color"); c != nullptr && c->Kind == StyleValueKind::ColorValue)
+        {
+            out.TextColor = c->ColorValue;
+            out.HasColor = true;
+        }
         node.SetPartStyle(part, out);
     }
 }

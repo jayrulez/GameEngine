@@ -643,6 +643,9 @@ export namespace experimental::gui
         bool HasBorderColor = false;
         bool HasRadii = false;
         bool HasShadows = false;
+        /// Its `color`: what a part that is text draws in (a code editor's keyword, CSS's ::selection).
+        Color TextColor{};
+        bool HasColor = false;
 
         /// `own` with the sheet's aspects over it.
         [[nodiscard]] NodeBox Over(NodeBox own) const

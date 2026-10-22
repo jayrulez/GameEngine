@@ -299,6 +299,21 @@ TEST_CASE("theme: tokens retint everything, a subtree overrides them, and a widg
     CHECK(slider->GetPartStyle(core::StringView(u8"track")).HasBackground);
 }
 
+TEST_CASE("theme: a part takes a colour, for a part that is text (a code editor's keyword)")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto slider = Make<Slider>();
+    root->AddChild(slider.Get());
+    StyleManager mgr;
+    mgr.SetStyleSheet(CSSParser::Parse(core::StringView(u8"slider::thumb { color: #ff8000; }")));
+    mgr.ApplyTree(*root.Get());
+    const PartStyle& thumb = slider->GetPartStyle(core::StringView(u8"thumb"));
+    CHECK(thumb.HasColor);
+    CHECK(thumb.TextColor.r == doctest::Approx(1.0f));
+    CHECK(thumb.TextColor.g == doctest::Approx(0x80 / 255.0f).epsilon(0.01));
+    CHECK_FALSE(slider->GetPartStyle(core::StringView(u8"fill")).HasColor);
+}
+
 TEST_CASE("theme: a skin's radius token rounds its control, so the focus ring follows the art")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

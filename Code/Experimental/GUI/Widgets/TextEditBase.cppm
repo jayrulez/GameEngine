@@ -348,7 +348,7 @@ export namespace experimental::gui
                 m_text.SetString(m_model.GetText());
             }
             SyncPlaceholderShown();
-            KeepCaretInView();
+            ShowCaret();
             Invalidate();
         }
         /// The value commits, and submits (the `submit` event).
@@ -361,9 +361,32 @@ export namespace experimental::gui
                 m_onSubmit(m_model.GetText());
             SendEvent(Event(EventType::Submit, this));
         }
-        void CaretMoved()
+        // Its own scroll keeps the caret in view, then each scroller round it does (a text area as
+        // tall as its text in a scrolling box), as a browser's do while it is typed in.
+        void ShowCaret()
         {
             KeepCaretInView();
+            Rect at;
+            if (!IsFocused() || !GetFocusArea(at))
+                return;
+            for (Node* up = GetParent(); up != nullptr; up = up->GetParent())
+                if (up->IsScrollContainer())
+                    up->ScrollIntoView(*this, at, ScrollAlign::Nearest, ScrollBehavior::Instant);
+        }
+        // Its caret, which a scroller round it keeps in view as its content grows.
+        [[nodiscard]] bool GetFocusArea(Rect& out) const override
+        {
+            const TextLayout& layout = EditLayout();
+            const core::Float2 origin = TextOrigin(EditBounds());
+            const usize caret = DisplayCaret();
+            const LaidOutLine line = LineAt(layout, caret);
+            const f32 h = line.Height > 0.0f ? line.Height : m_text.GetLineHeight();
+            out = Rect{origin.x + layout.CaretX(caret, CaretUpstream()), origin.y + line.Top, kCaretWidth, h};
+            return true;
+        }
+        void CaretMoved()
+        {
+            ShowCaret();
             ResetBlink();
             Invalidate();
         }
@@ -392,7 +415,7 @@ export namespace experimental::gui
                 Synced();
             KeepCaretInView();
         }
-        void OnSizeChange() override { KeepCaretInView(); }
+        void OnSizeChange() override { ShowCaret(); }
 
         void OnTextInput(const TextInputEvent& event) override
         {

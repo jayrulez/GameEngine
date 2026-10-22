@@ -1057,6 +1057,7 @@ namespace experimental::gui
     void Node::SetScrollExtent(core::Float2 extent)
     {
         const bool latched = IsLatchedToEnd(); // as it was before the content changed
+        const core::Float2 before = m_contentExtent;
         m_contentExtent = extent;
         ApplyScrollOffset(m_scrollOffset); // kept within the new range, a smooth scroll going on
         if (latched && !m_smoothScrolling && !m_flinging)
@@ -1067,6 +1068,21 @@ namespace experimental::gui
         }
         if (m_smoothScrolling)
             m_scrollTarget = ClampScroll(m_scrollTarget);
+        // The focused widget inside keeps its focus area in view (a caret on a line just typed,
+        // which the old range could not reach).
+        if (extent == before)
+            return;
+        const EventDispatcher* dispatcher = GetEventDispatcher();
+        Node* focused = dispatcher != nullptr ? dispatcher->GetFocusNode() : nullptr;
+        Rect area;
+        if (focused == nullptr || focused == this || !focused->GetFocusArea(area))
+            return;
+        for (const Node* up = focused->GetParent(); up != nullptr; up = up->GetParent())
+            if (up == this)
+            {
+                ScrollIntoView(*focused, area, ScrollAlign::Nearest, ScrollBehavior::Instant);
+                return;
+            }
     }
 
     void Node::RequestLayout()
@@ -1346,11 +1362,11 @@ namespace experimental::gui
         }));
     }
 
-    void Node::ScrollIntoView(Node& descendant, ScrollAlign align, ScrollBehavior behavior)
+    void Node::ScrollIntoView(Node& descendant, const Rect& area, ScrollAlign align, ScrollBehavior behavior)
     {
         if (!IsScrollContainer() || &descendant == this)
             return;
-        const Rect world = descendant.GetScreenBounds();
+        const Rect world = descendant.GetWorldTransform().TransformRect(area);
         const core::Float2 lo = ConvertToNodeSpace(core::Float2{world.x, world.y});
         const core::Float2 hi = ConvertToNodeSpace(core::Float2{world.x + world.width, world.y + world.height});
         const Rect box = GetContentBounds();

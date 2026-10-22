@@ -125,3 +125,35 @@ TEST_CASE("text area: markup and scripts make one by its element name")
     CHECK(ElementTypes::Find(u8"TextArea") == &TextArea::StaticType());
     CHECK(ElementTypes::Find(u8"RichText") == &RichText::StaticType());
 }
+
+TEST_CASE("text area: as tall as its text in a scroller, the scroller keeps the caret in view as it is typed in")
+{
+    core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    core::RefPtr<UIWidget> box = core::MakeRef<UIWidget>(core::DefaultAllocator());
+    core::RefPtr<TextArea> area = core::MakeRef<TextArea>(core::DefaultAllocator());
+    fonts::CachedFont font{core::DefaultAllocator(), core::DefaultAllocator().New<SixFont>(), nullptr, nullptr};
+    root->SetSize(core::Float2{400.0f, 300.0f});
+    root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
+    box->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Direction = FlexDirection::Column;
+        s.Width = LayoutLength::Px(100.0f);
+        s.Height = LayoutLength::Px(36.0f);
+        s.OverflowY = Overflow::Auto;
+    });
+    area->SetFont(&font);
+    area->SetRows(10); // 120 tall, in a box 36 tall
+    box->AddChild(area.Get());
+    root->AddChild(box.Get());
+    (void)root->UpdateLayout();
+    area->RequestFocus();
+    CHECK(box->GetScrollOffset().y == doctest::Approx(0.0f));
+    for (int i = 0; i < 6; ++i)
+        root->GetEventDispatcher()->InjectKeyDown(Key(KeyCode::Return));
+    // The caret on the seventh line (72 to 84): the box scrolled by the least that shows it.
+    CHECK(area->GetScrollY() == doctest::Approx(0.0f));
+    CHECK(box->GetScrollOffset().y == doctest::Approx(84.0f - 36.0f));
+    root->GetEventDispatcher()->InjectKeyDown(Key(KeyCode::Home), static_cast<core::u32>(KeyModCtrl));
+    CHECK(box->GetScrollOffset().y == doctest::Approx(0.0f));
+    area->SetFont(nullptr);
+}

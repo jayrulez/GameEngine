@@ -1079,7 +1079,7 @@ TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a fr
     CHECK(bed.view->GetSelectedFrames().IsEmpty());
 }
 
-TEST_CASE("GraphView: a comment longer than its frame scrolls there: edited, its text area; committed, its box under the wheel")
+TEST_CASE("GraphView: a comment longer than its frame scrolls in its box, to the caret while typed in and under the wheel")
 {
     Bed bed;
     const GraphId frame = Framed(bed);
@@ -1100,18 +1100,22 @@ TEST_CASE("GraphView: a comment longer than its frame scrolls there: edited, its
     UIWidget& box = widget.GetBodyBox();
     EditableLabel& label = widget.GetBodyLabel();
     const Rect frameAt = widget.GetScreenBounds();
-    CHECK(label.GetScreenBounds().Bottom() <= box.GetScreenBounds().Bottom() + 0.5f);
     CHECK(box.GetScreenBounds().Bottom() <= frameAt.Bottom() - 7.5f); // the frame's padding below it
-    CHECK(label.GetSize().y > 100.0f);
-    CHECK(area->GetScrollY() > 0.0f); // the caret's line in view
+    // As tall as its text, the box scrolled to its end, where the caret is.
+    CHECK(label.GetSize().y == doctest::Approx(31.0f * 12.0f));
+    REQUIRE(box.IsScrollContainer());
+    CHECK(box.GetScrollOffset().y == doctest::Approx(label.GetSize().y - box.GetContentBounds().height));
+    CHECK(area->GetScrollY() == doctest::Approx(0.0f));
     CHECK(widget.ClipsChildren());
+    // Back to the top (Ctrl+Home), the box follows the caret there.
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Home), static_cast<core::u32>(KeyModCtrl));
+    CHECK(box.GetScrollOffset().y == doctest::Approx(0.0f));
 
     // Committed, it is as tall as its text, the box scrolling it; it reads from its top.
     REQUIRE(label.EndEdit(true));
     (void)bed.root->UpdateLayout();
-    CHECK(label.GetSize().y == doctest::Approx(30.0f * 12.0f + 12.0f));
+    CHECK(label.GetSize().y == doctest::Approx(31.0f * 12.0f));
     CHECK(label.BaselineAt(label.GetSize()) == doctest::Approx(label.GetChrome().Top + 10.0f));
-    REQUIRE(box.IsScrollContainer());
     CHECK(box.GetScrollOffset().y == doctest::Approx(0.0f));
     const f32 zoom = bed.view->GetZoom();
     const Rect boxAt = box.GetScreenBounds();

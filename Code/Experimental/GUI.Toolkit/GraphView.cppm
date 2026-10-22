@@ -454,8 +454,9 @@ export namespace experimental::gui
                 m_title->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
             }
             AddChild(m_title.Get());
-            // The comment in the room the frame has left, scrolled there when longer (the wheel taken
-            // while it moves, then the view's again).
+            // The comment in the room the frame has left, as tall as its text and scrolled there when
+            // longer (the wheel taken while it moves, then the view's again; while it is typed in, to
+            // keep the caret in view).
             m_bodyBox = core::MakeRef<UIWidget>(MemoryAllocator());
             m_bodyBox->SetTag(core::StringView(u8"graphframebody"));
             {
@@ -497,19 +498,6 @@ export namespace experimental::gui
                 m_body->SetText(frame.Body.AsView());
                 m_body->SetDisplayed(!frame.Body.IsEmpty());
             }
-            // Edited, the comment fits the box (which clips, a scroller lays its content out unbounded)
-            // and its text area scrolls; else it is as tall as its text and the box scrolls it.
-            const bool editing = m_body->IsEditing();
-            if (editing != m_bodyFits)
-            {
-                m_bodyFits = editing;
-                {
-                    StyleWriteScope defaults(*m_bodyBox);
-                    m_bodyBox->EditLayoutStyle([editing](LayoutStyle& s) { s.OverflowY = editing ? Overflow::Hidden : Overflow::Auto; });
-                }
-                StyleWriteScope defaults(*m_body);
-                m_body->EditLayoutStyle([editing](LayoutStyle& s) { s.MinHeight = editing ? LayoutLength::Px(0.0f) : LayoutLength{}; });
-            }
         }
         [[nodiscard]] GraphId GetFrameId() const noexcept { return m_frame; }
         [[nodiscard]] EditableLabel& GetTitleLabel() noexcept { return *m_title; }
@@ -546,7 +534,6 @@ export namespace experimental::gui
         core::RefPtr<EditableLabel> m_title;
         core::RefPtr<UIWidget> m_bodyBox;
         core::RefPtr<EditableLabel> m_body;
-        bool m_bodyFits = false; // the comment held to the box's height (while it is edited)
         GraphId m_frame = 0;
         bool m_selected = false;
         core::Function<void(GraphId, core::StringView, bool)> m_onCommitted;

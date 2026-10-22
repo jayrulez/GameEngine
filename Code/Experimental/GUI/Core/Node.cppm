@@ -1668,7 +1668,20 @@ export namespace experimental::gui
         [[nodiscard]] virtual bool ScrollsDescendantsIntoView() const { return IsScrollContainer(); }
         /// Scrolls (a scroll container) to show `descendant` in the content box: by the least that
         /// shows it, or with its start, centre or end at the box's.
-        void ScrollIntoView(Node& descendant, ScrollAlign align = ScrollAlign::Nearest, ScrollBehavior behavior = ScrollBehavior::Auto);
+        void ScrollIntoView(Node& descendant, ScrollAlign align = ScrollAlign::Nearest, ScrollBehavior behavior = ScrollBehavior::Auto)
+        {
+            ScrollIntoView(descendant, descendant.GetLocalBounds(), align, behavior);
+        }
+        /// The part of it the scrollers round it keep in view while it has focus (a text field's
+        /// caret, in its own space), as it moves and as their content grows; false: none.
+        [[nodiscard]] virtual bool GetFocusArea(Rect& out) const
+        {
+            (void)out;
+            return false;
+        }
+        /// Scrolls to show `area` of `descendant` (in its own space): a text field's caret.
+        void ScrollIntoView(Node& descendant, const Rect& area, ScrollAlign align = ScrollAlign::Nearest,
+                            ScrollBehavior behavior = ScrollBehavior::Auto);
 
         // === Drag and drop (E7) ===
         // A press that moves past the GUI's threshold offers a drag to the pressed node and then

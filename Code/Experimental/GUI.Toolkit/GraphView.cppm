@@ -25,9 +25,13 @@
 //     every node or the selection; a node's copies, duplicates, deletes and begins a node link (then
 //     the link follows the pointer until a click ends it); a link's deletes it;
 //   - Delete deletes the selected nodes and links, Escape cancels a drag or clears the selection,
-//     Ctrl+C copies the selected nodes and Ctrl+V pastes them at the pointer, as the property grid's.
+//     Ctrl+C copies the selected nodes and Ctrl+V pastes them at the pointer, as the property grid's;
+//   - a frame (a titled, tinted box behind the nodes; with a body, a comment) moves by its title, the
+//     nodes and frames inside it moving with it, and resizes from its edges, each one change; a
+//     double click on its title or its body edits it in place.
 //   - a double click on a node is the application's (a subgraph opened);
 //   - the wheel zooms about the pointer within limits, a middle drag pans.
+// Frames' boxes are drawn by the view under the links, their titles and bodies widgets over them.
 // Links are drawn by the view under the nodes, culled to it, each pin's place kept from when its
 // node was last laid out. The application may highlight nodes and links (a state machine's active
 // state). Read only, it selects and does not edit.
@@ -419,6 +423,94 @@ export namespace experimental::gui
         GraphLinkState m_linkState = GraphLinkState::None;
     };
 
+    /// A frame of a graph view: its title and its body (a comment's), each edited in place by a
+    /// double click. The view draws its tinted box under the links; it holds the words over them.
+    class GraphFrameWidget : public UIWidget
+    {
+        RTTI_OBJECT(GraphFrameWidget, UIWidget)
+    public:
+        static constexpr f32 kHeaderMin = 24.0f;
+
+        GraphFrameWidget()
+        {
+            SetTag(core::StringView(u8"graphframe"));
+            {
+                StyleWriteScope defaults(*this);
+                EditLayoutStyle([](LayoutStyle& s)
+                {
+                    s.Direction = FlexDirection::Column;
+                    s.RowGap = 4.0f;
+                });
+                SetPadding(Thickness{8.0f, 4.0f, 8.0f, 6.0f});
+            }
+            m_title = core::MakeRef<EditableLabel>(MemoryAllocator());
+            m_title->AddClass(core::StringView(u8"title"));
+            AddChild(m_title.Get());
+            m_body = core::MakeRef<EditableLabel>(MemoryAllocator());
+            m_body->AddClass(core::StringView(u8"body"));
+            m_body->SetDisplayed(false);
+            AddChild(m_body.Get());
+            GraphFrameWidget* self = this;
+            m_title->SetOnTextCommitted([self](core::StringView text)
+            {
+                if (self->m_onCommitted)
+                    self->m_onCommitted(self->m_frame, text, false);
+            });
+            m_body->SetOnTextCommitted([self](core::StringView text)
+            {
+                if (self->m_onCommitted)
+                    self->m_onCommitted(self->m_frame, text, true);
+            });
+        }
+
+        void Show(const GraphFrameInfo& frame)
+        {
+            m_frame = frame.Id;
+            if (!m_title->IsEditing())
+                m_title->SetText(frame.Title.AsView());
+            if (!m_body->IsEditing())
+            {
+                m_body->SetText(frame.Body.AsView());
+                m_body->SetDisplayed(!frame.Body.IsEmpty());
+            }
+        }
+        [[nodiscard]] GraphId GetFrameId() const noexcept { return m_frame; }
+        [[nodiscard]] EditableLabel& GetTitleLabel() noexcept { return *m_title; }
+        [[nodiscard]] EditableLabel& GetBodyLabel() noexcept { return *m_body; }
+        /// Edits its body in place, shown while it does (a frame made a comment).
+        void EditBody()
+        {
+            m_body->SetDisplayed(true);
+            m_body->BeginEdit();
+        }
+        /// How tall its title band is, in its own space: what a press moves it by.
+        [[nodiscard]] f32 HeaderHeight() const
+        {
+            return core::Max(kHeaderMin, m_title->GetPosition().y + m_title->GetSize().y + 4.0f);
+        }
+        /// Shown selected (the sheet's `graphframe.selected`).
+        void SetSelected(bool selected)
+        {
+            if (selected == m_selected)
+                return;
+            m_selected = selected;
+            if (selected)
+                AddClass(core::StringView(u8"selected"));
+            else
+                RemoveClass(core::StringView(u8"selected"));
+        }
+        [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
+        /// A title or a body (`body`) committed: the view's, to edit the frame through the source.
+        void SetOnCommitted(core::Function<void(GraphId, core::StringView, bool)> callback) { m_onCommitted = core::Move(callback); }
+
+    private:
+        core::RefPtr<EditableLabel> m_title;
+        core::RefPtr<EditableLabel> m_body;
+        GraphId m_frame = 0;
+        bool m_selected = false;
+        core::Function<void(GraphId, core::StringView, bool)> m_onCommitted;
+    };
+
     class GraphView : public UIWidget, public IGraphSourceClient
     {
         RTTI_OBJECT(GraphView, UIWidget)
@@ -432,6 +524,11 @@ export namespace experimental::gui
         static constexpr f32 kLinkReach = 5.0f;
         /// How far apart a node link and its reverse are drawn.
         static constexpr f32 kParallelGap = 6.0f;
+        /// How far inside a frame's edge a press resizes it.
+        static constexpr f32 kFrameEdge = 6.0f;
+        /// The least a frame is resized to, in the graph's units.
+        static constexpr f32 kFrameMinWidth = 80.0f;
+        static constexpr f32 kFrameMinHeight = 48.0f;
         /// How far past its edges nodes are made before they come into view.
         static constexpr f32 kViewMargin = 64.0f;
         /// The size a node is taken to have before it was measured.
@@ -460,6 +557,7 @@ export namespace experimental::gui
                 m_source->AddGraphClient(this);
             m_selection.Clear();
             m_selectedLinks.Clear();
+            m_selectedFrames.Clear();
             m_sizes.Clear();
             m_pins.Clear();
             RequestLayout();
@@ -535,6 +633,37 @@ export namespace experimental::gui
         /// Makes a node of `type` at `at` (the graph's), linked from pin `linkFrom` when it is not 0,
         /// selecting it; its id, 0 when it was not made.
         GraphId AddNode(core::StringView type, core::Float2 at, GraphId linkFrom = 0);
+
+        // === Frames ===
+        /// Where a frame is, in its own space (as it is being resized, while it is); empty when there
+        /// is no such frame.
+        [[nodiscard]] Rect FrameRect(GraphId frame) const
+        {
+            GraphFrameInfo info;
+            if (!FindFrame(frame, info))
+                return Rect{};
+            const Rect graph = m_drag == Drag::Resize && frame == m_resizeFrame ? m_resizeTo : Rect{info.Position.x, info.Position.y, info.Size.x, info.Size.y};
+            const core::Float2 at = GraphToView(core::Float2{graph.x, graph.y});
+            return Rect{at.x, at.y, graph.width * m_zoom, graph.height * m_zoom};
+        }
+        [[nodiscard]] GraphFrameWidget* GetFrameWidget(GraphId frame) const
+        {
+            const core::RefPtr<GraphFrameWidget>* widget = m_frameWidgets.Find(frame);
+            return widget != nullptr ? widget->Get() : nullptr;
+        }
+        [[nodiscard]] const core::Array<GraphId>& GetSelectedFrames() const noexcept { return m_selectedFrames; }
+        void SetSelectedFrames(core::Span<const GraphId> frames)
+        {
+            core::Array<GraphId> next;
+            for (const GraphId frame : frames)
+                if (!Holds(next, frame))
+                    next.PushBack(frame);
+            ReselectFrames(core::Move(next));
+        }
+        [[nodiscard]] bool IsFrameSelected(GraphId frame) const noexcept { return Holds(m_selectedFrames, frame); }
+        /// Makes a frame (with `comment`, a comment: a frame with a body) around the selected nodes, or
+        /// at `at` (the graph's) with none selected, selecting it; its id, 0 when none was made.
+        GraphId AddFrame(core::Float2 at, bool comment = false);
 
         // === Menus ===
         /// Opens the node picker at `local` (its own space), the node chosen made there; with
@@ -680,6 +809,15 @@ export namespace experimental::gui
                         keptLinks.PushBack(link);
             if (keptLinks.Size() != m_selectedLinks.Size())
                 ReselectLinks(core::Move(keptLinks));
+            core::Array<GraphFrameInfo> frames;
+            m_source->GetFrames(frames);
+            core::Array<GraphId> keptFrames;
+            for (const GraphId frame : m_selectedFrames)
+                for (const GraphFrameInfo& at : frames)
+                    if (at.Id == frame)
+                        keptFrames.PushBack(frame);
+            if (keptFrames.Size() != m_selectedFrames.Size())
+                ReselectFrames(core::Move(keptFrames));
             RequestLayout();
             Invalidate();
         }
@@ -701,7 +839,7 @@ export namespace experimental::gui
         void OnMouseLeave(const MouseEvent&) override { m_pointerInside = false; }
         void OnContextMenu(const MouseEvent& event) override;
         void OnKeyDown(const KeyEvent& event) override;
-        [[nodiscard]] Cursor GetCursorNow() const override { return m_drag == Drag::Pan ? Cursor::Grabbing : UIWidget::GetCursorNow(); }
+        [[nodiscard]] Cursor GetCursorNow() const override;
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
         void OnDrawAbove(DrawContext& ctx) override;
         void OnTextStyleChange() override
@@ -721,7 +859,10 @@ export namespace experimental::gui
             Box,
             Pan,
             Link,
+            Resize,
         };
+        // A frame's edges a press is on (several at a corner).
+        static constexpr u8 kEdgeLeft = 1, kEdgeTop = 2, kEdgeRight = 4, kEdgeBottom = 8;
         // Where a pin is in its node, as the node was last laid out.
         struct PinPlace
         {
@@ -799,6 +940,74 @@ export namespace experimental::gui
             }
             return link;
         }
+        [[nodiscard]] bool FindFrame(GraphId frame, GraphFrameInfo& out) const
+        {
+            if (!m_source || frame == 0)
+                return false;
+            core::Array<GraphFrameInfo> frames;
+            m_source->GetFrames(frames);
+            for (const GraphFrameInfo& at : frames)
+                if (at.Id == frame)
+                {
+                    out = at;
+                    return true;
+                }
+            return false;
+        }
+        // The topmost frame at `local`: on which of its edges, and whether on its title band.
+        [[nodiscard]] GraphId HitFrame(core::Float2 local, u8& edges, bool& header) const
+        {
+            edges = 0;
+            header = false;
+            if (!m_source)
+                return 0;
+            core::Array<GraphFrameInfo> frames;
+            m_source->GetFrames(frames);
+            for (usize i = frames.Size(); i-- > 0;)
+            {
+                const Rect r = FrameRect(frames[i].Id);
+                if (!r.Contains(local))
+                    continue;
+                if (local.x < r.x + kFrameEdge)
+                    edges |= kEdgeLeft;
+                if (local.x > r.Right() - kFrameEdge)
+                    edges |= kEdgeRight;
+                if (local.y < r.y + kFrameEdge)
+                    edges |= kEdgeTop;
+                if (local.y > r.Bottom() - kFrameEdge)
+                    edges |= kEdgeBottom;
+                const GraphFrameWidget* widget = GetFrameWidget(frames[i].Id);
+                const f32 band = (widget != nullptr ? widget->HeaderHeight() : GraphFrameWidget::kHeaderMin) * m_zoom;
+                header = local.y < r.y + band;
+                return frames[i].Id;
+            }
+            return 0;
+        }
+        void ReselectFrames(core::Array<GraphId> next)
+        {
+            bool same = next.Size() == m_selectedFrames.Size();
+            for (usize i = 0; same && i < next.Size(); ++i)
+                same = Holds(m_selectedFrames, next[i]);
+            m_selectedFrames = core::Move(next);
+            if (same)
+                return;
+            RequestLayout();
+            Invalidate();
+            if (m_onSelectionChanged)
+                m_onSelectionChanged();
+        }
+        void EditFrameText(GraphId frame, core::StringView text, bool body)
+        {
+            GraphFrameInfo info;
+            if (m_readOnly || !FindFrame(frame, info))
+                return;
+            if (body)
+                info.Body = core::String(text);
+            else
+                info.Title = core::String(text);
+            (void)m_source->EditFrame(info);
+        }
+        void ResizeTo(core::Float2 local);
         void ReselectLinks(core::Array<GraphId> next)
         {
             bool same = next.Size() == m_selectedLinks.Size();
@@ -909,6 +1118,16 @@ export namespace experimental::gui
         core::Array<GraphId> m_selectedLinks;
         core::Array<GraphId> m_highlightedNodes;
         core::Array<GraphId> m_highlightedLinks;
+        core::HashMap<GraphId, core::RefPtr<GraphFrameWidget>> m_frameWidgets;
+        core::Array<GraphId> m_selectedFrames;
+        core::Array<GraphId> m_frameBoxBase;   // the frames a box adds to
+        core::Array<GraphId> m_moveNodes;      // what a move moves: the selected nodes, and those inside the selected frames
+        core::Array<GraphId> m_moveFrames;
+        GraphId m_pressedFrame = 0;            // the frame pressed by its title
+        GraphId m_resizeFrame = 0;
+        u8 m_resizeEdges = 0;
+        Rect m_resizeFrom{};                   // the graph's
+        Rect m_resizeTo{};
 
         Drag m_drag = Drag::None;
         core::Float2 m_pressAt{};   // where the gesture began, its own space
@@ -967,6 +1186,42 @@ export namespace experimental::gui
         const Rect box = GetContentBounds();
         const Rect reach{box.x - kViewMargin, box.y - kViewMargin, box.width + 2.0f * kViewMargin, box.height + 2.0f * kViewMargin};
         usize index = 0;
+        // The frames first, under the nodes; few, each made while it is in the graph.
+        {
+            core::Array<GraphFrameInfo> frames;
+            if (m_source)
+                m_source->GetFrames(frames);
+            core::HashMap<GraphId, core::RefPtr<GraphFrameWidget>> made;
+            GraphView* self = this;
+            for (const GraphFrameInfo& frame : frames)
+            {
+                core::RefPtr<GraphFrameWidget> widget;
+                if (core::RefPtr<GraphFrameWidget>* had = m_frameWidgets.Find(frame.Id))
+                {
+                    widget = *had;
+                    (void)m_frameWidgets.Remove(frame.Id);
+                }
+                else
+                {
+                    widget = core::MakeRef<GraphFrameWidget>(MemoryAllocator());
+                    widget->SetOnCommitted([self](GraphId id, core::StringView text, bool body) { self->EditFrameText(id, text, body); });
+                    AddChild(widget.Get());
+                }
+                widget->Show(frame);
+                widget->SetSelected(Holds(m_selectedFrames, frame.Id));
+                const Rect at = FrameRect(frame.Id);
+                widget->Arrange(Rect{at.x, at.y, at.width / m_zoom, at.height / m_zoom});
+                if (widget->GetScale().x != m_zoom || widget->GetScale().y != m_zoom)
+                    widget->SetScale(core::Float2{m_zoom, m_zoom});
+                if (index < ChildCount() && GetChildAt(index) != widget.Get())
+                    SetChildIndex(widget.Get(), index);
+                ++index;
+                made.InsertOrAssign(frame.Id, core::Move(widget));
+            }
+            for (auto& entry : m_frameWidgets)
+                RemoveChild(entry.value.Get());
+            m_frameWidgets = core::Move(made);
+        }
         for (const GraphId id : order)
         {
             const GraphNodeInfo* info = m_source->GetNode(id);
@@ -1081,16 +1336,66 @@ export namespace experimental::gui
             return;
         }
         const GraphId link = hit == 0 ? HitLink(local) : 0;
+        u8 edges = 0;
+        bool header = false;
+        const GraphId frame = hit == 0 && link == 0 ? HitFrame(local, edges, header) : 0;
         if (!m_additive)
             ReselectLinks(core::Array<GraphId>{});
+        m_pressed = 0;
+        m_pressedFrame = 0;
         if (hit != 0)
         {
             m_pressed = hit;
+            if (!m_additive && !IsNodeSelected(hit))
+                ReselectFrames(core::Array<GraphId>{});
             if (m_additive)
                 Toggle(hit);
             else if (!IsNodeSelected(hit))
                 SelectOnly(hit);
             m_drag = IsNodeSelected(hit) ? Drag::Pending : Drag::None;
+        }
+        else if (frame != 0 && edges != 0 && !m_readOnly)
+        {
+            if (!m_additive)
+            {
+                SelectOnly(0);
+                const GraphId only[] = {frame};
+                SetSelectedFrames(only);
+            }
+            GraphFrameInfo info;
+            (void)FindFrame(frame, info);
+            m_resizeFrame = frame;
+            m_resizeEdges = edges;
+            m_resizeFrom = Rect{info.Position.x, info.Position.y, info.Size.x, info.Size.y};
+            m_resizeTo = m_resizeFrom;
+            m_drag = Drag::Resize;
+        }
+        else if (frame != 0 && header)
+        {
+            m_pressedFrame = frame;
+            if (m_additive)
+            {
+                core::Array<GraphId> next = m_selectedFrames;
+                if (Holds(next, frame))
+                {
+                    for (usize i = 0; i < next.Size(); ++i)
+                        if (next[i] == frame)
+                        {
+                            next.RemoveAt(i);
+                            break;
+                        }
+                }
+                else
+                    next.PushBack(frame);
+                ReselectFrames(core::Move(next));
+            }
+            else if (!IsFrameSelected(frame))
+            {
+                SelectOnly(0);
+                const GraphId only[] = {frame};
+                SetSelectedFrames(only);
+            }
+            m_drag = IsFrameSelected(frame) ? Drag::Pending : Drag::None;
         }
         else if (link != 0)
         {
@@ -1114,10 +1419,16 @@ export namespace experimental::gui
         else
         {
             if (!m_additive)
+            {
                 SelectOnly(0);
+                ReselectFrames(core::Array<GraphId>{});
+            }
             m_boxBase = m_selection;
+            m_frameBoxBase = m_selectedFrames;
             m_drag = Drag::Box;
         }
+        if (link != 0 && !m_additive)
+            ReselectFrames(core::Array<GraphId>{});
         if (m_drag != Drag::None)
             CapturePointer();
     }
@@ -1154,11 +1465,21 @@ export namespace experimental::gui
                 if (!Holds(next, id) && area.Intersects(NodeRect(id)))
                     next.PushBack(id);
             Reselect(core::Move(next));
+            core::Array<GraphId> frames = m_frameBoxBase; // a frame wholly inside
+            core::Array<GraphFrameInfo> all;
+            m_source->GetFrames(all);
+            for (const GraphFrameInfo& frame : all)
+                if (!Holds(frames, frame.Id) && area.Contains(FrameRect(frame.Id)))
+                    frames.PushBack(frame.Id);
+            ReselectFrames(core::Move(frames));
             Invalidate();
             break;
         }
         case Drag::Link:
             LinkTo(local);
+            break;
+        case Drag::Resize:
+            ResizeTo(local);
             break;
         case Drag::Pan:
             SetPan(core::Float2{m_panFrom.x - (local.x - m_pressAt.x) / m_zoom, m_panFrom.y - (local.y - m_pressAt.y) / m_zoom});
@@ -1188,8 +1509,14 @@ export namespace experimental::gui
             EndLink(true);
             return;
         }
-        if (m_drag == Drag::Pending && !m_additive)
-            SelectOnly(m_pressed); // a click on a node of several selected selects it alone
+        if (m_drag == Drag::Pending && !m_additive) // a click on one of several selected selects it alone
+        {
+            SelectOnly(m_pressed);
+            core::Array<GraphId> frames;
+            if (m_pressedFrame != 0)
+                frames.PushBack(m_pressedFrame);
+            ReselectFrames(core::Move(frames));
+        }
         EndDrag(true);
     }
     inline void GraphView::OnPointerCancel(const MouseEvent&)
@@ -1201,8 +1528,10 @@ export namespace experimental::gui
     }
     inline void GraphView::OnKeyDown(const KeyEvent& event)
     {
+        if (event.Target != this)
+            return; // a frame's title being edited types its own keys
         const KeyCode key = static_cast<KeyCode>(event.KeyCode);
-        if (key == KeyCode::Escape && m_drag == Drag::Nodes)
+        if (key == KeyCode::Escape && (m_drag == Drag::Nodes || m_drag == Drag::Resize))
         {
             event.Handled = true;
             EndDrag(false);
@@ -1212,11 +1541,13 @@ export namespace experimental::gui
             event.Handled = true;
             EndLink(false);
         }
-        else if (key == KeyCode::Escape && event.Modifiers == 0 && m_drag == Drag::None && (!m_selection.IsEmpty() || !m_selectedLinks.IsEmpty()))
+        else if (key == KeyCode::Escape && event.Modifiers == 0 && m_drag == Drag::None &&
+                 (!m_selection.IsEmpty() || !m_selectedLinks.IsEmpty() || !m_selectedFrames.IsEmpty()))
         {
             event.Handled = true;
             Reselect(core::Array<GraphId>{});
             ReselectLinks(core::Array<GraphId>{});
+            ReselectFrames(core::Array<GraphId>{});
         }
         else if (event.Modifiers == 0 && (key == KeyCode::Delete || key == KeyCode::Backspace) && m_drag == Drag::None)
             event.Handled = DeleteSelected();
@@ -1242,6 +1573,32 @@ export namespace experimental::gui
     {
         const GraphNodeInfo* pressed = m_source->GetNode(m_pressed);
         m_pressedFrom = pressed != nullptr ? pressed->Position : core::Float2{};
+        GraphFrameInfo pressedFrame;
+        if (pressed == nullptr && FindFrame(m_pressedFrame, pressedFrame))
+            m_pressedFrom = pressedFrame.Position;
+        // What moves: the selected nodes and frames, and what lies wholly inside the selected frames.
+        m_moveNodes = m_selection;
+        m_moveFrames = m_selectedFrames;
+        core::Array<GraphFrameInfo> frames;
+        m_source->GetFrames(frames);
+        core::Array<GraphId> nodes;
+        m_source->GetNodes(nodes);
+        for (const GraphFrameInfo& frame : frames)
+        {
+            if (!Holds(m_selectedFrames, frame.Id))
+                continue;
+            const Rect inside{frame.Position.x, frame.Position.y, frame.Size.x, frame.Size.y};
+            for (const GraphId node : nodes)
+            {
+                const GraphNodeInfo* info = m_source->GetNode(node);
+                const core::Float2 size = NodeSize(node);
+                if (!Holds(m_moveNodes, node) && inside.Contains(Rect{info->Position.x, info->Position.y, size.x, size.y}))
+                    m_moveNodes.PushBack(node);
+            }
+            for (const GraphFrameInfo& other : frames)
+                if (!Holds(m_moveFrames, other.Id) && inside.Contains(Rect{other.Position.x, other.Position.y, other.Size.x, other.Size.y}))
+                    m_moveFrames.PushBack(other.Id);
+        }
         m_source->BeginMove();
     }
     inline void GraphView::MoveTo(core::Float2 local)
@@ -1253,7 +1610,7 @@ export namespace experimental::gui
             const f32 y = core::Round((m_pressedFrom.y + delta.y) / m_gridSize) * m_gridSize;
             delta = core::Float2{x - m_pressedFrom.x, y - m_pressedFrom.y};
         }
-        m_source->PreviewMove(m_selection.AsSpan(), core::Span<const GraphId>{}, delta);
+        m_source->PreviewMove(m_moveNodes.AsSpan(), m_moveFrames.AsSpan(), delta);
     }
     inline void GraphView::EndDrag(bool commit)
     {
@@ -1264,6 +1621,20 @@ export namespace experimental::gui
         ReleasePointer();
         if (drag == Drag::Box)
             Invalidate();
+        if (drag == Drag::Resize)
+        {
+            RequestLayout();
+            GraphFrameInfo info;
+            const bool changed = m_resizeTo.x != m_resizeFrom.x || m_resizeTo.y != m_resizeFrom.y || m_resizeTo.width != m_resizeFrom.width ||
+                                 m_resizeTo.height != m_resizeFrom.height;
+            if (commit && changed && FindFrame(m_resizeFrame, info))
+            {
+                info.Position = core::Float2{m_resizeTo.x, m_resizeTo.y};
+                info.Size = core::Float2{m_resizeTo.width, m_resizeTo.height};
+                (void)m_source->EditFrame(info);
+            }
+            return;
+        }
         if (drag != Drag::Nodes || !m_source)
             return;
         if (commit)
@@ -1333,6 +1704,11 @@ export namespace experimental::gui
             if (!left.IsEmpty())
                 any = m_source->Disconnect(left.AsSpan()) || any;
         }
+        if (!m_selectedFrames.IsEmpty())
+        {
+            const core::Array<GraphId> frames = m_selectedFrames;
+            any = m_source->DeleteFrames(frames.AsSpan()) || any;
+        }
         return any;
     }
     inline bool GraphView::CopySelected()
@@ -1398,6 +1774,84 @@ export namespace experimental::gui
         return made;
     }
 
+    inline GraphId GraphView::AddFrame(core::Float2 at, bool comment)
+    {
+        if (!m_source || m_readOnly)
+            return 0;
+        GraphFrameInfo frame;
+        frame.Title = core::String(comment ? u8"Comment" : u8"Frame");
+        if (comment)
+            frame.Body = core::String(u8"Write here");
+        frame.Position = at;
+        bool any = false;
+        f32 left = 0.0f, top = 0.0f, right = 0.0f, bottom = 0.0f;
+        for (const GraphId node : m_selection) // around the selected nodes, room for its title above them
+            if (const GraphNodeInfo* info = m_source->GetNode(node))
+            {
+                const core::Float2 size = NodeSize(node);
+                left = any ? core::Min(left, info->Position.x) : info->Position.x;
+                top = any ? core::Min(top, info->Position.y) : info->Position.y;
+                right = any ? core::Max(right, info->Position.x + size.x) : info->Position.x + size.x;
+                bottom = any ? core::Max(bottom, info->Position.y + size.y) : info->Position.y + size.y;
+                any = true;
+            }
+        if (any)
+        {
+            const f32 margin = m_gridSize, above = comment ? 3.0f * m_gridSize : 2.0f * m_gridSize;
+            frame.Position = core::Float2{left - margin, top - above};
+            frame.Size = core::Float2{right - left + 2.0f * margin, bottom - top + above + margin};
+        }
+        else if (m_snap)
+            frame.Position = core::Float2{core::Round(at.x / m_gridSize) * m_gridSize, core::Round(at.y / m_gridSize) * m_gridSize};
+        const GraphId made = m_source->CreateFrame(frame);
+        if (made != 0)
+        {
+            const GraphId only[] = {made};
+            SetSelectedFrames(only);
+        }
+        return made;
+    }
+    inline void GraphView::ResizeTo(core::Float2 local)
+    {
+        const f32 dx = (local.x - m_pressAt.x) / m_zoom, dy = (local.y - m_pressAt.y) / m_zoom;
+        const auto snap = [this](f32 v) { return m_snap ? core::Round(v / m_gridSize) * m_gridSize : v; };
+        const Rect from = m_resizeFrom;
+        f32 left = from.x, top = from.y, right = from.Right(), bottom = from.Bottom();
+        if ((m_resizeEdges & kEdgeLeft) != 0)
+            left = core::Min(snap(from.x + dx), right - kFrameMinWidth);
+        if ((m_resizeEdges & kEdgeRight) != 0)
+            right = core::Max(snap(from.Right() + dx), left + kFrameMinWidth);
+        if ((m_resizeEdges & kEdgeTop) != 0)
+            top = core::Min(snap(from.y + dy), bottom - kFrameMinHeight);
+        if ((m_resizeEdges & kEdgeBottom) != 0)
+            bottom = core::Max(snap(from.Bottom() + dy), top + kFrameMinHeight);
+        m_resizeTo = Rect{left, top, right - left, bottom - top};
+        RequestLayout();
+        Invalidate();
+    }
+    inline Cursor GraphView::GetCursorNow() const
+    {
+        if (m_drag == Drag::Pan)
+            return Cursor::Grabbing;
+        u8 edges = m_drag == Drag::Resize ? m_resizeEdges : 0;
+        if (m_drag == Drag::None && m_pointerInside && !m_readOnly && HitNode(m_pointer) == 0 && HitLink(m_pointer) == 0)
+        {
+            bool header = false;
+            (void)HitFrame(m_pointer, edges, header);
+        }
+        const bool horizontal = (edges & (kEdgeLeft | kEdgeRight)) != 0, vertical = (edges & (kEdgeTop | kEdgeBottom)) != 0;
+        if (horizontal && vertical)
+        {
+            const bool falling = (edges & kEdgeLeft) != 0 ? (edges & kEdgeTop) != 0 : (edges & kEdgeBottom) != 0;
+            return falling ? Cursor::NwseResize : Cursor::NeswResize;
+        }
+        if (horizontal)
+            return Cursor::EwResize;
+        if (vertical)
+            return Cursor::NsResize;
+        return UIWidget::GetCursorNow();
+    }
+
     // === Menus ===
 
     inline void GraphView::PopupAt(Node& popup, core::Float2 local, PopupOptions options)
@@ -1458,7 +1912,34 @@ export namespace experimental::gui
         GraphView* self = this;
         const GraphId node = HitNode(local);
         const GraphId link = node == 0 ? HitLink(local) : 0;
-        if (node != 0)
+        u8 edges = 0;
+        bool header = false;
+        const GraphId frame = node == 0 && link == 0 ? HitFrame(local, edges, header) : 0;
+        if (frame != 0 && header)
+        {
+            if (m_readOnly)
+                return;
+            if (!IsFrameSelected(frame))
+            {
+                SelectOnly(0);
+                ReselectLinks(core::Array<GraphId>{});
+                const GraphId only[] = {frame};
+                SetSelectedFrames(only);
+            }
+            m_menu->AddItem(core::StringView(u8"Rename"), [self, frame]()
+            {
+                if (GraphFrameWidget* widget = self->GetFrameWidget(frame))
+                    widget->GetTitleLabel().BeginEdit();
+            });
+            m_menu->AddItem(core::StringView(u8"Edit comment"), [self, frame]()
+            {
+                if (GraphFrameWidget* widget = self->GetFrameWidget(frame))
+                    widget->EditBody();
+            });
+            m_menu->AddSeparator();
+            m_menu->AddItem(core::StringView(u8"Delete"), [self]() { (void)self->DeleteSelected(); });
+        }
+        else if (node != 0)
         {
             if (!IsNodeSelected(node))
             {
@@ -1506,6 +1987,8 @@ export namespace experimental::gui
                 IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
                 const core::Float2 at = ViewToGraph(local);
                 m_menu->AddItem(core::StringView(u8"Paste"), [self, at]() { (void)self->PasteAt(at); })->SetEnabled(clipboard != nullptr && clipboard->HasText());
+                m_menu->AddItem(core::StringView(u8"Add frame"), [self, at]() { (void)self->AddFrame(at); });
+                m_menu->AddItem(core::StringView(u8"Add comment"), [self, at]() { (void)self->AddFrame(at, true); });
                 m_menu->AddSeparator();
             }
             m_menu->AddItem(core::StringView(u8"Frame all"), [self]() { self->FrameAll(); });
@@ -1889,6 +2372,27 @@ export namespace experimental::gui
             const bool strong = !fine || i % 8 == 0;
             const f32 y = GraphToView(core::Float2{0.0f, static_cast<f32>(i) * step}).y;
             ctx.VG().FillRect(Rectangle{box.x, core::Floor(y), box.width, 1.0f}, strong ? major : minor);
+        }
+        // The frames' boxes, under the links: tinted, their title bands more so.
+        if (m_source)
+        {
+            core::Array<GraphFrameInfo> frames;
+            m_source->GetFrames(frames);
+            const vg::CornerRadii round(core::Clamp(4.0f * m_zoom, 1.0f, 6.0f));
+            for (const GraphFrameInfo& frame : frames)
+            {
+                const Rect r = FrameRect(frame.Id);
+                if (!box.Intersects(r))
+                    continue;
+                ctx.VG().FillRoundedRect(r.ToRectangle(), round, frame.Tint);
+                const GraphFrameWidget* widget = GetFrameWidget(frame.Id);
+                const f32 band = core::Min(r.height, (widget != nullptr ? widget->HeaderHeight() : GraphFrameWidget::kHeaderMin) * m_zoom);
+                Color strong = frame.Tint;
+                strong.a = core::Min(1.0f, strong.a * 1.8f);
+                vg::CornerRadii top = round;
+                top.bottomLeft = top.bottomRight = 0.0f;
+                ctx.VG().FillRoundedRect(Rectangle{r.x, r.y, r.width, band}, top, strong);
+            }
         }
         // The links, under the nodes, each culled to the view; one being rewired is drawn as the drag.
         if (m_source)

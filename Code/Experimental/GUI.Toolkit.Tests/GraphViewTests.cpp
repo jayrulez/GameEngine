@@ -13,6 +13,8 @@
 // picker of node kinds (by category, with a search), opened from the menu over nothing or by a link
 // dropped on nothing (only the kinds it reaches, the node linked); Delete, Escape, Ctrl+C and Ctrl+V;
 // a node's menu duplicating and beginning a node link that follows the pointer; a link's deleting.
+// Frames: behind the nodes, moved by their title with what lies inside, resized from their edges,
+// renamed in place, made around the selection from the menu, deleted.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -798,4 +800,190 @@ TEST_CASE("GraphView: a node's menu begins a node link that follows the pointer 
     REQUIRE(bed.view->GetMenu() != nullptr);
     Activate(*bed.view->GetMenu(), u8"Delete");
     CHECK(bed.LinkCount() == 0);
+}
+
+namespace
+{
+    // The bed panned so the graph's (-100, -100) is at the view's top-left, not snapping, with a frame
+    // round A and B: from (-20, -40), 480 by 200.
+    GraphId Framed(Bed& bed)
+    {
+        bed.view->SetSnapToGrid(false);
+        bed.view->SetPan(core::Float2{-100.0f, -100.0f});
+        GraphFrameInfo frame;
+        frame.Title = core::String(u8"Group");
+        frame.Position = core::Float2{-20.0f, -40.0f};
+        frame.Size = core::Float2{480.0f, 200.0f};
+        const GraphId id = bed.graph.CreateFrame(frame);
+        (void)bed.root->UpdateLayout();
+        bed.changes.Clear();
+        return id;
+    }
+    GraphFrameInfo FrameOf(const Bed& bed, GraphId frame)
+    {
+        for (const GraphFrameInfo& at : bed.graph.State().Frames)
+            if (at.Id == frame)
+                return at;
+        return GraphFrameInfo{};
+    }
+    usize ChildIndex(experimental::gui::Node& parent, experimental::gui::Node* child)
+    {
+        for (usize i = 0; i < parent.ChildCount(); ++i)
+            if (parent.GetChildAt(i) == child)
+                return i;
+        return parent.ChildCount();
+    }
+}
+
+TEST_CASE("GraphView: a frame stands behind the nodes; dragged by its title it moves with what lies inside, one change")
+{
+    Bed bed;
+    const GraphId frame = Framed(bed);
+    REQUIRE(bed.view->GetFrameWidget(frame) != nullptr);
+    CHECK(bed.view->GetFrameWidget(frame)->GetTitleLabel().GetText() == core::StringView(u8"Group"));
+    CHECK(ChildIndex(*bed.view, bed.view->GetFrameWidget(frame)) < ChildIndex(*bed.view, bed.view->GetNodeWidget(bed.a)));
+    const Rect r = bed.view->FrameRect(frame);
+    CHECK(r.x == doctest::Approx(80.0f));
+    CHECK(r.y == doctest::Approx(60.0f));
+    const core::Float2 title{r.x + 30.0f, r.y + 10.0f};
+
+    bed.Click(title);
+    CHECK(bed.view->IsFrameSelected(frame));
+    CHECK(bed.view->GetFrameWidget(frame)->HasClass(core::StringView(u8"selected")));
+    CHECK(bed.Selected() == 0);
+    bed.Pause();
+    bed.Drag(title, core::Float2{title.x + 37.0f, title.y + 21.0f});
+    CHECK(FrameOf(bed, frame).Position.x == doctest::Approx(17.0f));
+    CHECK(FrameOf(bed, frame).Position.y == doctest::Approx(-19.0f));
+    CHECK(bed.Where(bed.a).x == doctest::Approx(37.0f)); // inside it
+    CHECK(bed.Where(bed.b).x == doctest::Approx(337.0f));
+    CHECK(bed.Where(bed.c).x == doctest::Approx(1200.0f)); // outside
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Moved"));
+
+    // Escape mid-drag puts it all back.
+    bed.Pause();
+    const core::Float2 again{bed.view->FrameRect(frame).x + 30.0f, bed.view->FrameRect(frame).y + 10.0f};
+    bed.Press(again);
+    bed.D().InjectMouseMove(core::Float2{again.x + 50.0f, again.y});
+    CHECK(bed.Where(bed.a).x == doctest::Approx(87.0f));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    bed.D().InjectMouseUp(core::Float2{again.x + 50.0f, again.y}, MouseButton::Left);
+    CHECK(bed.Where(bed.a).x == doctest::Approx(37.0f));
+    CHECK(FrameOf(bed, frame).Position.x == doctest::Approx(17.0f));
+    CHECK(bed.changes.Size() == 1);
+
+    // A box over the whole of it selects it, and the nodes it touches.
+    bed.Pause();
+    bed.Drag(core::Float2{599.0f, 395.0f}, core::Float2{60.0f, 50.0f}); // it reaches 597 now
+    CHECK(bed.view->IsFrameSelected(frame));
+    CHECK(bed.Selected() == 2);
+}
+
+TEST_CASE("GraphView: a frame's edges resize it, previewed and one change on release; Escape cancels")
+{
+    Bed bed;
+    const GraphId frame = Framed(bed);
+    Rect r = bed.view->FrameRect(frame);
+    const core::Float2 right{r.Right() - 2.0f, r.y + r.height * 0.5f};
+    bed.Press(right);
+    bed.D().InjectMouseMove(core::Float2{right.x + 30.0f, right.y});
+    CHECK(bed.view->FrameRect(frame).width == doctest::Approx(510.0f)); // previewed
+    CHECK(bed.changes.IsEmpty());
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    bed.D().InjectMouseUp(core::Float2{right.x + 30.0f, right.y}, MouseButton::Left);
+    CHECK(bed.view->FrameRect(frame).width == doctest::Approx(480.0f));
+    CHECK(bed.changes.IsEmpty());
+
+    bed.Pause();
+    bed.Drag(right, core::Float2{right.x + 60.0f, right.y});
+    CHECK(FrameOf(bed, frame).Size.x == doctest::Approx(540.0f));
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Edited a frame"));
+
+    // From its bottom start corner: wider to the start, taller.
+    bed.Pause();
+    r = bed.view->FrameRect(frame);
+    const core::Float2 corner{r.x + 2.0f, r.Bottom() - 2.0f};
+    bed.Drag(corner, core::Float2{corner.x - 30.0f, corner.y + 40.0f});
+    CHECK(FrameOf(bed, frame).Position.x == doctest::Approx(-50.0f));
+    CHECK(FrameOf(bed, frame).Position.y == doctest::Approx(-40.0f));
+    CHECK(FrameOf(bed, frame).Size.x == doctest::Approx(570.0f));
+    CHECK(FrameOf(bed, frame).Size.y == doctest::Approx(240.0f));
+
+    // No smaller than its least.
+    bed.Pause();
+    r = bed.view->FrameRect(frame);
+    const core::Float2 left{r.x + 2.0f, r.y + r.height * 0.5f};
+    bed.Drag(left, core::Float2{left.x + 1000.0f, left.y});
+    CHECK(FrameOf(bed, frame).Size.x == doctest::Approx(GraphView::kFrameMinWidth));
+}
+
+TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a frame round the selection and a comment; Delete deletes them")
+{
+    Bed bed;
+    const GraphId frame = Framed(bed);
+    GraphFrameWidget& widget = *bed.view->GetFrameWidget(frame);
+    widget.GetTitleLabel().BeginEdit();
+    REQUIRE(widget.GetTitleLabel().GetEditor() != nullptr);
+    widget.GetTitleLabel().GetEditor()->SetText(core::StringView(u8"Renamed"));
+    REQUIRE(widget.GetTitleLabel().EndEdit(true));
+    CHECK(FrameOf(bed, frame).Title == core::String(u8"Renamed"));
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Edited a frame"));
+
+    // While its body is edited, the keys are the field's: Delete deletes no node.
+    bed.Click(bed.Middle(bed.a));
+    widget.EditBody();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
+    CHECK(bed.NodeCount() == 3);
+    widget.GetBodyLabel().GetEditor()->SetText(core::StringView(u8"A note"));
+    REQUIRE(widget.GetBodyLabel().EndEdit(true));
+    CHECK(FrameOf(bed, frame).Body == core::String(u8"A note"));
+    (void)bed.root->UpdateLayout();
+    CHECK(widget.GetBodyLabel().IsDisplayed());
+
+    // Its title's menu renames it.
+    bed.Pause();
+    bed.RightClick(core::Float2{bed.view->FrameRect(frame).x + 30.0f, bed.view->FrameRect(frame).y + 10.0f});
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    Activate(*bed.view->GetMenu(), u8"Rename");
+    CHECK(widget.GetTitleLabel().IsEditing());
+    REQUIRE(widget.GetTitleLabel().EndEdit(false));
+
+    // Round the selected nodes, from the menu over nothing.
+    bed.Pause();
+    bed.Click(bed.Middle(bed.a));
+    bed.Pause();
+    bed.Click(bed.Middle(bed.b), KeyModShift);
+    bed.RightClick(core::Float2{300.0f, 380.0f});
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    Activate(*bed.view->GetMenu(), u8"Add frame");
+    REQUIRE(bed.graph.State().Frames.Size() == 2);
+    const GraphFrameInfo round = bed.graph.State().Frames[1];
+    CHECK(bed.changes.Back().Words == core::String(u8"Framed"));
+    const Rect inside{round.Position.x, round.Position.y, round.Size.x, round.Size.y};
+    CHECK(inside.Contains(Rect{0.0f, 0.0f, bed.view->NodeSize(bed.a).x, bed.view->NodeSize(bed.a).y}));
+    CHECK(inside.Contains(Rect{300.0f, 0.0f, bed.view->NodeSize(bed.b).x, bed.view->NodeSize(bed.b).y}));
+    CHECK(bed.view->IsFrameSelected(round.Id));
+
+    // A comment where the menu was, nothing selected: a frame with a body.
+    bed.Pause();
+    bed.Click(core::Float2{300.0f, 380.0f});
+    bed.RightClick(core::Float2{300.0f, 380.0f});
+    Activate(*bed.view->GetMenu(), u8"Add comment");
+    REQUIRE(bed.graph.State().Frames.Size() == 3);
+    const GraphFrameInfo comment = bed.graph.State().Frames[2];
+    CHECK_FALSE(comment.Body.IsEmpty());
+    (void)bed.root->UpdateLayout();
+    REQUIRE(bed.view->GetFrameWidget(comment.Id) != nullptr);
+    CHECK(bed.view->GetFrameWidget(comment.Id)->GetBodyLabel().IsDisplayed());
+
+    // Delete deletes the selected frame, and nothing else.
+    REQUIRE(bed.view->IsFrameSelected(comment.Id));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
+    CHECK(bed.graph.State().Frames.Size() == 2);
+    CHECK(bed.changes.Back().Words == core::String(u8"Deleted a frame"));
+    CHECK(bed.NodeCount() == 3);
+    CHECK(bed.view->GetSelectedFrames().IsEmpty());
 }

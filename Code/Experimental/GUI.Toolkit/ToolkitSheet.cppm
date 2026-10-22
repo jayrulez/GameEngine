@@ -111,6 +111,10 @@ export namespace experimental::gui
             graphnode.target { border-color: var(--graphnode-target, var(--accent-strong)); }
             graphnode.refused { opacity: 0.5; }
             graphpin.refused label { opacity: 0.4; }
+            graphframe { border: var(--border-width) solid transparent; border-radius: var(--radius); }
+            graphframe.selected { border-color: var(--graphframe-selected, var(--accent)); }
+            graphframe editablelabel.title { color: var(--graphframe-title, var(--text-strong)); }
+            graphframe editablelabel.body { color: var(--graphframe-body, var(--text)); white-space: pre-wrap; }
             graphnodepicker {
                 background-color: var(--graphnodepicker-background, var(--surface-raised)); border: var(--border-width) solid var(--border);
                 border-radius: var(--radius); font-size: var(--font-small); color: var(--text);

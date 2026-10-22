@@ -101,6 +101,7 @@ namespace experimental::gui
     RTTI_DEFINE_OBJECT(GraphPinRow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodeHeader, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodeWidget, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(GraphFrameWidget, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphPickerRow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodePicker, "rtti::gui::toolkit")
     REFLECT_MEMBERS(GraphView, "rtti::gui::toolkit")

@@ -82,6 +82,7 @@ namespace experimental::gui
     RTTI_DEFINE_OBJECT(CurveView, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GradientStrip, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GradientView, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(Dopesheet, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyViewPopup, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyValuePreview, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(CurvePropertyEditor, "rtti::gui::toolkit")

@@ -83,6 +83,15 @@ export namespace experimental::gui
                               color: var(--text-dim); }
             propertypreview::curve { background-color: var(--propertygrid-curve, var(--accent)); }
             propertypreview:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            dopesheet { background-color: var(--dopesheet-background, var(--surface-sunken)); color: var(--text); font-size: var(--font-small); }
+            dopesheet::labels { background-color: var(--dopesheet-labels, var(--surface-header)); }
+            dopesheet::separator { background-color: var(--dopesheet-separator, var(--separator)); }
+            dopesheet::key { background-color: var(--dopesheet-key, var(--text)); }
+            dopesheet::summary { background-color: var(--dopesheet-summary, var(--text-dim)); }
+            dopesheet::selected { background-color: var(--dopesheet-selected, var(--accent)); }
+            dopesheet::playhead { background-color: var(--timeline-playhead, var(--accent)); }
+            dopesheet::selection-box { background-color: var(--dopesheet-selection-box, var(--selection)); opacity: 0.5; }
+            dopesheet:focus-visible { box-shadow: inset 0 0 0 var(--focus-width) var(--focus-ring); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

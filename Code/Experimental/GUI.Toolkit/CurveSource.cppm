@@ -11,7 +11,9 @@
 // is the source's, an application's (ruling 1).
 //
 // CurveSet is a source of its own curves in memory: what tests and a page without curves of its own
-// edit, its commits told to whoever keeps the undo, which hands them back to undo and redo.
+// edit, its commits told to whoever keeps the undo, which hands them back to undo and redo. It is a
+// timeline source too, each curve a channel named by its path (its name), so a dopesheet and a curve
+// view stack over one clip.
 
 module;
 #include "Core/Prelude.h"
@@ -20,6 +22,7 @@ export module experimental.gui.toolkit:curve_source;
 
 import foundation.core;
 import experimental.gui;
+import :timeline_source;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -109,8 +112,8 @@ export namespace experimental::gui
         core::Array<CurveEdit> Curves;
     };
 
-    /// Curves of its own, in memory.
-    class CurveSet : public ICurveSource
+    /// Curves of its own, in memory; its curves the channels of a timeline, by their names.
+    class CurveSet : public ICurveSource, public ITimelineSource
     {
     public:
         /// Adds a curve; its index.
@@ -121,7 +124,7 @@ export namespace experimental::gui
             for (const CurveKey& key : keys)
                 curve.Keys.PushBack(key);
             m_curves.PushBack(core::Move(curve));
-            NotifyCurvesChanged();
+            Changed();
             return m_curves.Size() - 1;
         }
         /// Sets a curve's keys from code: shown, no change told.
@@ -130,11 +133,11 @@ export namespace experimental::gui
             if (curve >= m_curves.Size())
                 return;
             Assign(m_curves[curve].Keys, keys);
-            NotifyCurvesChanged();
+            Changed();
         }
         [[nodiscard]] CurveInfo& Info(usize curve) { return m_curves[curve].Info; }
         /// Something changed an info: tell the views.
-        void InfoChanged() { NotifyCurvesChanged(); }
+        void InfoChanged() { Changed(); }
 
         /// Each commit, for whoever keeps the undo.
         void SetOnCommit(core::Function<void(const CurveChange&)> callback) { m_onCommit = core::Move(callback); }
@@ -144,7 +147,7 @@ export namespace experimental::gui
             for (const CurveEdit& edit : change.Curves)
                 if (edit.Curve < m_curves.Size())
                     Assign(m_curves[edit.Curve].Keys, (undo ? edit.Before : edit.After).AsSpan());
-            NotifyCurvesChanged();
+            Changed();
         }
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
 
@@ -173,7 +176,7 @@ export namespace experimental::gui
             if (!m_editing || curve >= m_curves.Size())
                 return;
             Assign(m_curves[curve].Keys, keys);
-            NotifyCurvesChanged();
+            Changed();
         }
         void CommitKeysEdit() override
         {
@@ -194,7 +197,7 @@ export namespace experimental::gui
             m_before.Clear();
             if (!change.Curves.IsEmpty() && m_onCommit)
                 m_onCommit(change);
-            NotifyCurvesChanged();
+            Changed();
         }
         void CancelKeysEdit() override
         {
@@ -204,7 +207,114 @@ export namespace experimental::gui
             for (usize c = 0; c < m_curves.Size() && c < m_before.Size(); ++c)
                 m_curves[c].Keys = core::Move(m_before[c]);
             m_before.Clear();
-            NotifyCurvesChanged();
+            Changed();
+        }
+
+        // === ITimelineSource ===
+        [[nodiscard]] usize ChannelCount() const override { return m_curves.Size(); }
+        [[nodiscard]] core::String GetChannelPath(usize channel) const override { return channel < m_curves.Size() ? m_curves[channel].Info.Name : core::String{}; }
+        void GetKeyTimes(usize channel, core::Array<f32>& out) const override
+        {
+            out.Clear();
+            if (channel < m_curves.Size())
+                for (const CurveKey& key : m_curves[channel].Keys)
+                    out.PushBack(key.time);
+        }
+        void BeginKeysMove() override { BeginKeysEdit(); }
+        void PreviewKeysMove(core::Span<const TimelineKeyRef> keys, f32 delta, core::Array<TimelineKeyRef>& moved) override
+        {
+            moved.Clear();
+            if (!m_editing)
+                return;
+            for (usize c = 0; c < m_curves.Size() && c < m_before.Size(); ++c)
+            {
+                bool any = false;
+                for (const TimelineKeyRef& ref : keys)
+                    any = any || ref.Channel == c;
+                if (!any || m_curves[c].Info.Locked)
+                    continue;
+                core::Array<CurveKey> next;
+                core::Array<bool> chosen;
+                for (usize i = 0; i < m_before[c].Size(); ++i)
+                {
+                    CurveKey key = m_before[c][i];
+                    bool selected = false;
+                    for (const TimelineKeyRef& ref : keys)
+                        selected = selected || (ref.Channel == c && ref.Index == i);
+                    if (selected)
+                        key.time = core::Max(0.0f, key.time + delta);
+                    next.PushBack(key);
+                    chosen.PushBack(selected);
+                }
+                // Sorted again, stably, the moved keys followed to their places.
+                for (usize i = 1; i < next.Size(); ++i)
+                    for (usize j = i; j > 0 && next[j].time < next[j - 1].time; --j)
+                    {
+                        core::Swap(next[j], next[j - 1]);
+                        const bool m = chosen[j];
+                        chosen[j] = chosen[j - 1];
+                        chosen[j - 1] = m;
+                    }
+                ApplyTangentModes(next.AsSpan());
+                m_curves[c].Keys = core::Move(next);
+                for (usize n = 0; n < chosen.Size(); ++n)
+                    if (chosen[n])
+                        moved.PushBack(TimelineKeyRef{c, n});
+            }
+            Changed();
+        }
+        void CommitKeysMove() override { CommitKeysEdit(); }
+        void CancelKeysMove() override { CancelKeysEdit(); }
+        bool DeleteKeys(core::Span<const TimelineKeyRef> keys) override
+        {
+            if (keys.IsEmpty())
+                return false;
+            BeginKeysEdit();
+            bool any = false;
+            for (usize c = 0; c < m_curves.Size(); ++c)
+            {
+                if (m_curves[c].Info.Locked)
+                    continue;
+                core::Array<CurveKey> kept;
+                for (usize i = 0; i < m_curves[c].Keys.Size(); ++i)
+                {
+                    bool gone = false;
+                    for (const TimelineKeyRef& ref : keys)
+                        gone = gone || (ref.Channel == c && ref.Index == i);
+                    if (gone)
+                        any = true;
+                    else
+                        kept.PushBack(m_curves[c].Keys[i]);
+                }
+                ApplyTangentModes(kept.AsSpan());
+                m_curves[c].Keys = core::Move(kept);
+            }
+            CommitKeysEdit();
+            return any;
+        }
+        bool InsertKey(usize channel, f32 time, TimelineKeyRef& made) override
+        {
+            if (channel >= m_curves.Size())
+                return false;
+            Curve& curve = m_curves[channel];
+            if (curve.Info.Locked || (curve.Info.MaxKeys != 0 && curve.Keys.Size() >= curve.Info.MaxKeys))
+                return false;
+            BeginKeysEdit();
+            CurveKey key;
+            key.time = time;
+            key.value = EvaluateCurve(curve.Keys.AsSpan(), time);
+            key.interpolation = CurveKeyInterpolation::Cubic;
+            key.tangentMode = CurveTangentMode::Auto;
+            usize at = 0;
+            while (at < curve.Keys.Size() && curve.Keys[at].time <= time)
+                ++at;
+            if (at > 0)
+                key.interpolation = curve.Keys[at - 1].interpolation; // the segment's it splits
+            curve.Keys.Insert(at, key);
+            ApplyTangentModes(curve.Keys.AsSpan());
+            CommitKeysEdit();
+            made = TimelineKeyRef{channel, at};
+            return true;
         }
 
         /// Whether two key lists are the same, key by key.
@@ -220,6 +330,12 @@ export namespace experimental::gui
         }
 
     private:
+        // Its views told: the curve views and the dopesheets.
+        void Changed()
+        {
+            NotifyCurvesChanged();
+            NotifyTimelineChanged();
+        }
         struct Curve
         {
             CurveInfo Info;

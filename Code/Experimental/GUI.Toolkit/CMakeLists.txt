@@ -17,9 +17,11 @@ target_sources(GUI.Toolkit
             PropertyGrid.cppm
             ReflectedSource.cppm
             TimeAxis.cppm
+            TimelineSource.cppm
             CurveSource.cppm
             CurveView.cppm
             GradientView.cppm
+            Dopesheet.cppm
             CurveEditors.cppm
     PRIVATE
         ToolkitReflection.cpp)

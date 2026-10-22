@@ -496,6 +496,7 @@ private:
     void PlayClip(f32 time);
     void FillGraphs(gui::Node& section);
     void FillCrumbs(gui::Node& section);
+    void FillToasts(gui::Node& section);
     // The Toolkit page's edit history: changes left to save, to undo and to redo.
     i32 m_toolkitUnsaved = 0;
     i32 m_toolkitDone = 0;
@@ -1074,6 +1075,8 @@ void GUISandbox::FillNativeHosts()
         FillGraphs(*section);
     if (gui::Node* section = FindById(*m_shellNode, u8"crumbs-section"))
         FillCrumbs(*section);
+    if (gui::Node* section = FindById(*m_shellNode, u8"toasts-section"))
+        FillToasts(*section);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -2638,8 +2641,7 @@ void GUISandbox::WireGraph(GraphHistory& graph, gui::Node& section, StringView p
 // type's (a float's green, a colour's amber), a link only between pins of one type. And the lamp's
 // state machine: Off, On and Flicker and the transitions between them (node links), a double click
 // making a state the lamp's, which it and its transitions out show highlighted.
-// T7: two breadcrumb bars over an invented asset tree, and buttons posting each kind of toast to the
-// shell's host.
+// T7: two breadcrumb bars over an invented asset tree, a path not in it answered by a toast.
 void GUISandbox::FillCrumbs(gui::Node& section)
 {
     static constexpr const char8_t* kFolders[] = {
@@ -2741,8 +2743,12 @@ void GUISandbox::FillCrumbs(gui::Node& section)
             r.Payload.Label = String(u8"fox.glb");
             return true;
         });
+}
 
-    // The toasts.
+// T7: buttons posting each kind of toast to the shell's host (the core's, over the whole window).
+void GUISandbox::FillToasts(gui::Node& section)
+{
+    GUISandbox* self = this;
     auto* toastSaid = Cast<gui::Label>(FindById(section, u8"toast-said"));
     const auto tell = [self, toastSaid]()
     {

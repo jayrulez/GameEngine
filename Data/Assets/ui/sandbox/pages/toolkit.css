@@ -20,4 +20,3 @@ statusbar { height: 24px; font-family: Roboto; font-size: 12px; }
 .crumbs.narrow { width: 220px; }
 .crumbs-chip { padding: 4px 10px; font-family: Roboto; font-size: 13px; color: var(--ink); background-color: var(--shell-surface-2);
                border-radius: 4px; cursor: grab; }
-.toast-buttons { width: 590px; }

@@ -124,7 +124,7 @@
     </Panel>
 
     <Panel id="crumbs-section" class="section" gap="12">
-        <Label class="section-title" text="Breadcrumbs and toasts"/>
+        <Label class="section-title" text="Breadcrumbs"/>
         <Label class="toolkit-note" white-space="normal"
                text="An invented asset tree. Click a folder in the path to go there; the chevron after a folder lists what is inside it (Down on a focused folder too). The narrow bar folds the folders that do not fit into its overflow menu. Click the wide bar's empty end to type a path (Return goes there, Escape gives up). Drag the fox.glb chip onto a folder to move it there. Tab reaches the bar once; Left and Right move along it."/>
         <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
@@ -136,21 +136,6 @@
             <Label id="crumbs-chip" class="crumbs-chip" text="fox.glb"/>
         </Panel>
         <Label id="crumbs-said" class="caption" text="In Content/Models/Characters/Fox."/>
-        <Label class="toolkit-note" white-space="normal"
-               text="Toasts at the window's bottom end: info and success leave after 5 s, a warning after 8, an error stays until closed; the pointer on a toast holds them all. Repeat posts one key again (counted); Progress updates one toast by its key; Widget and Achievement show a widget, in a card and bare; Thread posts from a worker thread."/>
-        <Panel class="toast-buttons" flex-direction="row" gap="8" align-items="center" flex-wrap="wrap">
-            <Button id="toast-info" class="toolkit-button" text="Info"/>
-            <Button id="toast-success" class="toolkit-button" text="Success"/>
-            <Button id="toast-warning" class="toolkit-button" text="Warning"/>
-            <Button id="toast-error" class="toolkit-button" text="Error"/>
-            <Button id="toast-repeat" class="toolkit-button" text="Repeat"/>
-            <Button id="toast-progress" class="toolkit-button" text="Progress"/>
-            <Button id="toast-widget" class="toolkit-button" text="Widget"/>
-            <Button id="toast-bare" class="toolkit-button" text="Achievement"/>
-            <Button id="toast-thread" class="toolkit-button" text="Thread"/>
-            <Button id="toast-clear" class="toolkit-button" text="Clear"/>
-        </Panel>
-        <Label id="toast-said" class="caption" text="No toasts yet."/>
-        <Label class="caption" white-space="normal" text="BreadcrumbBar (GUI.Toolkit): segments carrying their ids, chevron menus from a children callback, drops of the page's types, the path editable. ToastHost (the core GUI, one host for games and editors) over the whole window."/>
+        <Label class="caption" white-space="normal" text="BreadcrumbBar (GUI.Toolkit): segments carrying their ids, chevron menus from a children callback, drops of the page's types, the path editable. A path not in the tree is answered by a toast (Menus and windows shows them)."/>
     </Panel>
 </Panel>

@@ -56,6 +56,26 @@
         </Panel>
     </Panel>
 
+    <Panel id="toasts-section" class="section" gap="12">
+        <Label class="section-title" text="Toasts"/>
+        <Label class="caption toast-note" white-space="normal"
+               text="Notices at the window's bottom end (the bottom left, right to left): info and success leave after 5 s, a warning after 8, an error stays until closed; the pointer on a toast holds them all. Repeat posts one key again (counted); Progress updates one toast by its key; Widget and Achievement show a widget, in a card and bare; Thread posts from a worker thread."/>
+        <Panel class="toast-buttons" flex-direction="row" gap="8" align-items="center" flex-wrap="wrap">
+            <Button id="toast-info" class="btn" text="Info"/>
+            <Button id="toast-success" class="btn" text="Success"/>
+            <Button id="toast-warning" class="btn" text="Warning"/>
+            <Button id="toast-error" class="btn" text="Error"/>
+            <Button id="toast-repeat" class="btn" text="Repeat"/>
+            <Button id="toast-progress" class="btn" text="Progress"/>
+            <Button id="toast-widget" class="btn" text="Widget"/>
+            <Button id="toast-bare" class="btn" text="Achievement"/>
+            <Button id="toast-thread" class="btn" text="Thread"/>
+            <Button id="toast-clear" class="btn" text="Clear"/>
+        </Panel>
+        <Label id="toast-said" class="caption" text="No toasts yet."/>
+        <Label class="caption toast-note" white-space="normal" text="ToastHost (the core GUI: one host for a game and an editor) over the whole window, in the shell."/>
+    </Panel>
+
     <Panel class="section" gap="12">
         <Label class="section-title" text="Windows and dialogs"/>
         <Panel class="row" flex-direction="row" align-items="start" gap="12">

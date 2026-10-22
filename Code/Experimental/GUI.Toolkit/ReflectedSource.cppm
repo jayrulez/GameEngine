@@ -20,6 +20,10 @@
 //   - A struct's group carries its type's name as its hint, and so does any other type, for an
 //     application's editor (a Color until T4, a Ref, an EntityRef); a struct no editor takes shows
 //     its own rows, anything else the grid's row saying no editor fits.
+//   - A type the application registers as a curve (its keys property, a list of Core's CurveKey)
+//     is one value of kind Curve, its keys whole; one registered as a gradient (its colour stops,
+//     alpha stops and blend properties) is one value of kind Gradient (T5): the toolkit names no
+//     runtime type, the application says which of its types these are and where their parts are.
 //   - The attributes the editor's inspector reads: `displayName` (else the name made readable),
 //     `description`, `range` (a Float4 of min, max, step), `visibleWhen` ("prop", or "prop=1,2" of
 //     its raw integer, a sibling's; shown when it holds for every object), and `flags`.
@@ -67,6 +71,24 @@ export namespace experimental::gui
         core::String Path;
         core::Array<core::String> Before;
         core::Array<core::String> After;
+    };
+
+    /// Where a type registered as a curve keeps its keys: a list (an Array or a BoundedArray) of
+    /// Core's CurveKey, by its property's name, and the most it holds (0: no limit).
+    struct ReflectedCurveParts
+    {
+        core::String Keys;
+        u32 MaxKeys = 0;
+    };
+    /// Where a type registered as a gradient keeps its parts: its lists of Core's GradientColorStop
+    /// and GradientAlphaStop and its GradientInterpolation, by their properties' names, and the
+    /// most stops of each kind (0: no limit).
+    struct ReflectedGradientParts
+    {
+        core::String Colors;
+        core::String Alphas;
+        core::String Interpolation;
+        u32 MaxStops = 0;
     };
 
     /// "castsShadows" -> "Casts Shadows", "fovYRadians" -> "Fov Y Radians", "IBL" -> "IBL": a
@@ -151,6 +173,19 @@ export namespace experimental::gui
 
         /// Tells the grid the objects changed from outside it (an undo the application made).
         void Refresh() { NotifyPropertiesChanged(); }
+
+        /// Takes the type named `typeName` as a curve: one value, its keys at `parts.Keys`.
+        void RegisterCurveType(core::StringView typeName, ReflectedCurveParts parts)
+        {
+            m_curveTypes.PushBack(CurveType{core::String(typeName), core::Move(parts)});
+            NotifyPropertiesChanged();
+        }
+        /// Takes the type named `typeName` as a gradient: one value of its stops and blend.
+        void RegisterGradientType(core::StringView typeName, ReflectedGradientParts parts)
+        {
+            m_gradientTypes.PushBack(GradientType{core::String(typeName), core::Move(parts)});
+            NotifyPropertiesChanged();
+        }
 
         // === IPropertySource ===
         [[nodiscard]] usize ObjectCount() const override { return m_objects.Size(); }
@@ -371,6 +406,8 @@ export namespace experimental::gui
             Float4,
             Quaternion,
             Color,
+            Curve,    // a type registered as a curve
+            Gradient, // a type registered as a gradient
             Group, // a nested or value struct, an object
             List,
             Other,
@@ -392,7 +429,31 @@ export namespace experimental::gui
             bool ReadOnly = false;
         };
 
-        [[nodiscard]] static Shape ShapeOf(const core::TypeInfo& type)
+        // A type's shape: one the application registered (a curve, a gradient), else what it is.
+        [[nodiscard]] Shape ShapeOf(const core::TypeInfo& type) const
+        {
+            const core::StringView name(reinterpret_cast<const char8_t*>(type.name));
+            if (FindCurveType(name) != nullptr)
+                return Shape::Curve;
+            if (FindGradientType(name) != nullptr)
+                return Shape::Gradient;
+            return BaseShapeOf(type);
+        }
+        [[nodiscard]] const ReflectedCurveParts* FindCurveType(core::StringView name) const
+        {
+            for (const CurveType& entry : m_curveTypes)
+                if (entry.Name.AsView() == name)
+                    return &entry.Parts;
+            return nullptr;
+        }
+        [[nodiscard]] const ReflectedGradientParts* FindGradientType(core::StringView name) const
+        {
+            for (const GradientType& entry : m_gradientTypes)
+                if (entry.Name.AsView() == name)
+                    return &entry.Parts;
+            return nullptr;
+        }
+        [[nodiscard]] static Shape BaseShapeOf(const core::TypeInfo& type)
         {
             const auto is = [&type]<typename T>() { return &type == &core::TypeOf<T>() || type.id == core::TypeOf<T>().id; };
             if (is.template operator()<bool>())
@@ -423,7 +484,7 @@ export namespace experimental::gui
                     return Shape::Group;
             return Shape::Other;
         }
-        [[nodiscard]] static bool IsGroup(const Target& target)
+        [[nodiscard]] bool IsGroup(const Target& target) const
         {
             return target.Part < 0 && target.Type != nullptr && ShapeOf(*target.Type) == Shape::Group;
         }
@@ -627,6 +688,14 @@ export namespace experimental::gui
             case Shape::Color:
                 info.Kind = PropertyKind::Color;
                 break;
+            case Shape::Curve:
+                info.Kind = PropertyKind::Curve;
+                info.MaxCount = FindCurveType(core::StringView(reinterpret_cast<const char8_t*>(type.name)))->MaxKeys;
+                break;
+            case Shape::Gradient:
+                info.Kind = PropertyKind::Gradient;
+                info.MaxCount = FindGradientType(core::StringView(reinterpret_cast<const char8_t*>(type.name)))->MaxStops;
+                break;
             case Shape::Group: // its type's name, for an editor of its own (a Color in T4); else its rows
                 info.Kind = PropertyKind::Group;
                 info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
@@ -783,6 +852,10 @@ export namespace experimental::gui
             if (shape == Shape::List)
                 return target.Address != nullptr ? Variant(static_cast<i64>(core::ContainerSize(*target.Type->container, core::Instance(target.Address, target.Type))))
                                                  : Variant{};
+            if (shape == Shape::Curve)
+                return ReadCurve(target);
+            if (shape == Shape::Gradient)
+                return ReadGradient(target);
             if (target.Address != nullptr)
                 return ReadAt(target.Address, *target.Type, shape);
             if (target.Element && !target.List.IsEmpty())
@@ -807,6 +880,10 @@ export namespace experimental::gui
             }
             if (target.Part >= 0)
                 return SetPart(target, shape, value.AsFloat());
+            if (shape == Shape::Curve)
+                return value.GetType() == Variant::Type::Curve && WriteCurve(target, value.AsCurve());
+            if (shape == Shape::Gradient)
+                return value.GetType() == Variant::Type::Gradient && WriteGradient(target, value.AsGradient());
             if (target.Address != nullptr)
                 return WriteAt(target.Address, *target.Type, shape, value);
             if (target.Element && !target.List.IsEmpty())
@@ -1158,6 +1235,12 @@ export namespace experimental::gui
                 SerializeList(ar, key, target);
                 return;
             }
+            case Shape::Curve:
+                SerializeCurve(ar, key, target);
+                return;
+            case Shape::Gradient:
+                SerializeGradient(ar, key, target);
+                return;
             case Shape::Group:
             {
                 if (target.Address == nullptr)
@@ -1311,7 +1394,7 @@ export namespace experimental::gui
         // What a copy is, so a paste takes only its like: a Float's name (a Quaternion's Euler
         // degrees a Float3, as the grid shows it), a struct's type, a list of its elements' type,
         // a value's kind.
-        [[nodiscard]] static core::String ShapeTag(const Target& target)
+        [[nodiscard]] core::String ShapeTag(const Target& target) const
         {
             if (target.Part == kHdrColorPart)
                 return core::String(u8"Color");
@@ -1339,6 +1422,8 @@ export namespace experimental::gui
                 return core::String(u8"Float4");
             case Shape::Color:
                 return core::String(u8"Color");
+            case Shape::Curve:
+            case Shape::Gradient:
             case Shape::Group:
                 return core::String(reinterpret_cast<const char8_t*>(target.Type->name));
             case Shape::List:
@@ -1391,6 +1476,183 @@ export namespace experimental::gui
             }
         }
 
+        // === Curves and gradients: the parts the application named, read and written whole ===
+
+        // The list property `name` of the struct at `target`, as a list instance; empty when absent.
+        [[nodiscard]] core::Instance PartList(const Target& target, core::StringView name) const
+        {
+            if (target.Address == nullptr || target.Type == nullptr)
+                return core::Instance{};
+            const core::PropertyInfo* property = FindPropertyNamed(*target.Type, name);
+            if (property == nullptr || property->type == nullptr || property->type->container == nullptr || property->address == nullptr)
+                return core::Instance{};
+            void* address = property->address(core::Instance(target.Address, target.Type));
+            return address != nullptr ? core::Instance(address, property->type) : core::Instance{};
+        }
+        // The list's elements as `T` (Core's key or stop), by value.
+        template <typename T>
+        static void ReadElements(const core::Instance& list, core::Array<T>& out)
+        {
+            if (list.IsEmpty())
+                return;
+            const core::ContainerInfo& container = *list.Type()->container;
+            for (usize i = 0; i < core::ContainerSize(container, list); ++i)
+            {
+                const core::Variant element = core::ContainerGetAt(container, list, i);
+                if (const T* typed = element.TryGet<T>())
+                    out.PushBack(*typed);
+            }
+        }
+        // The list made `values`: grown or cut to their count (a bounded array to its most), then
+        // each set. False when it could not hold them all.
+        template <typename T>
+        static bool WriteElements(const core::Instance& list, core::Span<const T> values)
+        {
+            if (list.IsEmpty())
+                return false;
+            const core::ContainerInfo& container = *list.Type()->container;
+            while (core::ContainerSize(container, list) > values.Size())
+                if (!core::ContainerRemoveAt(container, list, core::ContainerSize(container, list) - 1).IsOk())
+                    return false;
+            while (core::ContainerSize(container, list) < values.Size())
+                if (core::ContainerEmplaceDefault(container, list, core::ContainerSize(container, list)).IsEmpty())
+                    break; // at its most
+            bool all = core::ContainerSize(container, list) == values.Size();
+            for (usize i = 0; i < core::ContainerSize(container, list); ++i)
+                all = core::ContainerSetAt(container, list, i, core::Variant::From<T>(values[i])).IsOk() && all;
+            return all;
+        }
+        [[nodiscard]] Variant ReadCurve(const Target& target) const
+        {
+            const ReflectedCurveParts* parts = FindCurveType(core::StringView(reinterpret_cast<const char8_t*>(target.Type->name)));
+            const core::Instance list = parts != nullptr ? PartList(target, parts->Keys.AsView()) : core::Instance{};
+            if (list.IsEmpty())
+                return Variant{};
+            core::Array<core::CurveKey> keys(m_allocator);
+            ReadElements(list, keys);
+            return Variant::FromCurve(keys.AsSpan());
+        }
+        bool WriteCurve(const Target& target, core::Span<const core::CurveKey> keys) const
+        {
+            const ReflectedCurveParts* parts = FindCurveType(core::StringView(reinterpret_cast<const char8_t*>(target.Type->name)));
+            return parts != nullptr && WriteElements(PartList(target, parts->Keys.AsView()), keys);
+        }
+        [[nodiscard]] Variant ReadGradient(const Target& target) const
+        {
+            const ReflectedGradientParts* parts = FindGradientType(core::StringView(reinterpret_cast<const char8_t*>(target.Type->name)));
+            if (parts == nullptr || target.Address == nullptr)
+                return Variant{};
+            ColorGradient gradient;
+            ReadElements(PartList(target, parts->Colors.AsView()), gradient.Colors);
+            ReadElements(PartList(target, parts->Alphas.AsView()), gradient.Alphas);
+            if (const core::PropertyInfo* blend = FindPropertyNamed(*target.Type, parts->Interpolation.AsView()); blend != nullptr && blend->address != nullptr)
+                if (const void* address = blend->address(core::Instance(target.Address, target.Type)))
+                    gradient.Interpolation = static_cast<core::GradientInterpolation>(core::ReadEnumValue(address, *blend->type));
+            return Variant(gradient);
+        }
+        bool WriteGradient(const Target& target, const ColorGradient& gradient) const
+        {
+            const ReflectedGradientParts* parts = FindGradientType(core::StringView(reinterpret_cast<const char8_t*>(target.Type->name)));
+            if (parts == nullptr || target.Address == nullptr)
+                return false;
+            bool ok = WriteElements(PartList(target, parts->Colors.AsView()), gradient.Colors.AsSpan());
+            ok = WriteElements(PartList(target, parts->Alphas.AsView()), gradient.Alphas.AsSpan()) && ok;
+            if (const core::PropertyInfo* blend = FindPropertyNamed(*target.Type, parts->Interpolation.AsView()); blend != nullptr && blend->address != nullptr)
+                if (void* address = blend->address(core::Instance(target.Address, target.Type)))
+                    core::WriteEnumValue(address, *blend->type, static_cast<i64>(gradient.Interpolation));
+            return ok;
+        }
+        // A curve either way under `key`: its count, then each key's fields (written here, so an
+        // undo does not depend on Core's key being reflected where the application runs).
+        void SerializeCurve(core::ISerializer& ar, const char* key, const Target& target) const
+        {
+            const bool reading = ar.Mode() == core::SerializeMode::Read;
+            core::Array<core::CurveKey> keys(m_allocator);
+            for (const core::CurveKey& k : Read(target).AsCurve())
+                keys.PushBack(k);
+            ar.Key(key);
+            ar.BeginObject();
+            i64 count = static_cast<i64>(keys.Size());
+            core::Serialize(ar, "count", count);
+            if (reading)
+            {
+                keys.Clear();
+                for (i64 i = 0; i < count; ++i)
+                    keys.PushBack(core::CurveKey{});
+            }
+            for (usize i = 0; i < keys.Size(); ++i)
+            {
+                const std::array<char, 24> elementKey = ElementKey(static_cast<i64>(i), false);
+                if (reading && !ar.HasKey(elementKey.data()))
+                    continue;
+                core::CurveKey& k = keys[i];
+                ar.Key(elementKey.data());
+                ar.BeginObject();
+                core::Serialize(ar, "time", k.time);
+                core::Serialize(ar, "value", k.value);
+                core::Serialize(ar, "tangentIn", k.tangentIn);
+                core::Serialize(ar, "tangentOut", k.tangentOut);
+                i64 interpolation = static_cast<i64>(k.interpolation);
+                i64 mode = static_cast<i64>(k.tangentMode);
+                core::Serialize(ar, "interpolation", interpolation);
+                core::Serialize(ar, "tangentMode", mode);
+                k.interpolation = static_cast<core::CurveKeyInterpolation>(interpolation);
+                k.tangentMode = static_cast<core::CurveTangentMode>(mode);
+                ar.EndObject();
+            }
+            ar.EndObject();
+            if (reading && !target.ReadOnly)
+                (void)WriteCurve(target, keys.AsSpan());
+        }
+        void SerializeGradient(core::ISerializer& ar, const char* key, const Target& target) const
+        {
+            const bool reading = ar.Mode() == core::SerializeMode::Read;
+            ColorGradient gradient = Read(target).AsGradient();
+            ar.Key(key);
+            ar.BeginObject();
+            i64 blend = static_cast<i64>(gradient.Interpolation);
+            core::Serialize(ar, "interpolation", blend);
+            gradient.Interpolation = static_cast<core::GradientInterpolation>(blend);
+            i64 colors = static_cast<i64>(gradient.Colors.Size());
+            i64 alphas = static_cast<i64>(gradient.Alphas.Size());
+            core::Serialize(ar, "colors", colors);
+            core::Serialize(ar, "alphas", alphas);
+            if (reading)
+            {
+                gradient.Colors.Clear();
+                gradient.Alphas.Clear();
+                for (i64 i = 0; i < colors; ++i)
+                    gradient.Colors.PushBack(core::GradientColorStop{});
+                for (i64 i = 0; i < alphas; ++i)
+                    gradient.Alphas.PushBack(core::GradientAlphaStop{});
+            }
+            for (usize i = 0; i < gradient.Colors.Size(); ++i)
+            {
+                const std::array<char, 24> stopKey = ElementKey(static_cast<i64>(i), false);
+                if (reading && !ar.HasKey(stopKey.data()))
+                    continue;
+                ar.Key(stopKey.data());
+                ar.BeginObject();
+                core::Serialize(ar, "time", gradient.Colors[i].time);
+                core::Serialize(ar, "color", gradient.Colors[i].color);
+                ar.EndObject();
+            }
+            for (usize i = 0; i < gradient.Alphas.Size(); ++i)
+            {
+                const std::array<char, 24> stopKey = ElementKey(static_cast<i64>(i), true); // "t3": an alpha stop
+                if (reading && !ar.HasKey(stopKey.data()))
+                    continue;
+                ar.Key(stopKey.data());
+                ar.BeginObject();
+                core::Serialize(ar, "time", gradient.Alphas[i].time);
+                core::Serialize(ar, "alpha", gradient.Alphas[i].alpha);
+                ar.EndObject();
+            }
+            ar.EndObject();
+            if (reading && !target.ReadOnly)
+                (void)WriteGradient(target, gradient);
+        }
+
         // A property's change may show or hide others (visibleWhen): the properties changed.
         void Changed(core::StringView) { NotifyPropertiesChanged(); }
 
@@ -1428,6 +1690,18 @@ export namespace experimental::gui
         };
         core::Array<Provider> m_providers;
         core::RefPtr<core::Object> m_typeDefault; // the type's defaults, made by its creator
+        struct CurveType
+        {
+            core::String Name;
+            ReflectedCurveParts Parts;
+        };
+        struct GradientType
+        {
+            core::String Name;
+            ReflectedGradientParts Parts;
+        };
+        core::Array<CurveType> m_curveTypes;
+        core::Array<GradientType> m_gradientTypes;
         core::Function<void(const ReflectedChange&)> m_onChange;
     };
 }

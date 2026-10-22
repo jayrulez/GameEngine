@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include <initializer_list>
 import foundation.core;
 import experimental.gui;
 import experimental.gui.toolkit;
@@ -154,6 +155,60 @@ namespace reflected
         builder.Creator();
     }
 
+    // A curve and a gradient of an application's own (as a particle module's are): fixed arrays
+    // of Core's keys and stops with their counts, registered with the source as one value each.
+    struct TestCurve
+    {
+        core::CurveKey keys[4]{};
+        i32 keyCount = 0;
+    };
+    struct TestGradient
+    {
+        core::GradientColorStop colors[3]{};
+        i32 colorCount = 0;
+        core::GradientAlphaStop alphas[3]{};
+        i32 alphaCount = 0;
+        core::GradientInterpolation interpolation = core::GradientInterpolation::Srgb;
+    };
+    class TestEmitter : public core::Object
+    {
+        RTTI_OBJECT(TestEmitter, core::Object)
+    public:
+        TestEmitter()
+        {
+            size.keys[0] = core::CurveKey{0.0f, 1.0f, 0.0f, 0.0f, core::CurveKeyInterpolation::Linear, core::CurveTangentMode::Broken};
+            size.keys[1] = core::CurveKey{1.0f, 0.0f, 0.0f, 0.0f, core::CurveKeyInterpolation::Linear, core::CurveTangentMode::Broken};
+            size.keyCount = 2;
+            color.colors[0] = core::GradientColorStop{0.0f, core::Color{1.0f, 1.0f, 1.0f, 1.0f}};
+            color.colorCount = 1;
+            color.alphas[0] = core::GradientAlphaStop{0.0f, 1.0f};
+            color.alphas[1] = core::GradientAlphaStop{1.0f, 0.0f};
+            color.alphaCount = 2;
+        }
+        TestCurve size;
+        TestGradient color;
+        f32 rate = 10.0f;
+    };
+    REFLECT_VALUE(TestCurve, "rtti::tests::reflected")
+    {
+        builder.BoundedArray<&TestCurve::keys, &TestCurve::keyCount>("keys").Property<&TestCurve::keyCount>("keyCount");
+    }
+    REFLECT_VALUE(TestGradient, "rtti::tests::reflected")
+    {
+        builder.BoundedArray<&TestGradient::colors, &TestGradient::colorCount>("colors")
+            .Property<&TestGradient::colorCount>("colorCount")
+            .BoundedArray<&TestGradient::alphas, &TestGradient::alphaCount>("alphas")
+            .Property<&TestGradient::alphaCount>("alphaCount")
+            .Property<&TestGradient::interpolation>("interpolation");
+    }
+    REFLECT_MEMBERS(TestEmitter, "rtti::tests::reflected")
+    {
+        builder.Property<&TestEmitter::size>("size").PropAttribute("range", core::Float4{0.0f, 4.0f, 0.0f, 0.0f});
+        builder.Property<&TestEmitter::color>("color");
+        builder.Property<&TestEmitter::rate>("rate");
+        builder.Creator();
+    }
+
     core::RefPtr<TestEffect> CreateEffect(const core::TypeInfo& type)
     {
         core::RefPtr<core::Object> made = core::CreateObject(type, core::DefaultAllocator());
@@ -167,6 +222,8 @@ namespace reflected
         RttiRegisterEnum_LampKind();
         RttiRegisterEnum_LampLayers();
         RttiRegisterValue_LampShape();
+        RttiRegisterValue_TestCurve();
+        RttiRegisterValue_TestGradient();
         core::RegisterArrayType<f32>();
         core::RegisterPolymorphicArrayType<TestEffect>(&CreateEffect, &CanCreateEffect);
         static const bool once = []()
@@ -632,4 +689,142 @@ TEST_CASE("reflected source: the stops editor shows log2 of the intensity and wr
         root->GetEventDispatcher()->InjectKeyDown(static_cast<core::u32>(KeyCode::Up)); // a stop more
     CHECK(bed.a->glow.w == doctest::Approx(8.0f).epsilon(0.01));
     grid->SetSource(nullptr);
+}
+
+namespace
+{
+    // Two emitters, their curve and gradient registered as the application would.
+    struct EmitterBed
+    {
+        core::RefPtr<reflected::TestEmitter> a = core::MakeRef<reflected::TestEmitter>(core::DefaultAllocator());
+        core::RefPtr<reflected::TestEmitter> b = core::MakeRef<reflected::TestEmitter>(core::DefaultAllocator());
+        ReflectedPropertySource source{core::DefaultAllocator()};
+        reflected::BlobFormat format;
+        core::Array<ReflectedChange> changes{core::DefaultAllocator()};
+
+        EmitterBed()
+        {
+            reflected::Register();
+            source.RegisterCurveType(SV(u8"TestCurve"), ReflectedCurveParts{core::String(u8"keys"), 4});
+            source.RegisterGradientType(SV(u8"TestGradient"), ReflectedGradientParts{core::String(u8"colors"), core::String(u8"alphas"),
+                                                                                    core::String(u8"interpolation"), 3});
+            core::Instance objects[] = {core::Instance(a.Get(), a->GetType()), core::Instance(b.Get(), b->GetType())};
+            source.SetObjects(objects);
+            source.SetTextFormat(&format);
+            source.SetOnChange([this](const ReflectedChange& change) { changes.PushBack(change); });
+        }
+        [[nodiscard]] static core::Array<core::CurveKey> Keys(std::initializer_list<core::CurveKey> keys)
+        {
+            core::Array<core::CurveKey> out(core::DefaultAllocator());
+            for (const core::CurveKey& key : keys)
+                out.PushBack(key);
+            return out;
+        }
+    };
+    core::CurveKey K(f32 time, f32 value)
+    {
+        return core::CurveKey{time, value, 0.0f, 0.0f, core::CurveKeyInterpolation::Linear, core::CurveTangentMode::Broken};
+    }
+}
+
+TEST_CASE("reflected source: a registered curve and gradient are one value each, of their kind, their most from the registration")
+{
+    EmitterBed bed;
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8""), rows);
+    REQUIRE(rows.Size() == 3u);
+    CHECK(rows[0].Kind == PropertyKind::Curve);
+    CHECK(rows[0].MaxCount == 4u);
+    CHECK(rows[0].HasRange);
+    CHECK(rows[0].Max == doctest::Approx(4.0));
+    CHECK(rows[1].Kind == PropertyKind::Gradient);
+    CHECK(rows[1].MaxCount == 3u);
+
+    const Variant size = bed.source.GetValue(SV(u8"size"), 0);
+    REQUIRE(size.GetType() == Variant::Type::Curve);
+    REQUIRE(size.AsCurve().Size() == 2u);
+    CHECK(size.AsCurve()[0].value == doctest::Approx(1.0f));
+    const Variant color = bed.source.GetValue(SV(u8"color"), 1);
+    REQUIRE(color.GetType() == Variant::Type::Gradient);
+    CHECK(color.AsGradient().Colors.Size() == 1u);
+    CHECK(color.AsGradient().Alphas.Size() == 2u);
+
+    // Unregistered, the same type is a struct of its own rows.
+    ReflectedPropertySource plain{core::DefaultAllocator()};
+    core::Instance one[] = {core::Instance(bed.a.Get(), bed.a->GetType())};
+    plain.SetObjects(one);
+    rows.Clear();
+    plain.GetProperties(SV(u8""), rows);
+    CHECK(rows[0].Kind == PropertyKind::Group);
+    CHECK(rows[0].Hint == core::String(u8"TestCurve"));
+}
+
+TEST_CASE("reflected source: a curve written whole on each object, previewed, committed as one change an undo reads back")
+{
+    EmitterBed bed;
+    const core::Array<core::CurveKey> three = EmitterBed::Keys({K(0.0f, 0.0f), K(0.5f, 2.0f), K(1.0f, 1.0f)});
+    bed.source.BeginEdit(SV(u8"size"));
+    bed.source.PreviewEdit(SV(u8"size"), PropertyWrite{Variant::FromCurve(three.AsSpan())});
+    CHECK(bed.a->size.keyCount == 3);
+    CHECK(bed.b->size.keys[1].value == doctest::Approx(2.0f));
+    bed.source.CommitEdit(SV(u8"size"), PropertyWrite{Variant::FromCurve(three.AsSpan())});
+    REQUIRE(bed.changes.Size() == 1u);
+    CHECK(bed.b->size.keyCount == 3);
+
+    // Its most: five keys keep four.
+    const core::Array<core::CurveKey> five = EmitterBed::Keys({K(0.0f, 0.0f), K(0.2f, 1.0f), K(0.4f, 0.0f), K(0.6f, 1.0f), K(0.8f, 0.0f)});
+    bed.source.BeginEdit(SV(u8"size"));
+    bed.source.CommitEdit(SV(u8"size"), PropertyWrite{Variant::FromCurve(five.AsSpan())});
+    CHECK(bed.a->size.keyCount == 4);
+
+    // A cancel puts each back.
+    bed.source.BeginEdit(SV(u8"size"));
+    bed.source.PreviewEdit(SV(u8"size"), PropertyWrite{Variant::FromCurve(three.AsSpan())});
+    bed.source.CancelEdit(SV(u8"size"));
+    CHECK(bed.a->size.keyCount == 4);
+
+    // Undo the first: the two keys each had.
+    REQUIRE(bed.source.Restore(bed.changes[0], true));
+    CHECK(bed.a->size.keyCount == 2);
+    CHECK(bed.b->size.keys[0].value == doctest::Approx(1.0f));
+    REQUIRE(bed.source.Restore(bed.changes[0], false));
+    CHECK(bed.b->size.keyCount == 3);
+    CHECK(bed.b->size.keys[1].time == doctest::Approx(0.5f));
+}
+
+TEST_CASE("reflected source: a gradient written whole, its blend too; mixed, reverted, copied and pasted as one value")
+{
+    EmitterBed bed;
+    ColorGradient gradient;
+    gradient.Colors.PushBack(core::GradientColorStop{0.0f, core::Color{1.0f, 0.0f, 0.0f, 1.0f}});
+    gradient.Colors.PushBack(core::GradientColorStop{1.0f, core::Color{0.0f, 0.0f, 1.0f, 1.0f}});
+    gradient.Alphas.PushBack(core::GradientAlphaStop{0.0f, 0.5f});
+    gradient.Interpolation = core::GradientInterpolation::OkLab;
+    bed.source.BeginEdit(SV(u8"color"));
+    bed.source.CommitEdit(SV(u8"color"), PropertyWrite{Variant(gradient)});
+    CHECK(bed.a->color.colorCount == 2);
+    CHECK(bed.b->color.alphaCount == 1);
+    CHECK(bed.b->color.interpolation == core::GradientInterpolation::OkLab);
+    CHECK(bed.source.GetValue(SV(u8"color"), 0).AsGradient() == gradient);
+
+    // Mixed when one differs.
+    bed.b->size.keys[0].value = 3.0f;
+    CHECK(ReadPropertyValue(bed.source, SV(u8"size"), PropertyKind::Curve).Mixed);
+    CHECK_FALSE(ReadPropertyValue(bed.source, SV(u8"color"), PropertyKind::Gradient).Mixed);
+
+    // Reverted to the type's own.
+    REQUIRE(bed.source.Revert(SV(u8"color")));
+    CHECK(bed.a->color.colorCount == 1);
+    CHECK(bed.b->color.interpolation == core::GradientInterpolation::Srgb);
+
+    // Copied from the first, pasted onto both: its like only.
+    bed.a->size.keys[1].value = 2.5f;
+    const core::String copied = bed.source.CopyValue(SV(u8"size"));
+    REQUIRE(copied.Size() != 0);
+    core::String reason;
+    REQUIRE(bed.source.PasteValue(SV(u8"size"), copied.AsView(), reason));
+    CHECK(bed.b->size.keys[0].value == doctest::Approx(1.0f));
+    CHECK(bed.b->size.keys[1].value == doctest::Approx(2.5f));
+    CHECK_FALSE(bed.source.PasteValue(SV(u8"color"), copied.AsView(), reason));
+    CHECK(reason == core::String(u8"A TestCurve does not paste onto a TestGradient"));
 }

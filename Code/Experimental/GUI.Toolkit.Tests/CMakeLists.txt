@@ -8,6 +8,7 @@ add_executable(GUI.Toolkit.Tests
     TimeAxisTests.cpp
     CurveViewTests.cpp
     GradientViewTests.cpp
+    CurveEditorTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Toolkit.Tests PRIVATE Experimental::GUI.Toolkit Experimental::GUI Foundation::Xml doctest::doctest)

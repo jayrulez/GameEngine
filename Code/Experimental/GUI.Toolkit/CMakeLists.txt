@@ -20,5 +20,6 @@ target_sources(GUI.Toolkit
             CurveSource.cppm
             CurveView.cppm
             GradientView.cppm
+            CurveEditors.cppm
     PRIVATE
         ToolkitReflection.cpp)

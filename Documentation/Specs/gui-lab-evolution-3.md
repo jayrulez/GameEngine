@@ -615,7 +615,12 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     types they take and where their parts are (`ParticleCurveFloat`: `keys`; `ParticleCurveColor`:
     `colors`, `alphas`, `interpolation`), so the toolkit names no runtime type and reflection gains no
     attribute. Over several objects a curve or a gradient is one value, mixed when they differ, an
-    edit setting it on each (as a colour).
+    edit setting it on each (as a colour). It travels as one (the user, 2026-10-22): the `Variant`
+    carries Core's keys (`Curve`) or a `ColorGradient` (`Gradient`), as it carries a `Color`, of
+    `PropertyKind::Curve` and `::Gradient`; the reflected source takes the registrations
+    (`RegisterCurveType`, `RegisterGradientType`: a type's name, its parts' properties and its most,
+    since reflection does not say a bounded array's capacity) and reads and writes the parts itself,
+    so an undo does not need Core's key reflected where the application runs.
   - **The dopesheet**, `Dopesheet` over an `ITimelineSource`: rows folded by path (component, property,
     channel), a parent row the sum of the keys under it; keys addressed by (row, index), an edit
     returning the moved keys' new addresses so the selection survives the source's sorting. A click

@@ -48,6 +48,8 @@ export namespace experimental::gui
         Flags,   ///< an integer, any of its choices' bits
         List,    ///< its elements are its children by index (`tags.0`); its value is their count
         Color,   ///< a colour, its sRGB values (T4)
+        Curve,   ///< Core's curve keys, one value (T5); MaxCount its most keys, a range its values'
+        Gradient, ///< a ColorGradient, one value (T5); MaxCount its most stops of each kind
     };
 
     /// What a list allows (PropertyInfo::ListOps).
@@ -84,7 +86,7 @@ export namespace experimental::gui
         bool Visible = true;
         bool ShowsAlpha = true;   ///< a colour's alpha is edited (not an HDR colour's, nor one with `noAlpha`)
         u8 ListOps = 0;           ///< a list's: PropertyListOps
-        u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's); 0: no limit
+        u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's), a curve's most keys, a gradient's most stops; 0: no limit
         core::Array<core::String> ElementTypes; ///< a list's types an add chooses from; empty: its one
 
         [[nodiscard]] core::StringView ShownName() const noexcept { return DisplayName.Size() != 0 ? DisplayName.AsView() : Name.AsView(); }

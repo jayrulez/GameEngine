@@ -14,7 +14,7 @@
 //   - A double click on a colour stop, or a click on its swatch, opens T4's picker as a popup (its
 //     drags preview, closing it is the change, Escape gives it up); an alpha stop has a number field;
 //     the selected stop's place has one too; the interpolation is a drop-down.
-// It reports each step of a gesture (changing), its end (changed) and a gesture given up
+// The value is the GUI's ColorGradient, as a property grid's gradient row carries it. It reports each step of a gesture (changing), its end (changed) and a gesture given up
 // (cancelled, the value back as it was); whoever holds the gradient writes it.
 
 module;
@@ -34,28 +34,6 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
-    /// A gradient as a value: Core's stops, sorted by time, and how they blend.
-    struct ColorGradient
-    {
-        core::Array<GradientColorStop> Colors;
-        core::Array<GradientAlphaStop> Alphas;
-        GradientInterpolation Interpolation = GradientInterpolation::Srgb;
-
-        [[nodiscard]] Color Evaluate(f32 time) const noexcept { return EvaluateGradient(Colors.AsSpan(), Alphas.AsSpan(), Interpolation, time); }
-        [[nodiscard]] bool operator==(const ColorGradient& other) const noexcept
-        {
-            if (Interpolation != other.Interpolation || Colors.Size() != other.Colors.Size() || Alphas.Size() != other.Alphas.Size())
-                return false;
-            for (usize i = 0; i < Colors.Size(); ++i)
-                if (Colors[i].time != other.Colors[i].time || !(Colors[i].color == other.Colors[i].color))
-                    return false;
-            for (usize i = 0; i < Alphas.Size(); ++i)
-                if (Alphas[i].time != other.Alphas[i].time || Alphas[i].alpha != other.Alphas[i].alpha)
-                    return false;
-            return true;
-        }
-    };
-
     /// A stop of a gradient: which kind, and its place among that kind's stops.
     struct GradientStopRef
     {

@@ -5,9 +5,11 @@
 //
 // Variant: a small tagged value a Model hands to a view for a cell - the currency of the MVC
 // layer. Modeled on eepp's Models::Variant (role only, common subset): empty / bool / int /
-// float / string / color. Stored as a plain struct (no union) for simplicity and safety;
-// ToString renders it for display (a colour as #RRGGBBAA) and Compare orders it for sorting (a
-// colour channel by channel, so differing colours never compare equal).
+// float / string / color, and Core's curve keys and colour gradient (T5: what a property grid's
+// curve and gradient rows carry, one value each, as a colour is). Stored as a plain struct (no
+// union) for simplicity and safety; ToString renders it for display (a colour as #RRGGBBAA, a
+// curve as its count of keys) and Compare orders it for sorting (a colour channel by channel, a
+// curve and a gradient field by field, so differing values never compare equal).
 
 module;
 #include "Core/Prelude.h"
@@ -21,6 +23,32 @@ namespace core = foundation::core;
 
 export namespace experimental::gui
 {
+    /// A colour gradient as one value: Core's colour stops and alpha stops, sorted by time, and the
+    /// space they blend in (ruling 2: Core's gradient, no model of the GUI's own).
+    struct ColorGradient
+    {
+        core::Array<core::GradientColorStop> Colors;
+        core::Array<core::GradientAlphaStop> Alphas;
+        core::GradientInterpolation Interpolation = core::GradientInterpolation::Srgb;
+
+        [[nodiscard]] core::Color Evaluate(f32 time) const noexcept
+        {
+            return core::EvaluateGradient(Colors.AsSpan(), Alphas.AsSpan(), Interpolation, time);
+        }
+        [[nodiscard]] bool operator==(const ColorGradient& other) const noexcept
+        {
+            if (Interpolation != other.Interpolation || Colors.Size() != other.Colors.Size() || Alphas.Size() != other.Alphas.Size())
+                return false;
+            for (usize i = 0; i < Colors.Size(); ++i)
+                if (Colors[i].time != other.Colors[i].time || !(Colors[i].color == other.Colors[i].color))
+                    return false;
+            for (usize i = 0; i < Alphas.Size(); ++i)
+                if (Alphas[i].time != other.Alphas[i].time || Alphas[i].alpha != other.Alphas[i].alpha)
+                    return false;
+            return true;
+        }
+    };
+
     class Variant
     {
     public:
@@ -31,7 +59,9 @@ export namespace experimental::gui
             Int,
             Float,
             String,
-            Color
+            Color,
+            Curve,   ///< Core's curve keys, sorted by time
+            Gradient ///< a ColorGradient
         };
 
         Variant() = default;
@@ -42,6 +72,16 @@ export namespace experimental::gui
         Variant(core::StringView value) : m_type(Type::String), m_string(value) {}
         Variant(const core::String& value) : m_type(Type::String), m_string(value) {}
         Variant(core::Color value) : m_type(Type::Color), m_color(value) {}
+        Variant(const ColorGradient& value) : m_type(Type::Gradient), m_gradient(value) {}
+        /// A curve's keys (a constructor of its own: a span of keys is no other value).
+        [[nodiscard]] static Variant FromCurve(core::Span<const core::CurveKey> keys)
+        {
+            Variant out;
+            out.m_type = Type::Curve;
+            for (const core::CurveKey& key : keys)
+                out.m_keys.PushBack(key);
+            return out;
+        }
 
         [[nodiscard]] Type GetType() const noexcept { return m_type; }
         [[nodiscard]] bool IsEmpty() const noexcept { return m_type == Type::Empty; }
@@ -62,6 +102,10 @@ export namespace experimental::gui
         }
         [[nodiscard]] core::StringView AsString() const noexcept { return m_string.AsView(); }
         [[nodiscard]] core::Color AsColor() const noexcept { return m_color; }
+        /// A curve's keys; none for another type.
+        [[nodiscard]] core::Span<const core::CurveKey> AsCurve() const noexcept { return m_keys.AsSpan(); }
+        /// A gradient; an empty one for another type.
+        [[nodiscard]] const ColorGradient& AsGradient() const noexcept { return m_gradient; }
 
         // A display string for any type (numbers rendered simply; string returned as-is).
         [[nodiscard]] core::String ToString() const
@@ -91,6 +135,10 @@ export namespace experimental::gui
                 }
                 return core::String(core::StringView(text, 9));
             }
+            case Type::Curve:
+                return core::Format(u8"{} keys", m_keys.Size());
+            case Type::Gradient:
+                return core::Format(u8"{} colours, {} alphas", m_gradient.Colors.Size(), m_gradient.Alphas.Size());
             }
             return core::String{};
         }
@@ -131,11 +179,62 @@ export namespace experimental::gui
                         return a[i] < b[i] ? -1 : 1;
                 return 0;
             }
+            case Type::Curve:
+            {
+                // Its count, then key by key, field by field.
+                if (m_keys.Size() != other.m_keys.Size())
+                    return m_keys.Size() < other.m_keys.Size() ? -1 : 1;
+                for (usize k = 0; k < m_keys.Size(); ++k)
+                {
+                    const core::CurveKey& x = m_keys[k];
+                    const core::CurveKey& y = other.m_keys[k];
+                    const f32 a[] = {x.time, x.value, x.tangentIn, x.tangentOut, static_cast<f32>(x.interpolation), static_cast<f32>(x.tangentMode)};
+                    const f32 b[] = {y.time, y.value, y.tangentIn, y.tangentOut, static_cast<f32>(y.interpolation), static_cast<f32>(y.tangentMode)};
+                    if (const i32 order = CompareFloats(a, b, 6); order != 0)
+                        return order;
+                }
+                return 0;
+            }
+            case Type::Gradient:
+            {
+                const ColorGradient& x = m_gradient;
+                const ColorGradient& y = other.m_gradient;
+                if (x.Interpolation != y.Interpolation)
+                    return x.Interpolation < y.Interpolation ? -1 : 1;
+                if (x.Colors.Size() != y.Colors.Size())
+                    return x.Colors.Size() < y.Colors.Size() ? -1 : 1;
+                if (x.Alphas.Size() != y.Alphas.Size())
+                    return x.Alphas.Size() < y.Alphas.Size() ? -1 : 1;
+                for (usize i = 0; i < x.Colors.Size(); ++i)
+                {
+                    const core::GradientColorStop& p = x.Colors[i];
+                    const core::GradientColorStop& q = y.Colors[i];
+                    const f32 a[] = {p.time, p.color.r, p.color.g, p.color.b, p.color.a};
+                    const f32 b[] = {q.time, q.color.r, q.color.g, q.color.b, q.color.a};
+                    if (const i32 order = CompareFloats(a, b, 5); order != 0)
+                        return order;
+                }
+                for (usize i = 0; i < x.Alphas.Size(); ++i)
+                {
+                    const f32 a[] = {x.Alphas[i].time, x.Alphas[i].alpha};
+                    const f32 b[] = {y.Alphas[i].time, y.Alphas[i].alpha};
+                    if (const i32 order = CompareFloats(a, b, 2); order != 0)
+                        return order;
+                }
+                return 0;
+            }
             }
             return 0;
         }
 
     private:
+        [[nodiscard]] static i32 CompareFloats(const f32* a, const f32* b, usize count) noexcept
+        {
+            for (usize i = 0; i < count; ++i)
+                if (a[i] != b[i])
+                    return a[i] < b[i] ? -1 : 1;
+            return 0;
+        }
         [[nodiscard]] static i32 CompareStrings(core::StringView a, core::StringView b) noexcept
         {
             const usize n = a.Size() < b.Size() ? a.Size() : b.Size();
@@ -202,5 +301,7 @@ export namespace experimental::gui
         f64 m_float = 0.0;
         core::String m_string;
         core::Color m_color{};
+        core::Array<core::CurveKey> m_keys;
+        ColorGradient m_gradient;
     };
 }

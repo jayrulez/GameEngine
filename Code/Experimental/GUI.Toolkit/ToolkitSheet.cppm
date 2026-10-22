@@ -77,6 +77,12 @@ export namespace experimental::gui
             gradientstrip { color: var(--gradient-stop-edge, var(--text-dim)); }
             gradientstrip::selected { background-color: var(--gradient-stop-selected, var(--accent)); }
             gradientview:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            propertyviewpopup { background-color: var(--propertygrid-popup, var(--surface-raised)); border-radius: var(--radius-small);
+                                box-shadow: 0 4px 12px var(--shadow-color); }
+            propertypreview { background-color: var(--propertygrid-preview, var(--surface-sunken)); border-radius: var(--radius-small);
+                              color: var(--text-dim); }
+            propertypreview::curve { background-color: var(--propertygrid-curve, var(--accent)); }
+            propertypreview:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

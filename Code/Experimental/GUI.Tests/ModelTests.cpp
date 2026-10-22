@@ -58,6 +58,41 @@ TEST_CASE("variant: a colour is written as its hex code, and differing colours n
     CHECK(Variant(core::Color{0.1f, 0.2f, 0.3f, 1.0f}).Compare(Variant(core::Color{0.1f, 0.2f, 0.3f, 0.5f})) > 0);
 }
 
+TEST_CASE("variant: a curve's keys and a gradient are one value each, equal only when every field is")
+{
+    core::CurveKey keys[2]{};
+    keys[0].time = 0.0f;
+    keys[1].time = 1.0f;
+    keys[1].value = 2.0f;
+    const Variant curve = Variant::FromCurve(keys);
+    CHECK(curve.GetType() == Variant::Type::Curve);
+    REQUIRE(curve.AsCurve().Size() == 2);
+    CHECK(curve.AsCurve()[1].value == 2.0f);
+    CHECK(curve.ToString() == SV(u8"2 keys"));
+    CHECK(curve.Compare(Variant::FromCurve(keys)) == 0);
+    keys[1].tangentMode = core::CurveTangentMode::Flat;
+    CHECK(curve.Compare(Variant::FromCurve(keys)) != 0);
+    CHECK(curve.Compare(Variant::FromCurve(core::Span<const core::CurveKey>(keys, 1))) > 0); // more keys after
+    CHECK(Variant(1.0).AsCurve().IsEmpty());
+
+    ColorGradient gradient;
+    gradient.Colors.PushBack(core::GradientColorStop{0.0f, core::Color{1.0f, 0.0f, 0.0f, 1.0f}});
+    gradient.Alphas.PushBack(core::GradientAlphaStop{0.0f, 1.0f});
+    gradient.Alphas.PushBack(core::GradientAlphaStop{1.0f, 0.0f});
+    const Variant value(gradient);
+    CHECK(value.GetType() == Variant::Type::Gradient);
+    CHECK(value.ToString() == SV(u8"1 colours, 2 alphas"));
+    CHECK(value.AsGradient() == gradient);
+    CHECK(value.Compare(Variant(gradient)) == 0);
+    ColorGradient other = gradient;
+    other.Interpolation = core::GradientInterpolation::OkLab;
+    CHECK(value.Compare(Variant(other)) != 0);
+    other = gradient;
+    other.Alphas[1].alpha = 0.5f;
+    CHECK(value.Compare(Variant(other)) < 0);
+    CHECK(gradient.Evaluate(0.5f).a == doctest::Approx(0.5f));
+}
+
 TEST_CASE("model-index: validity + equality")
 {
     CHECK_FALSE(ModelIndex{}.IsValid()); // default row -1

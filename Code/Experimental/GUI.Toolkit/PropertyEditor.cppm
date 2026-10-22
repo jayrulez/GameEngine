@@ -121,6 +121,10 @@ export namespace experimental::gui
             return core::StringView(u8"list");
         case PropertyKind::Color:
             return core::StringView(u8"colour");
+        case PropertyKind::Curve:
+            return core::StringView(u8"curve");
+        case PropertyKind::Gradient:
+            return core::StringView(u8"gradient");
         }
         return core::StringView(u8"value");
     }

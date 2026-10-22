@@ -23,7 +23,7 @@ import foundation.core;
 import experimental.gui;
 import :property_source;
 import :property_editor;
-import :property_editors; // the default editors
+import :curve_editors;    // the default editors
 
 using namespace foundation::core;
 namespace core = foundation::core;

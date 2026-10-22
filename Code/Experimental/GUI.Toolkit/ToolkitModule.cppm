@@ -24,6 +24,7 @@ export import :time_axis;        // T5: one time axis and its ruler
 export import :curve_source;     // T5: what a curve view reads and edits through
 export import :curve_view;       // T5: a source's curves on one canvas
 export import :gradient_view;    // T5: a gradient's stops, edited as a value
+export import :curve_editors;    // T5: the grid's curve and gradient editors, and the defaults
 
 export namespace experimental::gui
 {

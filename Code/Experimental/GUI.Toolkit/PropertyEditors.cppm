@@ -848,25 +848,4 @@ export namespace experimental::gui
         core::Array<core::String> m_types;
         usize m_size = 0;
     };
-
-    /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
-    /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2); colours by kind, stops
-    /// and HDR colours by hint (T4).
-    inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
-    {
-        const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
-        for (const core::StringView hint : floats)
-            registry.RegisterHint(hint, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FloatsPropertyEditor>(a); }, true);
-        registry.RegisterKind(PropertyKind::Bool, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<BoolPropertyEditor>(a); });
-        registry.RegisterKind(PropertyKind::Integer, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<NumberPropertyEditor>(a); });
-        registry.RegisterKind(PropertyKind::Float, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<NumberPropertyEditor>(a); });
-        registry.RegisterKind(PropertyKind::String, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
-        registry.RegisterKind(PropertyKind::Enum, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<EnumPropertyEditor>(a); });
-        registry.RegisterKind(PropertyKind::Color, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ColorPropertyEditor>(a); });
-        registry.RegisterHint(core::StringView(u8"stops"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StopsPropertyEditor>(a); });
-        registry.RegisterHint(core::StringView(u8"ColorHdr"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<HdrColorPropertyEditor>(a); },
-                              true);
-        registry.RegisterKind(PropertyKind::List, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ListPropertyEditor>(a); });
-        registry.RegisterKind(PropertyKind::Flags, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FlagsPropertyEditor>(a); });
-    }
 }

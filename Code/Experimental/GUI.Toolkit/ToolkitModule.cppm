@@ -27,6 +27,7 @@ export import :curve_view;       // T5: a source's curves on one canvas
 export import :gradient_view;    // T5: a gradient's stops, edited as a value
 export import :dopesheet;        // T5: a timeline's channels as rows of keys
 export import :curve_editors;    // T5: the grid's curve and gradient editors, and the defaults
+export import :graph_source;     // T6: what a graph view reads and edits through
 
 export namespace experimental::gui
 {

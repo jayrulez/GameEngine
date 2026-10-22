@@ -23,5 +23,6 @@ target_sources(GUI.Toolkit
             GradientView.cppm
             Dopesheet.cppm
             CurveEditors.cppm
+            GraphSource.cppm
     PRIVATE
         ToolkitReflection.cpp)

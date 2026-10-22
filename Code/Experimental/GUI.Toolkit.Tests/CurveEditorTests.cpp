@@ -236,3 +236,55 @@ TEST_CASE("curve editors: a row's curve stays in its box, a steep tangent's over
     REQUIRE(high > low);
     CHECK(high - low <= box.height + 2.0f);
 }
+
+TEST_CASE("curve editors: in the popup, a gradient's stop pulled off the strip goes")
+{
+    Bed bed;
+    PropertyInfo info = Info(PropertyKind::Gradient);
+    info.MaxCount = 6;
+    auto editor = bed.Editor<GradientPropertyEditor>(info, AGradient());
+    bed.Click(*editor->GetPreview());
+    REQUIRE(editor->IsViewOpen());
+    (void)bed.root->UpdateLayout();
+    GradientStrip* strip = editor->GetView()->GetStrip();
+    const Rect r = strip->GetScreenBounds();
+    const core::Float2 stop{r.Right() - 2.0f, r.Bottom() - 4.0f}; // the last colour stop
+    bed.D().InjectMouseMove(stop);
+    bed.D().InjectMouseDown(stop, MouseButton::Left);
+    bed.D().InjectMouseMove(stop + core::Float2{0.0f, 10.0f});
+    bed.D().InjectMouseMove(stop + core::Float2{0.0f, 40.0f});
+    bed.D().InjectMouseMove(stop + core::Float2{0.0f, 80.0f});
+    CHECK(editor->GetView()->GetValue().Colors.Size() == 1);
+    bed.D().InjectMouseUp(stop + core::Float2{0.0f, 80.0f}, MouseButton::Left);
+    CHECK(editor->GetView()->GetValue().Colors.Size() == 1);
+    CHECK(bed.host.Last() == SV(u8"preview p=1 colours, 1 alphas"));
+}
+
+TEST_CASE("curve editors: in the popup, Shift+click adds a key to the selection")
+{
+    Bed bed;
+    PropertyInfo info = Info(PropertyKind::Curve);
+    info.MaxCount = 8;
+    auto editor = bed.Editor<CurvePropertyEditor>(info, CurveValue());
+    bed.Click(*editor->GetPreview());
+    REQUIRE(editor->IsViewOpen());
+    (void)bed.root->UpdateLayout();
+    CurveView* view = editor->GetView();
+    const Rect r = view->GetScreenBounds();
+    const auto at = [&](core::f32 t, core::f32 v)
+    {
+        const core::Float2 local = view->KeyPoint(t, v);
+        return core::Float2{r.x + local.x, r.y + local.y};
+    };
+    bed.D().InjectMouseMove(at(0.0f, 0.0f));
+    bed.D().InjectMouseDown(at(0.0f, 0.0f), MouseButton::Left);
+    bed.D().InjectMouseUp(at(0.0f, 0.0f), MouseButton::Left);
+    CHECK(view->GetSelection().Size() == 1);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::LeftShift), KeyModShift);
+    bed.D().InjectMouseMove(at(1.0f, 1.0f), KeyModShift);
+    bed.D().InjectMouseDown(at(1.0f, 1.0f), MouseButton::Left, KeyModShift);
+    bed.D().InjectMouseUp(at(1.0f, 1.0f), MouseButton::Left, KeyModShift);
+    bed.D().InjectKeyUp(static_cast<core::u32>(KeyCode::LeftShift), 0);
+    CHECK(view->GetSelection().Size() == 2);
+    CHECK(editor->IsViewOpen());
+}

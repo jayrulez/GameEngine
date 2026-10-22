@@ -43,7 +43,8 @@ export namespace experimental::gui
         }
 
         /// Whether it edits in a text area (Return breaks a line, Ctrl+Return commits) rather than a
-        /// field; its text keeps its line breaks and wraps (white-space: pre-wrap, unless a sheet says).
+        /// field; its text keeps its line breaks and wraps (white-space: pre-wrap, unless a sheet says),
+        /// read from its top, where the text area puts it: a box shorter than its text cuts its end.
         /// Set while it is not editing.
         void SetMultiline(bool multiline)
         {
@@ -53,6 +54,7 @@ export namespace experimental::gui
             {
                 StyleWriteScope defaults(*this);
                 SetWhiteSpace(multiline ? TextWhiteSpace::PreWrap : TextWhiteSpace::Normal);
+                SetTextAlignment(GetTextAlignH(), multiline ? TextVAlign::Top : TextVAlign::Middle);
             }
             if (m_editor)
             {

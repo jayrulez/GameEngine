@@ -171,6 +171,7 @@ TEST_CASE("editable label: multiline, it edits in a text area; Return breaks a l
     label->SetFont(&font);
     label->SetMultiline(true);
     CHECK(label->GetTextStyle().WhiteSpace == TextWhiteSpace::PreWrap);
+    CHECK(label->GetTextAlignV() == TextVAlign::Top);
     label->SetText(core::StringView(u8"note"));
     label->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(120.0f); });
     root->AddChild(label.Get());

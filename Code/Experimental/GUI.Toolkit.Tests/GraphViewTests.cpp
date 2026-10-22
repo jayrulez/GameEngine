@@ -1104,6 +1104,11 @@ TEST_CASE("GraphView: a comment typed past its frame's bottom stops at the edge,
     CHECK(area->GetScrollY() > 0.0f); // the caret's line in view
     CHECK(widget.ClipsChildren());
     REQUIRE(widget.GetBodyLabel().EndEdit(true));
+    // Committed, it reads from its top: its first line under the title, the rest cut at the edge.
+    (void)bed.root->UpdateLayout();
+    EditableLabel& label = widget.GetBodyLabel();
+    CHECK(label.GetSize().y < 200.0f);
+    CHECK(label.BaselineAt(label.GetSize()) == doctest::Approx(label.GetChrome().Top + 10.0f));
     widget.GetBodyLabel().SetFont(nullptr);
     (void)bed.root->UpdateLayout();
 }

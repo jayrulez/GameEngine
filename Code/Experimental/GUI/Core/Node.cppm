@@ -1293,6 +1293,11 @@ export namespace experimental::gui
         void SetScrollExtent(core::Float2 extent); // LayoutImpl.cpp
         /// How far the wheel scrolls per notch, and the arrow keys per press.
         void SetScrollStep(f32 step) noexcept { m_scrollStep = step; }
+        /// Whether, focused, the arrows, Page Up and Down, Home and End scroll it (true): a scroller
+        /// whose keys are its own (a code editor's caret moves) says false, the keymap then hearing
+        /// them; the wheel and the bars scroll it still.
+        void SetScrollsByKeys(bool scrolls) noexcept { m_scrollsByKeys = scrolls; }
+        [[nodiscard]] bool GetScrollsByKeys() const noexcept { return m_scrollsByKeys; }
         [[nodiscard]] f32 GetScrollStep() const noexcept { return m_scrollStep; }
         /// A part's own states (`::scrollbar-thumb:hover` matches through them): a scroller's bar
         /// hovered, its thumb hovered or dragged. A widget with parts of its own adds theirs.
@@ -2908,6 +2913,7 @@ export namespace experimental::gui
         u8 m_measureNext = 0;  // the slot the next measure replaces once all are in use
         bool m_placing = false;                  // inside Arrange: the size and place set are the layout's
         f32 m_scrollStep = 40.0f;                // the wheel's notch and an arrow key's step
+        bool m_scrollsByKeys = true;             // focused, the arrow and page keys scroll it
         core::Float2 m_scrollTarget{0.0f, 0.0f}; // where a smooth scroll is going
         bool m_smoothScrolling = false;          // a smooth scroll is easing toward m_scrollTarget
         bool m_smoothTicking = false;            // its tick runs on the GUI's clock

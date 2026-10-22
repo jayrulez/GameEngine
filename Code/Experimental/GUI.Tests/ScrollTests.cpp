@@ -182,6 +182,18 @@ TEST_CASE("scroll: the wheel scrolls it from the content; keys scroll it only wh
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f)); // already at the end
 }
 
+TEST_CASE("scroll: one whose keys are its own does not scroll by them; the wheel still does")
+{
+    Scroller s;
+    s.view->SetScrollsByKeys(false);
+    s.D().SetFocusNode(s.view.Get());
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::End));
+    s.D().InjectKeyDown(static_cast<core::u32>(KeyCode::PageDown));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(0.0f));
+    CHECK(s.D().InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f}));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(s.view->GetScrollStep()));
+}
+
 TEST_CASE("scroll: its bar lies over the content; the thumb drags, the track pages")
 {
     Scroller s;

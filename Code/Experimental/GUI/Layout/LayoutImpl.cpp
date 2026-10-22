@@ -1417,7 +1417,7 @@ namespace experimental::gui
         }
         case EventType::KeyDown:
         {
-            if (event.Target != this)
+            if (event.Target != this || !m_scrollsByKeys)
                 return; // keys a focused widget inside left go on to navigation, not to scrolling
             const Rect box = GetContentBounds();
             const KeyEvent& key = static_cast<const KeyEvent&>(event);

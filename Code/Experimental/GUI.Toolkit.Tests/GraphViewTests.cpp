@@ -411,6 +411,31 @@ TEST_CASE("GraphView: a double click on a node is the application's; framing fit
         CHECK(box.Contains(bed.view->NodeRect(node)));
     CHECK(bed.view->MadeNodeCount() == 3);
 
+    // Asked before it has a size, it frames them once it is laid out.
+    core::RefPtr<GraphView> later = core::MakeRef<GraphView>(core::DefaultAllocator());
+    later->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(300.0f);
+        s.Height = LayoutLength::Px(200.0f);
+    });
+    later->SetSource(&bed.graph);
+    later->FrameAll();
+    bed.root->AddChild(later.Get());
+    (void)bed.root->UpdateLayout();
+    const Rect small = later->GetContentBounds();
+    REQUIRE(small.width > 0.0f);
+    for (const GraphId node : all)
+        CHECK(small.Contains(later->NodeRect(node)));
+    // It goes on fitting them as its nodes change size, until the canvas is moved.
+    CHECK(later->IsFitting());
+    later->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(420.0f); });
+    (void)bed.root->UpdateLayout();
+    for (const GraphId node : all)
+        CHECK(later->GetContentBounds().Contains(later->NodeRect(node)));
+    later->SetPan(later->GetPan());
+    CHECK_FALSE(later->IsFitting());
+    later->SetSource(nullptr);
+
     // The selection alone, at no more than the zoom of 1.
     bed.view->SetSelectedNodes(core::Span<const GraphId>(&bed.c, 1));
     bed.view->FrameSelection();

@@ -571,6 +571,7 @@ export namespace experimental::gui
         /// The graph's point at its content box's top-left.
         void SetPan(core::Float2 pan)
         {
+            m_fitting = false;
             m_pan = pan;
             RequestLayout();
         }
@@ -578,6 +579,7 @@ export namespace experimental::gui
         /// The zoom (within its limits), the graph's point at `about` (its own space) kept in place.
         void SetZoom(f32 zoom, core::Float2 about)
         {
+            m_fitting = false;
             const core::Float2 fixed = ViewToGraph(about);
             m_zoom = core::Clamp(zoom, m_zoomMin, m_zoomMax);
             const Rect box = GetContentBounds();
@@ -615,10 +617,23 @@ export namespace experimental::gui
             return core::Float2{m_pan.x + (local.x - box.x) / m_zoom, m_pan.y + (local.y - box.y) / m_zoom};
         }
 
-        /// Fits every node in view (at most at the zoom of 1).
-        void FrameAll() { Frame(false); }
+        /// Fits every node in view (at most at the zoom of 1), and goes on fitting them as it is laid
+        /// out (its size settling, its nodes measured) until the canvas is moved: a press or the wheel
+        /// in it, or code setting its pan or zoom.
+        void FrameAll()
+        {
+            m_fitting = true;
+            Frame(false);
+            RequestLayout();
+        }
         /// Fits the selected nodes in view; every node with none selected.
-        void FrameSelection() { Frame(!m_selection.IsEmpty()); }
+        void FrameSelection()
+        {
+            m_fitting = false;
+            Frame(!m_selection.IsEmpty());
+        }
+        /// Whether it still fits every node (FrameAll, the canvas not moved since).
+        [[nodiscard]] bool IsFitting() const noexcept { return m_fitting; }
 
         // === Edits of the selection (one change each, through the source) ===
         /// Deletes the selected nodes (and their links), then the selected links left; false when
@@ -1107,6 +1122,7 @@ export namespace experimental::gui
         f32 m_zoomMax = 2.0f;
         f32 m_gridSize = 16.0f;
         bool m_snap = true;
+        bool m_fitting = false; // FrameAll's: fitting every node until the canvas is moved
         core::Array<GraphId> m_selection;
         core::Function<void()> m_onSelectionChanged;
         core::Function<void(GraphId)> m_onNodeDoubleClick;
@@ -1290,6 +1306,8 @@ export namespace experimental::gui
                 pins.InsertOrAssign(entry.key, entry.value);
         m_pins = core::Move(pins);
         ShowLinkStates();
+        if (m_fitting)
+            Frame(false); // every node measured now; laid out again where that moves them
     }
 
     // === Gestures ===
@@ -1298,6 +1316,7 @@ export namespace experimental::gui
     {
         if (!m_source || (m_drag != Drag::None && !(m_drag == Drag::Link && m_sticky)))
             return;
+        m_fitting = false; // the canvas is the user's now
         const core::Float2 local = ConvertToNodeSpace(event.Position); // events come in screen space
         if (event.Button == MouseButton::Middle)
         {
@@ -1670,14 +1689,18 @@ export namespace experimental::gui
         if (!any)
             return;
         const Rect box = GetContentBounds();
+        if (box.width <= 0.0f || box.height <= 0.0f)
+            return; // not laid out yet: fitting does it once it is
         const f32 margin = 32.0f;
         const f32 width = right - left + 2.0f * margin, height = bottom - top + 2.0f * margin;
-        f32 zoom = 1.0f;
-        if (box.width > 0.0f && box.height > 0.0f)
-            zoom = core::Min(1.0f, core::Min(box.width / width, box.height / height));
-        m_zoom = core::Clamp(zoom, m_zoomMin, m_zoomMax);
+        const f32 zoom = core::Clamp(core::Min(1.0f, core::Min(box.width / width, box.height / height)), m_zoomMin, m_zoomMax);
         const core::Float2 middle{(left + right) * 0.5f, (top + bottom) * 0.5f};
-        SetPan(core::Float2{middle.x - box.width * 0.5f / m_zoom, middle.y - box.height * 0.5f / m_zoom});
+        const core::Float2 pan{middle.x - box.width * 0.5f / zoom, middle.y - box.height * 0.5f / zoom};
+        if (core::Abs(zoom - m_zoom) < 1e-5f && core::Abs(pan.x - m_pan.x) < 0.01f && core::Abs(pan.y - m_pan.y) < 0.01f)
+            return; // where it is already: nothing to lay out again
+        m_zoom = zoom;
+        m_pan = pan;
+        RequestLayout();
     }
 
     // === Edits of the selection ===

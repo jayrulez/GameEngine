@@ -718,7 +718,9 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     it ("×12"), which also updates a progress toast (Godot, zed); four shown at once, the rest
     queued until there is room.
   - **Placement and motion**: stacked at the bottom end corner (the bottom left, right to left), the
-    sheet's to move; in and out by the core's transitions.
+    sheet's to move; in and out by the core's transitions, a request's classes choosing which (the
+    theme's slide up, `pop`, `still`, a game's own), a reduced-motion preference fading only (the
+    user, 2026-10-22: the caller chooses, the sheet says what each choice is).
   - **Announced** through the core's announcements, an error interrupting, the rest waiting.
   - **History is the application's**: the host reports each toast posted and dismissed, for a log
     or a bell that shows them again (Godot's); it keeps none.

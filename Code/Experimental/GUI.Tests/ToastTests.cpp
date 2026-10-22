@@ -340,6 +340,46 @@ TEST_CASE("toast: under the theme, its text wraps at the card's width, a path lo
     card->GetTitlePart()->SetFont(nullptr);
 }
 
+TEST_CASE("toast: it comes in `.entering` through a frame's styling, the sheet's transition starting there; a request's class chooses how")
+{
+    Bed bed;
+    ToastRequest request = Bed::Text(u8"Hello");
+    request.Class = core::String(u8"pop celebrate");
+    request.Key = core::String(u8"hello");
+    const ToastId id = bed.host->Post(core::Move(request));
+    ToastCard* card = bed.host->GetCard(id);
+    REQUIRE(card != nullptr);
+    CHECK(card->HasClass(SV(u8"pop")));
+    CHECK(card->HasClass(SV(u8"celebrate")));
+    CHECK(card->HasClass(SV(u8"entering")));
+    // Styled so by the theme: unseen, its transition's start.
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
+    styles.ApplyTree(*bed.root);
+    CHECK(card->GetAlpha() == doctest::Approx(0.0f));
+    bed.host->Tick(0.0f); // the frame that styles it entering
+    CHECK(card->HasClass(SV(u8"entering")));
+    bed.host->Tick(0.0f);
+    CHECK_FALSE(card->HasClass(SV(u8"entering")));
+    // Restyled, it fades in over the theme's 0.15 s, from where it was.
+    styles.ApplyTree(*bed.root);
+    CHECK(card->GetAlpha() == doctest::Approx(0.0f));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.07f));
+    CHECK(card->GetAlpha() > 0.05f);
+    CHECK(card->GetAlpha() < 0.95f);
+    bed.root->GetContext().Update(core::Duration::FromSeconds(0.2f));
+    CHECK(card->GetAlpha() == doctest::Approx(1.0f));
+
+    // Replaced by its key with another class: the old ones go.
+    ToastRequest again = Bed::Text(u8"Hello again");
+    again.Key = core::String(u8"hello");
+    again.Class = core::String(u8"still");
+    (void)bed.host->Post(core::Move(again));
+    CHECK(card->HasClass(SV(u8"still")));
+    CHECK_FALSE(card->HasClass(SV(u8"pop")));
+    CHECK_FALSE(card->HasClass(SV(u8"celebrate")));
+}
+
 TEST_CASE("toast: a host markup places")
 {
     RegisterGuiElements();

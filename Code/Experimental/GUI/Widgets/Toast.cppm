@@ -14,7 +14,9 @@
 // A post with the key of one shown replaces it and counts it ("×12": a burst of one error, or a
 // progress toast updated), four show at once and the rest wait. Posts may come from any thread:
 // they wait in the host until its next frame (Godot, zed, Zero), a widget made there by a function,
-// since widgets do not cross threads. Each shown toast is announced, an error interrupting. The
+// since widgets do not cross threads. A card comes in `.entering` and goes `.leaving`, for the
+// sheet's transitions; a request's classes choose which (the theme's slide, `pop`, `still`, a game's
+// own; reduced motion only fades). Each shown toast is announced, an error interrupting. The
 // host keeps no history: it tells the application each toast posted and gone, for a log or a bell.
 
 module;
@@ -90,6 +92,9 @@ export namespace experimental::gui
         f32 Duration = -1.0f;
         /// A post with the key of one shown or waiting replaces it and counts it; empty: none.
         core::String Key;
+        /// Classes on its card (space-separated): how it comes and goes, as the sheet says (the
+        /// theme's `pop` and `still`, a game's own), or any look the sheet gives them.
+        core::String Class;
     };
 
     class ToastHost;
@@ -138,7 +143,8 @@ export namespace experimental::gui
         u32 m_count = 1;
         f32 m_remaining = 0.0f;
         f32 m_leaving = -1.0f; // seconds until it is taken off, once dismissed
-        bool m_entering = true;
+        u8 m_entering = 2;     // ticks it stays `.entering`: until it has been styled so, its transition's start
+        core::String m_classes; // its request's
         core::RefPtr<UIWidget> m_body;
         core::RefPtr<Label> m_title;
         core::RefPtr<Label> m_message;
@@ -286,11 +292,9 @@ export namespace experimental::gui
             for (usize i = m_cards.Size(); i-- > 0;)
             {
                 ToastCard& card = *m_cards[i];
-                if (card.m_entering)
-                {
-                    card.m_entering = false; // a frame shown `.entering`: the sheet's transition in
+                // `.entering` through a frame's styling, so the sheet's transition starts from it.
+                if (card.m_entering > 0 && --card.m_entering == 0)
                     card.RemoveClass(core::StringView(u8"entering"));
-                }
                 if (card.m_leaving >= 0.0f)
                 {
                     card.m_leaving -= seconds;
@@ -408,6 +412,9 @@ export namespace experimental::gui
             card.RemoveClass(ToastSeverityName(card.m_severity));
             card.m_severity = request.Severity;
             card.AddClass(ToastSeverityName(card.m_severity));
+            EachClass(card.m_classes.AsView(), [&card](core::StringView name) { card.RemoveClass(name); });
+            card.m_classes = request.Class;
+            EachClass(card.m_classes.AsView(), [&card](core::StringView name) { card.AddClass(name); });
             if (request.Bare)
                 card.AddClass(core::StringView(u8"bare"));
             else
@@ -517,6 +524,19 @@ export namespace experimental::gui
             ToastCard* held = &card;
             card.m_close->SetOnClick([self, held]() { (void)self->Dismiss(held->m_id, true); });
             card.AddChild(card.m_close.Get());
+        }
+        template <typename Fn>
+        static void EachClass(core::StringView classes, Fn&& each)
+        {
+            core::StringView rest = core::Trim(classes);
+            while (rest.Size() != 0)
+            {
+                usize end = 0;
+                while (end < rest.Size() && rest[end] != u8' ')
+                    ++end;
+                each(rest.SubStr(0, end));
+                rest = core::Trim(rest.SubStr(end, rest.Size() - end));
+            }
         }
         void Announce(const ToastCard& card)
         {

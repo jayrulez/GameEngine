@@ -495,6 +495,7 @@ private:
     void FillClip(gui::Node& section);
     void PlayClip(f32 time);
     void FillGraphs(gui::Node& section);
+    void FillCrumbs(gui::Node& section);
     // The Toolkit page's edit history: changes left to save, to undo and to redo.
     i32 m_toolkitUnsaved = 0;
     i32 m_toolkitDone = 0;
@@ -528,6 +529,9 @@ private:
     GraphHistory m_states;
     UniquePtr<sandbox::XmlTextFormat> m_graphFormat;
     gui::GraphId m_lampState = 0; // the state machine's active state
+    RefPtr<gui::ToastHost> m_toasts; // over the whole window (the Toolkit page posts to it)
+    i32 m_cookPercent = 0;           // the Progress toast's
+    u32 m_toastsPosted = 0, m_toastsClosed = 0;
     void WireGraph(GraphHistory& graph, gui::Node& section, StringView prefix, Function<void()> changed);
     // The Toolkit page's reflected cameras (T3), their source and its format, and the page's
     // history of the source's changes (each with the cameras it was made on).
@@ -910,6 +914,8 @@ void GUISandbox::BuildSandbox()
         return;
     }
     m_root->AddChild(m_shellNode.Get());
+    m_toasts = MakeRef<gui::ToastHost>(AppRoot());
+    m_shellNode->AddChild(m_toasts.Get());
     m_header = FindById(*m_shellNode, u8"header");
     m_body = FindById(*m_shellNode, u8"body");
     m_sidebar = FindById(*m_shellNode, u8"sidebar");
@@ -1066,6 +1072,8 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: a dataflow graph and a lamp's state machine (T6), after the clip.
     if (gui::Node* section = FindById(*m_shellNode, u8"graph-section"))
         FillGraphs(*section);
+    if (gui::Node* section = FindById(*m_shellNode, u8"crumbs-section"))
+        FillCrumbs(*section);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -2630,6 +2638,229 @@ void GUISandbox::WireGraph(GraphHistory& graph, gui::Node& section, StringView p
 // type's (a float's green, a colour's amber), a link only between pins of one type. And the lamp's
 // state machine: Off, On and Flicker and the transitions between them (node links), a double click
 // making a state the lamp's, which it and its transitions out show highlighted.
+// T7: two breadcrumb bars over an invented asset tree, and buttons posting each kind of toast to the
+// shell's host.
+void GUISandbox::FillCrumbs(gui::Node& section)
+{
+    static constexpr const char8_t* kFolders[] = {
+        u8"Content",
+        u8"Content/Models",
+        u8"Content/Models/Characters",
+        u8"Content/Models/Characters/Fox",
+        u8"Content/Models/Characters/Robot",
+        u8"Content/Models/Props",
+        u8"Content/Models/Props/Crate",
+        u8"Content/Models/Props/Lamp",
+        u8"Content/Textures",
+        u8"Content/Textures/Wood",
+        u8"Content/Textures/Stone",
+        u8"Content/Audio",
+        u8"Content/Audio/Music",
+        u8"Content/Audio/Effects",
+        u8"Content/Audio/Effects/Footsteps",
+        u8"Content/Scenes",
+        u8"Content/Scenes/Town",
+        u8"Content/Scenes/Forest",
+    };
+    const auto exists = [](StringView path)
+    {
+        for (const char8_t* folder : kFolders)
+            if (StringView(folder) == path)
+                return true;
+        return false;
+    };
+    auto* wide = Cast<gui::BreadcrumbBar>(FindById(section, u8"crumbs-bar"));
+    auto* narrow = Cast<gui::BreadcrumbBar>(FindById(section, u8"crumbs-narrow"));
+    auto* said = Cast<gui::Label>(FindById(section, u8"crumbs-said"));
+    if (wide == nullptr || narrow == nullptr)
+        return;
+    GUISandbox* self = this;
+    const auto go = [wide, narrow, said](StringView path)
+    {
+        wide->SetPath(path);
+        narrow->SetPath(path);
+        if (said != nullptr)
+            said->SetText(Format(u8"In {}.", path).AsView());
+    };
+    const auto children = [](const gui::BreadcrumbItem& of, Array<gui::BreadcrumbItem>& out)
+    {
+        for (const char8_t* folder : kFolders)
+        {
+            const StringView path(folder);
+            if (path.Size() <= of.Id.Size() + 1 || path.SubStr(0, of.Id.Size()) != of.Id.AsView() || path[of.Id.Size()] != u8'/')
+                continue;
+            const StringView name = path.SubStr(of.Id.Size() + 1, path.Size() - of.Id.Size() - 1);
+            bool direct = true;
+            for (const char8_t c : name)
+                direct = direct && c != u8'/';
+            if (direct)
+                out.PushBack(gui::BreadcrumbItem{String(path), String(name), String(path), {}});
+        }
+    };
+    gui::BreadcrumbBar* const bars[] = {wide, narrow};
+    for (gui::BreadcrumbBar* bar : bars)
+    {
+        bar->SetOnNavigate([go](const gui::BreadcrumbItem& item) { go(item.Id.AsView()); });
+        bar->SetOnChildren(children);
+        bar->SetSegmentDropTypes(StringView(u8"asset"));
+        bar->SetOnSegmentDrop([said](const gui::BreadcrumbItem& item, const gui::DragPayload& payload, gui::DropEffect)
+        {
+            if (said != nullptr)
+                said->SetText(Format(u8"Moved {} into {}.", payload.Label, item.Id).AsView());
+        });
+    }
+    wide->SetPathEditable(true);
+    wide->SetOnPathSubmitted([self, go, exists](StringView typed)
+    {
+        String path(Trim(typed));
+        while (path.Size() > 1 && path.AsView()[path.Size() - 1] == u8'/')
+            path = String(path.AsView().SubStr(0, path.Size() - 1));
+        if (exists(path.AsView()))
+        {
+            go(path.AsView());
+            return;
+        }
+        gui::ToastRequest request;
+        request.Severity = gui::ToastSeverity::Warning;
+        request.Title = String(u8"No such folder");
+        request.Message = Format(u8"{} is not in the asset tree.", path);
+        request.Key = String(u8"crumbs-path");
+        (void)self->m_toasts->Post(Move(request));
+    });
+    go(StringView(u8"Content/Models/Characters/Fox"));
+    if (auto* up = Cast<gui::Button>(FindById(section, u8"crumbs-up")))
+        up->SetOnClick([wide, go]()
+        {
+            if (wide->ItemCount() > 1)
+                go(wide->ItemAt(wide->ItemCount() - 2).Id.AsView());
+        });
+    if (gui::Node* chip = FindById(section, u8"crumbs-chip"))
+        chip->SetDragSource([](gui::DragRequest& r)
+        {
+            r.Payload.Type = String(u8"asset");
+            r.Payload.Label = String(u8"fox.glb");
+            return true;
+        });
+
+    // The toasts.
+    auto* toastSaid = Cast<gui::Label>(FindById(section, u8"toast-said"));
+    const auto tell = [self, toastSaid]()
+    {
+        if (toastSaid != nullptr)
+            toastSaid->SetText(Format(u8"{} posted, {} closed by you, {} showing, {} waiting.", self->m_toastsPosted, self->m_toastsClosed,
+                                      self->m_toasts->ShownCount(), self->m_toasts->WaitingCount())
+                                   .AsView());
+    };
+    m_toasts->SetOnPosted([self, tell](gui::ToastId, const gui::ToastCard&)
+    {
+        ++self->m_toastsPosted;
+        tell();
+    });
+    m_toasts->SetOnDismissed([self, tell](gui::ToastId, bool byUser)
+    {
+        self->m_toastsClosed += byUser ? 1u : 0u;
+        tell();
+    });
+    const auto text = [](gui::ToastSeverity severity, const char8_t* title, const char8_t* message)
+    {
+        gui::ToastRequest request;
+        request.Severity = severity;
+        request.Title = String(title);
+        request.Message = String(message);
+        return request;
+    };
+    const auto button = [&section](const char8_t* id, Function<void()> click)
+    {
+        if (auto* found = Cast<gui::Button>(FindById(section, id)))
+            found->SetOnClick(Move(click));
+    };
+    button(u8"toast-info", [self, text]() { (void)self->m_toasts->Post(text(gui::ToastSeverity::Info, u8"", u8"Autosaved the scene.")); });
+    button(u8"toast-success", [self, text, toastSaid]()
+    {
+        gui::ToastRequest request = text(gui::ToastSeverity::Success, u8"Exported", u8"Town exported to Dist/Town.");
+        request.Actions.PushBack(gui::ToastAction{String(u8"Reveal"), [toastSaid]()
+        {
+            if (toastSaid != nullptr)
+                toastSaid->SetText(StringView(u8"Revealed Dist/Town (the toast's action)."));
+        }, {}});
+        (void)self->m_toasts->Post(Move(request));
+    });
+    button(u8"toast-warning", [self, text]()
+    {
+        (void)self->m_toasts->Post(text(gui::ToastSeverity::Warning, u8"Large textures", u8"3 textures are larger than 4096 pixels."));
+    });
+    button(u8"toast-error", [self, text]()
+    {
+        gui::ToastRequest request = text(gui::ToastSeverity::Error, u8"Cook failed", u8"Models/Fox.glb: the material [b]fur[/b] is missing.");
+        request.Rich = true;
+        (void)self->m_toasts->Post(Move(request));
+    });
+    button(u8"toast-repeat", [self, text]()
+    {
+        gui::ToastRequest request = text(gui::ToastSeverity::Warning, u8"", u8"Shader compiled with a warning.");
+        request.Key = String(u8"shader");
+        (void)self->m_toasts->Post(Move(request));
+    });
+    button(u8"toast-progress", [self, text]()
+    {
+        self->m_cookPercent = self->m_cookPercent >= 100 ? 20 : self->m_cookPercent + 20;
+        const bool done = self->m_cookPercent >= 100;
+        gui::ToastRequest request = done ? text(gui::ToastSeverity::Success, u8"Cooked", u8"Every asset is cooked.")
+                                         : text(gui::ToastSeverity::Info, u8"Cooking", u8"");
+        if (!done)
+        {
+            request.Message = Format(u8"{}% of the assets, click again to go on.", self->m_cookPercent);
+            request.Duration = 0.0f; // until it is done
+        }
+        request.Key = String(u8"cook");
+        (void)self->m_toasts->Post(Move(request));
+    });
+    button(u8"toast-widget", [self]()
+    {
+        auto content = MakeRef<gui::Panel>(AppRoot());
+        content->EditLayoutStyle([](gui::LayoutStyle& s)
+        {
+            s.Direction = gui::FlexDirection::Column;
+            s.RowGap = 6.0f;
+        });
+        auto label = MakeRef<gui::Label>(AppRoot());
+        label->SetText(StringView(u8"Baking the lights of Town"));
+        auto bar = MakeRef<gui::ProgressBar>(AppRoot());
+        bar->AddClass(StringView(u8"toast-progress"));
+        bar->SetValue(0.6);
+        content->AddChild(label.Get());
+        content->AddChild(bar.Get());
+        content->SetAccessLabel(String(u8"Baking the lights of Town, 60 percent"));
+        gui::ToastRequest request;
+        request.Content = content;
+        (void)self->m_toasts->Post(Move(request));
+    });
+    button(u8"toast-bare", [self]()
+    {
+        auto banner = MakeRef<gui::Label>(AppRoot());
+        banner->AddClass(StringView(u8"achievement"));
+        banner->SetText(StringView(u8"Achievement: First steps"));
+        gui::ToastRequest request;
+        request.Content = banner;
+        request.Bare = true;
+        request.Announcement = String(u8"Achievement unlocked: First steps");
+        (void)self->m_toasts->Post(Move(request));
+    });
+    button(u8"toast-thread", [self]()
+    {
+        gui::ToastHost* host = self->m_toasts.Get();
+        Thread worker([host]()
+        {
+            gui::ToastRequest request;
+            request.Title = String(u8"From a worker");
+            request.Message = String(u8"Posted from another thread, shown on the GUI's next frame.");
+            (void)host->PostFromAnyThread(Move(request));
+        });
+        worker.Join();
+    });
+    button(u8"toast-clear", [self]() { self->m_toasts->DismissAll(); });
+}
+
 void GUISandbox::FillGraphs(gui::Node& section)
 {
     m_graphFormat = MakeUnique<sandbox::XmlTextFormat>(AppRoot(), AppRoot());

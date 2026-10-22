@@ -16,3 +16,8 @@ statusbar { height: 24px; font-family: Roboto; font-size: 12px; }
 .clip-curves { margin-inline-start: 160px; height: 180px; border-top: 1px solid var(--border); }
 .graph-view { width: 590px; height: 300px; border: 1px solid var(--border); font-family: Roboto; font-size: 12px; }
 .graph-view.states { height: 240px; }
+.crumbs { width: 520px; font-family: Roboto; font-size: 13px; border: 1px solid var(--border); border-radius: 4px; }
+.crumbs.narrow { width: 220px; }
+.crumbs-chip { padding: 4px 10px; font-family: Roboto; font-size: 13px; color: var(--ink); background-color: var(--shell-surface-2);
+               border-radius: 4px; cursor: grab; }
+.toast-buttons { width: 590px; }

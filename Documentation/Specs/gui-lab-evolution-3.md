@@ -584,5 +584,44 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     (log2: 0 stops is x1), on one row: a swatch and a stops field, each its own gesture.
   - **Alpha** shows where the colour has it: not an HDR colour's, nor a Color's with `noAlpha`.
 - **T5 Curves, gradients, the timeline.** On ruling 2's Core types, after that `master` work.
+
+  T5's design (approved by the user, 2026-10-21; foundation.ui's toolkit `Timeline` surveyed first: only
+  the PropertyAnimation editor uses it, the profiler has its own; its keys are (lane, index), no id;
+  its `CurveCanvas` keeps its own key, tangent modes and interpolation):
+  - **One time axis**: a `TimeAxis` holds pixels per second, the scroll and an optional frame rate;
+    the ruler, the curve view and the dopesheet read it and keep no copy. The ruler's step is the
+    smallest of {1, 2, 5} times a power of ten whose labels do not collide; labels are seconds, or
+    frames with a frame rate.
+  - **The curve view**, `CurveView` over an `ICurveSource`: its curves (name, colour, value range, most
+    keys, locked) and each one's keys as Core's `CurveKey`s. Edits go as the property source's do
+    (begin, preview, commit, cancel): moving keys, their tangents, a tangent mode, an interpolation,
+    inserting and removing; each gesture one record for the application's undo. It draws with
+    `EvaluateCurve` and applies `ApplyTangentModes` while previewing, so auto and smooth keys follow.
+    Several curves on one canvas; a click or a box selects; Shift locks a drag to one axis; a double
+    click on a curve adds a key; a key's menu sets its interpolation (constant, linear, cubic) and
+    tangent mode (auto, smooth, flat, broken); a selected cubic key shows its handles, and dragging
+    an auto key's handle makes it smooth; the wheel zooms about the pointer (Ctrl only time, Shift
+    only value), a middle drag pans; framing fits every curve or the selection. Keys linked in time
+    across curves are not kept (the old canvas's `LinkedTime` served only the particles' two-axis
+    size, which is gone).
+  - **The gradient view**, `GradientView`, edits one Core gradient as a value: a bar of
+    `EvaluateGradient` over a checkerboard, alpha stops above it and colour stops below; a click adds
+    a stop of the colour there, a drag moves one and a drag off the bar removes it; a double click on
+    a colour stop opens T4's picker as a popup, an alpha stop has a number field; the interpolation
+    is a drop-down.
+  - **In the property grid**, `CurvePropertyEditor` and `GradientPropertyEditor`: a preview on the row,
+    the full view as a popup (closing it commits, Escape cancels). The application registers the
+    types they take and where their parts are (`ParticleCurveFloat`: `keys`; `ParticleCurveColor`:
+    `colors`, `alphas`, `interpolation`), so the toolkit names no runtime type and reflection gains no
+    attribute. Over several objects a curve or a gradient is one value, mixed when they differ, an
+    edit setting it on each (as a colour).
+  - **The dopesheet**, `Dopesheet` over an `ITimelineSource`: rows folded by path (component, property,
+    channel), a parent row the sum of the keys under it; keys addressed by (row, index), an edit
+    returning the moved keys' new addresses so the selection survives the source's sorting. A click
+    or a box selects, a drag moves keys in time (on frames with a frame rate), Delete removes, a double
+    click inserts a key (its value the source's, the sampled one as a rule); the playhead scrubs on
+    the ruler. A curve view can stand under it on the same axis.
+  - **The sandbox**: a lamp's flicker curve and a sky gradient in the grid, and a short clip whose
+    tracks animate the lamps, scrubbed in a dopesheet and a curve view, the grid following.
 - **T6 The node graph.** A view over a graph source.
 - **T7 The rest.** A breadcrumb bar; toasts, unless the gamekit's serve.

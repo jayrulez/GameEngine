@@ -1231,6 +1231,7 @@ namespace foundation::shell
                 e.y = event.motion.y;
                 e.dx = event.motion.xrel;
                 e.dy = event.motion.yrel;
+                e.modifiers = MapModifiers(SDL_GetModState()); // a Shift drag: SDL's mouse events carry none
                 m_input.EmitEvent(e);
                 m_input.MouseDevice().OnMotion(event.motion.x, event.motion.y, event.motion.xrel,
                                                event.motion.yrel);
@@ -1247,6 +1248,7 @@ namespace foundation::shell
                 e.button = MapMouseButton(btn);
                 e.x = event.button.x;
                 e.y = event.button.y;
+                e.modifiers = MapModifiers(SDL_GetModState()); // a Shift+click
                 m_input.EmitEvent(e);
                 m_input.MouseDevice().OnButton(btn, down);
                 break;
@@ -1258,6 +1260,7 @@ namespace foundation::shell
                 e.window = static_cast<core::u32>(event.wheel.windowID);
                 e.x = event.wheel.x;
                 e.y = event.wheel.y;
+                e.modifiers = MapModifiers(SDL_GetModState()); // a Ctrl+wheel
                 m_input.EmitEvent(e);
                 m_input.MouseDevice().OnWheel(event.wheel.x, event.wheel.y);
                 break;

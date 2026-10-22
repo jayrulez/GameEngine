@@ -525,6 +525,7 @@ export namespace foundation::shell
                 e.y = y;
                 e.dx = dx;
                 e.dy = dy;
+                e.modifiers = r.mods;
                 m_events.PushBack(e);
                 break;
             }
@@ -535,6 +536,7 @@ export namespace foundation::shell
                 e.kind = r.down ? InputEventKind::MouseButtonDown : InputEventKind::MouseButtonUp;
                 e.window = m_mainWindow;
                 e.button = static_cast<MouseButton>(r.button);
+                e.modifiers = r.mods;
                 m_events.PushBack(e);
                 break;
             }
@@ -546,6 +548,7 @@ export namespace foundation::shell
                 e.window = m_mainWindow;
                 e.x = r.sx;
                 e.y = r.sy;
+                e.modifiers = r.mods;
                 m_events.PushBack(e);
                 break;
             }
@@ -629,7 +632,9 @@ export namespace foundation::shell
             }
         }
 
-        [[nodiscard]] static KeyModifiers ModsFrom(const EmscriptenKeyboardEvent* e)
+        // The modifiers a DOM keyboard, mouse or wheel's mouse event says were held.
+        template <typename DomEvent>
+        [[nodiscard]] static KeyModifiers ModsFrom(const DomEvent* e)
         {
             KeyModifiers m = KeyModifiers::None;
             if (e->shiftKey)
@@ -669,6 +674,7 @@ export namespace foundation::shell
             r.y = static_cast<core::f32>(e->targetY);
             r.dx = static_cast<core::f32>(e->movementX);
             r.dy = static_cast<core::f32>(e->movementY);
+            r.mods = ModsFrom(e);
             self->m_queue.PushBack(r);
             return EM_TRUE;
         }
@@ -680,6 +686,7 @@ export namespace foundation::shell
             // DOM button: 0 left, 1 middle, 2 right (matches MouseButton Left/Middle/Right order).
             r.button = static_cast<core::u32>(e->button);
             r.down = (eventType == EMSCRIPTEN_EVENT_MOUSEDOWN);
+            r.mods = ModsFrom(e);
             self->m_queue.PushBack(r);
             return EM_TRUE;
         }
@@ -696,6 +703,7 @@ export namespace foundation::shell
                                                                           : 100.0f;
             r.sx = -static_cast<core::f32>(e->deltaX) / perNotch;
             r.sy = -static_cast<core::f32>(e->deltaY) / perNotch;
+            r.mods = ModsFrom(&e->mouse);
             self->m_queue.PushBack(r);
             return EM_TRUE;
         }

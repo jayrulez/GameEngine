@@ -529,3 +529,42 @@ TEST_CASE("shell.desktop: the screens are read, one of them primary; a moved win
     CHECK(StringView(reinterpret_cast<const utf8char*>(SDL_GetWindowTitle(static_cast<SDL3Window*>(shell.MainWindow())->Handle()))) ==
           StringView(u8"Profiler + 2"));
 }
+
+// SDL's mouse events carry no modifiers: the shell gives each the ones held, so a Shift+click, a
+// Shift drag and a Ctrl+wheel reach a GUI as such.
+TEST_CASE("shell.desktop: a mouse event carries the modifiers held")
+{
+    SDL3Shell shell(DefaultAllocator());
+    if (shell.MainWindow() == nullptr)
+    {
+        return;
+    }
+    const SDL_WindowID window = SDL_GetWindowID(static_cast<SDL3Window*>(shell.MainWindow())->Handle());
+    SDL_SetModState(static_cast<SDL_Keymod>(SDL_KMOD_LSHIFT | SDL_KMOD_LCTRL));
+    SDL_Event press{};
+    press.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+    press.button.windowID = window;
+    press.button.button = SDL_BUTTON_LEFT;
+    press.button.down = true;
+    SDL_PushEvent(&press);
+    SDL_Event motion{};
+    motion.type = SDL_EVENT_MOUSE_MOTION;
+    motion.motion.windowID = window;
+    SDL_PushEvent(&motion);
+    SDL_Event wheel{};
+    wheel.type = SDL_EVENT_MOUSE_WHEEL;
+    wheel.wheel.windowID = window;
+    wheel.wheel.y = 1.0f;
+    SDL_PushEvent(&wheel);
+
+    shell.ProcessEvents();
+    SDL_SetModState(SDL_KMOD_NONE);
+    int carried = 0;
+    for (const InputEvent& e : shell.Input()->Events())
+    {
+        const bool mouse = e.kind == InputEventKind::MouseButtonDown || e.kind == InputEventKind::MouseMove || e.kind == InputEventKind::MouseWheel;
+        if (mouse && HasFlag(e.modifiers, KeyModifiers::LeftShift) && HasFlag(e.modifiers, KeyModifiers::LeftCtrl))
+            ++carried;
+    }
+    CHECK(carried == 3);
+}

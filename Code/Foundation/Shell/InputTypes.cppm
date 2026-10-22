@@ -317,7 +317,7 @@ export namespace foundation::shell
 
         // Payload - interpret by `kind`:
         KeyCode key{};                  // KeyDown/KeyUp
-        KeyModifiers modifiers{};       // KeyDown/KeyUp
+        KeyModifiers modifiers{};       // KeyDown/KeyUp; the mouse's: those held (a Shift+click)
         MouseButton button{};           // MouseButton*
         GamepadButton padButton{};      // GamepadButton*
         GamepadAxis padAxis{};          // GamepadAxis

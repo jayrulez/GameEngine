@@ -534,6 +534,7 @@ if(OPTION_EXPERIMENTAL_GUI)
     add_subdirectory(Code/Experimental/GUI.Viewport)  # 3D content in a node, its input gated
     add_subdirectory(Code/Experimental/GUI.Docking)   # docking, floating panels as OS windows
     add_subdirectory(Code/Experimental/GUI.Toolkit)   # editor widgets
+    add_subdirectory(Code/Experimental/GUI.Code)      # the code editor
     add_subdirectory(Code/Experimental/GUI.Gamekit)   # a game's screens
     add_subdirectory(Code/Experimental/GUI.Resources) # cooked documents and themes
     if(OPTION_BUILD_TOOLS)
@@ -746,6 +747,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Experimental/GUI.Viewport.Tests            Experimental::GUI.Viewport)
     util_test_suite(Code/Experimental/GUI.Docking.Tests             Experimental::GUI.Docking)
     util_test_suite(Code/Experimental/GUI.Toolkit.Tests             Experimental::GUI.Toolkit)
+    util_test_suite(Code/Experimental/GUI.Code.Tests                Experimental::GUI.Code)
     util_test_suite(Code/Foundation/Animation.Resource.Tests        Foundation::Animation.Resource)
     util_test_suite(Code/Foundation/Animation.Tests                 Foundation::Animation)
     util_test_suite(Code/Foundation/PropertyAnimation.Tests         Foundation::PropertyAnimation)

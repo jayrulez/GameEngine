@@ -151,10 +151,23 @@ TEST_CASE("GraphSet: a link is asked for first: allowed, refused with why, or wh
     // An output takes many.
     CHECK(bed.graph.CheckLink(bed.Link(bed.number, u8"value", bed.mix, u8"b")).Replaces.IsEmpty());
 
-    // Node links (a state machine's): any two, a node to itself, several.
+    // Where a link may begin: any pin, either way.
+    GraphLinkInfo begin;
+    begin.FromNode = bed.mix;
+    begin.FromPin = bed.graph.FindPin(bed.mix, SV(u8"a"), GraphPinDirection::Input);
+    CHECK(bed.graph.CheckLink(begin).Allowed);
+
+    // Node links (a state machine's) only where the graph takes them; then any two, a node to
+    // itself, several.
     GraphLinkInfo transition;
     transition.Kind = GraphLinkKind::Nodes;
     transition.FromNode = bed.number;
+    transition.ToNode = bed.number;
+    CHECK_FALSE(bed.graph.CheckLink(transition).Allowed);
+    transition.ToNode = 0;
+    CHECK_FALSE(bed.graph.CheckLink(transition).Allowed);
+    bed.graph.SetNodeLinks(true);
+    CHECK(bed.graph.CheckLink(transition).Allowed);
     transition.ToNode = bed.number;
     CHECK(bed.graph.CheckLink(transition).Allowed);
 }

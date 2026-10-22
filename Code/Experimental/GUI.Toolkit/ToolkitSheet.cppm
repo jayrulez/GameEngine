@@ -101,7 +101,16 @@ export namespace experimental::gui
                 background-color: var(--graphnode-background, var(--surface-raised)); border: var(--border-width) solid var(--graphnode-border, var(--border));
                 border-radius: var(--graphnode-radius, var(--radius));
             }
+            graphview::node-link { background-color: var(--graphview-node-link, var(--text-dim)); }
+            graphview::link-selected { background-color: var(--graphview-link-selected, var(--text-strong)); }
+            graphview::link-highlight { background-color: var(--graphview-link-highlight, var(--accent-strong)); }
+            graphview::link-drag { background-color: var(--graphview-link-drag, var(--text-strong)); }
+            graphview::link-refused { background-color: var(--graphview-link-refused, var(--surface-raised)); }
             graphnode.selected { border-color: var(--graphnode-selected, var(--accent)); }
+            graphnode.highlighted { box-shadow: 0 0 0 2px var(--graphnode-highlight, var(--accent-strong)); }
+            graphnode.target { border-color: var(--graphnode-target, var(--accent-strong)); }
+            graphnode.refused { opacity: 0.5; }
+            graphpin.refused label { opacity: 0.4; }
             graphnodeheader label { color: var(--graphnode-title, #ffffff); }
             graphnodeheader label.subtitle { opacity: 0.75; }
             graphpin label { color: var(--graphpin-text, var(--text)); }

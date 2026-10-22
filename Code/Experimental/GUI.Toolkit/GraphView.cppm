@@ -11,9 +11,19 @@
 //     a box (Shift or Ctrl adding to what is selected);
 //   - a drag moves the selected nodes (one gesture through the source, on the grid where it snaps;
 //     Escape cancels it);
+//   - a drag from a pin links it (ezEngine): the source is asked of each pin, which it answers
+//     allowed or refused (and why) and which links it would replace, so the pins that fit are lit,
+//     the rest dimmed, a link about to be replaced faded and a refusal's reason shown; a drag from an
+//     input that has a link takes that link's end, to rewire it or, dropped on nothing, let it go;
+//   - a drag from just outside a node's edge links it to another node (a state machine's
+//     transition), where the source takes node links: a straight arrow between their borders, the
+//     two ways kept apart, a node to itself when the drag leaves it and comes back;
+//   - a click on a link selects it (Shift or Ctrl adds or takes it away);
 //   - a double click on a node is the application's (a subgraph opened);
 //   - the wheel zooms about the pointer within limits, a middle drag pans.
-// Read only, it selects and does not edit.
+// Links are drawn by the view under the nodes, culled to it, each pin's place kept from when its
+// node was last laid out. The application may highlight nodes and links (a state machine's active
+// state). Read only, it selects and does not edit.
 
 module;
 #include "Core/Prelude.h"
@@ -32,6 +42,30 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
+    /// What a pin or a node is to a link being dragged: nothing, a place it may end (lit), one it
+    /// may not (dimmed), or the one under the pointer that it would end at.
+    enum class GraphLinkState : u8
+    {
+        None,
+        Fits,
+        Refused,
+        Target,
+    };
+
+    /// Shows `state` as a class (`fits`, `refused` or `target`) for the sheet.
+    inline void ShowLinkState(UIWidget& widget, GraphLinkState state)
+    {
+        widget.RemoveClass(core::StringView(u8"fits"));
+        widget.RemoveClass(core::StringView(u8"refused"));
+        widget.RemoveClass(core::StringView(u8"target"));
+        if (state == GraphLinkState::Fits)
+            widget.AddClass(core::StringView(u8"fits"));
+        else if (state == GraphLinkState::Refused)
+            widget.AddClass(core::StringView(u8"refused"));
+        else if (state == GraphLinkState::Target)
+            widget.AddClass(core::StringView(u8"target"));
+    }
+
     /// A pin's row in a node: its name, the pin drawn on the node's edge by the node.
     class GraphPinRow : public UIWidget
     {
@@ -76,9 +110,25 @@ export namespace experimental::gui
         [[nodiscard]] GraphPinDirection GetDirection() const noexcept { return m_direction; }
         [[nodiscard]] Color GetTypeColor() const noexcept { return m_color; }
         [[nodiscard]] Label& GetNameLabel() noexcept { return *m_name; }
+        /// What it is to a link being dragged.
+        void SetLinkState(GraphLinkState state)
+        {
+            if (state == m_linkState)
+                return;
+            m_linkState = state;
+            ShowLinkState(*this, state);
+            // The node draws its pins: up from the row through its column and the body.
+            Node* node = this;
+            for (i32 up = 0; up < 3 && node != nullptr; ++up)
+                node = node->GetParent();
+            if (node != nullptr)
+                node->Invalidate();
+        }
+        [[nodiscard]] GraphLinkState GetLinkState() const noexcept { return m_linkState; }
 
     private:
         core::RefPtr<Label> m_name;
+        GraphLinkState m_linkState = GraphLinkState::None;
         GraphId m_pin = 0;
         GraphPinDirection m_direction = GraphPinDirection::Input;
         Color m_color{};
@@ -220,6 +270,27 @@ export namespace experimental::gui
                 RemoveClass(core::StringView(u8"selected"));
         }
         [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
+        /// Highlighted by the application (the sheet's `graphnode.highlighted`): a state machine's active state.
+        void SetHighlighted(bool highlighted)
+        {
+            if (highlighted == m_highlighted)
+                return;
+            m_highlighted = highlighted;
+            if (highlighted)
+                AddClass(core::StringView(u8"highlighted"));
+            else
+                RemoveClass(core::StringView(u8"highlighted"));
+        }
+        [[nodiscard]] bool IsHighlighted() const noexcept { return m_highlighted; }
+        /// What the node is to a node link being dragged.
+        void SetLinkState(GraphLinkState state)
+        {
+            if (state == m_linkState)
+                return;
+            m_linkState = state;
+            ShowLinkState(*this, state);
+        }
+        [[nodiscard]] GraphLinkState GetLinkState() const noexcept { return m_linkState; }
 
         /// Where pin `pin` is drawn, in the node's own space (on its inline start edge for an input, its
         /// inline end for an output, across from its row's middle); false when it has no such pin.
@@ -253,6 +324,14 @@ export namespace experimental::gui
         /// Under the pin rows: where an application puts widgets of its own.
         [[nodiscard]] UIWidget& GetBody() noexcept { return *m_body; }
 
+        /// What it draws: its box and its pins over its edges.
+        [[nodiscard]] Rect GetInkBounds() const override
+        {
+            const Rect ink = UIWidget::GetInkBounds();
+            const f32 reach = kPinRadius + 3.0f;
+            return Rect{ink.x - reach, ink.y, ink.width + 2.0f * reach, ink.height};
+        }
+
     protected:
         void OnDrawAbove(DrawContext& ctx) override
         {
@@ -262,12 +341,25 @@ export namespace experimental::gui
                 core::Float2 at{};
                 if (!PinPoint(row.GetPinId(), at))
                     continue;
+                // While a link is dragged: the pins it may end at ringed light, the one under the
+                // pointer larger, the rest dimmed.
+                const GraphLinkState state = row.GetLinkState();
+                const f32 radius = state == GraphLinkState::Target ? kPinRadius + 2.0f : kPinRadius;
+                Color ringColor{0.0f, 0.0f, 0.0f, 0.55f};
+                Color color = row.GetTypeColor();
+                if (state == GraphLinkState::Fits || state == GraphLinkState::Target)
+                    ringColor = Color{1.0f, 1.0f, 1.0f, 0.9f};
+                else if (state == GraphLinkState::Refused)
+                {
+                    color.a *= 0.3f;
+                    ringColor.a *= 0.3f;
+                }
                 vg::PathBuilder ring;
-                vg::ShapeBuilder::BuildCircle(at, kPinRadius + 1.0f, ring);
-                ctx.VG().FillPath(ring.ToPath(), Color{0.0f, 0.0f, 0.0f, 0.55f});
+                vg::ShapeBuilder::BuildCircle(at, radius + 1.0f, ring);
+                ctx.VG().FillPath(ring.ToPath(), ringColor);
                 vg::PathBuilder dot;
-                vg::ShapeBuilder::BuildCircle(at, kPinRadius, dot);
-                ctx.VG().FillPath(dot.ToPath(), row.GetTypeColor());
+                vg::ShapeBuilder::BuildCircle(at, radius, dot);
+                ctx.VG().FillPath(dot.ToPath(), color);
             }
         }
 
@@ -315,6 +407,8 @@ export namespace experimental::gui
         core::Array<core::RefPtr<GraphPinRow>> m_outputRows;
         GraphId m_node = 0;
         bool m_selected = false;
+        bool m_highlighted = false;
+        GraphLinkState m_linkState = GraphLinkState::None;
     };
 
     class GraphView : public UIWidget, public IGraphSourceClient
@@ -322,6 +416,14 @@ export namespace experimental::gui
         RTTI_OBJECT(GraphView, UIWidget)
     public:
         static constexpr f32 kDragThreshold = 3.0f;
+        /// How near a pin a press or a drop takes it (at least; the pin's own size when larger).
+        static constexpr f32 kPinReach = 9.0f;
+        /// How far outside a node's edge a press begins a node link.
+        static constexpr f32 kEdgeReach = 7.0f;
+        /// How near a link a click selects it.
+        static constexpr f32 kLinkReach = 5.0f;
+        /// How far apart a node link and its reverse are drawn.
+        static constexpr f32 kParallelGap = 6.0f;
         /// How far past its edges nodes are made before they come into view.
         static constexpr f32 kViewMargin = 64.0f;
         /// The size a node is taken to have before it was measured.
@@ -349,7 +451,9 @@ export namespace experimental::gui
             if (m_source)
                 m_source->AddGraphClient(this);
             m_selection.Clear();
+            m_selectedLinks.Clear();
             m_sizes.Clear();
+            m_pins.Clear();
             RequestLayout();
         }
         [[nodiscard]] IGraphSource* GetSource() const noexcept { return m_source; }
@@ -439,6 +543,26 @@ export namespace experimental::gui
                     return order[i];
             return 0;
         }
+        /// Where pin `pin` is drawn, in its own space, as its node was last laid out; false when the
+        /// view has not laid it out.
+        [[nodiscard]] bool PinPoint(GraphId pin, core::Float2& out) const
+        {
+            const PinPlace* place = m_pins.Find(pin);
+            const GraphNodeInfo* node = place != nullptr && m_source ? m_source->GetNode(place->Node) : nullptr;
+            if (node == nullptr)
+                return false;
+            const core::Float2 at = GraphToView(node->Position);
+            out = core::Float2{at.x + place->Offset.x * m_zoom, at.y + place->Offset.y * m_zoom};
+            return true;
+        }
+        /// The pin of a node in view at `local` (its own space); 0 when none.
+        [[nodiscard]] GraphId HitPin(core::Float2 local) const { return NearestPin(local, PinReach()); }
+        /// The line link `link` is drawn along, in its own space (a curve's points, or an edge with its
+        /// arrow at the end); false when an end has no place yet.
+        [[nodiscard]] bool LinkPoints(const GraphLinkInfo& link, core::Array<core::Float2>& out) const;
+        /// The topmost link at `local` (its own space); 0 when none.
+        [[nodiscard]] GraphId HitLink(core::Float2 local) const;
+
         /// A node's widget while it is made (in view); null when it is not.
         [[nodiscard]] GraphNodeWidget* GetNodeWidget(GraphId node) const
         {
@@ -460,6 +584,39 @@ export namespace experimental::gui
             Reselect(core::Move(next));
         }
         [[nodiscard]] bool IsNodeSelected(GraphId node) const noexcept { return Holds(m_selection, node); }
+        [[nodiscard]] const core::Array<GraphId>& GetSelectedLinks() const noexcept { return m_selectedLinks; }
+        void SetSelectedLinks(core::Span<const GraphId> links)
+        {
+            core::Array<GraphId> next;
+            for (const GraphId link : links)
+                if (!Holds(next, link))
+                    next.PushBack(link);
+            ReselectLinks(core::Move(next));
+        }
+        [[nodiscard]] bool IsLinkSelected(GraphId link) const noexcept { return Holds(m_selectedLinks, link); }
+
+        // === Highlights (the application's: a state machine's active state) ===
+        void SetHighlightedNodes(core::Span<const GraphId> nodes)
+        {
+            m_highlightedNodes.Clear();
+            for (const GraphId node : nodes)
+                m_highlightedNodes.PushBack(node);
+            RequestLayout();
+        }
+        void SetHighlightedLinks(core::Span<const GraphId> links)
+        {
+            m_highlightedLinks.Clear();
+            for (const GraphId link : links)
+                m_highlightedLinks.PushBack(link);
+            Invalidate();
+        }
+        [[nodiscard]] bool IsNodeHighlighted(GraphId node) const noexcept { return Holds(m_highlightedNodes, node); }
+        [[nodiscard]] bool IsLinkHighlighted(GraphId link) const noexcept { return Holds(m_highlightedLinks, link); }
+
+        /// Whether a link is being dragged, and what the source said of where it would end (Allowed
+        /// false with no reason: it is over nothing).
+        [[nodiscard]] bool IsLinking() const noexcept { return m_drag == Drag::Link; }
+        [[nodiscard]] const GraphLinkCheck& GetLinkCheck() const noexcept { return m_targetCheck; }
         /// Told each time the selection changes.
         void SetOnSelectionChanged(core::Function<void()> callback) { m_onSelectionChanged = core::Move(callback); }
         /// A double click on a node: the application's (a subgraph opened).
@@ -475,6 +632,15 @@ export namespace experimental::gui
                     kept.PushBack(node);
             if (kept.Size() != m_selection.Size())
                 Reselect(core::Move(kept));
+            core::Array<GraphLinkInfo> links;
+            m_source->GetLinks(links);
+            core::Array<GraphId> keptLinks;
+            for (const GraphId link : m_selectedLinks)
+                for (const GraphLinkInfo& at : links)
+                    if (at.Id == link)
+                        keptLinks.PushBack(link);
+            if (keptLinks.Size() != m_selectedLinks.Size())
+                ReselectLinks(core::Move(keptLinks));
             RequestLayout();
             Invalidate();
         }
@@ -485,12 +651,25 @@ export namespace experimental::gui
         void OnMouseMove(const MouseEvent& event) override;
         void OnMouseUp(const MouseEvent& event) override;
         void OnPointerCancel(const MouseEvent& event) override;
-        void OnPointerCaptureLost() override { EndDrag(false); }
+        void OnPointerCaptureLost() override
+        {
+            if (m_drag == Drag::Link)
+                EndLink(false);
+            else
+                EndDrag(false);
+        }
         void OnMouseWheel(const WheelEvent& event) override;
         void OnKeyDown(const KeyEvent& event) override;
         [[nodiscard]] Cursor GetCursorNow() const override { return m_drag == Drag::Pan ? Cursor::Grabbing : UIWidget::GetCursorNow(); }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
         void OnDrawAbove(DrawContext& ctx) override;
+        void OnTextStyleChange() override
+        {
+            m_text.SetFont(GetFont());
+            m_text.SetFontSelection(GetFontService(), GetTextStyle().FontFamily.AsView(), GetTextStyle().Selection);
+            m_text.SetColor(GetTextColor());
+            m_text.SetAlignment(TextHAlign::Start, TextVAlign::Top);
+        }
 
     private:
         enum class Drag : u8
@@ -500,7 +679,106 @@ export namespace experimental::gui
             Nodes,
             Box,
             Pan,
+            Link,
         };
+        // Where a pin is in its node, as the node was last laid out.
+        struct PinPlace
+        {
+            GraphId Node = 0;
+            core::Float2 Offset{}; // in the node's space, unzoomed
+            GraphPinDirection Direction = GraphPinDirection::Input;
+            Color TypeColor{};
+        };
+
+        [[nodiscard]] f32 PinReach() const noexcept { return core::Max(kPinReach, (GraphNodeWidget::kPinRadius + 3.0f) * m_zoom); }
+        // The pin of a made node nearest `local` within `reach`; 0 when none.
+        [[nodiscard]] GraphId NearestPin(core::Float2 local, f32 reach) const
+        {
+            GraphId best = 0;
+            f32 bestDistance = reach * reach;
+            for (const auto& entry : m_pins)
+            {
+                if (m_live.Find(entry.value.Node) == nullptr)
+                    continue;
+                core::Float2 at{};
+                if (!PinPoint(entry.key, at))
+                    continue;
+                const f32 dx = at.x - local.x, dy = at.y - local.y;
+                if (dx * dx + dy * dy <= bestDistance)
+                {
+                    bestDistance = dx * dx + dy * dy;
+                    best = entry.key;
+                }
+            }
+            return best;
+        }
+        // The node whose edge `local` is just outside of (none when it is inside a node).
+        [[nodiscard]] GraphId HitNodeEdge(core::Float2 local) const
+        {
+            if (!m_source)
+                return 0;
+            core::Array<GraphId> order;
+            PaintOrder(order);
+            for (usize i = order.Size(); i-- > 0;)
+            {
+                const Rect r = NodeRect(order[i]);
+                if (r.Contains(local))
+                    return 0;
+                if (Rect{r.x - kEdgeReach, r.y - kEdgeReach, r.width + 2.0f * kEdgeReach, r.height + 2.0f * kEdgeReach}.Contains(local))
+                    return order[i];
+            }
+            return 0;
+        }
+        // The link a drag would make ending at `target` (a pin, or a node for a node link).
+        [[nodiscard]] GraphLinkInfo Candidate(GraphId target) const
+        {
+            GraphLinkInfo link;
+            link.Kind = m_linkKind;
+            if (m_linkKind == GraphLinkKind::Nodes)
+            {
+                link.FromNode = m_anchorNode;
+                link.ToNode = target;
+                return link;
+            }
+            const PinPlace* place = m_pins.Find(target);
+            const GraphId targetNode = place != nullptr ? place->Node : 0;
+            if (m_anchorOutput)
+            {
+                link.FromNode = m_anchorNode;
+                link.FromPin = m_anchorPin;
+                link.ToNode = targetNode;
+                link.ToPin = target;
+            }
+            else
+            {
+                link.FromNode = targetNode;
+                link.FromPin = target;
+                link.ToNode = m_anchorNode;
+                link.ToPin = m_anchorPin;
+            }
+            return link;
+        }
+        void ReselectLinks(core::Array<GraphId> next)
+        {
+            bool same = next.Size() == m_selectedLinks.Size();
+            for (usize i = 0; same && i < next.Size(); ++i)
+                same = Holds(m_selectedLinks, next[i]);
+            m_selectedLinks = core::Move(next);
+            if (same)
+                return;
+            Invalidate();
+            if (m_onSelectionChanged)
+                m_onSelectionChanged();
+        }
+        bool BeginLink(core::Float2 local);
+        void LinkTo(core::Float2 local);
+        void EndLink(bool commit);
+        void ShowLinkStates();
+        // A curve from an output's point to an input's, leaving and arriving along the reading direction.
+        void CurvePoints(core::Float2 from, core::Float2 to, core::Array<core::Float2>& out) const;
+        // A straight edge between two nodes' borders (`gap` to its right), or a loop on one node.
+        void EdgePoints(const Rect& from, const Rect& to, f32 gap, core::Array<core::Float2>& out) const;
+        void StrokeLine(DrawContext& ctx, core::Span<const core::Float2> points, Color color, f32 width, bool arrow) const;
 
         [[nodiscard]] static bool Holds(const core::Array<GraphId>& ids, GraphId id) noexcept
         {
@@ -583,6 +861,10 @@ export namespace experimental::gui
         core::HashMap<GraphId, core::RefPtr<GraphNodeWidget>> m_live; // the nodes made, by id
         core::Array<core::RefPtr<GraphNodeWidget>> m_pool;            // made, waiting to be reused
         core::HashMap<GraphId, core::Float2> m_sizes;                  // each node's size as last measured
+        core::HashMap<GraphId, PinPlace> m_pins;                       // each pin's place, by pin id
+        core::Array<GraphId> m_selectedLinks;
+        core::Array<GraphId> m_highlightedNodes;
+        core::Array<GraphId> m_highlightedLinks;
 
         Drag m_drag = Drag::None;
         core::Float2 m_pressAt{};   // where the gesture began, its own space
@@ -592,6 +874,21 @@ export namespace experimental::gui
         bool m_additive = false;    // Shift or Ctrl held at the press
         core::Array<GraphId> m_boxBase; // what a box adds to
         core::Float2 m_panFrom{};
+
+        // A link dragged: from a pin (or, a node link, a node), or an existing link's input end.
+        GraphLinkKind m_linkKind = GraphLinkKind::Pins;
+        GraphId m_anchorNode = 0;
+        GraphId m_anchorPin = 0;
+        bool m_anchorOutput = true;    // the anchor is the link's From end
+        GraphId m_relinking = 0;       // the link whose end is carried
+        GraphId m_relinkFrom = 0;      // the input it came off
+        bool m_linkMoved = false;      // past the threshold
+        bool m_leftAnchor = false;     // a node link's pointer left its node (so it may come back to it)
+        core::Float2 m_linkTo{};
+        GraphId m_target = 0;
+        GraphLinkCheck m_targetCheck;
+        core::HashMap<GraphId, bool> m_fits; // each pin's (or node's) answer, asked once per drag
+        mutable Text m_text;           // a refusal's reason
     };
 
     // === Making the nodes in view ===
@@ -644,9 +941,17 @@ export namespace experimental::gui
             }
             widget->Show(*info);
             widget->SetSelected(Holds(m_selection, id));
+            widget->SetHighlighted(Holds(m_highlightedNodes, id));
             const core::Float2 size = widget->Measure(LayoutConstraints{});
             sizes.InsertOrAssign(id, size);
             widget->Arrange(Rect{at.x, at.y, size.x, size.y});
+            for (usize i = 0; i < widget->PinRowCount(); ++i) // the pins' places, kept for the links
+            {
+                const GraphPinRow& row = widget->PinRowAt(i);
+                core::Float2 offset{};
+                if (widget->PinPoint(row.GetPinId(), offset))
+                    m_pins.InsertOrAssign(row.GetPinId(), PinPlace{id, offset, row.GetDirection(), row.GetTypeColor()});
+            }
             if (widget->GetScale().x != m_zoom || widget->GetScale().y != m_zoom)
                 widget->SetScale(core::Float2{m_zoom, m_zoom});
             if (index < ChildCount() && GetChildAt(index) != widget.Get())
@@ -672,6 +977,12 @@ export namespace experimental::gui
             }
         m_live = core::Move(live);
         m_sizes = core::Move(sizes);
+        core::HashMap<GraphId, PinPlace> pins; // those of nodes gone go
+        for (const auto& entry : m_pins)
+            if (m_sizes.Find(entry.value.Node) != nullptr)
+                pins.InsertOrAssign(entry.key, entry.value);
+        m_pins = core::Move(pins);
+        ShowLinkStates();
     }
 
     // === Gestures ===
@@ -697,6 +1008,11 @@ export namespace experimental::gui
         m_pressAt = local;
         m_boxTo = local;
         m_additive = (event.Modifiers & (KeyModShift | KeyModCtrl)) != 0;
+        if (!m_readOnly && BeginLink(local))
+        {
+            CapturePointer();
+            return;
+        }
         const GraphId hit = HitNode(local);
         if (hit != 0 && event.ClickCount == 2 && !m_additive)
         {
@@ -705,6 +1021,9 @@ export namespace experimental::gui
                 m_onNodeDoubleClick(hit);
             return;
         }
+        const GraphId link = hit == 0 ? HitLink(local) : 0;
+        if (!m_additive)
+            ReselectLinks(core::Array<GraphId>{});
         if (hit != 0)
         {
             m_pressed = hit;
@@ -713,6 +1032,25 @@ export namespace experimental::gui
             else if (!IsNodeSelected(hit))
                 SelectOnly(hit);
             m_drag = IsNodeSelected(hit) ? Drag::Pending : Drag::None;
+        }
+        else if (link != 0)
+        {
+            if (!m_additive)
+                SelectOnly(0);
+            core::Array<GraphId> next = m_selectedLinks;
+            if (Holds(next, link))
+            {
+                for (usize i = 0; i < next.Size(); ++i)
+                    if (next[i] == link)
+                    {
+                        next.RemoveAt(i);
+                        break;
+                    }
+            }
+            else
+                next.PushBack(link);
+            ReselectLinks(core::Move(next));
+            m_drag = Drag::None;
         }
         else
         {
@@ -758,6 +1096,9 @@ export namespace experimental::gui
             Invalidate();
             break;
         }
+        case Drag::Link:
+            LinkTo(local);
+            break;
         case Drag::Pan:
             SetPan(core::Float2{m_panFrom.x - (local.x - m_pressAt.x) / m_zoom, m_panFrom.y - (local.y - m_pressAt.y) / m_zoom});
             break;
@@ -778,11 +1119,23 @@ export namespace experimental::gui
         }
         if (event.Button != MouseButton::Left)
             return;
+        if (m_drag == Drag::Link)
+        {
+            LinkTo(ConvertToNodeSpace(event.Position));
+            EndLink(true);
+            return;
+        }
         if (m_drag == Drag::Pending && !m_additive)
             SelectOnly(m_pressed); // a click on a node of several selected selects it alone
         EndDrag(true);
     }
-    inline void GraphView::OnPointerCancel(const MouseEvent&) { EndDrag(false); }
+    inline void GraphView::OnPointerCancel(const MouseEvent&)
+    {
+        if (m_drag == Drag::Link)
+            EndLink(false);
+        else
+            EndDrag(false);
+    }
     inline void GraphView::OnKeyDown(const KeyEvent& event)
     {
         const KeyCode key = static_cast<KeyCode>(event.KeyCode);
@@ -790,6 +1143,11 @@ export namespace experimental::gui
         {
             event.Handled = true;
             EndDrag(false);
+        }
+        else if (key == KeyCode::Escape && m_drag == Drag::Link)
+        {
+            event.Handled = true;
+            EndLink(false);
         }
     }
     inline void GraphView::OnMouseWheel(const WheelEvent& event)
@@ -872,6 +1230,314 @@ export namespace experimental::gui
         SetPan(core::Float2{middle.x - box.width * 0.5f / m_zoom, middle.y - box.height * 0.5f / m_zoom});
     }
 
+    // === Links ===
+
+    inline bool GraphView::BeginLink(core::Float2 local)
+    {
+        m_relinking = 0;
+        m_relinkFrom = 0;
+        m_target = 0;
+        m_targetCheck = GraphLinkCheck{};
+        m_linkMoved = false;
+        m_leftAnchor = false;
+        m_linkTo = local;
+        m_fits.Clear();
+        GraphLinkInfo begin;
+        if (const GraphId pin = HitPin(local); pin != 0)
+        {
+            const PinPlace& place = *m_pins.Find(pin);
+            m_linkKind = GraphLinkKind::Pins;
+            // An input with a link: its end is taken (the last made), to rewire it or let it go.
+            if (place.Direction == GraphPinDirection::Input)
+            {
+                core::Array<GraphLinkInfo> links;
+                m_source->GetLinks(links);
+                for (const GraphLinkInfo& link : links)
+                    if (link.Kind == GraphLinkKind::Pins && link.ToPin == pin)
+                    {
+                        m_relinking = link.Id;
+                        m_anchorNode = link.FromNode;
+                        m_anchorPin = link.FromPin;
+                    }
+            }
+            if (m_relinking != 0)
+            {
+                m_relinkFrom = pin;
+                m_anchorOutput = true;
+            }
+            else
+            {
+                m_anchorNode = place.Node;
+                m_anchorPin = pin;
+                m_anchorOutput = place.Direction == GraphPinDirection::Output;
+                begin.FromNode = place.Node;
+                begin.FromPin = pin;
+                if (!m_source->CheckLink(begin).Allowed)
+                    return false;
+            }
+            // Each pin asked once: where this link may end.
+            for (const auto& entry : m_pins)
+            {
+                if (entry.key == m_anchorPin)
+                    continue;
+                const bool fits = entry.key == m_relinkFrom || m_source->CheckLink(Candidate(entry.key)).Allowed;
+                m_fits.InsertOrAssign(entry.key, fits);
+            }
+        }
+        else if (const GraphId node = HitNodeEdge(local); node != 0)
+        {
+            m_linkKind = GraphLinkKind::Nodes;
+            begin.Kind = GraphLinkKind::Nodes;
+            begin.FromNode = node;
+            if (!m_source->CheckLink(begin).Allowed)
+                return false;
+            m_anchorNode = node;
+            m_anchorPin = 0;
+            m_anchorOutput = true;
+            core::Array<GraphId> ids;
+            m_source->GetNodes(ids);
+            for (const GraphId id : ids)
+                m_fits.InsertOrAssign(id, m_source->CheckLink(Candidate(id)).Allowed);
+        }
+        else
+            return false;
+        m_drag = Drag::Link;
+        m_pressAt = local;
+        ShowLinkStates();
+        Invalidate();
+        return true;
+    }
+    inline void GraphView::LinkTo(core::Float2 local)
+    {
+        m_linkTo = local;
+        if (!m_linkMoved && core::Abs(local.x - m_pressAt.x) < kDragThreshold && core::Abs(local.y - m_pressAt.y) < kDragThreshold)
+            return;
+        m_linkMoved = true;
+        GraphId target = 0;
+        if (m_linkKind == GraphLinkKind::Pins)
+        {
+            target = NearestPin(local, core::Max(PinReach(), 14.0f));
+            if (target == m_anchorPin)
+                target = 0;
+        }
+        else
+        {
+            target = HitNode(local);
+            if (target != m_anchorNode && HitNodeEdge(local) != m_anchorNode)
+                m_leftAnchor = true;
+            if (target == m_anchorNode && !m_leftAnchor) // to itself only once it has left and come back
+                target = 0;
+        }
+        if (target != m_target)
+        {
+            m_target = target;
+            m_targetCheck = GraphLinkCheck{};
+            if (target != 0 && target == m_relinkFrom)
+                m_targetCheck.Allowed = true; // back where it came from: nothing changes
+            else if (target != 0)
+                m_targetCheck = m_source->CheckLink(Candidate(target));
+            ShowLinkStates();
+        }
+        Invalidate();
+    }
+    inline void GraphView::EndLink(bool commit)
+    {
+        if (m_drag != Drag::Link)
+            return;
+        m_drag = Drag::None;
+        const GraphId target = m_target;
+        const GraphLinkCheck check = m_targetCheck;
+        m_target = 0;
+        m_targetCheck = GraphLinkCheck{};
+        m_fits.Clear();
+        ShowLinkStates();
+        ReleasePointer();
+        Invalidate();
+        if (!commit || !m_linkMoved || !m_source)
+            return;
+        if (target == 0)
+        {
+            if (m_relinking != 0) // an end dropped on nothing lets the link go
+            {
+                const GraphId gone[] = {m_relinking};
+                (void)m_source->Disconnect(gone);
+            }
+            return;
+        }
+        if (!check.Allowed || target == m_relinkFrom)
+            return;
+        if (m_relinking != 0)
+            (void)m_source->Relink(m_relinking, Candidate(target));
+        else
+            (void)m_source->Connect(Candidate(target));
+    }
+    inline void GraphView::ShowLinkStates()
+    {
+        const bool linking = m_drag == Drag::Link;
+        const auto stateOf = [this, linking](GraphId id, bool kind) -> GraphLinkState
+        {
+            if (!linking || !kind)
+                return GraphLinkState::None;
+            const bool* fits = m_fits.Find(id);
+            if (fits == nullptr)
+                return GraphLinkState::None;
+            if (id == m_target && m_targetCheck.Allowed)
+                return GraphLinkState::Target;
+            return *fits ? GraphLinkState::Fits : GraphLinkState::Refused;
+        };
+        for (const auto& entry : m_live)
+        {
+            GraphNodeWidget& widget = *entry.value;
+            widget.SetLinkState(stateOf(entry.key, m_linkKind == GraphLinkKind::Nodes));
+            for (usize i = 0; i < widget.PinRowCount(); ++i)
+            {
+                GraphPinRow& row = widget.PinRowAt(i);
+                row.SetLinkState(stateOf(row.GetPinId(), m_linkKind == GraphLinkKind::Pins));
+            }
+        }
+    }
+
+    inline void GraphView::CurvePoints(core::Float2 from, core::Float2 to, core::Array<core::Float2>& out) const
+    {
+        const f32 sign = IsRightToLeft() ? -1.0f : 1.0f; // outputs on the inline end
+        const f32 reach = core::Max(30.0f * m_zoom, core::Abs(to.x - from.x) * 0.5f);
+        const core::Float2 c0{from.x + sign * reach, from.y};
+        const core::Float2 c1{to.x - sign * reach, to.y};
+        constexpr i32 kSteps = 32;
+        for (i32 i = 0; i <= kSteps; ++i)
+        {
+            const f32 t = static_cast<f32>(i) / static_cast<f32>(kSteps);
+            const f32 u = 1.0f - t;
+            const f32 a = u * u * u, b = 3.0f * u * u * t, c = 3.0f * u * t * t, d = t * t * t;
+            out.PushBack(core::Float2{a * from.x + b * c0.x + c * c1.x + d * to.x, a * from.y + b * c0.y + c * c1.y + d * to.y});
+        }
+    }
+    inline void GraphView::EdgePoints(const Rect& from, const Rect& to, f32 gap, core::Array<core::Float2>& out) const
+    {
+        const core::Float2 a{from.x + from.width * 0.5f, from.y + from.height * 0.5f};
+        const core::Float2 b{to.x + to.width * 0.5f, to.y + to.height * 0.5f};
+        f32 dx = b.x - a.x, dy = b.y - a.y;
+        const f32 length = core::Sqrt(dx * dx + dy * dy);
+        if (length < 1e-3f) // a node to itself: a loop over its top end corner
+        {
+            const f32 side = IsRightToLeft() ? from.x + 24.0f * m_zoom : from.Right() - 24.0f * m_zoom;
+            const f32 lift = 36.0f * m_zoom, spread = 14.0f * m_zoom;
+            const core::Float2 start{side - spread, from.y}, end{side + spread, from.y};
+            const core::Float2 c0{start.x - spread, from.y - lift}, c1{end.x + spread, from.y - lift};
+            constexpr i32 kSteps = 24;
+            for (i32 i = 0; i <= kSteps; ++i)
+            {
+                const f32 t = static_cast<f32>(i) / static_cast<f32>(kSteps);
+                const f32 u = 1.0f - t;
+                const f32 p = u * u * u, q = 3.0f * u * u * t, r = 3.0f * u * t * t, w = t * t * t;
+                out.PushBack(core::Float2{p * start.x + q * c0.x + r * c1.x + w * end.x, p * start.y + q * c0.y + r * c1.y + w * end.y});
+            }
+            return;
+        }
+        dx /= length;
+        dy /= length;
+        const core::Float2 side{-dy * gap, dx * gap}; // to the edge's right, so its reverse lies apart
+        // Where the line from the middle leaves each box.
+        const auto exitAt = [](const Rect& box, f32 x, f32 y)
+        {
+            const f32 hx = box.width * 0.5f, hy = box.height * 0.5f;
+            const f32 tx = core::Abs(x) > 1e-6f ? hx / core::Abs(x) : 1e30f;
+            const f32 ty = core::Abs(y) > 1e-6f ? hy / core::Abs(y) : 1e30f;
+            return core::Min(tx, ty);
+        };
+        const f32 leave = exitAt(from, dx, dy), arrive = exitAt(to, dx, dy);
+        out.PushBack(core::Float2{a.x + dx * leave + side.x, a.y + dy * leave + side.y});
+        out.PushBack(core::Float2{b.x - dx * arrive + side.x, b.y - dy * arrive + side.y});
+    }
+
+    inline bool GraphView::LinkPoints(const GraphLinkInfo& link, core::Array<core::Float2>& out) const
+    {
+        out.Clear();
+        if (!m_source)
+            return false;
+        if (link.Kind == GraphLinkKind::Nodes)
+        {
+            if (m_source->GetNode(link.FromNode) == nullptr || m_source->GetNode(link.ToNode) == nullptr)
+                return false;
+            // Apart from its reverse; a second the same way further apart again.
+            f32 gap = 0.0f;
+            usize before = 0;
+            bool reverse = false;
+            core::Array<GraphLinkInfo> links;
+            m_source->GetLinks(links);
+            for (const GraphLinkInfo& at : links)
+            {
+                if (at.Kind != GraphLinkKind::Nodes || link.FromNode == link.ToNode)
+                    continue;
+                if (at.FromNode == link.ToNode && at.ToNode == link.FromNode)
+                    reverse = true;
+                if (at.FromNode == link.FromNode && at.ToNode == link.ToNode && at.Id < link.Id)
+                    ++before;
+            }
+            if (reverse || before > 0)
+                gap = kParallelGap * (1.0f + 2.0f * static_cast<f32>(before));
+            EdgePoints(NodeRect(link.FromNode), NodeRect(link.ToNode), gap, out);
+            return true;
+        }
+        core::Float2 from{}, to{};
+        if (!PinPoint(link.FromPin, from) || !PinPoint(link.ToPin, to))
+            return false;
+        CurvePoints(from, to, out);
+        return true;
+    }
+    inline GraphId GraphView::HitLink(core::Float2 local) const
+    {
+        if (!m_source)
+            return 0;
+        core::Array<GraphLinkInfo> links;
+        m_source->GetLinks(links);
+        core::Array<core::Float2> points;
+        for (usize l = links.Size(); l-- > 0;)
+        {
+            if (!LinkPoints(links[l], points))
+                continue;
+            for (usize i = 1; i < points.Size(); ++i)
+            {
+                const core::Float2 a = points[i - 1], b = points[i];
+                const f32 vx = b.x - a.x, vy = b.y - a.y;
+                const f32 lengthSq = vx * vx + vy * vy;
+                f32 t = lengthSq > 0.0f ? ((local.x - a.x) * vx + (local.y - a.y) * vy) / lengthSq : 0.0f;
+                t = core::Clamp(t, 0.0f, 1.0f);
+                const f32 dx = a.x + vx * t - local.x, dy = a.y + vy * t - local.y;
+                if (dx * dx + dy * dy <= kLinkReach * kLinkReach)
+                    return links[l].Id;
+            }
+        }
+        return 0;
+    }
+    inline void GraphView::StrokeLine(DrawContext& ctx, core::Span<const core::Float2> points, Color color, f32 width, bool arrow) const
+    {
+        if (points.Size() < 2)
+            return;
+        vg::PathBuilder line;
+        line.MoveTo(points[0].x, points[0].y);
+        for (usize i = 1; i < points.Size(); ++i)
+            line.LineTo(points[i].x, points[i].y);
+        ctx.VG().StrokePath(line.ToPath(), color, vg::StrokeStyle(width));
+        if (!arrow)
+            return;
+        // Its head at the end, along the last stretch.
+        const core::Float2 tip = points[points.Size() - 1], back = points[points.Size() - 2];
+        f32 dx = tip.x - back.x, dy = tip.y - back.y;
+        const f32 length = core::Sqrt(dx * dx + dy * dy);
+        if (length < 1e-4f)
+            return;
+        dx /= length;
+        dy /= length;
+        const f32 size = core::Clamp(9.0f * m_zoom, 6.0f, 14.0f);
+        vg::PathBuilder head;
+        head.MoveTo(tip.x, tip.y);
+        head.LineTo(tip.x - dx * size - dy * size * 0.55f, tip.y - dy * size + dx * size * 0.55f);
+        head.LineTo(tip.x - dx * size + dy * size * 0.55f, tip.y - dy * size - dx * size * 0.55f);
+        head.Close();
+        ctx.VG().FillPath(head.ToPath(), color);
+    }
+
     // === Drawing ===
 
     inline void GraphView::OnDraw(DrawContext& ctx, const Rect& localBounds)
@@ -906,10 +1572,101 @@ export namespace experimental::gui
             const f32 y = GraphToView(core::Float2{0.0f, static_cast<f32>(i) * step}).y;
             ctx.VG().FillRect(Rectangle{box.x, core::Floor(y), box.width, 1.0f}, strong ? major : minor);
         }
+        // The links, under the nodes, each culled to the view; one being rewired is drawn as the drag.
+        if (m_source)
+        {
+            const Color nodeLink = partColor(u8"node-link", Color{0.8f, 0.82f, 0.88f, 1.0f});
+            const Color selected = partColor(u8"link-selected", Color{1.0f, 1.0f, 1.0f, 1.0f});
+            const Color highlight = partColor(u8"link-highlight", Color{1.0f, 0.65f, 0.2f, 1.0f});
+            const f32 width = core::Clamp(2.0f * m_zoom, 1.0f, 3.0f);
+            core::Array<GraphLinkInfo> links;
+            m_source->GetLinks(links);
+            core::Array<core::Float2> points;
+            const bool replacing = m_drag == Drag::Link && m_targetCheck.Allowed;
+            for (const GraphLinkInfo& link : links)
+            {
+                if ((m_drag == Drag::Link && m_linkMoved && link.Id == m_relinking) || !LinkPoints(link, points))
+                    continue;
+                f32 left = points[0].x, right = left, top = points[0].y, bottom = top;
+                for (const core::Float2& p : points)
+                {
+                    left = core::Min(left, p.x);
+                    right = core::Max(right, p.x);
+                    top = core::Min(top, p.y);
+                    bottom = core::Max(bottom, p.y);
+                }
+                if (!box.Intersects(Rect{left - 8.0f, top - 8.0f, right - left + 16.0f, bottom - top + 16.0f}))
+                    continue;
+                Color color = nodeLink;
+                if (link.Kind == GraphLinkKind::Pins)
+                    if (const PinPlace* place = m_pins.Find(link.FromPin))
+                        color = place->TypeColor;
+                f32 stroke = width;
+                if (Holds(m_highlightedLinks, link.Id))
+                {
+                    color = highlight;
+                    stroke = width + 1.5f;
+                }
+                if (Holds(m_selectedLinks, link.Id))
+                {
+                    color = selected;
+                    stroke = width + 1.0f;
+                }
+                if (replacing && Holds(m_targetCheck.Replaces, link.Id))
+                    color.a *= 0.3f; // about to be replaced
+                StrokeLine(ctx, points.AsSpan(), color, stroke, link.Kind == GraphLinkKind::Nodes);
+            }
+        }
         ctx.PopClip();
     }
     inline void GraphView::OnDrawAbove(DrawContext& ctx)
     {
+        if (m_drag == Drag::Link && m_linkMoved && m_source)
+        {
+            ctx.PushClip(GetContentBounds());
+            const PartStyle& part = GetPartStyle(u8"link-drag");
+            Color color = part.HasBackground ? part.Box.BackgroundColor : Color{1.0f, 1.0f, 1.0f, 0.85f};
+            color.a *= part.Opacity;
+            const f32 width = core::Clamp(2.0f * m_zoom, 1.0f, 3.0f);
+            core::Array<core::Float2> points;
+            if (m_linkKind == GraphLinkKind::Nodes)
+            {
+                const Rect from = NodeRect(m_anchorNode);
+                const Rect to = m_target != 0 && m_targetCheck.Allowed ? NodeRect(m_target) : Rect{m_linkTo.x, m_linkTo.y, 0.0f, 0.0f};
+                EdgePoints(from, to, 0.0f, points);
+                StrokeLine(ctx, points.AsSpan(), color, width, true);
+            }
+            else
+            {
+                core::Float2 anchor{}, carried = m_linkTo;
+                if (m_target != 0 && m_targetCheck.Allowed)
+                    (void)PinPoint(m_target, carried); // it snaps to the pin it would end at
+                if (PinPoint(m_anchorPin, anchor))
+                {
+                    if (m_anchorOutput)
+                        CurvePoints(anchor, carried, points);
+                    else
+                        CurvePoints(carried, anchor, points);
+                    if (const PinPlace* place = m_pins.Find(m_anchorPin))
+                        color = Color{place->TypeColor.r, place->TypeColor.g, place->TypeColor.b, color.a};
+                    StrokeLine(ctx, points.AsSpan(), color, width, false);
+                }
+            }
+            // Why not, beside the pointer.
+            if (m_target != 0 && !m_targetCheck.Allowed && !m_targetCheck.Reason.IsEmpty() && m_text.HasFont())
+            {
+                m_text.SetString(m_targetCheck.Reason.AsView());
+                const core::Float2 size = m_text.Measure();
+                const Rect note{m_linkTo.x + 14.0f, m_linkTo.y + 10.0f, size.x + 12.0f, size.y + 6.0f};
+                const PartStyle& tip = GetPartStyle(u8"link-refused");
+                Color back = tip.HasBackground ? tip.Box.BackgroundColor : Color{0.45f, 0.12f, 0.12f, 0.95f};
+                back.a *= tip.Opacity;
+                ctx.VG().FillRoundedRect(note.ToRectangle(), 4.0f, back);
+                m_text.Draw(ctx, core::Float2{note.x + 6.0f, note.y + 3.0f});
+            }
+            ctx.PopClip();
+            return;
+        }
         if (m_drag != Drag::Box)
             return;
         const PartStyle& part = GetPartStyle(u8"selection-box");

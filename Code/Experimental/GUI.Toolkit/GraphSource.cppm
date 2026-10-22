@@ -136,7 +136,9 @@ export namespace experimental::gui
         virtual void CancelMove() = 0;
 
         // === Links ===
-        /// Whether `link` (its id unset) may be made, and what it would replace.
+        /// Whether `link` (its id unset) may be made, and what it would replace. With no `To` end
+        /// (ToNode 0): whether a link may begin at its `From` end, a pin of either direction or, for a
+        /// node link, a node (what a view asks before it lets one be dragged from there).
         [[nodiscard]] virtual GraphLinkCheck CheckLink(const GraphLinkInfo& link) const = 0;
         /// Makes `link` as CheckLink said (taking the place of what it replaces), one change; its
         /// id, 0 when it may not be.
@@ -208,7 +210,7 @@ export namespace experimental::gui
 
     /// A graph of its own, in memory. Its node types are templates the page adds; a pin's type
     /// decides what links to it (the same type, or either empty); an input takes one link unless it
-    /// says many, a new one replacing the old.
+    /// says many, a new one replacing the old. Its nodes link to each other only where the page says.
     class GraphSet : public IGraphSource
     {
     public:
@@ -245,6 +247,9 @@ export namespace experimental::gui
             return 0;
         }
         [[nodiscard]] const GraphState& State() const noexcept { return m_state; }
+        /// Whether its nodes link to each other (a state machine's transitions), not only its pins.
+        void SetNodeLinks(bool allowed) noexcept { m_nodeLinks = allowed; }
+        [[nodiscard]] bool GetNodeLinks() const noexcept { return m_nodeLinks; }
 
         /// The application's serializer for copies (not owned; null: no copying).
         void SetTextFormat(IPropertyTextFormat* format) noexcept { m_format = format; }
@@ -322,14 +327,24 @@ export namespace experimental::gui
             GraphLinkCheck check;
             const GraphNodeInfo* from = GetNode(link.FromNode);
             const GraphNodeInfo* to = GetNode(link.ToNode);
-            if (from == nullptr || to == nullptr)
+            if (from == nullptr || (to == nullptr && link.ToNode != 0))
             {
                 check.Reason = core::String(u8"No such node");
                 return check;
             }
             if (link.Kind == GraphLinkKind::Nodes)
             {
-                check.Allowed = true; // a state machine's transitions: any two nodes, itself, several
+                // A state machine's transitions: any two nodes, a node to itself, several.
+                check.Allowed = m_nodeLinks;
+                if (!m_nodeLinks)
+                    check.Reason = core::String(u8"This graph links pins, not nodes");
+                return check;
+            }
+            if (to == nullptr) // where a link begins: any pin
+            {
+                check.Allowed = PinOf(*from, link.FromPin) != nullptr;
+                if (!check.Allowed)
+                    check.Reason = core::String(u8"No such pin");
                 return check;
             }
             const GraphPinInfo* out = PinOf(*from, link.FromPin);
@@ -779,6 +794,7 @@ export namespace experimental::gui
         GraphState m_state;
         GraphState m_before; // the graph when a move began
         bool m_moving = false;
+        bool m_nodeLinks = false;
         core::Array<Template> m_types;
         IPropertyTextFormat* m_format = nullptr;
         core::Function<void(const GraphChange&)> m_onChange;

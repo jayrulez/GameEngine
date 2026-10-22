@@ -6,7 +6,10 @@
 // box selecting, Shift or Ctrl adding or taking away; a drag moving the selected nodes as one gesture
 // through the source, on the grid where it snaps, Escape cancelling it; read only moving nothing; a
 // double click the application's; the wheel zooming about the pointer within limits and a middle
-// drag panning; framing every node.
+// drag panning; framing every node. Links: dragged from a pin, the source asked of each pin (lit,
+// dimmed, the one under the pointer its target, a refusal and what would be replaced known); an
+// input's link end rewired or let go; a node link from just outside a node's edge, the two ways
+// apart, to itself after leaving it; a click selecting a link; highlights.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -96,7 +99,36 @@ namespace
             D().InjectMouseUp(core::Float2{790.0f, 590.0f}, MouseButton::Left);
         }
         [[nodiscard]] usize Selected() const { return view->GetSelectedNodes().Size(); }
+        [[nodiscard]] GraphId PinOf(GraphId node, const char8_t* name) const
+        {
+            const GraphId in = graph.FindPin(node, core::StringView(name), GraphPinDirection::Input);
+            return in != 0 ? in : graph.FindPin(node, core::StringView(name), GraphPinDirection::Output);
+        }
+        [[nodiscard]] core::Float2 PinAt(GraphId pin) const
+        {
+            core::Float2 at{};
+            REQUIRE(view->PinPoint(pin, at));
+            return at;
+        }
+        [[nodiscard]] GraphPinRow* Row(GraphId node, GraphId pin) const
+        {
+            GraphNodeWidget* widget = view->GetNodeWidget(node);
+            if (widget == nullptr)
+                return nullptr;
+            for (usize i = 0; i < widget->PinRowCount(); ++i)
+                if (widget->PinRowAt(i).GetPinId() == pin)
+                    return &widget->PinRowAt(i);
+            return nullptr;
+        }
+        [[nodiscard]] usize LinkCount() const { return graph.State().Links.Size(); }
+        GraphId Add(const char8_t* title, core::Float2 at)
+        {
+            const GraphId node = graph.AddNode(Node(title, at));
+            (void)root->UpdateLayout();
+            return node;
+        }
     };
+    bool Has(GraphPinRow* row, const char8_t* cls) { return row != nullptr && row->HasClass(core::StringView(cls)); }
 }
 
 TEST_CASE("GraphView: nodes are widgets made while in view, reused as it pans, and zoomed with it")
@@ -294,4 +326,214 @@ TEST_CASE("GraphView: a double click on a node is the application's; framing fit
     CHECK(bed.view->GetZoom() == doctest::Approx(1.0f));
     CHECK(box.Contains(bed.view->NodeRect(bed.c)));
     CHECK_FALSE(box.Intersects(bed.view->NodeRect(bed.a)));
+}
+
+TEST_CASE("GraphView: a drag from an output to an input that fits links them, the pins lit and dimmed as the source answers")
+{
+    Bed bed;
+    const GraphId aIn = bed.PinOf(bed.a, u8"in"), aOut = bed.PinOf(bed.a, u8"out");
+    const GraphId bIn = bed.PinOf(bed.b, u8"in"), bOut = bed.PinOf(bed.b, u8"out");
+    const core::Float2 from = bed.PinAt(aOut);
+    bed.Press(from);
+    bed.D().InjectMouseMove(core::Float2{from.x + 40.0f, from.y + 150.0f});
+    REQUIRE(bed.view->IsLinking());
+    CHECK(Has(bed.Row(bed.b, bIn), u8"fits"));
+    CHECK(Has(bed.Row(bed.a, aIn), u8"refused")); // a node does not feed itself
+    CHECK(Has(bed.Row(bed.b, bOut), u8"refused")); // an output to an output
+    bed.D().InjectMouseMove(bed.PinAt(bIn));
+    CHECK(Has(bed.Row(bed.b, bIn), u8"target"));
+    CHECK(bed.view->GetLinkCheck().Allowed);
+    bed.D().InjectMouseUp(bed.PinAt(bIn), MouseButton::Left);
+    CHECK_FALSE(bed.view->IsLinking());
+    REQUIRE(bed.LinkCount() == 1);
+    CHECK(bed.graph.State().Links[0].FromPin == aOut);
+    CHECK(bed.graph.State().Links[0].ToPin == bIn);
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Linked"));
+    CHECK_FALSE(Has(bed.Row(bed.b, bIn), u8"target"));
+    CHECK_FALSE(Has(bed.Row(bed.a, aIn), u8"refused"));
+
+    // Onto a pin it may not reach: refused, and why; nothing made.
+    bed.Pause();
+    bed.Press(bed.PinAt(aOut));
+    bed.D().InjectMouseMove(core::Float2{from.x + 40.0f, from.y + 150.0f});
+    bed.D().InjectMouseMove(bed.PinAt(aIn));
+    CHECK_FALSE(bed.view->GetLinkCheck().Allowed);
+    CHECK(bed.view->GetLinkCheck().Reason == core::String(u8"A node does not feed itself"));
+    bed.D().InjectMouseUp(bed.PinAt(aIn), MouseButton::Left);
+    CHECK(bed.LinkCount() == 1);
+
+    // Another output onto B's input: the link it would replace is known, and goes when it is made.
+    bed.Pause();
+    const GraphId d = bed.Add(u8"D", core::Float2{0.0f, 200.0f});
+    const GraphId dOut = bed.PinOf(d, u8"out");
+    bed.Press(bed.PinAt(dOut));
+    bed.D().InjectMouseMove(core::Float2{400.0f, 300.0f});
+    bed.D().InjectMouseMove(bed.PinAt(bIn));
+    REQUIRE(bed.view->GetLinkCheck().Replaces.Size() == 1);
+    CHECK(bed.view->GetLinkCheck().Replaces[0] == bed.graph.State().Links[0].Id);
+    bed.D().InjectMouseUp(bed.PinAt(bIn), MouseButton::Left);
+    REQUIRE(bed.LinkCount() == 1);
+    CHECK(bed.graph.State().Links[0].FromPin == dOut);
+
+    // Dropped on nothing, a new link is not made; Escape mid-drag ends it too.
+    bed.Pause();
+    bed.Drag(bed.PinAt(bOut), core::Float2{560.0f, 380.0f});
+    CHECK(bed.LinkCount() == 1);
+    bed.Press(bed.PinAt(aOut));
+    bed.D().InjectMouseMove(bed.PinAt(bIn));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK_FALSE(bed.view->IsLinking());
+    bed.D().InjectMouseUp(bed.PinAt(bIn), MouseButton::Left);
+    CHECK(bed.LinkCount() == 1);
+    CHECK(bed.changes.Size() == 2);
+}
+
+TEST_CASE("GraphView: an input's link end is dragged off to rewire it or let it go; from an input with none, a link begins backwards")
+{
+    Bed bed;
+    const GraphId aOut = bed.PinOf(bed.a, u8"out"), bIn = bed.PinOf(bed.b, u8"in");
+    GraphLinkInfo made;
+    made.FromNode = bed.a;
+    made.FromPin = aOut;
+    made.ToNode = bed.b;
+    made.ToPin = bIn;
+    const GraphId link = bed.graph.AddLink(made);
+    const GraphId d = bed.Add(u8"D", core::Float2{300.0f, 200.0f});
+    const GraphId dIn = bed.PinOf(d, u8"in");
+
+    bed.Drag(bed.PinAt(bIn), bed.PinAt(dIn));
+    REQUIRE(bed.LinkCount() == 1);
+    CHECK(bed.graph.State().Links[0].Id == link); // the same link, its end moved
+    CHECK(bed.graph.State().Links[0].ToNode == d);
+    CHECK(bed.graph.State().Links[0].ToPin == dIn);
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Relinked"));
+
+    // Off and back where it came from: nothing changes.
+    bed.Pause();
+    bed.Press(bed.PinAt(dIn));
+    bed.D().InjectMouseMove(core::Float2{560.0f, 380.0f});
+    bed.D().InjectMouseMove(bed.PinAt(dIn));
+    CHECK(bed.view->GetLinkCheck().Allowed);
+    bed.D().InjectMouseUp(bed.PinAt(dIn), MouseButton::Left);
+    CHECK(bed.changes.Size() == 1);
+    CHECK(bed.graph.State().Links[0].ToPin == dIn);
+
+    // Dropped on nothing, it goes.
+    bed.Pause();
+    bed.Drag(bed.PinAt(dIn), core::Float2{560.0f, 380.0f});
+    CHECK(bed.LinkCount() == 0);
+    REQUIRE(bed.changes.Size() == 2);
+    CHECK(bed.changes[1].Words == core::String(u8"Unlinked"));
+
+    // From the input, now with none, to an output: a link from that output.
+    bed.Pause();
+    bed.Drag(bed.PinAt(dIn), bed.PinAt(aOut));
+    REQUIRE(bed.LinkCount() == 1);
+    CHECK(bed.graph.State().Links[0].FromPin == aOut);
+    CHECK(bed.graph.State().Links[0].ToPin == dIn);
+
+    // Read only, a drag from a pin makes nothing.
+    bed.Pause();
+    bed.view->SetReadOnly(true);
+    bed.Drag(bed.PinAt(bed.PinOf(bed.b, u8"out")), bed.PinAt(dIn));
+    CHECK(bed.LinkCount() == 1);
+}
+
+TEST_CASE("GraphView: a click selects a link, Shift or Ctrl adding or taking it away; the application highlights nodes and links")
+{
+    Bed bed;
+    const GraphId aOut = bed.PinOf(bed.a, u8"out"), bIn = bed.PinOf(bed.b, u8"in");
+    GraphLinkInfo made;
+    made.FromNode = bed.a;
+    made.FromPin = aOut;
+    made.ToNode = bed.b;
+    made.ToPin = bIn;
+    const GraphId link = bed.graph.AddLink(made);
+    core::Array<core::Float2> points(core::DefaultAllocator());
+    REQUIRE(bed.view->LinkPoints(made, points));
+    CHECK(points.Size() > 2); // a curve
+    const core::Float2 from = bed.PinAt(aOut), to = bed.PinAt(bIn);
+    const core::Float2 middle{(from.x + to.x) * 0.5f, (from.y + to.y) * 0.5f}; // the curve's middle
+    CHECK(bed.view->HitLink(middle) == link);
+    bed.Click(bed.Middle(bed.a));
+    bed.Pause();
+    bed.Click(middle);
+    REQUIRE(bed.view->GetSelectedLinks().Size() == 1);
+    CHECK(bed.view->IsLinkSelected(link));
+    CHECK(bed.Selected() == 0); // a click on a link alone selects it alone
+    bed.Pause();
+    bed.Click(middle, KeyModCtrl);
+    CHECK(bed.view->GetSelectedLinks().IsEmpty());
+    bed.Pause();
+    bed.Click(middle);
+    bed.Pause();
+    bed.Click(core::Float2{500.0f, 350.0f});
+    CHECK(bed.view->GetSelectedLinks().IsEmpty());
+    CHECK(bed.changes.IsEmpty());
+
+    // An undo taking the link away takes it from the selection.
+    bed.Pause();
+    bed.Click(middle);
+    const GraphId gone[] = {link};
+    REQUIRE(bed.graph.Disconnect(gone));
+    CHECK(bed.view->GetSelectedLinks().IsEmpty());
+
+    bed.view->SetHighlightedNodes(core::Span<const GraphId>(&bed.a, 1));
+    (void)bed.root->UpdateLayout();
+    CHECK(bed.view->GetNodeWidget(bed.a)->HasClass(core::StringView(u8"highlighted")));
+    CHECK_FALSE(bed.view->GetNodeWidget(bed.b)->HasClass(core::StringView(u8"highlighted")));
+    bed.view->SetHighlightedLinks(core::Span<const GraphId>(&link, 1));
+    CHECK(bed.view->IsLinkHighlighted(link));
+}
+
+TEST_CASE("GraphView: node links from just outside a node's edge, where the source takes them; the two ways apart; to itself after leaving it")
+{
+    Bed bed;
+    const Rect atA = bed.view->NodeRect(bed.a);
+    const Rect atB = bed.view->NodeRect(bed.b);
+    const core::Float2 edgeA{atA.Right() + 3.0f, atA.y + 4.0f};
+    const core::Float2 edgeB{atB.x - 3.0f, atB.y + 4.0f};
+    // A graph of pins: the edge begins nothing.
+    bed.Drag(edgeA, bed.Middle(bed.b));
+    CHECK(bed.LinkCount() == 0);
+
+    bed.graph.SetNodeLinks(true);
+    bed.Pause();
+    bed.Drag(edgeA, bed.Middle(bed.b));
+    REQUIRE(bed.LinkCount() == 1);
+    const GraphLinkInfo there = bed.graph.State().Links[0];
+    CHECK(there.Kind == GraphLinkKind::Nodes);
+    CHECK(there.FromNode == bed.a);
+    CHECK(there.ToNode == bed.b);
+    bed.Pause();
+    bed.Drag(edgeB, bed.Middle(bed.a));
+    REQUIRE(bed.LinkCount() == 2);
+    const GraphLinkInfo back = bed.graph.State().Links[1];
+    CHECK(back.FromNode == bed.b);
+    // The two ways drawn apart, each with its own line to click.
+    core::Array<core::Float2> one(core::DefaultAllocator()), other(core::DefaultAllocator());
+    REQUIRE(bed.view->LinkPoints(there, one));
+    REQUIRE(bed.view->LinkPoints(back, other));
+    const core::Float2 m1{(one[0].x + one.Back().x) * 0.5f, (one[0].y + one.Back().y) * 0.5f};
+    const core::Float2 m2{(other[0].x + other.Back().x) * 0.5f, (other[0].y + other.Back().y) * 0.5f};
+    CHECK(core::Abs(m1.y - m2.y) >= 2.0f * GraphView::kParallelGap - 0.01f);
+    CHECK(bed.view->HitLink(m1) == there.Id);
+    CHECK(bed.view->HitLink(m2) == back.Id);
+
+    // Straight back onto its own node: nothing; out and back: a link to itself.
+    bed.Pause();
+    bed.Drag(edgeA, bed.Middle(bed.a));
+    CHECK(bed.LinkCount() == 2);
+    bed.Pause();
+    bed.Press(edgeA);
+    bed.D().InjectMouseMove(core::Float2{560.0f, 380.0f});
+    bed.D().InjectMouseMove(bed.Middle(bed.a));
+    bed.D().InjectMouseUp(bed.Middle(bed.a), MouseButton::Left);
+    REQUIRE(bed.LinkCount() == 3);
+    CHECK(bed.graph.State().Links[2].FromNode == bed.a);
+    CHECK(bed.graph.State().Links[2].ToNode == bed.a);
+    REQUIRE(bed.view->LinkPoints(bed.graph.State().Links[2], one));
+    CHECK(one.Size() > 2); // a loop
 }

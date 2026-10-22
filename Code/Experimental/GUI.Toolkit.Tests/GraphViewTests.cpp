@@ -266,6 +266,42 @@ TEST_CASE("GraphView: nodes are widgets made while in view, reused as it pans, a
     CHECK(in.y > node.GetHeader().GetSize().y);
 }
 
+TEST_CASE("GraphView: right to left, the canvas still runs left to right, inputs on a node's left and outputs on its right")
+{
+    Bed bed;
+    bed.root->SetLayoutDirection(experimental::gui::Node::LayoutDirection::RightToLeft);
+    (void)bed.root->UpdateLayout();
+    REQUIRE(bed.view->IsRightToLeft());
+    GraphNodeWidget& node = *bed.view->GetNodeWidget(bed.a);
+    GraphPinRow& in = node.PinRowAt(0);
+    GraphPinRow& out = node.PinRowAt(1);
+    REQUIRE(in.GetDirection() == GraphPinDirection::Input);
+    CHECK_FALSE(in.IsRightToLeft());
+    // The input's row at the node's left, the output's at its right, their pins on those edges.
+    const Rect nodeAt = node.GetScreenBounds();
+    CHECK(in.GetScreenBounds().x == doctest::Approx(nodeAt.x).epsilon(0.01));
+    CHECK(out.GetScreenBounds().Right() == doctest::Approx(nodeAt.Right()).epsilon(0.01));
+    core::Float2 inAt{}, outAt{};
+    REQUIRE(node.PinPoint(in.GetPinId(), inAt));
+    REQUIRE(node.PinPoint(out.GetPinId(), outAt));
+    CHECK(inAt.x == doctest::Approx(0.0f));
+    CHECK(outAt.x == doctest::Approx(node.GetSize().x));
+    // A's output to B's input is the short way across, not round the nodes.
+    const GraphId aOut = bed.PinOf(bed.a, u8"out"), bIn = bed.PinOf(bed.b, u8"in");
+    const f32 shift = bed.view->GetScreenBounds().x; // the root puts the view at its right
+    const auto screen = [shift](core::Float2 at) { return core::Float2{at.x + shift, at.y}; };
+    bed.Drag(screen(bed.PinAt(aOut)), screen(bed.PinAt(bIn)));
+    REQUIRE(bed.LinkCount() == 1);
+    core::Array<core::Float2> points;
+    REQUIRE(bed.view->LinkPoints(bed.graph.State().Links[0], points));
+    const f32 left = bed.view->NodeRect(bed.a).Right(), right = bed.view->NodeRect(bed.b).x;
+    for (const core::Float2& p : points)
+    {
+        CHECK(p.x >= left - 0.5f);
+        CHECK(p.x <= right + 0.5f);
+    }
+}
+
 TEST_CASE("GraphView: a click or a box selects; Shift or Ctrl adds or takes away")
 {
     Bed bed;

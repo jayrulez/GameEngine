@@ -5,8 +5,10 @@
 //
 // The graph view (T6 of Specs/gui-lab-evolution-3.md): a graph source's nodes on a canvas that pans
 // and zooms over a grid. A node is a widget (its header, title and a row per pin, which the sheet
-// styles and right to left mirrors), made only while it is in view and reused as the view moves
-// (Godot, traktor); a node never seen is made once to learn its size. Mouse first:
+// styles), made only while it is in view and reused as the view moves
+// (Godot, traktor); a node never seen is made once to learn its size. The canvas runs left to right
+// in every language, as a dopesheet's time does: where the nodes are placed is the graph's, so inputs
+// stay on a node's left and outputs on its right, and only its text follows the language. Mouse first:
 //   - a click selects a node (Shift or Ctrl adds or takes it away), a drag from nothing selects by
 //     a box (Shift or Ctrl adding to what is selected);
 //   - a drag moves the selected nodes (one gesture through the source, on the grid where it snaps;
@@ -98,6 +100,7 @@ export namespace experimental::gui
             }
             m_name = core::MakeRef<Label>(MemoryAllocator());
             m_name->SetHitTestVisible(false);
+            m_name->SetLayoutDirection(LayoutDirection::Auto); // its text reads as written; the row stays left to right
             AddChild(m_name.Get());
         }
 
@@ -191,8 +194,9 @@ export namespace experimental::gui
         Color m_color{0.27f, 0.47f, 0.73f, 1.0f};
     };
 
-    /// A node of a graph view: its header and a row per pin, inputs at its inline start and outputs at
-    /// its inline end, each pin drawn on the node's edge. A view fills it from the source.
+    /// A node of a graph view: its header and a row per pin, inputs on its left and outputs on its
+    /// right in every language (the canvas's flow), each pin drawn on the node's edge. A view fills it
+    /// from the source.
     class GraphNodeWidget : public UIWidget
     {
         RTTI_OBJECT(GraphNodeWidget, UIWidget)
@@ -233,6 +237,7 @@ export namespace experimental::gui
                 });
                 m_body->SetPadding(Thickness{0.0f, 4.0f, 0.0f, 4.0f});
             }
+            m_body->SetLayoutDirection(LayoutDirection::LeftToRight);
             m_inputs = MakePart(*m_body, u8"graphpins");
             m_inputs->AddClass(core::StringView(u8"inputs"));
             m_outputs = MakePart(*m_body, u8"graphpins");
@@ -304,11 +309,10 @@ export namespace experimental::gui
         }
         [[nodiscard]] GraphLinkState GetLinkState() const noexcept { return m_linkState; }
 
-        /// Where pin `pin` is drawn, in the node's own space (on its inline start edge for an input, its
-        /// inline end for an output, across from its row's middle); false when it has no such pin.
+        /// Where pin `pin` is drawn, in the node's own space (on its left edge for an input, its right
+        /// for an output, across from its row's middle); false when it has no such pin.
         [[nodiscard]] bool PinPoint(GraphId pin, core::Float2& out) const
         {
-            const bool rtl = IsRightToLeft();
             const auto find = [&](const core::Array<core::RefPtr<GraphPinRow>>& rows, bool output)
             {
                 for (const core::RefPtr<GraphPinRow>& row : rows)
@@ -316,8 +320,7 @@ export namespace experimental::gui
                     if (row->GetPinId() != pin)
                         continue;
                     const core::Float2 at = OffsetIn(*row);
-                    const bool right = output != rtl;
-                    out = core::Float2{right ? GetSize().x : 0.0f, at.y + row->GetSize().y * 0.5f};
+                    out = core::Float2{output ? GetSize().x : 0.0f, at.y + row->GetSize().y * 0.5f};
                     return true;
                 }
                 return false;
@@ -2223,10 +2226,9 @@ export namespace experimental::gui
 
     inline void GraphView::CurvePoints(core::Float2 from, core::Float2 to, core::Array<core::Float2>& out) const
     {
-        const f32 sign = IsRightToLeft() ? -1.0f : 1.0f; // outputs on the inline end
         const f32 reach = core::Max(30.0f * m_zoom, core::Abs(to.x - from.x) * 0.5f);
-        const core::Float2 c0{from.x + sign * reach, from.y};
-        const core::Float2 c1{to.x - sign * reach, to.y};
+        const core::Float2 c0{from.x + reach, from.y}; // out of an output's right, into an input's left
+        const core::Float2 c1{to.x - reach, to.y};
         constexpr i32 kSteps = 32;
         for (i32 i = 0; i <= kSteps; ++i)
         {
@@ -2242,9 +2244,9 @@ export namespace experimental::gui
         const core::Float2 b{to.x + to.width * 0.5f, to.y + to.height * 0.5f};
         f32 dx = b.x - a.x, dy = b.y - a.y;
         const f32 length = core::Sqrt(dx * dx + dy * dy);
-        if (length < 1e-3f) // a node to itself: a loop over its top end corner
+        if (length < 1e-3f) // a node to itself: a loop over its top right corner
         {
-            const f32 side = IsRightToLeft() ? from.x + 24.0f * m_zoom : from.Right() - 24.0f * m_zoom;
+            const f32 side = from.Right() - 24.0f * m_zoom;
             const f32 lift = 36.0f * m_zoom, spread = 14.0f * m_zoom;
             const core::Float2 start{side - spread, from.y}, end{side + spread, from.y};
             const core::Float2 c0{start.x - spread, from.y - lift}, c1{end.x + spread, from.y - lift};

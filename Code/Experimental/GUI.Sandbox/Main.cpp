@@ -494,6 +494,7 @@ private:
     void StepCameras(bool undo);
     void FillClip(gui::Node& section);
     void PlayClip(f32 time);
+    void FillGraphs(gui::Node& section);
     // The Toolkit page's edit history: changes left to save, to undo and to redo.
     i32 m_toolkitUnsaved = 0;
     i32 m_toolkitDone = 0;
@@ -514,6 +515,20 @@ private:
     RefPtr<gui::TimeAxis> m_clipAxis;
     Array<gui::CurveChange> m_clipUndo;
     Array<gui::CurveChange> m_clipRedo;
+    // The Toolkit page's node graphs (T6): a dataflow graph and a lamp's state machine, before the GUI
+    // too, the format their copies are written in, and the page's history of each one's changes.
+    struct GraphHistory
+    {
+        UniquePtr<gui::GraphSet> Set;
+        Array<gui::GraphChange> Undo;
+        Array<gui::GraphChange> Redo;
+        Function<void()> Changed; // told each change and each step back or on
+    };
+    GraphHistory m_flow;
+    GraphHistory m_states;
+    UniquePtr<sandbox::XmlTextFormat> m_graphFormat;
+    gui::GraphId m_lampState = 0; // the state machine's active state
+    void WireGraph(GraphHistory& graph, gui::Node& section, StringView prefix, Function<void()> changed);
     // The Toolkit page's reflected cameras (T3), their source and its format, and the page's
     // history of the source's changes (each with the cameras it was made on).
     RefPtr<sandbox::CameraRig> m_cameras[2];
@@ -1048,6 +1063,9 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: a clip of the lamps' values in a dopesheet and a curve view (T5), after the lamps.
     if (gui::Node* section = FindById(*m_shellNode, u8"clip-section"))
         FillClip(*section);
+    // Toolkit: a dataflow graph and a lamp's state machine (T6), after the clip.
+    if (gui::Node* section = FindById(*m_shellNode, u8"graph-section"))
+        FillGraphs(*section);
 
     // Viewport: a cube drawn into the widget's targets, under the page's note (V2).
     if (gui::Node* host = FindById(*m_shellNode, u8"viewport-host"))
@@ -2536,6 +2554,218 @@ void GUISandbox::FillClip(gui::Node& section)
                 view->FrameAll();
         });
     }
+}
+
+// A graph of the Toolkit page and its controls ("<prefix>-graph", "-undo", "-redo", "-frame", "-said"):
+// each change the graph tells goes on its Undo, and `changed` hears it and each step back or on.
+void GUISandbox::WireGraph(GraphHistory& graph, gui::Node& section, StringView prefix, Function<void()> changed)
+{
+    const auto byId = [&section, prefix](const char8_t* suffix)
+    {
+        String id(prefix);
+        id += StringView(suffix);
+        return FindById(section, id.AsView());
+    };
+    auto* view = Cast<gui::GraphView>(byId(u8"-graph"));
+    auto* undo = Cast<gui::Button>(byId(u8"-undo"));
+    auto* redo = Cast<gui::Button>(byId(u8"-redo"));
+    auto* frame = Cast<gui::Button>(byId(u8"-frame"));
+    auto* said = Cast<gui::Label>(byId(u8"-said"));
+    graph.Set->SetTextFormat(m_graphFormat.Get());
+    if (view != nullptr)
+    {
+        view->SetSource(graph.Set.Get());
+        view->FrameAll();
+    }
+    graph.Changed = Move(changed);
+    GraphHistory* history = &graph;
+    const auto buttons = [history, undo, redo]()
+    {
+        if (undo != nullptr)
+            undo->SetEnabled(!history->Undo.IsEmpty());
+        if (redo != nullptr)
+            redo->SetEnabled(!history->Redo.IsEmpty());
+    };
+    buttons();
+    graph.Set->SetOnChange([history, buttons, said](const gui::GraphChange& change)
+    {
+        history->Undo.PushBack(change);
+        history->Redo.Clear();
+        buttons();
+        if (said != nullptr)
+            said->SetText(Format(u8"{}.", change.Words).AsView());
+        if (history->Changed)
+            history->Changed();
+    });
+    const auto step = [history, buttons, said](bool back)
+    {
+        Array<gui::GraphChange>& from = back ? history->Undo : history->Redo;
+        Array<gui::GraphChange>& to = back ? history->Redo : history->Undo;
+        if (from.IsEmpty())
+            return;
+        gui::GraphChange change = Move(from.Back());
+        from.PopBack();
+        history->Set->Apply(change, back);
+        if (said != nullptr)
+            said->SetText((back ? Format(u8"Undid: {}.", change.Words) : Format(u8"Redid: {}.", change.Words)).AsView());
+        to.PushBack(Move(change));
+        buttons();
+        if (history->Changed)
+            history->Changed();
+    };
+    if (undo != nullptr)
+        undo->SetOnClick([step]() { step(true); });
+    if (redo != nullptr)
+        redo->SetOnClick([step]() { step(false); });
+    if (frame != nullptr)
+        frame->SetOnClick([view]()
+        {
+            if (view != nullptr)
+                view->FrameAll();
+        });
+}
+
+// The Toolkit page's graphs. A dataflow graph: two Numbers mixed into a lamp's intensity and a Colour
+// tinted into its colour, its kinds of node under Values, Maths, Colour and Output, a pin's colour its
+// type's (a float's green, a colour's amber), a link only between pins of one type. And the lamp's
+// state machine: Off, On and Flicker and the transitions between them (node links), a double click
+// making a state the lamp's, which it and its transitions out show highlighted.
+void GUISandbox::FillGraphs(gui::Node& section)
+{
+    m_graphFormat = MakeUnique<sandbox::XmlTextFormat>(AppRoot(), AppRoot());
+    const Color floatColor{0.55f, 0.85f, 0.45f, 1.0f}, colorColor{0.95f, 0.72f, 0.3f, 1.0f};
+    const auto pin = [floatColor, colorColor](const char8_t* name, gui::GraphPinDirection direction, const char8_t* type)
+    {
+        gui::GraphPinInfo info;
+        info.Name = String(name);
+        info.Direction = direction;
+        info.Type = String(type);
+        info.TypeColor = StringView(type) == StringView(u8"color") ? colorColor : floatColor;
+        info.Many = direction == gui::GraphPinDirection::Output;
+        return info;
+    };
+    const auto in = [pin](const char8_t* name, const char8_t* type) { return pin(name, gui::GraphPinDirection::Input, type); };
+    const auto out = [pin](const char8_t* name, const char8_t* type) { return pin(name, gui::GraphPinDirection::Output, type); };
+    const auto node = [](const char8_t* type, const char8_t* title, Color header)
+    {
+        gui::GraphNodeInfo info;
+        info.Type = String(type);
+        info.Title = String(title);
+        info.HeaderColor = header;
+        return info;
+    };
+    const Color values{0.27f, 0.47f, 0.73f, 1.0f}, maths{0.36f, 0.55f, 0.36f, 1.0f}, colour{0.66f, 0.45f, 0.22f, 1.0f}, output{0.6f, 0.3f, 0.35f, 1.0f};
+
+    m_flow.Set = MakeUnique<gui::GraphSet>(AppRoot());
+    gui::GraphSet& flow = *m_flow.Set;
+    gui::GraphNodeInfo number = node(u8"number", u8"Number", values);
+    number.Pins.PushBack(out(u8"value", u8"float"));
+    gui::GraphNodeInfo tone = node(u8"colour", u8"Colour", values);
+    tone.Pins.PushBack(out(u8"color", u8"color"));
+    gui::GraphNodeInfo mix = node(u8"mix", u8"Mix", maths);
+    mix.Pins.PushBack(in(u8"a", u8"float"));
+    mix.Pins.PushBack(in(u8"b", u8"float"));
+    mix.Pins.PushBack(in(u8"amount", u8"float"));
+    mix.Pins.PushBack(out(u8"result", u8"float"));
+    gui::GraphNodeInfo multiply = node(u8"multiply", u8"Multiply", maths);
+    multiply.Pins.PushBack(in(u8"a", u8"float"));
+    multiply.Pins.PushBack(in(u8"b", u8"float"));
+    multiply.Pins.PushBack(out(u8"result", u8"float"));
+    gui::GraphNodeInfo tint = node(u8"tint", u8"Tint", colour);
+    tint.Pins.PushBack(in(u8"color", u8"color"));
+    tint.Pins.PushBack(in(u8"amount", u8"float"));
+    tint.Pins.PushBack(out(u8"color", u8"color"));
+    gui::GraphNodeInfo lamp = node(u8"lamp", u8"Lamp", output);
+    lamp.Subtitle = String(u8"Lamp A");
+    lamp.Pins.PushBack(in(u8"intensity", u8"float"));
+    lamp.Pins.PushBack(in(u8"color", u8"color"));
+    lamp.Deletable = false;
+    flow.AddNodeType(gui::GraphNodeType{String(u8"number"), String(u8"Number"), String(u8"Values")}, number);
+    flow.AddNodeType(gui::GraphNodeType{String(u8"colour"), String(u8"Colour"), String(u8"Values")}, tone);
+    flow.AddNodeType(gui::GraphNodeType{String(u8"mix"), String(u8"Mix"), String(u8"Maths")}, mix);
+    flow.AddNodeType(gui::GraphNodeType{String(u8"multiply"), String(u8"Multiply"), String(u8"Maths")}, multiply);
+    flow.AddNodeType(gui::GraphNodeType{String(u8"tint"), String(u8"Tint"), String(u8"Colour")}, tint);
+    const auto place = [](gui::GraphNodeInfo info, f32 x, f32 y, const char8_t* subtitle)
+    {
+        info.Position = Float2{x, y};
+        if (subtitle != nullptr)
+            info.Subtitle = String(subtitle);
+        return info;
+    };
+    const gui::GraphId low = flow.AddNode(place(number, 0.0f, 0.0f, u8"5"));
+    const gui::GraphId high = flow.AddNode(place(number, 0.0f, 112.0f, u8"14"));
+    const gui::GraphId mixed = flow.AddNode(place(mix, 224.0f, 32.0f, nullptr));
+    const gui::GraphId warm = flow.AddNode(place(tone, 224.0f, 208.0f, u8"warm white"));
+    const gui::GraphId tinted = flow.AddNode(place(tint, 432.0f, 192.0f, nullptr));
+    const gui::GraphId lit = flow.AddNode(place(lamp, 640.0f, 96.0f, nullptr));
+    const auto link = [&flow](gui::GraphId from, const char8_t* output, gui::GraphId to, const char8_t* input)
+    {
+        gui::GraphLinkInfo made;
+        made.FromNode = from;
+        made.FromPin = flow.FindPin(from, StringView(output), gui::GraphPinDirection::Output);
+        made.ToNode = to;
+        made.ToPin = flow.FindPin(to, StringView(input), gui::GraphPinDirection::Input);
+        (void)flow.AddLink(made);
+    };
+    link(low, u8"value", mixed, u8"a");
+    link(high, u8"value", mixed, u8"b");
+    link(mixed, u8"result", lit, u8"intensity");
+    link(warm, u8"color", tinted, u8"color");
+    link(tinted, u8"color", lit, u8"color");
+    WireGraph(m_flow, section, StringView(u8"flow"), {});
+
+    // The lamp's states.
+    m_states.Set = MakeUnique<gui::GraphSet>(AppRoot());
+    gui::GraphSet& states = *m_states.Set;
+    states.SetNodeLinks(true);
+    gui::GraphNodeInfo state = node(u8"state", u8"State", Color{0.4f, 0.42f, 0.5f, 1.0f});
+    states.AddNodeType(gui::GraphNodeType{String(u8"state"), String(u8"State"), String(u8"States")}, state);
+    const gui::GraphId off = states.AddNode(place(node(u8"state", u8"Off", Color{0.32f, 0.34f, 0.4f, 1.0f}), 0.0f, 64.0f, u8"intensity 0"));
+    const gui::GraphId on = states.AddNode(place(node(u8"state", u8"On", Color{0.75f, 0.6f, 0.25f, 1.0f}), 256.0f, 0.0f, u8"steady"));
+    const gui::GraphId flicker = states.AddNode(place(node(u8"state", u8"Flicker", Color{0.7f, 0.4f, 0.2f, 1.0f}), 256.0f, 160.0f, u8"its Flicker curve"));
+    const auto transition = [&states](gui::GraphId from, gui::GraphId to)
+    {
+        gui::GraphLinkInfo made;
+        made.Kind = gui::GraphLinkKind::Nodes;
+        made.FromNode = from;
+        made.ToNode = to;
+        (void)states.AddLink(made);
+    };
+    transition(off, on);
+    transition(on, off);
+    transition(on, flicker);
+    transition(flicker, on);
+    m_lampState = on;
+    auto* view = Cast<gui::GraphView>(FindById(section, u8"states-graph"));
+    auto* said = Cast<gui::Label>(FindById(section, u8"states-said"));
+    GUISandbox* self = this;
+    const auto show = [self, view]()
+    {
+        if (view == nullptr)
+            return;
+        const gui::GraphNodeInfo* active = self->m_states.Set->GetNode(self->m_lampState);
+        if (active == nullptr)
+            self->m_lampState = 0;
+        view->SetHighlightedNodes(Span<const gui::GraphId>(&self->m_lampState, active != nullptr ? 1 : 0));
+        Array<gui::GraphId> leaving;
+        for (const gui::GraphLinkInfo& at : self->m_states.Set->State().Links)
+            if (at.Kind == gui::GraphLinkKind::Nodes && at.FromNode == self->m_lampState)
+                leaving.PushBack(at.Id);
+        view->SetHighlightedLinks(leaving.AsSpan());
+    };
+    WireGraph(m_states, section, StringView(u8"states"), show);
+    show();
+    if (view != nullptr)
+        view->SetOnNodeDoubleClick([self, show, said](gui::GraphId chosen)
+        {
+            const gui::GraphNodeInfo* info = self->m_states.Set->GetNode(chosen);
+            if (info == nullptr)
+                return;
+            self->m_lampState = chosen;
+            show();
+            if (said != nullptr)
+                said->SetText(Format(u8"The lamp is {}.", info->Title).AsView());
+        });
 }
 
 // The clip's tracks at `time` played into the lamps they name ("Lamp B.intensity": Lamp B's intensity).

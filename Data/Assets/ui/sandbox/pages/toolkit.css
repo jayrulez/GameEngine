@@ -14,3 +14,5 @@ statusbar { height: 24px; font-family: Roboto; font-size: 12px; }
 .clip-ruler { margin-inline-start: 160px; height: 22px; }
 .clip-sheet { height: 150px; }
 .clip-curves { margin-inline-start: 160px; height: 180px; border-top: 1px solid var(--border); }
+.graph-view { width: 590px; height: 300px; border: 1px solid var(--border); font-family: Roboto; font-size: 12px; }
+.graph-view.states { height: 240px; }

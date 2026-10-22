@@ -101,4 +101,25 @@
         <Label id="clip-said" class="caption" text="Scrub the ruler to play the clip into the lamps."/>
         <Label class="caption" white-space="normal" text="TimeRuler, Dopesheet and CurveView (GUI.Toolkit) on one TimeAxis over a CurveSet, Core's keys drawn with Core's EvaluateCurve; the grid's Flicker and Sky rows are its CurvePropertyEditor and GradientPropertyEditor, the sky a type the page registers with the reflected source."/>
     </Panel>
+
+    <Panel id="graph-section" class="section" gap="12">
+        <Label class="section-title" text="Node graphs"/>
+        <Label class="toolkit-note" white-space="normal"
+               text="Two graphs, each with its own Undo. Click or box-select nodes and drag them (they land on the grid); the wheel zooms about the pointer and a middle drag pans. Drag from an output pin to an input: the pins that fit light up, the rest dim, and a refused pin says why beside the pointer. Drag a link's end off its input to rewire it, or drop it on nothing to let it go; drop a new link on nothing for a menu of the nodes it can reach. Right-click for menus: add a node (by category, with a search), a frame or a comment; copy, duplicate or delete. Delete, Escape, Ctrl+C and Ctrl+V work as in the property grid. Drag a frame by its title to move it with what is inside, or by an edge to resize it; double-click its title to rename it. In the state machine, drag from just outside a state's edge to another state for a transition (out and back onto the same state for one to itself), or use the state's menu; double-click a state to make it the lamp's."/>
+        <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
+            <Button id="flow-undo" class="toolkit-button" text="Undo"/>
+            <Button id="flow-redo" class="toolkit-button" text="Redo"/>
+            <Button id="flow-frame" class="toolkit-button" text="Frame all"/>
+        </Panel>
+        <GraphView id="flow-graph" class="graph-view"/>
+        <Label id="flow-said" class="caption" text="A lamp's intensity and colour, worked out from numbers and a colour."/>
+        <Panel class="props-bar" flex-direction="row" gap="8" align-items="center">
+            <Button id="states-undo" class="toolkit-button" text="Undo"/>
+            <Button id="states-redo" class="toolkit-button" text="Redo"/>
+            <Button id="states-frame" class="toolkit-button" text="Frame all"/>
+        </Panel>
+        <GraphView id="states-graph" class="graph-view states"/>
+        <Label id="states-said" class="caption" text="The lamp is On."/>
+        <Label class="caption" white-space="normal" text="GraphView (GUI.Toolkit) over a GraphSet each: nodes are widgets made while in view, links are drawn, and every edit is one change the page keeps for Undo; copies use the engine's XmlSerializer."/>
+    </Panel>
 </Panel>

@@ -50,9 +50,9 @@ first three: hosting, the viewport, then docking.
 | GUI.Hosting | `experimental.gui.hosting` | The host on `foundation.graphics`: one GUI, a root per window, each window's VG context, renderer, targets and input; the frame; offscreen pictures; the picture baker | UI.Runtime | Built (H1 to H3) |
 | GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | Built (V1, V2) |
 | GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D6) |
-| GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs | UI.Toolkit less docking and the code editor | Designed (T0 to T7) |
-| GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Not this round (ruling T3) |
-| GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts, toasts | UI.Gamekit | Empty |
+| GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs, the breadcrumb bar | UI.Toolkit less docking and the code editor | Built (T0 to T6), T7 designed |
+| GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Next, after T7 (user, 2026-10-22; ruling T3 had it later) |
+| GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Empty |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
 | GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Empty |
 | (the engine's) | | A scene's GUI, the script facade | Engine.UI, Engine.UI.Script | Not this round (ruling 1) |
@@ -665,3 +665,65 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
   - **The sandbox**: a small dataflow graph and a lamp's state machine (Off, On, Flicker and their
     transitions), each a `GraphSet` with its Undo.
 - **T7 The rest.** A breadcrumb bar; toasts, unless the gamekit's serve.
+
+  T7's design (approved by the user, 2026-10-22, after a survey of breadcrumb bars and toasts in
+  foundation.ui, Godot, zed, doriax, Lumix, Zero, ezEngine, eepp, gpui and LunarSong). foundation.ui's
+  `BreadcrumbBar` takes strings, navigates on press (the current segment too), has no overflow (its
+  segments run past a narrow bar) and leaves its one user, the editor's asset view, mirroring a
+  table of groups by index. Its toasts are one class written twice, `UI.Toolkit`'s and a copy in
+  `UI.Gamekit` ("identical behaviour"), only for a module rule; no reference has a game's toasts
+  apart from an editor's.
+
+  **The breadcrumb bar**, GUI.Toolkit's `breadcrumbbar`:
+  - **Segments carry their target**: each item a text, an optional icon, a tooltip (the full path)
+    and an id the application gets back on navigation (doriax pairs a name with its path), so no
+    table beside it. A helper splits a `/` path, a drive or root kept as one segment.
+  - **A click navigates on release** (as the lab's popups open); the last segment is the current
+    one, shown so and inert.
+  - **A separator is a chevron**: given a children callback, it opens a menu of what lies in the
+    segment before it, and a child chosen is navigated to (Explorer's; none of the references has
+    it); without one, a mark.
+  - **Overflow**: the current segment and as many before it as fit, filled from the end; the rest
+    fold into a "…" button whose menu lists them (doriax), the root among them (user's answer 4).
+  - **Drops**: the segments but the current take drops of the application's types through the
+    core's drag and drop (doriax).
+  - **The path editable** (user's answer 3): opt-in, a click on the bar's empty end turns it into a
+    field holding the path; Return gives the text to the application, Escape cancels. No default
+    shortcut (mouse first).
+  - **Keys and access**: one tab stop; Left and Right move along it, Return navigates, Down opens a
+    chevron's menu; the current segment is marked current to a screen reader.
+  - **Right to left**: its segments run right to left and its chevrons mirror (a path reads as text,
+    unlike the graph's canvas).
+  - **History is the owner's**: back, forward and up belong to the view that holds the bar, as in
+    every reference.
+
+  **Toasts, in the core** (user's answer 1), `experimental.gui`'s `ToastHost`, beside its tooltips and
+  popups, so a game and the editor share one host, with no copy and no Gamekit for an editor:
+  - **A host per window** the application places: its cards alone take input, and it never takes
+    focus.
+  - **A request**: a message and an optional title, or a widget for its content (Godot's and zed's
+    take any; the user's point, 2026-10-22) with the host's card round it (severity, close, actions,
+    pause, timeout, key); `Bare` drops the card, for a game's own (an achievement's banner), keeping
+    the lifetime and stacking. A severity (info, success, warning, error; colour and icon the
+    sheet's), up to two actions (callbacks or command ids), a duration and a key. A message may be
+    the core's rich text. A widget's request carries the text to announce, else its accessible name.
+  - **Posted from any thread** (user's answer 2): a post from another thread waits in the host's
+    queue until its frame (Godot, zed, Zero); a widget cannot cross threads, so such a post passes
+    a function that makes it, called on the GUI's thread.
+  - **Lifetime**: by severity unless the request says (info and success 5 s, warning 8 s, an error
+    until closed, as the editor's notices are), each default the host's to change; hovering or
+    focusing a toast pauses them all; each has a close button; one leaves after the event that
+    closed it, never inside it.
+  - **Repeats and limits**: a post with the key of one shown replaces it (its widget too) and counts
+    it ("×12"), which also updates a progress toast (Godot, zed); four shown at once, the rest
+    queued until there is room.
+  - **Placement and motion**: stacked at the bottom end corner (the bottom left, right to left), the
+    sheet's to move; in and out by the core's transitions.
+  - **Announced** through the core's announcements, an error interrupting, the rest waiting.
+  - **History is the application's**: the host reports each toast posted and dismissed, for a log
+    or a bell that shows them again (Godot's); it keeps none.
+
+  Layers, each a commit with its tests: **T7a** the bar (segments, clicks, overflow, keys, right to
+  left, access); **T7b** its chevron menus, drops and editable path; **T7c** the toast host in the
+  core; **T7d** the sandbox: breadcrumbs over an invented asset tree on the Toolkit page, and buttons
+  posting each kind of toast (a repeat, one with an action, a widget, one that stays).

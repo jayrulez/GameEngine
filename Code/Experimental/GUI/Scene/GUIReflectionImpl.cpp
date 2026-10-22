@@ -722,6 +722,7 @@ namespace experimental::gui
                 &TreeView::StaticType(),       &TreeItem::StaticType(),      &TableView::StaticType(),
                 &TableItem::StaticType(),      &ScrollBar::StaticType(),     &MessageBox::StaticType(),
                 &Splitter::StaticType(),       &ColorSwatch::StaticType(),   &ColorPicker::StaticType(),
+                &ToastHost::StaticType(),
             };
             for (const TypeInfo* type : kLabElements)
                 (void)ElementTypes::Register(*type);
@@ -1026,6 +1027,14 @@ namespace experimental::gui
     }
 
     RTTI_DEFINE_OBJECT(ColorPickerArea, "rtti::gui")
+
+    // Toasts (T7 of round three): a host markup places, what it shows posted in code.
+    RTTI_DEFINE_OBJECT(ToastCard, "rtti::gui")
+    REFLECT_MEMBERS(ToastHost, "rtti::gui")
+    {
+        builder.Method<&ElementOf<ToastHost>, ToastHost, Node>("of");
+        builder.Creator();
+    }
 
     REFLECT_MEMBERS(ToggleSwitch, "rtti::gui")
     {

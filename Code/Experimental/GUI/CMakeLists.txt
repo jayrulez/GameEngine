@@ -95,6 +95,7 @@ target_sources(GUI
             Widgets/Menu.cppm
             Widgets/MenuBar.cppm
             Widgets/Tooltip.cppm
+            Widgets/Toast.cppm
             Styling/ResourceProvider.cppm
             Styling/ParseUtil.cppm
             Styling/StyleSelector.cppm

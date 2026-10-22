@@ -106,6 +106,7 @@ export import :menu;
 export import :menu_bar;
 export import :tooltip;
 export import :color_picker;
+export import :toast; // T7 of round three: notices that leave by themselves
 
 // MVC data layer (Phase 8: models + model-backed views)
 export import :variant;

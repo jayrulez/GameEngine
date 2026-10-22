@@ -132,6 +132,22 @@ export namespace experimental::gui
             dragpreview.tab { background-color: var(--tab-checked-background, var(--accent)); color: var(--tab-checked-text, var(--on-accent));
                               padding: var(--space-m) 10; border-radius: 0; opacity: 0.85; }
             tooltip.drophint.refused { color: var(--drop-refused, #ff8a80); }
+            /* Toasts: a card per notice, its mark the severity's colour; in and out by transitions. */
+            toast { background-color: var(--toast-background, var(--surface-raised)); color: var(--text);
+                    border-radius: var(--radius); padding: var(--space-m) var(--space-l); width: var(--toast-width, 320px);
+                    box-shadow: 0 4px 14px var(--shadow-color);
+                    transition: opacity var(--motion-fast), transform var(--motion-fast); }
+            toast.entering, toast.leaving { opacity: 0; transform: translate(0, 8px); }
+            toast.bare { background-color: transparent; padding: 0; box-shadow: none; width: auto; }
+            toastmark { width: 4px; height: 100%; min-height: 16px; border-radius: 2px; background-color: var(--toast-info, var(--accent)); }
+            toast.success toastmark { background-color: var(--toast-success, var(--success)); }
+            toast.warning toastmark { background-color: var(--toast-warning, var(--warning)); }
+            toast.error toastmark { background-color: var(--toast-error, var(--danger)); }
+            toast label.title { color: var(--text-strong); font-weight: bold; }
+            toast label.count { color: var(--text-dim); }
+            toast button.close { background-color: transparent; color: var(--text-dim); padding: 0 var(--space-s); }
+            toast button.close:hover { color: var(--text-strong); }
+            toast button.action { padding: var(--space-xs) var(--space-l); }
             /* The focus ring: where the keyboard is (a field shows it while it has the caret). */
             button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,
             switch:focus-visible, tab:focus-visible, expanderheader:focus-visible, listbox:focus-visible,

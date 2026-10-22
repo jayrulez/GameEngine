@@ -96,6 +96,7 @@ add_executable(GUI.Tests
     MenuTests.cpp
     MenuBarTests.cpp
     TooltipTests.cpp
+    ToastTests.cpp
     DragDropTests.cpp
     ThemeTests.cpp
     KeyframesTests.cpp

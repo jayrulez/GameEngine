@@ -167,5 +167,52 @@
 				</array>
 			</object>
 		</array>
+		<string name="lineComment">--</string>
+		<object name="blockComment">
+			<string name="open">--[[</string>
+			<string name="close">]]</string>
+		</object>
+		<array name="brackets" count="3">
+			<object>
+				<string name="open">(</string>
+				<string name="close">)</string>
+			</object>
+			<object>
+				<string name="open">[</string>
+				<string name="close">]</string>
+			</object>
+			<object>
+				<string name="open">{</string>
+				<string name="close">}</string>
+			</object>
+		</array>
+		<array name="autoClose" count="6">
+			<object>
+				<string name="open">(</string>
+				<string name="close">)</string>
+			</object>
+			<object>
+				<string name="open">[</string>
+				<string name="close">]</string>
+			</object>
+			<object>
+				<string name="open">{</string>
+				<string name="close">}</string>
+			</object>
+			<object>
+				<string name="open">"</string>
+				<string name="close">"</string>
+			</object>
+			<object>
+				<string name="open">'</string>
+				<string name="close">'</string>
+			</object>
+			<object>
+				<string name="open">`</string>
+				<string name="close">`</string>
+			</object>
+		</array>
+		<string name="indentAfter">{ ( [ then do function else repeat</string>
+		<string name="outdentFirst">} ) ] end else elseif until</string>
 	</object>
 </root>

@@ -32,7 +32,7 @@ export namespace experimental::gui
                 --code-number: #f78c6c; --code-string: #c3e88d; --code-escape: #89ddff; --code-comment: #6b7586;
                 --code-preprocessor: #ffcb6b; --code-operator: #89ddff; --code-punctuation: #a6aebb;
                 --code-tag: #f07178; --code-attribute: #ffcb6b; --code-property: #82aaff; --code-selector: #c792ea;
-                --code-invalid: #ff5370;
+                --code-invalid: #ff5370; --code-bracket-match: #2c3442;
             }
             @media (prefers-color-scheme: light) {
                 :root {
@@ -43,7 +43,7 @@ export namespace experimental::gui
                     --code-number: #b35900; --code-string: #0a6e31; --code-escape: #0a7ea4; --code-comment: #6e7781;
                     --code-preprocessor: #953800; --code-operator: #0a7ea4; --code-punctuation: #57606a;
                     --code-tag: #116329; --code-attribute: #953800; --code-property: #0550ae; --code-selector: #8250df;
-                    --code-invalid: #cf222e;
+                    --code-invalid: #cf222e; --code-bracket-match: #dde6f2;
                 }
             }
             codeeditor { background-color: var(--code-background); color: var(--code-text); padding: 4px 0; }
@@ -54,6 +54,7 @@ export namespace experimental::gui
             codeeditor::current-line { background-color: var(--code-current-line); }
             codeeditor::selection { background-color: var(--code-selection); }
             codeeditor::caret { background-color: var(--code-caret); }
+            codeeditor::bracket-match { background-color: var(--code-bracket-match); }
             codeeditor::keyword { color: var(--code-keyword); }
             codeeditor::type { color: var(--code-type); }
             codeeditor::constant { color: var(--code-constant); }

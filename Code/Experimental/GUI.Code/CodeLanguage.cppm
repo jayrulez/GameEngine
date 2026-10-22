@@ -119,6 +119,13 @@ export namespace experimental::gui
         core::String List;
     };
 
+    /// A pair the editor knows: a bracket it matches, or what typing one side puts the other for.
+    struct CodePair
+    {
+        core::String Open;
+        core::String Close;
+    };
+
     /// Where a line's tokenizing stands: the contexts entered (the first context below them all) and
     /// an open long bracket's level.
     struct CodeLexState
@@ -157,6 +164,13 @@ export namespace experimental::gui
         bool IdentifierDashes = false;        ///< names may hold '-' and begin with it (CSS's)
         core::Array<CodeWords> Words;
         core::Array<CodeContext> Contexts;    ///< the first is where a file starts
+        // How it is edited (C3):
+        core::String LineComment;             ///< what a line comment begins with ("//", "--")
+        CodePair BlockComment;                ///< a block comment's ends ("/*" "*/", "<!--" "-->")
+        core::Array<CodePair> Brackets;       ///< matched, and indent between ("(" ")", "{" "}")
+        core::Array<CodePair> AutoClose;      ///< typing the open puts the close ("(" ")", "\"" "\"")
+        core::String IndentAfter;             ///< what, ending a line, indents the next (space-separated: "{ ( [", Luau's "then do")
+        core::String OutdentFirst;            ///< what, first on its line, outdents it ("}", Luau's "end else until")
 
         /// Resolves what refers by name (a rule's context, the words), once after it is filled in or
         /// read; tokenizing asks it first.
@@ -457,6 +471,13 @@ export namespace experimental::gui
         detail::Optional(ar, "list", words.List);
         ar.EndObject();
     }
+    inline void Serialize(ISerializer& ar, CodePair& pair)
+    {
+        ar.BeginObject();
+        detail::Optional(ar, "open", pair.Open);
+        detail::Optional(ar, "close", pair.Close);
+        ar.EndObject();
+    }
     inline void Serialize(ISerializer& ar, CodeLanguage& language)
     {
         ar.BeginObject();
@@ -466,6 +487,13 @@ export namespace experimental::gui
         detail::Optional(ar, "identifierDashes", language.IdentifierDashes);
         detail::Optional(ar, "words", language.Words);
         detail::Optional(ar, "contexts", language.Contexts);
+        detail::Optional(ar, "lineComment", language.LineComment);
+        if (ar.Mode() != SerializeMode::Read || ar.HasKey("blockComment"))
+            core::Serialize(ar, "blockComment", language.BlockComment);
+        detail::Optional(ar, "brackets", language.Brackets);
+        detail::Optional(ar, "autoClose", language.AutoClose);
+        detail::Optional(ar, "indentAfter", language.IndentAfter);
+        detail::Optional(ar, "outdentFirst", language.OutdentFirst);
         ar.EndObject();
         if (ar.Mode() == SerializeMode::Read)
             language.Prepare();

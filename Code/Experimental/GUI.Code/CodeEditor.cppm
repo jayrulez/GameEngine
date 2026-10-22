@@ -41,6 +41,47 @@ namespace fonts = foundation::fonts;
 
 export namespace experimental::gui
 {
+    // The code editor's own commands (C3), bound in its "codeeditor" key context.
+    inline constexpr const char8_t* kCodeToggleComment = u8"code.toggle-comment";
+    inline constexpr const char8_t* kCodeIndentLines = u8"code.indent-lines";
+    inline constexpr const char8_t* kCodeOutdentLines = u8"code.outdent-lines";
+    inline constexpr const char8_t* kCodeMoveLinesUp = u8"code.move-lines-up";
+    inline constexpr const char8_t* kCodeMoveLinesDown = u8"code.move-lines-down";
+    inline constexpr const char8_t* kCodeDuplicateLinesUp = u8"code.duplicate-lines-up";
+    inline constexpr const char8_t* kCodeDuplicateLinesDown = u8"code.duplicate-lines-down";
+    inline constexpr const char8_t* kCodeDeleteLines = u8"code.delete-lines";
+    inline constexpr const char8_t* kCodeAddNextOccurrence = u8"code.add-next-occurrence";
+    inline constexpr const char8_t* kCodeSelectAllOccurrences = u8"code.select-all-occurrences";
+    inline constexpr const char8_t* kCodeAddCursorAbove = u8"code.add-cursor-above";
+    inline constexpr const char8_t* kCodeAddCursorBelow = u8"code.add-cursor-below";
+
+    /// Binds the code editor's keys (VS Code's, ruling 5), rebindable as any: a host calls it once
+    /// for a GUI's keymap, after the GUI's own bindings (which then win a tie).
+    inline void BindCodeEditorKeys(Keymap& keymap)
+    {
+        struct Binding
+        {
+            const char8_t* Keys;
+            const char8_t* Command;
+        };
+        static constexpr Binding kBindings[] = {
+            {u8"ctrl-slash", kCodeToggleComment},
+            {u8"ctrl-rightbracket", kCodeIndentLines},
+            {u8"ctrl-leftbracket", kCodeOutdentLines},
+            {u8"alt-up", kCodeMoveLinesUp},
+            {u8"alt-down", kCodeMoveLinesDown},
+            {u8"shift-alt-up", kCodeDuplicateLinesUp},
+            {u8"shift-alt-down", kCodeDuplicateLinesDown},
+            {u8"ctrl-shift-k", kCodeDeleteLines},
+            {u8"ctrl-d", kCodeAddNextOccurrence},
+            {u8"ctrl-shift-l", kCodeSelectAllOccurrences},
+            {u8"ctrl-alt-up", kCodeAddCursorAbove},
+            {u8"ctrl-alt-down", kCodeAddCursorBelow},
+        };
+        for (const Binding& b : kBindings)
+            (void)keymap.Bind(core::StringView(b.Keys), core::StringView(b.Command), core::StringView(u8"codeeditor"));
+    }
+
     class CodeEditor : public UIWidget
     {
         RTTI_OBJECT(CodeEditor, UIWidget)
@@ -53,7 +94,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"codeeditor"));
             SetTabFocusable(true);
             SetTabCaptures(true); // Tab indents
-            SetKeyContext(core::StringView(u8"textinput multiline"));
+            SetKeyContext(core::StringView(u8"textinput multiline codeeditor"));
             SetClipChildren(true);
             SetScrollsByKeys(false); // the arrows and pages move its carets, through the keymap
             {
@@ -70,6 +111,22 @@ export namespace experimental::gui
                 const TextEditCommand command = static_cast<TextEditCommand>(i);
                 (void)OnCommand(TextEditCommandName(command), [this, command](CommandEvent&) { (void)Run(command); });
             }
+            const auto command = [this](const char8_t* name, core::Function<void()> run)
+            {
+                (void)OnCommand(core::StringView(name), [run = core::Move(run)](CommandEvent&) mutable { run(); });
+            };
+            command(kCodeToggleComment, [this]() { ToggleComment(); });
+            command(kCodeIndentLines, [this]() { IndentLines(false); });
+            command(kCodeOutdentLines, [this]() { IndentLines(true); });
+            command(kCodeMoveLinesUp, [this]() { MoveLines(true); });
+            command(kCodeMoveLinesDown, [this]() { MoveLines(false); });
+            command(kCodeDuplicateLinesUp, [this]() { DuplicateLines(true); });
+            command(kCodeDuplicateLinesDown, [this]() { DuplicateLines(false); });
+            command(kCodeDeleteLines, [this]() { DeleteLines(); });
+            command(kCodeAddNextOccurrence, [this]() { (void)AddNextOccurrence(); });
+            command(kCodeSelectAllOccurrences, [this]() { SelectAllOccurrences(); });
+            command(kCodeAddCursorAbove, [this]() { AddCursorVertically(true); });
+            command(kCodeAddCursorBelow, [this]() { AddCursorVertically(false); });
             Attach(m_own);
             m_selections.PushBack(CodeSelection{});
             m_goals.PushBack(-1.0f);
@@ -166,7 +223,30 @@ export namespace experimental::gui
         /// Runs a text command at every caret (what its keys do); false when it did nothing.
         bool Run(TextEditCommand command);
         /// Types `text` at every caret, replacing what each selects (one undo step while typing goes on).
+        /// One character in a language: auto-closed brackets and quotes (typing a close over the one
+        /// put skips it), a selection surrounded, a closing word or mark first on its line outdenting it.
         void Type(core::StringView text);
+
+        // === C3's commands (each a command by name too, its keys in BindCodeEditorKeys) ===
+        /// Comments the lines the selections cover, or uncomments them when all are (a block comment
+        /// round each selection where the language has no line comment).
+        void ToggleComment();
+        /// Indents (or outdents) the lines the selections cover by a tab stop.
+        void IndentLines(bool outdent);
+        /// Moves the lines the selections cover up or down past their neighbour.
+        void MoveLines(bool up);
+        /// Copies the lines the selections cover below (or above) them, the selections going with the copy.
+        void DuplicateLines(bool up);
+        void DeleteLines();
+        /// Selects the primary caret's word, or adds a selection at the next match of the primary's
+        /// text (Ctrl+D); false when there is none further.
+        bool AddNextOccurrence();
+        /// Selects every match of the primary selection's text (Ctrl+Shift+L).
+        void SelectAllOccurrences();
+        /// Adds a caret a line above (or below) the primary, at its goal across.
+        void AddCursorVertically(bool up);
+        /// The bracket at or before `at` (not in a string or comment) and the one matching it.
+        bool FindMatchingBracket(CodePosition at, CodeRange& bracket, CodeRange& match) const;
 
         // === Geometry (its own space) ===
         [[nodiscard]] f32 LineHeight() const
@@ -213,6 +293,7 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"selection"));
             out.PushBack(core::StringView(u8"caret"));
             out.PushBack(core::StringView(u8"composition"));
+            out.PushBack(core::StringView(u8"bracket-match"));
             for (usize i = 1; i < static_cast<usize>(CodeToken::Count); ++i)
                 out.PushBack(CodeTokenName(static_cast<CodeToken>(i)));
         }
@@ -493,10 +574,23 @@ export namespace experimental::gui
             {
                 CodeRange replaced;
                 core::String text;
-                if (!edit(m_selections[i], replaced, text))
+                u32 back = 0; // the caret this many bytes before the end of what it put
+                if constexpr (requires { edit(m_selections[i], replaced, text, back); })
+                {
+                    if (!edit(m_selections[i], replaced, text, back))
+                        continue;
+                }
+                else if (!edit(m_selections[i], replaced, text))
                     continue;
                 const CodeRange put = m_doc->Replace(replaced, text.AsView(), kind);
-                after[i] = CodeSelection{put.End, put.End};
+                // `back` bytes before the end of what it put (across its line breaks too).
+                CodePosition caret = put.Start;
+                const usize upTo = text.Size() >= back ? text.Size() - back : 0;
+                for (usize k = 0; k < upTo; ++k)
+                    caret = text.AsView()[k] == u8'\n' ? CodePosition{caret.Line + 1, 0} : CodePosition{caret.Line, caret.Column + 1};
+                if (back == 0)
+                    caret = put.End;
+                after[i] = CodeSelection{caret, caret};
                 for (usize j = i + 1; j < after.Size(); ++j)
                     after[j] = CodeSelection{CodeDocument::Moved(after[j].Anchor, CodeBias::Right, replaced, put.End),
                                              CodeDocument::Moved(after[j].Head, CodeBias::Right, replaced, put.End)};
@@ -527,6 +621,177 @@ export namespace experimental::gui
             else
                 m_goals = goals;
             SelectionsChanged();
+        }
+        // Edits planned against the text as it is (each a range and its new text, none overlapping),
+        // applied from the last as one undo step, every selection carried through each: a range's
+        // start keeps left, its end and a caret go right.
+        struct Planned
+        {
+            CodeRange Range;
+            core::String Text;
+        };
+        void ApplyPlanned(core::Array<Planned>& edits, CodeEditKind kind = CodeEditKind::Other)
+        {
+            if (m_readOnly || edits.IsEmpty())
+                return;
+            for (usize i = 1; i < edits.Size(); ++i)
+                for (usize j = i; j > 0 && edits[j - 1].Range.Start < edits[j].Range.Start; --j)
+                    core::Swap(edits[j], edits[j - 1]);
+            const core::Array<CodeSelection> before = m_selections;
+            core::Array<CodeSelection> after = m_selections;
+            m_doc->Begin(before.AsSpan(), kind);
+            for (const Planned& edit : edits)
+            {
+                const CodeRange put = m_doc->Replace(edit.Range, edit.Text.AsView(), kind);
+                for (CodeSelection& sel : after)
+                {
+                    const bool forward = sel.Anchor <= sel.Head;
+                    const CodeBias anchorBias = sel.IsEmpty() ? CodeBias::Right : (forward ? CodeBias::Left : CodeBias::Right);
+                    const CodeBias headBias = sel.IsEmpty() ? CodeBias::Right : (forward ? CodeBias::Right : CodeBias::Left);
+                    sel = CodeSelection{CodeDocument::Moved(sel.Anchor, anchorBias, edit.Range, put.End),
+                                        CodeDocument::Moved(sel.Head, headBias, edit.Range, put.End)};
+                }
+            }
+            m_doc->End(after.AsSpan());
+            m_selections = core::Move(after);
+            Normalize();
+            ResetGoals();
+            SelectionsChanged();
+        }
+        // The lines the selections cover, as runs [first, last], in order (a selection ending at a
+        // line's start leaves that line out).
+        void LineBlocks(core::Array<u32>& firsts, core::Array<u32>& lasts) const
+        {
+            for (const CodeSelection& sel : m_selections)
+            {
+                const CodeRange r = sel.Range();
+                const u32 first = r.Start.Line;
+                const u32 last = r.End.Line > r.Start.Line && r.End.Column == 0 ? r.End.Line - 1 : r.End.Line;
+                if (!lasts.IsEmpty() && first <= lasts.Back() + 1)
+                {
+                    lasts.Back() = core::Max(lasts.Back(), last);
+                    continue;
+                }
+                firsts.PushBack(first);
+                lasts.PushBack(last);
+            }
+        }
+        [[nodiscard]] core::String IndentText(u32 columns) const
+        {
+            core::String out;
+            if (!m_insertSpaces)
+                for (; columns >= m_tabSize; columns -= m_tabSize)
+                    out.Append(core::StringView(u8"\t"));
+            for (; columns > 0; --columns)
+                out.Append(core::StringView(u8" "));
+            return out;
+        }
+        // A line's indent in columns (its tabs to their stops).
+        [[nodiscard]] u32 IndentColumns(core::StringView text) const
+        {
+            u32 columns = 0;
+            for (usize i = 0; i < text.Size() && (text[i] == u8' ' || text[i] == u8'\t'); ++i)
+                columns = text[i] == u8'\t' ? (columns / m_tabSize + 1) * m_tabSize : columns + 1;
+            return columns;
+        }
+        // Whether `text` (a line's text before the caret) ends with one of `list`'s (space-separated)
+        // words or marks: a word only where a name does not run on before it.
+        [[nodiscard]] static bool EndsWithAny(core::StringView text, core::StringView list)
+        {
+            usize end = text.Size();
+            while (end > 0 && (text[end - 1] == u8' ' || text[end - 1] == u8'\t'))
+                --end;
+            text = text.SubStr(0, end);
+            usize at = 0;
+            while (at < list.Size())
+            {
+                while (at < list.Size() && list[at] == u8' ')
+                    ++at;
+                usize stop = at;
+                while (stop < list.Size() && list[stop] != u8' ')
+                    ++stop;
+                const core::StringView item = list.SubStr(at, stop - at);
+                at = stop;
+                if (item.Size() == 0 || item.Size() > text.Size() || text.SubStr(text.Size() - item.Size(), item.Size()) != item)
+                    continue;
+                const bool word = IsNameByte(item[0]);
+                if (word && text.Size() > item.Size() && IsNameByte(text[text.Size() - item.Size() - 1]))
+                    continue;
+                return true;
+            }
+            return false;
+        }
+        [[nodiscard]] static bool IsListed(core::StringView item, core::StringView list)
+        {
+            usize at = 0;
+            while (at < list.Size())
+            {
+                while (at < list.Size() && list[at] == u8' ')
+                    ++at;
+                usize stop = at;
+                while (stop < list.Size() && list[stop] != u8' ')
+                    ++stop;
+                if (stop > at && list.SubStr(at, stop - at) == item)
+                    return true;
+                at = stop;
+            }
+            return false;
+        }
+        [[nodiscard]] static bool IsNameByte(char8_t c) noexcept
+        {
+            return (c >= u8'a' && c <= u8'z') || (c >= u8'A' && c <= u8'Z') || (c >= u8'0' && c <= u8'9') || c == u8'_' ||
+                   static_cast<u8>(c) >= 0x80u;
+        }
+        // The token of the character before `at` on its line (what a caret is "in").
+        [[nodiscard]] CodeToken TokenBefore(CodePosition at) const
+        {
+            if (m_language == nullptr || at.Column == 0)
+                return CodeToken::Text;
+            for (const CodeSpan& span : TokensOf(at.Line))
+                if (span.Start < at.Column && at.Column <= span.End)
+                    return span.Token;
+            return CodeToken::Text;
+        }
+        [[nodiscard]] CodeToken TokenAtColumn(u32 line, u32 column) const
+        {
+            if (m_language == nullptr)
+                return CodeToken::Text;
+            for (const CodeSpan& span : TokensOf(line))
+                if (span.Start <= column && column < span.End)
+                    return span.Token;
+            return CodeToken::Text;
+        }
+        void TypeCharacter(core::StringView text);
+        // Backspace between a pair it would have put (both go), or in an indent of spaces (back to
+        // the stop before).
+        bool DeleteBackwardSpecial(CodePosition at, CodeRange& replaced) const
+        {
+            const core::StringView line = m_doc->LineText(at.Line);
+            if (m_language != nullptr)
+                for (const CodePair& pair : m_language->AutoClose)
+                {
+                    const core::StringView open = pair.Open.AsView(), close = pair.Close.AsView();
+                    if (at.Column >= open.Size() && at.Column + close.Size() <= line.Size() &&
+                        line.SubStr(at.Column - open.Size(), open.Size()) == open && line.SubStr(at.Column, close.Size()) == close)
+                    {
+                        replaced = CodeRange{CodePosition{at.Line, at.Column - static_cast<u32>(open.Size())},
+                                             CodePosition{at.Line, at.Column + static_cast<u32>(close.Size())}};
+                        return true;
+                    }
+                }
+            if (m_insertSpaces && at.Column > 0 && at.Column <= IndentOf(line))
+            {
+                bool spaces = true;
+                for (u32 i = 0; i < at.Column; ++i)
+                    spaces = spaces && line[i] == u8' ';
+                if (spaces)
+                {
+                    const u32 stop = (at.Column - 1) / m_tabSize * m_tabSize;
+                    replaced = CodeRange{CodePosition{at.Line, stop}, at};
+                    return true;
+                }
+            }
+            return false;
         }
         [[nodiscard]] CodePosition WordLeft(CodePosition at) const
         {
@@ -641,6 +906,8 @@ export namespace experimental::gui
         u32 m_dragUnit = 1;
         CodeRange m_dragOrigin;
         bool m_dragAdds = false;
+        f32 m_columnX = 0.0f;                      // where across it began (the text's own space)
+        u32 m_columnLine = 0;
     };
 
     inline CodeEditor::LineView& CodeEditor::View(u32 line) const
@@ -915,6 +1182,8 @@ export namespace experimental::gui
             {
                 if (!s.IsEmpty())
                     replaced = s.Range();
+                else if (command == C::DeleteBackward && DeleteBackwardSpecial(s.Head, replaced))
+                    return true;
                 else
                 {
                     const CodePosition at = s.Head;
@@ -952,6 +1221,12 @@ export namespace experimental::gui
 
     inline void CodeEditor::Type(core::StringView text)
     {
+        // One character, in a language that pairs or outdents: its own rules.
+        if (m_language != nullptr && text.Size() >= 1 && text.Size() <= 4 && NextGrapheme(text, 0) == text.Size() && text[0] != u8'\n')
+        {
+            TypeCharacter(text);
+            return;
+        }
         EditEach(CodeEditKind::Typing, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
         {
             replaced = s.Range();
@@ -960,22 +1235,141 @@ export namespace experimental::gui
         });
     }
 
+    inline void CodeEditor::TypeCharacter(core::StringView text)
+    {
+        const CodeLanguage& lang = *m_language;
+        const CodePair* opens = nullptr;
+        const CodePair* closes = nullptr;
+        for (const CodePair& pair : lang.AutoClose)
+        {
+            if (opens == nullptr && pair.Open.AsView() == text)
+                opens = &pair;
+            if (closes == nullptr && pair.Close.AsView() == text)
+                closes = &pair;
+        }
+        EditEach(CodeEditKind::Typing, [&](const CodeSelection& s, CodeRange& replaced, core::String& put, u32& back)
+        {
+            replaced = s.Range();
+            const CodePosition at = replaced.Start;
+            const core::StringView line = m_doc->LineText(at.Line);
+            const usize afterAt = replaced.End.Line == at.Line ? replaced.End.Column : line.Size();
+            const core::StringView after = line.SubStr(afterAt, line.Size() - afterAt);
+            const CodeToken in = TokenBefore(at);
+            const bool inText = in == CodeToken::String || in == CodeToken::Comment || in == CodeToken::Escape;
+            // Typing the close the pair put: over it.
+            if (s.IsEmpty() && closes != nullptr && after.Size() >= text.Size() && after.SubStr(0, text.Size()) == text &&
+                !(opens != nullptr && opens->Open == opens->Close && inText && in != CodeToken::String))
+            {
+                replaced = CodeRange{at, CodePosition{at.Line, at.Column + static_cast<u32>(text.Size())}};
+                put = core::String(text);
+                return true;
+            }
+            // A selection and an open: round it.
+            if (!s.IsEmpty() && opens != nullptr)
+            {
+                put = core::String(opens->Open);
+                put.Append(m_doc->TextIn(replaced).AsView());
+                put.Append(opens->Close.AsView());
+                back = static_cast<u32>(opens->Close.Size());
+                return true;
+            }
+            // An open where its close may follow: the pair, the caret between. Not in a string or a
+            // comment; a quote not after a name (it's'), nor before one.
+            if (s.IsEmpty() && opens != nullptr && !inText)
+            {
+                const bool quote = opens->Open == opens->Close;
+                const bool nextFree = after.Size() == 0 || after[0] == u8' ' || after[0] == u8'\t' || after[0] == u8')' ||
+                                      after[0] == u8']' || after[0] == u8'}' || after[0] == u8',' || after[0] == u8';';
+                const bool afterName = at.Column > 0 && IsNameByte(line[at.Column - 1]);
+                if (nextFree && !(quote && afterName))
+                {
+                    put = core::String(opens->Open);
+                    put.Append(opens->Close.AsView());
+                    back = static_cast<u32>(opens->Close.Size());
+                    return true;
+                }
+            }
+            // A closing word or mark first on its line: the line outdented to its block's opener.
+            core::String before(line.SubStr(0, at.Column));
+            before.Append(text);
+            const u32 indent = IndentOf(before.AsView());
+            const core::StringView first = before.AsView().SubStr(indent, before.Size() - indent);
+            if (s.IsEmpty() && !lang.OutdentFirst.IsEmpty() && IsListed(first, lang.OutdentFirst.AsView()) &&
+                (after.Size() == 0 || !IsNameByte(after[0])))
+            {
+                // The nearest line above with text: its indent, less a stop unless it opens the block.
+                u32 target = IndentColumns(before.AsView());
+                for (u32 up = at.Line; up-- > 0;)
+                {
+                    const core::StringView above = m_doc->LineText(up);
+                    if (IndentOf(above) == above.Size())
+                        continue;
+                    const u32 aboveIndent = IndentColumns(above);
+                    target = EndsWithAny(above, lang.IndentAfter.AsView()) ? aboveIndent : (aboveIndent >= m_tabSize ? aboveIndent - m_tabSize : 0u);
+                    break;
+                }
+                if (target < IndentColumns(before.AsView()))
+                {
+                    replaced = CodeRange{CodePosition{at.Line, 0}, at};
+                    put = IndentText(target);
+                    put.Append(first);
+                    return true;
+                }
+            }
+            put = core::String(text);
+            return true;
+        });
+    }
+
     inline void CodeEditor::Newline()
     {
-        // Each new line as indented as the one it breaks (C3 adds the language's rules).
-        EditEach(CodeEditKind::Other, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
+        // Each new line as indented as the one it breaks, a stop more after what opens a block; between
+        // a bracket pair, the close on a line of its own below.
+        EditEach(CodeEditKind::Other, [&](const CodeSelection& s, CodeRange& replaced, core::String& put, u32& back)
         {
             replaced = s.Range();
             const core::StringView line = m_doc->LineText(replaced.Start.Line);
+            const core::StringView before = line.SubStr(0, replaced.Start.Column);
+            const usize afterAt = replaced.End.Line == replaced.Start.Line ? replaced.End.Column : line.Size();
+            const core::StringView after = line.SubStr(afterAt, line.Size() - afterAt);
+            const core::String indent(line.SubStr(0, core::Min(IndentOf(line), replaced.Start.Column)));
             put = core::String(core::StringView(u8"\n"));
-            put.Append(line.SubStr(0, core::Min(IndentOf(line), replaced.Start.Column)));
+            put.Append(indent.AsView());
+            if (m_language == nullptr)
+                return true;
+            const bool opens = EndsWithAny(before, m_language->IndentAfter.AsView());
+            if (!opens)
+                return true;
+            put.Append(IndentText(m_tabSize).AsView());
+            for (const CodePair& pair : m_language->Brackets)
+            {
+                usize end = before.Size();
+                while (end > 0 && (before[end - 1] == u8' ' || before[end - 1] == u8'\t'))
+                    --end;
+                const bool open = end >= pair.Open.Size() && before.SubStr(end - pair.Open.Size(), pair.Open.Size()) == pair.Open.AsView();
+                if (open && after.Size() >= pair.Close.Size() && after.SubStr(0, pair.Close.Size()) == pair.Close.AsView())
+                {
+                    put.Append(core::StringView(u8"\n"));
+                    put.Append(indent.AsView());
+                    back = static_cast<u32>(indent.Size() + 1);
+                    break;
+                }
+            }
             return true;
         });
     }
 
     inline void CodeEditor::Indent()
     {
-        // To the next tab stop at each caret (C3 indents a selection's lines).
+        // A selection across lines indents them; else to the next tab stop at each caret.
+        bool lines = false;
+        for (const CodeSelection& sel : m_selections)
+            lines = lines || sel.Range().Start.Line != sel.Range().End.Line;
+        if (lines)
+        {
+            IndentLines(false);
+            return;
+        }
         EditEach(CodeEditKind::Typing, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
         {
             replaced = s.Range();
@@ -991,6 +1385,335 @@ export namespace experimental::gui
                 put.Append(core::StringView(u8" "));
             return true;
         });
+    }
+
+    inline void CodeEditor::IndentLines(bool outdent)
+    {
+        core::Array<u32> firsts(MemoryAllocator()), lasts(MemoryAllocator());
+        LineBlocks(firsts, lasts);
+        core::Array<Planned> edits(MemoryAllocator());
+        for (usize b = 0; b < firsts.Size(); ++b)
+            for (u32 line = firsts[b]; line <= lasts[b]; ++line)
+            {
+                const core::StringView text = m_doc->LineText(line);
+                const u32 indent = IndentOf(text);
+                if (!outdent)
+                {
+                    if (indent < text.Size()) // a blank line keeps no indent
+                        edits.PushBack(Planned{CodeRange{CodePosition{line, 0}, CodePosition{line, 0}}, IndentText(m_tabSize)});
+                    continue;
+                }
+                // Up to a stop's worth of what indents it.
+                u32 columns = 0, bytes = 0;
+                while (bytes < indent && columns < m_tabSize)
+                {
+                    columns = text[bytes] == u8'\t' ? m_tabSize : columns + 1;
+                    ++bytes;
+                }
+                if (bytes > 0)
+                    edits.PushBack(Planned{CodeRange{CodePosition{line, 0}, CodePosition{line, bytes}}, core::String{}});
+            }
+        ApplyPlanned(edits);
+    }
+
+    inline void CodeEditor::ToggleComment()
+    {
+        if (m_language == nullptr)
+            return;
+        const CodeLanguage& lang = *m_language;
+        core::Array<Planned> edits(MemoryAllocator());
+        if (lang.LineComment.IsEmpty())
+        {
+            // Only block comments (markup's): round each selection, or its caret's line; off again
+            // where a selection is one already.
+            const core::StringView open = lang.BlockComment.Open.AsView(), close = lang.BlockComment.Close.AsView();
+            if (open.Size() == 0)
+                return;
+            for (const CodeSelection& sel : m_selections)
+            {
+                CodeRange r = sel.Range();
+                if (r.IsEmpty())
+                {
+                    const core::StringView text = m_doc->LineText(r.Start.Line);
+                    r = CodeRange{CodePosition{r.Start.Line, IndentOf(text)}, CodePosition{r.Start.Line, static_cast<u32>(text.Size())}};
+                }
+                const core::String inside = m_doc->TextIn(r);
+                const core::StringView view = inside.AsView();
+                if (view.Size() >= open.Size() + close.Size() && view.SubStr(0, open.Size()) == open && view.SubStr(view.Size() - close.Size(), close.Size()) == close)
+                {
+                    core::StringView body = view.SubStr(open.Size(), view.Size() - open.Size() - close.Size());
+                    if (body.Size() >= 2 && body[0] == u8' ' && body[body.Size() - 1] == u8' ')
+                        body = body.SubStr(1, body.Size() - 2);
+                    edits.PushBack(Planned{r, core::String(body)});
+                }
+                else
+                {
+                    core::String text(open);
+                    text.Append(core::StringView(u8" "));
+                    text.Append(view);
+                    text.Append(core::StringView(u8" "));
+                    text.Append(close);
+                    edits.PushBack(Planned{r, text});
+                }
+            }
+            ApplyPlanned(edits);
+            return;
+        }
+        const core::StringView mark = lang.LineComment.AsView();
+        core::Array<u32> firsts(MemoryAllocator()), lasts(MemoryAllocator());
+        LineBlocks(firsts, lasts);
+        // Off when every line with text is commented; else on, at the least indent.
+        bool all = true;
+        u32 least = ~u32(0);
+        for (usize b = 0; b < firsts.Size(); ++b)
+            for (u32 line = firsts[b]; line <= lasts[b]; ++line)
+            {
+                const core::StringView text = m_doc->LineText(line);
+                const u32 indent = IndentOf(text);
+                if (indent == text.Size())
+                    continue;
+                least = core::Min(least, indent);
+                all = all && text.SubStr(indent, core::Min(mark.Size(), text.Size() - indent)) == mark;
+            }
+        if (least == ~u32(0))
+            return; // only blank lines
+        for (usize b = 0; b < firsts.Size(); ++b)
+            for (u32 line = firsts[b]; line <= lasts[b]; ++line)
+            {
+                const core::StringView text = m_doc->LineText(line);
+                const u32 indent = IndentOf(text);
+                if (indent == text.Size())
+                    continue;
+                if (all)
+                {
+                    u32 cut = static_cast<u32>(mark.Size());
+                    if (indent + cut < text.Size() && text[indent + cut] == u8' ')
+                        ++cut;
+                    edits.PushBack(Planned{CodeRange{CodePosition{line, indent}, CodePosition{line, indent + cut}}, core::String{}});
+                }
+                else
+                {
+                    core::String put(mark);
+                    put.Append(core::StringView(u8" "));
+                    edits.PushBack(Planned{CodeRange{CodePosition{line, least}, CodePosition{line, least}}, put});
+                }
+            }
+        ApplyPlanned(edits);
+    }
+
+    inline void CodeEditor::MoveLines(bool up)
+    {
+        core::Array<u32> firsts(MemoryAllocator()), lasts(MemoryAllocator());
+        LineBlocks(firsts, lasts);
+        if (firsts.IsEmpty() || (up && firsts[0] == 0) || (!up && lasts.Back() + 1 >= m_doc->LineCount()))
+            return;
+        // Each block and the line it passes, swapped as one edit; the selections a line along.
+        const core::Array<CodeSelection> before = m_selections;
+        core::Array<CodeSelection> after = m_selections;
+        m_doc->Begin(before.AsSpan());
+        for (usize k = 0; k < firsts.Size(); ++k)
+        {
+            const usize b = up ? k : firsts.Size() - 1 - k;
+            const u32 first = firsts[b], last = lasts[b];
+            const u32 neighbour = up ? first - 1 : last + 1;
+            const CodeRange span{CodePosition{up ? neighbour : first, 0},
+                                 CodePosition{up ? last : neighbour, static_cast<u32>(m_doc->LineText(up ? last : neighbour).Size())}};
+            const core::String block = m_doc->TextIn(CodeRange{CodePosition{first, 0}, CodePosition{last, static_cast<u32>(m_doc->LineText(last).Size())}});
+            const core::String other(m_doc->LineText(neighbour));
+            core::String put = up ? block : other;
+            put.Append(core::StringView(u8"\n"));
+            put.Append(up ? other.AsView() : block.AsView());
+            (void)m_doc->Replace(span, put.AsView());
+            for (CodeSelection& sel : after)
+                if (sel.Range().Start.Line >= first && sel.Range().End.Line <= last + 1)
+                {
+                    const auto shift = [up](CodePosition p) { return CodePosition{up ? p.Line - 1 : p.Line + 1, p.Column}; };
+                    sel = CodeSelection{shift(sel.Anchor), shift(sel.Head)};
+                }
+        }
+        m_doc->End(after.AsSpan());
+        SetSelections(after.AsSpan(), m_primary);
+    }
+
+    inline void CodeEditor::DuplicateLines(bool up)
+    {
+        core::Array<u32> firsts(MemoryAllocator()), lasts(MemoryAllocator());
+        LineBlocks(firsts, lasts);
+        const core::Array<CodeSelection> before = m_selections;
+        core::Array<CodeSelection> after = m_selections;
+        m_doc->Begin(before.AsSpan());
+        for (usize k = firsts.Size(); k-- > 0;)
+        {
+            const u32 first = firsts[k], last = lasts[k];
+            const u32 count = last - first + 1;
+            core::String block = m_doc->TextIn(CodeRange{CodePosition{first, 0}, CodePosition{last, static_cast<u32>(m_doc->LineText(last).Size())}});
+            // The copy after the block's end: the selections go to it (down) or stay on the first (up).
+            core::String put(core::StringView(u8"\n"));
+            put.Append(block.AsView());
+            (void)m_doc->Insert(CodePosition{last, static_cast<u32>(m_doc->LineText(last).Size())}, put.AsView());
+            for (CodeSelection& sel : after)
+            {
+                const bool inside = sel.Range().Start.Line >= first && sel.Range().End.Line <= last;
+                if (inside && !up)
+                    sel = CodeSelection{CodePosition{sel.Anchor.Line + count, sel.Anchor.Column}, CodePosition{sel.Head.Line + count, sel.Head.Column}};
+                else if (!inside && sel.Range().Start.Line > last)
+                    sel = CodeSelection{CodePosition{sel.Anchor.Line + count, sel.Anchor.Column}, CodePosition{sel.Head.Line + count, sel.Head.Column}};
+            }
+        }
+        m_doc->End(after.AsSpan());
+        SetSelections(after.AsSpan(), m_primary);
+    }
+
+    inline void CodeEditor::DeleteLines()
+    {
+        core::Array<u32> firsts(MemoryAllocator()), lasts(MemoryAllocator());
+        LineBlocks(firsts, lasts);
+        core::Array<Planned> edits(MemoryAllocator());
+        for (usize b = 0; b < firsts.Size(); ++b)
+        {
+            const u32 first = firsts[b], last = lasts[b];
+            if (last + 1 < m_doc->LineCount())
+                edits.PushBack(Planned{CodeRange{CodePosition{first, 0}, CodePosition{last + 1, 0}}, core::String{}});
+            else if (first > 0)
+                edits.PushBack(Planned{CodeRange{CodePosition{first - 1, static_cast<u32>(m_doc->LineText(first - 1).Size())},
+                                                 CodePosition{last, static_cast<u32>(m_doc->LineText(last).Size())}},
+                                       core::String{}});
+            else
+                edits.PushBack(Planned{CodeRange{CodePosition{0, 0}, m_doc->End()}, core::String{}});
+        }
+        ApplyPlanned(edits);
+    }
+
+    inline bool CodeEditor::AddNextOccurrence()
+    {
+        CodeSelection primary = GetPrimary();
+        if (primary.IsEmpty())
+        {
+            // First, the word at the caret.
+            const TextRange word = WordRangeAt(m_doc->LineText(primary.Head.Line), primary.Head.Column);
+            if (word.Start == word.End)
+                return false;
+            const CodeSelection one{CodePosition{primary.Head.Line, static_cast<u32>(word.Start)}, CodePosition{primary.Head.Line, static_cast<u32>(word.End)}};
+            core::Array<CodeSelection> next = m_selections;
+            next[m_primary] = one;
+            SetSelections(next.AsSpan(), m_primary);
+            return true;
+        }
+        const core::String needle = m_doc->TextIn(primary.Range());
+        // From the last selection's end, round to the start; one already selected is skipped.
+        CodePosition from = m_selections.Back().Range().End;
+        for (usize tries = 0; tries <= m_selections.Size(); ++tries)
+        {
+            CodeRange found;
+            if (!m_doc->Find(needle.AsView(), from, true, false, true, found))
+                return false;
+            bool taken = false;
+            for (const CodeSelection& sel : m_selections)
+                taken = taken || sel.Range() == found;
+            if (!taken)
+            {
+                m_selections.PushBack(CodeSelection{found.Start, found.End});
+                m_primary = m_selections.Size() - 1;
+                Normalize();
+                ResetGoals();
+                SelectionsChanged();
+                return true;
+            }
+            from = found.End;
+        }
+        return false;
+    }
+
+    inline void CodeEditor::SelectAllOccurrences()
+    {
+        if (GetPrimary().IsEmpty() && !AddNextOccurrence())
+            return;
+        const core::String needle = m_doc->TextIn(GetPrimary().Range());
+        core::Array<CodeSelection> all(MemoryAllocator());
+        CodePosition from{0, 0};
+        CodeRange found;
+        while (m_doc->Find(needle.AsView(), from, true, false, false, found))
+        {
+            all.PushBack(CodeSelection{found.Start, found.End});
+            from = found.End == found.Start ? m_doc->NextCharacter(found.End) : found.End;
+            if (found.End == m_doc->End())
+                break;
+        }
+        if (!all.IsEmpty())
+            SetSelections(all.AsSpan());
+    }
+
+    inline void CodeEditor::AddCursorVertically(bool up)
+    {
+        f32 goal = m_goals[m_primary];
+        const CodePosition from = GetPrimary().Head;
+        if ((up && from.Line == 0) || (!up && from.Line + 1 >= m_doc->LineCount()))
+            return;
+        const CodePosition at = Vertical(from, up ? -1 : 1, goal);
+        m_selections.PushBack(CodeSelection{at, at});
+        m_primary = m_selections.Size() - 1;
+        Normalize();
+        ResetGoals();
+        m_goals[m_primary] = goal;
+        SelectionsChanged();
+    }
+
+    inline bool CodeEditor::FindMatchingBracket(CodePosition at, CodeRange& bracket, CodeRange& match) const
+    {
+        if (m_language == nullptr || m_language->Brackets.IsEmpty())
+            return false;
+        at = m_doc->Clamp(at);
+        const auto skip = [](CodeToken t) { return t == CodeToken::String || t == CodeToken::Comment || t == CodeToken::Escape; };
+        // The bracket after the caret, else the one before it.
+        for (int side = 0; side < 2; ++side)
+        {
+            const core::StringView line = m_doc->LineText(at.Line);
+            if (side == 1 && at.Column == 0)
+                break;
+            for (const CodePair& pair : m_language->Brackets)
+                for (int which = 0; which < 2; ++which)
+                {
+                    const core::StringView mark = which == 0 ? pair.Open.AsView() : pair.Close.AsView();
+                    const u32 column = side == 0 ? at.Column : at.Column - static_cast<u32>(core::Min<usize>(mark.Size(), at.Column));
+                    if (mark.Size() == 0 || column + mark.Size() > line.Size() || line.SubStr(column, mark.Size()) != mark ||
+                        skip(TokenAtColumn(at.Line, column)))
+                        continue;
+                    bracket = CodeRange{CodePosition{at.Line, column}, CodePosition{at.Line, column + static_cast<u32>(mark.Size())}};
+                    // Out from it, its kind counted, past strings and comments, a few thousand lines at most.
+                    const core::StringView open = pair.Open.AsView(), close = pair.Close.AsView();
+                    const bool forward = which == 0;
+                    i32 depth = 0;
+                    u32 l = at.Line;
+                    i64 c = forward ? column : static_cast<i64>(column);
+                    for (u32 seen = 0; seen < 4000; ++seen)
+                    {
+                        const core::StringView text = m_doc->LineText(l);
+                        while (forward ? c < static_cast<i64>(text.Size()) : c >= 0)
+                        {
+                            const u32 col = static_cast<u32>(c);
+                            const bool isOpen = col + open.Size() <= text.Size() && text.SubStr(col, open.Size()) == open;
+                            const bool isClose = col + close.Size() <= text.Size() && text.SubStr(col, close.Size()) == close;
+                            if ((isOpen || isClose) && !skip(TokenAtColumn(l, col)))
+                            {
+                                depth += (isOpen == forward) ? 1 : -1;
+                                if (depth == 0)
+                                {
+                                    const u32 size = static_cast<u32>(isOpen ? open.Size() : close.Size());
+                                    match = CodeRange{CodePosition{l, col}, CodePosition{l, col + size}};
+                                    return true;
+                                }
+                            }
+                            c += forward ? 1 : -1;
+                        }
+                        if (forward ? l + 1 >= m_doc->LineCount() : l == 0)
+                            return false;
+                        l = forward ? l + 1 : l - 1;
+                        c = forward ? 0 : static_cast<i64>(m_doc->LineText(l).Size()) - 1;
+                    }
+                    return false;
+                }
+        }
+        return false;
     }
 
     inline void CodeEditor::Copy(bool cut)
@@ -1072,9 +1795,12 @@ export namespace experimental::gui
             event.Handled = true;
             return;
         }
-        if (key == KeyCode::Tab && mods == 0 && !m_readOnly)
+        if (key == KeyCode::Tab && (mods == 0 || mods == KeyModShift) && !m_readOnly)
         {
-            Indent();
+            if (mods == KeyModShift)
+                IndentLines(true);
+            else
+                Indent();
             event.Handled = true;
             return;
         }
@@ -1113,6 +1839,8 @@ export namespace experimental::gui
         }
         else if (m_dragAdds)
         {
+            m_columnX = local.x - TextLeft() + ScrollShift().x;
+            m_columnLine = at.Line;
             m_selections.PushBack(CodeSelection{unit.Start, unit.End});
             m_primary = m_selections.Size() - 1;
             Normalize();
@@ -1135,7 +1863,24 @@ export namespace experimental::gui
     {
         if (!m_dragging)
             return;
-        const CodePosition at = PositionAt(ConvertToNodeSpace(event.Position));
+        const core::Float2 local = ConvertToNodeSpace(event.Position);
+        const CodePosition at = PositionAt(local);
+        if (m_dragAdds && m_dragUnit == 1 && at.Line != m_columnLine)
+        {
+            // Alt+drag across lines: a column, a selection on each line between, at the two places
+            // across, in place of the others (VS Code's box selection).
+            const f32 x = local.x - TextLeft() + ScrollShift().x;
+            core::Array<CodeSelection> next(MemoryAllocator());
+            const u32 from = core::Min(m_columnLine, at.Line), to = core::Max(m_columnLine, at.Line);
+            for (u32 line = from; line <= to; ++line)
+                next.PushBack(CodeSelection{CodePosition{line, ColumnAtX(line, m_columnX)}, CodePosition{line, ColumnAtX(line, x)}});
+            m_selections = core::Move(next);
+            m_primary = m_selections.Size() - 1;
+            Normalize();
+            ResetGoals();
+            SelectionsChanged();
+            return;
+        }
         // From what the press selected to what the pointer is on, by the press's unit.
         CodeRange unit{at, at};
         if (m_dragUnit == 2)
@@ -1210,6 +1955,21 @@ export namespace experimental::gui
                 const f32 x0 = line == r.Start.Line ? XOf(r.Start) : 0.0f;
                 const f32 x1 = line == r.End.Line ? XOf(r.End) : XOf(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())}) + DigitWidth() * 0.5f;
                 ctx.VG().FillRect(Rectangle{textX + x0, rowTop(line), core::Max(0.0f, x1 - x0), lh}, selectionColor);
+            }
+        }
+        // The bracket by the primary caret and its match, marked.
+        {
+            CodeRange bracket, match;
+            if (GetPrimary().IsEmpty() && FindMatchingBracket(primary, bracket, match))
+            {
+                const Color mark = partColor(u8"bracket-match", Color{0.5f, 0.6f, 0.75f, 0.35f});
+                const CodeRange both[] = {bracket, match};
+                for (const CodeRange& r : both)
+                    if (r.Start.Line >= first && r.Start.Line <= last)
+                    {
+                        const f32 x0 = XOf(r.Start), x1 = XOf(r.End);
+                        ctx.VG().FillRect(Rectangle{textX + x0, rowTop(r.Start.Line), x1 - x0, lh}, mark);
+                    }
             }
         }
         for (u32 line = first; line <= last; ++line)

@@ -162,6 +162,26 @@ export namespace experimental::gui
             return CodePosition{LineCount() - 1, static_cast<u32>(m_lines.Back().Text.Size())};
         }
 
+        // === Search ===
+        /// The first match of `needle` (line feeds in it span lines) at or after `from`, going on from
+        /// the start to `from` when `wrap`; case folded for ASCII letters unless `matchCase`, only
+        /// where no name runs on either side when `wholeWord`. False when there is none.
+        bool Find(core::StringView needle, CodePosition from, bool matchCase, bool wholeWord, bool wrap, CodeRange& out) const
+        {
+            if (needle.Size() == 0)
+                return false;
+            from = Clamp(from);
+            for (u32 line = from.Line; line < LineCount(); ++line)
+                if (FindOnLine(needle, line, line == from.Line ? from.Column : 0u, ~u32(0), matchCase, wholeWord, out))
+                    return true;
+            if (!wrap)
+                return false;
+            for (u32 line = 0; line <= from.Line && line < LineCount(); ++line)
+                if (FindOnLine(needle, line, 0, line == from.Line ? from.Column : ~u32(0), matchCase, wholeWord, out))
+                    return true;
+            return false;
+        }
+
         // === Positions ===
         /// `position` within the text, its column back on a character's boundary.
         [[nodiscard]] CodePosition Clamp(CodePosition position) const noexcept
@@ -356,6 +376,85 @@ export namespace experimental::gui
         void SetOnChanged(core::Function<void(const CodeChange&)> callback) { m_onChanged = core::Move(callback); }
 
     private:
+        [[nodiscard]] static char8_t Folded(char8_t c, bool matchCase) noexcept
+        {
+            return !matchCase && c >= u8'A' && c <= u8'Z' ? static_cast<char8_t>(c - u8'A' + u8'a') : c;
+        }
+        [[nodiscard]] static bool IsNameChar(char8_t c) noexcept
+        {
+            return (c >= u8'a' && c <= u8'z') || (c >= u8'A' && c <= u8'Z') || (c >= u8'0' && c <= u8'9') || c == u8'_' ||
+                   static_cast<u8>(c) >= 0x80u;
+        }
+        [[nodiscard]] static bool SameText(core::StringView a, core::StringView b, bool matchCase) noexcept
+        {
+            if (a.Size() != b.Size())
+                return false;
+            for (usize i = 0; i < a.Size(); ++i)
+                if (Folded(a[i], matchCase) != Folded(b[i], matchCase))
+                    return false;
+            return true;
+        }
+        // A match beginning on `line` at a column in [first, last).
+        bool FindOnLine(core::StringView needle, u32 line, u32 first, u32 last, bool matchCase, bool wholeWord, CodeRange& out) const
+        {
+            usize split = 0;
+            while (split < needle.Size() && needle[split] != u8'\n')
+                ++split;
+            const core::StringView head = needle.SubStr(0, split);
+            const core::StringView text = LineText(line);
+            const bool spans = split < needle.Size();
+            for (usize column = first; column + head.Size() <= text.Size() && column < last; ++column)
+            {
+                if ((static_cast<u8>(text[column]) & 0xC0u) == 0x80u)
+                    continue; // inside a character
+                if (spans ? column + head.Size() != text.Size() : false)
+                    continue; // a match across lines begins with a line's end
+                if (!SameText(text.SubStr(column, head.Size()), head, matchCase))
+                    continue;
+                CodePosition end{line, static_cast<u32>(column + head.Size())};
+                if (spans)
+                {
+                    // Each whole line between, then the next line's start.
+                    usize at = split + 1;
+                    u32 next = line + 1;
+                    bool fits = true;
+                    while (fits)
+                    {
+                        usize stop = at;
+                        while (stop < needle.Size() && needle[stop] != u8'\n')
+                            ++stop;
+                        const core::StringView part = needle.SubStr(at, stop - at);
+                        if (next >= LineCount())
+                        {
+                            fits = false;
+                            break;
+                        }
+                        const core::StringView there = LineText(next);
+                        if (stop < needle.Size())
+                        {
+                            fits = SameText(there, part, matchCase);
+                            at = stop + 1;
+                            ++next;
+                            continue;
+                        }
+                        fits = part.Size() <= there.Size() && SameText(there.SubStr(0, part.Size()), part, matchCase);
+                        end = CodePosition{next, static_cast<u32>(part.Size())};
+                        break;
+                    }
+                    if (!fits)
+                        continue;
+                }
+                if (wholeWord)
+                {
+                    const core::StringView endLine = LineText(end.Line);
+                    if ((column > 0 && IsNameChar(text[column - 1])) || (end.Column < endLine.Size() && IsNameChar(endLine[end.Column])))
+                        continue;
+                }
+                out = CodeRange{CodePosition{line, static_cast<u32>(column)}, end};
+                return true;
+            }
+            return false;
+        }
         struct Line
         {
             core::String Text;

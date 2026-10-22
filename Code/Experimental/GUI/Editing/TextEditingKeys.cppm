@@ -26,8 +26,10 @@ export namespace experimental::gui
     /// What a single-line field does with Return: it submits.
     inline constexpr const char8_t* kTextSubmitCommand = u8"text.submit";
 
-    /// Binds the editing keys to the editing commands in the text contexts.
-    inline void BindTextEditingKeys(Keymap& keymap)
+    /// Binds the editing keys to the editing commands: in the text contexts (`context` empty), or,
+    /// every key a multiline editor takes, in `context` alone (a widget that edits text but is not
+    /// a text input to the keymap, so a field inside it is one alone: a code editor's find bar).
+    inline void BindTextEditingKeys(Keymap& keymap, core::StringView context = {})
     {
         using C = TextEditCommand;
         struct Binding
@@ -81,6 +83,14 @@ export namespace experimental::gui
             {u8"enter", C::InsertNewline},
             {u8"shift-enter", C::InsertNewline},
         };
+        if (context.Size() != 0)
+        {
+            for (const Binding& b : kEverywhere)
+                (void)keymap.Bind(core::StringView(b.Keys), TextEditCommandName(b.Command), context);
+            for (const Binding& b : kMultiline)
+                (void)keymap.Bind(core::StringView(b.Keys), TextEditCommandName(b.Command), context);
+            return;
+        }
         for (const Binding& b : kEverywhere)
             (void)keymap.Bind(core::StringView(b.Keys), TextEditCommandName(b.Command), core::StringView(u8"textinput"));
         for (const Binding& b : kMultiline)

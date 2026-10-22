@@ -1,9 +1,10 @@
 add_executable(GUI.Code.Tests
     CodeDocumentTests.cpp
     CodeEditorTests.cpp
+    CodeLanguageTests.cpp
     TestsMain.cpp)
 
-target_link_libraries(GUI.Code.Tests PRIVATE Experimental::GUI.Code Experimental::GUI doctest::doctest)
+target_link_libraries(GUI.Code.Tests PRIVATE Experimental::GUI.Code Experimental::GUI Foundation::Xml.Serialization doctest::doctest)
 
 target_compile_definitions(GUI.Code.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

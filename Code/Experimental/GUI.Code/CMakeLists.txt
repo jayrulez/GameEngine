@@ -11,6 +11,7 @@ target_sources(GUI.Code
         FILE_SET guicode_modules TYPE CXX_MODULES FILES
             CodeModule.cppm
             CodeDocument.cppm
+            CodeLanguage.cppm
             CodeEditor.cppm
     PRIVATE
         CodeReflection.cpp)

@@ -17,6 +17,11 @@
 // the arrows, Home and End, the word and page moves, deleting, undo, the clipboard), each run at
 // every caret; typing goes in at each, one undo step that puts every caret back; Return keeps the
 // line's indent; Tab indents; Escape leaves one caret. The gutter numbers the lines.
+//
+// Given a language (C2), each line's tokens are kept with the state it began in and its hash, and a
+// line is tokenized again only where it changed or the line before now ends otherwise; tokenizing
+// runs to the last line in view. Each token draws in its part's colour (`codeeditor::keyword {
+// color: ... }`), so a theme restyles code.
 
 module;
 #include "Core/Prelude.h"
@@ -28,6 +33,7 @@ import foundation.core;
 import foundation.fonts;
 import experimental.gui;
 import :code_document;
+import :code_language;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -86,6 +92,27 @@ export namespace experimental::gui
             SetSelections(core::Span<const CodeSelection>{});
         }
         [[nodiscard]] core::String GetText() const { return m_doc->GetText(); }
+
+        /// The language its code is in (its owner keeps it, Prepared); null: plain text.
+        void SetLanguage(const CodeLanguage* language)
+        {
+            m_language = language;
+            m_lex.Clear();
+            m_cleanTo = 0;
+            m_views.Clear();
+            Invalidate();
+        }
+        [[nodiscard]] const CodeLanguage* GetLanguage() const noexcept { return m_language; }
+        /// Line `line`'s tokens (tokenizing up to it).
+        [[nodiscard]] core::Span<const CodeSpan> TokensOf(u32 line) const
+        {
+            if (m_language == nullptr || line >= m_doc->LineCount())
+                return {};
+            EnsureLexed(line);
+            return m_lex[line].Spans.AsSpan();
+        }
+        /// How many lines have been tokenized since it began (each time a line was), for a test.
+        [[nodiscard]] u64 TokenizedCount() const noexcept { return m_tokenized; }
 
         /// Whether it edits (or only shows, selects and copies).
         void SetReadOnly(bool readOnly) noexcept { m_readOnly = readOnly; }
@@ -186,6 +213,8 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"selection"));
             out.PushBack(core::StringView(u8"caret"));
             out.PushBack(core::StringView(u8"composition"));
+            for (usize i = 1; i < static_cast<usize>(CodeToken::Count); ++i)
+                out.PushBack(CodeTokenName(static_cast<CodeToken>(i)));
         }
 
     protected:
@@ -204,6 +233,13 @@ export namespace experimental::gui
             m_styleText = style;
             m_views.Clear();
             RequestLayout();
+            Invalidate();
+        }
+        // A token's colour changed: its lines are coloured again.
+        void OnPartStyleChange(core::StringView part) override
+        {
+            UIWidget::OnPartStyleChange(part);
+            m_views.Clear();
             Invalidate();
         }
         void OnLayout() override
@@ -266,10 +302,20 @@ export namespace experimental::gui
         static constexpr f32 kGutterPad = 6.0f;
         static constexpr f32 kTextGap = 8.0f;
 
+        struct LineLex
+        {
+            u64 Hash = 0;
+            CodeLexState Entry;
+            CodeLexState Exit;
+            core::Array<CodeSpan> Spans;
+            u64 Stamp = 0; // raised each time it is tokenized
+            bool Valid = false;
+        };
         struct LineView
         {
             u64 Hash = 0;
             u32 TabSize = 0;
+            u64 LexStamp = ~u64(0);
             bool Laid = false;
             core::String Shown;      // the line with its tabs to their stops (cut when very long)
             core::Array<u32> ShownAt; // a byte column's place in Shown (empty: the same)
@@ -294,6 +340,15 @@ export namespace experimental::gui
         }
         void DocumentChanged(const CodeChange& change)
         {
+            // The tokens of the lines below move with them; the changed lines' go; what follows a
+            // change is checked again from there (its state may differ now).
+            const usize lexFirst = core::Min<usize>(change.FirstLine, m_lex.Size());
+            const usize lexRemoved = core::Min<usize>(change.RemovedLines, m_lex.Size() - lexFirst);
+            for (usize i = 0; i < lexRemoved; ++i)
+                m_lex.RemoveAt(lexFirst);
+            for (u32 i = 0; i < change.InsertedLines && lexFirst <= m_lex.Size(); ++i)
+                m_lex.Insert(lexFirst, LineLex{});
+            m_cleanTo = core::Min<u32>(m_cleanTo, change.FirstLine);
             // The views below the change move with their lines; the changed ones go.
             const usize first = core::Min<usize>(change.FirstLine, m_views.Size());
             const usize removed = core::Min<usize>(change.RemovedLines, m_views.Size() - first);
@@ -523,8 +578,47 @@ export namespace experimental::gui
         void Newline();
         void Indent();
 
+        // Tokenizes from the first line not known to agree with the one before, up to `line`: a line is
+        // tokenized again where its text changed or its entry state did; the rest keep their tokens.
+        void EnsureLexed(u32 line) const
+        {
+            if (m_language == nullptr)
+                return;
+            while (m_lex.Size() < m_doc->LineCount())
+                m_lex.PushBack(LineLex{});
+            for (u32 i = m_cleanTo; i <= line && i < m_doc->LineCount(); ++i)
+            {
+                const CodeLexState entry = i == 0 ? CodeLexState{} : m_lex[i - 1].Exit;
+                LineLex& lex = m_lex[i];
+                const u64 hash = m_doc->LineHash(i);
+                if (lex.Valid && lex.Hash == hash && lex.Entry == entry)
+                    continue;
+                lex.Valid = true;
+                lex.Hash = hash;
+                lex.Entry = entry;
+                CodeLexState state = entry;
+                m_language->Tokenize(m_doc->LineText(i), state, lex.Spans);
+                lex.Exit = state;
+                ++lex.Stamp;
+                ++m_tokenized;
+            }
+            m_cleanTo = core::Max(m_cleanTo, core::Min(line + 1, m_doc->LineCount()));
+        }
+        // A token's colour: its part's, else the text's.
+        [[nodiscard]] Color TokenColor(CodeToken token) const
+        {
+            if (token == CodeToken::Text)
+                return GetTextColor();
+            const PartStyle& part = GetPartStyle(CodeTokenName(token));
+            return part.HasColor ? part.TextColor : GetTextColor();
+        }
+
         CodeDocument m_own;
         CodeDocument* m_doc = nullptr;
+        const CodeLanguage* m_language = nullptr;
+        mutable core::Array<LineLex> m_lex; // by line, tokenized up to the last line asked for
+        mutable u32 m_cleanTo = 0;          // lines before it agree with the lines before them
+        mutable u64 m_tokenized = 0;
         core::Array<CodeSelection> m_selections;
         core::Array<f32> m_goals; // each selection's goal across, for Up and Down (below 0: none)
         usize m_primary = 0;
@@ -558,8 +652,15 @@ export namespace experimental::gui
             slot = core::MakeUnique<LineView>(const_cast<CodeEditor*>(this)->MemoryAllocator());
         LineView& view = *slot;
         const u64 hash = m_doc->LineHash(line);
-        if (view.Laid && view.Hash == hash && view.TabSize == m_tabSize)
+        u64 stamp = 0;
+        if (m_language != nullptr)
+        {
+            EnsureLexed(line);
+            stamp = m_lex[line].Stamp;
+        }
+        if (view.Laid && view.Hash == hash && view.TabSize == m_tabSize && view.LexStamp == stamp)
             return view;
+        view.LexStamp = stamp;
         view.Laid = true;
         view.Hash = hash;
         view.TabSize = m_tabSize;
@@ -596,7 +697,51 @@ export namespace experimental::gui
         }
         if (m_styleText)
             m_styleText(view.Glyphs);
-        view.Glyphs.SetString(view.Shown.AsView());
+        if (m_language == nullptr)
+            view.Glyphs.SetString(view.Shown.AsView());
+        else
+        {
+            // Its tokens as the core's rich text: each run in its token's colour ("[[" a "[").
+            core::String markup;
+            const core::StringView shown = view.Shown.AsView();
+            const auto append = [&markup](core::StringView text)
+            {
+                for (usize i = 0; i < text.Size(); ++i)
+                    markup.Append(text[i] == u8'[' ? core::StringView(u8"[[") : text.SubStr(i, 1));
+            };
+            u32 done = 0;
+            for (const CodeSpan& span : m_lex[line].Spans)
+            {
+                const u32 from = ShownColumn(view, span.Start), to = ShownColumn(view, span.End);
+                if (from >= shown.Size())
+                    break;
+                if (from > done)
+                    append(shown.SubStr(done, from - done));
+                const core::StringView text = shown.SubStr(from, core::Min<usize>(to, shown.Size()) - from);
+                if (span.Token == CodeToken::Text)
+                    append(text);
+                else
+                {
+                    const Color c = TokenColor(span.Token);
+                    char8_t tag[] = u8"[color=#rrggbbaa]";
+                    const f32 channels[4] = {c.r, c.g, c.b, c.a};
+                    constexpr char8_t kHex[] = u8"0123456789abcdef";
+                    for (usize k = 0; k < 4; ++k)
+                    {
+                        const u32 v = static_cast<u32>(core::Clamp(channels[k], 0.0f, 1.0f) * 255.0f + 0.5f);
+                        tag[8 + k * 2] = kHex[v >> 4];
+                        tag[9 + k * 2] = kHex[v & 15u];
+                    }
+                    markup.Append(core::StringView(tag, sizeof(tag) - 1));
+                    append(text);
+                    markup.Append(core::StringView(u8"[/color]"));
+                }
+                done = core::Min<u32>(to, static_cast<u32>(shown.Size()));
+            }
+            if (done < shown.Size())
+                append(shown.SubStr(done, shown.Size() - done));
+            view.Glyphs.SetMarkup(markup.AsView());
+        }
         m_widest = core::Max(m_widest, view.Glyphs.LayoutFor(Rect{}).Width);
         return view;
     }

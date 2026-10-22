@@ -11,6 +11,7 @@ module;
 export module experimental.gui.code;
 
 export import :code_document; // C0: lines, positions, anchors, edits, undo with selections
+export import :code_language; // C2: a language's definition (its owners'), its tokenizer
 export import :code_editor;   // C1: the view: shaped lines in view, several carets, the keymap's text commands
 
 export namespace experimental::gui

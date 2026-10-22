@@ -147,15 +147,16 @@ export namespace experimental::gui
             const core::Span<const CurveKey> keys = m_value.AsCurve();
             if (keys.IsEmpty())
                 return;
-            // Across the keys' times (from 0), up the range or the values the curve reaches.
+            // Across the keys' times (from 0), up the range or the values the curve reaches, found at
+            // the points it is drawn through (a steep tangent's overshoot included); held in its box.
             const f32 end = core::Max(keys[keys.Size() - 1].time, 1e-3f);
             f32 low = m_low, high = m_high;
             if (high <= low)
             {
                 low = high = keys[0].value;
-                for (i32 s = 0; s <= 32; ++s)
+                for (f32 x = 0.0f; x <= box.width; x += 2.0f)
                 {
-                    const f32 v = EvaluateCurve(keys, end * static_cast<f32>(s) / 32.0f);
+                    const f32 v = EvaluateCurve(keys, end * x / box.width);
                     low = core::Min(low, v);
                     high = core::Max(high, v);
                 }
@@ -165,6 +166,7 @@ export namespace experimental::gui
                     high += 0.5f;
                 }
             }
+            ctx.PushClip(box);
             const f32 inset = 2.0f;
             vg::PathBuilder line;
             for (f32 x = 0.0f; x <= box.width; x += 2.0f)
@@ -180,6 +182,7 @@ export namespace experimental::gui
             Color stroke = part.HasBackground ? part.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
             stroke.a *= part.Opacity;
             ctx.VG().StrokePath(line.ToPath(), stroke, vg::StrokeStyle(1.5f));
+            ctx.PopClip();
         }
 
     private:

@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
+import foundation.vg;
 import experimental.gui;
 import experimental.gui.toolkit;
 
@@ -198,4 +199,40 @@ TEST_CASE("curve editors: a gradient's bar opens its view; its edits preview, cl
     bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
     CHECK_FALSE(editor->IsViewOpen());
     CHECK(bed.host.Last() == SV(u8"cancel p"));
+}
+
+TEST_CASE("curve editors: a row's curve stays in its box, a steep tangent's overshoot clipped or framed")
+{
+    Bed bed;
+    core::CurveKey keys[2]{};
+    keys[0] = core::CurveKey{0.0f, 0.0f, 0.0f, 40.0f, core::CurveKeyInterpolation::Cubic, core::CurveTangentMode::Broken};
+    keys[1] = core::CurveKey{1.0f, 1.0f, -40.0f, 0.0f, core::CurveKeyInterpolation::Cubic, core::CurveTangentMode::Broken};
+    PropertyInfo info = Info(PropertyKind::Curve);
+    info.HasRange = true; // a range the curve leaves by far
+    info.Min = 0.0;
+    info.Max = 1.0;
+    PropertyValue value;
+    value.Value = Variant::FromCurve(keys);
+    auto editor = bed.Editor<CurvePropertyEditor>(info, value);
+    const Rect box = editor->GetPreview()->GetScreenBounds();
+    REQUIRE(box.width > 0.0f);
+
+    // The preview alone: what it draws, less what a clip cuts away, spans no more than its box.
+    foundation::vg::VGContext vg;
+    DrawContext ctx{vg};
+    editor->GetPreview()->Draw(ctx);
+    const foundation::vg::VGBatch& batch = vg.GetBatch();
+    f32 low = 1e9f, high = -1e9f;
+    for (const foundation::vg::VGCommand& command : batch.commands)
+        for (core::i32 k = 0; k < command.indexCount; ++k)
+        {
+            const foundation::vg::VGVertex& v = batch.vertices[batch.indices[static_cast<core::usize>(command.startIndex + k)]];
+            f32 y = v.position.y;
+            if (command.scissored || command.clipMode == foundation::vg::VGClipMode::Scissor)
+                y = core::Clamp(y, command.clipRect.y, command.clipRect.y + command.clipRect.height);
+            low = core::Min(low, y);
+            high = core::Max(high, y);
+        }
+    REQUIRE(high > low);
+    CHECK(high - low <= box.height + 2.0f);
 }

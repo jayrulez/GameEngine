@@ -32,7 +32,8 @@
 // Folding (C7): ranges from the language's brackets, its indentation or its regions, or the host's;
 // a folded range's lines hide. Soft wrap breaks long lines at the view's width. One map from lines
 // to rows serves the carets, the pointer, the scroll and the drawing, so a fold is one row and a
-// wrapped line several.
+// wrapped line several. Whitespace is drawn by VS Code's choices (none, boundary, selection,
+// trailing, all).
 
 module;
 #include "Core/Prelude.h"
@@ -76,6 +77,7 @@ export namespace experimental::gui
     inline constexpr const char8_t* kCodeFindPrevious = u8"code.find-previous";
     inline constexpr const char8_t* kCodeComplete = u8"code.complete";
     inline constexpr const char8_t* kCodeToggleSoftWrap = u8"code.toggle-soft-wrap";
+    inline constexpr const char8_t* kCodeToggleWhitespace = u8"code.toggle-whitespace";
     inline constexpr const char8_t* kCodeFold = u8"code.fold";
     inline constexpr const char8_t* kCodeUnfold = u8"code.unfold";
     inline constexpr const char8_t* kCodeFoldAll = u8"code.fold-all";
@@ -148,6 +150,16 @@ export namespace experimental::gui
     }
 
     /// How bad a diagnostic is: each draws in its part's colour (`codeeditor::error`).
+    /// Which whitespace is drawn (C7, VS Code's choices): a dot for a space, an arrow for a tab.
+    enum class CodeWhitespace : u8
+    {
+        None,
+        Boundary,  ///< all but a single space between words
+        Selection, ///< what the selections hold
+        Trailing,  ///< what ends a line
+        All,
+    };
+
     /// A fold (C7): its first line stays in view; folded, the lines after it to its last hide.
     struct CodeFoldRange
     {
@@ -249,6 +261,10 @@ export namespace experimental::gui
                     (void)Unfold(sel.Head.Line);
             });
             command(kCodeToggleSoftWrap, [this]() { SetSoftWrap(!m_wrap); });
+            command(kCodeToggleWhitespace, [this]()
+            {
+                SetShowWhitespace(m_whitespace == CodeWhitespace::None ? CodeWhitespace::All : CodeWhitespace::None);
+            });
             command(kCodeFoldAll, [this]() { FoldAll(); });
             command(kCodeUnfoldAll, [this]() { UnfoldAll(); });
             command(kCodeCompletionNext, [this]() { m_completion->MoveSelection(1, true); });
@@ -344,6 +360,55 @@ export namespace experimental::gui
             Invalidate();
         }
         [[nodiscard]] bool GetSoftWrap() const noexcept { return m_wrap; }
+        /// Which whitespace it draws (none by default); its colour the `whitespace` part's.
+        void SetShowWhitespace(CodeWhitespace show)
+        {
+            m_whitespace = show;
+            Invalidate();
+        }
+        [[nodiscard]] CodeWhitespace GetShowWhitespace() const noexcept { return m_whitespace; }
+        /// Whether the space or tab at `at` is drawn, by the choice.
+        [[nodiscard]] bool ShowsWhitespaceAt(CodePosition at) const
+        {
+            if (m_whitespace == CodeWhitespace::None || at.Line >= m_doc->LineCount())
+                return false;
+            const core::StringView text = m_doc->LineText(at.Line);
+            if (at.Column >= text.Size() || (text[at.Column] != u8' ' && text[at.Column] != u8'\t'))
+                return false;
+            const auto blank = [](char8_t c) { return c == u8' ' || c == u8'\t'; };
+            switch (m_whitespace)
+            {
+            case CodeWhitespace::All:
+                return true;
+            case CodeWhitespace::Trailing:
+            {
+                for (usize i = at.Column; i < text.Size(); ++i)
+                    if (!blank(text[i]))
+                        return false;
+                return true;
+            }
+            case CodeWhitespace::Boundary:
+            {
+                // A lone space with text either side is not drawn; a tab, a run, an indent or the
+                // end's are.
+                if (text[at.Column] == u8'\t')
+                    return true;
+                const bool before = at.Column > 0 && !blank(text[at.Column - 1]);
+                const bool after = at.Column + 1 < text.Size() && !blank(text[at.Column + 1]);
+                return !(before && after);
+            }
+            case CodeWhitespace::Selection:
+                for (const CodeSelection& sel : m_selections)
+                {
+                    const CodeRange r = sel.Range();
+                    if (!sel.IsEmpty() && r.Start <= at && at < r.End)
+                        return true;
+                }
+                return false;
+            default:
+                return false;
+            }
+        }
 
         // === Selections ===
         /// The selections, in the document's order, none overlapping.
@@ -686,6 +751,7 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"find-current"));
             out.PushBack(core::StringView(u8"fold"));
             out.PushBack(core::StringView(u8"fold-placeholder"));
+            out.PushBack(core::StringView(u8"whitespace"));
             static constexpr const char8_t* kMarks[] = {u8"marker", u8"breakpoint", u8"execution", u8"execution-line", u8"bookmark",
                                                         u8"error", u8"warning", u8"info", u8"hint"};
             for (const char8_t* part : kMarks)
@@ -1279,6 +1345,37 @@ export namespace experimental::gui
             ++m_foldStamp;
             RequestLayout();
             Invalidate();
+        }
+        // A line's whitespace as the choice says: a dot mid-space, an arrow across a tab.
+        void DrawWhitespace(DrawContext& ctx, u32 line, const LineView& view, const TextLayout& layout, f32 textX, f32 top, Color color) const
+        {
+            if (layout.Lines.IsEmpty())
+                return;
+            const core::StringView text = m_doc->LineText(line);
+            const f32 lh = LineHeight();
+            const usize upTo = core::Min<usize>(text.Size(), kLongestLaidOut);
+            for (u32 column = 0; column < upTo; ++column)
+            {
+                if ((text[column] != u8' ' && text[column] != u8'\t') || !ShowsWhitespaceAt(CodePosition{line, column}))
+                    continue;
+                const usize from = ShownColumn(view, column), to = ShownColumn(view, column + 1);
+                const usize sub = layout.LineOf(from);
+                const f32 x0 = textX + layout.CaretXOnLine(from, sub), x1 = textX + layout.CaretXOnLine(to, sub);
+                const f32 y = top + static_cast<f32>(sub) * lh + lh * 0.5f;
+                if (text[column] == u8' ')
+                    ctx.VG().FillCircle(core::Float2{(x0 + x1) * 0.5f, y}, core::Max(1.0f, lh * 0.07f), color);
+                else
+                {
+                    const f32 head = core::Min(lh * 0.2f, (x1 - x0) * 0.4f);
+                    vg::PathBuilder arrow;
+                    arrow.MoveTo(x0 + 2.0f, y);
+                    arrow.LineTo(x1 - 2.0f, y);
+                    arrow.MoveTo(x1 - 2.0f - head, y - head);
+                    arrow.LineTo(x1 - 2.0f, y);
+                    arrow.LineTo(x1 - 2.0f - head, y + head);
+                    ctx.VG().StrokePath(arrow.ToPath(), color, vg::StrokeStyle(1.0f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
+                }
+            }
         }
         // A folded line's placeholder, after its text (local space).
         [[nodiscard]] Rect PlaceholderRect(u32 line) const
@@ -1876,6 +1973,7 @@ export namespace experimental::gui
         mutable f32 m_rowsWrap = -1.0f;
         mutable u32 m_rowsTabSize = 0;
         bool m_wrap = false;
+        CodeWhitespace m_whitespace = CodeWhitespace::None;
         f32 m_wrapWidth = 0.0f; // the text's width, while wrapping
         bool m_gutterHover = false;
         Text m_foldText; // a folded line's placeholder
@@ -3352,6 +3450,8 @@ export namespace experimental::gui
                 continue;
             LineView& view = View(line);
             const TextLayout& layout = LayoutOf(view);
+            if (m_whitespace != CodeWhitespace::None)
+                DrawWhitespace(ctx, line, view, layout, textX, rowTop(line), textColor(u8"whitespace", numberColor));
             // Its rows from its first (each a line height: the layout's own, the same font's).
             const f32 lead = layout.Lines.IsEmpty() ? 0.0f : (lh - layout.Lines[0].Height) * 0.5f;
             view.Glyphs.DrawLayout(ctx, layout, core::Float2{textX, rowTop(line) + lead});

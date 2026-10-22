@@ -36,7 +36,7 @@ export namespace experimental::gui
                 --code-find-match: #4a3d1e; --code-find-current: #7a5a1a; --code-find-bar: #232831;
                 --code-error: #ff5370; --code-warning: #ffcb6b; --code-info: #82aaff; --code-hint: #6b7586;
                 --code-breakpoint: #e5534b; --code-execution: #ffcb6b; --code-execution-line: #2c2a1c; --code-bookmark: #82aaff;
-                --code-completion: #1f232b; --code-completion-selected: #2a3a55; --code-completion-match: #82aaff;
+                --code-whitespace: #3a414d; --code-completion: #1f232b; --code-completion-selected: #2a3a55; --code-completion-match: #82aaff;
             }
             @media (prefers-color-scheme: light) {
                 :root {
@@ -51,7 +51,7 @@ export namespace experimental::gui
                     --code-find-match: #fbe9b7; --code-find-current: #f5cf6b; --code-find-bar: #eef1f5;
                     --code-error: #cf222e; --code-warning: #9a6700; --code-info: #0969da; --code-hint: #6e7781;
                     --code-breakpoint: #cf222e; --code-execution: #bf8700; --code-execution-line: #fff5d1; --code-bookmark: #0969da;
-                    --code-completion: #ffffff; --code-completion-selected: #dbe7fb; --code-completion-match: #0969da;
+                    --code-whitespace: #c4cad3; --code-completion: #ffffff; --code-completion-selected: #dbe7fb; --code-completion-match: #0969da;
                 }
             }
             codeeditor { background-color: var(--code-background); color: var(--code-text); padding: 4px 0; }
@@ -76,6 +76,7 @@ export namespace experimental::gui
             codeeditor::marker { background-color: var(--code-line-number); }
             codeeditor::fold { color: var(--code-line-number); }
             codeeditor::fold-placeholder { background-color: var(--code-bracket-match); }
+            codeeditor::whitespace { color: var(--code-whitespace); }
             codefindbar { background-color: var(--code-find-bar); border-radius: var(--radius-small);
                           box-shadow: 0 2px 8px var(--shadow-color); font-size: var(--font-small); }
             codefindbar label.count { color: var(--text-dim); padding: 0 4px; }

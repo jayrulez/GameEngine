@@ -7,6 +7,7 @@
 // share; folding moves carets out, and a caret going in unfolds; folds go with their lines through
 // edits and go when their bracket does; the gutter's chevron and the placeholder; VS Code's keys.
 // Wrapping, a long line's rows join the same map, so Down, the pointer and folds go by them.
+// Whitespace drawn by VS Code's choices.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <fstream>
@@ -14,6 +15,7 @@
 #include <string>
 import foundation.core;
 import foundation.fonts;
+import foundation.vg;
 import foundation.xml;
 import foundation.xml.serialization;
 import experimental.gui;
@@ -23,6 +25,7 @@ using namespace experimental::gui;
 namespace core = foundation::core;
 namespace fonts = foundation::fonts;
 namespace xml = foundation::xml;
+namespace vg = foundation::vg;
 using core::f32;
 using core::u32;
 using core::usize;
@@ -332,4 +335,65 @@ TEST_CASE("code soft wrap: a word longer than a row breaks; a fold hides every r
     CHECK(bed.editor->RowCount() == 2u);
     bed.editor->UnfoldAll();
     CHECK(bed.editor->RowCount() == 3u);
+}
+
+TEST_CASE("code whitespace: drawn by the choice: all, a line's end, all but a single space between words, the selections'")
+{
+    Bed bed("angelscript", u8"  a b  c\t\nx y  ");
+    const auto shows = [&](u32 line, u32 column) { return bed.editor->ShowsWhitespaceAt(At(line, column)); };
+    CHECK_FALSE(shows(0, 0)); // none by default
+    bed.editor->SetShowWhitespace(CodeWhitespace::All);
+    CHECK(shows(0, 0));
+    CHECK(shows(0, 3));
+    CHECK(shows(0, 8)); // the tab
+    CHECK_FALSE(shows(0, 2)); // a letter
+    bed.editor->SetShowWhitespace(CodeWhitespace::Trailing);
+    CHECK(shows(1, 3));
+    CHECK(shows(1, 4));
+    CHECK_FALSE(shows(1, 1));
+    CHECK(shows(0, 8));
+    CHECK_FALSE(shows(0, 5));
+    bed.editor->SetShowWhitespace(CodeWhitespace::Boundary);
+    CHECK(shows(0, 0)); // the indent
+    CHECK(shows(0, 1));
+    CHECK_FALSE(shows(0, 3)); // one between words
+    CHECK(shows(0, 5)); // a run
+    CHECK(shows(0, 6));
+    CHECK(shows(0, 8));
+    bed.editor->SetShowWhitespace(CodeWhitespace::Selection);
+    const CodeSelection some{At(0, 0), At(0, 4)};
+    bed.editor->SetSelections(core::Span<const CodeSelection>(&some, 1));
+    CHECK(shows(0, 1));
+    CHECK(shows(0, 3));
+    CHECK_FALSE(shows(0, 5));
+}
+
+TEST_CASE("code view: draws wrapped, folded, with its whitespace, a selection across rows and the chevrons")
+{
+    core::String text(SV(u8"void f()\n{\n\tint a = 1;   \n"));
+    for (int i = 0; i < 40; ++i)
+        text.Append(SV(u8"word "));
+    text.Append(SV(u8"\n}\n"));
+    Bed bed("angelscript");
+    bed.editor->SetText(text.AsView());
+    bed.editor->SetSoftWrap(true);
+    bed.editor->SetShowWhitespace(CodeWhitespace::All);
+    bed.Frame();
+    const CodeSelection across{At(2, 2), At(3, 120)};
+    bed.editor->SetSelections(core::Span<const CodeSelection>(&across, 1));
+    bed.D().InjectMouseMove(bed.editor->ConvertToRootSpace(core::Float2{2.0f, 20.0f})); // the gutter: chevrons
+    bed.Frame();
+    vg::VGContext canvas;
+    {
+        DrawContext ctx{canvas};
+        bed.root->Draw(ctx);
+    }
+    REQUIRE(bed.editor->Fold(1));
+    bed.editor->SetCaret(At(0, 4));
+    bed.Frame();
+    {
+        DrawContext ctx{canvas};
+        bed.root->Draw(ctx);
+    }
+    CHECK(bed.editor->RowCount() == 4u); // the function's line, the brace's, the close's, the end
 }

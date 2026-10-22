@@ -661,8 +661,10 @@ TEST_CASE("rtti: a BoundedArray reflects a count-bound C-array as a clamped cont
     const Instance sub(prop->address(inst), prop->type); // address = the owner identity
     const ContainerInfo& c = *prop->type->container;
 
-    // Size follows the COUNT, not the capacity; elements read/write through in place.
+    // Size follows the COUNT, not the capacity, which it says (an editor's "full"); elements
+    // read/write through in place.
     CHECK(ContainerSize(c, sub) == 2u);
+    CHECK(ContainerCapacity(c) == 4u);
     CHECK(ContainerGetAt(c, sub, 0).Get<int>() == 10);
     CHECK(ContainerGetAt(c, sub, 1).Get<int>() == 20);
     CHECK(ContainerSetAt(c, sub, 0, Variant::From(99)).IsOk());
@@ -686,6 +688,7 @@ TEST_CASE("rtti: container mutation - emplaceDefault / removeAt / moveElement")
     arr.PushBack(30);
     const ContainerInfo& c = *TypeOf<Array<int>>().container;
     Instance inst = Instance::From(&arr);
+    CHECK(ContainerCapacity(c) == 0u); // an Array has no limit
 
     // Homogeneous value elements are also reachable by address (the list-editor descent path).
     CHECK(ContainerAddressAt(c, inst, 1).Pointer() == &arr[1]);

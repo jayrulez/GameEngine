@@ -717,6 +717,9 @@ export namespace foundation::core
         // Variant, which only carries copyable values or RefPtr<Object>. Object containers may fill it
         // too (dynamic type), giving both flavors one uniform descent path. Null = no address access.
         Instance (*addressAt)(const Instance&, usize index) = nullptr;
+        // The most elements it holds: a BoundedArray's N, so an editor can say a list is full
+        // before an add fails. 0 = no limit (an Array<T>).
+        usize capacity = 0;
     };
 
     [[nodiscard]] inline bool IsContainer(const TypeInfo& type) noexcept
@@ -729,6 +732,9 @@ export namespace foundation::core
         return (static_cast<u32>(container.flags) &
                 static_cast<u32>(ContainerFlags::PolymorphicElements)) != 0;
     }
+
+    /// The most elements `container` holds; 0 when it has no limit.
+    [[nodiscard]] inline usize ContainerCapacity(const ContainerInfo& container) noexcept { return container.capacity; }
 
     [[nodiscard]] inline usize ContainerSize(const ContainerInfo& container,
                                              const Instance& instance)
@@ -1817,7 +1823,8 @@ export namespace foundation::core
                 .emplaceDefault =
                     &detail::BoundedEmplaceDefault<Owner, Elem, N, ArrayMember, CountMember>,
                 .removeAt = &detail::BoundedRemoveAt<Owner, Elem, N, ArrayMember, CountMember>,
-                .moveElement = &detail::BoundedMove<Owner, Elem, N, ArrayMember, CountMember>};
+                .moveElement = &detail::BoundedMove<Owner, Elem, N, ArrayMember, CountMember>,
+                .capacity = N};
             static const TypeInfo boundedType = []()
             {
                 TypeInfo info = MakeTypeInfo<Elem>("BoundedArray", "rtti::core", nullptr);

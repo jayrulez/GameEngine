@@ -3,6 +3,7 @@ add_executable(GUI.Code.Tests
     CodeEditorTests.cpp
     CodeLanguageTests.cpp
     CodeEditingTests.cpp
+    CodeCompletionTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Code.Tests PRIVATE Experimental::GUI.Code Experimental::GUI Foundation::Xml.Serialization doctest::doctest)

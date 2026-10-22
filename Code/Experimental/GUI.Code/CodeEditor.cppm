@@ -23,6 +23,11 @@
 // line is tokenized again only where it changed or the line before now ends otherwise; tokenizing
 // runs to the last line in view. Each token draws in its part's colour (`codeeditor::keyword {
 // color: ... }`), so a theme restyles code.
+//
+// Given its host's language service (C6), a name typed (or a trigger, or Ctrl+Space) opens the
+// completion list below the word, a popup that leaves it the focus; while it shows, the editor
+// declares "completing" beside "codeeditor", so the list's keys win; the service's word under the
+// pointer joins the tooltip after the diagnostics.
 
 module;
 #include "Core/Prelude.h"
@@ -37,6 +42,7 @@ import experimental.gui;
 import :code_document;
 import :code_language;
 import :code_find_bar;
+import :code_completion;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -63,6 +69,13 @@ export namespace experimental::gui
     inline constexpr const char8_t* kCodeGoToLine = u8"code.go-to-line";
     inline constexpr const char8_t* kCodeFindNext = u8"code.find-next";
     inline constexpr const char8_t* kCodeFindPrevious = u8"code.find-previous";
+    inline constexpr const char8_t* kCodeComplete = u8"code.complete";
+    inline constexpr const char8_t* kCodeCompletionNext = u8"code.completion-next";
+    inline constexpr const char8_t* kCodeCompletionPrevious = u8"code.completion-previous";
+    inline constexpr const char8_t* kCodeCompletionPageDown = u8"code.completion-page-down";
+    inline constexpr const char8_t* kCodeCompletionPageUp = u8"code.completion-page-up";
+    inline constexpr const char8_t* kCodeCompletionAccept = u8"code.completion-accept";
+    inline constexpr const char8_t* kCodeCompletionClose = u8"code.completion-close";
 
     /// Binds the code editor's keys (VS Code's, ruling 5), rebindable as any: a host calls it once
     /// for a GUI's keymap, after the GUI's own bindings (which then win a tie). The text editing
@@ -95,6 +108,7 @@ export namespace experimental::gui
             {u8"ctrl-g", kCodeGoToLine},
             {u8"f3", kCodeFindNext},
             {u8"shift-f3", kCodeFindPrevious},
+            {u8"ctrl-space", kCodeComplete},
         };
         for (const Binding& b : kBindings)
         {
@@ -104,6 +118,18 @@ export namespace experimental::gui
                                  command == core::StringView(kCodeFindPrevious);
             (void)keymap.Bind(core::StringView(b.Keys), command, finding ? core::StringView(u8"codeeditor") : kItself);
         }
+        // The completion list's keys, in the context the editor declares while it shows; bound after
+        // the editing keys, at the same depth they win. Tab accepts too (the editor's own key).
+        static constexpr Binding kListBindings[] = {
+            {u8"down", kCodeCompletionNext},
+            {u8"up", kCodeCompletionPrevious},
+            {u8"pagedown", kCodeCompletionPageDown},
+            {u8"pageup", kCodeCompletionPageUp},
+            {u8"enter", kCodeCompletionAccept},
+            {u8"escape", kCodeCompletionClose},
+        };
+        for (const Binding& b : kListBindings)
+            (void)keymap.Bind(core::StringView(b.Keys), core::StringView(b.Command), core::StringView(u8"codeeditor && completing && !textinput"));
     }
 
     /// How bad a diagnostic is: each draws in its part's colour (`codeeditor::error`).
@@ -186,6 +212,13 @@ export namespace experimental::gui
             command(kCodeGoToLine, [this]() { OpenGoToLine(); });
             command(kCodeFindNext, [this]() { (void)FindNext(false); });
             command(kCodeFindPrevious, [this]() { (void)FindNext(true); });
+            command(kCodeComplete, [this]() { (void)TriggerCompletion(true); });
+            command(kCodeCompletionNext, [this]() { m_completion->MoveSelection(1, true); });
+            command(kCodeCompletionPrevious, [this]() { m_completion->MoveSelection(-1, true); });
+            command(kCodeCompletionPageDown, [this]() { m_completion->MoveSelection(CodeCompletionList::PageRows(), false); });
+            command(kCodeCompletionPageUp, [this]() { m_completion->MoveSelection(-CodeCompletionList::PageRows(), false); });
+            command(kCodeCompletionAccept, [this]() { (void)AcceptCompletion(); });
+            command(kCodeCompletionClose, [this]() { CloseCompletion(); });
             m_findBar = core::MakeRef<CodeFindBar>(MemoryAllocator());
             CodeEditor* self = this;
             m_findBar->SetOnChanged([self]() { self->FindChanged(); });
@@ -198,6 +231,8 @@ export namespace experimental::gui
                 self->Invalidate();
             });
             AddChild(m_findBar.Get());
+            m_completion = core::MakeRef<CodeCompletionList>(MemoryAllocator());
+            m_completion->SetOnPicked([self](usize) { (void)self->AcceptCompletion(); });
             Attach(m_own);
             m_selections.PushBack(CodeSelection{});
             m_goals.PushBack(-1.0f);
@@ -469,6 +504,35 @@ export namespace experimental::gui
         }
 
         // === Geometry (its own space) ===
+        // === The language service (C6) ===
+        /// Asks `service` (its host's, which outlives it here; null: none) for completions and for
+        /// what to say of the word under the pointer.
+        void SetLanguageService(ICodeLanguageService* service)
+        {
+            CloseCompletion();
+            m_service = service;
+            m_hoverVersion = ~u64(0);
+        }
+        [[nodiscard]] ICodeLanguageService* GetLanguageService() const noexcept { return m_service; }
+        /// Opens the completion list at the primary caret with the service's completions, filtered
+        /// by the word before it: `invoked` (Ctrl+Space) anywhere, else as typed, not in a comment
+        /// or a string, and only on a word begun or after a `trigger` character. False when none
+        /// matched (or there is no service, or the caret selects).
+        bool TriggerCompletion(bool invoked, char8_t trigger = 0);
+        [[nodiscard]] bool IsCompleting() const noexcept { return m_completing; }
+        [[nodiscard]] CodeCompletionList& GetCompletionList() const noexcept { return *m_completion; }
+        /// Puts the selected completion in place of the word typed, at each caret where the same
+        /// word is (else at the caret), as one undo step, and closes the list.
+        bool AcceptCompletion();
+        void CloseCompletion()
+        {
+            if (EventDispatcher* dispatcher = GetEventDispatcher(); dispatcher != nullptr && dispatcher->IsPopupOpen(*m_completion))
+                (void)dispatcher->ClosePopup(*m_completion);
+            CompletionClosed();
+        }
+        /// What the service says of the word at `at` (empty off a word), asked once per word.
+        [[nodiscard]] core::StringView HoverAt(CodePosition at);
+
         [[nodiscard]] f32 LineHeight() const
         {
             const f32 height = m_measure.GetLineHeight();
@@ -591,6 +655,8 @@ export namespace experimental::gui
             UIWidget::OnScrollChange();
             if (m_findBar->IsDisplayed())
                 RequestLayout(); // the bar keeps its place in view
+            if (m_completing)
+                PlaceCompletion(); // the list stays at its word
         }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
         void OnFocusGained() override
@@ -603,6 +669,7 @@ export namespace experimental::gui
         {
             UIWidget::OnFocusLost();
             m_composition.Clear();
+            CloseCompletion();
             Invalidate();
         }
         void OnMouseDown(const MouseEvent& event) override;
@@ -787,6 +854,111 @@ export namespace experimental::gui
             ResetBlink();
             ScrollToCaret();
             Invalidate();
+            if (m_completing)
+                UpdateCompletion();
+        }
+        // === Completion ===
+        // An event from the open list, on its way up through its owner.
+        [[nodiscard]] bool FromCompletion(const Event& event) const
+        {
+            for (const Node* n = event.Target; n != nullptr && n != this; n = n->GetParent())
+                if (n == m_completion.Get())
+                    return true;
+            return false;
+        }
+        [[nodiscard]] bool IsWordByte(char8_t c) const noexcept
+        {
+            return IsNameByte(c) || (c == u8'-' && m_language != nullptr && m_language->IdentifierDashes);
+        }
+        // Where the word ending at `at` begins (at itself when none does).
+        [[nodiscard]] CodePosition WordStartBefore(CodePosition at) const
+        {
+            const core::StringView text = m_doc->LineText(at.Line);
+            u32 column = core::Min<u32>(at.Column, static_cast<u32>(text.Size()));
+            while (column > 0 && IsWordByte(text[column - 1]))
+                --column;
+            return CodePosition{at.Line, column};
+        }
+        // The word typed since the list opened; false when the caret has left it.
+        [[nodiscard]] bool TypedWord(core::StringView& word) const
+        {
+            const CodeSelection& primary = GetPrimary();
+            if (!primary.IsEmpty() || primary.Head.Line != m_wordStart.Line || primary.Head.Column < m_wordStart.Column)
+                return false;
+            const core::StringView text = m_doc->LineText(primary.Head.Line);
+            if (primary.Head.Column > text.Size())
+                return false;
+            word = text.SubStr(m_wordStart.Column, primary.Head.Column - m_wordStart.Column);
+            if (word.Size() == 0 && !m_completedEmpty)
+                return false; // back to the start of a word it opened on
+            for (usize i = 0; i < word.Size(); ++i)
+                if (!IsWordByte(word[i]))
+                    return false;
+            return true;
+        }
+        // The caret moved or the text changed under the open list: filtered again by the word, else
+        // closed when the caret left it or nothing matches.
+        void UpdateCompletion()
+        {
+            core::StringView word;
+            if (!TypedWord(word) || m_completion->Filter(word) == 0)
+            {
+                CloseCompletion();
+                return;
+            }
+            PlaceCompletion();
+        }
+        // The word's start, in the root's space, its label lined up with the word.
+        [[nodiscard]] Rect CompletionAnchor() const
+        {
+            const Rect caret = CaretRect(m_wordStart);
+            const core::Float2 p0 = ConvertToRootSpace(core::Float2{caret.x - m_completion->LabelInset(), caret.y});
+            const core::Float2 p1 = ConvertToRootSpace(core::Float2{caret.x - m_completion->LabelInset(), caret.y + caret.height});
+            return Rect{p0.x, core::Min(p0.y, p1.y), 0.0f, core::Abs(p1.y - p0.y)};
+        }
+        void PlaceCompletion()
+        {
+            EventDispatcher* dispatcher = GetEventDispatcher();
+            if (dispatcher == nullptr)
+                return;
+            if (dispatcher->IsPopupOpen(*m_completion))
+            {
+                (void)dispatcher->SetPopupAnchorRect(*m_completion, CompletionAnchor());
+                return;
+            }
+            // Manual: a press elsewhere is the editor's to close it with, not a press swallowed.
+            PopupOptions options;
+            options.Kind = PopupKind::Manual;
+            options.HasAnchorRect = true;
+            options.AnchorRect = CompletionAnchor();
+            options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 2.0f, true};
+            options.FitContent = true;
+            CodeEditor* self = this;
+            options.OnClosed = [self](PopupCloseReason) { self->CompletionClosed(); };
+            dispatcher->OpenPopup(*this, *m_completion, core::Move(options));
+        }
+        void CompletionClosed()
+        {
+            if (!m_completing)
+                return;
+            m_completing = false;
+            SetKeyContext(core::StringView(u8"codeeditor"));
+        }
+        // After a character typed: a trigger opens the list afresh; a word's letter opens it.
+        void CompleteAfterTyping(core::StringView text)
+        {
+            if (m_service == nullptr || text.Size() != 1)
+                return;
+            const char8_t c = text[0];
+            const core::StringView triggers = m_service->CompletionTriggers();
+            for (usize i = 0; i < triggers.Size(); ++i)
+                if (triggers[i] == c)
+                {
+                    (void)TriggerCompletion(false, c);
+                    return;
+                }
+            if (!m_completing && IsWordByte(c))
+                (void)TriggerCompletion(false);
         }
         void ResetBlink()
         {
@@ -1217,7 +1389,15 @@ export namespace experimental::gui
         u32 m_lastMarker = 0;
         core::Array<Diagnostic> m_diagnostics;
         core::Function<void(u32)> m_onGutterClick;
-        core::String m_hoverTip; // the diagnostics under the pointer
+        core::String m_hoverTip; // the diagnostics under the pointer, and what the service says there
+        ICodeLanguageService* m_service = nullptr;
+        core::RefPtr<CodeCompletionList> m_completion; // its child while open (a popup)
+        bool m_completing = false;
+        CodePosition m_wordStart;  // where the word the list completes begins
+        bool m_completedEmpty = false; // it opened on no word (a trigger): an empty word keeps it
+        CodeRange m_hoverWord;     // the word the service last spoke of
+        u64 m_hoverVersion = ~u64(0);
+        core::String m_hoverInfo;
         u32 m_listener = 0; // its change listener's token on m_doc
         core::RefPtr<CodeFindBar> m_findBar;
         mutable core::Array<CodeRange> m_matches;
@@ -1566,16 +1746,108 @@ export namespace experimental::gui
     {
         // One character, in a language that pairs or outdents: its own rules.
         if (m_language != nullptr && text.Size() >= 1 && text.Size() <= 4 && NextGrapheme(text, 0) == text.Size() && text[0] != u8'\n')
-        {
             TypeCharacter(text);
-            return;
+        else
+            EditEach(CodeEditKind::Typing, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
+            {
+                replaced = s.Range();
+                put = core::String(text);
+                return true;
+            });
+        CompleteAfterTyping(text);
+    }
+
+    inline bool CodeEditor::TriggerCompletion(bool invoked, char8_t trigger)
+    {
+        if (m_service == nullptr || m_readOnly || !GetPrimary().IsEmpty())
+            return false;
+        const CodePosition at = m_doc->Clamp(GetPrimary().Head);
+        const CodePosition start = WordStartBefore(at);
+        if (!invoked)
+        {
+            // Typed: in code (not a comment or a string), on a word that is a name (not a number),
+            // or just after a trigger.
+            const CodeToken token = TokenBefore(at);
+            if (token == CodeToken::Comment || token == CodeToken::String)
+                return false;
+            const core::StringView text = m_doc->LineText(at.Line);
+            if (trigger == 0 && (start.Column == at.Column || (text[start.Column] >= u8'0' && text[start.Column] <= u8'9')))
+                return false;
         }
-        EditEach(CodeEditKind::Typing, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
+        CodeCompletionRequest request;
+        request.At = at;
+        request.WordStart = start;
+        request.Invoked = invoked;
+        request.Trigger = trigger;
+        core::Array<CodeCompletionItem> items(MemoryAllocator());
+        m_service->Complete(*m_doc, request, items);
+        m_wordStart = start;
+        m_completedEmpty = start == at;
+        const core::StringView text = m_doc->LineText(at.Line);
+        m_completion->SetItems(core::Move(items), text.SubStr(start.Column, at.Column - start.Column));
+        if (m_completion->ShownCount() == 0)
+        {
+            CloseCompletion();
+            return false;
+        }
+        m_completing = true;
+        SetKeyContext(core::StringView(u8"codeeditor completing"));
+        PlaceCompletion();
+        return true;
+    }
+
+    inline bool CodeEditor::AcceptCompletion()
+    {
+        const CodeCompletionItem* item = m_completing ? m_completion->SelectedItem() : nullptr;
+        core::StringView word;
+        if (item == nullptr || m_readOnly || !TypedWord(word))
+        {
+            CloseCompletion();
+            return false;
+        }
+        const core::String insert(item->Insert.IsEmpty() ? item->Label.AsView() : item->Insert.AsView());
+        const core::String typed(word);
+        CloseCompletion();
+        m_doc->BreakMerge();
+        EditEach(CodeEditKind::Other, [&](const CodeSelection& s, CodeRange& replaced, core::String& put)
         {
             replaced = s.Range();
-            put = core::String(text);
+            if (s.IsEmpty() && s.Head.Column >= typed.Size())
+            {
+                const core::StringView line = m_doc->LineText(s.Head.Line);
+                const u32 from = s.Head.Column - static_cast<u32>(typed.Size());
+                if (s.Head.Column <= line.Size() && line.SubStr(from, typed.Size()) == typed.AsView())
+                    replaced.Start.Column = from;
+            }
+            put = core::String(insert.AsView());
             return true;
         });
+        m_doc->BreakMerge();
+        return true;
+    }
+
+    inline core::StringView CodeEditor::HoverAt(CodePosition at)
+    {
+        if (m_service == nullptr || at.Line >= m_doc->LineCount())
+            return core::StringView{};
+        const core::StringView text = m_doc->LineText(at.Line);
+        u32 from = core::Min<u32>(at.Column, static_cast<u32>(text.Size())), to = from;
+        while (from > 0 && IsWordByte(text[from - 1]))
+            --from;
+        while (to < text.Size() && IsWordByte(text[to]))
+            ++to;
+        const CodeRange word{CodePosition{at.Line, from}, CodePosition{at.Line, to}};
+        if (from == to)
+            return core::StringView{};
+        if (m_hoverVersion != m_doc->GetVersion() || !(m_hoverWord.Start == word.Start) || !(m_hoverWord.End == word.End))
+        {
+            m_hoverVersion = m_doc->GetVersion();
+            m_hoverWord = word;
+            m_hoverInfo.Clear();
+            if (!m_service->Hover(*m_doc, at, m_hoverInfo))
+                m_hoverInfo.Clear();
+        }
+        return m_hoverInfo.AsView();
     }
 
     inline void CodeEditor::TypeCharacter(core::StringView text)
@@ -2209,7 +2481,13 @@ export namespace experimental::gui
             return;
         const KeyCode key = static_cast<KeyCode>(event.KeyCode);
         const u32 mods = event.Modifiers & (KeyModCtrl | KeyModAlt | KeyModSuper | KeyModShift);
-        if (key == KeyCode::Escape && mods == 0 && m_selections.Size() > 1)
+        if (m_completing && key == KeyCode::Tab && mods == 0)
+        {
+            (void)AcceptCompletion(); // the list's, as Return (a captured Tab never reaches the keymap)
+            event.Handled = true;
+            return;
+        }
+        if (key == KeyCode::Escape && mods == 0 && m_selections.Size() > 1 && !m_completing)
         {
             const CodeSelection primary = GetPrimary();
             SetSelections(core::Span<const CodeSelection>(&primary, 1));
@@ -2232,9 +2510,10 @@ export namespace experimental::gui
 
     inline void CodeEditor::OnMouseDown(const MouseEvent& event)
     {
-        if (!IsTreeEnabled() || event.Button != MouseButton::Left)
+        if (!IsTreeEnabled() || event.Button != MouseButton::Left || FromCompletion(event))
             return;
         event.Handled = true;
+        CloseCompletion();
         RequestFocus();
         const core::Float2 local = ConvertToNodeSpace(event.Position);
         const CodePosition at = PositionAt(local);
@@ -2290,9 +2569,12 @@ export namespace experimental::gui
 
     inline void CodeEditor::OnMouseMove(const MouseEvent& event)
     {
+        if (FromCompletion(event))
+            return;
         if (!m_dragging)
         {
-            // Hovering: the diagnostics under the pointer, or on its line in the gutter, for the tooltip.
+            // Hovering: the diagnostics under the pointer, or on its line in the gutter, for the
+            // tooltip; over a word, what the service says of it after them.
             const core::Float2 hover = ConvertToNodeSpace(event.Position);
             const CodePosition over = PositionAt(hover);
             core::String tip;
@@ -2307,7 +2589,21 @@ export namespace experimental::gui
                     }
             }
             else
+            {
                 tip = DiagnosticsAt(over);
+                // Over the word itself, not the space past a line's end.
+                const f32 x = hover.x - TextLeft() + ScrollShift().x;
+                if (m_service != nullptr && over.Line < m_doc->LineCount() && x <= XOf(m_doc->Clamp(CodePosition{over.Line, ~0u})))
+                {
+                    const core::StringView info = HoverAt(over);
+                    if (info.Size() != 0)
+                    {
+                        if (!tip.IsEmpty())
+                            tip.Append(core::StringView(u8"\n"));
+                        tip.Append(info);
+                    }
+                }
+            }
             m_hoverTip = core::Move(tip);
             return;
         }

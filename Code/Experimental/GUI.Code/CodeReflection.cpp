@@ -27,6 +27,7 @@ namespace experimental::gui
     }
 
     RTTI_DEFINE_OBJECT(CodeFindBar, "rtti::gui::code")
+    RTTI_DEFINE_OBJECT(CodeCompletionList, "rtti::gui::code")
 
     void RegisterCodeElements()
     {

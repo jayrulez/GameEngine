@@ -14,6 +14,7 @@ export import :code_document; // C0: lines, positions, anchors, edits, undo with
 export import :code_language; // C2: a language's definition (its owners'), its tokenizer
 export import :code_sheet;    // C2: its default sheet, over the theme's tokens
 export import :code_find_bar; // C4: the find, replace and go-to-line bar
+export import :code_completion; // C6: the language service (the host's), the completion list
 export import :code_editor;   // C1: the view: shaped lines in view, several carets, the keymap's text commands
 
 export namespace experimental::gui

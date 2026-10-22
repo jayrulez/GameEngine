@@ -51,7 +51,7 @@ first three: hosting, the viewport, then docking.
 | GUI.Viewport | `experimental.gui.viewport` | A widget showing 3D (or any GPU) content drawn into a target of its own, with input gated to it | UI.Viewport | Built (V1, V2) |
 | GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D6) |
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs, the breadcrumb bar | UI.Toolkit less docking and the code editor | Built (T0 to T6), T7 designed |
-| GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Next, after T7 (user, 2026-10-22; ruling T3 had it later) |
+| GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Designed (C0 to C8; user, 2026-10-22, after T7; ruling T3 had it later) |
 | GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Empty |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
 | GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Empty |
@@ -735,3 +735,100 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
   left, access); **T7b** its chevron menus, drops and editable path; **T7c** the toast host in the
   core; **T7d** the sandbox: breadcrumbs over an invented asset tree on the Toolkit page, and buttons
   posting each kind of toast (a repeat, one with an action, a widget, one that stays).
+
+### C The code editor (approved by the user, 2026-10-22)
+
+`GUI.Code` (`experimental.gui.code`), after T7 as the user asked. The survey (2026-10-22) read
+foundation.ui's code editor and its users, zed, eepp, Godot, ZeroEngine, LumixEngine, traktor and
+doriax.
+
+foundation.ui's (`UI.Toolkit/Code/`, about 4,900 lines) keeps a line array and a sound incremental
+lexer cache, and serves four of the editor's pages: scripts (AngelScript and Luau: compile
+diagnostics, breakpoints, the execution line while debugging, hover values, completion over the
+script API), shaders (HLSL with the engine's properties block), the game UI document (markup, with
+completion from the markup registry) and its theme (the stylesheet, plain text: it has no lexer). It
+has one cursor, diagnostics by whole line (no squiggles), fixed-pitch drawing (tabs and wide
+characters misalign), every visible token drawn each frame, and no folding, auto-close, IME or
+accessibility.
+
+Findings that decide the design:
+
+- **Every editor keeps an array of lines** with tokens cached per line, state carried from line to
+  line, and draws only the rows in view; none but zed (whose rope serves collaboration) keeps a gap
+  buffer or a rope.
+- **zed**: positions that survive edits (anchors) hold selections, diagnostics and folds; an undo
+  transaction keeps the selections before and after it; one map from document lines to visual rows
+  for folds and wrapping; a language's configuration is data; a key context on the editor keeps the
+  keymap declarative.
+- **eepp**: a line's tokens are cached by its hash and the state it starts in, so re-tokenizing
+  stops where a line ends as it did before, and runs only to the last row in view.
+- **Godot, Zero**: a language service the host implements (completion, validation, lookup) keeps
+  the widget language-neutral.
+- **Pitfalls**: Godot's cache invalidates to the end of the file; eepp draws squiggles as `~`
+  glyphs; an undo that forgets the cursors breaks multi-cursor undo; folding and wrapping kept as
+  two maps drift.
+
+#### Rulings (user, 2026-10-22)
+
+1. **A language's definition is a value** (keywords and types, token rules, brackets and their
+   auto-close pairs, comment tokens, indent rules), built in code or read from a file through the
+   engine's XML serialization. The library ships none: its owners do (the script modules
+   AngelScript's and Luau's, the sandbox its own), as foundation.ui's rule had it.
+2. **No tree-sitter**: a dependency with no AngelScript grammar, where a state-carrying tokenizer
+   serves these languages (zed's own cheaper path).
+3. **Plain search first** (case, whole word); a regular-expression engine is a dependency decided
+   on its own.
+4. **No minimap.**
+5. **VS Code's keys by default** (Ctrl+D, Alt+Up and Down, Ctrl+/, Ctrl+F, H and G, F3, Alt+click),
+   bound in the keymap as commands, every one rebindable.
+
+#### The design
+
+- **The document**: an array of lines (text, hash, token cache); positions (line, byte column) on
+  character boundaries; anchors moved through each edit, biased left or right, holding selections,
+  diagnostics, markers and search hits; undo as transactions of (range, old text, new text) with
+  the selections before and after, edits within 300 ms merged, a compound edit one step.
+- **Drawn with the lab's text**, not fixed pitch: each line in view shaped by the core's text runs
+  and cached until its text or its highlighting changes; tabs to tab stops in layout; hit testing by
+  the shaped positions. Code runs left to right in every language (as the graph's canvas), a
+  string's Arabic still shaped. Only rows in view are laid out; a very long line is cut for layout.
+- **Multi-cursor from the start**: the selections sorted and disjoint, with one being dragged; a
+  double click selects a word, a triple a line, Alt+click adds a cursor, Alt+drag selects a
+  column; commands to add the next occurrence and a cursor above or below.
+- **Syntax**: a per-line tokenizer carrying state, cached by (hash, entry state), run lazily to the
+  end of the view; colours from the sheet by parts (`codeeditor::keyword` and the rest), so themes
+  restyle code.
+- **Editing**: auto-indent, auto-close and matching brackets, comment toggle, indent and outdent of
+  a selection, smart Home, moving and duplicating lines.
+- **The gutter**: line numbers and the host's markers per line (breakpoint, execution line,
+  bookmark, kinds of its own), drawn by the sheet; a click in the marker column is the host's.
+- **Diagnostics**: anchored ranges with a severity and a message, set by the host: a wavy path
+  under the range (the worst severity where they overlap), an icon in the gutter, a tooltip on
+  hover; anchored, they follow edits while the host recompiles.
+- **A language service** the host implements: completion and hover (signature help later). The
+  completion list is a core popup that does not take the focus, filtered fuzzily, with a key
+  context of its own so Up, Down and Return go to it.
+- **Find, replace and go to line**: a bar of the core's widgets; matches highlighted; replacing all
+  one undo step.
+- **Folding and soft wrap**: one map from document lines to visual rows, which the caret and hit
+  testing share; fold ranges from brackets, indentation, `#region`, or the host; whitespace shown
+  where asked.
+- **IME** composition as the core's fields; to a screen reader a multiline text input whose value
+  is the current line, a moved caret announced. **Read only** for logs and generated code.
+
+#### Phases
+
+Each a layer with its tests.
+
+- **C0 The document.** Lines, positions, anchors, edits, undo with selections.
+- **C1 The view.** Shaped lines in view, multi-cursor carets and selections, the mouse, editing
+  keys through the keymap, scrolling, the clipboard, IME, the line numbers.
+- **C2 Syntax.** The language definition, the incremental tokenizer, the sheet's colours;
+  definitions for AngelScript, Luau, HLSL with properties, XML markup and the stylesheet language.
+- **C3 Editing.** Auto-indent, brackets, comments, indentation, multi-cursor commands, line moves.
+- **C4 Find, replace, go to line.**
+- **C5 Markers and diagnostics.** The gutter's markers, squiggles, icons, hover.
+- **C6 The language service.** Completion and hover.
+- **C7 Folding, soft wrap, whitespace.**
+- **C8 The sandbox's Code page**: its own AngelScript with the engine's compiler's diagnostics as
+  it is typed, breakpoint markers, and a shader.

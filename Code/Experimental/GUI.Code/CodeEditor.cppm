@@ -519,12 +519,12 @@ export namespace experimental::gui
             m_widestVersion = ~u64(0);
             m_widest = 0.0f;
             CodeEditor* self = this;
-            m_doc->SetOnChanged([self](const CodeChange& change) { self->DocumentChanged(change); });
+            m_listener = m_doc->AddChangeListener([self](const CodeChange& change) { self->DocumentChanged(change); });
         }
         void Detach()
         {
             if (m_doc != nullptr)
-                m_doc->SetOnChanged({});
+                m_doc->RemoveChangeListener(m_listener);
         }
         void DocumentChanged(const CodeChange& change)
         {
@@ -537,6 +537,10 @@ export namespace experimental::gui
             for (u32 i = 0; i < change.InsertedLines && lexFirst <= m_lex.Size(); ++i)
                 m_lex.Insert(lexFirst, LineLex{});
             m_cleanTo = core::Min<u32>(m_cleanTo, change.FirstLine);
+            // Its selections go through the edit (one another view made; its own edits set them after).
+            for (CodeSelection& sel : m_selections)
+                sel = CodeSelection{CodeDocument::Moved(sel.Anchor, CodeBias::Right, change.Replaced, change.End),
+                                    CodeDocument::Moved(sel.Head, CodeBias::Right, change.Replaced, change.End)};
             // The views below the change move with their lines; the changed ones go.
             const usize first = core::Min<usize>(change.FirstLine, m_views.Size());
             const usize removed = core::Min<usize>(change.RemovedLines, m_views.Size() - first);
@@ -1022,6 +1026,7 @@ export namespace experimental::gui
 
         CodeDocument m_own;
         CodeDocument* m_doc = nullptr;
+        u32 m_listener = 0; // its change listener's token on m_doc
         core::RefPtr<CodeFindBar> m_findBar;
         mutable core::Array<CodeRange> m_matches;
         mutable core::String m_matchesQuery;

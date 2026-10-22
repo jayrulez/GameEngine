@@ -59,7 +59,9 @@ TEST_CASE("code document: an edit across lines replaces them, told as the lines 
     CodeDocument doc(core::DefaultAllocator());
     doc.SetText(SV(u8"one\ntwo\nthree"));
     core::Array<CodeChange> changes{core::DefaultAllocator()};
-    doc.SetOnChanged([&changes](const CodeChange& change) { changes.PushBack(change); });
+    const core::u32 token = doc.AddChangeListener([&changes](const CodeChange& change) { changes.PushBack(change); });
+    core::Array<CodeChange> others{core::DefaultAllocator()};
+    const core::u32 second = doc.AddChangeListener([&others](const CodeChange& change) { others.PushBack(change); });
     const u64 version = doc.GetVersion();
     const u64 hash = doc.LineHash(1);
     const CodeRange put = doc.Replace(CodeRange{At(0, 2), At(2, 2)}, SV(u8"X\r\nYY"));
@@ -71,9 +73,14 @@ TEST_CASE("code document: an edit across lines replaces them, told as the lines 
     CHECK(changes[0].InsertedLines == 2u);
     CHECK(doc.GetVersion() > version);
     CHECK(doc.LineHash(1) != hash);
+    CHECK(others.Size() == 1); // every listener told
+    doc.RemoveChangeListener(second);
+    doc.RemoveChangeListener(token);
 
-    // Given backwards, the same.
+    // Given backwards, the same; removed listeners hear no more.
     doc.Erase(CodeRange{At(1, 2), At(0, 2)});
+    CHECK(changes.Size() == 1);
+    CHECK(others.Size() == 1);
     CHECK(doc.GetText() == core::String(u8"onree"));
     doc.Insert(At(0, 5), SV(u8"\n"));
     CHECK(doc.LineCount() == 2u);

@@ -82,12 +82,16 @@ export namespace experimental::gui
         Deleting,
     };
 
-    /// Lines an edit replaced: from `FirstLine`, `RemovedLines` of them gave way to `InsertedLines`.
+    /// An edit: from `FirstLine`, `RemovedLines` lines gave way to `InsertedLines`; exactly, the
+    /// range `Replaced` (as it was) by text now ending at `End` (what another view sharing the
+    /// document moves its own positions through).
     struct CodeChange
     {
         u32 FirstLine = 0;
         u32 RemovedLines = 0;
         u32 InsertedLines = 0;
+        CodeRange Replaced;
+        CodePosition End;
     };
 
     using CodeAnchorId = u32;
@@ -118,7 +122,7 @@ export namespace experimental::gui
             m_redo.Clear();
             m_open = false;
             ++m_version;
-            Changed(CodeChange{0, removed, static_cast<u32>(m_lines.Size())});
+            Changed(CodeChange{0, removed, static_cast<u32>(m_lines.Size()), CodeRange{}, End()});
         }
         /// The whole text, its lines joined by line feeds.
         [[nodiscard]] core::String GetText() const
@@ -372,8 +376,22 @@ export namespace experimental::gui
             return CodePosition{position.Line - before.End.Line + after.Line, position.Column};
         }
 
-        /// Told each change's lines (a tokenizer's cache, a view's layouts).
-        void SetOnChanged(core::Function<void(const CodeChange&)> callback) { m_onChanged = core::Move(callback); }
+        /// Tells `callback` each change's lines (a tokenizer's cache, a view's layouts; each editor
+        /// sharing the document its own); a token for RemoveChangeListener.
+        u32 AddChangeListener(core::Function<void(const CodeChange&)> callback)
+        {
+            m_listeners.PushBack(Listener{++m_lastListener, core::Move(callback)});
+            return m_lastListener;
+        }
+        void RemoveChangeListener(u32 token)
+        {
+            for (usize i = 0; i < m_listeners.Size(); ++i)
+                if (m_listeners[i].Token == token)
+                {
+                    m_listeners.RemoveAt(i);
+                    return;
+                }
+        }
 
     private:
         [[nodiscard]] static char8_t Folded(char8_t c, bool matchCase) noexcept
@@ -532,14 +550,20 @@ export namespace experimental::gui
                 if (anchor.Live)
                     anchor.Position = Moved(anchor.Position, anchor.Bias, range, after);
             ++m_version;
-            Changed(CodeChange{range.Start.Line, removed, static_cast<u32>(made.Size())});
+            Changed(CodeChange{range.Start.Line, removed, static_cast<u32>(made.Size()), range, after});
             return CodeRange{range.Start, after};
         }
         void Changed(const CodeChange& change)
         {
-            if (m_onChanged)
-                m_onChanged(change);
+            for (usize i = 0; i < m_listeners.Size(); ++i)
+                if (m_listeners[i].Callback)
+                    m_listeners[i].Callback(change);
         }
+        struct Listener
+        {
+            u32 Token = 0;
+            core::Function<void(const CodeChange&)> Callback;
+        };
 
         IAllocator* m_allocator;
         core::Array<Line> m_lines; // never empty: an empty document is one empty line
@@ -552,6 +576,7 @@ export namespace experimental::gui
         f32 m_clock = 0.0f;
         usize m_undoLimit = 1000;
         u64 m_version = 0;
-        core::Function<void(const CodeChange&)> m_onChanged;
+        core::Array<Listener> m_listeners;
+        u32 m_lastListener = 0;
     };
 }

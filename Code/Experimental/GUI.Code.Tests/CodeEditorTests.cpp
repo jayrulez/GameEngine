@@ -338,6 +338,12 @@ TEST_CASE("code editor: two editors over one document see each other's edits")
     bed.editor->SetCaret(At(0, 3));
     bed.editor->Type(SV(u8"!"));
     CHECK(other->GetText() == core::String(u8"one!"));
+    // Both hear it: the other's caret, after where the text went, moved along with it.
+    other->SetCaret(At(0, 3));
+    bed.editor->SetCaret(At(0, 0));
+    bed.editor->Type(SV(u8">"));
+    CHECK(other->GetText() == core::String(u8">one!"));
+    CHECK(other->GetPrimary().Head == At(0, 4));
     bed.editor->SetDocument(nullptr); // back to its own
     other->SetDocument(nullptr);
     CHECK(bed.Text() == core::String(u8"shared")); // its own, as it was

@@ -30,6 +30,21 @@ namespace vg = foundation::vg;
 
 export namespace experimental::gui
 {
+    /// `value` to the decimals of `step` (0.25 to two, 5 to none): a ruler's or a grid's label.
+    [[nodiscard]] inline core::String FormatStepped(f32 value, f32 step)
+    {
+        i32 decimals = 0;
+        for (f32 s = step; s < 0.999f && decimals < 6; s *= 10.0f)
+            ++decimals;
+        f64 scale = 1.0;
+        for (i32 d = 0; d < decimals; ++d)
+            scale *= 10.0;
+        const f64 rounded = static_cast<f64>(static_cast<i64>(static_cast<f64>(value) * scale + (value < 0.0f ? -0.5 : 0.5))) / scale;
+        if (decimals == 0)
+            return core::Format(u8"{}", static_cast<i64>(rounded));
+        return core::Format(u8"{}", rounded);
+    }
+
     /// What a time axis tells the views on it.
     class ITimeAxisClient
     {
@@ -155,16 +170,7 @@ export namespace experimental::gui
         {
             if (m_frameRate > 0.0f)
                 return core::Format(u8"{}", static_cast<i64>(core::Round(time * m_frameRate)));
-            i32 decimals = 0;
-            for (f32 s = step; s < 0.999f && decimals < 6; s *= 10.0f)
-                ++decimals;
-            f64 scale = 1.0;
-            for (i32 d = 0; d < decimals; ++d)
-                scale *= 10.0;
-            const f64 rounded = static_cast<f64>(static_cast<i64>(static_cast<f64>(time) * scale + (time < 0.0f ? -0.5 : 0.5))) / scale;
-            if (decimals == 0)
-                return core::Format(u8"{}", static_cast<i64>(rounded));
-            return core::Format(u8"{}", rounded);
+            return FormatStepped(time, step);
         }
 
         // === Views ===

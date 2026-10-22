@@ -600,7 +600,7 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     Several curves on one canvas; a click or a box selects; Shift locks a drag to one axis; a double
     click on a curve adds a key; a key's menu sets its interpolation (constant, linear, cubic) and
     tangent mode (auto, smooth, flat, broken); a selected cubic key shows its handles, and dragging
-    an auto key's handle makes it smooth; the wheel zooms about the pointer (Ctrl only time, Shift
+    an auto or a flat key's handle makes it smooth (a handle that did nothing would be no handle); the wheel zooms about the pointer (Ctrl only time, Shift
     only value), a middle drag pans; framing fits every curve or the selection. Keys linked in time
     across curves are not kept (the old canvas's `LinkedTime` served only the particles' two-axis
     size, which is gone).

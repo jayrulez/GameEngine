@@ -21,6 +21,8 @@ export import :property_editors; // T1: the editors of bools, numbers, text, enu
 export import :property_grid;    // T1: the grid of a source's properties
 export import :reflected_source; // T3: core reflection as a property source
 export import :time_axis;        // T5: one time axis and its ruler
+export import :curve_source;     // T5: what a curve view reads and edits through
+export import :curve_view;       // T5: a source's curves on one canvas
 
 export namespace experimental::gui
 {

@@ -66,6 +66,13 @@ export namespace experimental::gui
             timeruler { background-color: var(--timeline-ruler, var(--surface-header)); color: var(--text-dim); font-size: var(--font-small); }
             timeruler::tick { background-color: var(--timeline-tick, var(--text-dim)); }
             timeruler::playhead { background-color: var(--timeline-playhead, var(--accent)); }
+            curveview { background-color: var(--curveview-background, var(--surface-sunken)); color: var(--text-dim);
+                        font-size: var(--font-small); }
+            curveview::grid { background-color: var(--curveview-grid, var(--separator)); }
+            curveview::selected { background-color: var(--curveview-selected, var(--text-strong)); }
+            curveview::playhead { background-color: var(--timeline-playhead, var(--accent)); }
+            curveview::selection-box { background-color: var(--curveview-selection-box, var(--selection)); opacity: 0.5; }
+            curveview:focus-visible { box-shadow: inset 0 0 0 var(--focus-width) var(--focus-ring); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

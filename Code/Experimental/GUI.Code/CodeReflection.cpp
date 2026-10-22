@@ -23,6 +23,7 @@ namespace experimental::gui
         builder.ComputedProperty<&CodeEditor::GetAccessValue>("accessValue").PropAttribute("access", core::String(u8"value"));
         builder.AccessorProperty<&CodeEditor::IsReadOnly, &CodeEditor::SetReadOnly>("readOnly").PropAttribute("css", core::String(u8"read-only"));
         builder.AccessorProperty<&CodeEditor::GetTabSize, &CodeEditor::SetTabSize>("tabSize").PropAttribute("css", core::String(u8"tab-size"));
+        builder.AccessorProperty<&CodeEditor::GetSoftWrap, &CodeEditor::SetSoftWrap>("softWrap").PropAttribute("css", core::String(u8"soft-wrap"));
         builder.Creator();
     }
 

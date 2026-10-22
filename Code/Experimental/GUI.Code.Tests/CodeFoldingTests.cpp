@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - folding (C7 of Specs/gui-lab-evolution-3.md), with the sandbox's definitions: ranges
-// from brackets past strings, by indentation where the language folds so, from regions, or the
-// host's; a folded range's lines hide, one row in the map the carets and the scroll share; folding
-// moves carets out, and a caret going in unfolds; folds go with their lines through edits and go
-// when their bracket does; the gutter's chevron and the placeholder; VS Code's keys.
+// GUI.Code - folding and soft wrap (C7 of Specs/gui-lab-evolution-3.md), with the sandbox's
+// definitions: ranges from brackets past strings, by indentation where the language folds so, from
+// regions, or the host's; a folded range's lines hide, one row in the map the carets and the scroll
+// share; folding moves carets out, and a caret going in unfolds; folds go with their lines through
+// edits and go when their bracket does; the gutter's chevron and the placeholder; VS Code's keys.
+// Wrapping, a long line's rows join the same map, so Down, the pointer and folds go by them.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <fstream>
@@ -272,4 +273,63 @@ TEST_CASE("code folding: the host's ranges in place of the language's, carried t
     CHECK(HasRange(*bed.editor, 1, 3));
     bed.editor->UseLanguageFolds();
     CHECK(HasRange(*bed.editor, 2, 7));
+}
+
+TEST_CASE("code soft wrap: a long line's rows are rows of the map; Down goes by them; nothing scrolls across")
+{
+    core::String words;
+    for (int i = 0; i < 30; ++i)
+        words.Append(SV(u8"abcd "));
+    words.Append(SV(u8"\nend"));
+    Bed bed("angelscript");
+    bed.editor->SetText(words.AsView());
+    bed.Frame();
+    CHECK(bed.editor->RowCount() == 2u);
+    bed.Key(KeyCode::Z, KeyModAlt);
+    REQUIRE(bed.editor->GetSoftWrap());
+    bed.Frame();
+    const u32 rows = bed.editor->RowCount() - 1; // the long line's
+    CHECK(rows >= 3u);
+    const f32 lh = bed.editor->LineHeight();
+    const Rect top = bed.editor->CaretRect(At(0, 0));
+    CHECK(bed.editor->CaretRect(At(1, 0)).y - top.y == doctest::Approx(lh * static_cast<f32>(rows)));
+    // Down from near the start: the line's second row, as far across.
+    bed.editor->SetCaret(At(0, 2));
+    bed.Key(KeyCode::Down);
+    CHECK(bed.Caret().Line == 0u);
+    const Rect second = bed.editor->CaretRect(bed.Caret());
+    CHECK(second.y - top.y == doctest::Approx(lh));
+    CHECK(second.x == doctest::Approx(bed.editor->CaretRect(At(0, 2)).x).epsilon(0.03));
+    // The pointer on the second row finds the line's place there.
+    const CodePosition hit = bed.editor->PositionAt(core::Float2{bed.editor->TextLeft() + 1.0f, top.y + lh * 1.5f});
+    CHECK(hit.Line == 0u);
+    CHECK(hit.Column > 0u);
+    CHECK(bed.editor->CaretRect(hit).y - top.y == doctest::Approx(lh));
+    bed.Key(KeyCode::End);
+    bed.Frame();
+    CHECK(bed.editor->GetScrollOffset().x == doctest::Approx(0.0f)); // never across
+    // Narrower: more rows.
+    bed.editor->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(200.0f); });
+    bed.Frame();
+    CHECK(bed.editor->RowCount() - 1 > rows);
+}
+
+TEST_CASE("code soft wrap: a word longer than a row breaks; a fold hides every row of what it holds")
+{
+    core::String text(SV(u8"{\n"));
+    for (int i = 0; i < 100; ++i)
+        text.Append(SV(u8"x"));
+    text.Append(SV(u8"\n}"));
+    Bed bed("angelscript");
+    bed.editor->SetText(text.AsView());
+    bed.editor->SetSoftWrap(true);
+    bed.Frame();
+    CHECK(bed.editor->RowCount() == 4u); // the hundred in two rows
+    REQUIRE(bed.editor->Fold(0));
+    CHECK(bed.editor->RowCount() == 2u);
+    bed.editor->SetSoftWrap(false);
+    bed.Frame();
+    CHECK(bed.editor->RowCount() == 2u);
+    bed.editor->UnfoldAll();
+    CHECK(bed.editor->RowCount() == 3u);
 }

@@ -270,20 +270,31 @@ TEST_CASE("toast: a widget for its content in the card, or bare; actions run and
     CHECK(card->ChildCount() == 1u);
     CHECK(bed.narrator.said.Back() == core::String(u8"Achievement: first steps"));
 
-    int revealed = 0;
+    core::Array<core::String> pressed{core::DefaultAllocator()};
     ToastRequest withActions = Bed::Text(u8"Exported", ToastSeverity::Success);
-    withActions.Actions.PushBack(ToastAction{core::String(u8"Reveal"), [&revealed]() { ++revealed; }, {}});
-    withActions.Actions.PushBack(ToastAction{core::String(u8"Open"), {}, {}});
-    withActions.Actions.PushBack(ToastAction{core::String(u8"Third"), {}, {}});
-    const ToastId acted = bed.host->Post(core::Move(withActions));
+    withActions.Actions.PushBack(ToastAction{core::String(u8"reveal"), core::String(u8"Reveal"), {}});
+    withActions.Actions.PushBack(ToastAction{core::String(u8"open"), core::String(u8"Open"), {}});
+    withActions.Actions.PushBack(ToastAction{core::String(u8"third"), core::String(u8"Third"), {}});
+    const ToastId acted = bed.host->Post(core::Move(withActions), [&pressed](const ToastAction& action) { pressed.PushBack(action.Id); });
+    // A script's `activate`, bubbling from the action's button with its id.
+    core::Array<core::String> activated{core::DefaultAllocator()};
+    (void)bed.host->AddEventListener(EventType::ItemActivate, [&activated](const Event& e)
+    {
+        if (const UIWidget* from = core::Cast<UIWidget>(e.Target))
+            activated.PushBack(core::String(from->GetId()));
+    });
     card = bed.host->GetCard(acted);
     REQUIRE(card != nullptr);
     REQUIRE(card->ActionCount() == 2u);
     CHECK(card->ActionAt(0).GetText() == SV(u8"Reveal"));
     bool byUser = false;
     bed.host->SetOnDismissed([&byUser](ToastId, bool user) { byUser = user; });
+    CHECK(card->ActionAt(0).GetId() == SV(u8"reveal"));
     (void)card->ActionAt(0).HandleActivate();
-    CHECK(revealed == 1);
+    REQUIRE(pressed.Size() == 1);
+    CHECK(pressed[0] == core::String(u8"reveal"));
+    REQUIRE(activated.Size() == 1);
+    CHECK(activated[0] == core::String(u8"reveal"));
     CHECK_FALSE(bed.host->IsShown(acted));
     CHECK(byUser);
 }
@@ -299,12 +310,11 @@ TEST_CASE("toast: posted from another thread, it waits for the host's frame, its
         ToastRequest request;
         request.Severity = ToastSeverity::Warning;
         request.Announcement = core::String(u8"Cook finished with warnings");
-        request.MakeContent = [&madeOn]()
+        id = bed.host->PostFromAnyThread(core::Move(request), [&madeOn]()
         {
             madeOn = std::this_thread::get_id();
             return core::RefPtr<UIWidget>(core::MakeRef<Label>(core::DefaultAllocator()));
-        };
-        id = bed.host->PostFromAnyThread(core::Move(request));
+        });
     });
     worker.join();
     CHECK(id != 0);
@@ -344,7 +354,7 @@ TEST_CASE("toast: it comes in `.entering` through a frame's styling, the sheet's
 {
     Bed bed;
     ToastRequest request = Bed::Text(u8"Hello");
-    request.Class = core::String(u8"pop celebrate");
+    request.Classes = core::String(u8"pop celebrate");
     request.Key = core::String(u8"hello");
     const ToastId id = bed.host->Post(core::Move(request));
     ToastCard* card = bed.host->GetCard(id);
@@ -373,7 +383,7 @@ TEST_CASE("toast: it comes in `.entering` through a frame's styling, the sheet's
     // Replaced by its key with another class: the old ones go.
     ToastRequest again = Bed::Text(u8"Hello again");
     again.Key = core::String(u8"hello");
-    again.Class = core::String(u8"still");
+    again.Classes = core::String(u8"still");
     (void)bed.host->Post(core::Move(again));
     CHECK(card->HasClass(SV(u8"still")));
     CHECK_FALSE(card->HasClass(SV(u8"pop")));

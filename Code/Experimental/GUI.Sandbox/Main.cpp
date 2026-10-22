@@ -2784,12 +2784,12 @@ void GUISandbox::FillToasts(gui::Node& section)
     button(u8"toast-success", [self, text, toastSaid]()
     {
         gui::ToastRequest request = text(gui::ToastSeverity::Success, u8"Exported", u8"Town exported to Dist/Town.");
-        request.Actions.PushBack(gui::ToastAction{String(u8"Reveal"), [toastSaid]()
+        request.Actions.PushBack(gui::ToastAction{String(u8"reveal"), String(u8"Reveal"), {}});
+        (void)self->m_toasts->Post(Move(request), [toastSaid](const gui::ToastAction&)
         {
             if (toastSaid != nullptr)
                 toastSaid->SetText(StringView(u8"Revealed Dist/Town (the toast's action)."));
-        }, {}});
-        (void)self->m_toasts->Post(Move(request));
+        });
     });
     button(u8"toast-warning", [self, text]()
     {

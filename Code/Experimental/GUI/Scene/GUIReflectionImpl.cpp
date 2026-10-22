@@ -732,6 +732,8 @@ namespace experimental::gui
     }
 
     void RttiRegisterValue_GuiEvent(); // REFLECT_VALUE below
+    void RttiRegisterEnum_ToastSeverity();
+    void RttiRegisterValue_ToastRequest();
 
     void RegisterGuiScriptSurface()
     {
@@ -751,6 +753,11 @@ namespace experimental::gui
             registry.Register(TweenSequence::StaticType());
             registry.Register(TweenParallel::StaticType());
             registry.Register(ListModel::StaticType()); // a script's list (E16)
+            // A toast a script fills in and posts (T7 of round three).
+            RttiRegisterEnum_ToastSeverity();
+            RttiRegisterValue_ToastRequest();
+            registry.Register(TypeOf<ToastSeverity>());
+            registry.Register(TypeOf<ToastRequest>());
             foundation::script::RegisterDelegateShape(u8"void KeyHandler(const string &in keys)"); // gui::captureKey's
             return true;
         }();
@@ -1028,10 +1035,59 @@ namespace experimental::gui
 
     RTTI_DEFINE_OBJECT(ColorPickerArea, "rtti::gui")
 
-    // Toasts (T7 of round three): a host markup places, what it shows posted in code.
+    // Toasts (T7 of round three): a host markup places; a request a script fills in and posts.
     RTTI_DEFINE_OBJECT(ToastCard, "rtti::gui")
+    REFLECT_ENUM(ToastSeverity, "rtti::gui")
+    {
+        builder.Value("Info", ToastSeverity::Info);
+        builder.Value("Success", ToastSeverity::Success);
+        builder.Value("Warning", ToastSeverity::Warning);
+        builder.Value("Error", ToastSeverity::Error);
+    }
+    REFLECT_VALUE(ToastRequest, "rtti::gui")
+    {
+        builder.Property<&ToastRequest::Title>("title")
+            .Property<&ToastRequest::Message>("message")
+            .Property<&ToastRequest::Rich>("rich")
+            .Property<&ToastRequest::Bare>("bare")
+            .Property<&ToastRequest::Announcement>("announcement")
+            .Property<&ToastRequest::Severity>("severity")
+            .Property<&ToastRequest::Duration>("duration")
+            .Property<&ToastRequest::Key>("key")
+            .Property<&ToastRequest::Classes>("classes"); // `class` is a script's keyword
+        builder.Method<&ToastRequest::AddAction>("addAction");
+        builder.Constructor();
+    }
+    namespace
+    {
+        // `ToastHost.nearest(node)`: the toast host in that node's GUI (its root's subtree), else null.
+        [[nodiscard]] ToastHost* FindToastHostUnder(Node& node)
+        {
+            if (ToastHost* host = Cast<ToastHost>(&node))
+                return host;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (ToastHost* host = FindToastHostUnder(*node.GetChildAt(i)))
+                    return host;
+            return nullptr;
+        }
+        [[nodiscard]] core::Variant FindToastHost(core::Variant handle)
+        {
+            Node* node = Node::FromHandle(handle);
+            Node* root = node != nullptr ? node->GetRootNode() : nullptr;
+            ToastHost* host = root != nullptr ? FindToastHostUnder(*root) : nullptr;
+            return host != nullptr ? host->HandleAs(ToastHost::StaticType()) : core::Variant{};
+        }
+    }
     REFLECT_MEMBERS(ToastHost, "rtti::gui")
     {
+        builder.Method<&ToastHost::PostScript>("post");
+        builder.Method<&ToastHost::PostContentScript, ToastId, Node>("postContent");
+        builder.Method<static_cast<bool (ToastHost::*)(ToastId)>(&ToastHost::Dismiss)>("dismiss");
+        builder.Method<&ToastHost::DismissAll>("dismissAll");
+        builder.ComputedProperty<&ToastHost::GetShownCountScript>("shownCount");
+        builder.ComputedProperty<&ToastHost::GetWaitingCountScript>("waitingCount");
+        builder.AccessorProperty<&ToastHost::GetMaxShownScript, &ToastHost::SetMaxShownScript>("maxShown");
+        builder.Method<&FindToastHost, ToastHost, Node>("nearest"); // not `find`: a node's find(id) has the name
         builder.Method<&ElementOf<ToastHost>, ToastHost, Node>("of");
         builder.Creator();
     }

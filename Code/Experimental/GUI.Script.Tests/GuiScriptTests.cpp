@@ -1081,3 +1081,101 @@ TEST_CASE("gui-script: Luau fills a list model and reads localized texts (E16)")
     bed.root->GetContext().SetLocalization(nullptr);
 }
 #endif
+
+namespace
+{
+    // Toasts from a script (T7 of round three): the script found the host the bed placed, filled in
+    // a request (a title, a message, success, staying, the class `pop`, an action "reveal") and
+    // posted it, posted a widget's toast, and listens for `activate` on the host, writing the
+    // pressed action's id to the data as `pressed`.
+    void CheckToasts(GuiBed& bed, gui::ToastHost& host)
+    {
+        INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+        REQUIRE(bed.errors.count == 0);
+        REQUIRE(host.ShownCount() == 2);
+        CHECK(bed.Number(u8"shown") == doctest::Approx(2.0));
+        gui::ToastCard* card = Cast<gui::ToastCard>(host.GetChildAt(0));
+        REQUIRE(card != nullptr);
+        REQUIRE(card->GetTitlePart() != nullptr);
+        CHECK(card->GetTitlePart()->GetText() == StringView(u8"Exported"));
+        CHECK(card->GetMessagePart()->GetText() == StringView(u8"Town is in Dist/Town."));
+        CHECK(card->HasClass(StringView(u8"success")));
+        CHECK(card->HasClass(StringView(u8"pop")));
+        CHECK(card->GetRemaining() < 0.0f); // duration 0: until closed
+        REQUIRE(card->ActionCount() == 1);
+        CHECK(card->ActionAt(0).GetText() == StringView(u8"Reveal"));
+        gui::ToastCard* widget = Cast<gui::ToastCard>(host.GetChildAt(1));
+        REQUIRE(widget != nullptr);
+        CHECK(Cast<gui::Label>(widget->GetContent()) != nullptr);
+        CHECK(widget->GetAnnouncement() == StringView(u8"From a widget"));
+
+        (void)card->ActionAt(0).HandleActivate();
+        CHECK(bed.root->GetContext().GetData().Get(u8"pressed").Get<String>() == StringView(u8"reveal"));
+        CHECK(host.ShownCount() == 1);
+        CHECK(bed.errors.count == 0);
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript fills in a toast request and posts it, and hears its action")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    RefPtr<gui::ToastHost> host = MakeRef<gui::ToastHost>(DefaultAllocator());
+    bed.root->AddChild(host.Get());
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"bool onAction(GuiEvent e) { gui::set(\"pressed\", e.id); return true; }\n"
+        u8"void main() {\n"
+        u8"  ToastHost@ host = ToastHost::nearest(gui::root());\n"
+        u8"  ToastRequest r;\n"
+        u8"  r.title = \"Exported\";\n"
+        u8"  r.message = \"Town is in Dist/Town.\";\n"
+        u8"  r.severity = ToastSeverity::Success;\n"
+        u8"  r.duration = 0;\n"
+        u8"  r.classes = \"pop\";\n"
+        u8"  r.addAction(\"reveal\", \"Reveal\", \"\");\n"
+        u8"  host.post(r);\n"
+        u8"  host.on(\"activate\", EventHandler(onAction));\n"
+        u8"  Node@ label = gui::root().add(\"Label\");\n"
+        u8"  ToastRequest w;\n"
+        u8"  w.announcement = \"From a widget\";\n"
+        u8"  host.postContent(w, label);\n"
+        u8"}\n"
+        u8"double shown() { return ToastHost::nearest(gui::root()).shownCount; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckToasts(bed, *host);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau fills in a toast request and posts it, and hears its action")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    RefPtr<gui::ToastHost> host = MakeRef<gui::ToastHost>(DefaultAllocator());
+    bed.root->AddChild(host.Get());
+    const Status loaded = bed.context->Load(
+        u8"local host = ToastHost.nearest(gui.root())\n"
+        u8"local r = ToastRequest.new()\n"
+        u8"r.title = \"Exported\"\n"
+        u8"r.message = \"Town is in Dist/Town.\"\n"
+        u8"r.severity = ToastSeverity.Success\n"
+        u8"r.duration = 0\n"
+        u8"r.classes = \"pop\"\n"
+        u8"r:addAction(\"reveal\", \"Reveal\", \"\")\n"
+        u8"host:post(r)\n"
+        u8"host:on(\"activate\", function(e) gui.set(\"pressed\", e.id); return true end)\n"
+        u8"local label = gui.root():add(\"Label\")\n"
+        u8"local w = ToastRequest.new()\n"
+        u8"w.announcement = \"From a widget\"\n"
+        u8"host:postContent(w, label)\n"
+        u8"function shown() return host.shownCount end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckToasts(bed, *host);
+}
+#endif

@@ -724,6 +724,12 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
   - **Announced** through the core's announcements, an error interrupting, the rest waiting.
   - **History is the application's**: the host reports each toast posted and dismissed, for a log
     or a bell that shows them again (Godot's); it keeps none.
+  - **From scripts** (the user, 2026-10-22): a request is a value with no callbacks in it, so a
+    script fills one in as code does (`ToastRequest r; r.title = ...; r.addAction(id, text,
+    command)`) and posts it (`ToastHost.nearest(node).post(r)`, or `postContent(r, widget)`); an
+    action's button sends `activate` with the action's id, as a menu item does. Code passes its
+    callbacks beside the request (`Post(request, onAction)`, `PostFromAnyThread(request,
+    makeContent, onAction)`).
 
   Layers, each a commit with its tests: **T7a** the bar (segments, clicks, overflow, keys, right to
   left, access); **T7b** its chevron menus, drops and editable path; **T7c** the toast host in the

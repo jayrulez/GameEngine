@@ -63,6 +63,9 @@ export namespace experimental::gui
                                  box-shadow: 0 4px 12px var(--shadow-color); }
             propertyflagslist { background-color: var(--propertygrid-popup, var(--surface-raised)); border-radius: var(--radius-small);
                                 box-shadow: 0 4px 12px var(--shadow-color); }
+            timeruler { background-color: var(--timeline-ruler, var(--surface-header)); color: var(--text-dim); font-size: var(--font-small); }
+            timeruler::tick { background-color: var(--timeline-tick, var(--text-dim)); }
+            timeruler::playhead { background-color: var(--timeline-playhead, var(--accent)); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

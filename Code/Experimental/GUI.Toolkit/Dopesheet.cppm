@@ -16,6 +16,8 @@
 //     source's);
 //   - a click on a row's name folds or opens it; the wheel over the names scrolls the rows, over
 //     the keys zooms about the pointer; a middle drag pans.
+// Its names are at the inline start (the right, right to left); time runs left to right in either
+// direction, as the ruler's does, so a ruler and a curve view beside it start at its keys.
 
 module;
 #include "Core/Prelude.h"
@@ -144,8 +146,20 @@ export namespace experimental::gui
         [[nodiscard]] core::Float2 KeyPoint(usize row, f32 time) const
         {
             const Rect box = GetContentBounds();
-            return core::Float2{box.x + m_labelWidth + (m_axis ? m_axis->TimeToOffset(time) : 0.0f),
+            return core::Float2{KeysLeft() + (m_axis ? m_axis->TimeToOffset(time) : 0.0f),
                                 box.y + (static_cast<f32>(row) + 0.5f) * kRowHeight - m_rowScroll};
+        }
+        /// The names' column and the keys' area (its own space).
+        [[nodiscard]] Rect NamesBounds() const
+        {
+            const Rect box = GetContentBounds();
+            const f32 width = core::Min(m_labelWidth, box.width);
+            return Rect{IsRightToLeft() ? box.Right() - width : box.x, box.y, width, box.height};
+        }
+        [[nodiscard]] f32 KeysLeft() const
+        {
+            const Rect box = GetContentBounds();
+            return IsRightToLeft() ? box.x : box.x + m_labelWidth;
         }
         [[nodiscard]] i32 RowAtY(f32 y) const
         {
@@ -156,10 +170,7 @@ export namespace experimental::gui
             const i32 row = static_cast<i32>(at / kRowHeight);
             return row < static_cast<i32>(GetRows().Size()) ? row : -1;
         }
-        [[nodiscard]] f32 TimeAtX(f32 x) const
-        {
-            return m_axis ? m_axis->OffsetToTime(x - GetContentBounds().x - m_labelWidth) : 0.0f;
-        }
+        [[nodiscard]] f32 TimeAtX(f32 x) const { return m_axis ? m_axis->OffsetToTime(x - KeysLeft()) : 0.0f; }
         [[nodiscard]] f32 GetRowScroll() const noexcept { return m_rowScroll; }
 
         // === The selection ===
@@ -436,7 +447,6 @@ export namespace experimental::gui
         if (!m_source || !m_axis)
             return;
         const core::Float2 local = ConvertToNodeSpace(event.Position); // events come in screen space
-        const Rect box = GetContentBounds();
         if (event.Button == MouseButton::Middle)
         {
             event.Handled = true;
@@ -449,7 +459,7 @@ export namespace experimental::gui
             return;
         event.Handled = true;
         RequestFocus();
-        if (local.x < box.x + m_labelWidth)
+        if (NamesBounds().Contains(local))
         {
             // The names: a click folds or opens a row that has children.
             const i32 row = RowAtY(local.y);
@@ -633,7 +643,7 @@ export namespace experimental::gui
         event.Handled = true;
         const core::Float2 local = ConvertToNodeSpace(event.Position);
         const Rect box = GetContentBounds();
-        if (local.x < box.x + m_labelWidth)
+        if (NamesBounds().Contains(local))
         {
             // Over the names: the rows scroll, kept in what they fill.
             const f32 most = core::Max(0.0f, static_cast<f32>(GetRows().Size()) * kRowHeight - box.height);
@@ -664,7 +674,10 @@ export namespace experimental::gui
         const Color summary = partColor(u8"summary", Color{0.55f, 0.58f, 0.65f, 1.0f});
         const Color selected = partColor(u8"selected", Color{1.0f, 0.8f, 0.3f, 1.0f});
         ctx.PushClip(box);
-        ctx.VG().FillRect(Rectangle{box.x, box.y, core::Min(m_labelWidth, box.width), box.height}, labels);
+        const Rect names = NamesBounds();
+        const bool rtl = IsRightToLeft();
+        const Rect keysArea{KeysLeft(), box.y, core::Max(0.0f, box.width - names.width), box.height};
+        ctx.VG().FillRect(names.ToRectangle(), labels);
         const core::Array<DopesheetRow>& rows = GetRows();
         core::Array<f32> times;
         core::Array<core::Array<TimelineKeyRef>> keys;
@@ -675,17 +688,20 @@ export namespace experimental::gui
             if (top > box.Bottom() || top + kRowHeight < box.y)
                 continue;
             ctx.VG().FillRect(Rectangle{box.x, top + kRowHeight - 1.0f, box.width, 1.0f}, separator);
-            const f32 indent = box.x + 4.0f + static_cast<f32>(row.Depth) * kIndent;
+            // From the names' inline start: a chevron, then the name.
+            const f32 indent = 4.0f + static_cast<f32>(row.Depth) * kIndent;
+            const f32 side = rtl ? -1.0f : 1.0f;
+            const f32 start = rtl ? names.Right() - indent : names.x + indent;
             if (row.HasChildren)
             {
-                // A chevron: right when folded, down when open.
+                // A chevron: toward the inline end when folded, down when open.
                 vg::PathBuilder chevron;
-                const f32 cx = indent + 4.0f, cy = top + kRowHeight * 0.5f;
+                const f32 cx = start + side * 4.0f, cy = top + kRowHeight * 0.5f;
                 if (row.Folded)
                 {
-                    chevron.MoveTo(cx - 2.0f, cy - 4.0f);
-                    chevron.LineTo(cx + 3.0f, cy);
-                    chevron.LineTo(cx - 2.0f, cy + 4.0f);
+                    chevron.MoveTo(cx - side * 2.0f, cy - 4.0f);
+                    chevron.LineTo(cx + side * 3.0f, cy);
+                    chevron.LineTo(cx - side * 2.0f, cy + 4.0f);
                 }
                 else
                 {
@@ -698,14 +714,15 @@ export namespace experimental::gui
             }
             if (m_text.HasFont())
             {
-                ctx.PushClip(Rect{box.x, top, core::Max(0.0f, m_labelWidth - 4.0f), kRowHeight});
+                ctx.PushClip(Rect{names.x + 2.0f, top, core::Max(0.0f, names.width - 4.0f), kRowHeight});
                 m_text.SetString(row.Name.AsView());
-                m_text.Draw(ctx, core::Float2{indent + 12.0f, top + 3.0f});
+                const f32 width = m_text.Measure().x;
+                m_text.Draw(ctx, core::Float2{rtl ? start - 12.0f - width : start + 12.0f, top + 3.0f});
                 ctx.PopClip();
             }
             if (!m_axis)
                 continue;
-            ctx.PushClip(Rect{box.x + m_labelWidth, top, core::Max(0.0f, box.width - m_labelWidth), kRowHeight});
+            ctx.PushClip(Rect{keysArea.x, top, keysArea.width, kRowHeight});
             GetRowKeys(r, times, keys);
             for (usize i = 0; i < times.Size(); ++i)
             {
@@ -725,8 +742,8 @@ export namespace experimental::gui
         if (m_axis)
         {
             const Color playhead = partColor(u8"playhead", Color{0.31f, 0.61f, 1.0f, 1.0f});
-            const f32 x = box.x + m_labelWidth + m_axis->TimeToOffset(m_axis->Playhead());
-            if (x >= box.x + m_labelWidth)
+            const f32 x = KeysLeft() + m_axis->TimeToOffset(m_axis->Playhead());
+            if (x >= keysArea.x && x <= keysArea.Right())
                 ctx.VG().FillRect(Rectangle{core::Floor(x), box.y, 1.0f, box.height}, playhead);
         }
         if (m_drag == Drag::Box)

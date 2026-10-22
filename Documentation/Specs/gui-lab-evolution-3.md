@@ -626,7 +626,8 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
     returning the moved keys' new addresses so the selection survives the source's sorting. A click
     or a box selects, a drag moves keys in time (on frames with a frame rate), Delete removes, a double
     click inserts a key (its value the source's, the sampled one as a rule); the playhead scrubs on
-    the ruler. A curve view can stand under it on the same axis.
+    the ruler. A curve view can stand under it on the same axis. Its names are at the inline start
+    and time runs left to right in either direction, as a ruler's numbers do.
   - **The sandbox**: a lamp's flicker curve and a sky gradient in the grid, and a short clip whose
     tracks animate the lamps, scrubbed in a dopesheet and a curve view, the grid following.
 - **T6 The node graph.** A view over a graph source.

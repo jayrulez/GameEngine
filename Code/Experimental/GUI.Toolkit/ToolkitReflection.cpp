@@ -78,11 +78,25 @@ namespace experimental::gui
     RTTI_DEFINE_OBJECT(StopsPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(HdrColorPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyGrip, "rtti::gui::toolkit")
-    RTTI_DEFINE_OBJECT(TimeRuler, "rtti::gui::toolkit")
-    RTTI_DEFINE_OBJECT(CurveView, "rtti::gui::toolkit")
+    // T5's views: elements markup places, whose axis and source the application gives in code.
+    REFLECT_MEMBERS(TimeRuler, "rtti::gui::toolkit")
+    {
+        builder.Creator();
+    }
+    REFLECT_MEMBERS(CurveView, "rtti::gui::toolkit")
+    {
+        builder.Creator();
+    }
     RTTI_DEFINE_OBJECT(GradientStrip, "rtti::gui::toolkit")
-    RTTI_DEFINE_OBJECT(GradientView, "rtti::gui::toolkit")
-    RTTI_DEFINE_OBJECT(Dopesheet, "rtti::gui::toolkit")
+    REFLECT_MEMBERS(GradientView, "rtti::gui::toolkit")
+    {
+        builder.Creator();
+    }
+    REFLECT_MEMBERS(Dopesheet, "rtti::gui::toolkit")
+    {
+        builder.AccessorProperty<&Dopesheet::GetLabelWidth, &Dopesheet::SetLabelWidth>("labelWidth").PropAttribute("css", core::String(u8"label-width"));
+        builder.Creator();
+    }
     RTTI_DEFINE_OBJECT(PropertyViewPopup, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyValuePreview, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(CurvePropertyEditor, "rtti::gui::toolkit")
@@ -101,6 +115,10 @@ namespace experimental::gui
                 &StatusItem::StaticType(),
                 &StatusBar::StaticType(),
                 &PropertyGrid::StaticType(),
+                &TimeRuler::StaticType(),
+                &CurveView::StaticType(),
+                &GradientView::StaticType(),
+                &Dopesheet::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)ElementTypes::Register(*type);

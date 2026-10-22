@@ -255,3 +255,39 @@ TEST_CASE("Dopesheet: the wheel over the names scrolls the rows, over the keys z
     CHECK(view->GetSource()->GetKeys(3)[0].time == doctest::Approx(0.5f));
     view->SetSource(nullptr);
 }
+
+TEST_CASE("Dopesheet: the timeline views are elements markup places, a dopesheet's names column set there")
+{
+    RegisterGuiElements();
+    RegisterToolkitElements();
+    static const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    core::RefPtr<Node> made = loader.LoadFromString(SV(u8R"(<Panel><TimeRuler/><Dopesheet label-width="120"/><CurveView/><GradientView/></Panel>)"));
+    REQUIRE(made);
+    REQUIRE(made->ChildCount() == 4);
+    CHECK(core::Cast<TimeRuler>(made->GetChildAt(0)) != nullptr);
+    Dopesheet* sheet = core::Cast<Dopesheet>(made->GetChildAt(1));
+    REQUIRE(sheet != nullptr);
+    CHECK(sheet->GetLabelWidth() == doctest::Approx(120.0f));
+    CHECK(core::Cast<CurveView>(made->GetChildAt(2)) != nullptr);
+    CHECK(core::Cast<GradientView>(made->GetChildAt(3)) != nullptr);
+}
+
+TEST_CASE("Dopesheet: right to left, its names are at the right and its keys start at the left, time still left to right")
+{
+    Bed bed;
+    bed.root->SetLayoutDirection(Node::LayoutDirection::RightToLeft);
+    (void)bed.root->UpdateLayout();
+    const Rect names = bed.sheet->NamesBounds();
+    const Rect box = bed.sheet->GetContentBounds();
+    CHECK(names.Right() == doctest::Approx(box.Right()));
+    CHECK(names.width == doctest::Approx(160.0f));
+    CHECK(bed.sheet->KeysLeft() == doctest::Approx(box.x));
+    CHECK(bed.sheet->KeyPoint(2, 1.0f).x == doctest::Approx(box.x + 250.0f));
+    CHECK(bed.sheet->TimeAtX(box.x + 250.0f) == doctest::Approx(1.0f));
+
+    // A click on a name at the right folds its row.
+    const Rect at = bed.sheet->GetScreenBounds();
+    bed.Click(core::Float2{at.Right() - 40.0f, at.y + 30.0f}); // "color"
+    CHECK(bed.sheet->IsFolded(SV(u8"Lamp.color")));
+}

@@ -137,7 +137,10 @@ export namespace experimental::gui
                 background-color: transparent; color: var(--breadcrumb-current, var(--text-strong));
             }
             crumb:focus-visible, crumboverflow:focus-visible { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
-            crumbseparator { color: var(--breadcrumb-separator, var(--text-dim)); opacity: 0.7; }
+            crumbseparator { background-color: transparent; color: var(--breadcrumb-separator, var(--text-dim)); opacity: 0.7;
+                             border-radius: var(--radius-small); }
+            crumbseparator.menu:hover { background-color: var(--breadcrumb-hover, var(--control-hover)); opacity: 1; }
+            breadcrumbbar > textfield.path { padding: 0 4px; }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

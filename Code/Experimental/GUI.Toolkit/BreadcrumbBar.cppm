@@ -10,7 +10,12 @@
 // the current one and as many before it as fit stay, filled from the end, and the rest fold into a
 // "…" button whose menu lists them (doriax). One tab stop: Left and Right move along it (mirrored
 // right to left, where its segments run right to left and its chevrons turn), Return navigates.
-// History (back, forward, up) is the view's that holds it, as in every bar surveyed.
+// Given a children callback, each chevron opens a menu of what lies in the segment before it (Down
+// on a segment too), a child chosen navigated to (Explorer's). The segments but the current take
+// drops of the application's types (doriax). Opt-in, a click on the bar's empty end makes it a field
+// holding the current item's id (the path), Return giving the text to the application, Escape or
+// focus leaving putting the segments back. History (back, forward, up) is the view's that holds it,
+// as in every bar surveyed.
 
 module;
 #include "Core/Prelude.h"
@@ -59,25 +64,39 @@ export namespace experimental::gui
         {
             return HasClass(core::StringView(u8"current")) ? core::String(core::StringView(u8"current")) : core::String{};
         }
+
+    protected:
+        // A drop of the bar's types, on a segment but the current.
+        void OnDragQuery(DropQuery& query) override;
+        void OnDrop(const DragEvent& event) override;
+
+    private:
+        friend class BreadcrumbBar;
+        BreadcrumbBar* m_bar = nullptr;
+        usize m_index = 0;
     };
 
-    /// The mark between two segments (`crumbseparator`): a chevron toward the current one.
-    class BreadcrumbSeparator : public UIWidget
+    /// The mark between two segments (`crumbseparator`): a chevron toward the current one; given a
+    /// children callback, a button opening the menu of what lies in the segment before it (`.menu`).
+    class BreadcrumbSeparator : public Button
     {
-        RTTI_OBJECT(BreadcrumbSeparator, UIWidget)
+        RTTI_OBJECT(BreadcrumbSeparator, Button)
     public:
         BreadcrumbSeparator()
         {
             SetTag(core::StringView(u8"crumbseparator"));
+            SetTabFocusable(false); // its menu opens from the keys by Down on the segment
             SetHitTestVisible(false);
             SetMirrorOnRtl(true); // drawn pointing right; right to left, it points left
         }
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override { return core::Float2{8.0f, 10.0f}; }
+        /// The segment whose children its menu lists.
+        [[nodiscard]] usize GetOwner() const noexcept { return m_owner; }
 
     protected:
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
-            UIWidget::OnDraw(ctx, localBounds);
+            Button::OnDraw(ctx, localBounds);
             const Rect c = GetContentBounds();
             const f32 cx = c.x + c.width * 0.5f;
             const f32 cy = c.y + c.height * 0.5f;
@@ -87,6 +106,10 @@ export namespace experimental::gui
             chevron.LineTo(cx - 1.5f, cy + 3.5f);
             ctx.VG().StrokePath(chevron.ToPath(), GetTextColor(), vg::StrokeStyle(1.25f, vg::VGLineCap::Round, vg::VGLineJoin::Round));
         }
+
+    private:
+        friend class BreadcrumbBar;
+        usize m_owner = 0;
     };
 
     class BreadcrumbBar : public UIWidget
@@ -114,9 +137,8 @@ export namespace experimental::gui
             BreadcrumbBar* self = this;
             m_overflow->SetOnClick([self]() { self->OpenOverflow(); });
             AddChild(m_overflow.Get());
-            m_overflowSeparator = core::MakeRef<BreadcrumbSeparator>(MemoryAllocator());
+            m_overflowSeparator = MakeSeparator();
             m_overflowSeparator->SetVisible(false);
-            AddChild(m_overflowSeparator.Get());
         }
 
         /// Its segments, from the root to the current one (the last).
@@ -130,6 +152,8 @@ export namespace experimental::gui
             m_separators.Clear();
             m_items.Clear();
             m_roving = nullptr;
+            if (m_editingPath)
+                EndPathEdit(false);
             BreadcrumbBar* self = this;
             for (usize i = 0; i < items.Size(); ++i)
             {
@@ -137,10 +161,12 @@ export namespace experimental::gui
                 m_items.PushBack(item);
                 if (i > 0)
                 {
-                    m_separators.PushBack(core::MakeRef<BreadcrumbSeparator>(MemoryAllocator()));
-                    AddChild(m_separators.Back().Get());
+                    m_separators.PushBack(MakeSeparator());
+                    m_separators.Back()->m_owner = i - 1;
                 }
                 core::RefPtr<BreadcrumbSegment> segment = core::MakeRef<BreadcrumbSegment>(MemoryAllocator());
+                segment->m_bar = this;
+                segment->m_index = i;
                 segment->SetText(item.Text.AsView());
                 if (Label* text = segment->GetTextPart())
                 {
@@ -203,6 +229,114 @@ export namespace experimental::gui
             return true;
         }
 
+        /// Gives the children of an item (what its chevron's menu lists): with it, the chevrons are
+        /// buttons; without (the default), marks.
+        void SetOnChildren(core::Function<void(const BreadcrumbItem& of, core::Array<BreadcrumbItem>& children)> callback)
+        {
+            m_onChildren = core::Move(callback);
+            const bool menus = static_cast<bool>(m_onChildren);
+            const auto show = [menus](BreadcrumbSeparator& separator)
+            {
+                separator.SetHitTestVisible(menus);
+                if (menus)
+                    separator.AddClass(core::StringView(u8"menu"));
+                else
+                    separator.RemoveClass(core::StringView(u8"menu"));
+            };
+            show(*m_overflowSeparator);
+            for (const core::RefPtr<BreadcrumbSeparator>& separator : m_separators)
+                show(*separator);
+        }
+        /// Opens the menu of segment `index`'s children below `anchor` (its chevron, else itself);
+        /// choosing one navigates to it. False with no callback or no children.
+        bool OpenChildren(usize index, Node& anchor)
+        {
+            if (!m_onChildren || index >= m_items.Size())
+                return false;
+            m_children.Clear();
+            m_onChildren(m_items[index], m_children);
+            if (m_children.IsEmpty())
+                return false;
+            m_menu = core::MakeRef<Menu>(MemoryAllocator());
+            ShareTextStyle(*m_menu, false);
+            m_menu->SetAutoWidth(true);
+            BreadcrumbBar* self = this;
+            for (usize i = 0; i < m_children.Size(); ++i)
+                (void)m_menu->AddItem(m_children[i].Text.AsView(), [self, i]()
+                {
+                    if (self->m_onNavigate && i < self->m_children.Size())
+                    {
+                        const BreadcrumbItem child = self->m_children[i];
+                        self->m_onNavigate(child);
+                    }
+                });
+            m_menu->OpenBelow(*this, anchor);
+            return true;
+        }
+        /// The menu open now: the overflow's or a chevron's.
+        [[nodiscard]] Menu* GetOpenMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
+
+        /// Segments but the current take drops whose type is among `types` (space-separated).
+        void SetSegmentDropTypes(core::StringView types) { m_dropTypes = core::String(types); }
+        /// Told a drop on a segment: its item, what was dropped and with what effect.
+        void SetOnSegmentDrop(core::Function<void(const BreadcrumbItem&, const DragPayload&, DropEffect)> callback)
+        {
+            m_onDrop = core::Move(callback);
+        }
+
+        /// Whether a click on its empty end edits the path as text (off by default).
+        void SetPathEditable(bool editable) noexcept { m_pathEditable = editable; }
+        [[nodiscard]] bool IsPathEditable() const noexcept { return m_pathEditable; }
+        /// Told the text typed when Return ends the edit (the application navigates, or not).
+        void SetOnPathSubmitted(core::Function<void(core::StringView)> callback) { m_onPathSubmitted = core::Move(callback); }
+        /// Makes it a field holding the current item's id, all selected.
+        void BeginPathEdit()
+        {
+            if (m_editingPath)
+                return;
+            if (!m_field)
+            {
+                m_field = core::MakeRef<TextField>(MemoryAllocator());
+                m_field->AddClass(core::StringView(u8"path"));
+                BreadcrumbBar* self = this;
+                m_field->SetOnSubmit([self](core::StringView) { self->EndPathEdit(true); });
+                (void)m_field->AddEventListener(EventType::FocusLost, [self](const Event&)
+                {
+                    // Elsewhere, the segments come back; not to the field's own context menu.
+                    if (const Menu* menu = self->m_field->GetContextMenu(); menu != nullptr && menu->IsOpen())
+                        return;
+                    self->EndPathEdit(false);
+                });
+                AddChild(m_field.Get());
+            }
+            m_editingPath = true;
+            m_field->SetText(m_items.IsEmpty() ? core::StringView{} : m_items.Back().Id.AsView());
+            m_field->SetDisplayed(true);
+            m_field->GetModel().SelectAll();
+            m_field->RequestFocus();
+            RequestLayout();
+        }
+        /// Ends the edit: with `submit`, the text goes to the application.
+        void EndPathEdit(bool submit)
+        {
+            if (!m_editingPath)
+                return;
+            m_editingPath = false;
+            const core::String typed(m_field->GetText());
+            const bool hadFocus = m_field->IsFocused();
+            m_field->SetDisplayed(false);
+            RequestLayout();
+            if (hadFocus && m_roving != nullptr)
+            {
+                m_roving->SetVisible(true); // hidden while the field showed; the layout places it
+                m_roving->RequestFocus();
+            }
+            if (submit && m_onPathSubmitted)
+                m_onPathSubmitted(typed.AsView());
+        }
+        [[nodiscard]] bool IsEditingPath() const noexcept { return m_editingPath; }
+        [[nodiscard]] TextField* GetPathField() const noexcept { return m_field.Get(); }
+
         /// The segments, from the root.
         [[nodiscard]] BreadcrumbSegment& SegmentAt(usize index) const noexcept { return *m_segments[index]; }
         /// The separator before segment `index` (from 1).
@@ -210,8 +344,6 @@ export namespace experimental::gui
         /// How many segments, from the root, folded into the overflow menu (0: all show).
         [[nodiscard]] usize FoldedCount() const noexcept { return m_folded; }
         [[nodiscard]] Button& GetOverflowButton() const noexcept { return *m_overflow; }
-        /// The overflow menu, while it is open.
-        [[nodiscard]] Menu* GetOverflowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
         /// Lists the folded segments below the "…" button; choosing one navigates to it.
         void OpenOverflow()
         {
@@ -256,6 +388,27 @@ export namespace experimental::gui
             const Rect content = GetContentBounds();
             const f32 gap = GetLayoutStyle().ColumnGap;
             const usize count = m_segments.Size();
+            const auto hideAll = [&]()
+            {
+                const auto hide = [&](Node& node)
+                {
+                    node.SetVisible(false);
+                    node.Arrange(Rect{content.x, content.y, 0.0f, 0.0f});
+                };
+                hide(*m_overflow);
+                hide(*m_overflowSeparator);
+                for (const core::RefPtr<BreadcrumbSegment>& segment : m_segments)
+                    hide(*segment);
+                for (const core::RefPtr<BreadcrumbSeparator>& separator : m_separators)
+                    hide(*separator);
+            };
+            if (m_editingPath)
+            {
+                // The field over the whole bar, the segments away.
+                hideAll();
+                m_field->Arrange(content);
+                return;
+            }
             core::Array<core::Float2> segments(MemoryAllocator());
             core::Array<core::Float2> separators(MemoryAllocator());
             for (usize i = 0; i < count; ++i)
@@ -310,6 +463,7 @@ export namespace experimental::gui
                 node.Arrange(Rect{content.x, content.y, 0.0f, 0.0f});
             };
             const bool folding = first > 0;
+            m_overflowSeparator->m_owner = first > 0 ? first - 1 : 0;
             m_overflow->SetVisible(folding);
             m_overflowSeparator->SetVisible(folding);
             if (folding)
@@ -360,12 +514,43 @@ export namespace experimental::gui
                     return;
                 }
         }
-        // Left and Right (the other way right to left), Home and End move along its items.
+        // A click on its empty end edits the path, where it may.
+        void OnMouseClick(const MouseEvent& event) override
+        {
+            if (event.Target != this || event.Button != MouseButton::Left || !m_pathEditable || m_editingPath)
+                return;
+            event.Handled = true;
+            BeginPathEdit();
+        }
+        // Left and Right (the other way right to left), Home and End move along its items; Down
+        // opens a segment's children; Escape leaves the path's edit.
         void OnKeyDown(const KeyEvent& event) override
         {
+            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            if (m_editingPath)
+            {
+                if (key == KeyCode::Escape && event.Modifiers == 0)
+                {
+                    EndPathEdit(false);
+                    event.Handled = true;
+                }
+                return;
+            }
             if (event.Modifiers != 0)
                 return;
-            const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            if (key == KeyCode::Down)
+            {
+                for (usize i = 0; i < m_segments.Size(); ++i)
+                    if (m_segments[i]->IsFocused())
+                    {
+                        Node* anchor = i + 1 < m_segments.Size() && m_separators[i]->IsVisible() ? static_cast<Node*>(m_separators[i].Get())
+                                                                                                    : static_cast<Node*>(m_segments[i].Get());
+                        if (OpenChildren(i, *anchor))
+                            event.Handled = true;
+                        return;
+                    }
+                return;
+            }
             const core::Array<Node*> stops = Stops();
             if (stops.IsEmpty())
                 return;
@@ -395,6 +580,46 @@ export namespace experimental::gui
         }
 
     private:
+        friend class BreadcrumbSegment;
+        core::RefPtr<BreadcrumbSeparator> MakeSeparator()
+        {
+            core::RefPtr<BreadcrumbSeparator> separator = core::MakeRef<BreadcrumbSeparator>(MemoryAllocator());
+            BreadcrumbSeparator* made = separator.Get();
+            BreadcrumbBar* self = this;
+            separator->SetOnClick([self, made]() { (void)self->OpenChildren(made->m_owner, *made); });
+            if (m_onChildren)
+            {
+                separator->SetHitTestVisible(true);
+                separator->AddClass(core::StringView(u8"menu"));
+            }
+            AddChild(separator.Get());
+            return separator;
+        }
+        // Whether segment `index` takes a drop of `type`: the bar's types, not the current one.
+        [[nodiscard]] bool TakesDrop(usize index, core::StringView type) const
+        {
+            if (index + 1 >= m_items.Size() || m_dropTypes.IsEmpty())
+                return false;
+            core::StringView rest = core::Trim(m_dropTypes.AsView());
+            while (rest.Size() != 0)
+            {
+                usize end = 0;
+                while (end < rest.Size() && rest[end] != u8' ')
+                    ++end;
+                if (rest.SubStr(0, end) == type)
+                    return true;
+                rest = core::Trim(rest.SubStr(end, rest.Size() - end));
+            }
+            return false;
+        }
+        void Dropped(usize index, const DragEvent& event)
+        {
+            if (m_onDrop && index < m_items.Size())
+            {
+                const BreadcrumbItem item = m_items[index];
+                m_onDrop(item, event.Payload, event.Effect);
+            }
+        }
         // What the keys move along, in order: the "…" while segments fold, then the shown segments.
         [[nodiscard]] core::Array<Node*> Stops() const
         {
@@ -434,8 +659,27 @@ export namespace experimental::gui
         core::RefPtr<Button> m_overflow;
         core::RefPtr<BreadcrumbSeparator> m_overflowSeparator;
         core::RefPtr<Menu> m_menu;
+        core::RefPtr<TextField> m_field; // the path, while it is edited
         Node* m_roving = nullptr; // the item that takes Tab
         usize m_folded = 0;
+        bool m_pathEditable = false;
+        bool m_editingPath = false;
+        core::String m_dropTypes;
+        core::Array<BreadcrumbItem> m_children; // what the open chevron's menu lists
         core::Function<void(const BreadcrumbItem&)> m_onNavigate;
+        core::Function<void(const BreadcrumbItem&, core::Array<BreadcrumbItem>&)> m_onChildren;
+        core::Function<void(const BreadcrumbItem&, const DragPayload&, DropEffect)> m_onDrop;
+        core::Function<void(core::StringView)> m_onPathSubmitted;
     };
+
+    inline void BreadcrumbSegment::OnDragQuery(DropQuery& query)
+    {
+        if (m_bar != nullptr && m_bar->TakesDrop(m_index, query.Payload.Type.AsView()))
+            query.Accept();
+    }
+    inline void BreadcrumbSegment::OnDrop(const DragEvent& event)
+    {
+        if (m_bar != nullptr)
+            m_bar->Dropped(m_index, event);
+    }
 }

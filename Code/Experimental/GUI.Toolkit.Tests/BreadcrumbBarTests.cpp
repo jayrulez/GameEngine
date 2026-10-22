@@ -4,7 +4,8 @@
 // GUI.Toolkit - the breadcrumb bar (T7 of Specs/gui-lab-evolution-3.md): segments carrying their
 // target, from items or a path; a click navigating on release, the current segment inert; the
 // segments that do not fit folded from the root into a "…" menu; one tab stop, the arrows moving
-// along it; right to left, run the other way with the chevrons turned.
+// along it; right to left, run the other way with the chevrons turned. Its chevrons' menus of
+// children, its segments' drops, and its path edited as text.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -188,7 +189,7 @@ TEST_CASE("breadcrumb bar: what does not fit folds from the root into the overfl
 
     // Its menu lists the folded ones; choosing one navigates there.
     bed.Click(bed.Middle(bed.bar->GetOverflowButton()));
-    Menu* menu = bed.bar->GetOverflowMenu();
+    Menu* menu = bed.bar->GetOpenMenu();
     REQUIRE(menu != nullptr);
     usize items = 0;
     MenuItem* firstItem = nullptr;
@@ -248,6 +249,161 @@ TEST_CASE("breadcrumb bar: right to left, its segments run from the right, its c
     bed.bar->SegmentAt(2).RequestFocus();
     bed.Key(KeyCode::Left); // toward the inline end
     CHECK(bed.bar->SegmentAt(3).IsFocused());
+}
+
+namespace
+{
+    core::String Join(core::StringView a, core::StringView b)
+    {
+        core::String out(a);
+        out.Append(b);
+        return out;
+    }
+    // The menu's items' texts, in order.
+    core::Array<core::String> MenuTexts(Menu& menu)
+    {
+        core::Array<core::String> out{core::DefaultAllocator()};
+        for (usize i = 0; i < menu.ChildCount(); ++i)
+            if (MenuItem* item = core::Cast<MenuItem>(menu.GetChildAt(i)))
+                out.PushBack(core::String(item->GetText()));
+        return out;
+    }
+    MenuItem* MenuItemAt(Menu& menu, usize at)
+    {
+        usize n = 0;
+        for (usize i = 0; i < menu.ChildCount(); ++i)
+            if (MenuItem* item = core::Cast<MenuItem>(menu.GetChildAt(i)))
+                if (n++ == at)
+                    return item;
+        return nullptr;
+    }
+}
+
+TEST_CASE("breadcrumb bar: given children, a chevron opens the menu of the segment before it; Down on a segment too")
+{
+    Bed bed;
+    // Without a callback, the chevrons are marks a click passes through.
+    CHECK_FALSE(bed.bar->SeparatorBefore(2).IsHitTestVisible());
+    core::Array<core::String> asked{core::DefaultAllocator()};
+    bed.bar->SetOnChildren([&asked](const BreadcrumbItem& of, core::Array<BreadcrumbItem>& children)
+    {
+        asked.PushBack(of.Id);
+        children.PushBack(BreadcrumbItem{Join(of.Id.AsView(), SV(u8"/alpha")), core::String(u8"alpha"), {}, {}});
+        children.PushBack(BreadcrumbItem{Join(of.Id.AsView(), SV(u8"/beta")), core::String(u8"beta"), {}, {}});
+    });
+    bed.Frame();
+    REQUIRE(bed.bar->SeparatorBefore(2).IsHitTestVisible());
+    CHECK(bed.bar->SeparatorBefore(2).HasClass(SV(u8"menu")));
+    CHECK(bed.bar->SeparatorBefore(2).GetOwner() == 1u);
+
+    // The chevron between "home" and "robert" lists what lies in "home".
+    bed.Click(bed.Middle(bed.bar->SeparatorBefore(2)));
+    REQUIRE(asked.Size() == 1);
+    CHECK(asked[0] == core::String(u8"/home"));
+    Menu* menu = bed.bar->GetOpenMenu();
+    REQUIRE(menu != nullptr);
+    const core::Array<core::String> texts = MenuTexts(*menu);
+    REQUIRE(texts.Size() == 2);
+    CHECK(texts[1] == core::String(u8"beta"));
+    (void)MenuItemAt(*menu, 1)->HandleActivate();
+    REQUIRE(bed.went.Size() == 1);
+    CHECK(bed.went[0] == core::String(u8"/home/beta"));
+    CHECK(bed.bar->GetOpenMenu() == nullptr);
+
+    // Down on the focused current segment lists its own children.
+    bed.bar->SegmentAt(4).RequestFocus();
+    bed.Key(KeyCode::Down);
+    REQUIRE(asked.Size() == 2);
+    CHECK(asked[1] == core::String(u8"/home/robert/Projects/Game"));
+    CHECK(bed.bar->GetOpenMenu() != nullptr);
+    bed.D().CloseAllPopups();
+
+    // No children: no menu.
+    bed.bar->SetOnChildren([](const BreadcrumbItem&, core::Array<BreadcrumbItem>&) {});
+    CHECK_FALSE(bed.bar->OpenChildren(1, bed.bar->SeparatorBefore(2)));
+}
+
+TEST_CASE("breadcrumb bar: segments but the current take drops of the bar's types, the application told which")
+{
+    Bed bed;
+    core::RefPtr<Panel> source = core::MakeRef<Panel>(core::DefaultAllocator());
+    source->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(60.0f);
+        s.Height = LayoutLength::Px(40.0f);
+    });
+    core::String type(u8"asset");
+    source->SetDragSource([&type](DragRequest& r)
+    {
+        r.Payload.Type = type;
+        r.Payload.Label = core::String(u8"fox.glb");
+        return true;
+    });
+    bed.root->AddChild(source.Get());
+    bed.Frame();
+    bed.bar->SetSegmentDropTypes(SV(u8"asset files"));
+    core::Array<core::String> dropped{core::DefaultAllocator()};
+    bed.bar->SetOnSegmentDrop([&dropped](const BreadcrumbItem& item, const DragPayload& payload, DropEffect)
+    {
+        dropped.PushBack(Join(Join(item.Id.AsView(), SV(u8" <- ")).AsView(), payload.Label.AsView()));
+    });
+    const auto dragTo = [&](core::Float2 to)
+    {
+        const core::Float2 from = bed.Middle(*source);
+        bed.D().InjectMouseMove(from);
+        bed.D().InjectMouseDown(from, MouseButton::Left);
+        bed.D().InjectMouseMove(core::Float2{from.x + 10.0f, from.y});
+        bed.D().InjectMouseMove(to);
+        bed.D().InjectMouseMove(core::Float2{to.x + 1.0f, to.y});
+        bed.D().InjectMouseUp(core::Float2{to.x + 1.0f, to.y}, MouseButton::Left);
+    };
+    dragTo(bed.Middle(bed.bar->SegmentAt(1)));
+    REQUIRE(dropped.Size() == 1);
+    CHECK(dropped[0] == core::String(u8"/home <- fox.glb"));
+    dragTo(bed.Middle(bed.bar->SegmentAt(4))); // the current one takes none
+    CHECK(dropped.Size() == 1);
+    type = core::String(u8"colour"); // nor a type not the bar's
+    dragTo(bed.Middle(bed.bar->SegmentAt(2)));
+    CHECK(dropped.Size() == 1);
+}
+
+TEST_CASE("breadcrumb bar: where editable, a click on its empty end edits the path; Return gives it, Escape leaves it")
+{
+    Bed bed;
+    const core::Float2 end{bed.bar->GetScreenBounds().Right() - 6.0f, bed.Middle(*bed.bar).y};
+    bed.Click(end);
+    CHECK_FALSE(bed.bar->IsEditingPath()); // not editable by default
+
+    bed.bar->SetPathEditable(true);
+    core::Array<core::String> typed{core::DefaultAllocator()};
+    bed.bar->SetOnPathSubmitted([&typed](core::StringView text) { typed.PushBack(core::String(text)); });
+    bed.Click(end);
+    REQUIRE(bed.bar->IsEditingPath());
+    TextField* field = bed.bar->GetPathField();
+    REQUIRE(field != nullptr);
+    field->SetFont(&bed.font);
+    bed.Frame();
+    CHECK(field->GetText() == SV(u8"/home/robert/Projects/Game"));
+    CHECK(field->SelectedText() == SV(u8"/home/robert/Projects/Game"));
+    CHECK(field->IsFocused());
+    CHECK_FALSE(bed.bar->SegmentAt(4).IsVisible());
+    CHECK(field->GetSize().x == doctest::Approx(bed.bar->GetContentBounds().width));
+
+    bed.D().InjectText(SV(u8"/tmp/x"));
+    bed.Key(KeyCode::Return);
+    CHECK_FALSE(bed.bar->IsEditingPath());
+    REQUIRE(typed.Size() == 1);
+    CHECK(typed[0] == core::String(u8"/tmp/x"));
+    bed.Frame();
+    CHECK(bed.bar->SegmentAt(4).IsVisible());
+    CHECK(bed.bar->SegmentAt(4).IsFocused()); // focus back on the bar's tab stop
+
+    // Escape puts the segments back, giving nothing.
+    bed.bar->BeginPathEdit();
+    bed.D().InjectText(SV(u8"nowhere"));
+    bed.Key(KeyCode::Escape);
+    CHECK_FALSE(bed.bar->IsEditingPath());
+    CHECK(typed.Size() == 1);
 }
 
 TEST_CASE("breadcrumb bar: an element markup places")

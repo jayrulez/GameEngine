@@ -111,6 +111,14 @@ export namespace experimental::gui
             graphnode.target { border-color: var(--graphnode-target, var(--accent-strong)); }
             graphnode.refused { opacity: 0.5; }
             graphpin.refused label { opacity: 0.4; }
+            graphnodepicker {
+                background-color: var(--graphnodepicker-background, var(--surface-raised)); border: var(--border-width) solid var(--border);
+                border-radius: var(--radius); font-size: var(--font-small); color: var(--text);
+            }
+            graphpickerrow { border-radius: var(--radius-small); }
+            graphpickerrow.category { padding: 1px 4px; }
+            graphpickerrow.category label { color: var(--text-dim); }
+            graphpickerrow.current { background-color: var(--graphnodepicker-current, var(--selection)); }
             graphnodeheader label { color: var(--graphnode-title, #ffffff); }
             graphnodeheader label.subtitle { opacity: 0.75; }
             graphpin label { color: var(--graphpin-text, var(--text)); }

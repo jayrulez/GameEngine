@@ -19,6 +19,13 @@
 //     transition), where the source takes node links: a straight arrow between their borders, the
 //     two ways kept apart, a node to itself when the drag leaves it and comes back;
 //   - a click on a link selects it (Shift or Ctrl adds or takes it away);
+//   - a link dropped on nothing opens the picker of the kinds of node with a pin that fits, the
+//     node chosen made there, linked to it, in one change;
+//   - the menu over nothing adds a node (the picker: by category, with a search), pastes, and frames
+//     every node or the selection; a node's copies, duplicates, deletes and begins a node link (then
+//     the link follows the pointer until a click ends it); a link's deletes it;
+//   - Delete deletes the selected nodes and links, Escape cancels a drag or clears the selection,
+//     Ctrl+C copies the selected nodes and Ctrl+V pastes them at the pointer, as the property grid's.
 //   - a double click on a node is the application's (a subgraph opened);
 //   - the wheel zooms about the pointer within limits, a middle drag pans.
 // Links are drawn by the view under the nodes, culled to it, each pin's place kept from when its
@@ -35,6 +42,7 @@ import foundation.core;
 import foundation.vg;
 import experimental.gui;
 import :graph_source;
+import :graph_node_picker;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -514,6 +522,37 @@ export namespace experimental::gui
         /// Fits the selected nodes in view; every node with none selected.
         void FrameSelection() { Frame(!m_selection.IsEmpty()); }
 
+        // === Edits of the selection (one change each, through the source) ===
+        /// Deletes the selected nodes (and their links), then the selected links left; false when
+        /// nothing went.
+        bool DeleteSelected();
+        /// Copies the selected nodes (and the links among them) to the clipboard as the source's text.
+        bool CopySelected();
+        /// Pastes the clipboard's nodes, their top-left at `at` (the graph's), selecting them.
+        bool PasteAt(core::Float2 at);
+        /// Copies and pastes the selected nodes beside them, selecting the copies (the clipboard kept).
+        bool DuplicateSelected();
+        /// Makes a node of `type` at `at` (the graph's), linked from pin `linkFrom` when it is not 0,
+        /// selecting it; its id, 0 when it was not made.
+        GraphId AddNode(core::StringView type, core::Float2 at, GraphId linkFrom = 0);
+
+        // === Menus ===
+        /// Opens the node picker at `local` (its own space), the node chosen made there; with
+        /// `fitting`, a pin, only the kinds a link from it reaches, the node linked to it. False when
+        /// there is no kind to offer.
+        bool OpenNodePicker(core::Float2 local, GraphId fitting = 0);
+        [[nodiscard]] bool IsNodePickerOpen() const
+        {
+            const EventDispatcher* dispatcher = m_picker ? m_picker->GetEventDispatcher() : nullptr;
+            return dispatcher != nullptr && dispatcher->IsPopupOpen(*m_picker);
+        }
+        [[nodiscard]] GraphNodePicker* GetNodePicker() const noexcept { return m_picker.Get(); }
+        /// The context menu while it is open; null when it is not.
+        [[nodiscard]] Menu* GetMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
+        /// Begins a node link from `node` that follows the pointer until a click ends it (a node's
+        /// menu); false when the source takes none from it.
+        bool BeginNodeLink(GraphId node);
+
         // === Nodes ===
         /// A node's size as last measured (an estimate before it was).
         [[nodiscard]] core::Float2 NodeSize(GraphId node) const
@@ -659,6 +698,8 @@ export namespace experimental::gui
                 EndDrag(false);
         }
         void OnMouseWheel(const WheelEvent& event) override;
+        void OnMouseLeave(const MouseEvent&) override { m_pointerInside = false; }
+        void OnContextMenu(const MouseEvent& event) override;
         void OnKeyDown(const KeyEvent& event) override;
         [[nodiscard]] Cursor GetCursorNow() const override { return m_drag == Drag::Pan ? Cursor::Grabbing : UIWidget::GetCursorNow(); }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
@@ -771,6 +812,9 @@ export namespace experimental::gui
                 m_onSelectionChanged();
         }
         bool BeginLink(core::Float2 local);
+        bool BeginNodeLinkFrom(GraphId node);
+        void OpenMenu(core::Float2 local, core::Float2 screen);
+        void PopupAt(Node& popup, core::Float2 local, PopupOptions options);
         void LinkTo(core::Float2 local);
         void EndLink(bool commit);
         void ShowLinkStates();
@@ -888,7 +932,15 @@ export namespace experimental::gui
         GraphId m_target = 0;
         GraphLinkCheck m_targetCheck;
         core::HashMap<GraphId, bool> m_fits; // each pin's (or node's) answer, asked once per drag
+        bool m_sticky = false;         // begun from a menu: it follows the pointer until a click
         mutable Text m_text;           // a refusal's reason
+
+        core::Float2 m_pointer{};      // where the pointer was last over it, its own space
+        bool m_pointerInside = false;
+        core::RefPtr<Menu> m_menu;
+        core::RefPtr<GraphNodePicker> m_picker;
+        core::Float2 m_pickAt{};       // where the node picked goes, the graph's
+        GraphId m_pickFrom = 0;        // the pin it is linked from
     };
 
     // === Making the nodes in view ===
@@ -989,7 +1041,7 @@ export namespace experimental::gui
 
     inline void GraphView::OnMouseDown(const MouseEvent& event)
     {
-        if (!m_source || m_drag != Drag::None)
+        if (!m_source || (m_drag != Drag::None && !(m_drag == Drag::Link && m_sticky)))
             return;
         const core::Float2 local = ConvertToNodeSpace(event.Position); // events come in screen space
         if (event.Button == MouseButton::Middle)
@@ -999,6 +1051,13 @@ export namespace experimental::gui
             m_pressAt = local;
             m_panFrom = m_pan;
             CapturePointer();
+            return;
+        }
+        if (m_drag == Drag::Link && m_sticky) // a link begun from a menu: a click ends it
+        {
+            event.Handled = true;
+            LinkTo(local);
+            EndLink(event.Button == MouseButton::Left);
             return;
         }
         if (event.Button != MouseButton::Left)
@@ -1064,9 +1123,11 @@ export namespace experimental::gui
     }
     inline void GraphView::OnMouseMove(const MouseEvent& event)
     {
+        const core::Float2 local = ConvertToNodeSpace(event.Position);
+        m_pointer = local;
+        m_pointerInside = true;
         if (m_drag == Drag::None || !m_source)
             return;
-        const core::Float2 local = ConvertToNodeSpace(event.Position);
         switch (m_drag)
         {
         case Drag::Pending:
@@ -1121,6 +1182,8 @@ export namespace experimental::gui
             return;
         if (m_drag == Drag::Link)
         {
+            if (m_sticky)
+                return; // the press that began it from a menu, or the one that ended it
             LinkTo(ConvertToNodeSpace(event.Position));
             EndLink(true);
             return;
@@ -1148,6 +1211,22 @@ export namespace experimental::gui
         {
             event.Handled = true;
             EndLink(false);
+        }
+        else if (key == KeyCode::Escape && event.Modifiers == 0 && m_drag == Drag::None && (!m_selection.IsEmpty() || !m_selectedLinks.IsEmpty()))
+        {
+            event.Handled = true;
+            Reselect(core::Array<GraphId>{});
+            ReselectLinks(core::Array<GraphId>{});
+        }
+        else if (event.Modifiers == 0 && (key == KeyCode::Delete || key == KeyCode::Backspace) && m_drag == Drag::None)
+            event.Handled = DeleteSelected();
+        else if (event.Modifiers == KeyModCtrl && key == KeyCode::C && m_drag == Drag::None)
+            event.Handled = CopySelected();
+        else if (event.Modifiers == KeyModCtrl && key == KeyCode::V && m_drag == Drag::None)
+        {
+            const Rect box = GetContentBounds();
+            const core::Float2 at = m_pointerInside ? m_pointer : core::Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+            event.Handled = PasteAt(ViewToGraph(at));
         }
     }
     inline void GraphView::OnMouseWheel(const WheelEvent& event)
@@ -1230,6 +1309,211 @@ export namespace experimental::gui
         SetPan(core::Float2{middle.x - box.width * 0.5f / m_zoom, middle.y - box.height * 0.5f / m_zoom});
     }
 
+    // === Edits of the selection ===
+
+    inline bool GraphView::DeleteSelected()
+    {
+        if (!m_source || m_readOnly)
+            return false;
+        bool any = false;
+        if (!m_selection.IsEmpty())
+        {
+            const core::Array<GraphId> nodes = m_selection;
+            any = m_source->DeleteNodes(nodes.AsSpan());
+        }
+        if (!m_selectedLinks.IsEmpty()) // those the nodes did not take with them
+        {
+            core::Array<GraphLinkInfo> links;
+            m_source->GetLinks(links);
+            core::Array<GraphId> left;
+            for (const GraphId link : m_selectedLinks)
+                for (const GraphLinkInfo& at : links)
+                    if (at.Id == link)
+                        left.PushBack(link);
+            if (!left.IsEmpty())
+                any = m_source->Disconnect(left.AsSpan()) || any;
+        }
+        return any;
+    }
+    inline bool GraphView::CopySelected()
+    {
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
+        if (!m_source || clipboard == nullptr || m_selection.IsEmpty())
+            return false;
+        const core::String text = m_source->CopyNodes(m_selection.AsSpan());
+        if (text.IsEmpty())
+            return false;
+        clipboard->SetText(text.AsView());
+        return true;
+    }
+    inline bool GraphView::PasteAt(core::Float2 at)
+    {
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
+        if (!m_source || m_readOnly || clipboard == nullptr || !clipboard->HasText())
+            return false;
+        const core::String text = clipboard->GetText();
+        core::Array<GraphId> made;
+        if (!m_source->PasteNodes(text.AsView(), at, made))
+            return false;
+        Reselect(core::Move(made));
+        ReselectLinks(core::Array<GraphId>{});
+        return true;
+    }
+    inline bool GraphView::DuplicateSelected()
+    {
+        if (!m_source || m_readOnly || m_selection.IsEmpty())
+            return false;
+        const core::String text = m_source->CopyNodes(m_selection.AsSpan());
+        if (text.IsEmpty())
+            return false;
+        bool any = false;
+        core::Float2 corner{};
+        for (const GraphId node : m_selection)
+            if (const GraphNodeInfo* info = m_source->GetNode(node))
+            {
+                corner = any ? core::Float2{core::Min(corner.x, info->Position.x), core::Min(corner.y, info->Position.y)} : info->Position;
+                any = true;
+            }
+        core::Array<GraphId> made;
+        const f32 step = 2.0f * m_gridSize;
+        if (!m_source->PasteNodes(text.AsView(), core::Float2{corner.x + step, corner.y + step}, made))
+            return false;
+        Reselect(core::Move(made));
+        return true;
+    }
+    inline GraphId GraphView::AddNode(core::StringView type, core::Float2 at, GraphId linkFrom)
+    {
+        if (!m_source || m_readOnly)
+            return 0;
+        if (m_snap)
+            at = core::Float2{core::Round(at.x / m_gridSize) * m_gridSize, core::Round(at.y / m_gridSize) * m_gridSize};
+        const GraphId made = m_source->CreateNode(type, at, linkFrom);
+        if (made != 0)
+        {
+            SelectOnly(made);
+            ReselectLinks(core::Array<GraphId>{});
+        }
+        return made;
+    }
+
+    // === Menus ===
+
+    inline void GraphView::PopupAt(Node& popup, core::Float2 local, PopupOptions options)
+    {
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        Node* top = GetRootNode();
+        if (dispatcher == nullptr || top == nullptr)
+            return;
+        const core::Float2 at = top->ConvertToNodeSpace(ConvertToWorldSpace(local));
+        options.AnchorRect = Rect{at.x, at.y, 0.0f, 0.0f};
+        options.HasAnchorRect = true;
+        options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
+        dispatcher->OpenPopup(*this, popup, core::Move(options));
+    }
+    inline bool GraphView::OpenNodePicker(core::Float2 local, GraphId fitting)
+    {
+        if (!m_source || m_readOnly)
+            return false;
+        core::Array<GraphNodeType> types;
+        m_source->GetNodeTypes(fitting, types);
+        if (types.IsEmpty())
+            return false;
+        if (!m_picker)
+            m_picker = core::MakeRef<GraphNodePicker>(MemoryAllocator());
+        ShareTextStyle(*m_picker, false);
+        m_picker->SetTypes(types.AsSpan());
+        m_pickAt = ViewToGraph(local);
+        m_pickFrom = fitting;
+        GraphView* self = this;
+        m_picker->SetOnChosen([self](const GraphNodeType& type)
+        {
+            const core::String chosen = type.Type;
+            if (EventDispatcher* dispatcher = self->GetEventDispatcher())
+                (void)dispatcher->ClosePopup(*self->m_picker);
+            (void)self->AddNode(chosen.AsView(), self->m_pickAt, self->m_pickFrom);
+        });
+        PopupOptions options;
+        options.TakesFocus = true;
+        options.FitContent = true;
+        PopupAt(*m_picker, local, core::Move(options));
+        return true;
+    }
+    inline void GraphView::OnContextMenu(const MouseEvent& event)
+    {
+        if (!m_source || m_drag != Drag::None)
+            return;
+        event.Handled = true;
+        OpenMenu(ConvertToNodeSpace(event.Position), event.Position);
+    }
+    inline void GraphView::OpenMenu(core::Float2 local, core::Float2 screen)
+    {
+        Node* top = GetRootNode();
+        if (top == nullptr)
+            return;
+        m_menu = core::MakeRef<Menu>(MemoryAllocator());
+        ShareTextStyle(*m_menu, false);
+        m_menu->SetAutoWidth(true);
+        GraphView* self = this;
+        const GraphId node = HitNode(local);
+        const GraphId link = node == 0 ? HitLink(local) : 0;
+        if (node != 0)
+        {
+            if (!IsNodeSelected(node))
+            {
+                SelectOnly(node);
+                ReselectLinks(core::Array<GraphId>{});
+            }
+            m_menu->AddItem(core::StringView(u8"Copy"), [self]() { (void)self->CopySelected(); });
+            if (!m_readOnly)
+            {
+                m_menu->AddItem(core::StringView(u8"Duplicate"), [self]() { (void)self->DuplicateSelected(); });
+                bool deletable = false;
+                for (const GraphId at : m_selection)
+                    if (const GraphNodeInfo* info = m_source->GetNode(at))
+                        deletable = deletable || info->Deletable;
+                m_menu->AddItem(core::StringView(u8"Delete"), [self]() { (void)self->DeleteSelected(); })->SetEnabled(deletable);
+                GraphLinkInfo begin;
+                begin.Kind = GraphLinkKind::Nodes;
+                begin.FromNode = node;
+                if (m_source->CheckLink(begin).Allowed)
+                    m_menu->AddItem(core::StringView(u8"Add transition"), [self, node]() { (void)self->BeginNodeLink(node); });
+            }
+            m_menu->AddSeparator();
+            m_menu->AddItem(core::StringView(u8"Frame selection"), [self]() { self->FrameSelection(); });
+        }
+        else if (link != 0)
+        {
+            if (m_readOnly)
+                return;
+            if (!IsLinkSelected(link))
+            {
+                SelectOnly(0);
+                const GraphId only[] = {link};
+                SetSelectedLinks(only);
+            }
+            m_menu->AddItem(core::StringView(u8"Delete"), [self]() { (void)self->DeleteSelected(); });
+        }
+        else
+        {
+            if (!m_readOnly)
+            {
+                core::Array<GraphNodeType> types;
+                m_source->GetNodeTypes(0, types);
+                m_menu->AddItem(core::StringView(u8"Add node\u2026"), [self, local]() { (void)self->OpenNodePicker(local); })->SetEnabled(!types.IsEmpty());
+                EventDispatcher* dispatcher = GetEventDispatcher();
+                IClipboard* clipboard = dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr;
+                const core::Float2 at = ViewToGraph(local);
+                m_menu->AddItem(core::StringView(u8"Paste"), [self, at]() { (void)self->PasteAt(at); })->SetEnabled(clipboard != nullptr && clipboard->HasText());
+                m_menu->AddSeparator();
+            }
+            m_menu->AddItem(core::StringView(u8"Frame all"), [self]() { self->FrameAll(); });
+            m_menu->AddItem(core::StringView(u8"Frame selection"), [self]() { self->FrameSelection(); })->SetEnabled(!m_selection.IsEmpty());
+        }
+        m_menu->Open(*this, top->ConvertToNodeSpace(screen));
+    }
+
     // === Links ===
 
     inline bool GraphView::BeginLink(core::Float2 local)
@@ -1286,18 +1570,8 @@ export namespace experimental::gui
         }
         else if (const GraphId node = HitNodeEdge(local); node != 0)
         {
-            m_linkKind = GraphLinkKind::Nodes;
-            begin.Kind = GraphLinkKind::Nodes;
-            begin.FromNode = node;
-            if (!m_source->CheckLink(begin).Allowed)
-                return false;
-            m_anchorNode = node;
-            m_anchorPin = 0;
-            m_anchorOutput = true;
-            core::Array<GraphId> ids;
-            m_source->GetNodes(ids);
-            for (const GraphId id : ids)
-                m_fits.InsertOrAssign(id, m_source->CheckLink(Candidate(id)).Allowed);
+            m_pressAt = local;
+            return BeginNodeLinkFrom(node);
         }
         else
             return false;
@@ -1305,6 +1579,47 @@ export namespace experimental::gui
         m_pressAt = local;
         ShowLinkStates();
         Invalidate();
+        return true;
+    }
+    inline bool GraphView::BeginNodeLinkFrom(GraphId node)
+    {
+        GraphLinkInfo begin;
+        begin.Kind = GraphLinkKind::Nodes;
+        begin.FromNode = node;
+        if (!m_source->CheckLink(begin).Allowed)
+            return false;
+        m_linkKind = GraphLinkKind::Nodes;
+        m_anchorNode = node;
+        m_anchorPin = 0;
+        m_anchorOutput = true;
+        core::Array<GraphId> ids;
+        m_source->GetNodes(ids);
+        for (const GraphId id : ids)
+            m_fits.InsertOrAssign(id, m_source->CheckLink(Candidate(id)).Allowed);
+        m_drag = Drag::Link;
+        ShowLinkStates();
+        Invalidate();
+        return true;
+    }
+    inline bool GraphView::BeginNodeLink(GraphId node)
+    {
+        if (!m_source || m_readOnly || m_drag != Drag::None || m_source->GetNode(node) == nullptr)
+            return false;
+        m_relinking = 0;
+        m_relinkFrom = 0;
+        m_target = 0;
+        m_targetCheck = GraphLinkCheck{};
+        m_leftAnchor = false;
+        m_fits.Clear();
+        const Rect at = NodeRect(node);
+        m_linkTo = m_pointerInside ? m_pointer : core::Float2{at.Right(), at.y};
+        m_pressAt = m_linkTo;
+        if (!BeginNodeLinkFrom(node))
+            return false;
+        m_sticky = true;
+        m_linkMoved = true;
+        RequestFocus();
+        CapturePointer();
         return true;
     }
     inline void GraphView::LinkTo(core::Float2 local)
@@ -1345,6 +1660,7 @@ export namespace experimental::gui
         if (m_drag != Drag::Link)
             return;
         m_drag = Drag::None;
+        m_sticky = false;
         const GraphId target = m_target;
         const GraphLinkCheck check = m_targetCheck;
         m_target = 0;
@@ -1362,6 +1678,8 @@ export namespace experimental::gui
                 const GraphId gone[] = {m_relinking};
                 (void)m_source->Disconnect(gone);
             }
+            else if (m_linkKind == GraphLinkKind::Pins) // a new one: the kinds of node it may reach
+                (void)OpenNodePicker(m_linkTo, m_anchorPin);
             return;
         }
         if (!check.Allowed || target == m_relinkFrom)

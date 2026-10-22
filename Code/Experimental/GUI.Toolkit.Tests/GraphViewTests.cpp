@@ -9,7 +9,10 @@
 // drag panning; framing every node. Links: dragged from a pin, the source asked of each pin (lit,
 // dimmed, the one under the pointer its target, a refusal and what would be replaced known); an
 // input's link end rewired or let go; a node link from just outside a node's edge, the two ways
-// apart, to itself after leaving it; a click selecting a link; highlights.
+// apart, to itself after leaving it; a click selecting a link; highlights. Menus and keys: the
+// picker of node kinds (by category, with a search), opened from the menu over nothing or by a link
+// dropped on nothing (only the kinds it reaches, the node linked); Delete, Escape, Ctrl+C and Ctrl+V;
+// a node's menu duplicating and beginning a node link that follows the pointer; a link's deleting.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -23,16 +26,69 @@ using core::usize;
 
 namespace
 {
-    GraphPinInfo Pin(const char8_t* name, GraphPinDirection direction)
+    GraphPinInfo Pin(const char8_t* name, GraphPinDirection direction, const char8_t* type = u8"")
     {
         GraphPinInfo pin;
         pin.Name = core::String(name);
         pin.Direction = direction;
+        pin.Type = core::String(type);
         return pin;
+    }
+    GraphNodeType Kind(const char8_t* type, const char8_t* name, const char8_t* category)
+    {
+        return GraphNodeType{core::String(type), core::String(name), core::String(category)};
+    }
+
+    // Core's binary serializer, its bytes held as the text.
+    class BlobFormat : public IPropertyTextFormat
+    {
+    public:
+        core::String Write(core::Function<void(core::ISerializer&)> write) override
+        {
+            core::MemoryStream stream;
+            core::BinarySerializer ar(stream, core::SerializeMode::Write);
+            write(ar);
+            const core::Span<const core::byte> bytes = stream.Bytes();
+            return ar.IsOk() ? core::String(core::StringView(reinterpret_cast<const char8_t*>(bytes.Data()), bytes.Size())) : core::String{};
+        }
+        bool Read(core::StringView text, core::Function<void(core::ISerializer&)> read) override
+        {
+            core::MemoryStream stream;
+            (void)stream.Write(text.Data(), text.Size());
+            (void)stream.Seek(0, core::SeekOrigin::Begin);
+            core::BinarySerializer ar(stream, core::SerializeMode::Read);
+            read(ar);
+            return ar.IsOk();
+        }
+    };
+    class MemoryClipboard : public IClipboard
+    {
+    public:
+        [[nodiscard]] bool HasText() const override { return m_text.Size() != 0; }
+        [[nodiscard]] core::String GetText() const override { return m_text; }
+        void SetText(core::StringView text) override { m_text = core::String(text); }
+
+    private:
+        core::String m_text;
+    };
+
+    MenuItem* Item(Menu& menu, const char8_t* text)
+    {
+        for (usize i = 0; i < menu.ChildCount(); ++i)
+            if (MenuItem* item = core::Cast<MenuItem>(menu.GetChildAt(i)); item != nullptr && item->GetText() == core::StringView(text))
+                return item;
+        return nullptr;
+    }
+    void Activate(Menu& menu, const char8_t* text)
+    {
+        MenuItem* item = Item(menu, text);
+        REQUIRE(item != nullptr);
+        (void)item->HandleActivate();
     }
     GraphNodeInfo Node(const char8_t* title, core::Float2 at)
     {
         GraphNodeInfo node;
+        node.Type = core::String(u8"mix"); // a kind the graph makes, so it copies and pastes
         node.Title = core::String(title);
         node.Position = at;
         node.Pins.PushBack(Pin(u8"in", GraphPinDirection::Input));
@@ -47,6 +103,8 @@ namespace
         core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
         core::RefPtr<GraphView> view = core::MakeRef<GraphView>(core::DefaultAllocator());
         GraphSet graph;
+        BlobFormat format;
+        MemoryClipboard clipboard;
         core::Array<GraphChange> changes{core::DefaultAllocator()};
         GraphId a = 0, b = 0, c = 0;
 
@@ -55,7 +113,26 @@ namespace
             a = graph.AddNode(Node(u8"A", core::Float2{0.0f, 0.0f}));
             b = graph.AddNode(Node(u8"B", core::Float2{300.0f, 0.0f}));
             c = graph.AddNode(Node(u8"C", core::Float2{1200.0f, 800.0f}));
+            // Its kinds of node: a Number (Values; out "value": float), a Mix and a Tint (Maths; in "a"
+            // and "b": float, out "result"; in "color": color, out "color").
+            GraphNodeInfo number;
+            number.Title = core::String(u8"Number");
+            number.Pins.PushBack(Pin(u8"value", GraphPinDirection::Output, u8"float"));
+            GraphNodeInfo mix;
+            mix.Title = core::String(u8"Mix");
+            mix.Pins.PushBack(Pin(u8"a", GraphPinDirection::Input, u8"float"));
+            mix.Pins.PushBack(Pin(u8"b", GraphPinDirection::Input, u8"float"));
+            mix.Pins.PushBack(Pin(u8"result", GraphPinDirection::Output, u8"float"));
+            GraphNodeInfo tint;
+            tint.Title = core::String(u8"Tint");
+            tint.Pins.PushBack(Pin(u8"color", GraphPinDirection::Input, u8"color"));
+            tint.Pins.PushBack(Pin(u8"color", GraphPinDirection::Output, u8"color"));
+            graph.AddNodeType(Kind(u8"number", u8"Number", u8"Values"), number);
+            graph.AddNodeType(Kind(u8"mix", u8"Mix", u8"Maths"), mix);
+            graph.AddNodeType(Kind(u8"tint", u8"Tint", u8"Maths"), tint);
+            graph.SetTextFormat(&format);
             graph.SetOnChange([this](const GraphChange& change) { changes.PushBack(change); });
+            D().SetClipboard(&clipboard);
             root->SetSize(core::Float2{800.0f, 600.0f});
             root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
             view->EditLayoutStyle([](LayoutStyle& s)
@@ -67,7 +144,19 @@ namespace
             view->SetSource(&graph);
             (void)root->UpdateLayout();
         }
-        ~Bed() { view->SetSource(nullptr); }
+        ~Bed()
+        {
+            D().CloseAllPopups();
+            D().SetClipboard(nullptr);
+            view->SetSource(nullptr);
+        }
+        void RightClick(core::Float2 at)
+        {
+            D().InjectMouseMove(at);
+            D().InjectMouseDown(at, MouseButton::Right);
+            D().InjectMouseUp(at, MouseButton::Right);
+        }
+        [[nodiscard]] usize NodeCount() const { return graph.State().Nodes.Size(); }
         EventDispatcher& D() { return *root->GetEventDispatcher(); }
         [[nodiscard]] core::Float2 Middle(GraphId node) const
         {
@@ -536,4 +625,177 @@ TEST_CASE("GraphView: node links from just outside a node's edge, where the sour
     CHECK(bed.graph.State().Links[2].ToNode == bed.a);
     REQUIRE(bed.view->LinkPoints(bed.graph.State().Links[2], one));
     CHECK(one.Size() > 2); // a loop
+}
+
+TEST_CASE("GraphView: the menu over nothing adds a node through the picker, by category with a search")
+{
+    Bed bed;
+    const core::Float2 at{450.0f, 300.0f};
+    bed.RightClick(at);
+    Menu* menu = bed.view->GetMenu();
+    REQUIRE(menu != nullptr);
+    REQUIRE(Item(*menu, u8"Paste") != nullptr);
+    CHECK_FALSE(Item(*menu, u8"Paste")->IsEnabled()); // nothing on the clipboard
+    REQUIRE(Item(*menu, u8"Frame all") != nullptr);
+    Activate(*menu, u8"Add node\u2026");
+    REQUIRE(bed.view->IsNodePickerOpen());
+    GraphNodePicker& picker = *bed.view->GetNodePicker();
+    REQUIRE(picker.ShownCount() == 3); // Values: Number; Maths: Mix, Tint
+    CHECK(picker.ShownAt(0).Name == core::String(u8"Number"));
+    CHECK(picker.ShownAt(1).Name == core::String(u8"Mix"));
+    picker.SetQuery(core::StringView(u8"MI"));
+    REQUIRE(picker.ShownCount() == 1);
+    CHECK(picker.ShownAt(0).Name == core::String(u8"Mix"));
+    REQUIRE(picker.ChooseCurrent());
+    CHECK_FALSE(bed.view->IsNodePickerOpen());
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Added Mix"));
+    REQUIRE(bed.Selected() == 1);
+    const GraphNodeInfo* made = bed.graph.GetNode(bed.view->GetSelectedNodes()[0]);
+    REQUIRE(made != nullptr);
+    CHECK(made->Position.x == doctest::Approx(448.0f)); // where the menu was, on the grid
+    CHECK(made->Position.y == doctest::Approx(304.0f));
+
+    // By the keys: Down to the second kind, Enter.
+    REQUIRE(bed.view->OpenNodePicker(core::Float2{100.0f, 300.0f}));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
+    CHECK(picker.GetCurrent() == 1);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    CHECK_FALSE(bed.view->IsNodePickerOpen());
+    REQUIRE(bed.changes.Size() == 2);
+    CHECK(bed.changes[1].Words == core::String(u8"Added Mix"));
+}
+
+TEST_CASE("GraphView: a link dropped on nothing opens the picker of the kinds it reaches; the node chosen comes linked, one change")
+{
+    Bed bed;
+    const GraphId aOut = bed.PinOf(bed.a, u8"out");
+    bed.Drag(bed.PinAt(aOut), core::Float2{450.0f, 300.0f});
+    REQUIRE(bed.view->IsNodePickerOpen());
+    GraphNodePicker& picker = *bed.view->GetNodePicker();
+    REQUIRE(picker.ShownCount() == 2); // those with an input: Mix and Tint
+    CHECK(picker.ShownAt(0).Name == core::String(u8"Mix"));
+    CHECK(picker.ShownAt(1).Name == core::String(u8"Tint"));
+    REQUIRE(picker.Choose(0));
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Added Mix"));
+    REQUIRE(bed.LinkCount() == 1);
+    const GraphLinkInfo link = bed.graph.State().Links[0];
+    CHECK(link.FromPin == aOut);
+    CHECK(link.ToNode == bed.view->GetSelectedNodes()[0]);
+    CHECK(link.ToPin == bed.graph.FindPin(link.ToNode, core::StringView(u8"a"), GraphPinDirection::Input));
+}
+
+TEST_CASE("GraphView: Delete, Escape, Ctrl+C and Ctrl+V as the property grid's; Duplicate from a node's menu")
+{
+    Bed bed;
+    bed.Click(bed.Middle(bed.a));
+    bed.Pause();
+    bed.Click(bed.Middle(bed.b), KeyModShift);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::C), KeyModCtrl);
+    CHECK(bed.clipboard.HasText());
+    bed.D().InjectMouseMove(core::Float2{450.0f, 300.0f});
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::V), KeyModCtrl);
+    REQUIRE(bed.changes.Size() == 1);
+    CHECK(bed.changes[0].Words == core::String(u8"Pasted"));
+    CHECK(bed.NodeCount() == 5);
+    REQUIRE(bed.Selected() == 2); // the copies
+    CHECK_FALSE(bed.view->IsNodeSelected(bed.a));
+    const GraphNodeInfo* first = bed.graph.GetNode(bed.view->GetSelectedNodes()[0]);
+    REQUIRE(first != nullptr);
+    CHECK(first->Position.y == doctest::Approx(300.0f)); // their top-left at the pointer
+
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
+    CHECK(bed.NodeCount() == 3);
+    REQUIRE(bed.changes.Size() == 2);
+    CHECK(bed.changes[1].Words == core::String(u8"Deleted"));
+    CHECK(bed.Selected() == 0);
+
+    bed.Pause();
+    bed.Click(bed.Middle(bed.a));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK(bed.Selected() == 0);
+
+    // A selected link goes with Delete.
+    GraphLinkInfo made;
+    made.FromNode = bed.a;
+    made.FromPin = bed.PinOf(bed.a, u8"out");
+    made.ToNode = bed.b;
+    made.ToPin = bed.PinOf(bed.b, u8"in");
+    (void)bed.graph.AddLink(made);
+    const core::Float2 from = bed.PinAt(made.FromPin), to = bed.PinAt(made.ToPin);
+    bed.Pause();
+    bed.Click(core::Float2{(from.x + to.x) * 0.5f, (from.y + to.y) * 0.5f});
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
+    CHECK(bed.LinkCount() == 0);
+    CHECK(bed.changes.Back().Words == core::String(u8"Unlinked"));
+
+    // Duplicate beside it, from its menu (the clipboard kept).
+    bed.clipboard.SetText(core::StringView(u8"kept"));
+    bed.RightClick(bed.Middle(bed.a));
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    Activate(*bed.view->GetMenu(), u8"Duplicate");
+    CHECK(bed.NodeCount() == 4);
+    REQUIRE(bed.Selected() == 1);
+    const GraphNodeInfo* copy = bed.graph.GetNode(bed.view->GetSelectedNodes()[0]);
+    REQUIRE(copy != nullptr);
+    CHECK(copy->Title == core::String(u8"A"));
+    CHECK(copy->Position.x == doctest::Approx(32.0f));
+    CHECK(copy->Position.y == doctest::Approx(32.0f));
+    CHECK(bed.clipboard.GetText() == core::String(u8"kept"));
+
+    // Read only: no Duplicate or Delete, and Delete deletes nothing.
+    bed.view->SetReadOnly(true);
+    bed.Pause();
+    bed.RightClick(bed.Middle(bed.a));
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    CHECK(Item(*bed.view->GetMenu(), u8"Copy") != nullptr);
+    CHECK(Item(*bed.view->GetMenu(), u8"Duplicate") == nullptr);
+    CHECK(Item(*bed.view->GetMenu(), u8"Delete") == nullptr);
+    bed.D().CloseAllPopups();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Delete));
+    CHECK(bed.NodeCount() == 4);
+}
+
+TEST_CASE("GraphView: a node's menu begins a node link that follows the pointer until a click; a link's menu deletes it")
+{
+    Bed bed;
+    bed.RightClick(bed.Middle(bed.a));
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    CHECK(Item(*bed.view->GetMenu(), u8"Add transition") == nullptr); // a graph of pins
+    bed.D().CloseAllPopups();
+
+    bed.graph.SetNodeLinks(true);
+    bed.Pause();
+    bed.RightClick(bed.Middle(bed.a));
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    Activate(*bed.view->GetMenu(), u8"Add transition");
+    REQUIRE(bed.view->IsLinking());
+    bed.D().InjectMouseMove(bed.Middle(bed.b));
+    CHECK(bed.view->GetLinkCheck().Allowed);
+    bed.Click(bed.Middle(bed.b));
+    CHECK_FALSE(bed.view->IsLinking());
+    REQUIRE(bed.LinkCount() == 1);
+    const GraphLinkInfo link = bed.graph.State().Links[0];
+    CHECK(link.Kind == GraphLinkKind::Nodes);
+    CHECK(link.FromNode == bed.a);
+    CHECK(link.ToNode == bed.b);
+
+    // Escape ends one unmade.
+    bed.Pause();
+    bed.RightClick(bed.Middle(bed.b));
+    Activate(*bed.view->GetMenu(), u8"Add transition");
+    REQUIRE(bed.view->IsLinking());
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK_FALSE(bed.view->IsLinking());
+    CHECK(bed.LinkCount() == 1);
+
+    // The link's menu deletes it.
+    core::Array<core::Float2> points(core::DefaultAllocator());
+    REQUIRE(bed.view->LinkPoints(link, points));
+    bed.Pause();
+    bed.RightClick(core::Float2{(points[0].x + points.Back().x) * 0.5f, (points[0].y + points.Back().y) * 0.5f});
+    REQUIRE(bed.view->GetMenu() != nullptr);
+    Activate(*bed.view->GetMenu(), u8"Delete");
+    CHECK(bed.LinkCount() == 0);
 }

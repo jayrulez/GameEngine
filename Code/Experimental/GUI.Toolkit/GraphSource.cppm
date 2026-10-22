@@ -686,8 +686,13 @@ export namespace experimental::gui
             for (usize i = made.Size(); i-- > 0;)
                 if (made[i] == 0)
                     made.RemoveAt(i);
+            if (made.IsEmpty()) // none of a kind it makes: no change
+            {
+                m_state = before;
+                return false;
+            }
             Told(core::String(u8"Pasted"), before);
-            return !made.IsEmpty();
+            return true;
         }
 
     private:

@@ -101,6 +101,8 @@ namespace experimental::gui
     RTTI_DEFINE_OBJECT(GraphPinRow, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodeHeader, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(GraphNodeWidget, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(GraphPickerRow, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(GraphNodePicker, "rtti::gui::toolkit")
     REFLECT_MEMBERS(GraphView, "rtti::gui::toolkit")
     {
         builder.AccessorProperty<&GraphView::GetGridSize, &GraphView::SetGridSize>("gridSize").PropAttribute("css", core::String(u8"grid-size"));

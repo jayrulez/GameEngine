@@ -24,6 +24,7 @@ target_sources(GUI.Toolkit
             Dopesheet.cppm
             CurveEditors.cppm
             GraphSource.cppm
+            GraphNodePicker.cppm
             GraphView.cppm
     PRIVATE
         ToolkitReflection.cpp)

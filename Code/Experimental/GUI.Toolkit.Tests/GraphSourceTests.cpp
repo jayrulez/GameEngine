@@ -286,4 +286,16 @@ TEST_CASE("GraphSet: nodes copied with the links among them, pasted as new nodes
     CHECK(bed.LinkCount() == 2); // the copy's own link, between the copies
     CHECK(bed.changes.Back().Words == core::String(u8"Pasted"));
     CHECK_FALSE(bed.graph.PasteNodes(SV(u8"not ours"), core::Float2{}, made));
+
+    // Nodes of no kind it makes: nothing pasted, and no change told.
+    const usize told = bed.changes.Size();
+    GraphNodeInfo stray;
+    stray.Title = core::String(u8"Stray");
+    stray.Type = core::String(u8"unknown");
+    const GraphId strayId = bed.graph.AddNode(stray);
+    const core::String strays = bed.graph.CopyNodes(core::Span<const GraphId>(&strayId, 1));
+    REQUIRE_FALSE(strays.IsEmpty());
+    CHECK_FALSE(bed.graph.PasteNodes(strays.AsView(), core::Float2{}, made));
+    CHECK(made.IsEmpty());
+    CHECK(bed.changes.Size() == told);
 }

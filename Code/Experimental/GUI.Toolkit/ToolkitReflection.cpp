@@ -97,6 +97,15 @@ namespace experimental::gui
         builder.AccessorProperty<&Dopesheet::GetLabelWidth, &Dopesheet::SetLabelWidth>("labelWidth").PropAttribute("css", core::String(u8"label-width"));
         builder.Creator();
     }
+    // T6's view: an element markup places, whose source the application gives in code.
+    RTTI_DEFINE_OBJECT(GraphPinRow, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(GraphNodeHeader, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(GraphNodeWidget, "rtti::gui::toolkit")
+    REFLECT_MEMBERS(GraphView, "rtti::gui::toolkit")
+    {
+        builder.AccessorProperty<&GraphView::GetGridSize, &GraphView::SetGridSize>("gridSize").PropAttribute("css", core::String(u8"grid-size"));
+        builder.Creator();
+    }
     RTTI_DEFINE_OBJECT(PropertyViewPopup, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyValuePreview, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(CurvePropertyEditor, "rtti::gui::toolkit")
@@ -119,6 +128,7 @@ namespace experimental::gui
                 &CurveView::StaticType(),
                 &GradientView::StaticType(),
                 &Dopesheet::StaticType(),
+                &GraphView::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)ElementTypes::Register(*type);

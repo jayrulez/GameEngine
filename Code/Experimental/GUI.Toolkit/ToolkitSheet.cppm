@@ -92,6 +92,19 @@ export namespace experimental::gui
             dopesheet::playhead { background-color: var(--timeline-playhead, var(--accent)); }
             dopesheet::selection-box { background-color: var(--dopesheet-selection-box, var(--selection)); opacity: 0.5; }
             dopesheet:focus-visible { box-shadow: inset 0 0 0 var(--focus-width) var(--focus-ring); }
+            graphview { background-color: var(--graphview-background, var(--surface-sunken)); color: var(--text); font-size: var(--font-small); }
+            graphview::grid { background-color: var(--graphview-grid, var(--separator)); opacity: 0.35; }
+            graphview::grid-major { background-color: var(--graphview-grid-major, var(--separator)); opacity: 0.8; }
+            graphview::selection-box { background-color: var(--graphview-selection-box, var(--selection)); opacity: 0.5; }
+            graphview:focus-visible { box-shadow: inset 0 0 0 var(--focus-width) var(--focus-ring); }
+            graphnode {
+                background-color: var(--graphnode-background, var(--surface-raised)); border: var(--border-width) solid var(--graphnode-border, var(--border));
+                border-radius: var(--graphnode-radius, var(--radius));
+            }
+            graphnode.selected { border-color: var(--graphnode-selected, var(--accent)); }
+            graphnodeheader label { color: var(--graphnode-title, #ffffff); }
+            graphnodeheader label.subtitle { opacity: 0.75; }
+            graphpin label { color: var(--graphpin-text, var(--text)); }
             toolbar > separator { thickness: 1px; margin: 3px 3px; background-color: var(--toolbar-separator, var(--separator)); }
         )");
     }

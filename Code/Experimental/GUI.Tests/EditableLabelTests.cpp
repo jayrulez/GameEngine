@@ -72,6 +72,25 @@ TEST_CASE("editable label: a double-click edits it in place, all selected; Retur
     CHECK(b.changeEvents == 1);
 }
 
+TEST_CASE("editable label: its field's text lies where the label's was, the field's padding reaching past it")
+{
+    Bed b;
+    b.label->SetPadding(Thickness{2.0f, 3.0f, 2.0f, 3.0f});
+    b.label->BeginEdit();
+    TextField* editor = b.label->GetEditor();
+    REQUIRE(editor != nullptr);
+    editor->SetPadding(Thickness{6.0f, 6.0f, 6.0f, 6.0f});
+    (void)b.root->UpdateLayout();
+    // A label 24 tall, its content 18: the field's content as tall, not 24 less its padding.
+    const Rect content = b.label->GetContentBounds();
+    const Rect field = editor->GetContentBounds();
+    CHECK(editor->GetPosition().x + field.x == doctest::Approx(content.x));
+    CHECK(editor->GetPosition().y + field.y == doctest::Approx(content.y));
+    CHECK(field.width == doctest::Approx(content.width));
+    CHECK(field.height == doctest::Approx(18.0f));
+    CHECK(editor->GetSize().y == doctest::Approx(30.0f));
+}
+
 TEST_CASE("editable label: F2 edits it; Escape cancels; focus leaving commits")
 {
     Bed b;

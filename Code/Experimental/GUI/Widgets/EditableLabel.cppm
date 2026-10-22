@@ -124,11 +124,17 @@ export namespace experimental::gui
             if (m_editor)
                 ShareTextStyle(*m_editor);
         }
-        // The field lies over its whole box.
+        // The field's text lies where the label's was: its content box on the label's, its padding
+        // and border reaching past the label's box. Over the whole box alone, a field's padding
+        // would leave a label one line tall no room to show what is typed.
         void OnLayout() override
         {
-            if (m_editor)
-                m_editor->Arrange(Rect{0.0f, 0.0f, GetSize().x, GetSize().y});
+            if (!m_editor)
+                return;
+            const Rect content = GetContentBounds();
+            const Thickness chrome = m_editor->GetChrome();
+            m_editor->Arrange(Rect{content.x - chrome.Left, content.y - chrome.Top, content.width + chrome.TotalHorizontal(),
+                                   content.height + chrome.TotalVertical()});
         }
 
     private:

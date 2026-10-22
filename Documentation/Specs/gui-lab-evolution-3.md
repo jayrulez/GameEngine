@@ -630,4 +630,38 @@ Each a layer with its tests, the sandbox's Toolkit page growing with them.
   - **The sandbox**: a lamp's flicker curve and a sky gradient in the grid, and a short clip whose
     tracks animate the lamps, scrubbed in a dopesheet and a curve view, the grid following.
 - **T6 The node graph.** A view over a graph source.
+
+  T6's design (approved by the user, 2026-10-22; foundation.ui's `NodeGraphCanvas` surveyed first: it
+  copies the graph into the widget and addresses it by index, a removal shifting the rest, so its
+  caller mirrors parallel arrays through `OnConnectionDeleting`; its one user, the editor's animation
+  graph, is a state machine of node-to-node transitions, parallel edges and an Any State):
+  - **A source with stable ids**, `IGraphSource`: nodes (title, subtitle, position, header colour,
+    movable, deletable, their input and output pins), pins (name, direction, a type's colour, one link
+    or many), links (two pins, or two nodes) and frames. Edits are requests it applies, as the
+    property and curve sources' are: moving nodes a gesture (begun, previewed, committed once or
+    cancelled); connecting, disconnecting, deleting, creating a node and a frame's edits one change
+    each; copying its text and pasting it back. The undo is the application's. `GraphSet` is a source
+    in memory, for tests and the sandbox.
+  - **A link asked for first** (ezEngine): while one is dragged the view asks the source of each pin
+    it passes, which answers allowed or refused (and why) and which link it would replace; pins that
+    fit are lit, the rest dimmed, a link about to be replaced marked.
+  - **Two kinds of link**: a pin's (dataflow), a curve from an output to an input; a node's (a state
+    machine's), a straight arrowed edge between two nodes' borders, parallel edges apart (A to B and B
+    to A both seen), a node to itself, begun from its edge or its menu.
+  - **Nodes are widgets, links drawn**: a node's header, title and a row per pin are widgets the sheet
+    styles and right to left mirrors, and its body may hold an application's widgets (a pin's
+    default); only the nodes in view are made, their widgets reused as the view moves; links are drawn
+    by the view, culled to it (Godot, traktor).
+  - **The view, mouse first**: a click or a box selects (Shift or Ctrl adds or takes away); a drag
+    moves nodes (on the grid where it snaps); a drag from a pin links it, and dropped on nothing opens
+    the menu of nodes with a pin that fits, the new node linked; a link's end dragged off its input
+    rewires it or lets it go; a double click on a node is the application's (a subgraph opened); the
+    wheel zooms about the pointer within limits, a middle drag pans; the menu over nothing frames every
+    node or the selection and adds a node by category, with a search; the application highlights nodes
+    and links (a state machine's active state); read only, it shows and does not edit. Its keys:
+    Delete, Escape, and Ctrl+C and Ctrl+V as the property grid's; duplicating is the menu's.
+  - **Frames**: a titled, coloured rectangle behind nodes, the nodes inside moving with it, resized
+    from its edges; a frame with a body is a comment.
+  - **The sandbox**: a small dataflow graph and a lamp's state machine (Off, On, Flicker and their
+    transitions), each a `GraphSet` with its Undo.
 - **T7 The rest.** A breadcrumb bar; toasts, unless the gamekit's serve.

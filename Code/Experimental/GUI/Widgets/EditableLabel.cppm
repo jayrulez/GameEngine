@@ -7,9 +7,10 @@
 // layer's name or a file's in a list. A double-click, or F2 while it is focused, edits it: a text
 // field over its text, all of it selected. Return commits, as does focus leaving; Escape cancels.
 // A multiline one (a comment) edits in a text area, where Return breaks a line and Ctrl+Return
-// commits, its box growing and shrinking with the lines typed.
-// A validator may refuse what was typed: Return then keeps it editing (the field marked
-// `.invalid`), and focus leaving puts the old text back. A committed change reports `change`.
+// commits, its box growing and shrinking with the lines typed. Its field's context menu (cut, copy,
+// paste) keeps it editing. A validator may refuse what was typed: Return then keeps it editing (the
+// field marked `.invalid`), and focus leaving puts the old text back. A committed change reports
+// `change`.
 
 module;
 #include "Core/Prelude.h"
@@ -26,6 +27,7 @@ import :label;
 import :text_edit_base;
 import :text_field;
 import :text_area;
+import :menu; // the field's context menu
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -191,7 +193,10 @@ export namespace experimental::gui
             m_editor->SetOnSubmit([self](core::StringView) { (void)self->EndEdit(true); });
             (void)m_editor->AddEventListener(EventType::FocusLost, [self](const Event&)
             {
-                // Focus went elsewhere: committed if it may be, else put back.
+                // Focus went elsewhere: committed if it may be, else put back. Not to the field's own
+                // context menu, which gives it back when it closes (a cut of what was selected).
+                if (const Menu* menu = self->m_editor->GetContextMenu(); menu != nullptr && menu->IsOpen())
+                    return;
                 if (self->m_editing && !self->EndEdit(true))
                     (void)self->EndEdit(false);
             });

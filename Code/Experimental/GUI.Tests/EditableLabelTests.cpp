@@ -124,6 +124,30 @@ TEST_CASE("editable label: its field's text lies where the label's was, the fiel
     CHECK(editor->GetSize().y == doctest::Approx(30.0f));
 }
 
+TEST_CASE("editable label: its field's context menu keeps it editing, the selection there to cut")
+{
+    Bed b;
+    b.label->BeginEdit();
+    TextEditBase* editor = b.label->GetEditor();
+    REQUIRE(editor != nullptr);
+    editor->GetModel().Select(TextRange{0, 5}); // "layer"
+    b.D().InjectMouseDown(core::Float2{20.0f, 12.0f}, MouseButton::Right);
+    b.D().InjectMouseUp(core::Float2{20.0f, 12.0f}, MouseButton::Right);
+    REQUIRE(editor->GetContextMenu() != nullptr);
+    REQUIRE(editor->GetContextMenu()->IsOpen());
+    CHECK(b.label->IsEditing());
+    CHECK(editor->SelectedText() == core::StringView(u8"layer"));
+    CHECK(b.commits == 0);
+    // Cut, from the menu: the field has the focus back, still editing.
+    MenuItem* cut = core::Cast<MenuItem>(editor->GetContextMenu()->GetChildAt(0));
+    REQUIRE(cut != nullptr);
+    (void)cut->HandleActivate();
+    CHECK_FALSE(editor->GetContextMenu()->IsOpen());
+    CHECK(b.label->IsEditing());
+    CHECK(editor->IsFocused());
+    CHECK(editor->GetText() == core::StringView(u8" 1"));
+}
+
 TEST_CASE("editable label: F2 edits it; Escape cancels; focus leaving commits")
 {
     Bed b;

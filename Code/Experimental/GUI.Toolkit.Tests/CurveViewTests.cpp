@@ -430,3 +430,17 @@ TEST_CASE("CurveView: an undo that takes keys away takes them from the selection
     CHECK(bed.Keys().Size() == 2);
     CHECK(bed.view->GetSelection().IsEmpty());
 }
+
+TEST_CASE("CurveView: a Shift+click on a key just selected takes it away, though it comes as a double click")
+{
+    Bed bed;
+    const core::CurveKey keys[] = {Key(0.2f, 0.2f), Key(0.8f, 0.8f)};
+    bed.curves.AddCurve(CurveInfo{}, keys);
+    bed.Click(Bed::At(0.2f, 0.2f));
+    REQUIRE(bed.view->IsSelected(CurveKeyRef{0, 0}));
+    bed.Click(Bed::At(0.2f, 0.2f), KeyModShift); // the second press, near in time and place
+    CHECK_FALSE(bed.view->IsSelected(CurveKeyRef{0, 0}));
+    bed.Click(Bed::At(0.2f, 0.2f), KeyModShift); // and back
+    CHECK(bed.view->IsSelected(CurveKeyRef{0, 0}));
+    CHECK(bed.Keys().Size() == 2); // nothing added
+}

@@ -414,10 +414,11 @@ export namespace experimental::gui
         m_boxTo = local;
         m_additive = (event.Modifiers & (KeyModShift | KeyModCtrl)) != 0;
         const CurveHit hit = HitTest(local);
-        if (event.ClickCount == 2 && (hit.What == CurveHit::Kind::Curve || hit.What == CurveHit::Kind::Key))
+        // A double click on the curve adds a key; on a key it is a click (a Shift+click soon after
+        // selecting a key takes it away again).
+        if (event.ClickCount == 2 && hit.What == CurveHit::Kind::Curve)
         {
-            if (hit.What == CurveHit::Kind::Curve)
-                (void)InsertKey(hit.Key.Curve, TimeAtX(local.x));
+            (void)InsertKey(hit.Key.Curve, TimeAtX(local.x));
             m_drag = Drag::None;
             return;
         }

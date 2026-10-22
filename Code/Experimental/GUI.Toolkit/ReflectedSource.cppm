@@ -38,7 +38,6 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <array> // a serializer key, null-terminated
 
 export module experimental.gui.toolkit:reflected_source;
 
@@ -1294,8 +1293,8 @@ export namespace experimental::gui
                     for (i64 i = 0; i < count; ++i)
                     {
                         core::String type;
-                        const std::array<char, 24> typeKey = ElementKey(i, true);
-                        core::Serialize(ar, typeKey.data(), type);
+                        const core::FixedArray<char, 24> typeKey = ElementKey(i, true);
+                        core::Serialize(ar, typeKey.items, type);
                         for (const core::TypeInfo* concrete : CreatableTypes(container))
                             if (core::StringView(reinterpret_cast<const char8_t*>(concrete->name)) == type.AsView())
                             {
@@ -1318,8 +1317,8 @@ export namespace experimental::gui
                 {
                     const core::Instance element = core::ContainerAddressAt(container, list, static_cast<usize>(i));
                     core::String type(element.IsEmpty() ? core::StringView{} : core::StringView(reinterpret_cast<const char8_t*>(element.Type()->name)));
-                    const std::array<char, 24> typeKey = ElementKey(i, true);
-                    core::Serialize(ar, typeKey.data(), type);
+                    const core::FixedArray<char, 24> typeKey = ElementKey(i, true);
+                    core::Serialize(ar, typeKey.items, type);
                 }
             const usize size = core::ContainerSize(container, list);
             for (usize i = 0; i < size; ++i)
@@ -1336,8 +1335,8 @@ export namespace experimental::gui
                     element.Address = at.Pointer();
                     element.Type = at.Type();
                 }
-                const std::array<char, 24> elementKey = ElementKey(static_cast<i64>(i), false);
-                if (reading && !ar.HasKey(elementKey.data()))
+                const core::FixedArray<char, 24> elementKey = ElementKey(static_cast<i64>(i), false);
+                if (reading && !ar.HasKey(elementKey.items))
                     continue;
                 if (element.Address == nullptr && element.Type != nullptr && ShapeOf(*element.Type) == Shape::Group)
                 {
@@ -1349,23 +1348,24 @@ export namespace experimental::gui
                     Target held = element;
                     held.Address = copy.ValuePointer();
                     held.Element = false;
-                    SerializeTarget(ar, elementKey.data(), held);
+                    SerializeTarget(ar, elementKey.items, held);
                     if (reading && !target.ReadOnly)
                         (void)core::ContainerSetAt(container, list, i, copy);
                     continue;
                 }
-                SerializeTarget(ar, elementKey.data(), element);
+                SerializeTarget(ar, elementKey.items, element);
             }
             ar.EndObject();
         }
         // "e3" for element 3, "t3" for its type: keys the serializer reads as C strings.
-        [[nodiscard]] static std::array<char, 24> ElementKey(i64 index, bool type)
+        [[nodiscard]] static core::FixedArray<char, 24> ElementKey(i64 index, bool type)
         {
-            std::array<char, 24> key{};
-            key[0] = type ? 't' : 'e';
+            core::FixedArray<char, 24> key;
+            key.Add(type ? 't' : 'e');
             const core::String digits = core::Format(u8"{}", index);
-            for (usize i = 0; i < digits.Size() && i + 2 < key.size(); ++i)
-                key[i + 1] = static_cast<char>(digits[i]);
+            for (usize i = 0; i < digits.Size() && key.Size() + 1 < key.CapacityValue(); ++i)
+                key.Add(static_cast<char>(digits[i]));
+            key.Add('\0'); // read as a C string (items)
             return key;
         }
 

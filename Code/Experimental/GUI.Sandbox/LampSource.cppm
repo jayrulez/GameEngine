@@ -20,7 +20,6 @@
 
 module;
 #include "Core/Prelude.h"
-#include <array> // a serializer key, null-terminated
 
 export module gui.sandbox.lamps;
 
@@ -132,7 +131,8 @@ export namespace sandbox
             }
             if (parent == StringView(u8"cone"))
             {
-                for (const StringView part : {StringView(u8"inner"), StringView(u8"outer")})
+                const StringView parts[] = {StringView(u8"inner"), StringView(u8"outer")};
+                for (const StringView part : parts)
                 {
                     gui::PropertyInfo& angle = Add(out, part, K::Float, u8"", part == StringView(u8"inner") ? StringView(u8"Inner") : StringView(u8"Outer"));
                     angle.HasRange = true;
@@ -342,7 +342,7 @@ export namespace sandbox
                     for (i64 i = 0; i < count; ++i)
                     {
                         i64 type = lamp.Effects[static_cast<usize>(i)].Type;
-                        Serialize(ar, Key(Format(u8"{}.type", i)).data(), type);
+                        Serialize(ar, Key(Format(u8"{}.type", i)).items, type);
                     }
             }
             Array<String> leaves(m_allocator);
@@ -356,7 +356,7 @@ export namespace sandbox
                 for (const String& leaf : leaves)
                 {
                     gui::Variant value = Read(lamp, leaf.AsView());
-                    SerializeVariant(ar, Key(Relative(path, leaf)).data(), value);
+                    SerializeVariant(ar, Key(Relative(path, leaf)).items, value);
                 }
             String text;
             ar.GetOutput(text);
@@ -407,7 +407,7 @@ export namespace sandbox
                     for (i64 i = 0; i < count; ++i)
                     {
                         i64 type = 0;
-                        Serialize(ar, Key(Format(u8"{}.type", i)).data(), type);
+                        Serialize(ar, Key(Format(u8"{}.type", i)).items, type);
                         pasted.Effects.PushBack(type == 1 ? Pulse() : Flicker());
                     }
                 }
@@ -420,7 +420,7 @@ export namespace sandbox
                 for (const String& leaf : leaves)
                 {
                     gui::Variant value = Read(pasted, leaf.AsView());
-                    SerializeVariant(ar, Key(Relative(path, leaf)).data(), value);
+                    SerializeVariant(ar, Key(Relative(path, leaf)).items, value);
                     Write(pasted, leaf.AsView(), value);
                 }
             if (!ar.IsOk())
@@ -773,11 +773,12 @@ export namespace sandbox
             return leaf.Size() == path.Size() ? String(u8"value") : String(leaf.AsView().SubStr(path.Size() + 1, leaf.Size() - path.Size() - 1));
         }
         // A key as the serializer takes one, null-terminated.
-        [[nodiscard]] static std::array<char, 64> Key(const String& text)
+        [[nodiscard]] static core::FixedArray<char, 64> Key(const String& text)
         {
-            std::array<char, 64> key{};
-            for (usize i = 0; i < text.Size() && i + 1 < key.size(); ++i)
-                key[i] = static_cast<char>(text[i]);
+            core::FixedArray<char, 64> key;
+            for (usize i = 0; i < text.Size() && key.Size() + 1 < key.CapacityValue(); ++i)
+                key.Add(static_cast<char>(text[i]));
+            key.Add('\0'); // read as a C string (items)
             return key;
         }
         // A Float2 or a Float3 either way as Core's own value (its x, y, z), its parts taken in
@@ -863,7 +864,7 @@ export namespace sandbox
                     keys.PopBack();
                 for (usize i = 0; i < keys.Size(); ++i)
                 {
-                    ar.Key(Key(Format(u8"k{}", i)).data());
+                    ar.Key(Key(Format(u8"k{}", i)).items);
                     ar.BeginObject();
                     Serialize(ar, "time", keys[i].time);
                     Serialize(ar, "value", keys[i].value);

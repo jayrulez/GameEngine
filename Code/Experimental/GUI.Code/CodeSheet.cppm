@@ -33,6 +33,7 @@ export namespace experimental::gui
                 --code-preprocessor: #ffcb6b; --code-operator: #89ddff; --code-punctuation: #a6aebb;
                 --code-tag: #f07178; --code-attribute: #ffcb6b; --code-property: #82aaff; --code-selector: #c792ea;
                 --code-invalid: #ff5370; --code-bracket-match: #2c3442;
+                --code-find-match: #4a3d1e; --code-find-current: #7a5a1a; --code-find-bar: #232831;
             }
             @media (prefers-color-scheme: light) {
                 :root {
@@ -44,6 +45,7 @@ export namespace experimental::gui
                     --code-preprocessor: #953800; --code-operator: #0a7ea4; --code-punctuation: #57606a;
                     --code-tag: #116329; --code-attribute: #953800; --code-property: #0550ae; --code-selector: #8250df;
                     --code-invalid: #cf222e; --code-bracket-match: #dde6f2;
+                    --code-find-match: #fbe9b7; --code-find-current: #f5cf6b; --code-find-bar: #eef1f5;
                 }
             }
             codeeditor { background-color: var(--code-background); color: var(--code-text); padding: 4px 0; }
@@ -55,6 +57,12 @@ export namespace experimental::gui
             codeeditor::selection { background-color: var(--code-selection); }
             codeeditor::caret { background-color: var(--code-caret); }
             codeeditor::bracket-match { background-color: var(--code-bracket-match); }
+            codeeditor::find-match { background-color: var(--code-find-match); }
+            codeeditor::find-current { background-color: var(--code-find-current); }
+            codefindbar { background-color: var(--code-find-bar); border-radius: var(--radius-small);
+                          box-shadow: 0 2px 8px var(--shadow-color); font-size: var(--font-small); }
+            codefindbar label.count { color: var(--text-dim); padding: 0 4px; }
+            codefindbar button { padding: 2px 6px; }
             codeeditor::keyword { color: var(--code-keyword); }
             codeeditor::type { color: var(--code-type); }
             codeeditor::constant { color: var(--code-constant); }

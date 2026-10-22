@@ -13,6 +13,7 @@ target_sources(GUI.Code
             CodeDocument.cppm
             CodeLanguage.cppm
             CodeSheet.cppm
+            CodeFindBar.cppm
             CodeEditor.cppm
     PRIVATE
         CodeReflection.cpp)

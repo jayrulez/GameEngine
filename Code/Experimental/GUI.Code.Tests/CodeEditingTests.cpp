@@ -314,3 +314,85 @@ TEST_CASE("code document: search by case and whole word, across lines, round to 
     CHECK(found.Start == At(0, 0)); // round to the start
     CHECK_FALSE(doc.Find(SV(u8"Value"), At(1, 0), true, false, false, found));
 }
+
+TEST_CASE("code find: Ctrl+F opens the bar with the selection's text; F3 and Shift+F3 go round the matches, counted")
+{
+    Bed bed("angelscript", u8"int count = 0;\ncount += 1; // Count\nreturn count;");
+    const CodeSelection word{At(0, 4), At(0, 9)};
+    bed.editor->SetSelections(core::Span<const CodeSelection>(&word, 1));
+    bed.Key(KeyCode::F, KeyModCtrl);
+    CodeFindBar& bar = bed.editor->GetFindBar();
+    REQUIRE(bar.IsDisplayed());
+    CHECK(bar.GetQuery() == SV(u8"count"));
+    CHECK(bar.GetQueryField().IsFocused());
+    bed.Frame();
+    CHECK(bed.editor->GetMatches().Size() == 4); // "Count" too, case folded
+    CHECK(bed.editor->CurrentMatch() == 1);
+    CHECK(bar.GetCountLabel().GetText() == SV(u8"1 of 4"));
+    bed.Key(KeyCode::F3);
+    CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(1, 0), At(1, 5)});
+    CHECK(bar.GetCountLabel().GetText() == SV(u8"2 of 4"));
+    bed.Key(KeyCode::F3, KeyModShift);
+    bed.Key(KeyCode::F3, KeyModShift); // round to the last
+    CHECK(bed.editor->GetPrimary().Range() == CodeRange{At(2, 7), At(2, 12)});
+    // Matching case: "Count" goes; whole words.
+    (void)bar.GetCaseToggle().HandleActivate();
+    CHECK(bed.editor->GetMatches().Size() == 3);
+    bar.GetQueryField().SetText(SV(u8"coun"));
+    CHECK(bed.editor->GetMatches().Size() == 3);
+    (void)bar.GetWordToggle().HandleActivate();
+    CHECK(bed.editor->GetMatches().Size() == 0);
+    CHECK(bar.GetCountLabel().GetText() == SV(u8"No results"));
+    // Return in the field finds the next; Escape closes, the focus back in the editor.
+    (void)bar.GetWordToggle().HandleActivate();
+    bed.Key(KeyCode::Return);
+    CHECK(bed.editor->CurrentMatch() > 0);
+    bed.Key(KeyCode::Escape);
+    CHECK_FALSE(bar.IsDisplayed());
+    CHECK(bed.editor->IsFocused());
+}
+
+TEST_CASE("code find: Ctrl+H replaces this match and goes on; All replaces every one as one undo step")
+{
+    Bed bed("angelscript", u8"a = old; b = old; c = old;");
+    bed.editor->SetCaret(At(0, 0));
+    bed.Key(KeyCode::H, KeyModCtrl);
+    CodeFindBar& bar = bed.editor->GetFindBar();
+    REQUIRE(bar.GetMode() == CodeFindBar::Mode::Replace);
+    bar.GetQueryField().SetText(SV(u8"old"));
+    bar.GetReplacementField().SetText(SV(u8"new"));
+    bed.editor->ReplaceCurrent(); // on no match yet: finds the first
+    CHECK(bed.editor->CurrentMatch() == 1);
+    bed.editor->ReplaceCurrent();
+    CHECK_TEXT(*bed.editor, u8"a = new; b = old; c = old;");
+    CHECK(bed.editor->CurrentMatch() == 1); // the next, now the first left
+    const usize steps = bed.editor->GetDocument().UndoCount();
+    bed.editor->ReplaceAll();
+    CHECK_TEXT(*bed.editor, u8"a = new; b = new; c = new;");
+    CHECK(bed.editor->GetDocument().UndoCount() == steps + 1);
+    CHECK(bar.GetCountLabel().GetText() == SV(u8"No results"));
+}
+
+TEST_CASE("code find: Ctrl+G goes to a line, or a line and column; the bar keeps its place as the code scrolls")
+{
+    core::String text;
+    for (int i = 0; i < 80; ++i)
+        text.Append(core::Format(u8"line {}\n", i).AsView());
+    Bed bed("angelscript", reinterpret_cast<const char8_t*>(text.CStr()));
+    bed.Key(KeyCode::G, KeyModCtrl);
+    CodeFindBar& bar = bed.editor->GetFindBar();
+    REQUIRE(bar.GetMode() == CodeFindBar::Mode::GoToLine);
+    CHECK(bar.GetLineField().GetText() == SV(u8"1"));
+    bar.GetLineField().GetModel().SelectAll();
+    bed.D().InjectText(SV(u8"60:3"));
+    bed.Key(KeyCode::Return);
+    CHECK(bed.Caret() == At(59, 2));
+    CHECK_FALSE(bar.IsDisplayed());
+    CHECK(bed.editor->IsFocused());
+    bed.Frame();
+    CHECK(bed.editor->GetScrollOffset().y > 0.0f);
+    // Open again, scrolled: still at the top of the editor's box.
+    bed.Key(KeyCode::F, KeyModCtrl);
+    bed.Frame();
+    CHECK(bar.GetScreenBounds().y == doctest::Approx(bed.editor->GetScreenBounds().y + bed.editor->GetContentBounds().y + 2.0f).epsilon(0.01));
+}

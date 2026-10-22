@@ -26,6 +26,8 @@ namespace experimental::gui
         builder.Creator();
     }
 
+    RTTI_DEFINE_OBJECT(CodeFindBar, "rtti::gui::code")
+
     void RegisterCodeElements()
     {
         static const bool once = []()

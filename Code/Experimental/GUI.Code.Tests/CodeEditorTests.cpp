@@ -76,6 +76,7 @@ namespace
 
         explicit Bed(const char8_t* text = u8"")
         {
+            BindCodeEditorKeys(root->GetContext().GetKeymap()); // the host's, once for its GUI
             root->SetSize(core::Float2{800.0f, 600.0f});
             root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
             editor->EditLayoutStyle([](LayoutStyle& s)
@@ -303,6 +304,11 @@ TEST_CASE("code editor: it scrolls to the caret, drawing the lines in view")
     const Rect caret = bed.editor->CaretRect(bed.Caret());
     CHECK(caret.y + caret.height <= bed.editor->GetContentBounds().Bottom() + 0.5f);
     CHECK(bed.editor->GetScrollOffset().y > 0.0f);
+    // Typing there lays it out again: it stays where it was scrolled.
+    const f32 scrolled = bed.editor->GetScrollOffset().y;
+    bed.editor->Type(SV(u8"x"));
+    bed.Frame();
+    CHECK(bed.editor->GetScrollOffset().y == doctest::Approx(scrolled));
 }
 
 TEST_CASE("code editor: its keys come through the keymap; typed text goes in; read only, nothing changes")

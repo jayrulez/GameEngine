@@ -13,10 +13,11 @@
 //
 // Several selections from the start, sorted and apart (zed's): a click places one caret, Shift
 // extends it, Alt adds one; a double click selects a word, a triple a line, a drag extends by what
-// the press selected. The keys are the keymap's text commands (the "textinput" context it declares:
-// the arrows, Home and End, the word and page moves, deleting, undo, the clipboard), each run at
-// every caret; typing goes in at each, one undo step that puts every caret back; Return keeps the
-// line's indent; Tab indents; Escape leaves one caret. The gutter numbers the lines.
+// the press selected. The keys are the keymap's text commands (the arrows, Home and End, the word
+// and page moves, deleting, undo, the clipboard), bound in its own "codeeditor" context by
+// BindCodeEditorKeys, each run at every caret; typing goes in at each, one undo step that puts every
+// caret back; Return keeps the line's indent; Tab indents; Escape leaves one caret. The gutter
+// numbers the lines.
 //
 // Given a language (C2), each line's tokens are kept with the state it began in and its hash, and a
 // line is tokenized again only where it changed or the line before now ends otherwise; tokenizing
@@ -34,6 +35,7 @@ import foundation.fonts;
 import experimental.gui;
 import :code_document;
 import :code_language;
+import :code_find_bar;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -54,11 +56,20 @@ export namespace experimental::gui
     inline constexpr const char8_t* kCodeSelectAllOccurrences = u8"code.select-all-occurrences";
     inline constexpr const char8_t* kCodeAddCursorAbove = u8"code.add-cursor-above";
     inline constexpr const char8_t* kCodeAddCursorBelow = u8"code.add-cursor-below";
+    inline constexpr const char8_t* kCodeFind = u8"code.find";
+    inline constexpr const char8_t* kCodeReplace = u8"code.replace";
+    inline constexpr const char8_t* kCodeGoToLine = u8"code.go-to-line";
+    inline constexpr const char8_t* kCodeFindNext = u8"code.find-next";
+    inline constexpr const char8_t* kCodeFindPrevious = u8"code.find-previous";
 
     /// Binds the code editor's keys (VS Code's, ruling 5), rebindable as any: a host calls it once
-    /// for a GUI's keymap, after the GUI's own bindings (which then win a tie).
+    /// for a GUI's keymap, after the GUI's own bindings (which then win a tie). The text editing
+    /// keys and its own commands where the editor has the focus (not a field inside it); finding
+    /// from its find bar's fields too.
     inline void BindCodeEditorKeys(Keymap& keymap)
     {
+        constexpr core::StringView kItself = core::StringView(u8"codeeditor && !textinput");
+        BindTextEditingKeys(keymap, kItself);
         struct Binding
         {
             const char8_t* Keys;
@@ -77,9 +88,20 @@ export namespace experimental::gui
             {u8"ctrl-shift-l", kCodeSelectAllOccurrences},
             {u8"ctrl-alt-up", kCodeAddCursorAbove},
             {u8"ctrl-alt-down", kCodeAddCursorBelow},
+            {u8"ctrl-f", kCodeFind},
+            {u8"ctrl-h", kCodeReplace},
+            {u8"ctrl-g", kCodeGoToLine},
+            {u8"f3", kCodeFindNext},
+            {u8"shift-f3", kCodeFindPrevious},
         };
         for (const Binding& b : kBindings)
-            (void)keymap.Bind(core::StringView(b.Keys), core::StringView(b.Command), core::StringView(u8"codeeditor"));
+        {
+            const core::StringView command(b.Command);
+            const bool finding = command == core::StringView(kCodeFind) || command == core::StringView(kCodeReplace) ||
+                                 command == core::StringView(kCodeGoToLine) || command == core::StringView(kCodeFindNext) ||
+                                 command == core::StringView(kCodeFindPrevious);
+            (void)keymap.Bind(core::StringView(b.Keys), command, finding ? core::StringView(u8"codeeditor") : kItself);
+        }
     }
 
     class CodeEditor : public UIWidget
@@ -94,7 +116,9 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"codeeditor"));
             SetTabFocusable(true);
             SetTabCaptures(true); // Tab indents
-            SetKeyContext(core::StringView(u8"textinput multiline codeeditor"));
+            // Its own context, not "textinput": a field inside it (the find bar's) is a text input
+            // alone, its Return its own; BindCodeEditorKeys binds the editing keys here.
+            SetKeyContext(core::StringView(u8"codeeditor"));
             SetClipChildren(true);
             SetScrollsByKeys(false); // the arrows and pages move its carets, through the keymap
             {
@@ -127,6 +151,23 @@ export namespace experimental::gui
             command(kCodeSelectAllOccurrences, [this]() { SelectAllOccurrences(); });
             command(kCodeAddCursorAbove, [this]() { AddCursorVertically(true); });
             command(kCodeAddCursorBelow, [this]() { AddCursorVertically(false); });
+            command(kCodeFind, [this]() { OpenFind(false); });
+            command(kCodeReplace, [this]() { OpenFind(true); });
+            command(kCodeGoToLine, [this]() { OpenGoToLine(); });
+            command(kCodeFindNext, [this]() { (void)FindNext(false); });
+            command(kCodeFindPrevious, [this]() { (void)FindNext(true); });
+            m_findBar = core::MakeRef<CodeFindBar>(MemoryAllocator());
+            CodeEditor* self = this;
+            m_findBar->SetOnChanged([self]() { self->FindChanged(); });
+            m_findBar->SetOnNext([self](bool backwards) { (void)self->FindNext(backwards); });
+            m_findBar->SetOnReplace([self](bool all) { all ? self->ReplaceAll() : self->ReplaceCurrent(); });
+            m_findBar->SetOnGoTo([self](core::StringView text) { self->GoToLine(text); });
+            m_findBar->SetOnClose([self]()
+            {
+                self->RequestFocus();
+                self->Invalidate();
+            });
+            AddChild(m_findBar.Get());
             Attach(m_own);
             m_selections.PushBack(CodeSelection{});
             m_goals.PushBack(-1.0f);
@@ -248,6 +289,45 @@ export namespace experimental::gui
         /// The bracket at or before `at` (not in a string or comment) and the one matching it.
         bool FindMatchingBracket(CodePosition at, CodeRange& bracket, CodeRange& match) const;
 
+        // === C4: find, replace, go to line ===
+        /// Shows the bar to find (or replace), holding the primary selection's text when it is on one line.
+        void OpenFind(bool replace)
+        {
+            const CodeRange r = GetPrimary().Range();
+            const core::String text = !r.IsEmpty() && r.Start.Line == r.End.Line ? m_doc->TextIn(r) : core::String{};
+            m_findBar->Show(replace ? CodeFindBar::Mode::Replace : CodeFindBar::Mode::Find, text.AsView());
+            RequestLayout();
+        }
+        void OpenGoToLine()
+        {
+            m_findBar->Show(CodeFindBar::Mode::GoToLine, core::Format(u8"{}", GetPrimary().Head.Line + 1).AsView());
+            RequestLayout();
+        }
+        [[nodiscard]] CodeFindBar& GetFindBar() const noexcept { return *m_findBar; }
+        /// Selects the next match of the bar's text after the primary selection (the previous before
+        /// it), round the document; false when there is none.
+        bool FindNext(bool backwards);
+        /// Replaces the match the primary selection is on and finds the next; finds one first if it is on none.
+        void ReplaceCurrent();
+        /// Replaces every match, one undo step.
+        void ReplaceAll();
+        /// Puts the caret at `line` or `line:column` (from 1), and closes the bar.
+        void GoToLine(core::StringView text);
+        /// The matches of the bar's text now, in order, and which the primary selection is on (from 1; 0: none).
+        [[nodiscard]] core::Span<const CodeRange> GetMatches() const
+        {
+            RefreshMatches();
+            return m_matches.AsSpan();
+        }
+        [[nodiscard]] usize CurrentMatch() const
+        {
+            RefreshMatches();
+            for (usize i = 0; i < m_matches.Size(); ++i)
+                if (m_matches[i] == GetPrimary().Range())
+                    return i + 1;
+            return 0;
+        }
+
         // === Geometry (its own space) ===
         [[nodiscard]] f32 LineHeight() const
         {
@@ -294,6 +374,8 @@ export namespace experimental::gui
             out.PushBack(core::StringView(u8"caret"));
             out.PushBack(core::StringView(u8"composition"));
             out.PushBack(core::StringView(u8"bracket-match"));
+            out.PushBack(core::StringView(u8"find-match"));
+            out.PushBack(core::StringView(u8"find-current"));
             for (usize i = 1; i < static_cast<usize>(CodeToken::Count); ++i)
                 out.PushBack(CodeTokenName(static_cast<CodeToken>(i)));
         }
@@ -325,7 +407,8 @@ export namespace experimental::gui
         }
         void OnLayout() override
         {
-            UIWidget::OnLayout();
+            // Not the base's: it places its one child (the find bar) itself, and its children's
+            // extent is not what it scrolls over (laying them out would clamp the scroll to it).
             // What it scrolls over: every line down; across, the widest line laid out yet, else each
             // line's length at the width of a digit (an estimate a wider line laid out corrects).
             const f32 digit = DigitWidth();
@@ -340,6 +423,30 @@ export namespace experimental::gui
             const f32 width = GutterWidth() + core::Max(m_estimated, m_widest) + digit * 2.0f;
             const f32 height = static_cast<f32>(m_doc->LineCount()) * LineHeight() + core::Max(0.0f, content.height - LineHeight());
             SetScrollExtent(core::Float2{width, height});
+            // The find bar over the top end corner, still as the code scrolls under it.
+            if (m_findBar->IsDisplayed())
+            {
+                LayoutConstraints constraints;
+                constraints.Max = core::Float2{content.width, content.height};
+                const core::Float2 size = m_findBar->Measure(constraints);
+                const core::Float2 shift = ScrollShift();
+                const f32 x = IsRightToLeft() ? content.x + 8.0f : content.Right() - size.x - 16.0f;
+                m_findBar->Arrange(Rect{x + shift.x, content.y + 2.0f + shift.y, size.x, size.y});
+            }
+        }
+        // Focus going into its find bar scrolls nothing: the bar is always in view.
+        void OnDescendantFocused(Node& focused) override
+        {
+            for (Node* n = &focused; n != nullptr && n != this; n = n->GetParent())
+                if (n == m_findBar.Get())
+                    return;
+            UIWidget::OnDescendantFocused(focused);
+        }
+        void OnScrollChange() override
+        {
+            UIWidget::OnScrollChange();
+            if (m_findBar->IsDisplayed())
+                RequestLayout(); // the bar keeps its place in view
         }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
         void OnFocusGained() override
@@ -878,8 +985,47 @@ export namespace experimental::gui
             return part.HasColor ? part.TextColor : GetTextColor();
         }
 
+        void FindChanged()
+        {
+            m_matchesVersion = ~u64(0);
+            UpdateCount();
+            Invalidate();
+        }
+        void UpdateCount()
+        {
+            RefreshMatches();
+            m_findBar->SetCount(CurrentMatch(), m_matches.Size());
+        }
+        // The matches, found again when the text, the bar's text or its toggles changed.
+        void RefreshMatches() const
+        {
+            const core::StringView query = m_findBar->GetQuery();
+            const u64 key = m_doc->GetVersion() * 4u + (m_findBar->MatchCase() ? 1u : 0u) + (m_findBar->WholeWord() ? 2u : 0u);
+            if (m_matchesVersion == key && m_matchesQuery.AsView() == query)
+                return;
+            m_matchesVersion = key;
+            m_matchesQuery = core::String(query);
+            m_matches.Clear();
+            if (query.Size() == 0)
+                return;
+            CodePosition from{0, 0};
+            CodeRange found;
+            while (m_matches.Size() < 100000 &&
+                   m_doc->Find(query, from, m_findBar->MatchCase(), m_findBar->WholeWord(), false, found))
+            {
+                m_matches.PushBack(found);
+                from = found.End;
+                if (found.End == m_doc->End())
+                    break;
+            }
+        }
+
         CodeDocument m_own;
         CodeDocument* m_doc = nullptr;
+        core::RefPtr<CodeFindBar> m_findBar;
+        mutable core::Array<CodeRange> m_matches;
+        mutable core::String m_matchesQuery;
+        mutable u64 m_matchesVersion = ~u64(0);
         const CodeLanguage* m_language = nullptr;
         mutable core::Array<LineLex> m_lex; // by line, tokenized up to the last line asked for
         mutable u32 m_cleanTo = 0;          // lines before it agree with the lines before them
@@ -1658,6 +1804,84 @@ export namespace experimental::gui
         SelectionsChanged();
     }
 
+    inline bool CodeEditor::FindNext(bool backwards)
+    {
+        RefreshMatches();
+        if (m_matches.IsEmpty())
+        {
+            UpdateCount();
+            return false;
+        }
+        const CodeRange from = GetPrimary().Range();
+        usize pick = 0;
+        if (!backwards)
+        {
+            pick = 0; // round to the first when none follows
+            for (usize i = 0; i < m_matches.Size(); ++i)
+                if (from.End <= m_matches[i].Start && !(m_matches[i] == from))
+                {
+                    pick = i;
+                    break;
+                }
+        }
+        else
+        {
+            pick = m_matches.Size() - 1; // round to the last when none comes before
+            for (usize i = m_matches.Size(); i-- > 0;)
+                if (m_matches[i].End <= from.Start && !(m_matches[i] == from))
+                {
+                    pick = i;
+                    break;
+                }
+        }
+        const CodeSelection one{m_matches[pick].Start, m_matches[pick].End};
+        SetSelections(core::Span<const CodeSelection>(&one, 1));
+        UpdateCount();
+        return true;
+    }
+
+    inline void CodeEditor::ReplaceCurrent()
+    {
+        if (m_readOnly || CurrentMatch() == 0)
+        {
+            (void)FindNext(false);
+            return;
+        }
+        core::Array<Planned> edits(MemoryAllocator());
+        edits.PushBack(Planned{GetPrimary().Range(), core::String(m_findBar->GetReplacement())});
+        ApplyPlanned(edits);
+        (void)FindNext(false);
+    }
+
+    inline void CodeEditor::ReplaceAll()
+    {
+        RefreshMatches();
+        if (m_readOnly || m_matches.IsEmpty())
+            return;
+        core::Array<Planned> edits(MemoryAllocator());
+        for (const CodeRange& r : m_matches)
+            edits.PushBack(Planned{r, core::String(m_findBar->GetReplacement())});
+        ApplyPlanned(edits);
+        UpdateCount();
+    }
+
+    inline void CodeEditor::GoToLine(core::StringView text)
+    {
+        // `line` or `line:column`, from 1.
+        u32 line = 0, column = 0;
+        usize at = 0;
+        while (at < text.Size() && text[at] >= u8'0' && text[at] <= u8'9')
+            line = line * 10u + static_cast<u32>(text[at++] - u8'0');
+        if (at < text.Size() && text[at] == u8':')
+            for (++at; at < text.Size() && text[at] >= u8'0' && text[at] <= u8'9'; ++at)
+                column = column * 10u + static_cast<u32>(text[at] - u8'0');
+        if (line == 0)
+            return;
+        m_findBar->Close();
+        SetCaret(CodePosition{line - 1, column > 0 ? column - 1 : 0u});
+        RequestFocus();
+    }
+
     inline bool CodeEditor::FindMatchingBracket(CodePosition at, CodeRange& bracket, CodeRange& match) const
     {
         if (m_language == nullptr || m_language->Brackets.IsEmpty())
@@ -1944,6 +2168,27 @@ export namespace experimental::gui
         if (GetPrimary().IsEmpty() && primary.Line >= first && primary.Line <= last && currentLine.a > 0.0f)
             ctx.VG().FillRect(Rectangle{content.x, rowTop(primary.Line), content.width, lh}, currentLine);
         ctx.PushClip(textArea);
+        // The find bar's matches in view, the current one stronger.
+        if (m_findBar->IsDisplayed() && m_findBar->GetMode() != CodeFindBar::Mode::GoToLine)
+        {
+            RefreshMatches();
+            const Color matchColor = partColor(u8"find-match", Color{0.85f, 0.65f, 0.2f, 0.3f});
+            const Color currentColor = partColor(u8"find-current", Color{0.95f, 0.7f, 0.2f, 0.6f});
+            const CodeRange current = GetPrimary().Range();
+            for (const CodeRange& r : m_matches)
+            {
+                if (r.End.Line < first)
+                    continue;
+                if (r.Start.Line > last)
+                    break;
+                for (u32 line = core::Max(r.Start.Line, first); line <= core::Min(r.End.Line, last); ++line)
+                {
+                    const f32 x0 = line == r.Start.Line ? XOf(r.Start) : 0.0f;
+                    const f32 x1 = line == r.End.Line ? XOf(r.End) : XOf(CodePosition{line, static_cast<u32>(m_doc->LineText(line).Size())});
+                    ctx.VG().FillRect(Rectangle{textX + x0, rowTop(line), core::Max(1.0f, x1 - x0), lh}, r == current ? currentColor : matchColor);
+                }
+            }
+        }
         // The selections, then the text over them.
         for (const CodeSelection& s : m_selections)
         {

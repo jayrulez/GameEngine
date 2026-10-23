@@ -251,6 +251,7 @@ export namespace experimental::gui
             child->m_parent = nullptr;
             child->m_leaving = false; // out of its parent, it has left (K0): taken back, it is whole
             child->m_leaveQueued = false;
+            child->m_enterPhase = 0;  // and its entrance is over (K5)
             m_children.RemoveAt(index);
             ChildrenRearranged(*child);
             ChildrenStyleChanged();
@@ -925,6 +926,7 @@ export namespace experimental::gui
             StateDropTarget = 1u << 19,
             StateDragSource = 1u << 20,
             StateLeaving = 1u << 22, // after :root (21)
+            StateEntering = 1u << 23,
         };
         /// `states` changed on this node: it restyles (its subtree too when the sheets read them
         /// through it).
@@ -1831,6 +1833,25 @@ export namespace experimental::gui
         }
         /// The style pass's: what moves it has ended, so it goes (at the next safe point, once).
         void FinishLeaving();
+
+        // === Entering (K5 of Specs/gui-lab-evolution-3.md) ===
+        // A node that arrives plays its way in: Enter puts it in `:entering`, where the sheet's
+        // entrance runs (a keyframe animation, or values it starts from, as CSS's @starting-style),
+        // until what that started has ended; then `:entering` goes, the node moves to its own style
+        // (through its transitions), and once that has settled it hears `entered`. Leave cuts an
+        // entrance short, leaving from where it is. In no GUI, in one no style pass runs over, or
+        // not styled, it has no entrance and hears `entered` at once. Defined in Scene/GUIClusterImpl.cpp.
+
+        void Enter();
+        /// In `:entering`, its entrance's first half.
+        [[nodiscard]] bool IsEntering() const noexcept { return m_enterPhase == 1; }
+        /// Entering, or moving to its own style after: `entered` is still to come.
+        [[nodiscard]] bool IsArriving() const noexcept { return m_enterPhase != 0; }
+        /// Whether the style pass tells it when what moves it settles (MotionSettled): leaving or arriving.
+        [[nodiscard]] bool WatchesMotion() const noexcept { return m_leaving || m_enterPhase != 0; }
+        /// The style pass's: nothing the sheet started on it waits now. A leaving node goes; an
+        /// arriving one takes its entrance's next step (at the GUI's next drain).
+        void MotionSettled();
         /// A style pass ran over the tree this node tops (StyleManager::ApplyTree says so): a node
         /// leaving it waits for the sheet's exit.
         void NoteStylePass() noexcept { m_styledTree = true; }
@@ -2964,6 +2985,8 @@ export namespace experimental::gui
         bool m_leaving = false;     // Leave was called; it goes when its exit ends (K0)
         bool m_inert = false;       // takes no input (K4)
         bool m_leaveQueued = false; // its removal waits in the mutation queue
+        u8 m_enterPhase = 0;        // K5: 1 in :entering, 2 moving to its own style, 0 arrived
+        bool m_enterQueued = false; // its entrance's next step waits in the mutation queue
         bool m_styledTree = false;  // the top of a tree a style pass ran over
         core::Float2 m_size{0.0f, 0.0f};
         LayoutStyle m_layoutStyle;              // what it asks of layout (E2)

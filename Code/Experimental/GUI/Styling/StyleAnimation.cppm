@@ -440,8 +440,8 @@ export namespace experimental::gui
             const RefPtr<Node> held(node);
             for (const MotionEnd& end : ends)
                 node->SendEvent(MotionEndEvent(end.Type, node, end.Name.AsView(), end.Elapsed));
-            if (node->IsLeaving() && !WaitsForEnd())
-                node->FinishLeaving();
+            if (node->WatchesMotion() && !WaitsForEnd())
+                node->MotionSettled();
         }
         [[nodiscard]] bool IsDone() override { return m_done || m_tracks.IsEmpty(); }
         [[nodiscard]] f32 GetCurrentProgress() override { return 0.0f; }

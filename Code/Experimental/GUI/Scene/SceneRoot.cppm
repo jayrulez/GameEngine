@@ -132,6 +132,11 @@ export namespace experimental::gui
         void SetContrastPreference(ContrastPreference contrast) noexcept { m_contrast = contrast; }
         [[nodiscard]] ContrastPreference GetContrastPreference() const noexcept { return m_contrast; }
         void SetReducedMotion(bool reduce) noexcept { m_reducedMotion = reduce; }
+        /// The most the GUI's clock moves in one update, in seconds (K5; 0, the default: no limit).
+        /// A game sets it so a hitch (a level loading under a menu) does not skip a screen's
+        /// entrance or exit: its motion runs slower for that frame rather than jumping to its end.
+        void SetMaxClockStep(f32 seconds) noexcept { m_maxClockStep = core::Max(0.0f, seconds); }
+        [[nodiscard]] f32 GetMaxClockStep() const noexcept { return m_maxClockStep; }
         [[nodiscard]] bool IsReducedMotion() const noexcept { return m_reducedMotion; }
         [[nodiscard]] fonts::IFontService* GetFontService() const noexcept { return m_fontService; }
         void SetResourceProvider(IResourceProvider* resources) noexcept { m_resources = resources; }
@@ -266,6 +271,7 @@ export namespace experimental::gui
         void RunAccessRequests();  // AccessibilityImpl.cpp: the requests queued, each run
         void FlushAccessibility(); // AccessibilityImpl.cpp: each root's changes to the bridge
         f32 m_chordAge = 0.0f;
+        f32 m_maxClockStep = 0.0f; // K5: the clock's step at most this (0: unlimited)
         static constexpr f32 kChordTimeout = 1.0f;
         Array<SceneRoot*> m_roots; // non-owning: each root registers itself and leaves on destruction
         SceneRoot* m_active = nullptr;
@@ -745,7 +751,11 @@ export namespace experimental::gui
     {
         RunAccessRequests(); // what a platform asked since: this frame shows it
         const f32 seconds = static_cast<f32>(elapsed.AsSecondsF());
-        m_actionManager.Update(elapsed,
+        // The motion's clock steps at most so far (K5): a hitch slows it rather than skipping it.
+        const core::Duration step = m_maxClockStep > 0.0f && seconds > m_maxClockStep
+                                        ? core::Duration::FromSeconds(static_cast<f64>(m_maxClockStep))
+                                        : elapsed;
+        m_actionManager.Update(step,
                                [](Node& target)
                                {
                                    const SceneRoot* root = target.GetSceneRoot();

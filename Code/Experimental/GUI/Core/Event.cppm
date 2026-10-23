@@ -143,6 +143,8 @@ export namespace experimental::gui
         // An event a library names for itself (a NamedEvent: a gamekit screen's `screenenter`),
         // told to the node it is about, not routed; a script listens for it by its name.
         Named,
+        // A node's entrance ended (K5: Node::Enter), told to it, not routed.
+        Entered,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -686,6 +688,7 @@ export namespace experimental::gui
             {u8"gestureend", EventType::GestureEnd},     {u8"gesturecancel", EventType::GestureCancel},
             {u8"transitionend", EventType::TransitionEnd}, {u8"animationend", EventType::AnimationEnd},
             {u8"inputkind", EventType::InputKindChanged},
+            {u8"entered", EventType::Entered},
         };
     }
     /// The event type markup and scripts call `name` ("click", "keydown"); false for one they do not.

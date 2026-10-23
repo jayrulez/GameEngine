@@ -524,8 +524,8 @@ export namespace experimental::gui
             }
             // Leaving (K0), with nothing the sheet started that will end: it goes (at the GUI's next
             // drain, not inside this walk); else its animation lets it go when that ends.
-            if (widget.IsLeaving() && !(animation && !animation->IsDone() && animation->WaitsForEnd()))
-                widget.FinishLeaving();
+            if (widget.WatchesMotion() && !(animation && !animation->IsDone() && animation->WaitsForEnd()))
+                widget.MotionSettled(); // a leaving node goes, an arriving one takes its next step (K0, K5)
             const ResolvedStyle* before = m_cache.Find(&widget);
             // Its children restyle when what they inherit changed: a custom property, or its text style.
             const bool customsChanged = before == nullptr || !SameCustomProperties(*before, resolved) ||

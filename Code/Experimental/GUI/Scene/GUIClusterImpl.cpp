@@ -116,6 +116,11 @@ namespace experimental::gui
             return;
         }
         m_leaving = true;
+        if (m_enterPhase != 0)
+        {
+            m_enterPhase = 0; // an entrance cut short: it leaves from where it is
+            MarkStyleStateDirty(StateEntering);
+        }
         // Out of input now, as a removed subtree is (hover, press, capture, focus, its popups):
         // a second Back while it fades does not reach it.
         dispatcher->NotifySubtreeRemoved(*this);
@@ -141,6 +146,66 @@ namespace experimental::gui
                        {
                            if (self->m_leaving)
                                self->RemoveFromParent();
+                       });
+    }
+
+    void Node::Enter()
+    {
+        if (m_leaving || m_parent == nullptr)
+            return;
+        if (GetEventDispatcher() == nullptr || !GetRootNode()->HasStylePass() || Cast<UIWidget>(this) == nullptr)
+        {
+            m_enterPhase = 0;
+            SendEvent(Event(EventType::Entered, this)); // nothing plays an entrance here
+            return;
+        }
+        m_enterPhase = 1;
+        MarkStyleStateDirty(StateEntering);
+        Invalidate();
+    }
+
+    void Node::MotionSettled()
+    {
+        // The style pass has not shown its state yet (a transition of before ended first): it
+        // tells again once it has.
+        if (IsStyleDirty())
+            return;
+        if (m_leaving)
+        {
+            FinishLeaving();
+            return;
+        }
+        if (m_enterPhase == 0 || m_enterQueued)
+            return;
+        const auto advance = [](Node& node)
+        {
+            if (node.m_enterPhase == 1)
+            {
+                node.m_enterPhase = 2; // :entering goes: to its own style, through its transitions
+                node.MarkStyleStateDirty(StateEntering);
+            }
+            else if (node.m_enterPhase == 2)
+            {
+                node.m_enterPhase = 0;
+                node.SendEvent(Event(EventType::Entered, &node));
+            }
+        };
+        MutationQueue* queue = GetMutationQueue();
+        if (queue == nullptr)
+        {
+            advance(*this);
+            return;
+        }
+        // Not inside the style pass's walk or an animation's tick: at the GUI's next drain, if the
+        // entrance is still at this step then.
+        m_enterQueued = true;
+        RefPtr<Node> self(this);
+        const u8 phase = m_enterPhase;
+        queue->Enqueue([self, phase, advance]()
+                       {
+                           self->m_enterQueued = false;
+                           if (self->m_enterPhase == phase)
+                               advance(*self);
                        });
     }
 

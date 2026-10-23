@@ -882,6 +882,8 @@ namespace experimental::gui
         builder.Method<&Node::Destroy>("destroy");
         builder.Method<&Node::Leave>("leave"); // goes after its exit plays (K0)
         builder.Method<&Node::IsLeaving>("isLeaving");
+        builder.Method<&Node::Enter>("enter"); // plays its entrance (K5)
+        builder.Method<&Node::IsArriving>("isEntering");
         // Motion (E14): a tween, a spring, a group's run, and the property given back.
         builder.Method<&Node::Animate>("tween"); // `animate` is an expander's property
         builder.Method<&Node::CreateTween>("createTween");

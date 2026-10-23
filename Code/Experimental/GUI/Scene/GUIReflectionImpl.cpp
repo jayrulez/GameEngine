@@ -901,6 +901,7 @@ namespace experimental::gui
         builder.Method<&Tween::RepeatScript>("repeats");
         builder.Method<&Tween::PingPongScript>("pingPong");
         builder.Method<&Tween::EaseScript>("ease");
+        builder.Method<&Tween::WholeScript>("whole"); // a data value counting in whole numbers (K3)
         builder.Method<&Tween::SpringScript>("spring");
         builder.Method<&Tween::OnFinishedScript>("onFinished");
         builder.Method<&Tween::Retarget>("retarget");

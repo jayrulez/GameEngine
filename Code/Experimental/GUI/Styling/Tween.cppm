@@ -93,6 +93,13 @@ export namespace experimental::gui
             m_easing = easing;
             return *this;
         }
+        /// A data value's tween (K3) counts in whole numbers: each value it writes rounded to the
+        /// nearest (a score; a script's numbers all arrive as fractions, so its type cannot say).
+        Tween& Whole(bool on = true)
+        {
+            m_whole = on;
+            return *this;
+        }
         /// Moves as a damped spring toward its end rather than over a time (GPUI's and react-spring's
         /// springs): `stiffness` pulls, `damping` slows, `mass` resists; little damping overshoots and
         /// rings. Its duration, easing, repeats and ping-pong no longer apply; it ends once settled.
@@ -122,6 +129,7 @@ export namespace experimental::gui
         RefPtr<Tween> RepeatScript(i32 count) { return Self(Repeat(count)); }
         RefPtr<Tween> PingPongScript(bool on) { return Self(PingPong(on)); }
         RefPtr<Tween> EaseScript(core::StringView easing) { return Self(Ease(ParseEasing(easing).ValueOr(Easing::Ease()))); }
+        RefPtr<Tween> WholeScript(bool on) { return Self(Whole(on)); }
         RefPtr<Tween> SpringScript(f32 stiffness, f32 damping, f32 mass) { return Self(Spring(stiffness, damping, mass)); }
         RefPtr<Tween> OnFinishedScript(RefPtr<foundation::script::IScriptDelegate> handler)
         {
@@ -422,7 +430,10 @@ export namespace experimental::gui
         {
             if (m_route == Route::Data)
             {
-                const Variant value = Mix(m_from, m_to, t);
+                Variant value = Mix(m_from, m_to, t);
+                if (m_whole)
+                    if (const f64* n = value.TryGet<f64>())
+                        value = Variant::From<f64>(*n < 0.0 ? -Floor(-*n + 0.5) : Floor(*n + 0.5));
                 const Variant typed = m_dataType != nullptr ? ConvertVariant(value, *m_dataType) : value;
                 (void)m_data->Set(m_property.AsView(), typed.IsEmpty() ? value : typed);
                 return;
@@ -486,6 +497,7 @@ export namespace experimental::gui
         const PropertyInfo* m_reflected = nullptr;
         RefPtr<DataModel> m_data;               // the model whose value it moves (K3), or none
         const TypeInfo* m_dataType = nullptr;   // the value's type, kept as it moves
+        bool m_whole = false;                   // a data value's: whole numbers only
         Variant m_from;
         Variant m_to;
         u64 m_owner = 0; // its mark in the layer

@@ -470,3 +470,21 @@ TEST_CASE("tween: a data value's tween runs as a group's step, after a wait")
     CHECK(*bed.Score().TryGet<core::i32>() == 10);
     CHECK(sequence->IsDone());
 }
+
+TEST_CASE("tween: a data value a script set (a fraction's type) counts in whole numbers when asked")
+{
+    DataBed bed;
+    GUIContext& gui = bed.root->GetContext();
+    gui.GetData().Set(SV(u8"points"), core::Variant::From<core::f64>(0.0)); // as a script's numbers arrive
+    core::RefPtr<Tween> counting = gui.AnimateData(SV(u8"points"), 100.0, 1.0f, SV(u8"linear"));
+    counting->Whole();
+    for (int i = 0; i < 7; ++i)
+    {
+        bed.Frame(1.0 / 7.0);
+        const core::Variant value = gui.GetData().Peek(SV(u8"points"));
+        const core::f64* now = value.TryGet<core::f64>();
+        REQUIRE(now != nullptr);
+        CHECK(*now == static_cast<core::f64>(static_cast<core::i64>(*now))); // never a fraction
+    }
+    CHECK(*gui.GetData().Peek(SV(u8"points")).TryGet<core::f64>() == doctest::Approx(100.0));
+}

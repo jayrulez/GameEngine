@@ -966,10 +966,17 @@ Each a layer with its tests.
 - **K2 The input kind.** K2a in `foundation.input` (on master, as Foundation work): the tracker,
   its rules and its change notification. K2b in the lab: the core's kind given by the host and the
   bridge passing it on, the change event, `gui.inputKind`, the media feature, the focus ring's
-  rules, `cursor: none` and the hidden cursor on a pad.
+  rules, `cursor: none` and the hidden cursor on a pad. Built (K2a on master, K2b on vg,
+  2026-10-23): the bridge passes the tracker's changes, and the dispatcher still follows what it
+  is given (a press, a key, a pad button), so a host without a tracker, or a test, drives it.
 - **K3 A data value tweened.** Built (vg, 2026-10-23): `GUIContext::AnimateData` and `gui.tween`, in the value's own type.
 - **K4 The screen stack.** Push, pop, replace, clear; covering, blocking, pausing; focus per
-  screen; the release under a cover; Back; the lifecycle events; the facade.
+  screen; the release under a cover; Back; the lifecycle events; the facade. Built (vg,
+  2026-10-23): `<Screens>` and `<Screen covers blocks pauses back>`, the screens under a blocking
+  one inert (the core's), a press on a screen's empty area keeping the focus so `back` reaches it,
+  `pausechange` beside the five lifecycle events (named events, the core's), and the stack's
+  script surface (`push` a document, `pushNode`, `replace`, `pop`, `clear`, `back`, `top`); the
+  engine's `ui::` facade waits for the move of the sample games.
 - **K5 Transitions.** Entering and leaving through the sheet; a pop during an enter; covered
   screens shown as the cover leaves; the capped time step.
 - **K6 Button prompts.** The InputMap read by input kind after rebinding, the label, the sheet's

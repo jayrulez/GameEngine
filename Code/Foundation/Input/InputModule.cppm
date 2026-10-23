@@ -15,3 +15,4 @@ export import :input_map;
 export import :action_runtime;
 export import :binding_names;
 export import :scripted_input;
+export import :input_kind;

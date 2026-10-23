@@ -2,7 +2,8 @@ add_executable(Input.Tests
     TestsMain.cpp
     InputTests.cpp
     BindingNamesTests.cpp
-    ScriptedInputTests.cpp)
+    ScriptedInputTests.cpp
+    InputKindTests.cpp)
 
 target_link_libraries(Input.Tests PRIVATE
     Foundation::Input Foundation::Shell Foundation::Xml.Serialization Foundation::Settings doctest::doctest)

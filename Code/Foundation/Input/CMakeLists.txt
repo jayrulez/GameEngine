@@ -14,5 +14,6 @@ target_sources(Input
             InputMap.cppm
             ActionRuntime.cppm
             BindingNames.cppm
-            ScriptedInput.cppm)
+            ScriptedInput.cppm
+            InputKind.cppm)
 

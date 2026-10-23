@@ -409,6 +409,12 @@ namespace editor::app
         {
             m_embeddedApp->UI()->SetRunScreens(true);
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_embeddedApp->GUI() != nullptr)
+        {
+            m_embeddedApp->GUI()->SetRunScreens(true); // and the engine GUI's
+        }
+#endif
         m_runtimeContext.Startup();
         m_embeddedApp->OnStartup(*m_embeddedHost);
 

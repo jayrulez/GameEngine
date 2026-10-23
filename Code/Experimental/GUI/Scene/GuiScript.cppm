@@ -28,10 +28,15 @@ export namespace experimental::gui
 {
     inline constexpr core::StringView kGuiScriptService = u8"gui.runtime";
 
-    /// What a host gives a script context: the root its scripts build under.
+    /// What a host gives a script context: the root its scripts build under, or a way to find it
+    /// at each call (a host whose scripts' roots differ by what is running them: an editor's
+    /// game per tab), which wins when set.
     struct GuiScriptBinding
     {
         SceneRoot* root = nullptr;
+        core::Function<SceneRoot*()> resolve;
+
+        [[nodiscard]] SceneRoot* Root() const { return resolve ? resolve() : root; }
     };
 
     inline void InstallGuiScriptService(foundation::script::IScriptContext& context, GuiScriptBinding& binding)

@@ -44,7 +44,12 @@
 // document by its guid ("{guid}") through the provider. Each component's `.of(entity)` reaches its
 // tree as a node (`root()`).
 //
-// The player's settings (E9) come later.
+// The game's screen (E9c): the screen tier lays out at the game's render resolution and draws, at
+// the target's own, into the rectangle that size is fitted into, turned when the game's orientation
+// is not the target's, as the game's image is (Engine.UI's placement); its pointer arrives in render
+// space and is taken to its pixels. With run screens on (the editor), each run (a Game tab's game)
+// has a screen tier of its own: drawn for its tab (SetRenderRun), the input of the scene it is
+// bound to, the `gui` root of its scripts; the overlay layer stays on the shared tier above it.
 // GCC modules hygiene: the renderer, the shaders and the textures live in GuiSubsystemImpl.cpp.
 
 module;
@@ -314,6 +319,20 @@ export namespace engine::gui
         scene.AddSystem<GuiWorldPanelComponentManager>();
     }
 
+    /// Where a screen tier draws on its target (Engine.UI's ScreenPlacement): not fitted, the plain
+    /// draw at the target's own size over all of it; fitted, the root lays out at `DrawSize` over
+    /// its display scale `DpiScale` and draws into `Rect` of the target through `Transform`, which
+    /// turns the root's pixels onto the rectangle's (identity unless the orientation turns it).
+    struct GuiScreenPlacement
+    {
+        bool Fitted = false;
+        ContentRotation Turn = ContentRotation::None;
+        Rectangle Rect{0.0f, 0.0f, 0.0f, 0.0f};
+        Float2 DrawSize{0.0f, 0.0f};
+        f32 DpiScale = 1.0f;
+        Float4x4 Transform = Float4x4::Identity();
+    };
+
     /// The lab's resources by asset guid, through the application's resource manager.
     class GuiResourceProvider final : public lab::IResourceProvider
     {
@@ -392,8 +411,37 @@ export namespace engine::gui
 
         /// The screen tier, outside any scene: its root, the gamekit's screen stack in it, and the
         /// overlay layer above the stack (a loading screen, a system menu).
-        [[nodiscard]] lab::SceneRoot* ScreenRoot() noexcept { return m_screenRoot.Get(); }
-        [[nodiscard]] lab::ScreenStack* Screens() noexcept { return m_screens.Get(); }
+        [[nodiscard]] lab::SceneRoot* ScreenRoot() noexcept { return m_screen.Root.Get(); }
+        [[nodiscard]] lab::ScreenStack* Screens() noexcept { return m_screen.Screens.Get(); }
+
+        // ---- the game's screen ----
+        /// The screen tier at the game's render resolution, fitted into its target by `fit`, its
+        /// text crisp at the target's resolution; nought on either axis: the target's own size.
+        void SetScreenResolution(u32 width, u32 height, FitMode fit);
+        [[nodiscard]] bool HasScreenResolution() const noexcept { return m_screen.HasResolution(); }
+        /// The game's orientation: on a target of the other shape the screen tier lays out at the
+        /// game's shape and draws turned a quarter. Any: never turned.
+        void SetScreenOrientation(ScreenOrientation orientation) noexcept { m_screen.Orientation = orientation; }
+        /// Where a tier at `resolution` (none: 0 x 0), fitted by `fit` and held to `orientation`,
+        /// draws on a `target`-sized target.
+        [[nodiscard]] static GuiScreenPlacement PlaceScreen(Float2 resolution, FitMode fit, ScreenOrientation orientation, Float2 target) noexcept;
+
+        // ---- a screen tier per run (the editor's Game tabs) ----
+        /// On: each run its own screen tier (the editor sets it once). Off (the player's): one.
+        void SetRunScreens(bool enabled) noexcept { m_runScreens = enabled; }
+        [[nodiscard]] bool RunScreens() const noexcept { return m_runScreens; }
+        /// `run`'s screen stack and root, made on first use; the shared tier's with run screens off
+        /// or no run.
+        [[nodiscard]] lab::ScreenStack* ScreensFor(const void* run);
+        [[nodiscard]] lab::SceneRoot* ScreenRootFor(const void* run);
+        void SetScreenResolution(const void* run, u32 width, u32 height, FitMode fit);
+        void SetScreenOrientation(const void* run, ScreenOrientation orientation);
+        /// The run whose screen tier the next screen overlay draws under the shared one's overlays
+        /// (null: none), set by a host around its overlays for that run's view.
+        void SetRenderRun(const void* run) noexcept { m_renderRun = run; }
+        /// The run ended: its screen tier and every screen on it go.
+        void EndRunScreens(const void* run);
+        [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
         [[nodiscard]] lab::Node* OverlayLayer() noexcept { return m_overlay.Get(); }
         /// The scene tier's root for `scene`; null when the scene is unknown.
         [[nodiscard]] lab::SceneRoot* SceneRootFor(const scene::Scene& scene) noexcept;
@@ -488,9 +536,33 @@ export namespace engine::gui
         struct InputTarget
         {
             lab::SceneRoot* Root = nullptr;
-            Float2 Point{0.0f, 0.0f};
+            Float2 Point{0.0f, 0.0f}; ///< in the root's pixels
+            bool Mapped = false;      ///< the point is not the pointer's own (a panel's, a fitted tier's)
             bool Panel = false;
         };
+        // A screen tier: a root holding a screen stack (the shared one the overlay layer above it
+        // too), its input, and the game's screen it lays out for.
+        struct ScreenTier
+        {
+            const void* Run = nullptr; ///< null: the shared tier
+            RefPtr<lab::SceneRoot> Root;
+            RefPtr<lab::ScreenStack> Screens;
+            UniquePtr<lab::GuiInputBridge> Bridge;
+            Float2 Resolution{0.0f, 0.0f};
+            FitMode Fit = FitMode::Letterbox;
+            ScreenOrientation Orientation = ScreenOrientation::Any;
+            Float2 TargetSize{0.0f, 0.0f}; ///< the target it last drew into
+            ContentRotation Turn = ContentRotation::None;
+            [[nodiscard]] bool HasResolution() const noexcept { return Resolution.x > 0.0f && Resolution.y > 0.0f; }
+        };
+        void MakeScreenTier(ScreenTier& tier);
+        static void ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit);
+        [[nodiscard]] ScreenTier* FindRunTier(const void* run) noexcept;
+        [[nodiscard]] ScreenTier* TierOfRoot(const lab::SceneRoot* root) noexcept;
+        // The tier input reaches: the run of the scene the input is bound to, when it has a tier.
+        [[nodiscard]] ScreenTier& InputTier() noexcept;
+        // A render-space point in the tier's root pixels (the crop's offset off, at its scale).
+        [[nodiscard]] static Float2 ScreenPointerPoint(const ScreenTier& tier, Float2 point) noexcept;
         [[nodiscard]] InputTarget PanelUnderPointer(Float2 point, bool centreAim);
         [[nodiscard]] InputTarget PickInputRoot(bool pointer, Float2 point, bool centreAim);
         [[nodiscard]] bool InputReaches(const SceneTier& tier) const noexcept;
@@ -510,11 +582,12 @@ export namespace engine::gui
         Array<RefPtr<foundation::fonts::Font>> m_otherFonts;
         Array<Guid> m_sheets;
         u64 m_sheetGeneration = 0;
-        RefPtr<lab::SceneRoot> m_screenRoot;
-        RefPtr<lab::ScreenStack> m_screens;
+        ScreenTier m_screen;                     // the shared tier
+        Array<UniquePtr<ScreenTier>> m_runTiers; // a tier per run, with run screens on
+        bool m_runScreens = false;
+        const void* m_renderRun = nullptr;
         RefPtr<lab::UIWidget> m_overlay;
         lab::GuiScriptBinding m_scriptBinding; // what each script context is given
-        UniquePtr<lab::GuiInputBridge> m_screenBridge;
         Array<SceneTier> m_sceneTiers;
         Array<UniquePtr<TextureRoot>> m_textureRoots;
         u64 m_frameSerial = 0;

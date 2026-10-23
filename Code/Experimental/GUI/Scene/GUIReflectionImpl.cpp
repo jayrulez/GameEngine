@@ -503,7 +503,8 @@ namespace experimental::gui
             foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
             const auto* binding =
                 context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
-            return binding != nullptr && binding->root != nullptr ? &binding->root->GetContext().GetData() : nullptr;
+            SceneRoot* root = binding != nullptr ? binding->Root() : nullptr;
+            return root != nullptr ? &root->GetContext().GetData() : nullptr;
         }
     }
 
@@ -534,7 +535,7 @@ namespace experimental::gui
             foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
             const auto* binding =
                 context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
-            return binding != nullptr ? binding->root : nullptr;
+            return binding != nullptr ? binding->Root() : nullptr;
         }
     }
 
@@ -701,8 +702,8 @@ namespace experimental::gui
         foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
         const auto* binding =
             context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
-        return binding != nullptr && binding->root != nullptr ? binding->root->HandleAs(Node::StaticType())
-                                                              : core::Variant{};
+        SceneRoot* root = binding != nullptr ? binding->Root() : nullptr;
+        return root != nullptr ? root->HandleAs(Node::StaticType()) : core::Variant{};
     }
 
     // A node's tooltip by default: a Tooltip with its text (here, where the widgets are seen).

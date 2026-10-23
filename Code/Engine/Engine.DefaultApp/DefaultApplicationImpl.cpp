@@ -397,6 +397,12 @@ namespace engine::runtime
         {
             m_ui->SetScreenResolution(m_renderWidth, m_renderHeight, fit);
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gui != nullptr)
+        {
+            m_gui->SetScreenResolution(m_renderWidth, m_renderHeight, fit); // the GUI's screen tier too
+        }
+#endif
         UpdateFittedInput();
     }
 
@@ -407,6 +413,12 @@ namespace engine::runtime
         {
             m_ui->SetScreenOrientation(orientation); // the screen tier turns with the game's image
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gui != nullptr)
+        {
+            m_gui->SetScreenOrientation(orientation);
+        }
+#endif
         UpdateFittedInput();
     }
 

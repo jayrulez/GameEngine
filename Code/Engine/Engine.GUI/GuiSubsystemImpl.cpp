@@ -603,6 +603,8 @@ namespace engine::gui
         UniquePtr<lab::GuiPassRenderer> Renderer;
         // What PrepareOverlay recorded for the screen tier, and for which view.
         lab::GuiPassRenderer::Prepared Screen{};
+        lab::GuiPassRenderer::Prepared RunScreen{}; // the drawn run's tier, under the shared one
+        bool HasRunScreen = false;
         render::ScreenOverlayView ScreenView{};
         bool ScreenPrepared = false;
 
@@ -736,8 +738,10 @@ namespace engine::gui
         m_styles.SetFontService(fonts);
         if (m_render && m_render->Renderer)
             m_render->Renderer->SetFontService(fonts);
-        if (m_screenRoot)
-            m_screenRoot->RequestLayoutTree();
+        if (m_screen.Root)
+            m_screen.Root->RequestLayoutTree();
+        for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+            tier->Root->RequestLayoutTree();
         for (const SceneTier& tier : m_sceneTiers)
             tier.Root->RequestLayoutTree();
         for (const UniquePtr<TextureRoot>& root : m_textureRoots)
@@ -781,25 +785,32 @@ namespace engine::gui
         m_styles.SetUserAgentSheet(lab::CSSParser::Parse(lab::DefaultThemeCSS(), StringView(u8"theme")));
         ApplySheets();
 
-        // The screen tier: the screen stack, and the overlay layer above it, each filling the root.
-        // Neither paints, so neither takes the pointer from the game until something in it does.
-        m_screenRoot = MakeRef<lab::SceneRoot>(m_allocator, m_context);
-        {
-            lab::Node::StyleWriteScope defaults(*m_screenRoot);
-            m_screenRoot->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
-        }
-        m_screens = MakeRef<lab::ScreenStack>(m_allocator);
-        m_screens->SetId(StringView(u8"screens")); // a script's ScreenStack::of(gui::root().find("screens"))
-        m_screenRoot->AddChild(m_screens.Get());
+        // The shared screen tier: the screen stack, and the overlay layer above it, each filling the
+        // root. Neither paints, so neither takes the pointer from the game until something in it does.
+        MakeScreenTier(m_screen);
         m_overlay = MakeRef<lab::UIWidget>(m_allocator);
         m_overlay->SetTag(StringView(u8"overlays"));
         {
             lab::Node::StyleWriteScope defaults(*m_overlay);
             m_overlay->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
         }
-        m_screenRoot->AddChild(m_overlay.Get());
-        m_screenBridge = MakeBridge(*m_screenRoot);
-        m_scriptBinding.root = m_screenRoot.Get();
+        m_screen.Root->AddChild(m_overlay.Get());
+        // A script's root is its run's screen tier (the shared one in the player).
+        m_scriptBinding.resolve = [this]() { return ScreenRootFor(foundation::script::CurrentRun()); };
+    }
+
+    // A screen tier's root, filled by its stack (its id what a script finds), with its input.
+    void GuiSubsystem::MakeScreenTier(ScreenTier& tier)
+    {
+        tier.Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        {
+            lab::Node::StyleWriteScope defaults(*tier.Root);
+            tier.Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
+        }
+        tier.Screens = MakeRef<lab::ScreenStack>(m_allocator);
+        tier.Screens->SetId(StringView(u8"screens")); // a script's ScreenStack::of(gui::root().find("screens"))
+        tier.Root->AddChild(tier.Screens.Get());
+        tier.Bridge = MakeBridge(*tier.Root);
     }
 
     void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& context) { lab::InstallGuiScriptService(context, m_scriptBinding); }
@@ -841,13 +852,16 @@ namespace engine::gui
         m_input = nullptr;
         m_sceneTiers.Clear();
         m_textureRoots.Clear();
-        m_screenBridge = nullptr;
-        if (m_screens)
-            m_screens->Clear();
+        for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+            tier->Screens->Clear();
+        m_runTiers.Clear();
+        if (m_screen.Screens)
+            m_screen.Screens->Clear();
         m_overlay = nullptr;
-        m_screens = nullptr;
-        m_scriptBinding.root = nullptr; // a script still running finds no root, not a freed one
-        m_screenRoot = nullptr;
+        m_scriptBinding.resolve = nullptr; // a script still running finds no root, not a freed one
+        m_screen.Bridge = nullptr;
+        m_screen.Screens = nullptr;
+        m_screen.Root = nullptr;
         m_resources->SetTextureSink(nullptr);
         m_context->SetPictureBaker(nullptr);
         m_render = nullptr; // waits for the GPU, then lets the renderers go
@@ -883,8 +897,10 @@ namespace engine::gui
         PumpInput();
         // Unscaled: menus move while the game is paused.
         m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
-        if (m_screenRoot)
-            StyleAndLayOut(*m_screenRoot, m_screenRoot->GetViewportSize());
+        if (m_screen.Root)
+            StyleAndLayOut(*m_screen.Root, m_screen.Root->GetViewportSize());
+        for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+            StyleAndLayOut(*tier->Root, tier->Root->GetViewportSize());
     }
 
     void GuiSubsystem::SetResourceManager(resource::ResourceManager* resources)
@@ -1240,16 +1256,18 @@ namespace engine::gui
     void GuiSubsystem::SetTextInputTarget(foundation::shell::IWindow* window)
     {
         m_textInputTarget = window;
-        if (m_screenBridge)
-            m_screenBridge->SetTextInputTarget(window);
+        if (m_screen.Bridge)
+            m_screen.Bridge->SetTextInputTarget(window);
+        for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+            tier->Bridge->SetTextInputTarget(window);
         for (const SceneTier& tier : m_sceneTiers)
             tier.Bridge->SetTextInputTarget(window);
     }
 
     lab::GuiInputBridge* GuiSubsystem::BridgeOf(const lab::SceneRoot* root) noexcept
     {
-        if (root != nullptr && root == m_screenRoot.Get())
-            return m_screenBridge.Get();
+        if (ScreenTier* tier = TierOfRoot(root))
+            return tier->Bridge.Get();
         for (const SceneTier& tier : m_sceneTiers)
             if (tier.Root.Get() == root)
                 return tier.Bridge.Get();
@@ -1289,7 +1307,7 @@ namespace engine::gui
                     if (!hit.Hit || (found.Root != nullptr && hit.Distance >= nearest))
                         return;
                     const Float2 pixels = WorldPanelPixels(c);
-                    found = InputTarget{c.renderRoot.Get(), Float2{hit.Uv.x * pixels.x, hit.Uv.y * pixels.y}, true};
+                    found = InputTarget{c.renderRoot.Get(), Float2{hit.Uv.x * pixels.x, hit.Uv.y * pixels.y}, true, true};
                     nearest = hit.Distance;
                 });
         }
@@ -1309,37 +1327,39 @@ namespace engine::gui
 
     GuiSubsystem::InputTarget GuiSubsystem::PickInputRoot(bool pointer, Float2 point, bool centreAim)
     {
-        if (!m_screenRoot)
+        if (!m_screen.Root)
             return {};
-        const InputTarget screen{m_screenRoot.Get(), point, false};
-        // An occupied overlay layer (a system menu, a loading screen) is modal.
+        // The shared tier's overlay layer, occupied (a system menu, a loading screen), is modal.
         for (usize i = 0; m_overlay && i < m_overlay->ChildCount(); ++i)
             if (m_overlay->GetChildAt(i)->IsDisplayed())
-                return screen;
+                return InputTarget{m_screen.Root.Get(), ScreenPointerPoint(m_screen, point), m_screen.HasResolution(), false};
+        // The screen tier input reaches (the bound run's), its pointer in its own pixels.
+        ScreenTier& tier = InputTier();
+        const InputTarget screen{tier.Root.Get(), ScreenPointerPoint(tier, point), tier.HasResolution(), false};
         // The GUI under the pointer, the screen tier's over a scene's, then a world panel's.
         if (pointer)
         {
-            if (m_screenRoot->GetEventDispatcher()->IsPointerOver(point))
+            if (tier.Root->GetEventDispatcher()->IsPointerOver(screen.Point))
                 return screen;
-            for (const SceneTier& tier : m_sceneTiers)
-                if (InputReaches(tier) && tier.Root->GetEventDispatcher()->IsPointerOver(point))
-                    return InputTarget{tier.Root.Get(), point, false};
+            for (const SceneTier& scene : m_sceneTiers)
+                if (InputReaches(scene) && scene.Root->GetEventDispatcher()->IsPointerOver(point))
+                    return InputTarget{scene.Root.Get(), point, false, false};
             if (const InputTarget panel = PanelUnderPointer(point, centreAim); panel.Root != nullptr)
                 return panel;
         }
         // The keys and a pad: the screens a game pushed, else a scene's GUI.
-        if (m_screens && m_screens->Count() > 0)
+        if (tier.Screens->Count() > 0)
             return screen;
-        for (const SceneTier& tier : m_sceneTiers)
-            if (InputReaches(tier) && HasContent(tier))
-                return InputTarget{tier.Root.Get(), point, false};
+        for (const SceneTier& scene : m_sceneTiers)
+            if (InputReaches(scene) && HasContent(scene))
+                return InputTarget{scene.Root.Get(), point, false, false};
         return screen;
     }
 
     void GuiSubsystem::PumpInput()
     {
         m_pointerTaken = false;
-        if (m_input == nullptr || !m_screenRoot)
+        if (m_input == nullptr || !m_screen.Root)
             return;
         foundation::input::IInputSourceProvider& devices = m_input->ActiveSource();
         m_inputKind.Update(devices);
@@ -1369,7 +1389,12 @@ namespace engine::gui
             bool panel = false;
             for (const UniquePtr<TextureRoot>& texture : m_textureRoots)
                 panel = panel || texture->Root.Get() == m_pressRoot;
-            target = InputTarget{m_pressRoot, panel ? m_panelPoint : point, panel};
+            if (panel)
+                target = InputTarget{m_pressRoot, m_panelPoint, true, true};
+            else if (ScreenTier* tier = TierOfRoot(m_pressRoot))
+                target = InputTarget{m_pressRoot, ScreenPointerPoint(*tier, point), tier->HasResolution(), false};
+            else
+                target = InputTarget{m_pressRoot, point, false, false};
         }
         if (target.Panel)
             m_panelPoint = target.Point;
@@ -1386,11 +1411,12 @@ namespace engine::gui
         if (held && m_pressRoot == nullptr)
         {
             m_pressRoot = root; // the press begins: where it began says whether the GUI took it
-            m_pressTaken = target.Panel || root->GetEventDispatcher()->IsPointerOver(point);
+            m_pressTaken = target.Panel || root->GetEventDispatcher()->IsPointerOver(target.Point);
         }
-        if (target.Panel)
+        if (target.Mapped)
         {
-            // A panel's pointer is where the ray crosses it, in its pixels (fingers stay the view's).
+            // A panel's pointer is where the ray crosses it, a fitted screen tier's where the render-
+            // space pointer falls in its pixels (fingers come as the mouse SDL copies them to).
             PanelMouse mapped(mouse, target.Point);
             bridge->PumpDevices(mouse != nullptr ? &mapped : nullptr, nullptr, devices.Keyboard());
         }
@@ -1417,7 +1443,7 @@ namespace engine::gui
         // What the action layer is told the GUI took: the pointer over GUI that takes it, or a press
         // that began there while it is held; the keys while text is edited. Added to Engine.UI's
         // claim (its pump runs first in this lane); EndFrame clears them after the frame read them.
-        m_pointerTaken = pointer && (held ? m_pressTaken : target.Panel || root->GetEventDispatcher()->IsPointerOver(point));
+        m_pointerTaken = pointer && (held ? m_pressTaken : target.Panel || root->GetEventDispatcher()->IsPointerOver(target.Point));
         const bool keys = root->GetEventDispatcher()->WantsTextInput();
         if (!held)
         {
@@ -1517,6 +1543,33 @@ namespace engine::gui
         }
     }
 
+    // A screen tier placed on `view`'s target and recorded (its layers on `encoder` when given): laid
+    // out at the game's resolution over its scale and drawn into the fitted rectangle, turned with the
+    // game's image, or at the target's own size over all of it.
+    static lab::GuiPassRenderer::Prepared PrepareScreenTier(lab::GuiPassRenderer& renderer, lab::SceneRoot& root,
+                                                            const GuiScreenPlacement& place, Float2 target,
+                                                            const render::ScreenOverlayView& view, rhi::CommandEncoder* encoder,
+                                                            const Function<void(lab::SceneRoot&, Float2)>& layOut)
+    {
+        lab::GuiPassView pass = ScreenPass(view);
+        Float2 size = target;
+        f32 scale = 1.0f;
+        if (place.Fitted)
+        {
+            pass.X = static_cast<i32>(place.Rect.x);
+            pass.Y = static_cast<i32>(place.Rect.y);
+            pass.Width = static_cast<u32>(Max(place.Rect.width, 1.0f));
+            pass.Height = static_cast<u32>(Max(place.Rect.height, 1.0f));
+            pass.Transform = place.Transform;
+            size = place.DrawSize;
+            scale = place.DpiScale;
+        }
+        if (root.GetDisplayScale() != scale)
+            root.SetDisplayScale(scale);
+        layOut(root, size);
+        return encoder != nullptr ? renderer.Prepare(root, pass, encoder) : renderer.Prepare(root, pass);
+    }
+
     void GuiSubsystem::PrepareOverlay(rhi::CommandEncoder& encoder, const render::ScreenOverlayView& view)
     {
         if (!IsRenderReady())
@@ -1524,27 +1577,200 @@ namespace engine::gui
         m_render->ScreenPrepared = false;
         // The bakes before any pass samples them, once a frame.
         (void)m_render->Renderer->RecordBakes(encoder, view.frameIndex);
-        if (!m_screenRoot || view.width == 0 || view.height == 0)
+        if (!m_screen.Root || view.width == 0 || view.height == 0)
             return;
-        StyleAndLayOut(*m_screenRoot, Float2{static_cast<f32>(view.width), static_cast<f32>(view.height)});
-        m_render->Screen = m_render->Renderer->Prepare(*m_screenRoot, ScreenPass(view), &encoder);
+        const Float2 target{static_cast<f32>(view.width), static_cast<f32>(view.height)};
+        const Function<void(lab::SceneRoot&, Float2)> layOut = [this](lab::SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
+        const auto prepare = [&](ScreenTier& tier)
+        {
+            tier.TargetSize = target;
+            const GuiScreenPlacement place = PlaceScreen(tier.Resolution, tier.Fit, tier.Orientation, target);
+            tier.Turn = place.Turn;
+            return PrepareScreenTier(*m_render->Renderer, *tier.Root, place, target, view, &encoder, layOut);
+        };
+        // The drawn run's own screens (its Game tab), then the shared tier above them.
+        ScreenTier* run = m_runScreens ? FindRunTier(m_renderRun) : nullptr;
+        m_render->HasRunScreen = run != nullptr;
+        if (run != nullptr)
+            m_render->RunScreen = prepare(*run);
+        m_render->Screen = prepare(m_screen);
         m_render->ScreenView = view;
         m_render->ScreenPrepared = true;
     }
 
     void GuiSubsystem::Render(rhi::RenderPassEncoder& encoder, const render::ScreenOverlayView& view)
     {
-        if (!IsRenderReady() || !m_screenRoot || view.width == 0 || view.height == 0)
+        if (!IsRenderReady() || !m_screen.Root || view.width == 0 || view.height == 0)
             return;
         const bool prepared = m_render->ScreenPrepared && SameView(m_render->ScreenView, view);
         m_render->ScreenPrepared = false;
         if (prepared)
         {
+            if (m_render->HasRunScreen)
+                m_render->Renderer->Draw(encoder, m_render->RunScreen);
             m_render->Renderer->Draw(encoder, m_render->Screen);
             return;
         }
-        StyleAndLayOut(*m_screenRoot, Float2{static_cast<f32>(view.width), static_cast<f32>(view.height)});
-        m_render->Renderer->DrawInPass(*m_screenRoot, encoder, ScreenPass(view));
+        // Not prepared for this view: recorded now, their layers drawn in place.
+        const Float2 target{static_cast<f32>(view.width), static_cast<f32>(view.height)};
+        const Function<void(lab::SceneRoot&, Float2)> layOut = [this](lab::SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
+        const auto draw = [&](ScreenTier& tier)
+        {
+            tier.TargetSize = target;
+            const GuiScreenPlacement place = PlaceScreen(tier.Resolution, tier.Fit, tier.Orientation, target);
+            tier.Turn = place.Turn;
+            m_render->Renderer->Draw(encoder, PrepareScreenTier(*m_render->Renderer, *tier.Root, place, target, view, nullptr, layOut));
+        };
+        if (ScreenTier* run = m_runScreens ? FindRunTier(m_renderRun) : nullptr)
+            draw(*run);
+        draw(m_screen);
+    }
+
+    // ---- the game's screen ----
+
+    GuiScreenPlacement GuiSubsystem::PlaceScreen(Float2 resolution, FitMode fit, ScreenOrientation orientation, Float2 target) noexcept
+    {
+        GuiScreenPlacement place;
+        if (target.x <= 0.0f || target.y <= 0.0f)
+            return place;
+        const ContentRotation turn = TurnFor(orientation, target.x, target.y);
+        const bool hasResolution = resolution.x > 0.0f && resolution.y > 0.0f;
+        if (!hasResolution && turn == ContentRotation::None)
+            return place; // the plain draw
+        const bool swaps = turn == ContentRotation::Quarter || turn == ContentRotation::ThreeQuarter;
+        // The game's frame: its resolution, else the target's own pixels at the game's shape.
+        const Float2 content = hasResolution ? resolution : (swaps ? Float2{target.y, target.x} : target);
+        const ContentFit placed{Rectangle{0.0f, 0.0f, target.x, target.y}, content, hasResolution ? fit : FitMode::Stretch, turn};
+        place.Fitted = true;
+        place.Turn = turn;
+        place.Rect = placed.DstRect();
+        place.DrawSize = swaps ? Float2{place.Rect.height, place.Rect.width} : Float2{place.Rect.width, place.Rect.height};
+        const f32 scale = placed.Scale().y; // layout units per target pixel, down the game's height
+        place.DpiScale = scale > 0.0f ? 1.0f / scale : 1.0f;
+        if (turn != ContentRotation::None)
+        {
+            // The root's pixels onto the rectangle's, turned as the game's image is: the image of
+            // the origin and of each axis through the same fit, as a row-vector affine.
+            const ContentFit turned{Rectangle{0.0f, 0.0f, place.Rect.width, place.Rect.height}, place.DrawSize, FitMode::Stretch, turn};
+            const Float2 origin = turned.FromContent(Float2{0.0f, 0.0f});
+            const Float2 xAxis = turned.FromContent(Float2{1.0f, 0.0f});
+            const Float2 yAxis = turned.FromContent(Float2{0.0f, 1.0f});
+            place.Transform = Float4x4{{{xAxis.x - origin.x, xAxis.y - origin.y, 0.0f, 0.0f},
+                                        {yAxis.x - origin.x, yAxis.y - origin.y, 0.0f, 0.0f},
+                                        {0.0f, 0.0f, 1.0f, 0.0f},
+                                        {origin.x, origin.y, 0.0f, 1.0f}}};
+        }
+        return place;
+    }
+
+    void GuiSubsystem::ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit)
+    {
+        tier.Resolution = width > 0 && height > 0 ? Float2{static_cast<f32>(width), static_cast<f32>(height)} : Float2{0.0f, 0.0f};
+        tier.Fit = fit;
+    }
+
+    void GuiSubsystem::SetScreenResolution(u32 width, u32 height, FitMode fit) { ApplyResolution(m_screen, width, height, fit); }
+
+    GuiSubsystem::ScreenTier* GuiSubsystem::FindRunTier(const void* run) noexcept
+    {
+        if (run == nullptr)
+            return nullptr;
+        for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+            if (tier->Run == run)
+                return tier.Get();
+        return nullptr;
+    }
+
+    GuiSubsystem::ScreenTier* GuiSubsystem::TierOfRoot(const lab::SceneRoot* root) noexcept
+    {
+        if (root == nullptr)
+            return nullptr;
+        if (root == m_screen.Root.Get())
+            return &m_screen;
+        for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+            if (tier->Root.Get() == root)
+                return tier.Get();
+        return nullptr;
+    }
+
+    lab::ScreenStack* GuiSubsystem::ScreensFor(const void* run)
+    {
+        lab::SceneRoot* root = ScreenRootFor(run);
+        ScreenTier* tier = TierOfRoot(root);
+        return tier != nullptr ? tier->Screens.Get() : nullptr;
+    }
+
+    lab::SceneRoot* GuiSubsystem::ScreenRootFor(const void* run)
+    {
+        if (!m_runScreens || run == nullptr || !m_screen.Root)
+            return m_screen.Root.Get();
+        if (ScreenTier* found = FindRunTier(run))
+            return found->Root.Get();
+        UniquePtr<ScreenTier> tier = MakeUnique<ScreenTier>(m_allocator);
+        tier->Run = run;
+        MakeScreenTier(*tier);
+        lab::SceneRoot* root = tier->Root.Get();
+        m_runTiers.PushBack(Move(tier));
+        return root;
+    }
+
+    void GuiSubsystem::SetScreenResolution(const void* run, u32 width, u32 height, FitMode fit)
+    {
+        // Made on first use, so a tab can size its tier before anything is pushed.
+        ScreenTier* tier = TierOfRoot(ScreenRootFor(run));
+        if (tier != nullptr)
+            ApplyResolution(*tier, width, height, fit);
+    }
+
+    void GuiSubsystem::SetScreenOrientation(const void* run, ScreenOrientation orientation)
+    {
+        if (ScreenTier* tier = TierOfRoot(ScreenRootFor(run)))
+            tier->Orientation = orientation;
+    }
+
+    void GuiSubsystem::EndRunScreens(const void* run)
+    {
+        for (usize i = 0; i < m_runTiers.Size(); ++i)
+            if (m_runTiers[i]->Run == run)
+            {
+                lab::SceneRoot* root = m_runTiers[i]->Root.Get();
+                if (m_activeRoot == root)
+                    m_activeRoot = nullptr;
+                if (m_pressRoot == root)
+                    m_pressRoot = nullptr;
+                m_runTiers[i]->Screens->Clear();
+                m_runTiers.RemoveAt(i);
+                break;
+            }
+        if (m_renderRun == run)
+            m_renderRun = nullptr;
+    }
+
+    GuiSubsystem::ScreenTier& GuiSubsystem::InputTier() noexcept
+    {
+        const void* bound = m_runScreens && m_input != nullptr ? m_input->BoundSceneKey() : nullptr;
+        if (bound != nullptr)
+            for (const SceneTier& scene : m_sceneTiers)
+                if (static_cast<const void*>(scene.Scene) == bound)
+                {
+                    if (ScreenTier* tier = FindRunTier(scene.Scene->Run()))
+                        return *tier;
+                    break;
+                }
+        return m_screen;
+    }
+
+    Float2 GuiSubsystem::ScreenPointerPoint(const ScreenTier& tier, Float2 point) noexcept
+    {
+        if (!tier.HasResolution())
+            return point; // the target's own pixels (a turned game's pointer arrives in its frame)
+        // As PlaceScreen fitted it on the last draw: the part of the resolution a crop leaves out
+        // offsets it, and the root's scale takes it to its pixels.
+        const ContentFit fit{Rectangle{0.0f, 0.0f, tier.TargetSize.x, tier.TargetSize.y}, tier.Resolution, tier.Fit, tier.Turn};
+        const Rectangle source = fit.SrcRect();
+        const f32 scale = fit.Scale().y;
+        const f32 dpi = scale > 0.0f ? 1.0f / scale : 1.0f;
+        return Float2{(point.x - source.x) * dpi, (point.y - source.y) * dpi};
     }
 
     usize GuiSubsystem::TextureCount() const noexcept { return m_render ? m_render->Targets.Size() : 0; }

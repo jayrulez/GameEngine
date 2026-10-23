@@ -1078,3 +1078,117 @@ TEST_CASE("engine.gui: the project's fonts, a default and others each a family, 
     CHECK(engine.gui->Fonts() == builtIn);
     CHECK(engine.gui->Context().GetFontService() == builtIn);
 }
+
+TEST_CASE("engine.gui: the screen is placed as the game's image is: fitted at its resolution, turned for its orientation")
+{
+    using engine::gui::GuiSubsystem;
+    // No resolution, any orientation: the plain draw.
+    CHECK_FALSE(GuiSubsystem::PlaceScreen(Float2{}, FitMode::Letterbox, ScreenOrientation::Any, Float2{1280.0f, 720.0f}).Fitted);
+
+    // 320 by 180 fitted into 1280 by 800: letterboxed, laid out at 320 by 180 four times over.
+    engine::gui::GuiScreenPlacement place =
+        GuiSubsystem::PlaceScreen(Float2{320.0f, 180.0f}, FitMode::Letterbox, ScreenOrientation::Any, Float2{1280.0f, 800.0f});
+    REQUIRE(place.Fitted);
+    CHECK(place.Rect.x == doctest::Approx(0.0f));
+    CHECK(place.Rect.y == doctest::Approx(40.0f));
+    CHECK(place.Rect.width == doctest::Approx(1280.0f));
+    CHECK(place.Rect.height == doctest::Approx(720.0f));
+    CHECK(place.DrawSize.x == doctest::Approx(1280.0f));
+    CHECK(place.DpiScale == doctest::Approx(4.0f)); // 1280 / 4 = 320 laid out
+
+    // A landscape game on a portrait target: turned a quarter, laid out at its own shape.
+    place = GuiSubsystem::PlaceScreen(Float2{}, FitMode::Letterbox, ScreenOrientation::Landscape, Float2{720.0f, 1280.0f});
+    REQUIRE(place.Fitted);
+    CHECK(place.Turn != ContentRotation::None);
+    CHECK(place.DrawSize.x == doctest::Approx(1280.0f)); // the target's sides swapped
+    CHECK(place.DrawSize.y == doctest::Approx(720.0f));
+    CHECK(place.Transform.m[0][0] == doctest::Approx(0.0f)); // x runs down the target
+}
+
+TEST_CASE("engine.gui: at a render resolution the screen tier lays out at it, draws fitted, and takes the pointer in render space")
+{
+    rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
+    Engine engine;
+    engine.gui->EnsureRenderReady(device, 2);
+    engine.gui->SetScreenResolution(400, 300, FitMode::Letterbox);
+    CHECK(engine.gui->HasScreenResolution());
+    RefPtr<lab::UIWidget> menu = MakeRef<lab::UIWidget>(DefaultAllocator());
+    menu->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
+    REQUIRE(engine.gui->Screens()->Push(*menu) != nullptr);
+
+    foundation::render::ScreenOverlayView view;
+    view.width = 800;
+    view.height = 600;
+    view.targetFormat = rhi::TextureFormat::RGBA8UnormSrgb;
+    rhi::null::NullCommandEncoder encoder;
+    engine.gui->PrepareOverlay(encoder, view);
+    lab::SceneRoot* root = engine.gui->ScreenRoot();
+    CHECK(root->GetSize().x == doctest::Approx(400.0f)); // laid out at the game's resolution
+    CHECK(root->GetSize().y == doctest::Approx(300.0f));
+    CHECK(root->GetDisplayScale() == doctest::Approx(2.0f)); // drawn crisp at the target's
+    rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(rhi::RenderPassDesc{});
+    const u64 draws = encoder.counters->Snapshot().draws;
+    engine.gui->Render(*pass, view);
+    CHECK(encoder.counters->Snapshot().draws > draws);
+    pass->End();
+
+    // The pointer arrives in render space (the game's fitted source): the tier takes it to its pixels.
+    engine.devices.mouse.x = 50.0f;
+    engine.devices.mouse.y = 30.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == root);
+    CHECK(root->GetEventDispatcher()->GetMousePosition().x == doctest::Approx(100.0f));
+    CHECK(root->GetEventDispatcher()->GetMousePosition().y == doctest::Approx(60.0f));
+
+    engine.gui->SetScreenResolution(0, 0, FitMode::Letterbox); // back to the target's own size
+    CHECK_FALSE(engine.gui->HasScreenResolution());
+    engine.gui->PrepareOverlay(encoder, view);
+    CHECK(root->GetSize().x == doctest::Approx(800.0f));
+    CHECK(root->GetDisplayScale() == doctest::Approx(1.0f));
+}
+
+TEST_CASE("engine.gui: with run screens on each run has its own screen tier, drawn for its tab and gone with its run")
+{
+    rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
+    Engine engine;
+    engine.gui->EnsureRenderReady(device, 2);
+    int runA = 0;
+    int runB = 0;
+    CHECK(engine.gui->ScreensFor(&runA) == engine.gui->Screens()); // off: one tier for every run
+    engine.gui->SetRunScreens(true);
+    lab::ScreenStack* a = engine.gui->ScreensFor(&runA);
+    lab::ScreenStack* b = engine.gui->ScreensFor(&runB);
+    REQUIRE(a != nullptr);
+    CHECK(a != b);
+    CHECK(a != engine.gui->Screens());
+    CHECK(engine.gui->ScreensFor(&runA) == a); // made once
+    CHECK(engine.gui->ScreensFor(nullptr) == engine.gui->Screens());
+    CHECK(engine.gui->RunScreenCount() == 2u);
+    CHECK(a->GetId() == StringView(u8"screens")); // what its scripts find under their root
+
+    // A's tab draws A's screens under the shared tier; a run's resolution is its own.
+    RefPtr<lab::UIWidget> menu = MakeRef<lab::UIWidget>(DefaultAllocator());
+    menu->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
+    REQUIRE(a->Push(*menu) != nullptr);
+    engine.gui->SetScreenResolution(&runA, 320, 180, FitMode::Letterbox);
+    CHECK_FALSE(engine.gui->HasScreenResolution()); // the shared tier's untouched
+    foundation::render::ScreenOverlayView view;
+    view.width = 640;
+    view.height = 360;
+    view.targetFormat = rhi::TextureFormat::RGBA8UnormSrgb;
+    rhi::null::NullCommandEncoder encoder;
+    engine.gui->SetRenderRun(&runA);
+    engine.gui->PrepareOverlay(encoder, view);
+    CHECK(engine.gui->ScreenRootFor(&runA)->GetSize().x == doctest::Approx(320.0f));
+    rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(rhi::RenderPassDesc{});
+    const u64 draws = encoder.counters->Snapshot().draws;
+    engine.gui->Render(*pass, view);
+    CHECK(encoder.counters->Snapshot().draws > draws);
+    pass->End();
+    engine.gui->SetRenderRun(nullptr);
+
+    engine.gui->EndRunScreens(&runA);
+    CHECK(engine.gui->RunScreenCount() == 1u);
+    engine.gui->EndRunScreens(&runB);
+    CHECK(engine.gui->RunScreenCount() == 0u);
+}

@@ -1201,7 +1201,18 @@ Each a layer with its tests.
     measured); the player and the editor's project defaults give the GUI the UI's fonts and the
     sheets. The project-settings asset-list count follows (2).
   - **E9c Run screens.** A screen tier per run in the editor's Game tabs, the game's resolution and
-    orientation.
+    orientation. Built (vg, 2026-10-23): a screen tier is a root, its stack, its input and the
+    game's screen it lays out for; the shared one holds the overlay layer. `SetScreenResolution`
+    and `SetScreenOrientation` (the shared tier's, or a run's) place it as Engine.UI's
+    `PlaceScreen` does: laid out at the resolution over its display scale, drawn into the fitted
+    rectangle, turned through the pass view's new transform; its pointer, in render space, is taken
+    to its pixels (a crop's offset off, at its scale). With `SetRunScreens` (the editor) each run's
+    tier is made on first use (`ScreensFor`, `ScreenRootFor`), drawn under the shared tier for its
+    tab (`SetRenderRun`), given the input of the scene it is bound to, and gone with
+    `EndRunScreens`; the `gui` binding finds the calling script's run's root (the lab's binding
+    gained `resolve`). DefaultApplication passes on the game's resolution and orientation; the
+    editor turns run screens on; a Game tab sizes, draws and ends its run's tier. Fingers on a
+    fitted tier come as the mouse SDL copies them to.
   - **E9d The GUI's loading document.** The boot splash through the GUI when the project names one.
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
 - **E11 The web.** The lab and the engine's GUI on wasm.

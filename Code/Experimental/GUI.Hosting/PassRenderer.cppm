@@ -59,6 +59,9 @@ export namespace experimental::gui
         /// Encoded blend space); false: linear light.
         bool Encoded = false;
         u32 FrameIndex = 0;
+        /// The root's pixels onto the region's: identity, or a quarter turn when the content is
+        /// presented turned (a landscape game on a portrait target).
+        Float4x4 Transform = Float4x4::Identity();
     };
 
     class GuiPassRenderer
@@ -161,6 +164,7 @@ export namespace experimental::gui
             m_canvas.SetStencilFills(stencil); // what the batch emits matches the pass it draws into
             m_canvas.SetLayers(layered);
             m_canvas.Clear();
+            m_canvas.SetTransform(view.Transform);
             {
                 DrawContext context{m_canvas};
                 root.DrawFrame(context);

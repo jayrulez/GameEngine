@@ -28,8 +28,8 @@ Targets by flow-family, mirroring the collection conventions
   round-trips. (Created when its first test migrates or lands.)
 - `Integration.Runtime` - boot flow, scene/script end-to-end scenarios
   (Roll Call-class). (Same.)
-- `Integration.GuiScript` - the experimental GUI's satellites driven from the
-  script backends (the gamekit's screen stack), apart from
+- `Integration.GuiScript` - the experimental GUI and its satellites driven from
+  the script backends (the lab's widgets, the gamekit's screen stack), apart from
   `Integration.ScriptFacades` because the lab and foundation.ui reflect types of
   the same names and one process binds only one set to its scripts.
 

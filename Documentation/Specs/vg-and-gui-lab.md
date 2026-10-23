@@ -253,7 +253,7 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   aliases), through which markup and a script's `add` create, from the GUI's allocator; the
   widgets' native API reflected (geometry, visibility, opacity, id, classes, text, checked,
   value, progress; add, find, parent, childAt, destroy, `on(event, fn)`, `X.of(node)`), and
-  `gui.root()` from a per-context binding. GUI.Script.Tests runs the G1 tests in both languages;
+  `gui.root()` from a per-context binding. Integration.GuiScript (GUI.Script.Tests until 2026-10-23) runs the G1 tests in both languages;
   GUI.Tests covers the native half (separate tables, reuse, a GUI going, the registry's refusals,
   sets and aliases, a library's widget in markup).
   Left: unloading a library while elements of its types live is not yet refused (it must be,

@@ -61,7 +61,7 @@ class Game
         m_paused = false;
         run::setTimeScale(0.0f); // whatever is behind the title holds still
         ui::clear();
-        Screen@ s = ui::push(kTitleDoc);
+        UIScreen@ s = ui::push(kTitleDoc);
         s.findButton("play-btn").onClick(Action(this.onPalace));
         s.findButton("canal-btn").onClick(Action(this.onCanal));
         s.findButton("solo-btn").onClick(Action(this.onSolo));
@@ -116,7 +116,7 @@ class Game
     private void onJoin()
     {
         sound(kClick);
-        TextBox@ box = ui::findTextBox("address");
+        UITextBox@ box = ui::findTextBox("address");
         m_address = (box !is null && box.text.length() > 0) ? box.text : "127.0.0.1";
         m_mode = kJoining;
         startRound();
@@ -146,7 +146,7 @@ class Game
         ui::push(kHudDoc);
         ui::findLabel("hud-target").setText("");
         ui::findLabel("hud-score").setText("Points 0");
-        View@ controls = ui::find("hud-controls");
+        UIView@ controls = ui::find("hud-controls");
         controls.setVisible(true);
         controls.setOpacity(0.0f);
         controls.fadeTo(1.0f, 0.3f);
@@ -210,7 +210,7 @@ class Game
         {
             return;
         }
-        Label@ mark = ui::findLabel("hud-target");
+        UILabel@ mark = ui::findLabel("hud-target");
         mark.setText(costumeName(int(hud.z)));
         mark.setTextColor(costumeColour(int(hud.z)));
         ui::findLabel("hud-score").setText("Points " + int(hud.x));
@@ -278,7 +278,7 @@ class Game
         if (scores.y > scores.x) ++place;
         if (scores.z > scores.x) ++place;
         if (scores.w > scores.x) ++place;
-        Screen@ s = ui::push(kResultsDoc);
+        UIScreen@ s = ui::push(kResultsDoc);
         s.findLabel("res-title").setText(place == 1 ? "The ball is yours" : "The music stops");
         s.findLabel("res-you").setText("You came " + this.place(place) + " with " + you + " points");
         s.findLabel("res-0").setText("You        " + you);
@@ -308,7 +308,7 @@ class Game
         holdStill();
         m_controlsShow = 0.0f;
         ui::find("hud-controls").setVisible(false); // the menu shows them itself
-        Screen@ s = ui::push(kPauseDoc);
+        UIScreen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
         s.findButton("restart-btn").onClick(Action(this.onAgain));
         s.findButton("restart-btn").setVisible(m_mode != kJoining); // the host's to start over
@@ -395,7 +395,7 @@ class Game
 
     private void note(string text)
     {
-        Label@ label = ui::findLabel("hud-note");
+        UILabel@ label = ui::findLabel("hud-note");
         label.setText(text);
         label.setOpacity(1.0f);
         label.setVisible(true);

@@ -61,7 +61,7 @@ class Lamp
     {
         if (near)
         {
-            Label@ text = ui::findLabel("hud-prompt");
+            UILabel@ text = ui::findLabel("hud-prompt");
             if (text !is null && text.isValid())
             {
                 text.setText(lit ? "Interact: put out the lamp" : "Interact: light the lamp");

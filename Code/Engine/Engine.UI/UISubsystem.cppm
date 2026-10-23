@@ -150,7 +150,7 @@ export namespace engine::ui
         RefPtr<View> root;                     // instantiated tree (template = document)
         // The instantiated tree as a script group handle (`root()` to scripts), whose finders reach
         // the views inside, as `ui::root()` reaches the HUD's. Null-valid before the tree is built.
-        [[nodiscard]] engine::uiscript::ViewGroup rootGroup() const;
+        [[nodiscard]] engine::uiscript::UIViewGroup rootGroup() const;
         RefPtr<ViewGroup> host;                // per-canvas host in the scene root (order + scaler)
         RefPtr<RootView> renderRoot;           // RenderTexture mode: standalone root (never a tier)
         const UIDocument* builtFrom = nullptr; // rebuild detector (hot reload)
@@ -228,7 +228,7 @@ export namespace engine::ui
         const UIDocument* builtFrom = nullptr;
 
         // The instantiated tree as a script group handle (`root()`), as UICanvasComponent's.
-        [[nodiscard]] engine::uiscript::ViewGroup rootGroup() const;
+        [[nodiscard]] engine::uiscript::UIViewGroup rootGroup() const;
     };
 
     inline void Serialize(ISerializer& ar, UIBillboardComponent& c)
@@ -292,7 +292,7 @@ export namespace engine::ui
 
         // The instantiated tree as a script group handle (`root()`), as UICanvasComponent's: a
         // meter over a guard's head is filled through it.
-        [[nodiscard]] engine::uiscript::ViewGroup rootGroup() const;
+        [[nodiscard]] engine::uiscript::UIViewGroup rootGroup() const;
     };
 
     inline void Serialize(ISerializer& ar, UIWorldPanelComponent& c)

@@ -314,44 +314,44 @@ namespace engine::uiscript
         OnViewAnimation(view.Get(), Move(handler), false);                                              \
     }
 
-    UI_SCRIPT_DEFINE_COMMON(View)
-    UI_SCRIPT_DEFINE_COMMON(Label)
-    UI_SCRIPT_DEFINE_COMMON(Button)
-    UI_SCRIPT_DEFINE_COMMON(ProgressBar)
-    UI_SCRIPT_DEFINE_COMMON(Slider)
-    UI_SCRIPT_DEFINE_COMMON(RichText)
-    UI_SCRIPT_DEFINE_COMMON(TextBox)
-    UI_SCRIPT_DEFINE_COMMON(Image)
-    UI_SCRIPT_DEFINE_COMMON(ViewGroup)
-    UI_SCRIPT_DEFINE_COMMON(Screen)
+    UI_SCRIPT_DEFINE_COMMON(UIView)
+    UI_SCRIPT_DEFINE_COMMON(UILabel)
+    UI_SCRIPT_DEFINE_COMMON(UIButton)
+    UI_SCRIPT_DEFINE_COMMON(UIProgressBar)
+    UI_SCRIPT_DEFINE_COMMON(UISlider)
+    UI_SCRIPT_DEFINE_COMMON(UIRichText)
+    UI_SCRIPT_DEFINE_COMMON(UITextBox)
+    UI_SCRIPT_DEFINE_COMMON(UIImage)
+    UI_SCRIPT_DEFINE_COMMON(UIViewGroup)
+    UI_SCRIPT_DEFINE_COMMON(UIScreen)
 #undef UI_SCRIPT_DEFINE_COMMON
 
-    // ------------------------------------------------------------------------------- Label / Button ---
-    String Label::text() const
+    // --------------------------------------------------------------------------- UILabel / UIButton ---
+    String UILabel::text() const
     {
         auto* l = As<ui::Label>(view);
         return (l != nullptr) ? String(l->Text.Value().AsView()) : String{};
     }
-    void Label::setText(String value)
+    void UILabel::setText(String value)
     {
         if (auto* l = As<ui::Label>(view))
         {
             l->Text.SetValue(Move(value));
         }
     }
-    Color Label::textColor() const
+    Color UILabel::textColor() const
     {
         auto* l = As<ui::Label>(view);
         return (l != nullptr) ? l->ResolvedTextColor() : Color::Transparent;
     }
-    void Label::setTextColor(Color value)
+    void UILabel::setTextColor(Color value)
     {
         if (auto* l = As<ui::Label>(view))
         {
             l->TextColor.SetValue(Optional<Color>(value));
         }
     }
-    void Label::clearTextColor()
+    void UILabel::clearTextColor()
     {
         if (auto* l = As<ui::Label>(view))
         {
@@ -359,19 +359,19 @@ namespace engine::uiscript
         }
     }
 
-    String Button::text() const
+    String UIButton::text() const
     {
         auto* b = As<ui::Button>(view);
         return (b != nullptr) ? String(b->Text.Value().AsView()) : String{};
     }
-    void Button::setText(String value)
+    void UIButton::setText(String value)
     {
         if (auto* b = As<ui::Button>(view))
         {
             b->Text.SetValue(Move(value));
         }
     }
-    void Button::onClick(RefPtr<foundation::script::IScriptDelegate> handler)
+    void UIButton::onClick(RefPtr<foundation::script::IScriptDelegate> handler)
     {
         auto* b = As<ui::ButtonBase>(view); // any button: a text Button or a ContentButton
         if (b == nullptr || !handler)
@@ -405,13 +405,13 @@ namespace engine::uiscript
             });
     }
 
-    // --------------------------------------------------------------------------------- ProgressBar ---
-    f64 ProgressBar::value() const
+    // ------------------------------------------------------------------------------- UIProgressBar ---
+    f64 UIProgressBar::value() const
     {
         auto* p = As<ui::ProgressBar>(view);
         return (p != nullptr) ? static_cast<f64>(p->Value.Value()) : 0.0;
     }
-    void ProgressBar::setValue(f64 value)
+    void UIProgressBar::setValue(f64 value)
     {
         if (auto* p = As<ui::ProgressBar>(view))
         {
@@ -419,30 +419,30 @@ namespace engine::uiscript
         }
     }
 
-    // -------------------------------------------------------------------------------------- Slider ---
-    f64 Slider::value() const
+    // ------------------------------------------------------------------------------------ UISlider ---
+    f64 UISlider::value() const
     {
         auto* s = As<ui::Slider>(view);
         return (s != nullptr) ? static_cast<f64>(s->Value.Value()) : 0.0;
     }
-    void Slider::setValue(f64 value)
+    void UISlider::setValue(f64 value)
     {
         if (auto* s = As<ui::Slider>(view))
         {
             s->Value.SetValue(static_cast<f32>(value));
         }
     }
-    f64 Slider::min() const
+    f64 UISlider::min() const
     {
         auto* s = As<ui::Slider>(view);
         return (s != nullptr) ? static_cast<f64>(s->Min.Value()) : 0.0;
     }
-    f64 Slider::max() const
+    f64 UISlider::max() const
     {
         auto* s = As<ui::Slider>(view);
         return (s != nullptr) ? static_cast<f64>(s->Max.Value()) : 0.0;
     }
-    void Slider::setRange(f64 min, f64 max)
+    void UISlider::setRange(f64 min, f64 max)
     {
         if (auto* s = As<ui::Slider>(view))
         {
@@ -450,21 +450,21 @@ namespace engine::uiscript
             s->Max.SetValue(static_cast<f32>(max));
         }
     }
-    void Slider::setStep(f64 step)
+    void UISlider::setStep(f64 step)
     {
         if (auto* s = As<ui::Slider>(view))
         {
             s->Step.SetValue(static_cast<f32>(step));
         }
     }
-    void Slider::onChanged(RefPtr<foundation::script::IScriptDelegate> handler)
+    void UISlider::onChanged(RefPtr<foundation::script::IScriptDelegate> handler)
     {
         auto* s = As<ui::Slider>(view);
         if (s == nullptr || !handler)
         {
             return; // null-but-valid handle, or no handler: a safe no-op
         }
-        // As Button::onClick: the delegate lives with the subscription, and the handler never runs
+        // As UIButton::onClick: the delegate lives with the subscription, and the handler never runs
         // inline during dispatch but through the mutation queue (directly with no context).
         s->OnValueChanged.Add(
             [handler](ui::Slider* changed, f32)
@@ -481,37 +481,37 @@ namespace engine::uiscript
             });
     }
 
-    // ------------------------------------------------------------------------------------ RichText ---
-    String RichText::markup() const
+    // ---------------------------------------------------------------------------------- UIRichText ---
+    String UIRichText::markup() const
     {
         auto* t = As<ui::RichText>(view);
         return (t != nullptr) ? String(t->Markup.Value().AsView()) : String{};
     }
-    void RichText::setMarkup(String value)
+    void UIRichText::setMarkup(String value)
     {
         if (auto* t = As<ui::RichText>(view))
         {
             t->SetMarkup(value.AsView());
         }
     }
-    String RichText::plainText() const
+    String UIRichText::plainText() const
     {
         auto* t = As<ui::RichText>(view);
         return (t != nullptr) ? t->Document().PlainText() : String{};
     }
-    String RichText::clickedLink() const
+    String UIRichText::clickedLink() const
     {
         auto* t = As<ui::RichText>(view);
         return (t != nullptr) ? String(t->LastLink()) : String{};
     }
-    void RichText::onLink(RefPtr<foundation::script::IScriptDelegate> handler)
+    void UIRichText::onLink(RefPtr<foundation::script::IScriptDelegate> handler)
     {
         auto* t = As<ui::RichText>(view);
         if (t == nullptr || !handler)
         {
             return;
         }
-        // As Button::onClick: deferred through the mutation queue; the id waits in LastLink.
+        // As UIButton::onClick: deferred through the mutation queue; the id waits in LastLink.
         t->OnLink.Add(
             [handler](ui::RichText* clicked, StringView)
             {
@@ -526,14 +526,14 @@ namespace engine::uiscript
                 }
             });
     }
-    void RichText::clearRuns()
+    void UIRichText::clearRuns()
     {
         if (auto* t = As<ui::RichText>(view))
         {
             t->SetRuns(Array<ui::TextRun>{});
         }
     }
-    void RichText::addRun(String text)
+    void UIRichText::addRun(String text)
     {
         if (auto* t = As<ui::RichText>(view))
         {
@@ -542,7 +542,7 @@ namespace engine::uiscript
             t->AppendRun(Move(run));
         }
     }
-    void RichText::addRun(String text, Color color)
+    void UIRichText::addRun(String text, Color color)
     {
         if (auto* t = As<ui::RichText>(view))
         {
@@ -552,7 +552,7 @@ namespace engine::uiscript
             t->AppendRun(Move(run));
         }
     }
-    void RichText::addRun(String text, Color color, f32 size, bool bold, bool italic)
+    void UIRichText::addRun(String text, Color color, f32 size, bool bold, bool italic)
     {
         if (auto* t = As<ui::RichText>(view))
         {
@@ -569,13 +569,13 @@ namespace engine::uiscript
         }
     }
 
-    // ------------------------------------------------------------------------------------- TextBox ---
-    String TextBox::text() const
+    // ----------------------------------------------------------------------------------- UITextBox ---
+    String UITextBox::text() const
     {
         auto* e = As<ui::EditText>(view);
         return (e != nullptr) ? String(e->Text()) : String{};
     }
-    void TextBox::setText(String value)
+    void UITextBox::setText(String value)
     {
         if (auto* e = As<ui::EditText>(view))
         {
@@ -583,8 +583,8 @@ namespace engine::uiscript
         }
     }
 
-    // ------------------------------------------------------------------------------------- Image ---
-    Guid Image::source() const
+    // ----------------------------------------------------------------------------------- UIImage ---
+    Guid UIImage::source() const
     {
         auto* i = As<ui::ImageView>(view);
         Guid id;
@@ -600,7 +600,7 @@ namespace engine::uiscript
         (void)Guid::TryParse(text, id);
         return id;
     }
-    void Image::setSource(Guid value)
+    void UIImage::setSource(Guid value)
     {
         if (auto* i = As<ui::ImageView>(view))
         {
@@ -608,58 +608,58 @@ namespace engine::uiscript
         }
     }
 
-    // --------------------------------------------------------- ViewGroup / Screen finders (shared) ---
+    // ----------------------------------------------------- UIViewGroup / UIScreen finders (shared) ---
 #define UI_SCRIPT_DEFINE_FINDERS(H)                                                                     \
     i32 H::childCount() const                                                                           \
     {                                                                                                   \
         auto* g = As<ui::ViewGroup>(view);                                                              \
         return (g != nullptr) ? static_cast<i32>(g->ChildCount()) : 0;                                  \
     }                                                                                                   \
-    View H::childAt(i32 index) const                                                                    \
+    UIView H::childAt(i32 index) const                                                                    \
     {                                                                                                   \
         auto* g = As<ui::ViewGroup>(view);                                                              \
         if (g == nullptr || index < 0 || index >= static_cast<i32>(g->ChildCount()))                    \
         {                                                                                               \
-            return View{};                                                                              \
+            return UIView{};                                                                              \
         }                                                                                               \
-        return Wrap<View>(g->GetChildAt(static_cast<usize>(index)));                                    \
+        return Wrap<UIView>(g->GetChildAt(static_cast<usize>(index)));                                    \
     }                                                                                                   \
-    View H::find(String name) const { return FindAs<ui::View, View>(view, name.AsView()); }             \
-    Label H::findLabel(String name) const { return FindAs<ui::Label, Label>(view, name.AsView()); }     \
-    Button H::findButton(String name) const                                                             \
+    UIView H::find(String name) const { return FindAs<ui::View, UIView>(view, name.AsView()); }             \
+    UILabel H::findLabel(String name) const { return FindAs<ui::Label, UILabel>(view, name.AsView()); }     \
+    UIButton H::findButton(String name) const                                                             \
     {                                                                                                   \
-        return FindAs<ui::ButtonBase, Button>(view, name.AsView());                                     \
+        return FindAs<ui::ButtonBase, UIButton>(view, name.AsView());                                     \
     }                                                                                                   \
-    ProgressBar H::findProgressBar(String name) const                                                   \
+    UIProgressBar H::findProgressBar(String name) const                                                   \
     {                                                                                                   \
-        return FindAs<ui::ProgressBar, ProgressBar>(view, name.AsView());                               \
+        return FindAs<ui::ProgressBar, UIProgressBar>(view, name.AsView());                               \
     }                                                                                                   \
-    Slider H::findSlider(String name) const { return FindAs<ui::Slider, Slider>(view, name.AsView()); } \
-    RichText H::findRichText(String name) const                                                         \
+    UISlider H::findSlider(String name) const { return FindAs<ui::Slider, UISlider>(view, name.AsView()); } \
+    UIRichText H::findRichText(String name) const                                                         \
     {                                                                                                   \
-        return FindAs<ui::RichText, RichText>(view, name.AsView());                                     \
+        return FindAs<ui::RichText, UIRichText>(view, name.AsView());                                     \
     }                                                                                                   \
-    TextBox H::findTextBox(String name) const                                                           \
+    UITextBox H::findTextBox(String name) const                                                           \
     {                                                                                                   \
-        return FindAs<ui::EditText, TextBox>(view, name.AsView());                                      \
+        return FindAs<ui::EditText, UITextBox>(view, name.AsView());                                      \
     }                                                                                                   \
-    Image H::findImage(String name) const                                                               \
+    UIImage H::findImage(String name) const                                                               \
     {                                                                                                   \
-        return FindAs<ui::ImageView, Image>(view, name.AsView());                                       \
+        return FindAs<ui::ImageView, UIImage>(view, name.AsView());                                       \
     }                                                                                                   \
-    ViewGroup H::findGroup(String name) const                                                           \
+    UIViewGroup H::findGroup(String name) const                                                           \
     {                                                                                                   \
-        return FindAs<ui::ViewGroup, ViewGroup>(view, name.AsView());                                   \
+        return FindAs<ui::ViewGroup, UIViewGroup>(view, name.AsView());                                   \
     }
 
-    UI_SCRIPT_DEFINE_FINDERS(ViewGroup)
-    UI_SCRIPT_DEFINE_FINDERS(Screen)
+    UI_SCRIPT_DEFINE_FINDERS(UIViewGroup)
+    UI_SCRIPT_DEFINE_FINDERS(UIScreen)
 #undef UI_SCRIPT_DEFINE_FINDERS
 
-    // findScreen lives on ViewGroup only (a screen inside a screen is not a v1 shape).
-    Screen ViewGroup::findScreen(String name) const
+    // findScreen lives on UIViewGroup only (a screen inside a screen is not a v1 shape).
+    UIScreen UIViewGroup::findScreen(String name) const
     {
-        return FindAs<gamekit::UIScreen, Screen>(view, name.AsView());
+        return FindAs<gamekit::UIScreen, UIScreen>(view, name.AsView());
     }
 
     // ================================================================================= `ui` facade ===
@@ -680,12 +680,12 @@ namespace engine::uiscript
         return b->stackForRun ? b->stackForRun(foundation::script::CurrentRun()) : b->stack;
     }
 
-    ViewGroup Ui::root()
+    UIViewGroup Ui::root()
     {
         UiScreenScriptBinding* b = Resolve();
         if (b == nullptr)
         {
-            return Wrap<ViewGroup>(nullptr);
+            return Wrap<UIViewGroup>(nullptr);
         }
         // The ScreenStack's attached root is the SOURCE OF TRUTH for where pushed screens live
         // (Push adds to it). A separately-captured raw RootView* can diverge in the embedded host
@@ -693,12 +693,12 @@ namespace engine::uiscript
         // shutdown, so the binding carries none - the stack is the only root source.
         foundation::ui::gamekit::ScreenStack* stack = Stack(b);
         foundation::ui::RootView* root = stack != nullptr ? stack->Root() : nullptr;
-        return Wrap<ViewGroup>(root);
+        return Wrap<UIViewGroup>(root);
     }
-    Screen Ui::top()
+    UIScreen Ui::top()
     {
         UiScreenScriptBinding* b = Resolve();
-        return Wrap<Screen>(Stack(b) != nullptr ? Stack(b)->Top() : nullptr);
+        return Wrap<UIScreen>(Stack(b) != nullptr ? Stack(b)->Top() : nullptr);
     }
     i32 Ui::count()
     {
@@ -706,29 +706,29 @@ namespace engine::uiscript
         return Stack(b) != nullptr ? static_cast<i32>(Stack(b)->Count()) : 0;
     }
 
-    View Ui::find(String name) { return root().find(Move(name)); }
-    Label Ui::findLabel(String name) { return root().findLabel(Move(name)); }
-    Button Ui::findButton(String name) { return root().findButton(Move(name)); }
-    ProgressBar Ui::findProgressBar(String name) { return root().findProgressBar(Move(name)); }
-    Slider Ui::findSlider(String name) { return root().findSlider(Move(name)); }
-    RichText Ui::findRichText(String name) { return root().findRichText(Move(name)); }
-    TextBox Ui::findTextBox(String name) { return root().findTextBox(Move(name)); }
-    Image Ui::findImage(String name) { return root().findImage(Move(name)); }
-    ViewGroup Ui::findGroup(String name) { return root().findGroup(Move(name)); }
+    UIView Ui::find(String name) { return root().find(Move(name)); }
+    UILabel Ui::findLabel(String name) { return root().findLabel(Move(name)); }
+    UIButton Ui::findButton(String name) { return root().findButton(Move(name)); }
+    UIProgressBar Ui::findProgressBar(String name) { return root().findProgressBar(Move(name)); }
+    UISlider Ui::findSlider(String name) { return root().findSlider(Move(name)); }
+    UIRichText Ui::findRichText(String name) { return root().findRichText(Move(name)); }
+    UITextBox Ui::findTextBox(String name) { return root().findTextBox(Move(name)); }
+    UIImage Ui::findImage(String name) { return root().findImage(Move(name)); }
+    UIViewGroup Ui::findGroup(String name) { return root().findGroup(Move(name)); }
 
-    Screen Ui::push(Guid document)
+    UIScreen Ui::push(Guid document)
     {
         UiScreenScriptBinding* b = Resolve();
         if (Stack(b) == nullptr)
         {
-            return Screen{};
+            return UIScreen{};
         }
         RefPtr<gamekit::UIScreen> screen = MakeScreenFromDocument(b, document);
         if (!screen)
         {
-            return Screen{};
+            return UIScreen{};
         }
-        return Wrap<Screen>(Stack(b)->Push(screen));
+        return Wrap<UIScreen>(Stack(b)->Push(screen));
     }
     void Ui::pop()
     {
@@ -738,19 +738,19 @@ namespace engine::uiscript
             Stack(b)->Pop();
         }
     }
-    Screen Ui::replace(Guid document)
+    UIScreen Ui::replace(Guid document)
     {
         UiScreenScriptBinding* b = Resolve();
         if (Stack(b) == nullptr)
         {
-            return Screen{};
+            return UIScreen{};
         }
         RefPtr<gamekit::UIScreen> screen = MakeScreenFromDocument(b, document);
         if (!screen)
         {
-            return Screen{};
+            return UIScreen{};
         }
-        return Wrap<Screen>(Stack(b)->Replace(screen));
+        return Wrap<UIScreen>(Stack(b)->Replace(screen));
     }
     void Ui::clear()
     {
@@ -798,240 +798,240 @@ namespace engine::uiscript
         builder.Value("OutElastic", Ease::OutElastic);
     }
 
-    REFLECT_VALUE(View, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIView, "rtti::engine.ui.script")
     {
-        builder.Method<&View::isValid>("isValid");
-        builder.ComputedProperty<&View::name>("name");
-        builder.ComputedProperty<&View::visible>("visible");
-        builder.ComputedProperty<&View::enabled>("enabled");
-        builder.Method<&View::setVisible>("setVisible", {"value"});
-        builder.Method<&View::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&View::opacity>("opacity");
-        builder.Method<&View::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (View::*)(f32, f32)>(&View::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&View::translation>("translation");
-        builder.Method<&View::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&View::rotation>("rotation");
-        builder.Method<&View::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(View);
+        builder.Method<&UIView::isValid>("isValid");
+        builder.ComputedProperty<&UIView::name>("name");
+        builder.ComputedProperty<&UIView::visible>("visible");
+        builder.ComputedProperty<&UIView::enabled>("enabled");
+        builder.Method<&UIView::setVisible>("setVisible", {"value"});
+        builder.Method<&UIView::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIView::opacity>("opacity");
+        builder.Method<&UIView::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIView::*)(f32, f32)>(&UIView::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIView::translation>("translation");
+        builder.Method<&UIView::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIView::rotation>("rotation");
+        builder.Method<&UIView::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIView);
         builder.Constructor();
     }
-    REFLECT_VALUE(Label, "rtti::engine.ui.script")
+    REFLECT_VALUE(UILabel, "rtti::engine.ui.script")
     {
-        builder.Method<&Label::isValid>("isValid");
-        builder.ComputedProperty<&Label::name>("name");
-        builder.ComputedProperty<&Label::visible>("visible");
-        builder.ComputedProperty<&Label::enabled>("enabled");
-        builder.ComputedProperty<&Label::text>("text");
-        builder.Method<&Label::setVisible>("setVisible", {"value"});
-        builder.Method<&Label::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&Label::opacity>("opacity");
-        builder.Method<&Label::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (Label::*)(f32, f32)>(&Label::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&Label::translation>("translation");
-        builder.Method<&Label::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&Label::rotation>("rotation");
-        builder.Method<&Label::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(Label);
-        builder.Method<&Label::setText>("setText", {"value"});
-        builder.ComputedProperty<&Label::textColor>("textColor");
-        builder.Method<&Label::setTextColor>("setTextColor", {"value"});
-        builder.Method<&Label::clearTextColor>("clearTextColor");
+        builder.Method<&UILabel::isValid>("isValid");
+        builder.ComputedProperty<&UILabel::name>("name");
+        builder.ComputedProperty<&UILabel::visible>("visible");
+        builder.ComputedProperty<&UILabel::enabled>("enabled");
+        builder.ComputedProperty<&UILabel::text>("text");
+        builder.Method<&UILabel::setVisible>("setVisible", {"value"});
+        builder.Method<&UILabel::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UILabel::opacity>("opacity");
+        builder.Method<&UILabel::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UILabel::*)(f32, f32)>(&UILabel::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UILabel::translation>("translation");
+        builder.Method<&UILabel::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UILabel::rotation>("rotation");
+        builder.Method<&UILabel::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UILabel);
+        builder.Method<&UILabel::setText>("setText", {"value"});
+        builder.ComputedProperty<&UILabel::textColor>("textColor");
+        builder.Method<&UILabel::setTextColor>("setTextColor", {"value"});
+        builder.Method<&UILabel::clearTextColor>("clearTextColor");
         builder.Constructor();
     }
-    REFLECT_VALUE(Button, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIButton, "rtti::engine.ui.script")
     {
-        builder.Method<&Button::isValid>("isValid");
-        builder.ComputedProperty<&Button::name>("name");
-        builder.ComputedProperty<&Button::visible>("visible");
-        builder.ComputedProperty<&Button::enabled>("enabled");
-        builder.ComputedProperty<&Button::text>("text");
-        builder.Method<&Button::setVisible>("setVisible", {"value"});
-        builder.Method<&Button::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&Button::opacity>("opacity");
-        builder.Method<&Button::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (Button::*)(f32, f32)>(&Button::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&Button::translation>("translation");
-        builder.Method<&Button::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&Button::rotation>("rotation");
-        builder.Method<&Button::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(Button);
-        builder.Method<&Button::setText>("setText", {"value"});
-        builder.Method<&Button::onClick>("onClick", {"handler"});
+        builder.Method<&UIButton::isValid>("isValid");
+        builder.ComputedProperty<&UIButton::name>("name");
+        builder.ComputedProperty<&UIButton::visible>("visible");
+        builder.ComputedProperty<&UIButton::enabled>("enabled");
+        builder.ComputedProperty<&UIButton::text>("text");
+        builder.Method<&UIButton::setVisible>("setVisible", {"value"});
+        builder.Method<&UIButton::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIButton::opacity>("opacity");
+        builder.Method<&UIButton::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIButton::*)(f32, f32)>(&UIButton::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIButton::translation>("translation");
+        builder.Method<&UIButton::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIButton::rotation>("rotation");
+        builder.Method<&UIButton::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIButton);
+        builder.Method<&UIButton::setText>("setText", {"value"});
+        builder.Method<&UIButton::onClick>("onClick", {"handler"});
         builder.Constructor();
     }
-    REFLECT_VALUE(Slider, "rtti::engine.ui.script")
+    REFLECT_VALUE(UISlider, "rtti::engine.ui.script")
     {
-        builder.Method<&Slider::isValid>("isValid");
-        builder.ComputedProperty<&Slider::name>("name");
-        builder.ComputedProperty<&Slider::visible>("visible");
-        builder.ComputedProperty<&Slider::enabled>("enabled");
-        builder.ComputedProperty<&Slider::value>("value");
-        builder.ComputedProperty<&Slider::min>("min");
-        builder.ComputedProperty<&Slider::max>("max");
-        builder.Method<&Slider::setVisible>("setVisible", {"value"});
-        builder.Method<&Slider::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&Slider::opacity>("opacity");
-        builder.Method<&Slider::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (Slider::*)(f32, f32)>(&Slider::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&Slider::translation>("translation");
-        builder.Method<&Slider::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&Slider::rotation>("rotation");
-        builder.Method<&Slider::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(Slider);
-        builder.Method<&Slider::setValue>("setValue", {"value"});
-        builder.Method<&Slider::setRange>("setRange", {"min", "max"});
-        builder.Method<&Slider::setStep>("setStep", {"step"});
-        builder.Method<&Slider::onChanged>("onChanged", {"handler"});
+        builder.Method<&UISlider::isValid>("isValid");
+        builder.ComputedProperty<&UISlider::name>("name");
+        builder.ComputedProperty<&UISlider::visible>("visible");
+        builder.ComputedProperty<&UISlider::enabled>("enabled");
+        builder.ComputedProperty<&UISlider::value>("value");
+        builder.ComputedProperty<&UISlider::min>("min");
+        builder.ComputedProperty<&UISlider::max>("max");
+        builder.Method<&UISlider::setVisible>("setVisible", {"value"});
+        builder.Method<&UISlider::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UISlider::opacity>("opacity");
+        builder.Method<&UISlider::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UISlider::*)(f32, f32)>(&UISlider::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UISlider::translation>("translation");
+        builder.Method<&UISlider::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UISlider::rotation>("rotation");
+        builder.Method<&UISlider::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UISlider);
+        builder.Method<&UISlider::setValue>("setValue", {"value"});
+        builder.Method<&UISlider::setRange>("setRange", {"min", "max"});
+        builder.Method<&UISlider::setStep>("setStep", {"step"});
+        builder.Method<&UISlider::onChanged>("onChanged", {"handler"});
         builder.Constructor();
     }
 
-    REFLECT_VALUE(RichText, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIRichText, "rtti::engine.ui.script")
     {
-        builder.Method<&RichText::isValid>("isValid");
-        builder.ComputedProperty<&RichText::name>("name");
-        builder.ComputedProperty<&RichText::visible>("visible");
-        builder.ComputedProperty<&RichText::enabled>("enabled");
-        builder.Method<&RichText::setVisible>("setVisible", {"value"});
-        builder.Method<&RichText::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&RichText::opacity>("opacity");
-        builder.Method<&RichText::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (RichText::*)(f32, f32)>(&RichText::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&RichText::translation>("translation");
-        builder.Method<&RichText::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&RichText::rotation>("rotation");
-        builder.Method<&RichText::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(RichText);
-        builder.ComputedProperty<&RichText::markup>("markup");
-        builder.Method<&RichText::setMarkup>("setMarkup", {"value"});
-        builder.ComputedProperty<&RichText::plainText>("plainText");
-        builder.ComputedProperty<&RichText::clickedLink>("clickedLink");
-        builder.Method<&RichText::onLink>("onLink", {"handler"});
-        builder.Method<&RichText::clearRuns>("clearRuns");
-        builder.Method<static_cast<void (RichText::*)(String)>(&RichText::addRun)>("addRun", {"text"});
-        builder.Method<static_cast<void (RichText::*)(String, Color)>(&RichText::addRun)>("addRun", {"text", "color"});
-        builder.Method<static_cast<void (RichText::*)(String, Color, f32, bool, bool)>(&RichText::addRun)>(
+        builder.Method<&UIRichText::isValid>("isValid");
+        builder.ComputedProperty<&UIRichText::name>("name");
+        builder.ComputedProperty<&UIRichText::visible>("visible");
+        builder.ComputedProperty<&UIRichText::enabled>("enabled");
+        builder.Method<&UIRichText::setVisible>("setVisible", {"value"});
+        builder.Method<&UIRichText::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIRichText::opacity>("opacity");
+        builder.Method<&UIRichText::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIRichText::*)(f32, f32)>(&UIRichText::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIRichText::translation>("translation");
+        builder.Method<&UIRichText::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIRichText::rotation>("rotation");
+        builder.Method<&UIRichText::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIRichText);
+        builder.ComputedProperty<&UIRichText::markup>("markup");
+        builder.Method<&UIRichText::setMarkup>("setMarkup", {"value"});
+        builder.ComputedProperty<&UIRichText::plainText>("plainText");
+        builder.ComputedProperty<&UIRichText::clickedLink>("clickedLink");
+        builder.Method<&UIRichText::onLink>("onLink", {"handler"});
+        builder.Method<&UIRichText::clearRuns>("clearRuns");
+        builder.Method<static_cast<void (UIRichText::*)(String)>(&UIRichText::addRun)>("addRun", {"text"});
+        builder.Method<static_cast<void (UIRichText::*)(String, Color)>(&UIRichText::addRun)>("addRun", {"text", "color"});
+        builder.Method<static_cast<void (UIRichText::*)(String, Color, f32, bool, bool)>(&UIRichText::addRun)>(
             "addRun", {"text", "color", "size", "bold", "italic"});
         builder.Constructor();
     }
 
-    REFLECT_VALUE(ProgressBar, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIProgressBar, "rtti::engine.ui.script")
     {
-        builder.Method<&ProgressBar::isValid>("isValid");
-        builder.ComputedProperty<&ProgressBar::name>("name");
-        builder.ComputedProperty<&ProgressBar::visible>("visible");
-        builder.ComputedProperty<&ProgressBar::enabled>("enabled");
-        builder.ComputedProperty<&ProgressBar::value>("value");
-        builder.Method<&ProgressBar::setVisible>("setVisible", {"value"});
-        builder.Method<&ProgressBar::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&ProgressBar::opacity>("opacity");
-        builder.Method<&ProgressBar::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (ProgressBar::*)(f32, f32)>(&ProgressBar::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&ProgressBar::translation>("translation");
-        builder.Method<&ProgressBar::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&ProgressBar::rotation>("rotation");
-        builder.Method<&ProgressBar::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(ProgressBar);
-        builder.Method<&ProgressBar::setValue>("setValue", {"value"});
+        builder.Method<&UIProgressBar::isValid>("isValid");
+        builder.ComputedProperty<&UIProgressBar::name>("name");
+        builder.ComputedProperty<&UIProgressBar::visible>("visible");
+        builder.ComputedProperty<&UIProgressBar::enabled>("enabled");
+        builder.ComputedProperty<&UIProgressBar::value>("value");
+        builder.Method<&UIProgressBar::setVisible>("setVisible", {"value"});
+        builder.Method<&UIProgressBar::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIProgressBar::opacity>("opacity");
+        builder.Method<&UIProgressBar::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIProgressBar::*)(f32, f32)>(&UIProgressBar::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIProgressBar::translation>("translation");
+        builder.Method<&UIProgressBar::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIProgressBar::rotation>("rotation");
+        builder.Method<&UIProgressBar::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIProgressBar);
+        builder.Method<&UIProgressBar::setValue>("setValue", {"value"});
         builder.Constructor();
     }
-    REFLECT_VALUE(TextBox, "rtti::engine.ui.script")
+    REFLECT_VALUE(UITextBox, "rtti::engine.ui.script")
     {
-        builder.Method<&TextBox::isValid>("isValid");
-        builder.ComputedProperty<&TextBox::name>("name");
-        builder.ComputedProperty<&TextBox::visible>("visible");
-        builder.ComputedProperty<&TextBox::enabled>("enabled");
-        builder.ComputedProperty<&TextBox::text>("text");
-        builder.Method<&TextBox::setVisible>("setVisible", {"value"});
-        builder.Method<&TextBox::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&TextBox::opacity>("opacity");
-        builder.Method<&TextBox::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (TextBox::*)(f32, f32)>(&TextBox::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&TextBox::translation>("translation");
-        builder.Method<&TextBox::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&TextBox::rotation>("rotation");
-        builder.Method<&TextBox::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(TextBox);
-        builder.Method<&TextBox::setText>("setText", {"value"});
+        builder.Method<&UITextBox::isValid>("isValid");
+        builder.ComputedProperty<&UITextBox::name>("name");
+        builder.ComputedProperty<&UITextBox::visible>("visible");
+        builder.ComputedProperty<&UITextBox::enabled>("enabled");
+        builder.ComputedProperty<&UITextBox::text>("text");
+        builder.Method<&UITextBox::setVisible>("setVisible", {"value"});
+        builder.Method<&UITextBox::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UITextBox::opacity>("opacity");
+        builder.Method<&UITextBox::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UITextBox::*)(f32, f32)>(&UITextBox::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UITextBox::translation>("translation");
+        builder.Method<&UITextBox::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UITextBox::rotation>("rotation");
+        builder.Method<&UITextBox::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UITextBox);
+        builder.Method<&UITextBox::setText>("setText", {"value"});
         builder.Constructor();
     }
-    REFLECT_VALUE(Image, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIImage, "rtti::engine.ui.script")
     {
-        builder.Method<&Image::isValid>("isValid");
-        builder.ComputedProperty<&Image::name>("name");
-        builder.ComputedProperty<&Image::visible>("visible");
-        builder.ComputedProperty<&Image::enabled>("enabled");
-        builder.ComputedProperty<&Image::source>("source");
-        builder.Method<&Image::setVisible>("setVisible", {"value"});
-        builder.Method<&Image::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&Image::opacity>("opacity");
-        builder.Method<&Image::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (Image::*)(f32, f32)>(&Image::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&Image::translation>("translation");
-        builder.Method<&Image::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&Image::rotation>("rotation");
-        builder.Method<&Image::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(Image);
-        builder.Method<&Image::setSource>("setSource", {"value"});
+        builder.Method<&UIImage::isValid>("isValid");
+        builder.ComputedProperty<&UIImage::name>("name");
+        builder.ComputedProperty<&UIImage::visible>("visible");
+        builder.ComputedProperty<&UIImage::enabled>("enabled");
+        builder.ComputedProperty<&UIImage::source>("source");
+        builder.Method<&UIImage::setVisible>("setVisible", {"value"});
+        builder.Method<&UIImage::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIImage::opacity>("opacity");
+        builder.Method<&UIImage::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIImage::*)(f32, f32)>(&UIImage::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIImage::translation>("translation");
+        builder.Method<&UIImage::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIImage::rotation>("rotation");
+        builder.Method<&UIImage::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIImage);
+        builder.Method<&UIImage::setSource>("setSource", {"value"});
         builder.Constructor();
     }
-    REFLECT_VALUE(ViewGroup, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIViewGroup, "rtti::engine.ui.script")
     {
-        builder.Method<&ViewGroup::isValid>("isValid");
-        builder.ComputedProperty<&ViewGroup::name>("name");
-        builder.ComputedProperty<&ViewGroup::visible>("visible");
-        builder.ComputedProperty<&ViewGroup::enabled>("enabled");
-        builder.ComputedProperty<&ViewGroup::childCount>("childCount");
-        builder.Method<&ViewGroup::setVisible>("setVisible", {"value"});
-        builder.Method<&ViewGroup::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&ViewGroup::opacity>("opacity");
-        builder.Method<&ViewGroup::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (ViewGroup::*)(f32, f32)>(&ViewGroup::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&ViewGroup::translation>("translation");
-        builder.Method<&ViewGroup::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&ViewGroup::rotation>("rotation");
-        builder.Method<&ViewGroup::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(ViewGroup);
-        builder.Method<&ViewGroup::childAt>("childAt", {"index"});
-        builder.Method<&ViewGroup::find>("find", {"name"});
-        builder.Method<&ViewGroup::findLabel>("findLabel", {"name"});
-        builder.Method<&ViewGroup::findButton>("findButton", {"name"});
-        builder.Method<&ViewGroup::findProgressBar>("findProgressBar", {"name"});
-        builder.Method<&ViewGroup::findSlider>("findSlider", {"name"});
-        builder.Method<&ViewGroup::findRichText>("findRichText", {"name"});
-        builder.Method<&ViewGroup::findTextBox>("findTextBox", {"name"});
-        builder.Method<&ViewGroup::findImage>("findImage", {"name"});
-        builder.Method<&ViewGroup::findGroup>("findGroup", {"name"});
-        builder.Method<&ViewGroup::findScreen>("findScreen", {"name"});
+        builder.Method<&UIViewGroup::isValid>("isValid");
+        builder.ComputedProperty<&UIViewGroup::name>("name");
+        builder.ComputedProperty<&UIViewGroup::visible>("visible");
+        builder.ComputedProperty<&UIViewGroup::enabled>("enabled");
+        builder.ComputedProperty<&UIViewGroup::childCount>("childCount");
+        builder.Method<&UIViewGroup::setVisible>("setVisible", {"value"});
+        builder.Method<&UIViewGroup::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIViewGroup::opacity>("opacity");
+        builder.Method<&UIViewGroup::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIViewGroup::*)(f32, f32)>(&UIViewGroup::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIViewGroup::translation>("translation");
+        builder.Method<&UIViewGroup::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIViewGroup::rotation>("rotation");
+        builder.Method<&UIViewGroup::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIViewGroup);
+        builder.Method<&UIViewGroup::childAt>("childAt", {"index"});
+        builder.Method<&UIViewGroup::find>("find", {"name"});
+        builder.Method<&UIViewGroup::findLabel>("findLabel", {"name"});
+        builder.Method<&UIViewGroup::findButton>("findButton", {"name"});
+        builder.Method<&UIViewGroup::findProgressBar>("findProgressBar", {"name"});
+        builder.Method<&UIViewGroup::findSlider>("findSlider", {"name"});
+        builder.Method<&UIViewGroup::findRichText>("findRichText", {"name"});
+        builder.Method<&UIViewGroup::findTextBox>("findTextBox", {"name"});
+        builder.Method<&UIViewGroup::findImage>("findImage", {"name"});
+        builder.Method<&UIViewGroup::findGroup>("findGroup", {"name"});
+        builder.Method<&UIViewGroup::findScreen>("findScreen", {"name"});
         builder.Constructor();
     }
-    REFLECT_VALUE(Screen, "rtti::engine.ui.script")
+    REFLECT_VALUE(UIScreen, "rtti::engine.ui.script")
     {
-        builder.Method<&Screen::isValid>("isValid");
-        builder.ComputedProperty<&Screen::name>("name");
-        builder.ComputedProperty<&Screen::visible>("visible");
-        builder.ComputedProperty<&Screen::enabled>("enabled");
-        builder.ComputedProperty<&Screen::childCount>("childCount");
-        builder.Method<&Screen::setVisible>("setVisible", {"value"});
-        builder.Method<&Screen::setEnabled>("setEnabled", {"value"});
-        builder.ComputedProperty<&Screen::opacity>("opacity");
-        builder.Method<&Screen::setOpacity>("setOpacity", {"value"});
-        builder.Method<static_cast<void (Screen::*)(f32, f32)>(&Screen::fadeTo)>("fadeTo", {"opacity", "seconds"});
-        builder.ComputedProperty<&Screen::translation>("translation");
-        builder.Method<&Screen::setTranslation>("setTranslation", {"x", "y"});
-        builder.ComputedProperty<&Screen::rotation>("rotation");
-        builder.Method<&Screen::setRotation>("setRotation", {"degrees"});
-        UI_SCRIPT_REFLECT_MOTION(Screen);
-        builder.Method<&Screen::childAt>("childAt", {"index"});
-        builder.Method<&Screen::find>("find", {"name"});
-        builder.Method<&Screen::findLabel>("findLabel", {"name"});
-        builder.Method<&Screen::findButton>("findButton", {"name"});
-        builder.Method<&Screen::findProgressBar>("findProgressBar", {"name"});
-        builder.Method<&Screen::findSlider>("findSlider", {"name"});
-        builder.Method<&Screen::findRichText>("findRichText", {"name"});
-        builder.Method<&Screen::findTextBox>("findTextBox", {"name"});
-        builder.Method<&Screen::findImage>("findImage", {"name"});
-        builder.Method<&Screen::findGroup>("findGroup", {"name"});
+        builder.Method<&UIScreen::isValid>("isValid");
+        builder.ComputedProperty<&UIScreen::name>("name");
+        builder.ComputedProperty<&UIScreen::visible>("visible");
+        builder.ComputedProperty<&UIScreen::enabled>("enabled");
+        builder.ComputedProperty<&UIScreen::childCount>("childCount");
+        builder.Method<&UIScreen::setVisible>("setVisible", {"value"});
+        builder.Method<&UIScreen::setEnabled>("setEnabled", {"value"});
+        builder.ComputedProperty<&UIScreen::opacity>("opacity");
+        builder.Method<&UIScreen::setOpacity>("setOpacity", {"value"});
+        builder.Method<static_cast<void (UIScreen::*)(f32, f32)>(&UIScreen::fadeTo)>("fadeTo", {"opacity", "seconds"});
+        builder.ComputedProperty<&UIScreen::translation>("translation");
+        builder.Method<&UIScreen::setTranslation>("setTranslation", {"x", "y"});
+        builder.ComputedProperty<&UIScreen::rotation>("rotation");
+        builder.Method<&UIScreen::setRotation>("setRotation", {"degrees"});
+        UI_SCRIPT_REFLECT_MOTION(UIScreen);
+        builder.Method<&UIScreen::childAt>("childAt", {"index"});
+        builder.Method<&UIScreen::find>("find", {"name"});
+        builder.Method<&UIScreen::findLabel>("findLabel", {"name"});
+        builder.Method<&UIScreen::findButton>("findButton", {"name"});
+        builder.Method<&UIScreen::findProgressBar>("findProgressBar", {"name"});
+        builder.Method<&UIScreen::findSlider>("findSlider", {"name"});
+        builder.Method<&UIScreen::findRichText>("findRichText", {"name"});
+        builder.Method<&UIScreen::findTextBox>("findTextBox", {"name"});
+        builder.Method<&UIScreen::findImage>("findImage", {"name"});
+        builder.Method<&UIScreen::findGroup>("findGroup", {"name"});
         builder.Constructor();
     }
 
@@ -1062,26 +1062,26 @@ namespace engine::uiscript
     {
         static const bool once = []()
         {
-            RttiRegisterValue_View();
-            RttiRegisterValue_Label();
-            RttiRegisterValue_Button();
-            RttiRegisterValue_ProgressBar();
-            RttiRegisterValue_Slider();
-            RttiRegisterValue_RichText();
-            RttiRegisterValue_TextBox();
-            RttiRegisterValue_Image();
-            RttiRegisterValue_ViewGroup();
-            RttiRegisterValue_Screen();
-            GlobalTypeRegistry().Register(TypeOf<View>());
-            GlobalTypeRegistry().Register(TypeOf<Label>());
-            GlobalTypeRegistry().Register(TypeOf<Button>());
-            GlobalTypeRegistry().Register(TypeOf<ProgressBar>());
-            GlobalTypeRegistry().Register(TypeOf<Slider>());
-            GlobalTypeRegistry().Register(TypeOf<RichText>());
-            GlobalTypeRegistry().Register(TypeOf<TextBox>());
-            GlobalTypeRegistry().Register(TypeOf<Image>());
-            GlobalTypeRegistry().Register(TypeOf<ViewGroup>());
-            GlobalTypeRegistry().Register(TypeOf<Screen>());
+            RttiRegisterValue_UIView();
+            RttiRegisterValue_UILabel();
+            RttiRegisterValue_UIButton();
+            RttiRegisterValue_UIProgressBar();
+            RttiRegisterValue_UISlider();
+            RttiRegisterValue_UIRichText();
+            RttiRegisterValue_UITextBox();
+            RttiRegisterValue_UIImage();
+            RttiRegisterValue_UIViewGroup();
+            RttiRegisterValue_UIScreen();
+            GlobalTypeRegistry().Register(TypeOf<UIView>());
+            GlobalTypeRegistry().Register(TypeOf<UILabel>());
+            GlobalTypeRegistry().Register(TypeOf<UIButton>());
+            GlobalTypeRegistry().Register(TypeOf<UIProgressBar>());
+            GlobalTypeRegistry().Register(TypeOf<UISlider>());
+            GlobalTypeRegistry().Register(TypeOf<UIRichText>());
+            GlobalTypeRegistry().Register(TypeOf<UITextBox>());
+            GlobalTypeRegistry().Register(TypeOf<UIImage>());
+            GlobalTypeRegistry().Register(TypeOf<UIViewGroup>());
+            GlobalTypeRegistry().Register(TypeOf<UIScreen>());
             RttiRegisterEnum_Ease();                         // the tweens' easing choice
             GlobalTypeRegistry().Register(TypeOf<Ease>());
             // onAnimationEnd / onAnimationIteration's handler, so an AngelScript screen passes one

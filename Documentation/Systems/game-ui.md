@@ -76,7 +76,10 @@ Play-in-editor works by construction (the same event stream through the viewport
 - **`UITheme`** (cooked) - a validated `.sss` payload; a project `defaultUiThemeId` (manifest v5,
   shared with audio's bus layout) selects it, per-canvas override allowed, `GameTheme`/`GameLightTheme`
   as built-in fallbacks. Swappable-theme-asset model (Godot) over our SSS.
-- **UI facade** - addresses a control by its authored `id`: `setText` / `setProgress` / `setVisible`,
+- **UI facade** - addresses a control by its authored `id`, through typed handles (`UIView`,
+  `UIViewGroup`, `UIScreen`, `UILabel`, `UIButton`, `UISlider`, `UIProgressBar`, `UITextBox`,
+  `UIRichText`, `UIImage`; the `UI` prefix leaves the plain names to the experimental GUI's
+  script types): `setText` / `setProgress` / `setVisible`,
   and `onClick` binds a script delegate, resolved through the live screen tier + resource manager.
   Every handle moves and turns its view with `setTranslation(x, y)` (pixels from where layout put
   it) and `setRotation(degrees)`, the view's post-layout transform, so a minimap marker or a

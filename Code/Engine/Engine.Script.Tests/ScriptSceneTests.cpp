@@ -5051,7 +5051,7 @@ TEST_CASE("script.scene: a world-space UI component's root() finds and drives th
                   u8"    private Entity@ self;\n"
                   u8"    Meter(Entity@ entity) { @self = entity; }\n"
                   u8"    void onStart() {\n"
-                  u8"        ViewGroup@ panel = UIWorldPanelComponent::of(self).root();\n"
+                  u8"        UIViewGroup@ panel = UIWorldPanelComponent::of(self).root();\n"
                   u8"        panel.findProgressBar(\"meter\").setValue(0.75);\n"
                   u8"        panel.findLabel(\"mark\").setText(\"!\");\n"
                   u8"    }\n"

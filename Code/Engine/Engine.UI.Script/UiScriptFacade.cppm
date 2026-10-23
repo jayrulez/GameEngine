@@ -42,7 +42,7 @@ export namespace engine::uiscript
         // editor's Game tabs, UISubsystem::ScreensFor); unset, every script uses `stack`.
         Function<foundation::ui::gamekit::ScreenStack*(const void* run)> stackForRun;
         // Instantiate a cooked UIDocument (by guid) into a live view tree. The app supplies this
-        // (resource manager + MarkupLoader); nil -> push returns a null Screen.
+        // (resource manager + MarkupLoader); nil -> push returns a null UIScreen.
         Function<RefPtr<foundation::ui::View>(const Guid&)> instantiate;
     };
 
@@ -68,25 +68,25 @@ export namespace engine::uiscript
         [[nodiscard]] static foundation::ui::gamekit::ScreenStack* Stack(UiScreenScriptBinding* b);
 
         // Roots / narrowing.
-        [[nodiscard]] static ViewGroup root();  // the screen-tier root as a group handle
-        [[nodiscard]] static Screen top();       // the top screen on the stack (null if empty)
+        [[nodiscard]] static UIViewGroup root();  // the screen-tier root as a group handle
+        [[nodiscard]] static UIScreen top();       // the top screen on the stack (null if empty)
         [[nodiscard]] static i32 count();        // number of screens on the stack
 
         // Convenience finders (search from the screen root).
-        [[nodiscard]] static View find(String name);
-        [[nodiscard]] static Label findLabel(String name);
-        [[nodiscard]] static Button findButton(String name);
-        [[nodiscard]] static ProgressBar findProgressBar(String name);
-        [[nodiscard]] static Slider findSlider(String name);
-        [[nodiscard]] static RichText findRichText(String name);
-        [[nodiscard]] static TextBox findTextBox(String name);
-        [[nodiscard]] static Image findImage(String name);
-        [[nodiscard]] static ViewGroup findGroup(String name);
+        [[nodiscard]] static UIView find(String name);
+        [[nodiscard]] static UILabel findLabel(String name);
+        [[nodiscard]] static UIButton findButton(String name);
+        [[nodiscard]] static UIProgressBar findProgressBar(String name);
+        [[nodiscard]] static UISlider findSlider(String name);
+        [[nodiscard]] static UIRichText findRichText(String name);
+        [[nodiscard]] static UITextBox findTextBox(String name);
+        [[nodiscard]] static UIImage findImage(String name);
+        [[nodiscard]] static UIViewGroup findGroup(String name);
 
-        // Screen management.
-        [[nodiscard]] static Screen push(Guid document);
+        // UIScreen management.
+        [[nodiscard]] static UIScreen push(Guid document);
         static void pop();
-        [[nodiscard]] static Screen replace(Guid document);
+        [[nodiscard]] static UIScreen replace(Guid document);
         static void clear();
         static bool back(); // pop the top unless it is the last screen; true if popped
     };

@@ -141,7 +141,7 @@ class Game
         m_delivered += 1;
         m_score += points;
         ui::findLabel("hud-score").setText("" + m_score);
-        Label@ pop = ui::findLabel("hud-pop");
+        UILabel@ pop = ui::findLabel("hud-pop");
         pop.setText("+" + points);
         pop.setOpacity(1.0f);
         pop.setTranslation(kPopX, kPopY);
@@ -161,7 +161,7 @@ class Game
         Input::rumble(0.3f, 0.6f, 0.45f); // the cheer of a cleared block
         Audio::stopMusic(1.2f);
         Audio::playOneShot(kClearedFanfare, AudioBus::Music);
-        Label@ banner = ui::findLabel("hud-banner");
+        UILabel@ banner = ui::findLabel("hud-banner");
         banner.setOpacity(0.0f);
         banner.setVisible(true);
     }
@@ -178,7 +178,7 @@ class Game
         eased = 1.0f - (1.0f - eased) * (1.0f - eased);
         run::setTimeScale(1.0f + (kCelebrateSlowest - 1.0f) * eased);
 
-        Label@ banner = ui::findLabel("hud-banner");
+        UILabel@ banner = ui::findLabel("hud-banner");
         float drop = m_celebrated / kBannerDrop;
         if (drop > 1.0f)
         {
@@ -203,10 +203,10 @@ class Game
         m_score += bonus;
         m_banked = m_score;
         ui::findLabel("hud-score").setText("" + m_score);
-        Screen@ s = ui::push(kClearedDoc);
+        UIScreen@ s = ui::push(kClearedDoc);
         s.findLabel("cleared-summary").setText("" + m_delivered + " delivered, " + earned + " points + "
                                                + bonus + " time bonus");
-        Button@ next = s.findButton("continue-btn");
+        UIButton@ next = s.findButton("continue-btn");
         if (m_level + 1 >= int(m_levels.length()))
         {
             next.setText("Finish");
@@ -232,7 +232,7 @@ class Game
             showGameOver(false);
             return;
         }
-        Screen@ s = ui::push(kFailedDoc);
+        UIScreen@ s = ui::push(kFailedDoc);
         s.findLabel("failed-reason").setText(reason == 0 ? "Out of time" : "Out of papers");
         s.findLabel("failed-lives").setText(m_lives == 1 ? "1 life left" : "" + m_lives + " lives left");
         s.findButton("retry-btn").onClick(Action(this.onRetry));
@@ -283,7 +283,7 @@ class Game
     {
         click();
         m_settingsFrom = m_phase;
-        Screen@ s = ui::push(kSettingsDoc);
+        UIScreen@ s = ui::push(kSettingsDoc);
         bindVolume(s, "master", AudioBus::Master, Action(this.onMasterChanged));
         bindVolume(s, "music", AudioBus::Music, Action(this.onMusicChanged));
         bindVolume(s, "effects", AudioBus::Effects, Action(this.onEffectsChanged));
@@ -349,7 +349,7 @@ class Game
     private void pause()
     {
         run::setTimeScale(0.0f);
-        Screen@ s = ui::push(kPauseDoc);
+        UIScreen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
         s.findButton("restart-btn").onClick(Action(this.onRetry));
         s.findButton("settings-btn").onClick(Action(this.onSettings));
@@ -370,7 +370,7 @@ class Game
             return;
         }
         m_pop -= dt;
-        Label@ pop = ui::findLabel("hud-pop");
+        UILabel@ pop = ui::findLabel("hud-pop");
         if (pop is null || !pop.isValid())
         {
             m_pop = 0.0f;
@@ -387,9 +387,9 @@ class Game
     }
 
     // A volume row: its slider at the bus's level, its readout, and the handler.
-    private void bindVolume(Screen@ s, string row, AudioBus bus, Action@ handler)
+    private void bindVolume(UIScreen@ s, string row, AudioBus bus, Action@ handler)
     {
-        Slider@ slider = s.findSlider(row + "-slider");
+        UISlider@ slider = s.findSlider(row + "-slider");
         slider.setValue(Audio::busVolume(bus));
         showVolume(row, slider.value);
         slider.onChanged(handler);
@@ -422,7 +422,7 @@ class Game
             Audio::playOneShot(kGameOverVoice, AudioBus::Effects);
         }
         m_endingIn = won ? 4.2f : 2.0f; // the ending's music once the fanfare or the voice is done
-        Screen@ s = ui::push(kGameOverDoc);
+        UIScreen@ s = ui::push(kGameOverDoc);
         s.findLabel("over-title").setText(won ? "Route complete!" : "Game over");
         s.findLabel("over-score").setText("Score " + m_score);
         s.findLabel("over-reached").setText(won ? "Every block delivered"
@@ -437,7 +437,7 @@ class Game
         m_endingIn = -1.0f;
         Audio::playMusic(kTitleMusic, 0.8f, kMusicVolume);
         ui::clear();
-        Screen@ s = ui::push(kTitleDoc);
+        UIScreen@ s = ui::push(kTitleDoc);
         s.findButton("play-btn").onClick(Action(this.onNewGame));
         s.findButton("settings-btn").onClick(Action(this.onSettings));
         s.findButton("quit-btn").onClick(Action(this.onQuit));

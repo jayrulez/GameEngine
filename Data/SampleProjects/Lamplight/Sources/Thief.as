@@ -100,7 +100,7 @@ class Thief
     void onCheckpoint(Float3 at)
     {
         m_checkpoint = at;
-        Label@ note = ui::findLabel("hud-note");
+        UILabel@ note = ui::findLabel("hud-note");
         if (note !is null && note.isValid())
         {
             note.setText("Checkpoint");

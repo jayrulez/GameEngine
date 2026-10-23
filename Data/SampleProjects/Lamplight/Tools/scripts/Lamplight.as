@@ -100,7 +100,7 @@ class Game
         m_paused = false;
         run::setTimeScale(0.0f); // whatever is behind the title holds still
         ui::clear();
-        Screen@ s = ui::push(kTitleDoc);
+        UIScreen@ s = ui::push(kTitleDoc);
         s.findButton("level-0").onClick(Action(this.onLevel0));
         s.findButton("level-1").onClick(Action(this.onLevel1));
         s.findButton("level-2").onClick(Action(this.onLevel2));
@@ -137,7 +137,7 @@ class Game
         ui::push(kHudDoc);
         showHud();
         // The controls, keyboard and pad, for the first seconds of the level (the pause menu has them too).
-        View@ controls = ui::find("hud-controls");
+        UIView@ controls = ui::find("hud-controls");
         controls.setVisible(true);
         controls.setOpacity(0.0f);
         controls.fadeTo(1.0f, 0.3f);
@@ -197,7 +197,7 @@ class Game
 
     private void note(string text)
     {
-        Label@ label = ui::findLabel("hud-note");
+        UILabel@ label = ui::findLabel("hud-note");
         label.setText(text);
         label.setOpacity(1.0f);
         label.setVisible(true);
@@ -256,7 +256,7 @@ class Game
         run::setTimeScale(0.0f);
         m_controlsShow = 0.0f;
         ui::find("hud-controls").setVisible(false); // the menu shows them itself
-        Screen@ s = ui::push(kPauseDoc);
+        UIScreen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
         s.findButton("restart-btn").onClick(Action(this.onRestart));
         s.findButton("title-btn").onClick(Action(this.onTitle));
@@ -299,7 +299,7 @@ class Game
         }
         Save::flush();
 
-        Screen@ s = ui::push(kResultsDoc);
+        UIScreen@ s = ui::push(kResultsDoc);
         bool last = m_level + 1 >= kLevelCount;
         string title = ghost ? "Away like a ghost" : (m_caught == 0 ? "Away clean" : "Away");
         s.findLabel("res-title").setText(last ? "The jewels are yours. " + title : title);

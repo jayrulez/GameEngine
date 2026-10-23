@@ -51,7 +51,7 @@ class Gallery
     {
         m_yaw = startYaw;
         m_pitch = startPitch;
-        Screen@ s = ui::push(kGalleryDoc);
+        UIScreen@ s = ui::push(kGalleryDoc);
         s.findButton("lesson-1").onClick(Action(this.onLesson1));
         s.findButton("lesson-2").onClick(Action(this.onLesson2));
         s.findButton("lesson-3").onClick(Action(this.onLesson3));

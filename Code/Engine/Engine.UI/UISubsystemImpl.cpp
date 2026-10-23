@@ -3006,17 +3006,17 @@ namespace engine::ui
     namespace
     {
         // A component's tree as a script group handle (null-valid when not built yet).
-        engine::uiscript::ViewGroup GroupOf(const RefPtr<View>& root)
+        engine::uiscript::UIViewGroup GroupOf(const RefPtr<View>& root)
         {
-            engine::uiscript::ViewGroup group;
+            engine::uiscript::UIViewGroup group;
             group.view = root;
             return group;
         }
     }
 
-    engine::uiscript::ViewGroup UICanvasComponent::rootGroup() const { return GroupOf(root); }
-    engine::uiscript::ViewGroup UIBillboardComponent::rootGroup() const { return GroupOf(root); }
-    engine::uiscript::ViewGroup UIWorldPanelComponent::rootGroup() const { return GroupOf(root); }
+    engine::uiscript::UIViewGroup UICanvasComponent::rootGroup() const { return GroupOf(root); }
+    engine::uiscript::UIViewGroup UIBillboardComponent::rootGroup() const { return GroupOf(root); }
+    engine::uiscript::UIViewGroup UIWorldPanelComponent::rootGroup() const { return GroupOf(root); }
 
     void RegisterUIComponentReflection()
     {

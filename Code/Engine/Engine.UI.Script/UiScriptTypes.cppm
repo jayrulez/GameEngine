@@ -26,16 +26,16 @@ using namespace foundation::core;
 
 export namespace engine::uiscript
 {
-    struct View;
-    struct Label;
-    struct Button;
-    struct ProgressBar;
-    struct Slider;
-    struct RichText;
-    struct TextBox;
-    struct Image;
-    struct ViewGroup;
-    struct Screen;
+    struct UIView;
+    struct UILabel;
+    struct UIButton;
+    struct UIProgressBar;
+    struct UISlider;
+    struct UIRichText;
+    struct UITextBox;
+    struct UIImage;
+    struct UIViewGroup;
+    struct UIScreen;
 
     /// How a scripted tween moves through its time (`label.scaleTo(1.4f, 0.2f, Ease::OutBack)`).
     /// InOut, the default, starts and ends gently; Out arrives gently; OutBack overshoots and
@@ -94,13 +94,13 @@ export namespace engine::uiscript
     void onAnimationIteration(RefPtr<foundation::script::IScriptDelegate> handler);
 
     /// A bare view - identity + visibility/enabled. What find / childAt return.
-    struct View
+    struct UIView
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
     };
 
     /// A text label. `label.text` reads, `label.setText(...)` writes.
-    struct Label
+    struct UILabel
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] String text() const;
@@ -121,7 +121,7 @@ export namespace engine::uiscript
     /// screen pops). It always runs through the mutation queue (drained next frame), never inline during
     /// click dispatch - so it may do ANY structural mutation (screens, entities, ...), not just screen
     /// push/pop, without re-entrancy.
-    struct Button
+    struct UIButton
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] String text() const;
@@ -130,7 +130,7 @@ export namespace engine::uiscript
     };
 
     /// A progress/fill bar. `bar.value` is 0..1.
-    struct ProgressBar
+    struct UIProgressBar
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] f64 value() const;
@@ -139,7 +139,7 @@ export namespace engine::uiscript
 
     /// A slider: `slider.value` within `min`..`max`, and `onChanged` for a drag, a click, an arrow or a
     /// pad's left and right. A volume control, say.
-    struct Slider
+    struct UISlider
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] f64 value() const;
@@ -161,7 +161,7 @@ export namespace engine::uiscript
     /// added one by one. `text.markup` reads the markup (empty once runs were added), `text.plainText`
     /// the words without it. `onLink` runs a handler when a [link=id] span is clicked, through the
     /// mutation queue as a button's click does; the handler reads the id from `text.clickedLink`.
-    struct RichText
+    struct UIRichText
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] String markup() const;
@@ -178,7 +178,7 @@ export namespace engine::uiscript
     };
 
     /// A text input. `box.text` reads/writes the edited text.
-    struct TextBox
+    struct UITextBox
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] String text() const;
@@ -187,7 +187,7 @@ export namespace engine::uiscript
 
     /// An image. `image.source` is the texture asset it shows (a render texture a camera draws
     /// into included); `image.setSource(id)` swaps it, a nil id clears it.
-    struct Image
+    struct UIImage
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] Guid source() const;
@@ -196,39 +196,39 @@ export namespace engine::uiscript
 
     /// A container - the search surface. Every finder searches this group's subtree recursively, first
     /// match, and returns a null-but-valid handle when the name is missing or is the wrong control type.
-    struct ViewGroup
+    struct UIViewGroup
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] i32 childCount() const;
-        [[nodiscard]] View childAt(i32 index) const;
-        [[nodiscard]] View find(String name) const;
-        [[nodiscard]] Label findLabel(String name) const;
-        [[nodiscard]] Button findButton(String name) const;
-        [[nodiscard]] ProgressBar findProgressBar(String name) const;
-        [[nodiscard]] Slider findSlider(String name) const;
-        [[nodiscard]] RichText findRichText(String name) const;
-        [[nodiscard]] TextBox findTextBox(String name) const;
-        [[nodiscard]] Image findImage(String name) const;
-        [[nodiscard]] ViewGroup findGroup(String name) const;
-        [[nodiscard]] Screen findScreen(String name) const;
+        [[nodiscard]] UIView childAt(i32 index) const;
+        [[nodiscard]] UIView find(String name) const;
+        [[nodiscard]] UILabel findLabel(String name) const;
+        [[nodiscard]] UIButton findButton(String name) const;
+        [[nodiscard]] UIProgressBar findProgressBar(String name) const;
+        [[nodiscard]] UISlider findSlider(String name) const;
+        [[nodiscard]] UIRichText findRichText(String name) const;
+        [[nodiscard]] UITextBox findTextBox(String name) const;
+        [[nodiscard]] UIImage findImage(String name) const;
+        [[nodiscard]] UIViewGroup findGroup(String name) const;
+        [[nodiscard]] UIScreen findScreen(String name) const;
     };
 
-    /// A screen (a gamekit UIScreen) - a container with the same finder surface as ViewGroup, scoped to
+    /// A screen (a gamekit UIScreen) - a container with the same finder surface as UIViewGroup, scoped to
     /// one screen so name lookups can be narrowed (`ui.top().findLabel(...)`).
-    struct Screen
+    struct UIScreen
     {
         UI_SCRIPT_COMMON_HANDLE_MEMBERS
         [[nodiscard]] i32 childCount() const;
-        [[nodiscard]] View childAt(i32 index) const;
-        [[nodiscard]] View find(String name) const;
-        [[nodiscard]] Label findLabel(String name) const;
-        [[nodiscard]] Button findButton(String name) const;
-        [[nodiscard]] ProgressBar findProgressBar(String name) const;
-        [[nodiscard]] Slider findSlider(String name) const;
-        [[nodiscard]] RichText findRichText(String name) const;
-        [[nodiscard]] TextBox findTextBox(String name) const;
-        [[nodiscard]] Image findImage(String name) const;
-        [[nodiscard]] ViewGroup findGroup(String name) const;
+        [[nodiscard]] UIView childAt(i32 index) const;
+        [[nodiscard]] UIView find(String name) const;
+        [[nodiscard]] UILabel findLabel(String name) const;
+        [[nodiscard]] UIButton findButton(String name) const;
+        [[nodiscard]] UIProgressBar findProgressBar(String name) const;
+        [[nodiscard]] UISlider findSlider(String name) const;
+        [[nodiscard]] UIRichText findRichText(String name) const;
+        [[nodiscard]] UITextBox findTextBox(String name) const;
+        [[nodiscard]] UIImage findImage(String name) const;
+        [[nodiscard]] UIViewGroup findGroup(String name) const;
     };
 
 #undef UI_SCRIPT_COMMON_HANDLE_MEMBERS

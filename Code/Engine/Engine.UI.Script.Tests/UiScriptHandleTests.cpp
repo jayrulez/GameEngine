@@ -21,9 +21,9 @@ namespace uis = engine::uiscript;
 namespace
 {
     // Wrap a borrowed view in a group handle (the finders live on it).
-    [[nodiscard]] uis::ViewGroup Group(ui::ViewGroup* g)
+    [[nodiscard]] uis::UIViewGroup Group(ui::ViewGroup* g)
     {
-        uis::ViewGroup h;
+        uis::UIViewGroup h;
         h.view = RefPtr<ui::View>(g);
         return h;
     }
@@ -76,7 +76,7 @@ TEST_CASE("uiscript.handle: a view's animation end and iteration reach a script 
 {
     auto root = MakeRef<ui::FrameLayout>(DefaultAllocator());
     root->AddView(MakeLabel(u8"spinner", u8"").Get());
-    uis::Label spinner = Group(root.Get()).findLabel(u8"spinner");
+    uis::UILabel spinner = Group(root.Get()).findLabel(u8"spinner");
     REQUIRE(spinner.isValid());
     auto ended = MakeRef<NamingDelegate>(DefaultAllocator());
     auto looped = MakeRef<NamingDelegate>(DefaultAllocator());
@@ -98,7 +98,7 @@ TEST_CASE("uiscript.handle: an owning handle keeps its view alive after the tree
     group->AddView(label.Get());
 
     // A script would hold this handle (e.g. a cached HUD label). It owns a ref.
-    uis::Label held = Group(group.Get()).findLabel(u8"status");
+    uis::UILabel held = Group(group.Get()).findLabel(u8"status");
     REQUIRE(held.isValid());
 
     // The screen is popped: drop the tree's + our local strong refs. The handle's RefPtr is the last
@@ -120,7 +120,7 @@ TEST_CASE("uiscript.handle: typed finders are loud-null on missing name or type 
     button->Name = String(u8"go");
     group->AddView(button.Get());
 
-    uis::ViewGroup g = Group(group.Get());
+    uis::UIViewGroup g = Group(group.Get());
 
     CHECK(g.findLabel(u8"status").isValid());   // present + right type
     CHECK_FALSE(g.findLabel(u8"go").isValid());  // present but a Button -> loud null
@@ -129,7 +129,7 @@ TEST_CASE("uiscript.handle: typed finders are loud-null on missing name or type 
     CHECK_FALSE(g.findButton(u8"status").isValid());
 
     // Ops on a null handle are safe no-ops (no crash, nothing happens).
-    uis::Label absent = g.findLabel(u8"nope");
+    uis::UILabel absent = g.findLabel(u8"nope");
     absent.setText(u8"ignored");
     CHECK(absent.text() == StringView(u8""));
 }
@@ -143,14 +143,14 @@ TEST_CASE("uiscript.handle: findLabel searches the subtree deeply, first match")
     mid->AddView(inner.Get());
     inner->AddView(MakeLabel(u8"deep", u8"found").Get());
 
-    uis::Label deep = Group(root.Get()).findLabel(u8"deep");
+    uis::UILabel deep = Group(root.Get()).findLabel(u8"deep");
     REQUIRE(deep.isValid());
     CHECK(deep.text() == StringView(u8"found"));
 }
 
-// A card is a ContentButton (a picture and labels as its content): the Button handle covers it, its
+// A card is a ContentButton (a picture and labels as its content): the UIButton handle covers it, its
 // click runs the script's handler, and a label inside its content is found from the screen.
-TEST_CASE("uiscript.handle: a ContentButton is a Button, its labels found through its content")
+TEST_CASE("uiscript.handle: a ContentButton is a UIButton, its labels found through its content")
 {
     auto root = MakeRef<ui::FrameLayout>(DefaultAllocator());
     auto content = MakeRef<ui::FrameLayout>(DefaultAllocator());
@@ -159,8 +159,8 @@ TEST_CASE("uiscript.handle: a ContentButton is a Button, its labels found throug
     card->Name = String(u8"card");
     root->AddView(card.Get());
 
-    uis::ViewGroup g = Group(root.Get());
-    uis::Button button = g.findButton(u8"card");
+    uis::UIViewGroup g = Group(root.Get());
+    uis::UIButton button = g.findButton(u8"card");
     REQUIRE(button.isValid());
     CHECK(button.text() == StringView(u8"")); // no text of its own: its content is its face
 
@@ -169,7 +169,7 @@ TEST_CASE("uiscript.handle: a ContentButton is a Button, its labels found throug
     card->OnClick.Invoke(card.Get()); // headless (no context): the handler runs at once
     CHECK(handler->calls == 1);
 
-    uis::Label best = g.findLabel(u8"card-best");
+    uis::UILabel best = g.findLabel(u8"card-best");
     REQUIRE(best.isValid());
     CHECK(best.text() == StringView(u8"Gold"));
 }
@@ -186,9 +186,9 @@ TEST_CASE("uiscript.handle: a view fades on the frame clock, and a set stops the
     panel->Name = String(u8"panel");
     root->AddView(panel.Get());
     panel->AddView(MakeLabel(u8"title", u8"Paused").Get());
-    uis::ViewGroup rootGroup = Group(root.Get());
+    uis::UIViewGroup rootGroup = Group(root.Get());
 
-    uis::Label label = rootGroup.findLabel(u8"title");
+    uis::UILabel label = rootGroup.findLabel(u8"title");
     REQUIRE(label.isValid());
     CHECK(label.opacity() == doctest::Approx(1.0f));
     label.setOpacity(0.25f);
@@ -213,12 +213,12 @@ TEST_CASE("uiscript.handle: a view fades on the frame clock, and a set stops the
     // Zero seconds is a set; a group fades too; a null handle takes nothing.
     label.fadeTo(0.1f, 0.0f);
     CHECK(label.opacity() == doctest::Approx(0.1f));
-    uis::ViewGroup group = rootGroup.findGroup(u8"panel");
+    uis::UIViewGroup group = rootGroup.findGroup(u8"panel");
     REQUIRE(group.isValid());
     group.fadeTo(0.0f, 0.2f);
     ctx.BeginFrame(0.3f);
     CHECK(group.opacity() == doctest::Approx(0.0f));
-    uis::Label missing = rootGroup.findLabel(u8"nope");
+    uis::UILabel missing = rootGroup.findLabel(u8"nope");
     missing.setOpacity(0.5f);
     missing.fadeTo(0.5f, 1.0f);
     CHECK(missing.opacity() == doctest::Approx(0.0f));
@@ -232,9 +232,9 @@ TEST_CASE("uiscript.handle: a view is translated and rotated through its transfo
     auto group = MakeRef<ui::FrameLayout>(DefaultAllocator());
     auto marker = MakeLabel(u8"marker", u8"^");
     group->AddView(marker.Get());
-    uis::ViewGroup g = Group(group.Get());
+    uis::UIViewGroup g = Group(group.Get());
 
-    uis::Label handle = g.findLabel(u8"marker");
+    uis::UILabel handle = g.findLabel(u8"marker");
     REQUIRE(handle.isValid());
     CHECK(handle.translation().x == doctest::Approx(0.0f));
     CHECK(handle.rotation() == doctest::Approx(0.0f));
@@ -248,12 +248,12 @@ TEST_CASE("uiscript.handle: a view is translated and rotated through its transfo
     CHECK(handle.rotation() == doctest::Approx(90.0f));
 
     // Every handle type has it: the bare view the generic finder returns moves the same way.
-    uis::View bare = g.find(u8"marker");
+    uis::UIView bare = g.find(u8"marker");
     REQUIRE(bare.isValid());
     bare.setTranslation(1.0f, 2.0f);
     CHECK(marker->Transform.Translation.x == doctest::Approx(1.0f));
 
-    uis::Label missing = g.findLabel(u8"nope");
+    uis::UILabel missing = g.findLabel(u8"nope");
     missing.setTranslation(5.0f, 5.0f);
     missing.setRotation(45.0f);
     CHECK(missing.translation().x == doctest::Approx(0.0f));
@@ -270,7 +270,7 @@ TEST_CASE("uiscript.handle: views move, scale, turn and pulse on the frame clock
     ctx.AddRootView(root.Get());
     auto popup = MakeLabel(u8"popup", u8"+100");
     root->AddView(popup.Get());
-    uis::Label label = Group(root.Get()).findLabel(u8"popup");
+    uis::UILabel label = Group(root.Get()).findLabel(u8"popup");
     REQUIRE(label.isValid());
     CHECK(label.scale() == doctest::Approx(1.0f));
 
@@ -314,10 +314,10 @@ TEST_CASE("uiscript.handle: views move, scale, turn and pulse on the frame clock
     CHECK(label.translation().x == doctest::Approx(7.0f));
     auto loose = MakeRef<ui::FrameLayout>(DefaultAllocator());
     loose->AddView(MakeLabel(u8"loose", u8"x").Get());
-    uis::Label unrooted = Group(loose.Get()).findLabel(u8"loose");
+    uis::UILabel unrooted = Group(loose.Get()).findLabel(u8"loose");
     unrooted.scaleTo(2.0f, 1.0f, uis::Ease::OutBack);
     CHECK(unrooted.scale() == doctest::Approx(2.0f));
-    uis::Label missing = Group(root.Get()).findLabel(u8"nope");
+    uis::UILabel missing = Group(root.Get()).findLabel(u8"nope");
     missing.moveTo(1.0f, 1.0f, 1.0f);
     missing.pulse(2.0f, 1.0f);
     CHECK(missing.scale() == doctest::Approx(1.0f));
@@ -333,7 +333,7 @@ TEST_CASE("uiscript.handle: a label's text colour is set, read and cleared back 
     label->SetStyle(ui::StyleProperty::TextColor, Color{0.2f, 0.4f, 0.6f, 1.0f});
     root->AddView(label.Get());
 
-    uis::Label warning = Group(root.Get()).findLabel(u8"warning");
+    uis::UILabel warning = Group(root.Get()).findLabel(u8"warning");
     REQUIRE(warning.isValid());
     CHECK(warning.textColor().b == doctest::Approx(0.6f)); // the style's
 
@@ -347,7 +347,7 @@ TEST_CASE("uiscript.handle: a label's text colour is set, read and cleared back 
     CHECK_FALSE(label->TextColor.Value().HasValue());
     CHECK(warning.textColor().b == doctest::Approx(0.6f)); // the style's again
 
-    uis::Label gone = Group(root.Get()).findLabel(u8"nope");
+    uis::UILabel gone = Group(root.Get()).findLabel(u8"nope");
     gone.setTextColor(Color::White); // nothing to set: no crash
     CHECK(gone.textColor().a == doctest::Approx(0.0f));
 }

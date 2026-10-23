@@ -127,7 +127,7 @@ class Game
         music(kMusicTitle);
         run::setTimeScale(0.0f); // the scene behind the title holds still
         ui::clear();
-        Screen@ s = ui::push(kTitleDoc);
+        UIScreen@ s = ui::push(kTitleDoc);
         s.findButton("course-0").onClick(Action(this.onMeadow));
         s.findButton("course-1").onClick(Action(this.onForest));
         s.findButton("course-2").onClick(Action(this.onRidge));
@@ -149,7 +149,7 @@ class Game
         m_controlsShow = 0.0f;
         ui::find("hud-controls").setVisible(false); // the menu shows them itself
         run::setTimeScale(0.0f);
-        Screen@ s = ui::push(kPauseDoc);
+        UIScreen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
         s.findButton("restart-btn").onClick(Action(this.onRestartRun));
         s.findButton("courses-btn").onClick(Action(this.onCourses));
@@ -230,7 +230,7 @@ class Game
         resetRun();
         // The controls, keyboard and pad, along the bottom for the first seconds of the course
         // (and always in the pause menu).
-        View@ controls = ui::find("hud-controls");
+        UIView@ controls = ui::find("hud-controls");
         controls.setVisible(true);
         controls.setOpacity(0.0f);
         controls.fadeTo(1.0f, 0.3f);
@@ -332,7 +332,7 @@ class Game
         m_missed += 1;
         m_penalty += kMissPenalty;
         m_flash = 1.2f;
-        View@ penalty = ui::find("hud-penalty");
+        UIView@ penalty = ui::find("hud-penalty");
         penalty.setVisible(true);
         showGates();
     }
@@ -401,7 +401,7 @@ class Game
         {
             return;
         }
-        Label@ gap = ui::findLabel("hud-avalanche");
+        UILabel@ gap = ui::findLabel("hud-avalanche");
         gap.setText("" + metres + " m");
         if (metres < 15)
         {
@@ -461,7 +461,7 @@ class Game
         {
             m_combo += 1;
         }
-        View@ combo = ui::find("hud-combo");
+        UIView@ combo = ui::find("hud-combo");
         ui::findLabel("hud-combo").setText("Combo x" + m_combo);
         combo.setVisible(true);
     }
@@ -479,7 +479,7 @@ class Game
 
     private void showTrick(string name, string points)
     {
-        Label@ trick = ui::findLabel("hud-trick");
+        UILabel@ trick = ui::findLabel("hud-trick");
         trick.setText(points == "" ? name : name + "   " + points);
         trick.setVisible(true);
         trick.setOpacity(0.0f);
@@ -673,7 +673,7 @@ class Game
                 key = "bonus";
                 value = "+" + timeBonus(total);
             }
-            View@ row = ui::find("row-" + key);
+            UIView@ row = ui::find("row-" + key);
             row.setVisible(true);
             ui::findLabel("value-" + key).setText(value);
             if (!quiet)
@@ -701,7 +701,7 @@ class Game
             }
             else
             {
-                View@ disc = ui::find("medal-" + medal);
+                UIView@ disc = ui::find("medal-" + medal);
                 disc.setVisible(true);
                 if (!quiet)
                 {

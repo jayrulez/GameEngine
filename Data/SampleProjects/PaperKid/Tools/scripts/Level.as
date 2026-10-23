@@ -135,7 +135,7 @@ class Level
             Audio::playOneShot(kHurrySound, AudioBus::Effects);
             Audio::setVoicePitch(Audio::musicVoice(), kHurryMusicRate, kHurryMusicEase);
         }
-        Label@ time = ui::findLabel("hud-time");
+        UILabel@ time = ui::findLabel("hud-time");
         if (m_timeLeft > kTicksFrom)
         {
             time.setOpacity(1.0f);

@@ -139,7 +139,7 @@ class Game
     private int m_nextLevel = 0;
     /// The phase a fade in reveals.
     private Phase m_afterFade = Phase::Intro;
-    private View@ m_fade;
+    private UIView@ m_fade;
     /// The track playing: 0 none, 1 the menu's, 2 + n level n's. A track asked for again keeps
     /// playing rather than restarting.
     private int m_track = 0;
@@ -204,7 +204,7 @@ class Game
                 if (m_afterFade == Phase::Intro)
                 {
                     // The level's card drops in from above and settles with a bounce.
-                    View@ card = ui::find("intro-card");
+                    UIView@ card = ui::find("intro-card");
                     card.moveTo(0.0f, 0.0f, 0.55f, Ease::OutBack);
                     card.fadeTo(1.0f, 0.25f);
                 }
@@ -306,7 +306,7 @@ class Game
         }
         m_gem = true;
         popup("+" + kGemPoints);
-        View@ gem = ui::find("hud-gem");
+        UIView@ gem = ui::find("hud-gem");
         gem.setVisible(true);
         gem.setScale(0.0f);
         gem.scaleTo(1.0f, 0.45f, Ease::OutBack);
@@ -330,7 +330,7 @@ class Game
         }
         m_falls += 1;
         m_lives -= 1;
-        View@ heart = ui::find("hud-heart");
+        UIView@ heart = ui::find("hud-heart");
         heart.pulse(0.6f, 0.35f); // the heart shrinks and comes back: a life gone
         refreshHud();
         if (m_lives <= 0)
@@ -375,7 +375,7 @@ class Game
         m_allFalls += m_falls;
         m_allTime += m_time;
         Audio::playOneShot(kClearJingle);
-        Screen@ s = ui::push(kClearDoc);
+        UIScreen@ s = ui::push(kClearDoc);
         s.findLabel("star-3-caption").setText("Under " + clock(par));
         s.findLabel("tally-total").setText("0");
         s.findLabel("clear-best").setText("");
@@ -397,7 +397,7 @@ class Game
     void onSettings()
     {
         click();
-        Screen@ s = ui::push(kSettingsDoc);
+        UIScreen@ s = ui::push(kSettingsDoc);
         bindVolume(s, "master", AudioBus::Master, Action(this.onMasterChanged));
         bindVolume(s, "music", AudioBus::Music, Action(this.onMusicChanged));
         bindVolume(s, "effects", AudioBus::Effects, Action(this.onEffectsChanged));
@@ -484,9 +484,9 @@ class Game
     }
 
     /// A bound volume row: its slider at the bus's level, its readout, and the handler.
-    private void bindVolume(Screen@ s, string row, AudioBus bus, Action@ handler)
+    private void bindVolume(UIScreen@ s, string row, AudioBus bus, Action@ handler)
     {
-        Slider@ slider = s.findSlider(row + "-slider");
+        UISlider@ slider = s.findSlider(row + "-slider");
         slider.setValue(Audio::busVolume(bus));
         showVolume(row, slider.value);
         slider.onChanged(handler);
@@ -508,7 +508,7 @@ class Game
     {
         music(1);
         ui::clear();
-        Screen@ s = ui::push(kTitleDoc);
+        UIScreen@ s = ui::push(kTitleDoc);
         s.findButton("play-btn").onClick(Action(this.onPlay));
         s.findButton("settings-btn").onClick(Action(this.onSettings));
         s.findButton("quit-btn").onClick(Action(this.onQuit));
@@ -521,7 +521,7 @@ class Game
     private void pause()
     {
         run::setTimeScale(0.0f);
-        Screen@ s = ui::push(kPauseDoc);
+        UIScreen@ s = ui::push(kPauseDoc);
         s.findButton("resume-btn").onClick(Action(this.onResume));
         s.findButton("restart-btn").onClick(Action(this.onRestart));
         s.findButton("title-btn").onClick(Action(this.onQuitToTitle));
@@ -533,7 +533,7 @@ class Game
         run::setTimeScale(0.0f);
         int total = m_score + levelPoints();
         bool best = saveRun(total);
-        Screen@ s = ui::push(kGameOverDoc);
+        UIScreen@ s = ui::push(kGameOverDoc);
         s.findLabel("gameover-reached").setText("Reached level " + (m_level + 1) + ", " + levelName(m_level));
         s.findLabel("gameover-score").setText(points(total));
         s.findLabel("gameover-best").setText(best ? "New best run!" : "Best " + points(Save::getInt("best.run", 0)));
@@ -547,7 +547,7 @@ class Game
         ui::pop(); // the clear card
         Audio::playOneShot(kVictoryJingle);
         bool best = saveRun(m_score);
-        Screen@ s = ui::push(kVictoryDoc);
+        UIScreen@ s = ui::push(kVictoryDoc);
         s.findLabel("victory-summary").setText("Coins " + m_allCoins + " / " + m_allCoinTotal + "    Falls "
             + m_allFalls + "    Time " + clock(m_allTime));
         s.findLabel("victory-score").setText(points(m_score));
@@ -577,7 +577,7 @@ class Game
         {
             return;
         }
-        Screen@ s = ui::push(kFadeDoc);
+        UIScreen@ s = ui::push(kFadeDoc);
         @m_fade = s.find("fade");
         m_fade.fadeTo(1.0f, kFadeSeconds);
         enter(Phase::FadingOut);
@@ -609,15 +609,15 @@ class Game
             ui::push(kHudDoc);
             m_shownScore = float(m_score);
             refreshHud();
-            Screen@ intro = ui::push(kIntroDoc);
+            UIScreen@ intro = ui::push(kIntroDoc);
             intro.findLabel("intro-number").setText("Level " + (m_level + 1));
             intro.findLabel("intro-name").setText(levelName(m_level));
-            View@ card = intro.find("intro-card"); // above, waiting for the fade to clear
+            UIView@ card = intro.find("intro-card"); // above, waiting for the fade to clear
             card.setTranslation(0.0f, -260.0f);
             card.setOpacity(0.0f);
             m_afterFade = Phase::Intro;
         }
-        Screen@ s = ui::push(kFadeDoc);
+        UIScreen@ s = ui::push(kFadeDoc);
         @m_fade = s.find("fade");
         m_fade.setOpacity(1.0f);
         m_fade.fadeTo(0.0f, kFadeSeconds);
@@ -701,9 +701,9 @@ class Game
                 key = "flawless";
                 value = (m_flawless > 0) ? "+" + points(m_flawless) : "-";
             }
-            View@ row = ui::find("tally-" + key + "-row");
+            UIView@ row = ui::find("tally-" + key + "-row");
             row.setVisible(true);
-            Label@ label = ui::findLabel("tally-" + key);
+            UILabel@ label = ui::findLabel("tally-" + key);
             label.setText(value);
             if (!quiet)
             {
@@ -717,7 +717,7 @@ class Game
         }
         if (step == 5)
         {
-            Label@ total = ui::findLabel("tally-total");
+            UILabel@ total = ui::findLabel("tally-total");
             total.setText(points(m_levelScore));
             if (!quiet)
             {
@@ -730,7 +730,7 @@ class Game
         {
             return;
         }
-        View@ filled = ui::find("star-" + star);
+        UIView@ filled = ui::find("star-" + star);
         filled.setVisible(true);
         if (!quiet)
         {
@@ -746,7 +746,7 @@ class Game
     private void finishTally()
     {
         m_tallyDone = true;
-        Label@ best = ui::findLabel("clear-best");
+        UILabel@ best = ui::findLabel("clear-best");
         if (m_newBest)
         {
             best.setText("New best!");
@@ -851,7 +851,7 @@ class Game
         {
             m_lives += 1;
         }
-        Label@ up = ui::findLabel("hud-life-popup");
+        UILabel@ up = ui::findLabel("hud-life-popup");
         up.setVisible(true);
         up.setOpacity(1.0f);
         up.setTranslation(0.0f, 0.0f);
@@ -870,7 +870,7 @@ class Game
     /// A gain floating up from the score.
     private void popup(string text)
     {
-        Label@ pop = ui::findLabel("hud-popup");
+        UILabel@ pop = ui::findLabel("hud-popup");
         pop.setText(text);
         pop.setVisible(true);
         pop.setOpacity(1.0f);
@@ -889,7 +889,7 @@ class Game
         }
         float step = (target - m_shownScore) * 8.0f * real + 40.0f * real;
         m_shownScore = (m_shownScore + step > target) ? target : m_shownScore + step;
-        Label@ score = ui::findLabel("hud-score");
+        UILabel@ score = ui::findLabel("hud-score");
         score.setText(points(int(m_shownScore)));
         if (m_shownScore >= target)
         {

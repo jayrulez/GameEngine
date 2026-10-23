@@ -108,14 +108,14 @@ class Door
     {
         if (show)
         {
-            Label@ text = ui::findLabel("hud-prompt");
+            UILabel@ text = ui::findLabel("hud-prompt");
             if (text !is null && text.isValid())
             {
                 text.setText(locked ? (m_picking ? "Picking the lock..." : "Hold Interact: pick the lock")
                                     : (m_target != 0.0f ? "Interact: close the door" : "Interact: open the door"));
             }
             ui::find("hud-prompt-panel").setVisible(true);
-            ProgressBar@ bar = ui::findProgressBar("hud-pick");
+            UIProgressBar@ bar = ui::findProgressBar("hud-pick");
             if (bar !is null && bar.isValid())
             {
                 bar.setVisible(m_picking);

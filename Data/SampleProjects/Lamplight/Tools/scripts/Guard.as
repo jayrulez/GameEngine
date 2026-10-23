@@ -171,7 +171,7 @@ class Guard
         {
             return;
         }
-        ViewGroup@ panel = board.root();
+        UIViewGroup@ panel = board.root();
         panel.findProgressBar("meter").setValue(m_state == kChase ? 1.0 : double(awareness));
         panel.findLabel("mark").setText(m_state == kChase ? "!" : "?");
     }

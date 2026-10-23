@@ -53,7 +53,7 @@ TEST_CASE("engine.composition: the one list covers every domain, and the scene f
     // Thirteen scene domains (the old scene list) + input + the two facade-only libraries, and the
     // GUI's when the lab is built.
     CHECK(composition.Modules().Size() == 16u + kGuiDomains);
-    CHECK(composition.Scene().ModuleCount() == 13u);
+    CHECK(composition.Scene().ModuleCount() == 13u + kGuiDomains);
     CHECK(&engine::FullSceneComposition() == &composition.Scene());
 
     scene::Scene scratch(DefaultAllocator());

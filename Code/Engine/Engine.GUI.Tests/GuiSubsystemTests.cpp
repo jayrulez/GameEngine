@@ -242,6 +242,11 @@ namespace
         {
             auto* sceneSubsystem = context.AddSubsystem<engine::scene::SceneSubsystem>();
             sceneSubsystem->RegisterManager(&scenes);
+            {
+                const scene::SceneModule guiModule{u8"gui", &engine::gui::AddGuiSceneManagers, nullptr};
+                const scene::SceneModule* modules[] = {&guiModule};
+                sceneSubsystem->SetComposition(scene::SceneComposition::Build(modules));
+            }
             input = context.AddSubsystem<engine::input::InputSubsystem>(nullptr);
             claiming = context.AddSubsystem<ClaimingSubsystem>(*input);
             gui = context.AddSubsystem<GuiSubsystem>(DefaultAllocator(), DataFs());
@@ -470,7 +475,7 @@ TEST_CASE("engine.gui: the domain brings the documents' and sheets' resource mod
     for (const foundation::resource::ResourceModule* module : domain.resources)
         documents = documents || module == &lab::kGuiResourceModule;
     CHECK(documents);
-    CHECK_FALSE(domain.HasScene()); // its components come with E7
+    CHECK(domain.HasScene()); // its components
 }
 
 TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a click lands, and the action layer hears what the GUI took")
@@ -581,4 +586,176 @@ TEST_CASE("engine.gui: a source bound to another scene never reaches this scene'
     CHECK(engine.gui->ActiveInputRoot() == hud);
     engine.scenes.DestroyScene(other);
     engine.scenes.DestroyScene(level);
+}
+
+namespace
+{
+    RefPtr<lab::GuiDocument> MakeDocument(StringView markup)
+    {
+        RefPtr<lab::GuiDocument> document = MakeRef<lab::GuiDocument>(DefaultAllocator());
+        document->markup = String(markup);
+        return document;
+    }
+    // The scene's GUI styled and laid out at `size`, as a frame's draw does.
+    void LayOut(GuiSubsystem& gui, lab::SceneRoot& root, Float2 size)
+    {
+        root.SetViewportSize(size);
+        gui.Styles().SetMediaContext(root.GetMediaContext());
+        gui.Styles().ApplyTree(root);
+        root.UpdateLayout();
+    }
+}
+
+TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, shown and taking input as it says, rebuilt when its document changes, gone when despawned")
+{
+    Engine engine;
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
+    REQUIRE(canvases != nullptr); // installed by the scene composition
+    const scene::EntityHandle hud = level->CreateEntity(u8"hud");
+    const scene::EntityHandle pause = level->CreateEntity(u8"pause");
+    {
+        engine::gui::GuiCanvasComponent& c = canvases->Add(pause);
+        c.document = MakeDocument(u8"<Panel id=\"pause-menu\"/>");
+        c.order = 5;
+    }
+    {
+        engine::gui::GuiCanvasComponent& c = canvases->Add(hud);
+        c.document = MakeDocument(u8"<Panel id=\"score\"/>");
+        c.order = 1;
+    }
+    engine.Frame();
+    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    REQUIRE(root != nullptr);
+    REQUIRE(root->ChildCount() == 2u);
+    CHECK(FindById(*root->GetChildAt(0), u8"score") != nullptr); // order 1 under order 5
+    CHECK(FindById(*root->GetChildAt(1), u8"pause-menu") != nullptr);
+    CHECK(Cast<lab::UIWidget>(root->GetChildAt(0))->GetTag() == StringView(u8"canvas"));
+
+    // Reordered.
+    canvases->Get(hud)->order = 9;
+    engine.Frame();
+    CHECK(FindById(*root->GetChildAt(1), u8"score") != nullptr);
+
+    // Hidden, then its entity inactive; not interactive.
+    engine::gui::GuiCanvasComponent* c = canvases->Get(hud);
+    lab::Node* tree = c->root.Get();
+    REQUIRE(tree != nullptr);
+    c->visible = false;
+    engine.Frame();
+    CHECK_FALSE(tree->IsDisplayed());
+    c->visible = true;
+    level->SetActive(hud, false);
+    engine.Frame();
+    CHECK_FALSE(tree->IsDisplayed());
+    level->SetActive(hud, true);
+    c->interactive = false;
+    engine.Frame();
+    CHECK(tree->IsDisplayed());
+    CHECK(tree->IsTreeInert());
+
+    // A new document product rebuilds the tree.
+    c->document = MakeDocument(u8"<Panel id=\"lives\"/>");
+    engine.Frame();
+    CHECK(FindById(*root, u8"lives") != nullptr);
+    CHECK(FindById(*root, u8"score") == nullptr);
+
+    // Despawned: its host goes.
+    level->DestroyEntity(hud);
+    engine.Frame();
+    CHECK(root->ChildCount() == 1u);
+    CHECK(FindById(*root, u8"lives") == nullptr);
+    engine.scenes.DestroyScene(level);
+}
+
+TEST_CASE("engine.gui: a canvas scaled from a reference resolution fits the view, centred; at constant pixels it fills it")
+{
+    Engine engine;
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
+    const scene::EntityHandle hud = level->CreateEntity(u8"hud");
+    engine::gui::GuiCanvasComponent& added = canvases->Add(hud);
+    added.document = MakeDocument(u8"<Panel id=\"frame\"/>");
+    added.scalerMode = engine::gui::GuiScalerMode::ReferenceResolution;
+    added.referenceResolution = Float2{400.0f, 300.0f};
+    engine.Frame();
+    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    lab::Node* tree = canvases->Get(hud)->root.Get();
+    REQUIRE(tree != nullptr);
+
+    LayOut(*engine.gui, *root, Float2{1000.0f, 600.0f});
+    CHECK(tree->GetSize().x == doctest::Approx(400.0f)); // laid out at the reference
+    CHECK(tree->GetSize().y == doctest::Approx(300.0f));
+    CHECK(tree->GetScale().x == doctest::Approx(2.0f));  // scaled to fit the height
+    CHECK(tree->GetPosition().x == doctest::Approx(100.0f)); // centred across
+    CHECK(tree->GetPosition().y == doctest::Approx(0.0f));
+
+    canvases->Get(hud)->scalerMode = engine::gui::GuiScalerMode::ConstantPixel;
+    engine.Frame();
+    LayOut(*engine.gui, *root, Float2{1000.0f, 600.0f});
+    CHECK(tree->GetSize().x == doctest::Approx(1000.0f));
+    CHECK(tree->GetScale().x == doctest::Approx(1.0f));
+    engine.scenes.DestroyScene(level);
+}
+
+TEST_CASE("engine.gui: a canvas's own sheet styles its document alone, over the game's")
+{
+    Engine engine;
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
+    const scene::EntityHandle styled = level->CreateEntity(u8"styled");
+    const scene::EntityHandle plain = level->CreateEntity(u8"plain");
+    RefPtr<lab::GuiStyleSheet> sheet = MakeRef<lab::GuiStyleSheet>(DefaultAllocator());
+    sheet->css = String(u8".title { width: 77px; height: 5px; }");
+    {
+        engine::gui::GuiCanvasComponent& c = canvases->Add(styled);
+        c.document = MakeDocument(u8"<Panel><Panel class=\"title\" id=\"a\"/></Panel>"); // the root is the canvas's area
+        c.sheet = sheet;
+    }
+    canvases->Add(plain).document = MakeDocument(u8"<Panel><Panel class=\"title\" id=\"b\"/></Panel>");
+    engine.Frame();
+    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    LayOut(*engine.gui, *root, Float2{800.0f, 600.0f});
+    lab::Node* a = FindById(*root, u8"a");
+    lab::Node* b = FindById(*root, u8"b");
+    REQUIRE(a != nullptr);
+    REQUIRE(b != nullptr);
+    CHECK(a->GetSize().x == doctest::Approx(77.0f));
+    CHECK(b->GetSize().x != doctest::Approx(77.0f));
+    engine.scenes.DestroyScene(level);
+}
+
+TEST_CASE("engine.gui: a canvas component round-trips through the scene format")
+{
+    engine::gui::RegisterGuiComponentReflection(); // versioned payloads read the type's data version
+    engine::gui::GuiCanvasComponent a;
+    a.document.SetId(Guid{1, 2});
+    a.sheet.SetId(Guid{3, 4});
+    a.order = 7;
+    a.visible = false;
+    a.interactive = false;
+    a.scalerMode = engine::gui::GuiScalerMode::ReferenceResolution;
+    a.referenceResolution = Float2{1280.0f, 800.0f};
+    MemoryStream buffer;
+    {
+        BinarySerializer writer(buffer, SerializeMode::Write);
+        BeginVersionedPayload(writer, TypeOf<engine::gui::GuiCanvasComponent>());
+        Serialize(writer, a);
+        EndVersionedPayload(writer);
+    }
+    (void)buffer.Seek(0, SeekOrigin::Begin);
+    engine::gui::GuiCanvasComponent b;
+    {
+        BinarySerializer reader(buffer, SerializeMode::Read);
+        BeginVersionedPayload(reader, TypeOf<engine::gui::GuiCanvasComponent>());
+        Serialize(reader, b);
+        EndVersionedPayload(reader);
+    }
+    CHECK(b.document.id == a.document.id);
+    CHECK(b.sheet.id == a.sheet.id);
+    CHECK(b.order == 7);
+    CHECK_FALSE(b.visible);
+    CHECK_FALSE(b.interactive);
+    CHECK(b.scalerMode == engine::gui::GuiScalerMode::ReferenceResolution);
+    CHECK(b.referenceResolution.x == doctest::Approx(1280.0f));
 }

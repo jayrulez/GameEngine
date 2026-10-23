@@ -27,7 +27,11 @@
 // over GUI that takes it, or a press that began there; the keys while text is being edited), added
 // to what Engine.UI claims; the GUI tracks the input kind from the same source.
 //
-// Its components (E7), script surface (E8) and the player's settings (E9) come later.
+// Components (E7): `gui.Canvas` shows a document (with a sheet of its own over the game's) in its
+// scene's root, ordered among the scene's canvases, at the target's pixels or scaled from a
+// reference resolution to fit; despawned, its tree goes; a re-cooked document rebuilds it.
+//
+// Its script surface (E8) and the player's settings (E9) come later.
 // GCC modules hygiene: the renderer, the shaders and the textures live in GuiSubsystemImpl.cpp.
 
 module;
@@ -52,7 +56,8 @@ import foundation.input;      // InputKindTracker
 import engine.input;          // the active input source, the action runtimes
 import experimental.gui;
 import experimental.gui.gamekit;
-import experimental.gui.shell; // GuiInputBridge
+import experimental.gui.resources; // the documents and sheets components name
+import experimental.gui.shell;     // GuiInputBridge
 
 using namespace foundation::core;
 namespace rhi = foundation::rhi;
@@ -64,6 +69,65 @@ export namespace engine::gui
     namespace scene = foundation::scene;
     namespace resource = foundation::resource;
     namespace image = foundation::image;
+
+    // ---- components ----
+
+    enum class GuiScalerMode : u8
+    {
+        ConstantPixel = 0,   ///< one GUI pixel a target pixel
+        ReferenceResolution, ///< laid out at the reference resolution, scaled uniformly to fit, centred
+    };
+
+    /// A document shown in its scene's GUI: a menu, a HUD. Spawned it opens, despawned it closes.
+    struct GuiCanvasComponent
+    {
+        // Authored:
+        resource::Ref<lab::GuiDocument> document;
+        resource::Ref<lab::GuiStyleSheet> sheet; ///< over the game's sheets, for this canvas alone (optional)
+        i32 order = 0;                           ///< among the scene's canvases: higher on top
+        bool visible = true;
+        bool interactive = true;
+        GuiScalerMode scalerMode = GuiScalerMode::ConstantPixel;
+        Float2 referenceResolution{1920.0f, 1080.0f};
+
+        // Runtime:
+        RefPtr<lab::Node> root;       ///< the tree built from the document
+        RefPtr<lab::UIWidget> host;   ///< its place in the scene's root (order, scaler)
+        RefPtr<Object> builtFrom;     ///< the document product it was built from (held: a new one never takes its address)
+        RefPtr<Object> sheetFrom;     ///< the sheet product applied
+    };
+
+    inline void Serialize(ISerializer& ar, GuiCanvasComponent& c)
+    {
+        foundation::core::Serialize(ar, "document", c.document);
+        foundation::core::Serialize(ar, "sheet", c.sheet);
+        foundation::core::Serialize(ar, "order", c.order);
+        foundation::core::Serialize(ar, "visible", c.visible);
+        foundation::core::Serialize(ar, "interactive", c.interactive);
+        u8 scaler = static_cast<u8>(c.scalerMode);
+        foundation::core::Serialize(ar, "scalerMode", scaler);
+        c.scalerMode = static_cast<GuiScalerMode>(scaler);
+        foundation::core::Serialize(ar, "referenceResolution", c.referenceResolution);
+    }
+
+    inline void ResolveResources(resource::ResourceManager& manager, GuiCanvasComponent& c)
+    {
+        c.document.Bind(manager);
+        c.sheet.Bind(manager);
+    }
+
+    class GuiCanvasComponentManager final : public scene::SerializableComponentManager<GuiCanvasComponent>
+    {
+    public:
+        GuiCanvasComponentManager() : SerializableComponentManager<GuiCanvasComponent>(u8"gui.Canvas") {}
+    };
+
+    /// The components' reflection (the inspector, the scene format). Idempotent.
+    void RegisterGuiComponentReflection();
+
+    /// The GUI's managers for a scene: the subsystem's scenes and headless scene consumers alike
+    /// (Engine.Composition).
+    inline void AddGuiSceneManagers(scene::Scene& scene) { scene.AddSystem<GuiCanvasComponentManager>(); }
 
     /// The lab's resources by asset guid, through the application's resource manager.
     class GuiResourceProvider final : public lab::IResourceProvider
@@ -188,13 +252,15 @@ export namespace engine::gui
         struct RenderState; // the renderer and the shaders (impl unit)
         struct SceneTier
         {
-            const scene::Scene* Scene = nullptr;
+            scene::Scene* Scene = nullptr;
             RefPtr<lab::SceneRoot> Root;
             UniquePtr<lab::GuiInputBridge> Bridge;
+            Array<RefPtr<lab::UIWidget>> Canvases; ///< its canvases' hosts, in the root
         };
 
         void ApplySheets();
         void PumpInput();
+        void SyncCanvases(SceneTier& tier);
         [[nodiscard]] lab::SceneRoot* PickInputRoot(bool pointer, Float2 point);
         [[nodiscard]] bool InputReaches(const SceneTier& tier) const noexcept;
         [[nodiscard]] lab::GuiInputBridge* BridgeOf(const lab::SceneRoot* root) noexcept;

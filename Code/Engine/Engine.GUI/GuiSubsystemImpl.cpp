@@ -7,6 +7,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
+#include "Core/Reflection/Reflect.h"
 #include "Profiler/Profiler.h"
 
 module engine.gui;
@@ -300,6 +301,93 @@ namespace engine::gui
     }
 
     // ===================================================================================
+    // Components
+    // ===================================================================================
+
+    namespace
+    {
+        // A canvas's place in its scene's root, filling it (the `canvas` element to a sheet): its
+        // document laid out at the root's size, or at the reference resolution and scaled
+        // uniformly to fit, centred on a whole pixel. Paints nothing, so it never takes the
+        // pointer from the game: only what its document paints does.
+        class CanvasHost final : public lab::UIWidget
+        {
+        public:
+            CanvasHost() { SetTag(StringView(u8"canvas")); }
+
+            void Configure(i32 order, GuiScalerMode scaler, Float2 reference)
+            {
+                Order = order;
+                if (scaler == m_scaler && reference == m_reference)
+                    return;
+                m_scaler = scaler;
+                m_reference = reference;
+                RequestLayout();
+            }
+
+            void OnLayout() override
+            {
+                const Float2 size = GetSize();
+                Float2 inner = size;
+                f32 scale = 1.0f;
+                Float2 offset{0.0f, 0.0f};
+                if (m_scaler == GuiScalerMode::ReferenceResolution && m_reference.x > 0.0f && m_reference.y > 0.0f && size.x > 0.0f &&
+                    size.y > 0.0f)
+                {
+                    inner = m_reference;
+                    scale = Min(size.x / inner.x, size.y / inner.y);
+                    offset = Float2{Round((size.x - inner.x * scale) * 0.5f), Round((size.y - inner.y * scale) * 0.5f)};
+                }
+                for (usize i = 0; i < ChildCount(); ++i)
+                {
+                    lab::Node* child = GetChildAt(i);
+                    child->SetScaleOrigin(Float2{0.0f, 0.0f});
+                    child->SetScale(Float2{scale, scale});
+                    child->Arrange(lab::Rect{offset.x, offset.y, inner.x, inner.y});
+                }
+            }
+
+            i32 Order = 0;
+
+        private:
+            GuiScalerMode m_scaler = GuiScalerMode::ConstantPixel;
+            Float2 m_reference{0.0f, 0.0f};
+        };
+    }
+
+    REFLECT_ENUM(GuiScalerMode, "rtti::engine::gui")
+    {
+        builder.Value("ConstantPixel", GuiScalerMode::ConstantPixel);
+        builder.Value("ReferenceResolution", GuiScalerMode::ReferenceResolution);
+    }
+
+    REFLECT_VALUE(GuiCanvasComponent, "rtti::engine::gui")
+    {
+        builder.Attribute("displayName", String(u8"GUI Canvas"))
+            .Attribute("category", String(u8"GUI"))
+            .Attribute("description", String(u8"Shows a GUI document in its scene, as a menu or a HUD."))
+            .DataVersion(1);
+        builder.Property<&GuiCanvasComponent::document>("document");
+        builder.Property<&GuiCanvasComponent::sheet>("sheet");
+        builder.Property<&GuiCanvasComponent::order>("order");
+        builder.Property<&GuiCanvasComponent::visible>("visible");
+        builder.Property<&GuiCanvasComponent::interactive>("interactive");
+        builder.Property<&GuiCanvasComponent::scalerMode>("scalerMode");
+        builder.Property<&GuiCanvasComponent::referenceResolution>("referenceResolution");
+    }
+
+    void RegisterGuiComponentReflection()
+    {
+        static const bool once = []()
+        {
+            RttiRegisterEnum_GuiScalerMode();
+            RttiRegisterValue_GuiCanvasComponent();
+            return true;
+        }();
+        (void)once;
+    }
+
+    // ===================================================================================
     // GuiSubsystem
     // ===================================================================================
 
@@ -439,6 +527,8 @@ namespace engine::gui
             m_render->Renderer->BeginFrame();
         if (m_resources->Poll())
             ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
+        for (SceneTier& tier : m_sceneTiers)
+            SyncCanvases(tier);
         PumpInput();
         // Unscaled: menus move while the game is paused.
         m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
@@ -500,6 +590,10 @@ namespace engine::gui
         SceneTier tier;
         tier.Scene = &scene;
         tier.Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        {
+            lab::Node::StyleWriteScope defaults(*tier.Root);
+            tier.Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // each canvas fills it
+        }
         tier.Bridge = MakeBridge(*tier.Root);
         m_sceneTiers.PushBack(Move(tier));
     }
@@ -516,6 +610,93 @@ namespace engine::gui
                 m_sceneTiers.RemoveAt(i);
                 return;
             }
+    }
+
+    // Each canvas's tree in line with its component: built from its document (again when the
+    // document is cooked again), in its host in the scene's root, its sheet, shown while the canvas
+    // and its entity are; the hosts of canvases gone swept; the hosts ordered.
+    void GuiSubsystem::SyncCanvases(SceneTier& tier)
+    {
+        auto* canvases = tier.Scene->GetSystem<GuiCanvasComponentManager>();
+        Array<const lab::Node*> seen(m_allocator);
+        if (canvases != nullptr)
+            canvases->ForEach(
+                [&](GuiCanvasComponent& c, scene::EntityHandle entity)
+                {
+                    lab::GuiDocument* document = c.document.Get();
+                    if (document != c.builtFrom.Get())
+                    {
+                        if (c.root && c.root->GetParent() != nullptr)
+                            c.root->GetParent()->RemoveChild(c.root.Get());
+                        c.root = nullptr;
+                        c.sheetFrom = nullptr;
+                        if (document != nullptr && !document->markup.IsEmpty())
+                        {
+                            lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), m_fonts.Get());
+                            loader.SetDataModel(m_context->GetDataRef());
+                            c.root = loader.LoadFromString(document->markup.AsView());
+                            if (!c.root)
+                                LOG_WARNING(u8"GUI", u8"a canvas's document did not build");
+                        }
+                        c.builtFrom = RefPtr<Object>(document);
+                    }
+                    if (!c.host)
+                    {
+                        c.host = MakeRef<CanvasHost>(m_allocator);
+                        tier.Root->AddChild(c.host.Get());
+                        tier.Canvases.PushBack(c.host);
+                    }
+                    auto* host = static_cast<CanvasHost*>(c.host.Get());
+                    host->Configure(c.order, c.scalerMode, c.referenceResolution);
+                    seen.PushBack(host);
+                    if (!c.root)
+                        return;
+                    if (c.root->GetParent() == nullptr)
+                        host->AddChild(c.root.Get());
+                    lab::GuiStyleSheet* sheet = c.sheet.Get();
+                    if (sheet != c.sheetFrom.Get())
+                    {
+                        if (sheet != nullptr)
+                            (void)m_styles.SetSubtreeSheet(*c.root, lab::CSSParser::Parse(sheet->css.AsView(), StringView(u8"canvas")));
+                        else
+                            m_styles.RemoveSubtreeSheet(*c.root);
+                        c.sheetFrom = RefPtr<Object>(sheet);
+                    }
+                    c.root->SetDisplayed(c.visible && tier.Scene->IsEffectivelyActive(entity));
+                    c.root->SetInert(!c.interactive);
+                });
+        // The hosts whose canvas went (despawned, the component removed), then the order: by
+        // `order`, stably, after whatever else the root holds.
+        Array<CanvasHost*> hosts(m_allocator);
+        for (usize i = 0; i < tier.Canvases.Size();)
+        {
+            CanvasHost* host = static_cast<CanvasHost*>(tier.Canvases[i].Get());
+            bool live = false;
+            for (const lab::Node* known : seen)
+                live = live || known == host;
+            if (live)
+            {
+                hosts.PushBack(host);
+                ++i;
+                continue;
+            }
+            tier.Root->RemoveChild(host);
+            tier.Canvases.RemoveAt(i);
+        }
+        // In the root's order, for the sort.
+        for (usize i = 1; i < hosts.Size(); ++i)
+            for (usize j = i; j > 0 && tier.Root->GetChildIndex(hosts[j]) < tier.Root->GetChildIndex(hosts[j - 1]); --j)
+                Swap(hosts[j - 1], hosts[j]);
+        bool sorted = true;
+        for (usize i = 1; i < hosts.Size(); ++i)
+            sorted = sorted && hosts[i - 1]->Order <= hosts[i]->Order;
+        if (sorted)
+            return;
+        for (usize i = 1; i < hosts.Size(); ++i) // stable insertion sort
+            for (usize j = i; j > 0 && hosts[j - 1]->Order > hosts[j]->Order; --j)
+                Swap(hosts[j - 1], hosts[j]);
+        for (CanvasHost* host : hosts)
+            tier.Root->SetChildIndex(host, tier.Root->ChildCount() - 1);
     }
 
     UniquePtr<lab::GuiInputBridge> GuiSubsystem::MakeBridge(lab::SceneRoot& root)
@@ -773,6 +954,8 @@ namespace engine::gui
             &lab::kGuiResourceModule, &foundation::vg::kVGResourceModule, &foundation::fonts::kFontsResourceModule};
         static const engine::DomainModule kModule{
             .id = u8"gui",
+            .installScene = &AddGuiSceneManagers,
+            .registerReflection = &RegisterGuiComponentReflection,
             .resources = Span<const resource::ResourceModule* const>{kResources, sizeof(kResources) / sizeof(kResources[0])}};
         return kModule;
     }

@@ -1149,7 +1149,16 @@ Each a layer with its tests.
   input kind tracker of its own: the GUI keeps one, fed from the same source. The pad's confirm on
   release and the touch guide are Engine.UI's and not carried over; the lab's own pad handling
   serves.
-- **E7 Components.** Canvas, billboard, world panel.
+- **E7 Components.** Canvas, billboard, world panel. In three layers:
+  - **E7a The canvas.** Built (vg, 2026-10-23): `gui.Canvas` (a document, a sheet of its own as a
+    subtree sheet over the game's, an order, visible, interactive (inert when not), a scaler:
+    constant pixels or a reference resolution fitted and centred) in a `canvas` host in its scene's
+    root; rebuilt when its document's product changes, its host swept when it goes, the hosts kept
+    in order. One sheet per canvas: a sheet imports others. The document's root is the canvas's
+    area (the host arranges it), so it never takes the pointer unless it paints.
+  - **E7b Billboards.** A document over an entity, projected through the view's camera.
+  - **E7c Render textures and world panels.** A canvas drawn into a texture, a world panel's quad,
+    the pointer by a ray, the bakes recorded before the scene.
 - **E8 The script surface.** The facade per context, pushing by guid.
 - **E9 The player and play-in-editor.** Settings, splash, run screens.
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.

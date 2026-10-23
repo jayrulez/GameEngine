@@ -105,6 +105,14 @@ export namespace experimental::gui
         [[nodiscard]] EffectScheduler& GetEffectScheduler() noexcept { return m_effects; }
         /// The GUI's named values, which markup and scripts bind to.
         [[nodiscard]] DataModel& GetData() noexcept { return *m_data; }
+        /// Moves data value `name` to `to` over `seconds` on the GUI's clock (K3), eased as `easing`
+        /// names: whatever is bound to it follows each frame (a score counting up with no widget to
+        /// drive it), in the value's own type (a whole number counts in whole numbers). A tween of
+        /// the same name replaces the running one, from the value showing; a GUI root's pause does not
+        /// hold it. The tween, to shape further. Defined in Styling/TweenImpl.cpp.
+        RefPtr<Tween> AnimateData(core::StringView name, f64 to, f32 seconds, core::StringView easing = core::StringView(u8"ease"));
+        /// A data value's tween as AnimateData makes one, not yet running: a step for a group.
+        RefPtr<Tween> CreateDataTween(core::StringView name, f64 to, f32 seconds, core::StringView easing = core::StringView(u8"ease"));
         [[nodiscard]] const RefPtr<DataModel>& GetDataRef() const noexcept { return m_data; }
         [[nodiscard]] CommandSet& GetCommands() noexcept { return m_commands; }
         Command& DefineCommand(core::StringView id) { return m_commands.Define(id, MemoryAllocator()); }

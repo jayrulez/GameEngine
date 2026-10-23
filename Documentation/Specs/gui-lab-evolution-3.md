@@ -967,7 +967,7 @@ Each a layer with its tests.
   its rules and its change notification. K2b in the lab: the core's kind given by the host and the
   bridge passing it on, the change event, `gui.inputKind`, the media feature, the focus ring's
   rules, `cursor: none` and the hidden cursor on a pad.
-- **K3 A data value tweened.**
+- **K3 A data value tweened.** Built (vg, 2026-10-23): `GUIContext::AnimateData` and `gui.tween`, in the value's own type.
 - **K4 The screen stack.** Push, pop, replace, clear; covering, blocking, pausing; focus per
   screen; the release under a cover; Back; the lifecycle events; the facade.
 - **K5 Transitions.** Entering and leaving through the sheet; a pop during an enter; covered

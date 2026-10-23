@@ -671,6 +671,18 @@ namespace experimental::gui
             data->Set(name, value);
     }
 
+    RefPtr<Tween> Gui::TweenData(StringView name, f64 to, f32 seconds, StringView easing)
+    {
+        SceneRoot* root = ScriptRoot();
+        return root != nullptr ? root->GetContext().AnimateData(name, to, seconds, easing) : RefPtr<Tween>{};
+    }
+
+    RefPtr<Tween> Gui::CreateDataTween(StringView name, f64 to, f32 seconds, StringView easing)
+    {
+        SceneRoot* root = ScriptRoot();
+        return root != nullptr ? root->GetContext().CreateDataTween(name, to, seconds, easing) : RefPtr<Tween>{};
+    }
+
     core::Variant Gui::Root()
     {
         foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
@@ -1548,6 +1560,8 @@ namespace experimental::gui
         builder.Method<&Gui::Language>("language");
         builder.Method<&Gui::GetBool>("getBool");
         builder.Method<&Gui::Set>("set");
+        builder.Method<&Gui::TweenData>("tween"); // a data value moving (K3)
+        builder.Method<&Gui::CreateDataTween>("createTween");
         builder.Method<&Gui::DefineCommand>("defineCommand");
         builder.Method<&Gui::SetCommandEnabled>("setCommandEnabled");
         builder.Method<&Gui::SetCommandChecked>("setCommandChecked");

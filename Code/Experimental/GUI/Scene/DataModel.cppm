@@ -149,6 +149,24 @@ export namespace experimental::gui
             entry.Changed->Notify();
             return true;
         }
+        /// The value named `name`, read without a binding following it (a tween reading where it starts).
+        [[nodiscard]] Variant Peek(core::StringView name) const
+        {
+            for (const Entry& entry : m_entries)
+                if (entry.Name.AsView() == name)
+                    return entry.Value;
+            return {};
+        }
+        /// The tween now moving `name` (K3): a tween starting claims it, so the one before it sees it
+        /// was replaced and stops where it is. 0 when none has.
+        void ClaimTween(core::StringView name, u64 owner) { EntryFor(name).TweenOwner = owner; }
+        [[nodiscard]] u64 TweenOwnerOf(core::StringView name) const
+        {
+            for (const Entry& entry : m_entries)
+                if (entry.Name.AsView() == name)
+                    return entry.TweenOwner;
+            return 0;
+        }
         [[nodiscard]] bool Has(core::StringView name) const
         {
             for (const Entry& entry : m_entries)
@@ -163,6 +181,7 @@ export namespace experimental::gui
             core::String Name;
             Variant Value;
             bool HasValue = false;
+            u64 TweenOwner = 0; // the tween moving it (K3)
             UniquePtr<Observable> Changed; // not movable: the entry array moves
         };
         Array<Entry> m_entries;

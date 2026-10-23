@@ -2,7 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI - a node's tweens (E14 of Specs/gui-lab-evolution-2.md): Node::Animate and StopAnimation,
-// here because :node cannot import :tween (a tween targets a node), and the tweens' one count.
+// here because :node cannot import :tween (a tween targets a node), and the tweens' one count; and
+// a GUI's data value's (K3: GUIContext::AnimateData).
 
 module;
 #include "Core/Prelude.h"
@@ -85,6 +86,21 @@ namespace experimental::gui
         RefPtr<Tween> tween = CreateTween(property, to, 0.0f);
         tween->Spring(stiffness, damping, mass);
         RunAction(tween);
+        return tween;
+    }
+
+    RefPtr<Tween> GUIContext::CreateDataTween(core::StringView name, f64 to, f32 seconds, core::StringView easing)
+    {
+        RefPtr<Tween> tween = core::MakeRef<Tween>(MemoryAllocator(), core::String(name), FormatVariant(core::Variant::From<f64>(to)), seconds,
+                                                   ParseEasing(easing).ValueOr(Easing::Ease()));
+        tween->TargetData(m_data);
+        return tween;
+    }
+
+    RefPtr<Tween> GUIContext::AnimateData(core::StringView name, f64 to, f32 seconds, core::StringView easing)
+    {
+        RefPtr<Tween> tween = CreateDataTween(name, to, seconds, easing);
+        m_actionManager.AddAction(tween); // its start replaces the one moving the value
         return tween;
     }
 

@@ -874,6 +874,58 @@ TEST_CASE("gui-script: Luau makes a node leave and hears its transition end (K0)
 
 namespace
 {
+    // A data value tweened (K3): the script tweens `score` (0 at first) to 10 over a second and
+    // offers `done()`, whether its tween ended.
+    void CheckDataTween(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        const auto advance = [&](double seconds) { bed.root->GetContext().Update(Duration::FromSeconds(seconds)); };
+        advance(0.5);
+        const Variant half = bed.root->GetContext().GetData().Get(StringView(u8"score"));
+        REQUIRE(half.TryGet<i32>() != nullptr);
+        CHECK(*half.TryGet<i32>() == 5);
+        CHECK(bed.Number(u8"done") == doctest::Approx(0.0));
+        advance(0.5);
+        CHECK(*bed.root->GetContext().GetData().Get(StringView(u8"score")).TryGet<i32>() == 10);
+        CHECK(bed.Number(u8"done") == doctest::Approx(1.0));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript tweens a data value (K3)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    bed.root->GetContext().GetData().Set(StringView(u8"score"), Variant::From<i32>(0));
+    const Status loaded = bed.context->Load(
+        u8"Tween@ counting;\n"
+        u8"void main() { @counting = gui::tween(\"score\", 10, 1.0, \"linear\"); }\n"
+        u8"double done() { return counting.isDone() ? 1 : 0; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckDataTween(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau tweens a data value (K3)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    bed.root->GetContext().GetData().Set(StringView(u8"score"), Variant::From<i32>(0));
+    const Status loaded = bed.context->Load(
+        u8"local counting = gui.tween(\"score\", 10, 1.0, \"linear\")\n"
+        u8"function done() return counting:isDone() and 1 or 0 end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckDataTween(bed);
+}
+#endif
+
+namespace
+{
     // Listener tokens (E16): the script put a Button 80 x 30 at the origin, listening for clicks
     // twice: `once` stops itself from inside, `always` stays until `stopAlways` turns it off.
     void CheckOff(GuiBed& bed)

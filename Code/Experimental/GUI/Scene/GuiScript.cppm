@@ -63,6 +63,10 @@ export namespace experimental::gui
         [[nodiscard]] static bool GetBool(core::StringView name);
         /// Sets the GUI's data value `name` (whatever is bound to it follows).
         static void Set(core::StringView name, const Variant& value);
+        /// Moves the GUI's data value `name` to `to` over `seconds` (K3: GUIContext::AnimateData),
+        /// running; and one not yet running, a step for a group. Null when the host installed no root.
+        static RefPtr<Tween> TweenData(core::StringView name, f64 to, f32 seconds, core::StringView easing);
+        static RefPtr<Tween> CreateDataTween(core::StringView name, f64 to, f32 seconds, core::StringView easing);
         /// Commands (G7): define one (with its label), switch it on or off, set its checked state,
         /// run it along the focus path (true when a handler ran).
         static void DefineCommand(core::StringView id, core::StringView label);

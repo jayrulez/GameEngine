@@ -384,3 +384,89 @@ TEST_CASE("tween: a spring moves a reflected property, and runs as a group's ste
     CHECK(after);
     CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
 }
+
+// === A data value tweened (K3 of Specs/gui-lab-evolution-3.md) ===
+
+namespace
+{
+    // A GUI whose data holds `score`, and a label bound to it.
+    struct DataBed
+    {
+        core::RefPtr<SceneRoot> root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        core::RefPtr<Label> label = core::MakeRef<Label>(core::DefaultAllocator());
+
+        DataBed()
+        {
+            root->AddChild(label.Get());
+            Label* shown = label.Get();
+            GUIContext* gui = &root->GetContext();
+            label->Bind([shown, gui]() { shown->SetText(FormatVariant(gui->GetData().Get(SV(u8"score")))); });
+            Data().Set(SV(u8"score"), core::Variant::From<core::i32>(0));
+            Frame(0.0);
+        }
+        DataModel& Data() { return root->GetContext().GetData(); }
+        void Frame(double seconds) { root->GetContext().Update(core::Duration::FromSeconds(seconds)); }
+        [[nodiscard]] core::Variant Score() { return Data().Peek(SV(u8"score")); }
+    };
+}
+
+TEST_CASE("tween: a data value counts up with no widget to drive it, in its own type, and a bound label follows")
+{
+    DataBed bed;
+    core::RefPtr<Tween> tween = bed.root->GetContext().AnimateData(SV(u8"score"), 1500.0, 1.0f, SV(u8"linear"));
+    CHECK(tween->MovesData());
+    bed.Frame(0.25);
+    REQUIRE(bed.Score().TryGet<core::i32>() != nullptr); // a whole number stays one
+    CHECK(*bed.Score().TryGet<core::i32>() == 375);
+    CHECK(bed.label->GetText() == SV(u8"375"));
+    bed.Frame(0.75);
+    CHECK(*bed.Score().TryGet<core::i32>() == 1500);
+    CHECK(bed.label->GetText() == SV(u8"1500"));
+    CHECK(tween->IsDone());
+}
+
+TEST_CASE("tween: a data value's new tween replaces the running one from the value showing")
+{
+    DataBed bed;
+    core::RefPtr<Tween> first = bed.root->GetContext().AnimateData(SV(u8"score"), 100.0, 1.0f, SV(u8"linear"));
+    bed.Frame(0.5);
+    CHECK(*bed.Score().TryGet<core::i32>() == 50);
+    core::RefPtr<Tween> second = bed.root->GetContext().AnimateData(SV(u8"score"), 0.0, 1.0f, SV(u8"linear"));
+    bed.Frame(0.5);
+    CHECK(first->IsDone());
+    CHECK(*bed.Score().TryGet<core::i32>() == 25); // from 50 toward 0
+    bed.Frame(0.5);
+    CHECK(*bed.Score().TryGet<core::i32>() == 0);
+}
+
+TEST_CASE("tween: a data value never set moves as a number; retargeted it turns from where it is; cancelled it stays")
+{
+    DataBed bed;
+    GUIContext& gui = bed.root->GetContext();
+    core::RefPtr<Tween> fill = gui.AnimateData(SV(u8"health"), 1.0, 1.0f, SV(u8"linear"));
+    bed.Frame(0.5);
+    REQUIRE(gui.GetData().Peek(SV(u8"health")).TryGet<core::f64>() != nullptr);
+    CHECK(*gui.GetData().Peek(SV(u8"health")).TryGet<core::f64>() == doctest::Approx(0.5));
+    fill->Retarget(SV(u8"0"));
+    bed.Frame(0.5);
+    CHECK(*gui.GetData().Peek(SV(u8"health")).TryGet<core::f64>() == doctest::Approx(0.25));
+    fill->Cancel();
+    bed.Frame(1.0);
+    CHECK(fill->IsDone());
+    CHECK(*gui.GetData().Peek(SV(u8"health")).TryGet<core::f64>() == doctest::Approx(0.25));
+}
+
+TEST_CASE("tween: a data value's tween runs as a group's step, after a wait")
+{
+    DataBed bed;
+    auto sequence = core::MakeRef<TweenSequence>(core::DefaultAllocator());
+    sequence->Wait(0.5f).Add(bed.root->GetContext().CreateDataTween(SV(u8"score"), 10.0, 0.5f, SV(u8"linear")));
+    bed.label->Play(sequence);
+    bed.Frame(0.5);
+    CHECK(*bed.Score().TryGet<core::i32>() == 0);
+    bed.Frame(0.25);
+    CHECK(*bed.Score().TryGet<core::i32>() == 5);
+    bed.Frame(0.25);
+    CHECK(*bed.Score().TryGet<core::i32>() == 10);
+    CHECK(sequence->IsDone());
+}

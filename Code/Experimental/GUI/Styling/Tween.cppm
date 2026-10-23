@@ -11,6 +11,9 @@
 // reflected property, read and written through its accessors (numbers, colours and points move;
 // what cannot switches halfway). A tween may wait, repeat and run back and forth; at its end it
 // holds its value until stopped or replaced. It holds its node weakly (the action's weak target).
+// A tween of a GUI's data value (K3: GUIContext::AnimateData) has no node: it moves a number in the
+// data model, which whatever is bound to it follows (a score counting up), keeping the value's
+// type (a whole number counts in whole numbers).
 
 module;
 #include "Core/Prelude.h"
@@ -30,6 +33,7 @@ import :style_sheet;   // ResolvedStyle::ParseLonghand
 import :style_applier; // the reflected properties' lookup and parsing, as a sheet's
 import :style_interpolation;
 import :easing;
+import :data_model; // a data value's tween (K3)
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -53,6 +57,10 @@ export namespace experimental::gui
         {
             m_owner = NextTweenOwner();
         }
+
+        /// Moves the data value its property names in `model`, rather than a node's property (K3).
+        void TargetData(RefPtr<DataModel> model) { m_data = core::Move(model); }
+        [[nodiscard]] bool MovesData() const noexcept { return m_data.Get() != nullptr; }
 
         // === Shaping (before its first frame) ===
         /// Where it starts, as a value of its property (else the value showing).
@@ -132,6 +140,8 @@ export namespace experimental::gui
         /// value it has).
         void Cancel()
         {
+            if (m_data && m_data->TweenOwnerOf(m_property.AsView()) == m_owner)
+                m_data->ClaimTween(m_property.AsView(), 0); // the value stays as it is
             if (m_route == Route::Style)
                 if (UINode* node = core::Cast<UINode>(ResolveTarget()))
                     if (const MotionValue* motion = node->FindMotion(m_property.AsView()); motion != nullptr && motion->Owner == m_owner)
@@ -152,7 +162,10 @@ export namespace experimental::gui
             m_route = Route::Unbound;
             m_springX = 0.0f;
             m_springV = 0.0f;
-            ReplaceOthersOf(*this);
+            if (m_data)
+                m_data->ClaimTween(m_property.AsView(), m_owner); // the one moving it gives way
+            else
+                ReplaceOthersOf(*this);
         }
         void Stop() override { m_done = true; }
         void Update(core::Duration elapsed) override
@@ -160,7 +173,7 @@ export namespace experimental::gui
             if (m_done)
                 return;
             Node* target = ResolveTarget();
-            if (target == nullptr)
+            if (target == nullptr && !m_data)
             {
                 m_done = true;
                 return;
@@ -169,7 +182,13 @@ export namespace experimental::gui
             const f32 active = m_elapsed - m_delay;
             if (active < 0.0f)
                 return; // waiting: the property shows what it did
-            if (m_route == Route::Unbound && !Bind(*target))
+            if (m_route == Route::Unbound && !(m_data ? BindData() : Bind(*target)))
+            {
+                m_done = true;
+                return;
+            }
+            // Another tween took the data value: stop where it is.
+            if (m_route == Route::Data && m_data->TweenOwnerOf(m_property.AsView()) != m_owner)
             {
                 m_done = true;
                 return;
@@ -191,7 +210,7 @@ export namespace experimental::gui
                 if (settled)
                     m_springX = 1.0f;
                 m_progress = core::Clamp(m_springX, 0.0f, 1.0f);
-                Write(*target, m_springX);
+                Write(target, m_springX);
                 if (settled)
                 {
                     m_done = true;
@@ -228,7 +247,7 @@ export namespace experimental::gui
             if (m_pingPong && (run % 2u) == 1u)
                 local = 1.0f - local;
             m_progress = local;
-            Write(*target, m_easing.Evaluate(local));
+            Write(target, m_easing.Evaluate(local));
             if (finished)
             {
                 m_done = true;
@@ -252,6 +271,7 @@ export namespace experimental::gui
             Unbound,
             Style,
             Reflected,
+            Data, // a data model's value (K3)
         };
 
         [[nodiscard]] RefPtr<Tween> Self(Tween& self) { return RefPtr<Tween>(&self); }
@@ -377,12 +397,41 @@ export namespace experimental::gui
             return true;
         }
 
-        // The value at eased progress `t`.
-        void Write(Node& target, f32 t)
+        // Its first frame, for a data value: from the value now (or the start given), toward its
+        // end, both numbers; the value's own type kept (a number when it has none yet).
+        bool BindData()
         {
+            const Optional<f64> to = ParseFloat(core::Trim(m_toText.AsView()));
+            if (!to.HasValue())
+                return false;
+            const Variant now = m_data->Peek(m_property.AsView());
+            f64 from = 0.0;
+            (void)detail::NumberOf(now, from);
+            if (m_hasFrom)
+                from = ParseFloat(core::Trim(m_fromText.AsView())).ValueOr(from);
+            f64 probe = 0.0;
+            m_dataType = !now.IsEmpty() && detail::NumberOf(now, probe) && now.TryGet<bool>() == nullptr ? now.Type() : &TypeOf<f64>();
+            m_from = Variant::From<f64>(from);
+            m_to = Variant::From<f64>(to.Value());
+            m_route = Route::Data;
+            return true;
+        }
+
+        // The value at eased progress `t`.
+        void Write(Node* target, f32 t)
+        {
+            if (m_route == Route::Data)
+            {
+                const Variant value = Mix(m_from, m_to, t);
+                const Variant typed = m_dataType != nullptr ? ConvertVariant(value, *m_dataType) : value;
+                (void)m_data->Set(m_property.AsView(), typed.IsEmpty() ? value : typed);
+                return;
+            }
+            if (target == nullptr)
+                return;
             if (m_route == Route::Style)
             {
-                UINode& node = *core::Cast<UINode>(&target);
+                UINode& node = *core::Cast<UINode>(target);
                 if (MotionValue* motion = node.FindMotion(m_property.AsView()))
                 {
                     motion->Progress = t;
@@ -390,7 +439,7 @@ export namespace experimental::gui
                 }
                 return;
             }
-            (void)core::SetProperty(*m_reflected, Instance::From(&target), Mix(m_from, m_to, t));
+            (void)core::SetProperty(*m_reflected, Instance::From(target), Mix(m_from, m_to, t));
         }
 
         // Numbers, colours and points move; anything else switches halfway, as CSS's discrete values.
@@ -435,6 +484,8 @@ export namespace experimental::gui
 
         Route m_route = Route::Unbound;
         const PropertyInfo* m_reflected = nullptr;
+        RefPtr<DataModel> m_data;               // the model whose value it moves (K3), or none
+        const TypeInfo* m_dataType = nullptr;   // the value's type, kept as it moves
         Variant m_from;
         Variant m_to;
         u64 m_owner = 0; // its mark in the layer
@@ -450,7 +501,7 @@ export namespace experimental::gui
     {
         m_toText = core::String(to);
         Node* target = ResolveTarget();
-        if (target == nullptr || m_route == Route::Unbound)
+        if ((target == nullptr && !m_data) || m_route == Route::Unbound)
             return; // it reads its end at its first frame
         if (!m_spring)
             m_elapsed = m_delay; // a timed tween runs its time again, from where it is
@@ -469,6 +520,19 @@ export namespace experimental::gui
             motion->To = next;
             motion->Progress = 0.0f;
             node->MarkStyleMotionDirty();
+            return;
+        }
+        if (m_route == Route::Data)
+        {
+            const Optional<f64> end = ParseFloat(core::Trim(to));
+            if (!end.HasValue())
+                return;
+            // From the value showing (a whole number's rounding aside, where it is).
+            const Variant now = Mix(m_from, m_to, m_spring ? m_springX : m_easing.Evaluate(m_progress));
+            const Variant next = Variant::From<f64>(end.Value());
+            CarrySpeed(Distance(m_from, m_to), Distance(now, next));
+            m_from = now;
+            m_to = next;
             return;
         }
         const Variant next = detail::ParseForProperty(*m_reflected, to, LengthContext{});

@@ -15,6 +15,7 @@ import foundation.vfs;
 import foundation.runtime;
 import foundation.scene;
 import engine.scene;
+import engine.render; // sprites and cameras (the textures, the panels' ray)
 import foundation.content;
 import foundation.resource;
 import foundation.rhi;
@@ -873,5 +874,134 @@ TEST_CASE("engine.gui: billboards live in a layer under the canvases, placed as 
     level->DestroyEntity(guard);
     engine.Frame();
     CHECK(layer->ChildCount() == 0u);
+    engine.scenes.DestroyScene(level);
+}
+
+TEST_CASE("engine.gui: a ray crosses a world panel where it should, from either face, and misses past its edges")
+{
+    const Float4x4 panel = At(Float3{0.0f, 0.0f, 0.0f}); // in the xy plane, 2 by 1
+    engine::gui::GuiPanelHit hit = engine::gui::RayHitGuiPanel(Float3{0.0f, 0.0f, 5.0f}, Float3{0.0f, 0.0f, -1.0f}, panel, Float2{2.0f, 1.0f});
+    REQUIRE(hit.Hit);
+    CHECK(hit.Distance == doctest::Approx(5.0f));
+    CHECK(hit.Uv.x == doctest::Approx(0.5f));
+    CHECK(hit.Uv.y == doctest::Approx(0.5f));
+    hit = engine::gui::RayHitGuiPanel(Float3{0.5f, 0.25f, -5.0f}, Float3{0.0f, 0.0f, 1.0f}, panel, Float2{2.0f, 1.0f}); // from behind
+    REQUIRE(hit.Hit);
+    CHECK(hit.Uv.x == doctest::Approx(0.75f));
+    CHECK(hit.Uv.y == doctest::Approx(0.25f)); // v down
+    CHECK_FALSE(engine::gui::RayHitGuiPanel(Float3{1.5f, 0.0f, 5.0f}, Float3{0.0f, 0.0f, -1.0f}, panel, Float2{2.0f, 1.0f}).Hit); // past the edge
+    CHECK_FALSE(engine::gui::RayHitGuiPanel(Float3{0.0f, 0.0f, 5.0f}, Float3{1.0f, 0.0f, 0.0f}, panel, Float2{2.0f, 1.0f}).Hit);  // along the plane
+    CHECK_FALSE(engine::gui::RayHitGuiPanel(Float3{0.0f, 0.0f, 5.0f}, Float3{0.0f, 0.0f, 1.0f}, panel, Float2{2.0f, 1.0f}).Hit);  // away from it
+}
+
+TEST_CASE("engine.gui: a render-texture canvas draws into a texture of its own, its entity's sprite shows it, and it goes with the canvas")
+{
+    rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
+    Engine engine;
+    engine.gui->EnsureRenderReady(device, 2);
+    REQUIRE(engine.gui->IsRenderReady());
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    level->AddSystem<engine::render::SpriteComponentManager>();
+    auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
+    const scene::EntityHandle screen = level->CreateEntity(u8"screen");
+    engine::render::SpriteComponent& sprite = level->GetSystem<engine::render::SpriteComponentManager>()->Add(screen);
+    engine::gui::GuiCanvasComponent& added = canvases->Add(screen);
+    added.document = MakeDocument(u8"<Panel id=\"monitor\"/>");
+    added.renderMode = engine::gui::GuiCanvasRenderMode::RenderTexture;
+    added.renderTextureWidth = 128;
+    added.renderTextureHeight = 64;
+    engine.Frame();
+    engine::gui::GuiCanvasComponent* c = canvases->Get(screen);
+    REQUIRE(c->renderRoot);
+    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    CHECK(root->ChildCount() == 1u); // the billboards' layer alone: not in the scene's GUI
+    CHECK(FindById(*c->renderRoot, u8"monitor") != nullptr);
+
+    rhi::null::NullCommandEncoder encoder;
+    engine.gui->RenderTextures(encoder, 0);
+    CHECK(engine.gui->TextureCount() == 1u);
+    REQUIRE(c->renderTextureView != nullptr);
+    CHECK(sprite.texture == c->renderTextureView);
+    CHECK(c->renderRoot->GetViewportSize().x == doctest::Approx(128.0f));
+    const u64 passes = encoder.counters->Snapshot().renderPasses;
+    CHECK(passes >= 1u);
+    engine.gui->RenderTextures(encoder, 0); // once a frame
+    CHECK(encoder.counters->Snapshot().renderPasses == passes);
+
+    // Back over the view: in the scene's GUI again, the texture let go next time.
+    c->renderMode = engine::gui::GuiCanvasRenderMode::ScreenOverlay;
+    engine.Frame();
+    CHECK(FindById(*root, u8"monitor") != nullptr);
+    engine.gui->RenderTextures(encoder, 1);
+    CHECK(engine.gui->TextureCount() == 0u);
+    CHECK(sprite.texture == nullptr);
+
+    // Into a texture again, then despawned: the texture goes.
+    c->renderMode = engine::gui::GuiCanvasRenderMode::RenderTexture;
+    engine.Frame();
+    engine.gui->RenderTextures(encoder, 0);
+    CHECK(engine.gui->TextureCount() == 1u);
+    level->DestroyEntity(screen);
+    engine.Frame();
+    engine.gui->RenderTextures(encoder, 1);
+    CHECK(engine.gui->TextureCount() == 0u);
+    engine.scenes.DestroyScene(level);
+}
+
+TEST_CASE("engine.gui: a world panel drives its sprite, and the pointer reaches it by a ray: hovered, clicked, the game told")
+{
+    rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
+    Engine engine;
+    engine.gui->EnsureRenderReady(device, 2);
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    level->AddSystem<engine::render::SpriteComponentManager>();
+    level->AddSystem<engine::render::CameraComponentManager>();
+    const scene::EntityHandle camera = level->CreateEntity(u8"camera");
+    level->SetLocalPosition(camera, Float3{0.0f, 2.0f, 10.0f});
+    level->GetSystem<engine::render::CameraComponentManager>()->Add(camera);
+    const scene::EntityHandle kiosk = level->CreateEntity(u8"kiosk");
+    level->SetLocalPosition(kiosk, Float3{0.0f, 2.0f, 0.0f});
+    level->UpdateTransforms();
+    auto* panels = level->GetSystem<engine::gui::GuiWorldPanelComponentManager>();
+    engine::gui::GuiWorldPanelComponent& added = panels->Add(kiosk);
+    added.document = MakeDocument(u8"<Button id=\"tap\" text=\"Tap\"/>");
+    added.sizeMeters = Float2{2.0f, 1.0f};
+    added.pixelsPerMeter = 100.0f;
+    engine.Frame();
+    engine::gui::GuiWorldPanelComponent* c = panels->Get(kiosk);
+    REQUIRE(c->renderRoot);
+    i32 clicks = 0;
+    (void)c->root->AddEventListener(lab::EventType::MouseClick, [&](const lab::Event&) { ++clicks; });
+
+    rhi::null::NullCommandEncoder encoder;
+    engine.gui->RenderTextures(encoder, 0);
+    engine::render::SpriteComponent* sprite = level->GetSystem<engine::render::SpriteComponentManager>()->Get(kiosk);
+    REQUIRE(sprite != nullptr); // added for it
+    CHECK(sprite->texture == c->renderTextureView);
+    CHECK(sprite->orientation == engine::render::SpriteOrientation::EntityOriented);
+    CHECK(sprite->postTonemap);
+    CHECK(sprite->size.x == doctest::Approx(2.0f * 204.0f / 200.0f)); // the transparent edge's share
+    CHECK(c->renderRoot->GetViewportSize().x == doctest::Approx(200.0f));
+
+    // The scene's GUI drew at 800 by 600: its camera's ray through the middle meets the panel.
+    engine.gui->SceneRootFor(*level)->SetViewportSize(Float2{800.0f, 600.0f});
+    engine.devices.mouse.x = 400.0f;
+    engine.devices.mouse.y = 300.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == c->renderRoot.Get());
+    CHECK(engine.gui->PointerOverGui());
+    CHECK(engine.PointerClaimed());
+    engine.devices.mouse.down = true;
+    engine.Frame();
+    engine.devices.mouse.down = false;
+    engine.Frame();
+    CHECK(clicks == 1);
+
+    // Off the panel: the game's.
+    engine.devices.mouse.x = 10.0f;
+    engine.devices.mouse.y = 10.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() != c->renderRoot.Get());
+    CHECK_FALSE(engine.gui->PointerOverGui());
     engine.scenes.DestroyScene(level);
 }

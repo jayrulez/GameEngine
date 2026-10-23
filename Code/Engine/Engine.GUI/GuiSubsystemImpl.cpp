@@ -42,6 +42,7 @@ import experimental.gui.gamekit;
 import experimental.gui.shell;
 import experimental.gui.resources; // GuiDocument, GuiStyleSheet, kGuiResourceModule
 import experimental.gui.hosting;   // GuiPassRenderer, VgShaderLibrary
+import foundation.vg.renderer;     // VGPassTargets: a texture's multisampled pass
 
 using namespace foundation::core;
 
@@ -365,7 +366,7 @@ namespace engine::gui
     {
         builder.Attribute("displayName", String(u8"GUI Canvas"))
             .Attribute("category", String(u8"GUI"))
-            .Attribute("description", String(u8"Shows a GUI document in its scene, as a menu or a HUD."))
+            .Attribute("description", String(u8"Shows a GUI document in its scene, as a menu or a HUD, or draws it into a texture."))
             .DataVersion(1);
         builder.Property<&GuiCanvasComponent::document>("document");
         builder.Property<&GuiCanvasComponent::sheet>("sheet");
@@ -374,6 +375,9 @@ namespace engine::gui
         builder.Property<&GuiCanvasComponent::interactive>("interactive");
         builder.Property<&GuiCanvasComponent::scalerMode>("scalerMode");
         builder.Property<&GuiCanvasComponent::referenceResolution>("referenceResolution");
+        builder.Property<&GuiCanvasComponent::renderMode>("renderMode");
+        builder.Property<&GuiCanvasComponent::renderTextureWidth>("renderTextureWidth");
+        builder.Property<&GuiCanvasComponent::renderTextureHeight>("renderTextureHeight");
     }
 
     REFLECT_ENUM(GuiBillboardOrientation, "rtti::engine::gui")
@@ -430,6 +434,27 @@ namespace engine::gui
         return placement;
     }
 
+
+    REFLECT_ENUM(GuiCanvasRenderMode, "rtti::engine::gui")
+    {
+        builder.Value("ScreenOverlay", GuiCanvasRenderMode::ScreenOverlay);
+        builder.Value("RenderTexture", GuiCanvasRenderMode::RenderTexture);
+    }
+
+    REFLECT_VALUE(GuiWorldPanelComponent, "rtti::engine::gui")
+    {
+        builder.Attribute("displayName", String(u8"GUI World Panel"))
+            .Attribute("category", String(u8"GUI"))
+            .Attribute("description", String(u8"Shows a GUI document on a panel in the world, in the entity's plane, optionally taking the pointer."))
+            .DataVersion(1);
+        builder.Property<&GuiWorldPanelComponent::document>("document");
+        builder.Property<&GuiWorldPanelComponent::sheet>("sheet");
+        builder.Property<&GuiWorldPanelComponent::sizeMeters>("sizeMeters");
+        builder.Property<&GuiWorldPanelComponent::pixelsPerMeter>("pixelsPerMeter");
+        builder.Property<&GuiWorldPanelComponent::interactive>("interactive");
+        builder.Property<&GuiWorldPanelComponent::visible>("visible");
+    }
+
     void RegisterGuiComponentReflection()
     {
         static const bool once = []()
@@ -439,9 +464,91 @@ namespace engine::gui
             RttiRegisterEnum_GuiBillboardOrientation();
             RttiRegisterEnum_GuiBillboardScale();
             RttiRegisterValue_GuiBillboardComponent();
+            RttiRegisterEnum_GuiCanvasRenderMode();
+            RttiRegisterValue_GuiWorldPanelComponent();
             return true;
         }();
         (void)once;
+    }
+
+    Float2 WorldPanelPixels(const GuiWorldPanelComponent& panel) noexcept
+    {
+        const f32 density = Max(panel.pixelsPerMeter, 1.0f);
+        const u32 width = Clamp<u32>(static_cast<u32>(panel.sizeMeters.x * density + 0.5f), 16u, 2044u);
+        const u32 height = Clamp<u32>(static_cast<u32>(panel.sizeMeters.y * density + 0.5f), 16u, 2044u);
+        return Float2{static_cast<f32>(width), static_cast<f32>(height)};
+    }
+
+    void GuiPointerRay(const render::ViewCamera& camera, Float2 pointer, Float2 viewSize, Float3& origin, Float3& direction) noexcept
+    {
+        const Float4x4 inverse = Inverse(camera.ViewProjection());
+        const f32 ndcX = (pointer.x / viewSize.x) * 2.0f - 1.0f;
+        const f32 ndcY = 1.0f - (pointer.y / viewSize.y) * 2.0f;
+        const auto unproject = [&](f32 z)
+        {
+            const Float4 clip = Float4{ndcX, ndcY, z, 1.0f} * inverse;
+            const f32 w = clip.w != 0.0f ? clip.w : 1.0f;
+            return Float3{clip.x / w, clip.y / w, clip.z / w};
+        };
+        origin = unproject(projection::kNdcDepthNear);
+        const Float3 far = unproject(projection::kNdcDepthFar);
+        direction = Normalized(Float3{far.x - origin.x, far.y - origin.y, far.z - origin.z});
+    }
+
+    GuiPanelHit RayHitGuiPanel(Float3 origin, Float3 direction, const Float4x4& panelWorld, Float2 sizeMeters) noexcept
+    {
+        GuiPanelHit result;
+        const Float3 centre{panelWorld.m[3][0], panelWorld.m[3][1], panelWorld.m[3][2]};
+        const Float3 right = Normalized(Float3{panelWorld.m[0][0], panelWorld.m[0][1], panelWorld.m[0][2]});
+        const Float3 up = Normalized(Float3{panelWorld.m[1][0], panelWorld.m[1][1], panelWorld.m[1][2]});
+        const Float3 normal = Cross(right, up);
+        const f32 facing = Dot(direction, normal);
+        if (Abs(facing) < 1.0e-6f)
+            return result; // along the plane
+        const f32 t = Dot(Float3{centre.x - origin.x, centre.y - origin.y, centre.z - origin.z}, normal) / facing;
+        if (t <= 0.0f)
+            return result; // behind the pointer
+        const Float3 local{origin.x + direction.x * t - centre.x, origin.y + direction.y * t - centre.y, origin.z + direction.z * t - centre.z};
+        const f32 x = Dot(local, right);
+        const f32 y = Dot(local, up);
+        if (Abs(x) > sizeMeters.x * 0.5f || Abs(y) > sizeMeters.y * 0.5f)
+            return result;
+        result.Hit = true;
+        result.Distance = t;
+        result.Uv = Float2{x / sizeMeters.x + 0.5f, 0.5f - y / sizeMeters.y};
+        return result;
+    }
+
+    namespace
+    {
+        // The mouse as a world panel sees it: at the point the ray crosses it, in its pixels; its
+        // buttons, wheel and the rest the real one's.
+        class PanelMouse final : public foundation::shell::IMouse
+        {
+        public:
+            PanelMouse(foundation::shell::IMouse* mouse, Float2 at) noexcept : m_mouse(mouse), m_at(at) {}
+            [[nodiscard]] f32 X() const override { return m_at.x; }
+            [[nodiscard]] f32 Y() const override { return m_at.y; }
+            [[nodiscard]] f32 GlobalX() const override { return m_mouse->GlobalX(); }
+            [[nodiscard]] f32 GlobalY() const override { return m_mouse->GlobalY(); }
+            [[nodiscard]] f32 DeltaX() const override { return m_mouse->DeltaX(); }
+            [[nodiscard]] f32 DeltaY() const override { return m_mouse->DeltaY(); }
+            [[nodiscard]] f32 ScrollX() const override { return m_mouse->ScrollX(); }
+            [[nodiscard]] f32 ScrollY() const override { return m_mouse->ScrollY(); }
+            [[nodiscard]] bool IsButtonDown(foundation::shell::MouseButton button) const override { return m_mouse->IsButtonDown(button); }
+            [[nodiscard]] bool IsButtonPressed(foundation::shell::MouseButton button) const override { return m_mouse->IsButtonPressed(button); }
+            [[nodiscard]] bool IsButtonReleased(foundation::shell::MouseButton button) const override { return m_mouse->IsButtonReleased(button); }
+            [[nodiscard]] bool RelativeMode() const override { return m_mouse->RelativeMode(); }
+            void SetRelativeMode(bool enabled) override { m_mouse->SetRelativeMode(enabled); }
+            [[nodiscard]] bool CursorVisible() const override { return m_mouse->CursorVisible(); }
+            void SetCursorVisible(bool visible) override { m_mouse->SetCursorVisible(visible); }
+            void SetCursor(foundation::shell::CursorType cursor) override { m_mouse->SetCursor(cursor); }
+            void SetGlobalCapture(bool capture) override { m_mouse->SetGlobalCapture(capture); }
+
+        private:
+            foundation::shell::IMouse* m_mouse;
+            Float2 m_at;
+        };
     }
 
     // ===================================================================================
@@ -450,7 +557,6 @@ namespace engine::gui
 
     struct GuiSubsystem::RenderState
     {
-        explicit RenderState(IAllocator& allocator) noexcept : Shaders(allocator) {}
 
         rhi::Device* Device = nullptr;
         lab::VgShaderLibrary Shaders;
@@ -459,11 +565,101 @@ namespace engine::gui
         lab::GuiPassRenderer::Prepared Screen{};
         render::ScreenOverlayView ScreenView{};
         bool ScreenPrepared = false;
+
+        // A texture a canvas or a panel draws into: the sampled texture, and the multisampled
+        // colour and stencil its pass resolves from (none: a plain pass straight into it).
+        struct Target
+        {
+            explicit Target(IAllocator&) noexcept {}
+            const lab::SceneRoot* Root = nullptr; // whose
+            scene::Scene* Scene = nullptr;
+            scene::EntityHandle Entity{};
+            rhi::Texture* Texture = nullptr;
+            rhi::TextureView* View = nullptr;
+            foundation::vg::renderer::VGPassTargets Pass;
+            bool Multisampled = false;
+            u32 Width = 0;
+            u32 Height = 0;
+            rhi::ResourceState State = rhi::ResourceState::Undefined;
+            bool Seen = false;
+        };
+        Array<UniquePtr<Target>> Targets;
+
+        explicit RenderState(IAllocator& allocator, bool) noexcept : Shaders(allocator), Targets(allocator) {}
+        ~RenderState()
+        {
+            if (Device == nullptr)
+                return;
+            Device->WaitIdle();
+            for (const UniquePtr<Target>& target : Targets)
+                Release(*target);
+        }
+        void Release(Target& target)
+        {
+            target.Pass.Destroy();
+            if (target.View != nullptr)
+                Device->DestroyTextureView(target.View);
+            if (target.Texture != nullptr)
+                Device->DestroyTexture(target.Texture);
+            target.View = nullptr;
+            target.Texture = nullptr;
+        }
+        // `root`'s texture at `width` x `height`, made or made again at that size (the GPU waited
+        // for: the scene may still sample the old one); null when the device makes none.
+        Target* EnsureTarget(const lab::SceneRoot& root, scene::Scene& scene, scene::EntityHandle entity, u32 width, u32 height,
+                             IAllocator& allocator)
+        {
+            Target* found = nullptr;
+            for (const UniquePtr<Target>& target : Targets)
+                if (target->Root == &root)
+                    found = target.Get();
+            if (found == nullptr)
+            {
+                UniquePtr<Target> made = MakeUnique<Target>(allocator, allocator);
+                made->Root = &root;
+                made->Scene = &scene;
+                made->Entity = entity;
+                found = made.Get();
+                Targets.PushBack(Move(made));
+            }
+            found->Seen = true;
+            if (found->Texture != nullptr && found->Width == width && found->Height == height)
+                return found;
+            if (found->Texture != nullptr)
+            {
+                Device->WaitIdle();
+                Release(*found);
+            }
+            if (!Device->CreateTexture(rhi::TextureDesc::RenderTarget(kTextureFormat, width, height, 1, u8"GUI texture"), found->Texture).IsOk())
+            {
+                found->Texture = nullptr;
+                return nullptr;
+            }
+            rhi::TextureViewDesc viewDesc{};
+            viewDesc.format = kTextureFormat;
+            if (!Device->CreateTextureView(found->Texture, viewDesc, found->View).IsOk())
+            {
+                Device->DestroyTexture(found->Texture);
+                found->Texture = nullptr;
+                found->View = nullptr;
+                return nullptr;
+            }
+            found->Pass.Configure(*Device);
+            found->Multisampled = found->Pass.Create(kTextureFormat, width, height);
+            found->Width = width;
+            found->Height = height;
+            found->State = rhi::ResourceState::Undefined;
+            return found;
+        }
+
+        // sRGB, as the window's: the shaders write linear light, the texture encodes it, the
+        // scene samples linear light back.
+        static constexpr rhi::TextureFormat kTextureFormat = rhi::TextureFormat::RGBA8UnormSrgb;
     };
 
     GuiSubsystem::GuiSubsystem(IAllocator& allocator, foundation::vfs::IFileSystem& dataFileSystem)
         : m_allocator(allocator, RegisterMemoryTag("GUI")), m_dataFileSystem(&dataFileSystem), m_sheets(m_allocator),
-          m_sceneTiers(m_allocator)
+          m_sceneTiers(m_allocator), m_textureRoots(m_allocator)
     {
         m_context = MakeRef<lab::GUIContext>(m_allocator);
         m_resources = MakeUnique<GuiResourceProvider>(m_allocator, m_allocator);
@@ -566,6 +762,7 @@ namespace engine::gui
         m_pressRoot = nullptr;
         m_input = nullptr;
         m_sceneTiers.Clear();
+        m_textureRoots.Clear();
         m_screenBridge = nullptr;
         if (m_screens)
             m_screens->Clear();
@@ -580,15 +777,30 @@ namespace engine::gui
     void GuiSubsystem::BeginFrame(f32 deltaTime)
     {
         PROFILE_SCOPE("GUI.BeginFrame");
+        ++m_frameSerial;
         if (m_render && m_render->Renderer)
             m_render->Renderer->BeginFrame();
         if (m_resources->Poll())
             ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
+        for (const UniquePtr<TextureRoot>& root : m_textureRoots)
+            root->Seen = false;
         for (SceneTier& tier : m_sceneTiers)
         {
             SyncBillboards(tier);
             SyncCanvases(tier);
+            SyncPanels(tier);
         }
+        // The roots of textures whose canvas or panel went (their textures go as RenderTextures
+        // next runs).
+        for (usize i = m_textureRoots.Size(); i-- > 0;)
+            if (!m_textureRoots[i]->Seen)
+            {
+                if (m_activeRoot == m_textureRoots[i]->Root.Get())
+                    m_activeRoot = nullptr;
+                if (m_pressRoot == m_textureRoots[i]->Root.Get())
+                    m_pressRoot = nullptr;
+                m_textureRoots.RemoveAt(i);
+            }
         PumpInput();
         // Unscaled: menus move while the game is paused.
         m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
@@ -664,6 +876,15 @@ namespace engine::gui
 
     void GuiSubsystem::OnDestroying(scene::Scene& scene)
     {
+        for (usize i = m_textureRoots.Size(); i-- > 0;) // its canvases' and panels' own roots
+            if (m_textureRoots[i]->Scene == &scene)
+            {
+                if (m_activeRoot == m_textureRoots[i]->Root.Get())
+                    m_activeRoot = nullptr;
+                if (m_pressRoot == m_textureRoots[i]->Root.Get())
+                    m_pressRoot = nullptr;
+                m_textureRoots.RemoveAt(i);
+            }
         for (usize i = 0; i < m_sceneTiers.Size(); ++i)
             if (m_sceneTiers[i].Scene == &scene)
             {
@@ -676,9 +897,86 @@ namespace engine::gui
             }
     }
 
+    RefPtr<lab::Node> GuiSubsystem::BuildDocument(const lab::GuiDocument& document)
+    {
+        if (document.markup.IsEmpty())
+            return {};
+        lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), m_fonts.Get());
+        loader.SetDataModel(m_context->GetDataRef());
+        RefPtr<lab::Node> root = loader.LoadFromString(document.markup.AsView());
+        if (!root)
+            LOG_WARNING(u8"GUI", u8"a component's document did not build");
+        return root;
+    }
+
+    // A component's tree built again when its document's product changed (a re-cook, another
+    // document): the old one out of wherever it was. True when it was.
+    template <typename Component>
+    bool GuiSubsystem::RebuildIfChanged(Component& c)
+    {
+        lab::GuiDocument* document = c.document.Get();
+        if (document == c.builtFrom.Get())
+            return false;
+        if (c.root && c.root->GetParent() != nullptr)
+            c.root->GetParent()->RemoveChild(c.root.Get());
+        c.root = document != nullptr ? BuildDocument(*document) : RefPtr<lab::Node>{};
+        c.sheetFrom = nullptr;
+        c.builtFrom = RefPtr<Object>(document);
+        return true;
+    }
+
+    // A component's own sheet on its tree (in a GUI by now), again when its product changed.
+    template <typename Component>
+    void GuiSubsystem::ApplySheet(Component& c, StringView name)
+    {
+        lab::GuiStyleSheet* sheet = c.sheet.Get();
+        if (!c.root || sheet == c.sheetFrom.Get())
+            return;
+        if (sheet != nullptr)
+            (void)m_styles.SetSubtreeSheet(*c.root, lab::CSSParser::Parse(sheet->css.AsView(), name));
+        else
+            m_styles.RemoveSubtreeSheet(*c.root);
+        c.sheetFrom = RefPtr<Object>(sheet);
+    }
+
+    // The root of its own a texture's content (a render-texture canvas, a world panel) is drawn
+    // in: made for the entity the first time, holding `content` alone, kept while seen each frame.
+    RefPtr<lab::SceneRoot> GuiSubsystem::TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, lab::Node& content)
+    {
+        TextureRoot* found = nullptr;
+        for (const UniquePtr<TextureRoot>& known : m_textureRoots)
+            if (known->Scene == &scene && known->Entity == entity && !known->Seen)
+                found = known.Get();
+        if (found == nullptr)
+        {
+            UniquePtr<TextureRoot> made = MakeUnique<TextureRoot>(m_allocator);
+            made->Scene = &scene;
+            made->Entity = entity;
+            made->Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+            {
+                lab::Node::StyleWriteScope defaults(*made->Root);
+                made->Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // the content fills it
+            }
+            made->Bridge = MakeBridge(*made->Root);
+            found = made.Get();
+            m_textureRoots.PushBack(Move(made));
+        }
+        found->Seen = true;
+        if (content.GetParent() != found->Root.Get())
+        {
+            if (content.GetParent() != nullptr)
+                content.GetParent()->RemoveChild(&content);
+            while (found->Root->ChildCount() > 0)
+                found->Root->RemoveChild(found->Root->GetChildAt(0));
+            found->Root->AddChild(&content);
+        }
+        return found->Root;
+    }
+
     // Each canvas's tree in line with its component: built from its document (again when the
-    // document is cooked again), in its host in the scene's root, its sheet, shown while the canvas
-    // and its entity are; the hosts of canvases gone swept; the hosts ordered.
+    // document is cooked again), in its host in the scene's root or a root of its own for its
+    // texture, its sheet, shown while the canvas and its entity are; the hosts of canvases gone
+    // swept; the hosts ordered.
     void GuiSubsystem::SyncCanvases(SceneTier& tier)
     {
         auto* canvases = tier.Scene->GetSystem<GuiCanvasComponentManager>();
@@ -687,50 +985,44 @@ namespace engine::gui
             canvases->ForEach(
                 [&](GuiCanvasComponent& c, scene::EntityHandle entity)
                 {
-                    lab::GuiDocument* document = c.document.Get();
-                    if (document != c.builtFrom.Get())
+                    const bool wantsTexture = c.renderMode == GuiCanvasRenderMode::RenderTexture;
+                    if (!RebuildIfChanged(c) && c.root && wantsTexture != (c.renderRoot.Get() != nullptr))
                     {
-                        if (c.root && c.root->GetParent() != nullptr)
+                        // Its mode changed: out of where it was, its sheet applied afresh where it goes.
+                        if (c.root->GetParent() != nullptr)
                             c.root->GetParent()->RemoveChild(c.root.Get());
-                        c.root = nullptr;
                         c.sheetFrom = nullptr;
-                        if (document != nullptr && !document->markup.IsEmpty())
-                        {
-                            lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), m_fonts.Get());
-                            loader.SetDataModel(m_context->GetDataRef());
-                            c.root = loader.LoadFromString(document->markup.AsView());
-                            if (!c.root)
-                                LOG_WARNING(u8"GUI", u8"a canvas's document did not build");
-                        }
-                        c.builtFrom = RefPtr<Object>(document);
                     }
-                    if (!c.host)
+                    if (wantsTexture)
                     {
-                        c.host = MakeRef<CanvasHost>(m_allocator);
-                        tier.Root->AddChild(c.host.Get());
-                        tier.Canvases.PushBack(c.host);
+                        c.host = nullptr; // swept below, unseen
+                        c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<lab::SceneRoot>{};
                     }
-                    auto* host = static_cast<CanvasHost*>(c.host.Get());
-                    host->Configure(c.order, c.scalerMode, c.referenceResolution);
-                    seen.PushBack(host);
+                    else
+                    {
+                        c.renderRoot = nullptr;
+                        c.renderTexture = nullptr;
+                        c.renderTextureView = nullptr;
+                        if (!c.host)
+                        {
+                            c.host = MakeRef<CanvasHost>(m_allocator);
+                            tier.Root->AddChild(c.host.Get());
+                            tier.Canvases.PushBack(c.host);
+                        }
+                        auto* host = static_cast<CanvasHost*>(c.host.Get());
+                        host->Configure(c.order, c.scalerMode, c.referenceResolution);
+                        seen.PushBack(host);
+                        if (c.root && c.root->GetParent() == nullptr)
+                            host->AddChild(c.root.Get());
+                    }
                     if (!c.root)
                         return;
-                    if (c.root->GetParent() == nullptr)
-                        host->AddChild(c.root.Get());
-                    lab::GuiStyleSheet* sheet = c.sheet.Get();
-                    if (sheet != c.sheetFrom.Get())
-                    {
-                        if (sheet != nullptr)
-                            (void)m_styles.SetSubtreeSheet(*c.root, lab::CSSParser::Parse(sheet->css.AsView(), StringView(u8"canvas")));
-                        else
-                            m_styles.RemoveSubtreeSheet(*c.root);
-                        c.sheetFrom = RefPtr<Object>(sheet);
-                    }
+                    ApplySheet(c, StringView(u8"canvas"));
                     c.root->SetDisplayed(c.visible && tier.Scene->IsEffectivelyActive(entity));
                     c.root->SetInert(!c.interactive);
                 });
-        // The hosts whose canvas went (despawned, the component removed), then the order: by
-        // `order`, stably, after whatever else the root holds.
+        // The hosts whose canvas went (despawned, the component removed, drawn into a texture
+        // now), then the order: by `order`, stably, after whatever else the root holds.
         Array<CanvasHost*> hosts(m_allocator);
         for (usize i = 0; i < tier.Canvases.Size();)
         {
@@ -774,23 +1066,7 @@ namespace engine::gui
             billboards->ForEach(
                 [&](GuiBillboardComponent& c, scene::EntityHandle entity)
                 {
-                    lab::GuiDocument* document = c.document.Get();
-                    if (document != c.builtFrom.Get())
-                    {
-                        if (c.root && c.root->GetParent() != nullptr)
-                            c.root->GetParent()->RemoveChild(c.root.Get());
-                        c.root = nullptr;
-                        c.sheetFrom = nullptr;
-                        if (document != nullptr && !document->markup.IsEmpty())
-                        {
-                            lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), m_fonts.Get());
-                            loader.SetDataModel(m_context->GetDataRef());
-                            c.root = loader.LoadFromString(document->markup.AsView());
-                            if (!c.root)
-                                LOG_WARNING(u8"GUI", u8"a billboard's document did not build");
-                        }
-                        c.builtFrom = RefPtr<Object>(document);
-                    }
+                    (void)RebuildIfChanged(c);
                     if (!c.root)
                         return;
                     if (c.root->GetParent() == nullptr)
@@ -799,15 +1075,7 @@ namespace engine::gui
                         tier.Billboards->AddChild(c.root.Get());
                     }
                     seen.PushBack(c.root.Get());
-                    lab::GuiStyleSheet* sheet = c.sheet.Get();
-                    if (sheet != c.sheetFrom.Get())
-                    {
-                        if (sheet != nullptr)
-                            (void)m_styles.SetSubtreeSheet(*c.root, lab::CSSParser::Parse(sheet->css.AsView(), StringView(u8"billboard")));
-                        else
-                            m_styles.RemoveSubtreeSheet(*c.root);
-                        c.sheetFrom = RefPtr<Object>(sheet);
-                    }
+                    ApplySheet(c, StringView(u8"billboard"));
                     c.root->SetDisplayed(c.visible && tier.Scene->IsEffectivelyActive(entity));
                 });
         for (usize i = tier.Billboards->ChildCount(); i-- > 0;)
@@ -819,6 +1087,29 @@ namespace engine::gui
             if (!live)
                 tier.Billboards->RemoveChild(child);
         }
+    }
+
+    // Each world panel's tree in line with its component, in a root of its own for its texture.
+    void GuiSubsystem::SyncPanels(SceneTier& tier)
+    {
+        auto* panels = tier.Scene->GetSystem<GuiWorldPanelComponentManager>();
+        if (panels == nullptr)
+            return;
+        panels->ForEach(
+            [&](GuiWorldPanelComponent& c, scene::EntityHandle entity)
+            {
+                (void)RebuildIfChanged(c);
+                c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<lab::SceneRoot>{};
+                if (!c.root)
+                {
+                    c.renderTexture = nullptr;
+                    c.renderTextureView = nullptr;
+                    return;
+                }
+                ApplySheet(c, StringView(u8"panel"));
+                c.root->SetDisplayed(c.visible && tier.Scene->IsEffectivelyActive(entity));
+                c.root->SetInert(!c.interactive);
+            });
     }
 
     // Each shown billboard placed for `view`: hung by its bottom centre on its projected point (its
@@ -883,7 +1174,47 @@ namespace engine::gui
         for (const SceneTier& tier : m_sceneTiers)
             if (tier.Root.Get() == root)
                 return tier.Bridge.Get();
+        for (const UniquePtr<TextureRoot>& texture : m_textureRoots)
+            if (texture->Root.Get() == root)
+                return texture->Bridge.Get();
         return nullptr;
+    }
+
+    // The nearest interactive world panel the pointer's ray crosses, through each reachable scene's
+    // camera at the shape its GUI last drew (through the view's centre when the mouse is captured:
+    // the crosshair is the pointer), and the point in its pixels; none: no root.
+    GuiSubsystem::InputTarget GuiSubsystem::PanelUnderPointer(Float2 point, bool centreAim)
+    {
+        InputTarget found;
+        f32 nearest = 0.0f;
+        for (const SceneTier& tier : m_sceneTiers)
+        {
+            auto* panels = tier.Scene->GetSystem<GuiWorldPanelComponentManager>();
+            if (panels == nullptr || !InputReaches(tier))
+                continue;
+            const Float2 viewSize = tier.Root->GetViewportSize();
+            if (viewSize.x <= 0.0f || viewSize.y <= 0.0f)
+                continue; // not drawn yet: no shape to cast through
+            render::ViewCamera camera;
+            if (!engine::render::ExtractPrimaryCamera(*tier.Scene, camera, nullptr, viewSize.x / viewSize.y))
+                continue;
+            Float3 origin;
+            Float3 direction;
+            GuiPointerRay(camera, centreAim ? Float2{viewSize.x * 0.5f, viewSize.y * 0.5f} : point, viewSize, origin, direction);
+            panels->ForEach(
+                [&](GuiWorldPanelComponent& c, scene::EntityHandle entity)
+                {
+                    if (!c.interactive || !c.visible || !c.renderRoot || !tier.Scene->IsEffectivelyActive(entity))
+                        return;
+                    const GuiPanelHit hit = RayHitGuiPanel(origin, direction, tier.Scene->GetWorldMatrix(entity), c.sizeMeters);
+                    if (!hit.Hit || (found.Root != nullptr && hit.Distance >= nearest))
+                        return;
+                    const Float2 pixels = WorldPanelPixels(c);
+                    found = InputTarget{c.renderRoot.Get(), Float2{hit.Uv.x * pixels.x, hit.Uv.y * pixels.y}, true};
+                    nearest = hit.Distance;
+                });
+        }
+        return found;
     }
 
     // Whether this frame's input may reach `tier`'s scene: the source's own scene when it is bound
@@ -897,30 +1228,33 @@ namespace engine::gui
         return m_input->UnboundScenePolicy() == engine::input::UnboundInputScenePolicy::AllScenes;
     }
 
-    lab::SceneRoot* GuiSubsystem::PickInputRoot(bool pointer, Float2 point)
+    GuiSubsystem::InputTarget GuiSubsystem::PickInputRoot(bool pointer, Float2 point, bool centreAim)
     {
         if (!m_screenRoot)
-            return nullptr;
+            return {};
+        const InputTarget screen{m_screenRoot.Get(), point, false};
         // An occupied overlay layer (a system menu, a loading screen) is modal.
         for (usize i = 0; m_overlay && i < m_overlay->ChildCount(); ++i)
             if (m_overlay->GetChildAt(i)->IsDisplayed())
-                return m_screenRoot.Get();
-        // The GUI under the pointer, the screen tier's over a scene's.
+                return screen;
+        // The GUI under the pointer, the screen tier's over a scene's, then a world panel's.
         if (pointer)
         {
             if (m_screenRoot->GetEventDispatcher()->IsPointerOver(point))
-                return m_screenRoot.Get();
+                return screen;
             for (const SceneTier& tier : m_sceneTiers)
                 if (InputReaches(tier) && tier.Root->GetEventDispatcher()->IsPointerOver(point))
-                    return tier.Root.Get();
+                    return InputTarget{tier.Root.Get(), point, false};
+            if (const InputTarget panel = PanelUnderPointer(point, centreAim); panel.Root != nullptr)
+                return panel;
         }
         // The keys and a pad: the screens a game pushed, else a scene's GUI.
         if (m_screens && m_screens->Count() > 0)
-            return m_screenRoot.Get();
+            return screen;
         for (const SceneTier& tier : m_sceneTiers)
             if (InputReaches(tier) && HasContent(tier))
-                return tier.Root.Get();
-        return m_screenRoot.Get();
+                return InputTarget{tier.Root.Get(), point, false};
+        return screen;
     }
 
     void GuiSubsystem::PumpInput()
@@ -947,8 +1281,20 @@ namespace engine::gui
                                                            mouse->IsButtonDown(foundation::shell::MouseButton::Right) ||
                                                            mouse->IsButtonDown(foundation::shell::MouseButton::Middle)));
 
-        // One root a frame; a held press stays with the root it began in, so its release lands.
-        lab::SceneRoot* root = held && m_pressRoot != nullptr ? m_pressRoot : PickInputRoot(pointer, point);
+        // One root a frame; a held press stays with the root it began in, so its release lands (on a
+        // panel, where the ray crosses it still, else where it last did).
+        const bool centreAim = mouse != nullptr && mouse->RelativeMode();
+        InputTarget target = PickInputRoot(pointer, point, centreAim);
+        if (held && m_pressRoot != nullptr && target.Root != m_pressRoot)
+        {
+            bool panel = false;
+            for (const UniquePtr<TextureRoot>& texture : m_textureRoots)
+                panel = panel || texture->Root.Get() == m_pressRoot;
+            target = InputTarget{m_pressRoot, panel ? m_panelPoint : point, panel};
+        }
+        if (target.Panel)
+            m_panelPoint = target.Point;
+        lab::SceneRoot* root = target.Root;
         if (root != m_activeRoot && m_activeRoot != nullptr && pointer)
         {
             // The root input leaves: nothing in it stays hovered.
@@ -961,9 +1307,16 @@ namespace engine::gui
         if (held && m_pressRoot == nullptr)
         {
             m_pressRoot = root; // the press begins: where it began says whether the GUI took it
-            m_pressTaken = root->GetEventDispatcher()->IsPointerOver(point);
+            m_pressTaken = target.Panel || root->GetEventDispatcher()->IsPointerOver(point);
         }
-        bridge->PumpDevices(mouse, touch, devices.Keyboard());
+        if (target.Panel)
+        {
+            // A panel's pointer is where the ray crosses it, in its pixels (fingers stay the view's).
+            PanelMouse mapped(mouse, target.Point);
+            bridge->PumpDevices(mouse != nullptr ? &mapped : nullptr, nullptr, devices.Keyboard());
+        }
+        else
+            bridge->PumpDevices(mouse, touch, devices.Keyboard());
         // Keys, text and the pad through their events, in order; the pointer was polled above.
         for (const foundation::shell::InputEvent& event : devices.Events())
             switch (event.kind)
@@ -985,7 +1338,7 @@ namespace engine::gui
         // What the action layer is told the GUI took: the pointer over GUI that takes it, or a press
         // that began there while it is held; the keys while text is edited. Added to Engine.UI's
         // claim (its pump runs first in this lane); EndFrame clears them after the frame read them.
-        m_pointerTaken = pointer && (held ? m_pressTaken : root->GetEventDispatcher()->IsPointerOver(point));
+        m_pointerTaken = pointer && (held ? m_pressTaken : target.Panel || root->GetEventDispatcher()->IsPointerOver(point));
         const bool keys = root->GetEventDispatcher()->WantsTextInput();
         if (!held)
         {
@@ -1014,7 +1367,7 @@ namespace engine::gui
     {
         if (m_render && m_render->Device != nullptr)
             return;
-        m_render = MakeUnique<RenderState>(m_allocator, m_allocator);
+        m_render = MakeUnique<RenderState>(m_allocator, m_allocator, true);
         m_render->Device = &device;
         if (!m_render->Shaders.Load(device, *m_dataFileSystem))
         {
@@ -1113,6 +1466,152 @@ namespace engine::gui
         }
         StyleAndLayOut(*m_screenRoot, Float2{static_cast<f32>(view.width), static_cast<f32>(view.height)});
         m_render->Renderer->DrawInPass(*m_screenRoot, encoder, ScreenPass(view));
+    }
+
+    usize GuiSubsystem::TextureCount() const noexcept { return m_render ? m_render->Targets.Size() : 0; }
+
+    namespace
+    {
+        // A texture's content drawn into it: laid out at its size (inset by `padding` on each side,
+        // left clear), offscreen layers first, then its pass, the texture left ready to sample.
+        void DrawTexture(lab::GuiPassRenderer& renderer, rhi::CommandEncoder& encoder, auto& target, lab::SceneRoot& root, u32 padding,
+                         u32 frameIndex)
+        {
+            lab::GuiPassView view;
+            view.X = static_cast<i32>(padding);
+            view.Y = static_cast<i32>(padding);
+            view.Width = target.Width - 2 * padding;
+            view.Height = target.Height - 2 * padding;
+            view.Format = rhi::TextureFormat::RGBA8UnormSrgb;
+            if (target.Multisampled)
+            {
+                const foundation::vg::renderer::VGTargetConfig config = target.Pass.ConfigFor();
+                view.SampleCount = config.sampleCount;
+                view.DepthStencilFormat = config.depthStencilFormat;
+            }
+            view.FrameIndex = frameIndex;
+            const lab::GuiPassRenderer::Prepared prepared = renderer.Prepare(root, view, &encoder);
+            encoder.TransitionTexture(target.Texture, target.State, rhi::ResourceState::RenderTarget);
+            const rhi::ClearColor clear{0.0f, 0.0f, 0.0f, 0.0f};
+            rhi::RenderPassDesc pass{};
+            if (target.Multisampled)
+                pass = target.Pass.BeginPass(encoder, target.View, clear, u8"GUI texture");
+            else
+            {
+                rhi::ColorAttachment color{};
+                color.view = target.View;
+                color.loadOp = rhi::LoadOp::Clear;
+                color.storeOp = rhi::StoreOp::Store;
+                color.clearValue = clear;
+                pass.colorAttachments.Add(color);
+            }
+            if (rhi::RenderPassEncoder* passEncoder = encoder.BeginRenderPass(pass))
+            {
+                renderer.Draw(*passEncoder, prepared);
+                passEncoder->End();
+            }
+            encoder.TransitionTexture(target.Texture, rhi::ResourceState::RenderTarget, rhi::ResourceState::ShaderRead);
+            target.State = rhi::ResourceState::ShaderRead;
+        }
+    }
+
+    void GuiSubsystem::RenderTextures(rhi::CommandEncoder& encoder, u32 frameIndex)
+    {
+        if (!IsRenderReady() || m_texturesSerial == m_frameSerial)
+            return;
+        m_texturesSerial = m_frameSerial; // several pages of an editor share one GUI: once a frame
+        lab::GuiPassRenderer& renderer = *m_render->Renderer;
+        (void)renderer.RecordBakes(encoder, frameIndex); // before any pass samples them
+        for (const UniquePtr<RenderState::Target>& target : m_render->Targets)
+            target->Seen = false;
+        for (SceneTier& tier : m_sceneTiers)
+        {
+            auto* sprites = tier.Scene->GetSystem<engine::render::SpriteComponentManager>();
+            auto* decals = tier.Scene->GetSystem<engine::render::DecalComponentManager>();
+            // A render-texture canvas's entity's own sprite and decal show its texture (the same
+            // override a script would set); one that showed the old one lets it go.
+            const auto show = [&](scene::EntityHandle entity, rhi::TextureView* was, rhi::TextureView* now)
+            {
+                if (auto* sprite = sprites != nullptr ? sprites->Get(entity) : nullptr; sprite != nullptr && (now != nullptr || sprite->texture == was))
+                    sprite->texture = now;
+                if (auto* decal = decals != nullptr ? decals->Get(entity) : nullptr; decal != nullptr && (now != nullptr || decal->texture == was))
+                    decal->texture = now;
+            };
+            if (auto* canvases = tier.Scene->GetSystem<GuiCanvasComponentManager>())
+                canvases->ForEach(
+                    [&](GuiCanvasComponent& c, scene::EntityHandle entity)
+                    {
+                        if (c.renderMode != GuiCanvasRenderMode::RenderTexture || !c.renderRoot)
+                            return;
+                        rhi::TextureView* was = c.renderTextureView;
+                        RenderState::Target* target = m_render->EnsureTarget(*c.renderRoot, *tier.Scene, entity, Max(c.renderTextureWidth, 1u),
+                                                                             Max(c.renderTextureHeight, 1u), m_allocator);
+                        c.renderTexture = target != nullptr ? target->Texture : nullptr;
+                        c.renderTextureView = target != nullptr ? target->View : nullptr;
+                        show(entity, was, c.renderTextureView);
+                        if (target == nullptr || !c.visible || !tier.Scene->IsEffectivelyActive(entity))
+                            return; // the texture kept, not drawn
+                        StyleAndLayOut(*c.renderRoot, Float2{static_cast<f32>(target->Width), static_cast<f32>(target->Height)});
+                        DrawTexture(renderer, encoder, *target, *c.renderRoot, 0, frameIndex);
+                    });
+            // A world panel's sprite is driven outright: the quad in its entity's plane, a little
+            // larger than the panel for the transparent edge its texture keeps (the quad's own edge
+            // falls in clear texels, smoothed by sampling), drawn after the tone mapping so the
+            // panel keeps its authored colours, as the screen's GUI does.
+            constexpr u32 kEdge = 2;
+            if (auto* panels = tier.Scene->GetSystem<GuiWorldPanelComponentManager>())
+                panels->ForEach(
+                    [&](GuiWorldPanelComponent& c, scene::EntityHandle entity)
+                    {
+                        if (!c.renderRoot)
+                            return;
+                        const Float2 pixels = WorldPanelPixels(c);
+                        const u32 width = static_cast<u32>(pixels.x) + 2 * kEdge;
+                        const u32 height = static_cast<u32>(pixels.y) + 2 * kEdge;
+                        RenderState::Target* target = m_render->EnsureTarget(*c.renderRoot, *tier.Scene, entity, width, height, m_allocator);
+                        c.renderTexture = target != nullptr ? target->Texture : nullptr;
+                        c.renderTextureView = target != nullptr ? target->View : nullptr;
+                        const bool shown = c.visible && tier.Scene->IsEffectivelyActive(entity);
+                        if (sprites != nullptr)
+                        {
+                            engine::render::SpriteComponent* sprite = sprites->Get(entity);
+                            if (sprite == nullptr)
+                                sprite = &sprites->Add(entity);
+                            sprite->orientation = engine::render::SpriteOrientation::EntityOriented;
+                            sprite->size = Float2{c.sizeMeters.x * static_cast<f32>(width) / pixels.x, c.sizeMeters.y * static_cast<f32>(height) / pixels.y};
+                            sprite->texture = c.renderTextureView;
+                            sprite->visible = shown && target != nullptr;
+                            sprite->postTonemap = true;
+                        }
+                        if (target == nullptr || !shown)
+                            return;
+                        StyleAndLayOut(*c.renderRoot, pixels);
+                        DrawTexture(renderer, encoder, *target, *c.renderRoot, kEdge, frameIndex);
+                    });
+        }
+        // The textures whose canvas or panel went: a sprite or decal of a scene still here that
+        // shows one lets it go, then it goes (the GPU waited for).
+        for (usize i = m_render->Targets.Size(); i-- > 0;)
+        {
+            RenderState::Target& target = *m_render->Targets[i];
+            if (target.Seen)
+                continue;
+            bool sceneHere = false;
+            for (const SceneTier& tier : m_sceneTiers)
+                sceneHere = sceneHere || tier.Scene == target.Scene;
+            if (sceneHere && target.View != nullptr)
+            {
+                if (auto* sprites = target.Scene->GetSystem<engine::render::SpriteComponentManager>())
+                    if (auto* sprite = sprites->Get(target.Entity); sprite != nullptr && sprite->texture == target.View)
+                        sprite->texture = nullptr;
+                if (auto* decals = target.Scene->GetSystem<engine::render::DecalComponentManager>())
+                    if (auto* decal = decals->Get(target.Entity); decal != nullptr && decal->texture == target.View)
+                        decal->texture = nullptr;
+            }
+            m_render->Device->WaitIdle();
+            m_render->Release(target);
+            m_render->Targets.RemoveAt(i);
+        }
     }
 
     const engine::DomainModule& GuiDomain() noexcept

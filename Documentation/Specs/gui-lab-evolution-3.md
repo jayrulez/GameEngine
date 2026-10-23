@@ -1164,7 +1164,18 @@ Each a layer with its tests.
     point), from its last layout's size (a new one settles the next frame). A scene's GUI draws, and
     takes the keys, only while it holds a canvas or a billboard.
   - **E7c Render textures and world panels.** A canvas drawn into a texture, a world panel's quad,
-    the pointer by a ray, the bakes recorded before the scene.
+    the pointer by a ray, the bakes recorded before the scene. Built (vg, 2026-10-23): a canvas's
+    `renderMode` (ScreenOverlay or RenderTexture, a texture's size) and `gui.WorldPanel` (a size in
+    metres, a density, interactive, visible), each in a root of its own with its input;
+    `RenderTextures` (the host's, before the scene, once a frame) records the bakes, then draws each
+    into an sRGB texture (multisampled with a stencil when the device takes it), a canvas's
+    entity's sprite and decal shown it, a panel's sprite driven (entity-oriented, after the tone
+    mapping, a transparent two-pixel edge); textures made again at a new size and let go with their
+    canvas or panel (the GPU waited for). The pointer reaches the nearest interactive panel by a ray
+    through its scene's camera (through the view's centre when the mouse is captured), after the
+    screen's and the scenes' GUI; a press stays with it. A panel takes the mouse, not fingers. The
+    ray math is Engine.UI's, kept in Engine.GUI while both live. No host calls `RenderTextures`
+    yet (E9). The canvas kept data version 1: no scene had saved one.
 - **E8 The script surface.** The facade per context, pushing by guid.
 - **E9 The player and play-in-editor.** Settings, splash, run screens.
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.

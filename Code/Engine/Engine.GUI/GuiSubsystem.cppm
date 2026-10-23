@@ -32,7 +32,11 @@
 // reference resolution to fit; despawned, its tree goes; a re-cooked document rebuilds it.
 // `gui.Billboard` shows a document over its entity (a nameplate, a health bar), in a layer under
 // the scene's canvases, placed through each view's camera as it draws: hung by its bottom centre on
-// the projected point, hidden behind the camera, scaled with distance when asked.
+// the projected point, hidden behind the camera, scaled with distance when asked. A canvas may
+// draw into a texture instead (a screen in the world, its entity's sprite or decal showing it), and
+// `gui.WorldPanel` shows a document on a quad in its entity's plane, its sprite driven, the pointer
+// reaching it by a ray through the scene's camera. Both draw in RenderTextures, which the host calls
+// before the scene, after the frame's bakes.
 //
 // Its script surface (E8) and the player's settings (E9) come later.
 // GCC modules hygiene: the renderer, the shaders and the textures live in GuiSubsystemImpl.cpp.
@@ -81,6 +85,12 @@ export namespace engine::gui
         ReferenceResolution, ///< laid out at the reference resolution, scaled uniformly to fit, centred
     };
 
+    enum class GuiCanvasRenderMode : u8
+    {
+        ScreenOverlay = 0, ///< in its scene's GUI, over the view
+        RenderTexture,     ///< into a texture of its own (its entity's sprite or decal shows it)
+    };
+
     /// A document shown in its scene's GUI: a menu, a HUD. Spawned it opens, despawned it closes.
     struct GuiCanvasComponent
     {
@@ -92,12 +102,18 @@ export namespace engine::gui
         bool interactive = true;
         GuiScalerMode scalerMode = GuiScalerMode::ConstantPixel;
         Float2 referenceResolution{1920.0f, 1080.0f};
+        GuiCanvasRenderMode renderMode = GuiCanvasRenderMode::ScreenOverlay;
+        u32 renderTextureWidth = 512; ///< RenderTexture: the texture's size, in pixels
+        u32 renderTextureHeight = 512;
 
         // Runtime:
         RefPtr<lab::Node> root;       ///< the tree built from the document
         RefPtr<lab::UIWidget> host;   ///< its place in the scene's root (order, scaler)
         RefPtr<Object> builtFrom;     ///< the document product it was built from (held: a new one never takes its address)
         RefPtr<Object> sheetFrom;     ///< the sheet product applied
+        RefPtr<lab::SceneRoot> renderRoot;     ///< RenderTexture: its own root, never in a scene's GUI
+        rhi::Texture* renderTexture = nullptr; ///< RenderTexture: the texture (the subsystem's), once drawn
+        rhi::TextureView* renderTextureView = nullptr;
     };
 
     inline void Serialize(ISerializer& ar, GuiCanvasComponent& c)
@@ -111,6 +127,11 @@ export namespace engine::gui
         foundation::core::Serialize(ar, "scalerMode", scaler);
         c.scalerMode = static_cast<GuiScalerMode>(scaler);
         foundation::core::Serialize(ar, "referenceResolution", c.referenceResolution);
+        u8 render = static_cast<u8>(c.renderMode);
+        foundation::core::Serialize(ar, "renderMode", render);
+        c.renderMode = static_cast<GuiCanvasRenderMode>(render);
+        foundation::core::Serialize(ar, "renderTextureWidth", c.renderTextureWidth);
+        foundation::core::Serialize(ar, "renderTextureHeight", c.renderTextureHeight);
     }
 
     inline void ResolveResources(resource::ResourceManager& manager, GuiCanvasComponent& c)
@@ -185,6 +206,68 @@ export namespace engine::gui
         GuiBillboardComponentManager() : SerializableComponentManager<GuiBillboardComponent>(u8"gui.Billboard") {}
     };
 
+    /// A document on a quad in the world, in its entity's plane (a sign, a terminal): drawn into a
+    /// texture at a density of its own, its entity's sprite driven to show it (added when missing),
+    /// so it sits in the scene with its depth; the pointer reaches it by a ray when interactive.
+    struct GuiWorldPanelComponent
+    {
+        // Authored:
+        resource::Ref<lab::GuiDocument> document;
+        resource::Ref<lab::GuiStyleSheet> sheet; ///< over the game's sheets, for this panel alone (optional)
+        Float2 sizeMeters{1.6f, 0.9f};           ///< the quad's extent in the world
+        f32 pixelsPerMeter = 200.0f;             ///< the texture's density
+        bool interactive = true;
+        bool visible = true;
+
+        // Runtime:
+        RefPtr<lab::Node> root;
+        RefPtr<lab::SceneRoot> renderRoot; ///< its own root, never in a scene's GUI
+        RefPtr<Object> builtFrom;
+        RefPtr<Object> sheetFrom;
+        rhi::Texture* renderTexture = nullptr; ///< the subsystem's, once drawn
+        rhi::TextureView* renderTextureView = nullptr;
+    };
+
+    inline void Serialize(ISerializer& ar, GuiWorldPanelComponent& c)
+    {
+        foundation::core::Serialize(ar, "document", c.document);
+        foundation::core::Serialize(ar, "sheet", c.sheet);
+        foundation::core::Serialize(ar, "sizeMeters", c.sizeMeters);
+        foundation::core::Serialize(ar, "pixelsPerMeter", c.pixelsPerMeter);
+        foundation::core::Serialize(ar, "interactive", c.interactive);
+        foundation::core::Serialize(ar, "visible", c.visible);
+    }
+
+    inline void ResolveResources(resource::ResourceManager& manager, GuiWorldPanelComponent& c)
+    {
+        c.document.Bind(manager);
+        c.sheet.Bind(manager);
+    }
+
+    class GuiWorldPanelComponentManager final : public scene::SerializableComponentManager<GuiWorldPanelComponent>
+    {
+    public:
+        GuiWorldPanelComponentManager() : SerializableComponentManager<GuiWorldPanelComponent>(u8"gui.WorldPanel") {}
+    };
+
+    /// A world panel's texture in pixels (its content, at its density, within GPU-friendly limits).
+    [[nodiscard]] Float2 WorldPanelPixels(const GuiWorldPanelComponent& panel) noexcept;
+
+    /// The world ray under `pointer` (pixels) on a view of `viewSize` through `camera` (unjittered),
+    /// from the near plane, between the engine's NDC depths. (Engine.UI keeps the same math for its
+    /// panels while it lives.)
+    void GuiPointerRay(const render::ViewCamera& camera, Float2 pointer, Float2 viewSize, Float3& origin, Float3& direction) noexcept;
+
+    struct GuiPanelHit
+    {
+        bool Hit = false;
+        f32 Distance = 0.0f; ///< along the ray
+        Float2 Uv{0.0f, 0.0f}; ///< 0 to 1 across the panel, v down as a GUI's pixels
+    };
+    /// The ray against a panel of `sizeMeters` in the plane of `panelWorld` (its right and up span
+    /// it; either face is hit).
+    [[nodiscard]] GuiPanelHit RayHitGuiPanel(Float3 origin, Float3 direction, const Float4x4& panelWorld, Float2 sizeMeters) noexcept;
+
     /// Where a billboard shows in a view: the point it hangs from (its bottom centre), in the
     /// view's pixels, and its scale; not shown when the point is behind the camera.
     struct GuiBillboardPlacement
@@ -207,6 +290,7 @@ export namespace engine::gui
     {
         scene.AddSystem<GuiCanvasComponentManager>();
         scene.AddSystem<GuiBillboardComponentManager>();
+        scene.AddSystem<GuiWorldPanelComponentManager>();
     }
 
     /// The lab's resources by asset guid, through the application's resource manager.
@@ -326,6 +410,13 @@ export namespace engine::gui
         /// The GPU side, by whoever owns graphics (the application's startup): the VG shaders from
         /// the data mount, the renderer. Idempotent; without it the overlays draw nothing.
         void EnsureRenderReady(rhi::Device& device, i32 frameCount);
+        /// The textures: the frame's bakes, then every render-texture canvas and world panel drawn
+        /// into its texture, made or resized as it asks and left ready to sample; their entities'
+        /// sprites (and a canvas's decal) shown them. By the host on its encoder before the scene
+        /// draws, so the scene samples this frame's. Once a frame: a second call does nothing.
+        void RenderTextures(rhi::CommandEncoder& encoder, u32 frameIndex);
+        /// How many textures canvases and panels draw into now.
+        [[nodiscard]] usize TextureCount() const noexcept;
         [[nodiscard]] bool IsRenderReady() const noexcept;
 
     private:
@@ -345,7 +436,33 @@ export namespace engine::gui
         void SyncBillboards(SceneTier& tier);
         void PlaceBillboards(SceneTier& tier, const render::SceneOverlayView& view);
         [[nodiscard]] static bool HasContent(const SceneTier& tier) noexcept;
-        [[nodiscard]] lab::SceneRoot* PickInputRoot(bool pointer, Float2 point);
+        void SyncPanels(SceneTier& tier);
+        // A document's tree (null when it does not build), and a component's tree in line with its
+        // document and sheet: rebuilt when the document's product changes.
+        [[nodiscard]] RefPtr<lab::Node> BuildDocument(const lab::GuiDocument& document);
+        template <typename Component>
+        bool RebuildIfChanged(Component& c);
+        template <typename Component>
+        void ApplySheet(Component& c, StringView name);
+        // A root of its own for a texture (a render-texture canvas, a world panel), with its input.
+        struct TextureRoot
+        {
+            scene::Scene* Scene = nullptr;
+            scene::EntityHandle Entity{};
+            RefPtr<lab::SceneRoot> Root;
+            UniquePtr<lab::GuiInputBridge> Bridge;
+            bool Seen = false;
+        };
+        RefPtr<lab::SceneRoot> TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, lab::Node& content);
+        // Where the pointer goes this frame: a root, and the point in it (a panel's in its pixels).
+        struct InputTarget
+        {
+            lab::SceneRoot* Root = nullptr;
+            Float2 Point{0.0f, 0.0f};
+            bool Panel = false;
+        };
+        [[nodiscard]] InputTarget PanelUnderPointer(Float2 point, bool centreAim);
+        [[nodiscard]] InputTarget PickInputRoot(bool pointer, Float2 point, bool centreAim);
         [[nodiscard]] bool InputReaches(const SceneTier& tier) const noexcept;
         [[nodiscard]] lab::GuiInputBridge* BridgeOf(const lab::SceneRoot* root) noexcept;
         [[nodiscard]] UniquePtr<lab::GuiInputBridge> MakeBridge(lab::SceneRoot& root);
@@ -365,6 +482,10 @@ export namespace engine::gui
         RefPtr<lab::UIWidget> m_overlay;
         UniquePtr<lab::GuiInputBridge> m_screenBridge;
         Array<SceneTier> m_sceneTiers;
+        Array<UniquePtr<TextureRoot>> m_textureRoots;
+        u64 m_frameSerial = 0;
+        u64 m_texturesSerial = ~0ull; // the frame RenderTextures last ran in
+        Float2 m_panelPoint{0.0f, 0.0f}; // where a held press on a panel last was, in its pixels
         UniquePtr<RenderState> m_render;
         render::ISceneRenderer* m_sceneRenderer = nullptr; // the overlays' registration
         render::IScreenRenderer* m_screenRenderer = nullptr;

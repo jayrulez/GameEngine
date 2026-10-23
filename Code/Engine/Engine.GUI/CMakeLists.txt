@@ -7,7 +7,7 @@ target_link_libraries(Engine.GUI
     PUBLIC Foundation::Core Foundation::Runtime Foundation::Scene Engine::Scene Engine::Domain
            Foundation::Resource Foundation::Content Foundation::RHI Foundation::VFS Foundation::Image
            Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
-           Foundation::VG Foundation::VG.SVG Foundation::VG.Resource Foundation::Texture.Resource
+           Foundation::VG Foundation::VG.SVG Foundation::VG.Renderer Foundation::VG.Resource Foundation::Texture.Resource
            Foundation::Render Engine::Render Foundation::Shell Foundation::Input Engine::Input
            Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Gamekit Experimental::GUI.Resources Experimental::GUI.Hosting
            Foundation::Profiler Foundation::Policy)

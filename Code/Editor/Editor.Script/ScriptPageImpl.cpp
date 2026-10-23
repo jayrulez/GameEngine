@@ -150,6 +150,11 @@ namespace editor
             {
                 detail.PushBack(utf8char(':'));
                 AppendCount(detail, static_cast<usize>(e.line));
+                if (e.column > 0)
+                {
+                    detail.PushBack(utf8char(':'));
+                    AppendCount(detail, static_cast<usize>(e.column));
+                }
             }
             detail.Append(u8": ");
             detail.Append(e.message.AsView());

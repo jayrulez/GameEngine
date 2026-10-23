@@ -490,7 +490,7 @@ namespace pipeline{
             [[nodiscard]] bool Cook(StringView source, StringView assetName,
                                     CookScriptErrorSink& sink, ScriptClassSource& out) override
             {
-                const bool ok = CookOnThisThread(source, assetName, sink, out);
+                const bool ok = CookOnThisThread(source, assetName, sink, out, false);
                 // AngelScript keeps per-thread local data (active-context stack, type-name
                 // scratch) that only asThreadCleanup releases. Cooks run on job workers that
                 // never exit through AngelScript's own teardown, so release it here, after
@@ -499,8 +499,21 @@ namespace pipeline{
                 return ok;
             }
 
+            [[nodiscard]] bool Check(StringView source, StringView assetName,
+                                     CookScriptErrorSink& sink, String& className) override
+            {
+                ScriptClassSource out;
+                const bool ok = CookOnThisThread(source, assetName, sink, out, true);
+                asThreadCleanup(); // as in Cook
+                className = Move(out.className);
+                return ok;
+            }
+
+            // `checkOnly` stops after the build (Check): no harvest, no bytecode, and the build
+            // leaves the global initializers unrun.
             [[nodiscard]] bool CookOnThisThread(StringView source, StringView assetName,
-                                                CookScriptErrorSink& sink, ScriptClassSource& out)
+                                                CookScriptErrorSink& sink, ScriptClassSource& out,
+                                                bool checkOnly)
             {
                 out.language = String(u8"angelscript");
                 out.sourceName = String(assetName); // the source file identity (breakpoint key)
@@ -553,16 +566,28 @@ namespace pipeline{
                     "__coroutine_support", reinterpret_cast<const char*>(coroutinePrelude.Data()),
                     static_cast<unsigned>(coroutinePrelude.Size()));
 
+                if (checkOnly)
+                {
+                    (void)engine->SetEngineProperty(asEP_INIT_GLOBAL_VARS_AFTER_BUILD, 0);
+                }
                 const int built = builder.BuildModule();
                 if (built < 0)
                 {
-                    ReportScriptCookErrors(assetName, sink);
+                    if (!checkOnly) // a check's errors go to its caller, not the log
+                    {
+                        ReportScriptCookErrors(assetName, sink);
+                    }
                     engine->ClearMessageCallback();
                     return false;
                 }
 
                 out.className =
                     FindScriptClassName(source, pipeline::FileStemOf(assetName));
+                if (checkOnly)
+                {
+                    engine->ClearMessageCallback();
+                    return true;
+                }
                 out.handlers = ScanScriptHandlers(source);
                 out.usesCoroutines = ScriptReferencesCoroutineStart(source);
 

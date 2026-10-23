@@ -179,6 +179,10 @@ TEST_CASE("script.pipeline: B3 - the neutral builder resolves a per-language COO
             out.source = String(source);
             return true;
         }
+        [[nodiscard]] bool Check(StringView, StringView, CookScriptErrorSink&, String&) override
+        {
+            return true;
+        }
     };
     ScriptLanguageCookRegistry::Get().Register(
         String(u8"faketest"),
@@ -316,4 +320,36 @@ TEST_CASE("script.pipeline: a class name from an asset name, and the starter tha
     CHECK(FillStarterClassName(u8"class {ClassName} { {ClassName}() {} }", u8"Mover") ==
           u8"class Mover { Mover() {} }");
     CHECK(FillStarterClassName(u8"class {ClassName}", {}) == u8"class NewBehavior");
+}
+
+TEST_CASE("script.pipeline: ScriptSourceDocument::Validate compiles without running - a global "
+          "initializer that faults passes the check, and an error carries its column")
+{
+    CookBed bed(u8"as_validate_check");
+    // Cook builds with the initializers run, so this one fails at cook; the check never runs it.
+    constexpr StringView kFaulting = u8"int Zero() { return 0; }\n"
+                                     u8"int boom = 10 / Zero();\n"
+                                     u8"class Mover\n"
+                                     u8"{\n"
+                                     u8"    [4.5] float speed;\n"
+                                     u8"    Mover(Entity@ entity) {}\n"
+                                     u8"}\n";
+    bed.WriteSource(u8"mover.as", kFaulting);
+    ScriptSourceDocument doc;
+    doc.Bind(bed.srcDir.AsView(), u8"mover.as", u8"angelscript");
+    REQUIRE(doc.Load().IsOk());
+    CHECK(doc.Validate());
+    CHECK(doc.ClassName() == u8"Mover");
+    CHECK(doc.Errors().Size() == 0u);
+    content::Instance* product = nullptr;
+    CHECK_FALSE(bed.Cook(u8"mover.as", u8"angelscript", product).IsOk());
+
+    doc.SetSource(u8"class Mover\n"
+                  u8"{\n"
+                  u8"    void onStart() { int b = ; }\n"
+                  u8"}\n");
+    CHECK_FALSE(doc.Validate());
+    REQUIRE(doc.Errors().Size() >= 1u);
+    CHECK(doc.Errors().Data()[0].line == 3);
+    CHECK(doc.Errors().Data()[0].column == 30);
 }

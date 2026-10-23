@@ -213,3 +213,31 @@ function Mover:onUpdate(dt) end
         CHECK(cooked->className == u8"Mover"); // unchanged - the failed cook never wrote
     }
 }
+
+TEST_CASE("script.pipeline: luau ScriptSourceDocument::Validate compiles without running the "
+          "top level, and a syntax error carries its column")
+{
+    CookBed bed(u8"luau_validate_check");
+    // Cook loads (runs) the chunk, so this fails at cook; the check never runs it.
+    constexpr StringView kRaising = u8"error(\"ran\")\n"
+                                    u8"Mover = {}\n"
+                                    u8"Mover.__index = Mover\n"
+                                    u8"function Mover.new(entity)\n"
+                                    u8"    return setmetatable({}, Mover)\n"
+                                    u8"end\n";
+    bed.WriteSource(u8"mover.luau", kRaising);
+    ScriptSourceDocument doc;
+    doc.Bind(bed.srcDir.AsView(), u8"mover.luau", u8"luau");
+    REQUIRE(doc.Load().IsOk());
+    CHECK(doc.Validate());
+    CHECK(doc.ClassName() == u8"Mover");
+    CHECK(doc.Errors().Size() == 0u);
+    content::Instance* product = nullptr;
+    CHECK_FALSE(bed.Cook(u8"mover.luau", u8"luau", product).IsOk());
+
+    doc.SetSource(u8"Mover = {}\nlocal c = = =\n");
+    CHECK_FALSE(doc.Validate());
+    REQUIRE(doc.Errors().Size() >= 1u);
+    CHECK(doc.Errors().Data()[0].line == 2);
+    CHECK(doc.Errors().Data()[0].column == 11);
+}

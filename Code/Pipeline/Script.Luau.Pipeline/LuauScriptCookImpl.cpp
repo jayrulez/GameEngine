@@ -263,6 +263,26 @@ namespace pipeline{
 
         class LuauScriptCook final : public IScriptLanguageCook
         {
+        private:
+            // The cook VM, from the registry by LANGUAGE, carrying the SAME global surface the
+            // runtime registers (core math + the behavior facades) so top-level facade references
+            // compile identically. Idempotent. Null (logged) when the backend is absent.
+            [[nodiscard]] static RefPtr<IScriptManager> CreateCookManager(StringView assetName)
+            {
+                RefPtr<IScriptManager> manager =
+                    CreateScriptManagerForLanguage(u8"luau", DefaultAllocator());
+                if (manager.Get() == nullptr)
+                {
+                    LOG_ERROR(u8"Script", u8"'{}': no Luau backend registered - cook failed",
+                                       assetName);
+                    return manager;
+                }
+                RegisterCoreTypes();
+                RegisterScriptFacadeReflection();
+                RegisterReflectedTypes(*manager);
+                return manager;
+            }
+
         public:
             [[nodiscard]] String NewAssetTemplate(ScriptTier tier,
                                                   StringView className) const override
@@ -283,6 +303,19 @@ namespace pipeline{
             // fingerprint so a vendor bump recooks every Luau script pack.
             [[nodiscard]] u32 CookVersion() const override { return LuauBytecodeVersion(); }
 
+            // Compiles through the manager's Check, so unlike Cook nothing in the source runs.
+            [[nodiscard]] bool Check(StringView source, StringView assetName,
+                                     CookScriptErrorSink& sink, String& className) override
+            {
+                RefPtr<IScriptManager> manager = CreateCookManager(assetName);
+                if (manager.Get() == nullptr || !manager->Check(source, assetName, sink))
+                {
+                    return false;
+                }
+                className = FindLuauClassName(source, pipeline::FileStemOf(assetName));
+                return true;
+            }
+
             [[nodiscard]] bool Cook(StringView source, StringView assetName,
                                     CookScriptErrorSink& sink, ScriptClassSource& out) override
             {
@@ -290,20 +323,11 @@ namespace pipeline{
                 out.sourceName = String(assetName); // the source file identity (breakpoint key)
                 out.source = String(source);
 
-                // The harvest VM comes from the registry, by LANGUAGE.
-                RefPtr<IScriptManager> manager =
-                    CreateScriptManagerForLanguage(u8"luau", DefaultAllocator());
+                RefPtr<IScriptManager> manager = CreateCookManager(assetName);
                 if (manager.Get() == nullptr)
                 {
-                    LOG_ERROR(u8"Script", u8"'{}': no Luau backend registered - cook failed",
-                                       assetName);
                     return false;
                 }
-                // The cook VM registers the SAME global surface the runtime does (core math + the
-                // behavior facades) so top-level facade references compile identically. Idempotent.
-                RegisterCoreTypes();
-                RegisterScriptFacadeReflection();
-                RegisterReflectedTypes(*manager);
                 RefPtr<IScriptContext> context = manager->CreateContext();
                 if (context.Get() == nullptr)
                 {

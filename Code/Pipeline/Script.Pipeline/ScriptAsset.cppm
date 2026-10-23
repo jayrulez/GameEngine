@@ -572,6 +572,12 @@ export namespace pipeline{
         /// record survives (live instances keep running the old class).
         [[nodiscard]] virtual bool Cook(StringView source, StringView assetName,
                                         CookScriptErrorSink& sink, ScriptClassSource& out) = 0;
+
+        /// Compile-check `source` as Cook would, WITHOUT running any of it and without the
+        /// harvest: errors to `sink`, the class name (empty when none is found) to `className`.
+        /// For checking a script as it is typed. Returns whether it compiled.
+        [[nodiscard]] virtual bool Check(StringView source, StringView assetName,
+                                         CookScriptErrorSink& sink, String& className) = 0;
     };
 
     /// The cook registry (mirrors ScriptBackendRegistry): a language library registers its
@@ -781,9 +787,9 @@ export namespace pipeline{
     /// source file plus the save + compile-check loop, factored OUT of the UI so it is
     /// unit-testable without a window. Save writes the source file (the recook + hot reload is
     /// driven by the page through EditorContext::RequestCook - the SAME path an external edit
-    /// takes). Validate() compile-checks the CURRENT buffer through the language cook the
-    /// product build already delegates to: it captures the cook's ScriptError file/line +
-    /// message for inline surfacing but NEVER writes a product, so a failing edit leaves the
+    /// takes). Validate() compile-checks the CURRENT buffer through the language cook's Check,
+    /// which compiles as the product build does but runs none of the source: it captures the
+    /// ScriptError file/line/column + message for inline surfacing but NEVER writes a product, so a failing edit leaves the
     /// last-good cooked ScriptClass untouched (live instances keep running the old class).
     class ScriptSourceDocument
     {
@@ -794,6 +800,7 @@ export namespace pipeline{
             String module; // reporting module/file (empty = the asset's own file)
             i32 line = 0;  // NOTE: as the cook's error handler captured it (may include the
                            // backend's framing prelude offset; the message is authoritative)
+            i32 column = -1; // 1-based, or -1 when the backend does not say
             String message;
         };
 
@@ -844,9 +851,9 @@ export namespace pipeline{
             return written;
         }
 
-        /// Compile-check the CURRENT buffer through the language cook (no product write).
-        /// Fills Errors() with the captured ScriptErrors and, on success, the harvested class
-        /// name. Returns whether it compiled. An unknown language surfaces one config error.
+        /// Compile-check the CURRENT buffer through the language cook's Check (nothing runs, no
+        /// product write). Fills Errors() with the captured ScriptErrors and, on success, the
+        /// class name. Returns whether it compiled. An unknown language surfaces one config error.
         [[nodiscard]] bool Validate()
         {
             m_errors.Clear();
@@ -864,20 +871,21 @@ export namespace pipeline{
                 return false;
             }
             CookScriptErrorSink sink;
-            ScriptClassSource out;
-            const bool ok = cook->Cook(m_source.AsView(), m_fileName.AsView(), sink, out);
+            String className;
+            const bool ok = cook->Check(m_source.AsView(), m_fileName.AsView(), sink, className);
             for (const CookScriptErrorSink::Entry& entry : sink.errors)
             {
                 CompileError e;
                 e.kind = entry.kind;
                 e.module = entry.module;
                 e.line = entry.line;
+                e.column = entry.column;
                 e.message = entry.message;
                 m_errors.PushBack(Move(e));
             }
             if (ok)
             {
-                m_className = out.className;
+                m_className = Move(className);
             }
             m_lastCompileOk = ok;
             return ok;

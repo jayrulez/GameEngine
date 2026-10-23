@@ -869,6 +869,11 @@ if(OPTION_BUILD_TESTS)
     if(OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU)
         util_test_suite(Code/Integration/Integration.ScriptFacades     Engine::UI)
     endif()
+    # The experimental GUI's satellites from scripts (the gamekit's screen stack), apart from the
+    # facades above: the lab and foundation.ui reflect types of the same names.
+    if(OPTION_EXPERIMENTAL_GUI AND (OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU))
+        util_test_suite(Code/Integration/Integration.GuiScript         Experimental::GUI.Gamekit)
+    endif()
     util_test_suite(Code/Integration/Integration.Mcp                Editor::Mcp)  # golden: create->open->inspect a project
     # Engine composition x pipeline registration: every factory description's cooked form has a builder.
     util_test_suite(Code/Integration/Integration.Composition        Pipeline::Registration)

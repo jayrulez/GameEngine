@@ -3,19 +3,15 @@
 
 // GUI.Gamekit - the screen stack (K4 of Specs/gui-lab-evolution-3.md): push, pop, replace and
 // clear; covering, blocking and pausing; focus per screen; `back` from the keys and the pad; the
-// lifecycle events; screens from markup and documents; and the script surface.
+// lifecycle events; screens from markup and documents. Its script surface is Integration.ScriptFacades'.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
-import foundation.script;
 import foundation.image;
 import foundation.vg;
 import foundation.vg.svg;
 import experimental.gui;
 import experimental.gui.gamekit;
-#ifdef OPTION_HAS_LUAU
-import foundation.script.luau;
-#endif
 
 using namespace experimental::gui;
 namespace core = foundation::core;
@@ -341,70 +337,3 @@ TEST_CASE("screens: from markup, the screens a stack holds are pushed in order; 
     CHECK(core::Cast<Label>(core::Cast<UIWidget>(second)->GetChildAt(1))->GetText() == SV(u8"Ada"));
     CHECK(bed.stack->PushDocument(SV(u8"missing.xml")) == nullptr);
 }
-
-#ifdef OPTION_HAS_LUAU
-namespace
-{
-    struct Errors final : foundation::script::IScriptErrorHandler
-    {
-        int count = 0;
-        core::String last;
-        void OnError(const foundation::script::ScriptError& error) override
-        {
-            ++count;
-            last = core::String(error.message);
-        }
-    };
-}
-
-TEST_CASE("screens: a Luau script pushes, reads and pops screens, and hears their events")
-{
-    foundation::core::RegisterCoreTypes();
-    RegisterGuiScriptSurface();
-    RegisterGamekitElements();
-    core::RefPtr<foundation::script::IScriptManager> manager = foundation::script::CreateLuauScriptManager(core::DefaultAllocator());
-    foundation::script::RegisterReflectedTypes(*manager);
-    Bed bed;
-    Documents documents;
-    bed.root->GetContext().SetResourceProvider(&documents);
-    GuiScriptBinding binding;
-    binding.root = bed.root.Get();
-    core::RefPtr<foundation::script::IScriptContext> context = manager->CreateContext();
-    Errors errors;
-    context->SetErrorHandler(&errors);
-    InstallGuiScriptService(*context, binding);
-    const core::Status loaded = context->Load(
-        u8"local root = gui.root()\n"
-        u8"local stack = ScreenStack.of(root:add(\"Screens\"))\n"
-        u8"local entered = 0\n"
-        u8"local first = stack:pushNode(root:add(\"Panel\"))\n"
-        u8"local pause = stack:push(\"pause.xml\")\n"
-        u8"pause:on(\"screenleave\", function(e) entered = entered + 1; return false end)\n"
-        u8"function count() return stack:count() end\n"
-        u8"function paused() return stack:isPaused() and 1 or 0 end\n"
-        u8"function covers() return Screen.of(stack:top()).covers and 1 or 0 end\n"
-        u8"function popIt() return stack:pop() and 1 or 0 end\n"
-        u8"function left() return entered end\n",
-        u8"main");
-    INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
-    REQUIRE(loaded.IsOk());
-    const auto number = [&](const char8_t* function)
-    {
-        core::Result<core::Variant> result = context->Call(function, core::Span<core::Variant>{});
-        INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
-        REQUIRE(result.HasValue());
-        const double* value = result.Value().TryGet<double>();
-        REQUIRE(value != nullptr);
-        return *value;
-    };
-    CHECK(number(u8"count") == doctest::Approx(2.0));
-    CHECK(number(u8"paused") == doctest::Approx(1.0));
-    CHECK(number(u8"covers") == doctest::Approx(1.0));
-    CHECK(number(u8"popIt") == doctest::Approx(1.0));
-    CHECK(number(u8"count") == doctest::Approx(1.0));
-    CHECK(number(u8"left") == doctest::Approx(1.0));
-    CHECK(errors.count == 0);
-    ClearGuiScriptService(*context);
-    context->SetErrorHandler(nullptr);
-}
-#endif

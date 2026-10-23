@@ -1236,13 +1236,18 @@ Each a layer with its tests.
   sandbox's sheets and code set fonts themselves). The GUI's user agent sheet now declares the
   font service's default family at the body size on every tree's top elements (`:root`), which a
   game's sheets override; with it the pages show their text. Seen there too, for later: a lab
-  Button with no width fills its line (the showcase gives every button one).
+  Button with no width fills its line (the showcase gives every button one). After it (the user's
+  choice, 2026-10-23): the XML parser keeps each element's and attribute's line (on master), and
+  the markup loader's warnings name it, so an editor marks a dropped element or attribute on its
+  own line and a cook's warning says where; CSS highlighting waits for the editor's move, whose
+  code editor (GUI.Code) lexes CSS already.
 - **E11 The web.** The lab and the engine's GUI on wasm.
 
 #### After section E (the user, 2026-10-23)
 
-The engine's sandbox and the native samples (`Code/Samples`) move onto `Engine.GUI`, then the
-sample games. Then a pause for cleanup: the lab moves from `Code/Experimental` into Foundation, and
-the `lab` namespace alias gives way to proper `gui` naming. After that, the editor's move is
-planned properly before any of it is built: a design for the whole editor, its sheet, its icons,
-its transitions, everything (which also gives the mirror engine time to port the GUI).
+First the cleanup: the lab moves from `Code/Experimental` into Foundation, and the `lab` namespace
+alias gives way to proper `gui` naming (before the samples move, so they are moved once, onto the
+final names). Then the engine's sandbox and the native samples (`Code/Samples`) move onto
+`Engine.GUI`, then the sample games. After that, the editor's move is planned properly before any
+of it is built: a design for the whole editor, its sheet, its icons, its transitions, everything
+(which also gives the mirror engine time to port the GUI).

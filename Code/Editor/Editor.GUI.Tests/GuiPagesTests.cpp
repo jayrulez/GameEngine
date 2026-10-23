@@ -28,9 +28,8 @@ TEST_CASE("gui editor: what the cook reports marks the editor's lines, and clear
     REQUIRE_FALSE(found.IsEmpty()); // an element nothing makes is dropped, and said so
     editor::gui_pages::MarkLines(editor, found);
     REQUIRE(editor.Document().Diagnostics().Size() == found.Size());
-    // The editor counts from 0; a diagnostic with no line (0) marks the first.
-    const i32 expected = found[0].Line > 0 ? static_cast<i32>(found[0].Line) - 1 : 0;
-    CHECK(editor.Document().Diagnostics()[0].line == expected);
+    CHECK(found[0].Line == 2u); // the dropped element's own line
+    CHECK(editor.Document().Diagnostics()[0].line == 1); // the editor counts from 0
     CHECK_FALSE(editor.Document().Diagnostics()[0].message.IsEmpty());
 
     Array<lab::GuiDiagnostic> none;

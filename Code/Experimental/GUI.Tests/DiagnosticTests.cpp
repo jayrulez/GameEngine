@@ -49,6 +49,17 @@ TEST_CASE("diagnostics: markup that does not parse is an error with its line; an
     said.Clear();
     CHECK_FALSE(loader.LoadFromString(SV(u8"<?xml version=\"1.0\"?>")));
     CHECK(said.Size() == 1);
+
+    // Each warning names its line: the dropped element's, the unknown attribute's own (on a line
+    // of its own here), so an editor marks it and a cook's warning says where.
+    said.Clear();
+    REQUIRE(loader.LoadFromString(SV(u8"<Panel>\n  <Lable text=\"typo\"/>\n  <Label text=\"ok\"\n         txet=\"x\"/>\n</Panel>")));
+    REQUIRE(said.Size() == 2);
+    for (const GuiDiagnostic& d : said)
+        if (Has(d.Message.AsView(), SV(u8"<Lable>")))
+            CHECK(d.Line == 2u);
+        else if (Has(d.Message.AsView(), SV(u8"'txet'")))
+            CHECK(d.Line == 4u);
 }
 
 TEST_CASE("diagnostics: the CSS parser says what it skips, each with its line")

@@ -135,7 +135,7 @@ export namespace experimental::gui
             {
                 // An element this GUI does not make (a typo, or one its element set leaves out): said,
                 // rather than the subtree vanishing without a word.
-                Report(GuiDiagnostic::Severity::Warning, 0,
+                Report(GuiDiagnostic::Severity::Warning, element.Line(),
                        core::Format(u8"no element <{}>; it and what it holds are left out", element.TagName()));
                 return {};
             }
@@ -184,7 +184,7 @@ export namespace experimental::gui
                 if (uinode != nullptr && uinode->SetMarkupAttribute(name, value))
                     continue;
                 if (!IsStyleName(uinode, name, value))
-                    Report(GuiDiagnostic::Severity::Warning, 0,
+                    Report(GuiDiagnostic::Severity::Warning, attr->Line(),
                            core::Format(u8"<{}> has no attribute or style property '{}'", element.TagName(), name));
                 inlineStyle.Set(name, value); // an inline CSS property
                 if (uinode != nullptr)

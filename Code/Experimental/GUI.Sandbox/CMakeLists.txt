@@ -1,13 +1,13 @@
 # GUI Sandbox - experimental.gui's widgets, styles, motion and input, an application on the runtime host
 # through the lab's GuiHost (GUI.Hosting).
 add_executable(GUISandbox Main.cpp ReflectedCameraImpl.cpp)
-target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm LampSource.cppm ReflectedCamera.cppm) # the Stress page (E8a), the Toolkit page's lamps (T1) and camera (T3)
+target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm LampSource.cppm ReflectedCamera.cppm CodePage.cppm) # the Stress page (E8a), the Toolkit page's lamps (T1) and camera (T3), the Code page (C8)
 target_link_libraries(GUISandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::VFS
     Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop
     Foundation::Graphics Foundation::Graphics.Gpu
     Foundation::Shell Foundation::Image Foundation::Image.IO Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::Fonts.HarfBuzz Foundation::Xml.Serialization Foundation::Fonts.DistanceField.Baker
-    Foundation::VG Foundation::VG.Renderer Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Inspector Experimental::GUI.Testing Experimental::GUI.Hosting Experimental::GUI.Viewport Experimental::GUI.Docking Experimental::GUI.Toolkit Foundation::Shaders Foundation::RHI.Capture
+    Foundation::VG Foundation::VG.Renderer Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Inspector Experimental::GUI.Testing Experimental::GUI.Hosting Experimental::GUI.Viewport Experimental::GUI.Docking Experimental::GUI.Toolkit Experimental::GUI.Code Foundation::Shaders Foundation::RHI.Capture
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT}) # the showcase (G6) runs AngelScript
 util_copy_sdl3_dll(GUISandbox)
 

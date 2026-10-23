@@ -49,11 +49,13 @@ import experimental.gui.hosting;   // the host: the window's GUI, offscreen pict
 import experimental.gui.viewport;  // the Viewport page's widget
 import experimental.gui.docking;   // the Docking page's dock space
 import experimental.gui.toolkit;   // the Toolkit page's tool and status bars
+import experimental.gui.code;      // the Code page's editors (C8)
 import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
 import gui.sandbox.lamps;  // the Toolkit page's property source (T1)
 import gui.sandbox.camera; // the Toolkit page's reflected object (T3)
+import gui.sandbox.code;   // the Code page (C8)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -509,6 +511,9 @@ private:
 
     // The Stress page's builder and its views' models: before the GUI, so it outlives the views.
     UniquePtr<sandbox::StressPage> m_stress;
+    // The Code page's host (C8): its languages and its service, before the GUI, so the editors
+    // that point at them go first.
+    UniquePtr<sandbox::CodePage> m_code;
     // The Toolkit page's lamps (T1): before the GUI, so the grid lets go of them first.
     UniquePtr<sandbox::LampSource> m_lamps;
     // The Toolkit page's clip (T5): tracks of the lamps' values, before the GUI too, its axis, and
@@ -677,6 +682,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     m_dataFileSystem = MakeUnique<vfs::NativeFileSystem>(AppRoot(), m_dataRoot.AsView(), AppRoot());
     gui::RegisterGuiElements(); // the lab's widgets, creatable by tag from markup
     gui::RegisterToolkitElements(); // and the toolkit's
+    gui::RegisterCodeElements();    // and the code editor
     m_shaders = MakeUnique<gui::VgShaderLibrary>(AppRoot(), AppRoot());
     if (!m_shaders->Load(*m_device, *m_dataFileSystem))
     {
@@ -961,6 +967,7 @@ void GUISandbox::BuildSandbox()
     (void)m_root->OnCommand(u8"files.more", [count](gui::CommandEvent&) { count(1); });
     (void)m_root->OnCommand(u8"files.fewer", [count](gui::CommandEvent&) { count(-1); });
     (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
+    gui::BindCodeEditorKeys(m_gui->GetKeymap()); // the Code page's editors: VS Code's keys (C8)
     m_root->SetDebugFont(m_font);
     ApplyDebugOverlay();
 
@@ -1073,6 +1080,18 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: a dataflow graph and a lamp's state machine (T6), after the clip.
     if (gui::Node* section = FindById(*m_shellNode, u8"graph-section"))
         FillGraphs(*section);
+    // Code: a script checked as it is typed and a shader, in the sandbox's languages (C8).
+    if (auto* editor = Cast<gui::CodeEditor>(FindById(*m_shellNode, u8"code-script")))
+    {
+        const String dir = Format(u8"{}code/", kSandboxDir);
+        m_code = MakeUnique<sandbox::CodePage>(AppRoot(), AppRoot(), m_scripts.Get());
+        m_code->AttachScript(*editor, ReadText(Format(u8"{}angelscript.xml", dir).AsView()).AsView(),
+                             ReadText(Format(u8"{}sample.as", dir).AsView()).AsView(),
+                             Cast<gui::Label>(FindById(*m_shellNode, u8"code-status")));
+        if (auto* shader = Cast<gui::CodeEditor>(FindById(*m_shellNode, u8"code-shader")))
+            m_code->AttachShader(*shader, ReadText(Format(u8"{}hlsl.xml", dir).AsView()).AsView(),
+                                 ReadText(Format(u8"{}sample.hlsl", dir).AsView()).AsView());
+    }
     if (gui::Node* section = FindById(*m_shellNode, u8"crumbs-section"))
         FillCrumbs(*section);
     if (gui::Node* section = FindById(*m_shellNode, u8"toasts-section"))
@@ -1336,7 +1355,8 @@ void GUISandbox::ApplySandboxSheet()
 {
     // The built-in theme for the widgets (the user agent's), the sandbox's look over it, and each
     // page's own sheet over that, styling its page alone.
-    const String theme = Format(u8"{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS()); // the satellites' over the widgets'
+    const String theme = Format(u8"{}\n{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS(),
+                                gui::CodeSheetCSS()); // the satellites' over the widgets'
     m_styles->SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
     String path(kSandboxDir);
     path += StringView(u8"sandbox.css");
@@ -2043,6 +2063,9 @@ void GUISandbox::OnUpdate(runtime::IApplicationHost&, f32 deltaTime)
         std::fflush(stdout);
         m_nextStatsTime = m_totalTime + 1.0f;
     }
+    // The Code page checks its script a moment after an edit.
+    if (m_code)
+        m_code->Update(deltaTime);
     // The Stress page shows the last frame's costs, each second.
     if (m_stress && m_current.AsView() == StringView(u8"stress") && m_totalTime >= m_nextStressStatsTime)
     {

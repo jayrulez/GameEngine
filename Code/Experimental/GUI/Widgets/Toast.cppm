@@ -14,9 +14,10 @@
 // A post with the key of one shown replaces it and counts it ("×12": a burst of one error, or a
 // progress toast updated), four show at once and the rest wait. Posts may come from any thread:
 // they wait in the host until its next frame (Godot, zed, Zero), a widget made there by a function,
-// since widgets do not cross threads. A card comes in `.entering` and goes `.leaving`, for the
-// sheet's transitions; a request's classes choose which (the theme's slide, `pop`, `still`, a game's
-// own; reduced motion only fades). Each shown toast is announced, an error interrupting. The
+// since widgets do not cross threads. A card enters and leaves through the core's Enter and Leave
+// (`:entering`, `:leaving`), so the sheet's transitions play and a dismissed card goes once its
+// exit has ended; a request's classes choose how (the theme's slide, `pop`, `still`, a game's own;
+// reduced motion only fades). Each shown toast is announced, an error interrupting. The
 // host keeps no history: it tells the application each toast posted and gone, for a log or a bell.
 // A request is a value (no callbacks in it), so a script fills one in as code does and posts it; an
 // action's button sends `activate` with the action's id, as a menu item does, beside the callback
@@ -156,8 +157,7 @@ export namespace experimental::gui
         core::String m_announcement;
         u32 m_count = 1;
         f32 m_remaining = 0.0f;
-        f32 m_leaving = -1.0f; // seconds until it is taken off, once dismissed
-        u8 m_entering = 2;     // ticks it stays `.entering`: until it has been styled so, its transition's start
+        bool m_dismissed = false; // taken off the stack: leaving (the core's Leave), gone once its exit ends
         core::String m_classes; // its request's
         core::RefPtr<UIWidget> m_body;
         core::RefPtr<Label> m_title;
@@ -236,7 +236,7 @@ export namespace experimental::gui
             while (!m_waiting.IsEmpty())
                 (void)Remove(m_waiting[0].Id, false);
             for (usize i = m_cards.Size(); i-- > 0;)
-                if (m_cards[i]->m_leaving < 0.0f)
+                if (!m_cards[i]->m_dismissed)
                     (void)Remove(m_cards[i]->m_id, false);
         }
 
@@ -258,7 +258,7 @@ export namespace experimental::gui
         {
             usize count = 0;
             for (const core::RefPtr<ToastCard>& card : m_cards)
-                count += card->m_leaving < 0.0f ? 1 : 0;
+                count += !card->m_dismissed ? 1 : 0;
             return count;
         }
         [[nodiscard]] usize WaitingCount() const noexcept { return m_waiting.Size(); }
@@ -266,7 +266,7 @@ export namespace experimental::gui
         [[nodiscard]] ToastCard* GetCard(ToastId id) const noexcept
         {
             for (const core::RefPtr<ToastCard>& card : m_cards)
-                if (card->m_id == id && card->m_leaving < 0.0f)
+                if (card->m_id == id && !card->m_dismissed)
                     return card.Get();
             return nullptr;
         }
@@ -293,8 +293,6 @@ export namespace experimental::gui
         /// Seconds a severity's toasts stay when a request does not say (0: until closed).
         void SetDefaultDuration(ToastSeverity severity, f32 seconds) noexcept { m_defaults[static_cast<usize>(severity)] = core::Max(0.0f, seconds); }
         [[nodiscard]] f32 GetDefaultDuration(ToastSeverity severity) const noexcept { return m_defaults[static_cast<usize>(severity)]; }
-        /// Seconds a dismissed toast stays, `.leaving`, for the sheet's transition out (0.15).
-        void SetLeaveSeconds(f32 seconds) noexcept { m_leaveSeconds = core::Max(0.0f, seconds); }
 
         /// Told each toast posted (once shown or queued; a replacement too), for a log.
         void SetOnPosted(core::Function<void(ToastId, const ToastCard&)> callback) { m_onPosted = core::Move(callback); }
@@ -321,17 +319,10 @@ export namespace experimental::gui
             for (usize i = m_cards.Size(); i-- > 0;)
             {
                 ToastCard& card = *m_cards[i];
-                // `.entering` through a frame's styling, so the sheet's transition starts from it.
-                if (card.m_entering > 0 && --card.m_entering == 0)
-                    card.RemoveClass(core::StringView(u8"entering"));
-                if (card.m_leaving >= 0.0f)
+                if (card.m_dismissed)
                 {
-                    card.m_leaving -= seconds;
-                    if (card.m_leaving <= 0.0f)
-                    {
-                        RemoveChild(&card);
+                    if (card.GetParent() != this) // its exit ended: the core's Leave took it off
                         m_cards.RemoveAt(i);
-                    }
                     continue;
                 }
                 if (paused || card.m_remaining < 0.0f)
@@ -390,7 +381,7 @@ export namespace experimental::gui
             if (!request.Key.IsEmpty())
             {
                 for (const core::RefPtr<ToastCard>& card : m_cards)
-                    if (card->m_leaving < 0.0f && card->m_key == request.Key)
+                    if (!card->m_dismissed && card->m_key == request.Key)
                     {
                         const u32 count = card->m_count + 1;
                         Fill(*card, card->m_id, core::Move(request), count, core::Move(onAction));
@@ -418,9 +409,9 @@ export namespace experimental::gui
         void Show(ToastId id, ToastRequest request, u32 count, ToastActionCallback onAction)
         {
             core::RefPtr<ToastCard> card = core::MakeRef<ToastCard>(MemoryAllocator());
-            card->AddClass(core::StringView(u8"entering"));
             Fill(*card, id, core::Move(request), count, core::Move(onAction));
             AddChild(card.Get());
+            card->Enter(); // `:entering` for the sheet's entrance
             m_cards.PushBack(card);
             if (m_onPosted)
                 m_onPosted(id, *card);
@@ -586,8 +577,8 @@ export namespace experimental::gui
                 scene->GetContext().Announce(card.m_announcement.AsView(),
                                              card.m_severity == ToastSeverity::Error ? AnnouncePriority::Assertive : AnnouncePriority::Polite);
         }
-        // Off the stack: a shown one leaves after its transition (never inside the event that closed
-        // it: it stays a child until the host's next frames), a waiting one at once.
+        // Off the stack: a shown one leaves through the core's Leave (out of the pointer at once, a
+        // child until its exit has ended, never inside the event that closed it), a waiting one at once.
         bool Remove(ToastId id, bool byUser)
         {
             for (usize i = 0; i < m_waiting.Size(); ++i)
@@ -599,11 +590,10 @@ export namespace experimental::gui
                     return true;
                 }
             for (const core::RefPtr<ToastCard>& card : m_cards)
-                if (card->m_id == id && card->m_leaving < 0.0f)
+                if (card->m_id == id && !card->m_dismissed)
                 {
-                    card->m_leaving = m_leaveSeconds;
-                    card->AddClass(core::StringView(u8"leaving"));
-                    card->SetHitTestVisible(false);
+                    card->m_dismissed = true;
+                    card->Leave();
                     if (m_onDismissed)
                         m_onDismissed(id, byUser);
                     return true;
@@ -618,7 +608,6 @@ export namespace experimental::gui
         ToastId m_lastId = 0;
         usize m_maxShown = 4;
         f32 m_defaults[4] = {};
-        f32 m_leaveSeconds = 0.15f;
         bool m_ticking = false; // its clock's action runs
         core::Function<void(ToastId, const ToastCard&)> m_onPosted;
         core::Function<void(ToastId, bool)> m_onDismissed;

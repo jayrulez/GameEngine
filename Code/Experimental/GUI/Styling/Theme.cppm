@@ -137,10 +137,10 @@ export namespace experimental::gui
                     border-radius: var(--radius); padding: var(--space-m) var(--space-l); width: var(--toast-width, 320px);
                     box-shadow: 0 4px 14px var(--shadow-color);
                     transition: opacity var(--motion-fast), transform var(--motion-fast); }
-            /* How it comes and goes, a request's class choosing: a slide up (the default), `pop` (scaled in),
-               `still` (no motion); a game's own classes add their own. */
-            toast.entering, toast.leaving { opacity: 0; transform: translate(0, 8px); }
-            toast.pop.entering, toast.pop.leaving { transform: scale(0.9); }
+            /* How it comes and goes (the core's :entering and :leaving), a request's class choosing: a slide
+               up (the default), `pop` (scaled in), `still` (no motion); a game's own classes add their own. */
+            toast:entering, toast:leaving { opacity: 0; transform: translate(0, 8px); }
+            toast.pop:entering, toast.pop:leaving { transform: scale(0.9); }
             toast.still { transition: none; }
             toast.bare { background-color: transparent; padding: 0; box-shadow: none; width: auto; }
             toastmark { width: 4px; height: 100%; min-height: 16px; border-radius: 2px; background-color: var(--toast-info, var(--accent)); }
@@ -203,7 +203,7 @@ export namespace experimental::gui
             }
             /* Less motion: a toast fades, whatever its class asks, without sliding or scaling. */
             @media (prefers-reduced-motion: reduce) {
-                toast.entering, toast.leaving, toast.pop.entering, toast.pop.leaving { transform: none; }
+                toast:entering, toast:leaving, toast.pop:entering, toast.pop:leaving { transform: none; }
             }
         )");
     }

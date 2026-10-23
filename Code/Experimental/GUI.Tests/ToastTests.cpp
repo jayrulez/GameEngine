@@ -78,7 +78,6 @@ namespace
             root->SetSize(core::Float2{800.0f, 600.0f});
             root->AddChild(host.Get());
             root->GetContext().SetAccessibilityBridge(&narrator);
-            host->SetLeaveSeconds(0.1f);
             Frame(0.0f);
         }
         ~Bed() { root->GetContext().SetAccessibilityBridge(nullptr); }
@@ -139,7 +138,7 @@ TEST_CASE("toast: a card with its title, message and severity, at the bottom end
     CHECK_FALSE(bed.host->IsShown(id));
     REQUIRE(gone.Size() == 1);
     CHECK(gone[0] == core::Format(u8"{} user", id));
-    CHECK(card->HasClass(SV(u8"leaving"))); // still a child, for its transition out
+    CHECK(card->IsLeaving()); // still a child, never taken off inside the click that closed it
     CHECK(card->GetParent() == bed.host.Get());
     bed.Frame(0.2f);
     CHECK(card->GetParent() == nullptr);
@@ -350,9 +349,12 @@ TEST_CASE("toast: under the theme, its text wraps at the card's width, a path lo
     card->GetTitlePart()->SetFont(nullptr);
 }
 
-TEST_CASE("toast: it comes in `.entering` through a frame's styling, the sheet's transition starting there; a request's class chooses how")
+TEST_CASE("toast: it enters `:entering` and fades in through the sheet's transition; a request's class chooses how")
 {
     Bed bed;
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
+    styles.ApplyTree(*bed.root); // a style pass runs over this GUI: a toast plays its entrance
     ToastRequest request = Bed::Text(u8"Hello");
     request.Classes = core::String(u8"pop celebrate");
     request.Key = core::String(u8"hello");
@@ -361,16 +363,12 @@ TEST_CASE("toast: it comes in `.entering` through a frame's styling, the sheet's
     REQUIRE(card != nullptr);
     CHECK(card->HasClass(SV(u8"pop")));
     CHECK(card->HasClass(SV(u8"celebrate")));
-    CHECK(card->HasClass(SV(u8"entering")));
+    CHECK(card->IsEntering());
     // Styled so by the theme: unseen, its transition's start.
-    StyleManager styles;
-    styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
     styles.ApplyTree(*bed.root);
     CHECK(card->GetAlpha() == doctest::Approx(0.0f));
-    bed.host->Tick(0.0f); // the frame that styles it entering
-    CHECK(card->HasClass(SV(u8"entering")));
-    bed.host->Tick(0.0f);
-    CHECK_FALSE(card->HasClass(SV(u8"entering")));
+    bed.root->GetContext().Update(core::Duration{}); // its first style shown: :entering goes
+    CHECK_FALSE(card->IsEntering());
     // Restyled, it fades in over the theme's 0.15 s, from where it was.
     styles.ApplyTree(*bed.root);
     CHECK(card->GetAlpha() == doctest::Approx(0.0f));
@@ -399,4 +397,44 @@ TEST_CASE("toast: a host markup places")
     REQUIRE(made);
     REQUIRE(made->ChildCount() == 1);
     CHECK(core::Cast<ToastHost>(made->GetChildAt(0)) != nullptr);
+}
+
+TEST_CASE("toast: dismissed, it fades out through the sheet's transition and goes when that ends; a `still` one at the next update")
+{
+    Bed bed;
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
+    styles.ApplyTree(*bed.root);
+    const auto frame = [&](float seconds)
+    {
+        bed.root->GetContext().Update(core::Duration::FromSeconds(seconds));
+        styles.ApplyTree(*bed.root);
+    };
+    const ToastId id = bed.host->Post(Bed::Text(u8"Fading"));
+    core::RefPtr<ToastCard> card(bed.host->GetCard(id)); // held: the host lets it go when it has left
+    REQUIRE(card);
+    for (int i = 0; i < 4; ++i)
+        frame(0.1f); // in, and settled
+    REQUIRE(card->GetAlpha() == doctest::Approx(1.0f));
+    CHECK(bed.host->Dismiss(id));
+    CHECK(card->IsLeaving());
+    CHECK(bed.host->ShownCount() == 0);
+    frame(0.0f); // :leaving shown: the fade starts
+    frame(0.07f);
+    CHECK(card->GetParent() == bed.host.Get()); // still fading
+    CHECK(card->GetAlpha() < 0.95f);
+    frame(0.2f);
+    CHECK(card->GetParent() == nullptr);
+
+    ToastRequest still = Bed::Text(u8"Still");
+    still.Classes = core::String(u8"still");
+    const ToastId quiet = bed.host->Post(core::Move(still));
+    core::RefPtr<ToastCard> quietCard(bed.host->GetCard(quiet));
+    REQUIRE(quietCard);
+    frame(0.0f);
+    frame(0.0f);
+    CHECK(bed.host->Dismiss(quiet));
+    frame(0.0f); // nothing moves it: the style pass lets it go
+    frame(0.0f);
+    CHECK(quietCard->GetParent() == nullptr);
 }

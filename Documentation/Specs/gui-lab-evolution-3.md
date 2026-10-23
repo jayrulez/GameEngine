@@ -1193,9 +1193,23 @@ Each a layer with its tests.
     textures; the editor's scene and game pages call it too; the player points the GUI's text
     input at its window.
   - **E9b The project's settings.** The sheet list and the shared fonts applied by the player and the
-    editor; the settings page and MCP's project settings.
+    editor; the settings page and MCP's project settings. Built (vg, 2026-10-23): the manifest's
+    appended `guiStyleSheetIds` (an asset list of `GuiStyleSheetAsset`, in the UI tab; the dialog,
+    `project_info` and `project_settings_set` take it from its reflection, the dist copy and the
+    asset walks reach it); `GuiSubsystem::SetFonts` (the project's default font and others, a
+    resource font service, else the built-in font; the pass renderer and the baker draw with what
+    measured); the player and the editor's project defaults give the GUI the UI's fonts and the
+    sheets. The project-settings asset-list count follows (2).
   - **E9c Run screens.** A screen tier per run in the editor's Game tabs, the game's resolution and
     orientation.
   - **E9d The GUI's loading document.** The boot splash through the GUI when the project names one.
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
 - **E11 The web.** The lab and the engine's GUI on wasm.
+
+#### After section E (the user, 2026-10-23)
+
+The engine's sandbox and the native samples (`Code/Samples`) move onto `Engine.GUI`, then the
+sample games. Then a pause for cleanup: the lab moves from `Code/Experimental` into Foundation, and
+the `lab` namespace alias gives way to proper `gui` naming. After that, the editor's move is
+planned properly before any of it is built: a design for the whole editor, its sheet, its icons,
+its transitions, everything (which also gives the mirror engine time to port the GUI).

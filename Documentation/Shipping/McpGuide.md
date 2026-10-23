@@ -164,13 +164,15 @@ text draws with: the engine's built-in font is not in a dist), the default sky, 
 and plane. Then `project_open` -> `project_info`, which also reports the
 settings play reads (default scene, startup script, default input map, bus layout, UI theme,
 loading screen, UI font, MSAA, and `uiFontIds`, the other fonts the game UI loads beside the
-default, each a family a label picks with `font-family="<family>"`, a title face say, and the
+default, each a family a label picks with `font-family="<family>"`, a title face say,
+`guiStyleSheetIds`, the engine GUI's `.css` sheets in order over its built-in theme, each over
+those before it (its fonts are the UI's), and the
 display: `renderWidth`/`renderHeight`, the resolution the game draws at, 0 for its output's size,
 `renderFit`, and the player's `windowWidth`, `windowHeight`, `windowMode` and `windowResizable`),
 and `settingCategories`, how they group: the Project Settings dialog's tabs in order (General,
 Startup, Audio, UI, Display), each with the names of its settings.
 `project_settings_set` changes them, by the names `project_info` reports: each asset setting must
-name an asset of its type, `""` clears it, `uiFontIds` takes the whole list, a choice takes one of its values by name, and nothing changes
+name an asset of its type, `""` clears it, `uiFontIds` and `guiStyleSheetIds` take the whole list, a choice takes one of its values by name, and nothing changes
 when any of it is refused. `project_health` is the
 one-call soundness sweep (dangling refs, broken sources, cook state); a dirty count alone
 is normal - clear it with `asset_cook`.

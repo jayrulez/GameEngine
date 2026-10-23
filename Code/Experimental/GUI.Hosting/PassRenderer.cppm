@@ -120,6 +120,15 @@ export namespace experimental::gui
         /// without shaders.
         [[nodiscard]] GpuPictureBaker* Baker() noexcept { return m_baker.Get(); }
 
+        /// The fonts its roots' text and an SVG's draw with from now on (the GUI's changed: a
+        /// project's own): what made a text's glyphs is what draws them.
+        void SetFontService(fonts::IFontService* fonts) noexcept
+        {
+            m_canvas.SetFontService(fonts);
+            if (m_baker)
+                m_baker->SetFontService(fonts);
+        }
+
         /// A frame begins: each renderer rewinds at its first use in it, and the bakes may record.
         void BeginFrame() noexcept
         {

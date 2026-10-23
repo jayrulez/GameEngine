@@ -23,6 +23,8 @@ import foundation.rhi.null;
 import foundation.image;
 import foundation.vg.resource;
 import foundation.vg.svg;
+import foundation.fonts;          // IFontService
+import foundation.fonts.resource; // Font products (the project's fonts)
 import foundation.texture.resource;
 import foundation.render.api;
 import foundation.shell;
@@ -1034,4 +1036,45 @@ TEST_CASE("engine.gui: the script surface names gui and the components, and a co
     engine.Frame();
     CHECK_FALSE(canvases->Get(hud)->rootNode().IsEmpty());
     engine.scenes.DestroyScene(level);
+}
+
+namespace
+{
+    RefPtr<foundation::fonts::Font> MakeFontProduct(StringView family)
+    {
+        RefPtr<foundation::fonts::Font> font = MakeRef<foundation::fonts::Font>(DefaultAllocator());
+        font->SetFamily(family);
+        foundation::fonts::Font::Entry entry;
+        entry.pixelHeight = 24.0f;
+        font->AddEntry(Move(entry));
+        return font;
+    }
+}
+
+TEST_CASE("engine.gui: the project's fonts, a default and others each a family, else the built-in font")
+{
+    Engine engine;
+    foundation::fonts::IFontService* builtIn = engine.gui->Fonts();
+    REQUIRE(builtIn != nullptr);
+    RefPtr<foundation::fonts::Font> body = MakeFontProduct(u8"Body");
+    RefPtr<foundation::fonts::Font> title = MakeFontProduct(u8"Title");
+    const foundation::fonts::Font* others[] = {title.Get()};
+
+    engine.gui->SetFonts(nullptr, Span<const foundation::fonts::Font* const>(others, 1)); // others wait for a default
+    CHECK(engine.gui->Fonts() == builtIn);
+
+    engine.gui->SetFonts(body.Get(), Span<const foundation::fonts::Font* const>(others, 1));
+    foundation::fonts::IFontService* project = engine.gui->Fonts();
+    REQUIRE(project != builtIn);
+    CHECK(engine.gui->Context().GetFontService() == project); // what text measures and draws with
+    CHECK(project->DefaultFontFamily() == StringView(u8"Body"));
+    foundation::fonts::CachedFont* bodyFont = project->GetFont(u8"Body", 24.0f);
+    foundation::fonts::CachedFont* titleFont = project->GetFont(u8"Title", 24.0f);
+    REQUIRE(bodyFont != nullptr);
+    REQUIRE(titleFont != nullptr);
+    CHECK(titleFont != bodyFont); // a label naming the title family gets the title face
+
+    engine.gui->SetFonts(nullptr, {});
+    CHECK(engine.gui->Fonts() == builtIn);
+    CHECK(engine.gui->Context().GetFontService() == builtIn);
 }

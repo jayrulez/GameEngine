@@ -61,6 +61,7 @@ import foundation.resource;
 import foundation.rhi;
 import foundation.vfs;
 import foundation.fonts;
+import foundation.fonts.resource; // the project's fonts (Font products)
 import foundation.image;
 import foundation.vg.svg;
 import foundation.render.api; // the two overlay roles
@@ -375,6 +376,11 @@ export namespace engine::gui
         /// The fonts the GUI's text draws with.
         [[nodiscard]] foundation::fonts::IFontService* Fonts() const noexcept;
 
+        /// The project's fonts, which it shares with Engine.UI (defaultUiFontId, uiFontIds): the
+        /// default and the others, each a family a label picks by `font-family`. Without a default
+        /// the built-in font serves (the others wait for one). The products are held.
+        void SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others);
+
         /// Where asset guids resolve (the application's resource manager); null resolves nothing.
         void SetResourceManager(resource::ResourceManager* resources);
         /// The game's sheets, over the built-in theme, each over the ones before it (a game's own
@@ -498,7 +504,10 @@ export namespace engine::gui
         RefPtr<lab::GUIContext> m_context;
         lab::StyleManager m_styles;
         UniquePtr<GuiResourceProvider> m_resources;
-        UniquePtr<foundation::fonts::IFontService> m_fonts;
+        UniquePtr<foundation::fonts::IFontService> m_fonts;        // the built-in font
+        UniquePtr<foundation::fonts::IFontService> m_projectFonts; // the project's, when it names a default
+        RefPtr<foundation::fonts::Font> m_defaultFont;
+        Array<RefPtr<foundation::fonts::Font>> m_otherFonts;
         Array<Guid> m_sheets;
         u64 m_sheetGeneration = 0;
         RefPtr<lab::SceneRoot> m_screenRoot;

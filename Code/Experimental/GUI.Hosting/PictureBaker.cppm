@@ -101,6 +101,9 @@ export namespace experimental::gui
 
         /// A renderer that samples the bakes (a window's): every bake drawn is registered with it,
         /// those drawn before too.
+        /// The fonts an SVG's text draws with from now on (the host's changed: a project's own).
+        void SetFontService(foundation::fonts::IFontService* fonts) noexcept { m_canvas.SetFontService(fonts); }
+
         void AddTarget(vg::renderer::VGRenderer& target)
         {
             for (vg::renderer::VGRenderer* known : m_targets)

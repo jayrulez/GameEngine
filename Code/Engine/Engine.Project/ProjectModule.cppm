@@ -113,6 +113,11 @@ export namespace engine::project
                                // own family a label picks by font-family (a title face beside
                                // the body text). Appended: a manifest saved before it reads none.
 
+        // The engine GUI's sheets (the experimental GUI's, gui-lab-evolution-3.md E9b), in order
+        // over its built-in theme, each over those before it (a game's own over a shared one).
+        // Appended: a manifest saved before it reads none. Its fonts are the UI's (above).
+        Array<Guid> guiStyleSheetIds;
+
         // The display (appended: a manifest saved before them reads these defaults).
         // The resolution the game DRAWS at, fitted into whatever shows it (the player's window,
         // the editor's Game tab) by renderFit. Nought on either axis draws at the output's own
@@ -176,6 +181,7 @@ export namespace engine::project
             SerializeAppended(ar, "windowMode", windowMode);
             SerializeAppended(ar, "windowResizable", windowResizable);
             SerializeAppended(ar, "orientation", orientation);
+            SerializeAppended(ar, "guiStyleSheetIds", guiStyleSheetIds);
         }
     };
 

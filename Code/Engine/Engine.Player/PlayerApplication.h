@@ -357,6 +357,23 @@ namespace engine::player
                 }
             }
 
+#if OPTION_HAS_EXPERIMENTAL_GUI
+            // The engine GUI: the project's fonts (the UI's, shared) and its sheets, in order.
+            if (GUI() != nullptr && Resources() != nullptr)
+            {
+                const foundation::fonts::Font* defaultFont = nullptr;
+                if (!m_settings.defaultUiFontId.IsNil())
+                    if (auto font = Resources()->Bind<foundation::fonts::Font>(m_settings.defaultUiFontId))
+                        defaultFont = font.Get();
+                Array<const foundation::fonts::Font*> others;
+                for (const Guid& id : m_settings.uiFontIds)
+                    if (auto font = Resources()->Bind<foundation::fonts::Font>(id))
+                        others.PushBack(font.Get());
+                GUI()->SetFonts(defaultFont, Span<const foundation::fonts::Font* const>(others.Data(), others.Size()));
+                GUI()->SetStyleSheets(Span<const Guid>(m_settings.guiStyleSheetIds.Data(), m_settings.guiStyleSheetIds.Size()));
+            }
+#endif
+
             // The resolution the game draws at, fitted into whatever window it got.
             SetRenderResolution(m_settings.renderWidth, m_settings.renderHeight, m_settings.renderFit);
             SetOrientation(m_settings.orientation); // presented turned on a window of the other shape

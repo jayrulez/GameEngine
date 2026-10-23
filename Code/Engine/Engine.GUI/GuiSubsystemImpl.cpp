@@ -698,7 +698,7 @@ namespace engine::gui
     };
 
     GuiSubsystem::GuiSubsystem(IAllocator& allocator, foundation::vfs::IFileSystem& dataFileSystem)
-        : m_allocator(allocator, RegisterMemoryTag("GUI")), m_dataFileSystem(&dataFileSystem), m_sheets(m_allocator),
+        : m_allocator(allocator, RegisterMemoryTag("GUI")), m_dataFileSystem(&dataFileSystem), m_otherFonts(m_allocator), m_sheets(m_allocator),
           m_sceneTiers(m_allocator), m_textureRoots(m_allocator)
     {
         m_context = MakeRef<lab::GUIContext>(m_allocator);
@@ -708,7 +708,41 @@ namespace engine::gui
     }
     GuiSubsystem::~GuiSubsystem() = default;
 
-    foundation::fonts::IFontService* GuiSubsystem::Fonts() const noexcept { return m_fonts.Get(); }
+    foundation::fonts::IFontService* GuiSubsystem::Fonts() const noexcept { return m_projectFonts ? m_projectFonts.Get() : m_fonts.Get(); }
+
+    void GuiSubsystem::SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others)
+    {
+        m_defaultFont = RefPtr<foundation::fonts::Font>(const_cast<foundation::fonts::Font*>(defaultFont));
+        m_otherFonts.Clear();
+        for (const foundation::fonts::Font* font : others)
+            if (font != nullptr)
+                m_otherFonts.PushBack(RefPtr<foundation::fonts::Font>(const_cast<foundation::fonts::Font*>(font)));
+        m_projectFonts = nullptr;
+        if (m_defaultFont)
+        {
+            UniquePtr<foundation::fonts::ResourceFontService> service = MakeUnique<foundation::fonts::ResourceFontService>(m_allocator, m_allocator);
+            service->AddFont(m_defaultFont.Get());
+            service->SetDefaultFamily(m_defaultFont->Family());
+            for (const RefPtr<foundation::fonts::Font>& font : m_otherFonts)
+                service->AddFont(font.Get());
+            m_projectFonts = Move(service);
+        }
+        else if (!m_otherFonts.IsEmpty())
+            LOG_WARNING(u8"GUI", u8"{} GUI font(s) wait for a default font", static_cast<u64>(m_otherFonts.Size()));
+        // Everything that measures or draws text from now on asks the new service; every root
+        // measures again.
+        foundation::fonts::IFontService* fonts = Fonts();
+        m_context->SetFontService(fonts);
+        m_styles.SetFontService(fonts);
+        if (m_render && m_render->Renderer)
+            m_render->Renderer->SetFontService(fonts);
+        if (m_screenRoot)
+            m_screenRoot->RequestLayoutTree();
+        for (const SceneTier& tier : m_sceneTiers)
+            tier.Root->RequestLayoutTree();
+        for (const UniquePtr<TextureRoot>& root : m_textureRoots)
+            root->Root->RequestLayoutTree();
+    }
 
     bool GuiSubsystem::IsRenderReady() const noexcept { return m_render && m_render->Renderer && m_render->Renderer->IsUsable(); }
 
@@ -946,7 +980,7 @@ namespace engine::gui
     {
         if (document.markup.IsEmpty())
             return {};
-        lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), m_fonts.Get());
+        lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), Fonts());
         loader.SetDataModel(m_context->GetDataRef());
         RefPtr<lab::Node> root = loader.LoadFromString(document.markup.AsView());
         if (!root)
@@ -1420,7 +1454,7 @@ namespace engine::gui
             return;
         }
         m_render->Renderer = MakeUnique<lab::GuiPassRenderer>(m_allocator, m_allocator, device, static_cast<u32>(frameCount < 1 ? 1 : frameCount),
-                                                              m_fonts.Get(), m_render->Shaders.Set());
+                                                              Fonts(), m_render->Shaders.Set());
         m_context->SetPictureBaker(m_render->Renderer->Baker());
         lab::GuiPassRenderer* renderer = m_render->Renderer.Get();
         m_resources->SetTextureSink(

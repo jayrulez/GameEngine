@@ -1128,7 +1128,16 @@ Each a layer with its tests.
   registered by key told to every renderer, those made later too. The root's owner styles and lays
   it out first.
 - **E5 `Engine.GUI`'s subsystem.** The context, the tiers, the resource provider by guid, hot
-  reload, the overlays; composition.
+  reload, the overlays; composition. Built (vg, 2026-10-23): `GuiResourceProvider` (a document's
+  markup, a sheet's CSS, a vector image's SVG, a texture's image by guid, each bound only as the
+  cooked type its instance has; `Poll` follows re-cooks); `GuiSubsystem` (one context and style
+  manager, the built-in theme under the game's sheets as one author sheet `@import`ing each guid in
+  order, the built-in font; the screen tier a root holding the gamekit's stack under an overlay
+  layer, the scene tier a root per scene; both drawn through `GuiPassRenderer` above Engine.UI's
+  overlays, the bakes recorded in the screen tier's prepare step; a re-cooked sheet or document
+  re-applies the sheets); `GuiDomain` (resources `gui`, `vg`, `fonts`) in the composition when the
+  lab is built. Pushed screens are not rebuilt on a re-cook (the canvases are, with E7); the screen
+  tier lays out at the target's size (the game's resolution and orientation come with E9).
 - **E6 Input.** The engine's input into the GUI, the active root, the action layer told.
 - **E7 Components.** Canvas, billboard, world panel.
 - **E8 The script surface.** The facade per context, pushing by guid.

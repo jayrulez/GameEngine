@@ -559,6 +559,9 @@ add_subdirectory(Code/Engine/Engine.Integration) # cross-subsystem composition h
 # The scene-surface composition root: aggregates every domain's Add<Domain>SceneManagers (the same
 # functions the subsystems' OnSceneCreated delegate to) for headless scene consumers (export
 # transcode, MCP scene_validate). Must come after all the domain libs it aggregates (incl. Script).
+if(OPTION_EXPERIMENTAL_GUI)
+    add_subdirectory(Code/Engine/Engine.GUI) # the engine's GUI on the lab (Specs/gui-lab-evolution-3.md, section E)
+endif()
 add_subdirectory(Code/Engine/Engine.Composition) # THE composition root: the one list of domains, facets on demand (scene, reflection, resource types, factories, facades)
 if(OPTION_EXTENSION_IMGUI)
     add_subdirectory(Code/Extensions/Imgui) # Dear ImGui debug UI (RHI renderer + subsystem) over Runtime
@@ -752,6 +755,7 @@ if(OPTION_BUILD_TESTS)
     if(OPTION_BUILD_TOOLS)
         util_test_suite(Code/Experimental/GUI.Pipeline.Tests        Experimental::GUI.Pipeline)
     endif()
+    util_test_suite(Code/Engine/Engine.GUI.Tests                    Engine::GUI)
     util_test_suite(Code/Foundation/Animation.Resource.Tests        Foundation::Animation.Resource)
     util_test_suite(Code/Foundation/Animation.Tests                 Foundation::Animation)
     util_test_suite(Code/Foundation/PropertyAnimation.Tests         Foundation::PropertyAnimation)

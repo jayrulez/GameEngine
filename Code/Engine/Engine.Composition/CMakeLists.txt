@@ -14,6 +14,9 @@ target_link_libraries(Engine.Composition PUBLIC
     Engine::Audio Engine::Script Engine::UI Engine::UI.Script Engine::Input Engine::GameInstance
     Foundation::Net.Replication Foundation::Net.Manager Engine::Net
     Foundation::Policy)
+if(OPTION_EXPERIMENTAL_GUI)
+    target_link_libraries(Engine.Composition PUBLIC Engine::GUI) # the GUI domain (section E of gui-lab-evolution-3.md)
+endif()
 
 target_sources(Engine.Composition
     PRIVATE

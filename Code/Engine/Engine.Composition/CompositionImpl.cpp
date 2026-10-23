@@ -33,6 +33,9 @@ import engine.spline;
 import engine.input;
 import engine.ui.script;
 import engine.gameinstance;
+#if OPTION_HAS_EXPERIMENTAL_GUI
+import engine.gui; // the engine's GUI on the lab, beside the UI domain while both live
+#endif
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -61,6 +64,9 @@ namespace
         &engine::net::NetDomain(),               &engine::spline::SplineDomain(),
         &kPrefabsDomain,                         &engine::input::InputDomain(),
         &engine::uiscript::UiScriptDomain(),     &engine::runtime::RunDomain(),
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        &engine::gui::GuiDomain(),
+#endif
     };
 }
 

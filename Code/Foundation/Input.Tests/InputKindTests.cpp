@@ -146,6 +146,23 @@ TEST_CASE("input kind: listeners hear each change once, and one may leave from i
     CHECK(InputKindName(InputKind::Pointer) == StringView(u8"pointer"));
 }
 
+TEST_CASE("input kind: a listener after one that leaves from inside still hears that change")
+{
+    KindBed bed;
+    u32 leaver = 0;
+    leaver = bed.tracker.AddListener([&](InputKind) { CHECK(bed.tracker.RemoveListener(leaver)); });
+    Array<InputKind> heard;
+    (void)bed.tracker.AddListener([&](InputKind kind) { heard.PushBack(kind); });
+    bed.PressPad(shell::GamepadButton::South);
+    (void)bed.Frame();
+    REQUIRE(heard.Size() == 1);
+    CHECK(heard[0] == InputKind::Pad);
+    bed.Click();
+    (void)bed.Frame();
+    REQUIRE(heard.Size() == 2); // the one that left is gone, the other stays
+    CHECK(heard[1] == InputKind::Pointer);
+}
+
 TEST_CASE("input kind: a disconnected pad counts for nothing")
 {
     KindBed bed;

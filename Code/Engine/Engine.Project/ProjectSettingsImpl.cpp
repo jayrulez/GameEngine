@@ -78,6 +78,9 @@ namespace engine::project
         // The engine GUI's sheets, in order over its theme (its fonts are the UI's above).
         builder.Property<&ProjectSettings::guiStyleSheetIds>("guiStyleSheetIds");
         asset(u8"GUI sheets", u8"GuiStyleSheetAsset", u8"(none)", u8"UI");
+        // The engine GUI's boot splash (its document binds `bootProgress`); nil = the UI's.
+        builder.Property<&ProjectSettings::guiLoadingDocumentId>("guiLoadingDocumentId");
+        asset(u8"GUI loading screen", u8"GuiDocumentAsset", u8"(the UI's)", u8"Startup");
         // The display: the render resolution (0 x 0 is the output's size) and its fit, then the
         // player's window. An export preset may override either per platform.
         const Float4 renderSize{0.0f, 16384.0f, 1.0f, 0.0f};

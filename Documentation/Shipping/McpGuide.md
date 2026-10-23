@@ -166,7 +166,9 @@ settings play reads (default scene, startup script, default input map, bus layou
 loading screen, UI font, MSAA, and `uiFontIds`, the other fonts the game UI loads beside the
 default, each a family a label picks with `font-family="<family>"`, a title face say,
 `guiStyleSheetIds`, the engine GUI's `.css` sheets in order over its built-in theme, each over
-those before it (its fonts are the UI's), and the
+those before it (its fonts are the UI's), `guiLoadingDocumentId`, a `.gml` document the player's
+boot splash shows through the engine GUI instead of the UI's (its load progress the GUI's data
+value `bootProgress`, 0 to 1), and the
 display: `renderWidth`/`renderHeight`, the resolution the game draws at, 0 for its output's size,
 `renderFit`, and the player's `windowWidth`, `windowHeight`, `windowMode` and `windowResizable`),
 and `settingCategories`, how they group: the Project Settings dialog's tabs in order (General,

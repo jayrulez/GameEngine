@@ -117,6 +117,10 @@ export namespace engine::project
         // over its built-in theme, each over those before it (a game's own over a shared one).
         // Appended: a manifest saved before it reads none. Its fonts are the UI's (above).
         Array<Guid> guiStyleSheetIds;
+        // The cooked GuiDocument the player's boot splash shows through the engine GUI while the
+        // default scene loads (nil = the UI's loading screen, loadingDocumentId); its load progress
+        // the GUI's data value `bootProgress` (0 to 1). Appended. (E9d)
+        Guid guiLoadingDocumentId;
 
         // The display (appended: a manifest saved before them reads these defaults).
         // The resolution the game DRAWS at, fitted into whatever shows it (the player's window,
@@ -182,6 +186,11 @@ export namespace engine::project
             SerializeAppended(ar, "windowResizable", windowResizable);
             SerializeAppended(ar, "orientation", orientation);
             SerializeAppended(ar, "guiStyleSheetIds", guiStyleSheetIds);
+            if (ar.Mode() != SerializeMode::Read || ar.HasKey("guiLoadingDocumentId")) // appended
+            {
+                ar.Key("guiLoadingDocumentId");
+                ar.GuidValue(guiLoadingDocumentId);
+            }
         }
     };
 

@@ -1192,3 +1192,35 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     engine.gui->EndRunScreens(&runB);
     CHECK(engine.gui->RunScreenCount() == 0u);
 }
+
+TEST_CASE("engine.gui: a document on the overlay layer shows above every screen, modal, until it is taken off")
+{
+    Engine engine;
+    engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    lab::SceneRoot* hud = engine.gui->SceneRootFor(*level);
+    hud->SetViewportSize(Float2{800.0f, 600.0f});
+    RefPtr<lab::Button> fire = MakeButton(u8"fire", Float2{20.0f, 20.0f});
+    hud->AddChild(fire.Get());
+    engine.devices.mouse.x = 50.0f;
+    engine.devices.mouse.y = 30.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+
+    RefPtr<lab::GuiDocument> loading = MakeDocument(u8"<Panel id=\"loading\"/>");
+    RefPtr<lab::Node> splash = engine.gui->PushOverlay(*loading);
+    REQUIRE(splash);
+    CHECK(engine.gui->OverlayCount() == 1u);
+    CHECK(FindById(*engine.gui->OverlayLayer(), u8"loading") != nullptr);
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == engine.gui->ScreenRoot()); // modal while it shows
+
+    engine.gui->RemoveOverlay(*splash);
+    CHECK(engine.gui->OverlayCount() == 0u);
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+
+    RefPtr<lab::GuiDocument> empty = MakeDocument(u8"");
+    CHECK_FALSE(engine.gui->PushOverlay(*empty)); // nothing to build
+    engine.scenes.DestroyScene(level);
+}

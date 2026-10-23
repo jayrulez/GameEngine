@@ -586,8 +586,36 @@ namespace engine::player
             LOG_INFO(u8"Player", u8"running scene '{}'", m_bootScenePath);
         }
 
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        // The engine GUI's splash, when the project names one (guiLoadingDocumentId): on the GUI's
+        // overlay layer, its progress the GUI's data value `bootProgress`. False when there is none
+        // or it does not resolve (the UI's splash shows instead).
+        bool PushGuiSplash()
+        {
+            if (GUI() == nullptr || m_settings.guiLoadingDocumentId.IsNil() || Resources() == nullptr)
+            {
+                return false;
+            }
+            auto proxy = Resources()->Bind<experimental::gui::GuiDocument>(m_settings.guiLoadingDocumentId);
+            if (proxy.Get() == nullptr)
+            {
+                LOG_WARNING(u8"Player", u8"the GUI loading screen did not resolve; the UI's shows");
+                return false;
+            }
+            GUI()->Context().GetData().Set(StringView(u8"bootProgress"), Variant::From<f64>(0.0));
+            m_guiSplash = GUI()->PushOverlay(*proxy.Get());
+            return static_cast<bool>(m_guiSplash);
+        }
+#endif
+
         [[nodiscard]] RefPtr<foundation::ui::View> PushSplash()
         {
+#if OPTION_HAS_EXPERIMENTAL_GUI
+            if (PushGuiSplash())
+            {
+                return {};
+            }
+#endif
             if (UI() == nullptr)
             {
                 return {};
@@ -621,10 +649,23 @@ namespace engine::player
                 UI()->RemoveScreenOverlay(m_splashView.Get());
             }
             m_splashView = nullptr;
+#if OPTION_HAS_EXPERIMENTAL_GUI
+            if (m_guiSplash && GUI() != nullptr)
+            {
+                GUI()->RemoveOverlay(*m_guiSplash);
+            }
+            m_guiSplash = nullptr;
+#endif
         }
 
         void DriveSplash(f32 progress)
         {
+#if OPTION_HAS_EXPERIMENTAL_GUI
+            if (m_guiSplash && GUI() != nullptr)
+            {
+                GUI()->Context().GetData().Set(StringView(u8"bootProgress"), Variant::From<f64>(static_cast<f64>(progress)));
+            }
+#endif
             foundation::ui::ViewGroup* root = Cast<foundation::ui::ViewGroup>(m_splashView.Get());
             if (root == nullptr)
             {
@@ -652,6 +693,9 @@ namespace engine::player
         // Boot splash + async default-scene load (task #123 step 4).
         engine::runtime::SceneLoadHandle m_bootLoad;     // the in-flight async boot load
         RefPtr<foundation::ui::View> m_splashView; // the pushed splash overlay (null = none)
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        RefPtr<experimental::gui::Node> m_guiSplash; // the GUI's splash, when the project names one
+#endif
         String m_bootScenePath;
         bool m_booting = false;
     };

@@ -443,6 +443,14 @@ export namespace engine::gui
         void EndRunScreens(const void* run);
         [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
         [[nodiscard]] lab::Node* OverlayLayer() noexcept { return m_overlay.Get(); }
+        /// `document` built and shown on the overlay layer, above every screen (a loading screen, a
+        /// system menu), modal while it shows; the tree, to take off again, or null when it does
+        /// not build.
+        RefPtr<lab::Node> PushOverlay(const lab::GuiDocument& document);
+        /// A tree made in code shown on the overlay layer.
+        void PushOverlay(lab::Node& overlay);
+        void RemoveOverlay(lab::Node& overlay);
+        [[nodiscard]] usize OverlayCount() const noexcept { return m_overlay ? m_overlay->ChildCount() : 0; }
         /// The scene tier's root for `scene`; null when the scene is unknown.
         [[nodiscard]] lab::SceneRoot* SceneRootFor(const scene::Scene& scene) noexcept;
 

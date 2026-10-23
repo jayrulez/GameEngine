@@ -813,6 +813,26 @@ namespace engine::gui
         tier.Bridge = MakeBridge(*tier.Root);
     }
 
+    RefPtr<lab::Node> GuiSubsystem::PushOverlay(const lab::GuiDocument& document)
+    {
+        RefPtr<lab::Node> tree = BuildDocument(document);
+        if (tree)
+            PushOverlay(*tree);
+        return tree;
+    }
+
+    void GuiSubsystem::PushOverlay(lab::Node& overlay)
+    {
+        if (m_overlay && overlay.GetParent() == nullptr)
+            m_overlay->AddChild(&overlay);
+    }
+
+    void GuiSubsystem::RemoveOverlay(lab::Node& overlay)
+    {
+        if (m_overlay && overlay.GetParent() == m_overlay.Get())
+            m_overlay->RemoveChild(&overlay);
+    }
+
     void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& context) { lab::InstallGuiScriptService(context, m_scriptBinding); }
 
     void GuiSubsystem::OnReady()

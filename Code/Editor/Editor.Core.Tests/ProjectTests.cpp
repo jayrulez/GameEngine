@@ -349,7 +349,7 @@ TEST_CASE("editor-project: the settings describe themselves, and the path mirror
             CHECK(engine::project::SettingAttribute(property, engine::project::kSettingEmptyTextAttribute) != nullptr);
         }
     }
-    CHECK(assets == 7u);
+    CHECK(assets == 8u); // + guiLoadingDocumentId
     CHECK(lists == 2u); // uiFontIds, guiStyleSheetIds
     const PropertyInfo* scene = FindProperty(type, "defaultSceneId");
     REQUIRE(scene != nullptr);
@@ -449,6 +449,17 @@ TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset
         const usize close = older.find("/>", start);
         REQUIRE(close != std::string::npos);
         older.erase(start, close + 2 - start);
+        // And the GUI loading screen, appended after it.
+        const usize splash = older.find("guiLoadingDocumentId");
+        REQUIRE(splash != std::string::npos);
+        const usize open = older.rfind('<', splash);
+        const usize end = older.find('>', splash);
+        REQUIRE(open != std::string::npos);
+        REQUIRE(end != std::string::npos);
+        usize stop = end + 1;
+        if (older[end - 1] != '/') // <guid ...>...</guid>: through its closing tag
+            stop = older.find('>', older.find("</", end)) + 1;
+        older.erase(open, stop - open);
         foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
         REQUIRE(root.AsWritable()
                     ->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(older.data()), older.size()))
@@ -460,6 +471,8 @@ TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset
         UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
         REQUIRE(static_cast<bool>(project)); // an older manifest still opens
         CHECK(project->Settings().guiStyleSheetIds.IsEmpty());
+        CHECK(project->Settings().guiLoadingDocumentId.IsNil());
+        project->Settings().guiLoadingDocumentId = Guid{0x65, 0x66};
         project->Settings().guiStyleSheetIds.PushBack(shared);
         project->Settings().guiStyleSheetIds.PushBack(game);
         REQUIRE(project->SaveSettings().IsOk());
@@ -473,6 +486,8 @@ TEST_CASE("project: the GUI's sheets are an appended list, in order, every asset
     engine::project::ProjectSettings dist;
     REQUIRE(engine::project::CopyProjectSettings(project->Settings(), dist).IsOk());
     CHECK(dist.guiStyleSheetIds.Size() == 2u);
+    CHECK(project->Settings().guiLoadingDocumentId == Guid{0x65, 0x66});
+    CHECK(dist.guiLoadingDocumentId == Guid{0x65, 0x66});
 
     usize visited = 0;
     engine::project::ForEachSettingAsset(project->Settings(),

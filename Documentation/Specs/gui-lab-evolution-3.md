@@ -1214,6 +1214,11 @@ Each a layer with its tests.
     editor turns run screens on; a Game tab sizes, draws and ends its run's tier. Fingers on a
     fitted tier come as the mouse SDL copies them to.
   - **E9d The GUI's loading document.** The boot splash through the GUI when the project names one.
+    Built (vg, 2026-10-23): the manifest's appended `guiLoadingDocumentId` (a `GuiDocumentAsset`,
+    Startup); `GuiSubsystem::PushOverlay` and `RemoveOverlay` (a document built, or a tree, on the
+    overlay layer, modal while it shows); the player shows its boot splash there when the project
+    names one, its load progress the GUI's data value `bootProgress` (0 to 1, which the document
+    binds), else the UI's splash as before. The project settings' asset count follows (8).
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
 - **E11 The web.** The lab and the engine's GUI on wasm.
 

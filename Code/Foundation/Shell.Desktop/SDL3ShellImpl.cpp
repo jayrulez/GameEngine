@@ -401,6 +401,8 @@ namespace foundation::shell
     core::Result<IWindow*> SDL3WindowManager::CreateWindow(const WindowSettings& settings)
     {
         const core::String title = core::String(settings.title);
+        // By default, SDL bypasses the compositor on X11. We don't want that so we set the hint to 0.
+        SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
         SDL_Window* window = SDL_CreateWindow(
             reinterpret_cast<const char*>(title.CStr()), static_cast<int>(settings.width),
             static_cast<int>(settings.height), Sdl3WindowFlags(settings));

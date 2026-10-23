@@ -279,18 +279,24 @@ export namespace experimental::gui
         // recommended path for a viewport-hosted GUI - the surface handles transform + gating,
         // and a fresh InjectMouseMove each frame keeps hover current. (Keyboard/text still come
         // through the event-based Dispatch() path.)
-        void PumpFromSurface(shell::InputSurface& surface)
+        void PumpFromSurface(shell::InputSurface& surface) { PumpDevices(surface.Mouse(), surface.Touch(), surface.Keyboard()); }
+        /// PumpFromSurface's poll from devices however they come (an engine's active input source,
+        /// already in content space): the fingers, the mouse, its buttons' edges and its wheel;
+        /// `keyboard` gives the modifiers. Any may be null.
+        void PumpDevices(shell::IMouse* mouse, shell::ITouch* touch, shell::IKeyboard* keyboard)
         {
             if (m_dispatcher == nullptr)
                 return;
-            shell::IMouse* mouse = surface.Mouse();
-            if (mouse == nullptr)
-                return;
-
-            // Fingers first (the surface places them in content space): the first one down drives
-            // the pointer; it went down, moved or lifted since the last pump.
-            if (shell::ITouch* touch = surface.Touch(); touch != nullptr)
+            // Fingers first (in the mouse's coordinates): the first one down drives the pointer; it
+            // went down, moved or lifted since the last pump.
+            if (touch != nullptr)
                 PumpTouch(*touch);
+            if (mouse == nullptr)
+            {
+                SyncTextInput();
+                SyncCursor();
+                return;
+            }
 
             const core::Float2 position{mouse->X(), mouse->Y()};
             if (IsTouchCopy(position))
@@ -301,7 +307,6 @@ export namespace experimental::gui
             }
             // Current keyboard modifiers, so a modified click or drag (Shift+click to extend a text
             // selection, a Shift drag scrubbing finer) carries them even on the poll-based path.
-            shell::IKeyboard* keyboard = surface.Keyboard();
             const u32 modifiers = keyboard != nullptr ? MapModifiers(keyboard->Modifiers()) : 0u;
             m_dispatcher->InjectMouseMove(position, modifiers);
 

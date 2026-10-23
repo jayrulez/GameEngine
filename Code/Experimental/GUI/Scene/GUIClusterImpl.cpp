@@ -103,6 +103,47 @@ namespace experimental::gui
                 dispatcher->SetFocusNode(nullptr);
     }
 
+    void Node::Leave()
+    {
+        if (m_leaving || m_parent == nullptr)
+            return;
+        EventDispatcher* dispatcher = GetEventDispatcher();
+        // A sheet plays the exit: in no GUI, in one no style pass runs over, or not styled itself
+        // (a sheet styles widgets), it has none.
+        if (dispatcher == nullptr || !GetRootNode()->HasStylePass() || Cast<UIWidget>(this) == nullptr)
+        {
+            RemoveFromParent();
+            return;
+        }
+        m_leaving = true;
+        // Out of input now, as a removed subtree is (hover, press, capture, focus, its popups):
+        // a second Back while it fades does not reach it.
+        dispatcher->NotifySubtreeRemoved(*this);
+        MarkStyleStateDirty(StateLeaving);
+        Invalidate();
+    }
+
+    void Node::FinishLeaving()
+    {
+        if (!m_leaving || m_leaveQueued)
+            return;
+        MutationQueue* queue = GetMutationQueue();
+        if (queue == nullptr)
+        {
+            RemoveFromParent();
+            return;
+        }
+        m_leaveQueued = true;
+        // Never inside the style pass's walk or an animation's tick: at the GUI's next drain. Still
+        // leaving then, it goes (a node removed or taken back meanwhile is not leaving any more).
+        RefPtr<Node> self(this);
+        queue->Enqueue([self]()
+                       {
+                           if (self->m_leaving)
+                               self->RemoveFromParent();
+                       });
+    }
+
     void Node::NotifyRemovingChild(Node& child)
     {
         if (EventDispatcher* dispatcher = GetEventDispatcher())

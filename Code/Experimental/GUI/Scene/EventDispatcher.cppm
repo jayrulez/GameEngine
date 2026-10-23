@@ -814,7 +814,7 @@ export namespace experimental::gui
         }
         void SetFocusNode(Node* node)
         {
-            if (node == m_focusNode)
+            if (node == m_focusNode || (node != nullptr && node->IsTreeLeaving())) // what leaves takes no focus (K0)
                 return;
             Node* previous = m_focusNode;
             m_focusNode = node;
@@ -2464,9 +2464,11 @@ export namespace experimental::gui
             return -1;
         }
         // Whether `node` takes input: anything while no modal is open; else what is in the topmost
-        // modal popup or in a popup above it.
+        // modal popup or in a popup above it. Never what is leaving (K0).
         [[nodiscard]] bool IsLive(const Node* node) const
         {
+            if (node != nullptr && node->IsTreeLeaving())
+                return false;
             const i32 modal = TopModal();
             if (modal < 0 || node == nullptr)
                 return true;

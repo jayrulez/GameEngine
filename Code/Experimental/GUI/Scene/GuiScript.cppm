@@ -100,7 +100,7 @@ export namespace experimental::gui
         i32 clickCount = 0;
         i32 key = 0; ///< a KeyCode value for keys
         i32 modifiers = 0; ///< shift 1, ctrl 2, alt 4, super 8
-        core::String text; ///< typed text
+        core::String text; ///< typed text; a link's id; the property or @keyframes a transitionend or animationend is of
         f32 deltaX = 0.0f; ///< the wheel; a gesture's translation since the last event
         f32 deltaY = 0.0f;
         // A gesture (E17c), x and y its fingers' middle: totals since it began, and this event's change.
@@ -113,6 +113,7 @@ export namespace experimental::gui
         core::String dragType; ///< a drag's payload type (its value as `text`, its place as `index`)
         core::String effect;   ///< a drag's effect: "none", "copy", "move" or "link"
         i32 index = -1; ///< the tab for `tabclose`; the row for `activate`, and for a pointer event over a row
+        f32 elapsed = 0.0f; ///< the seconds a transitionend's or animationend's motion ran
     };
 
     /// Registers the lab's own element types (ElementTypes::Register: Label, Button, the layouts,

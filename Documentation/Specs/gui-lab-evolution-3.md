@@ -961,7 +961,7 @@ its screens in the editor and in its exported player.
 
 Each a layer with its tests.
 
-- **K0 Leaving.** `Node::Leave`, `:leaving`, `transitionend` and `animationend`.
+- **K0 Leaving.** `Node::Leave`, `:leaving`, `transitionend` and `animationend`. Built (vg, 2026-10-23).
 - **K1 Back.** The `back` command in the keymap; popups answer it; the Escape special case goes.
 - **K2 The input kind.** K2a in `foundation.input` (on master, as Foundation work): the tracker,
   its rules and its change notification. K2b in the lab: the core's kind given by the host and the

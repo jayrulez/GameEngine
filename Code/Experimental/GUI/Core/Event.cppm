@@ -133,6 +133,11 @@ export namespace experimental::gui
         GestureChange,
         GestureEnd,
         GestureCancel,
+        // A sheet's transition of one property ended, or a keyframe animation ran its last
+        // iteration (a MotionEndEvent, K0): told to the node it moved, not routed. One replaced or
+        // stopped before its end is not told.
+        TransitionEnd,
+        AnimationEnd,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -516,6 +521,19 @@ export namespace experimental::gui
         LinkEvent(Node* target, core::StringView link) noexcept : Event(EventType::Link, target), Link(link) {}
     };
 
+    /// A sheet's motion that ended on its node: the property a transition moved, or the
+    /// @keyframes an animation ran, and the seconds it ran (its delay not counted).
+    struct MotionEndEvent : Event
+    {
+        core::StringView Name;
+        f32 Elapsed = 0.0f;
+
+        MotionEndEvent(EventType type, Node* target, core::StringView name, f32 elapsed) noexcept
+            : Event(type, target), Name(name), Elapsed(elapsed)
+        {
+        }
+    };
+
     /// A drag's events: its payload, the effect a drop would have (or had: none when a drag
     /// ended cancelled), where the pointer is (in the root's space) and the modifiers held.
     struct DragEvent : Event
@@ -625,6 +643,7 @@ export namespace experimental::gui
             {u8"dragquery", EventType::DragQuery},
             {u8"gesturestart", EventType::GestureStart}, {u8"gesturechange", EventType::GestureChange},
             {u8"gestureend", EventType::GestureEnd},     {u8"gesturecancel", EventType::GestureCancel},
+            {u8"transitionend", EventType::TransitionEnd}, {u8"animationend", EventType::AnimationEnd},
         };
     }
     /// The event type markup and scripts call `name` ("click", "keydown"); false for one they do not.

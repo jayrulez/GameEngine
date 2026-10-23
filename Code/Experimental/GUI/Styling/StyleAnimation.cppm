@@ -10,7 +10,9 @@
 // toward its new one, or a keyframe animation's track through its stops, each eased (cubic-bezier,
 // steps, the named curves) and interpolated through the typed values. Each tick it applies the
 // target with the tracks' values over it. It holds its widget weakly (the element table), so a
-// destroyed widget ends it.
+// destroyed widget ends it. A transition that ends tells its widget `transitionend`, an animation
+// that runs its last iteration `animationend` (K0), and a widget leaving goes once nothing it waits
+// for moves it.
 
 module;
 #include "Core/Prelude.h"
@@ -21,6 +23,7 @@ export module experimental.gui:style_animation;
 import foundation.core;
 import foundation.fonts;
 import :node;
+import :event; // MotionEndEvent
 import :ui_node;
 import :element_types; // Element<T>
 import :action;
@@ -259,6 +262,7 @@ export namespace experimental::gui
         void StartKeyframes(const AnimationSpec& spec, const Keyframes& keyframes)
         {
             StopKeyframes(spec.Name.AsView());
+            ForgetEnded(spec.Name.AsView());
             Array<AnimationTrack> tracks;
             const auto trackFor = [&](core::StringView property) -> AnimationTrack&
             {
@@ -343,6 +347,15 @@ export namespace experimental::gui
         }
         [[nodiscard]] const Array<core::String>& KeyframeAnimations() const noexcept { return m_animations; }
         [[nodiscard]] usize TrackCount() const noexcept { return m_tracks.Size(); }
+        /// Whether something it runs will end and has not (a leaving node waits for it): an
+        /// infinite animation or a paused one is not waited for.
+        [[nodiscard]] bool WaitsForEnd() const noexcept
+        {
+            for (const AnimationTrack& t : m_tracks)
+                if (!t.Paused && t.Iterations >= 0.0f && !t.Ended())
+                    return true;
+            return false;
+        }
 
         /// Applies the target with every track's value now over it.
         void ApplyNow()
@@ -380,6 +393,27 @@ export namespace experimental::gui
                 if (!track.Paused)
                     track.Elapsed += seconds;
             ApplyNow();
+            // The animations whose every track has now ended (told once; a forwards fill keeps its
+            // tracks, so this is asked before the others go).
+            Array<MotionEnd> ends;
+            for (const core::String& name : m_animations)
+            {
+                bool any = false;
+                bool ended = true;
+                f32 ran = 0.0f;
+                for (const AnimationTrack& t : m_tracks)
+                    if (t.Animation.AsView() == name.AsView())
+                    {
+                        any = true;
+                        ended = ended && t.Ended();
+                        ran = t.Duration * t.Iterations;
+                    }
+                if (any && ended && !HasEnded(name.AsView()))
+                {
+                    m_ended.PushBack(name);
+                    ends.PushBack(MotionEnd{EventType::AnimationEnd, name, ran});
+                }
+            }
             // Ended tracks that hold nothing go (a forwards fill keeps its track, showing its end).
             for (usize i = 0; i < m_tracks.Size();)
             {
@@ -387,6 +421,8 @@ export namespace experimental::gui
                 const bool holds = t.Fill == AnimationFill::Forwards || t.Fill == AnimationFill::Both;
                 if (t.Ended() && (!holds || t.Animation.IsEmpty()))
                 {
+                    if (t.Animation.IsEmpty())
+                        ends.PushBack(MotionEnd{EventType::TransitionEnd, t.Property, t.Duration});
                     m_resets.PushBack(t.Property);
                     m_tracks.RemoveAt(i);
                 }
@@ -397,12 +433,44 @@ export namespace experimental::gui
             }
             if (!m_resets.IsEmpty())
                 ApplyNow(); // what the ended tracks moved returns to the target, or its initial value
+            UINode* node = m_node.Get();
+            if (node == nullptr)
+                return;
+            // Told after the tick is done: a listener may restyle, retarget or remove the node.
+            const RefPtr<Node> held(node);
+            for (const MotionEnd& end : ends)
+                node->SendEvent(MotionEndEvent(end.Type, node, end.Name.AsView(), end.Elapsed));
+            if (node->IsLeaving() && !WaitsForEnd())
+                node->FinishLeaving();
         }
         [[nodiscard]] bool IsDone() override { return m_done || m_tracks.IsEmpty(); }
         [[nodiscard]] f32 GetCurrentProgress() override { return 0.0f; }
         [[nodiscard]] core::Duration GetTotalTime() override { return core::Duration{}; }
 
     private:
+        struct MotionEnd
+        {
+            EventType Type = EventType::TransitionEnd;
+            core::String Name;
+            f32 Elapsed = 0.0f;
+        };
+        [[nodiscard]] bool HasEnded(core::StringView animation) const
+        {
+            for (const core::String& name : m_ended)
+                if (name.AsView() == animation)
+                    return true;
+            return false;
+        }
+        void ForgetEnded(core::StringView animation)
+        {
+            for (usize i = 0; i < m_ended.Size(); ++i)
+                if (m_ended[i].AsView() == animation)
+                {
+                    m_ended.RemoveAt(i);
+                    return;
+                }
+        }
+
         [[nodiscard]] StyleInterpolationContext InterpolationContext() const
         {
             StyleInterpolationContext ctx;
@@ -454,6 +522,7 @@ export namespace experimental::gui
         Array<AnimationTrack> m_tracks;
         Array<core::String> m_animations;
         Array<core::String> m_resets; // properties whose tracks just went, to return on the next apply
+        Array<core::String> m_ended;  // the animations that told their end (not again until restarted)
         bool m_done = false;
     };
 

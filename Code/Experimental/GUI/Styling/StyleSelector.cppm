@@ -10,7 +10,7 @@
 //
 // - state: :hover, :active, :focus, :focus-visible, :focus-within, :disabled, :enabled, and the
 //   widget's own (:checked, :indeterminate, :read-only, :read-write, :placeholder-shown, :selected, and E7's :drop-target and :drag-source), which a
-//   widget reports through UIWidget::GetWidgetStates;
+//   widget reports through UIWidget::GetWidgetStates, and :leaving (K0: Node::Leave);
 // - structure: :first-child, :last-child, :only-child, :first-of-type, :last-of-type, :empty,
 //   :nth-child(), :nth-last-child(), :nth-of-type(), :nth-last-of-type() (an+b, odd, even);
 // - logic: :not(), :is() and :where() over selector lists;
@@ -84,12 +84,14 @@ export namespace experimental::gui
         /// A widget at the top of its tree, under no widget (E13: where a theme's tokens go, so
         /// every widget inherits them and a subtree can override them).
         PseudoRoot = 1u << 21,
+        /// On its way out (K0): Node::Leave, until its exit ends and it goes.
+        PseudoLeaving = Node::StateLeaving,
     };
     /// The pseudo-classes that follow interaction (what `applyPseudo = false` ignores).
     inline constexpr u32 kDynamicPseudoClasses = PseudoHover | PseudoFocus | PseudoActive | PseudoDisabled | PseudoFocusVisible |
                                                  PseudoEnabled | PseudoFocusWithin | PseudoChecked | PseudoIndeterminate |
                                                  PseudoReadOnly | PseudoReadWrite | PseudoPlaceholderShown |
-                                                 PseudoSelected | PseudoDropTarget | PseudoDragSource;
+                                                 PseudoSelected | PseudoDropTarget | PseudoDragSource | PseudoLeaving;
 
     /// `:nth-child(an+b)` and its kin: the positions an+b (n = 0, 1, 2, ...), 1-based.
     struct NthPattern
@@ -871,6 +873,8 @@ export namespace experimental::gui
             return false;
         if (has(PseudoDragSource) && !element.IsDragSource())
             return false;
+        if (has(PseudoLeaving) && !element.IsLeaving())
+            return false;
         if (has(PseudoEmpty) && element.ChildCount() != 0)
             return false;
         if (has(PseudoRoot) && element.GetParent() != nullptr && core::Cast<UIWidget>(element.GetParent()) != nullptr)
@@ -1048,6 +1052,7 @@ export namespace experimental::gui
             {u8"selected", PseudoSelected},
             {u8"drop-target", PseudoDropTarget},
             {u8"drag-source", PseudoDragSource},
+            {u8"leaving", PseudoLeaving},
             {u8"empty", PseudoEmpty},
             {u8"root", PseudoRoot},
             {u8"first-child", PseudoFirstChild},

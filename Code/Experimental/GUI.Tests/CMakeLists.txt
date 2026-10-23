@@ -100,6 +100,7 @@ add_executable(GUI.Tests
     DragDropTests.cpp
     ThemeTests.cpp
     KeyframesTests.cpp
+    LeaveTests.cpp
     MarkupCoverageTests.cpp
     MarkupTests.cpp)
 

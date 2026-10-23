@@ -243,6 +243,7 @@ export namespace experimental::gui
             for (const Node* n = root.GetParent(); n != nullptr; n = n->GetParent())
                 if (const UIWidget* w = core::Cast<UIWidget>(n))
                     m_ancestors.Push(*w);
+            root.GetRootNode()->NoteStylePass(); // a node leaving this tree waits for its exit (K0)
             m_filtering = true;
             Visit(root, all, false);
             m_filtering = false;
@@ -517,6 +518,10 @@ export namespace experimental::gui
                     ApplyStyle(widget, resolved, context.Resources, context.FontService, context.Lengths);
                 }
             }
+            // Leaving (K0), with nothing the sheet started that will end: it goes (at the GUI's next
+            // drain, not inside this walk); else its animation lets it go when that ends.
+            if (widget.IsLeaving() && !(animation && !animation->IsDone() && animation->WaitsForEnd()))
+                widget.FinishLeaving();
             const ResolvedStyle* before = m_cache.Find(&widget);
             // Its children restyle when what they inherit changed: a custom property, or its text style.
             const bool customsChanged = before == nullptr || !SameCustomProperties(*before, resolved) ||

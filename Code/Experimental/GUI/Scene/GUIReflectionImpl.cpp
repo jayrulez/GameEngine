@@ -168,6 +168,14 @@ namespace experimental::gui
                 break;
             }
             case EventType::ItemActivate: out.index = static_cast<const ItemEvent&>(event).Item; break;
+            case EventType::TransitionEnd:
+            case EventType::AnimationEnd:
+            {
+                const MotionEndEvent& motion = static_cast<const MotionEndEvent&>(event);
+                out.text = core::String(motion.Name);
+                out.elapsed = motion.Elapsed;
+                break;
+            }
             default: break;
             }
             return out;
@@ -792,6 +800,7 @@ namespace experimental::gui
             .Property<&GuiEvent::id>("id")
             .Property<&GuiEvent::dragType>("dragType")
             .Property<&GuiEvent::effect>("effect")
+            .Property<&GuiEvent::elapsed>("elapsed")
             // Constructible, so both languages take it by value and Luau binds it (a type a script
             // can make is one it can be handed).
             .Constructor<>();
@@ -846,6 +855,8 @@ namespace experimental::gui
         builder.Method<&Node::OnCommandScript>("onCommand");
         builder.Method<&Node::FocusElement>("focus");
         builder.Method<&Node::Destroy>("destroy");
+        builder.Method<&Node::Leave>("leave"); // goes after its exit plays (K0)
+        builder.Method<&Node::IsLeaving>("isLeaving");
         // Motion (E14): a tween, a spring, a group's run, and the property given back.
         builder.Method<&Node::Animate>("tween"); // `animate` is an expander's property
         builder.Method<&Node::CreateTween>("createTween");

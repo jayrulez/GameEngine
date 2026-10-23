@@ -796,6 +796,84 @@ TEST_CASE("gui-script: Luau tweens, springs and plays a sequence (E14)")
 
 namespace
 {
+    // Leaving (K0): the script has put a Button "card" (class "card") under the root, listening for
+    // `transitionend` (`heardOpacity` is 1 once it heard the opacity's, `heardElapsed` its seconds),
+    // and offers `goAway()`, which makes it leave, and `leaving()`, which reads whether it is.
+    void CheckLeaving(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        REQUIRE(bed.root->ChildCount() == 1);
+        gui::StyleManager styles(gui::CSSParser::Parse(
+            StringView(u8".card { opacity: 1; transition: opacity 0.5s linear; } .card:leaving { opacity: 0; }")));
+        const auto frame = [&](double seconds)
+        {
+            bed.root->GetContext().Update(Duration::FromSeconds(seconds));
+            styles.ApplyTree(*bed.root);
+        };
+        frame(0.0);
+        bed.Run(u8"goAway");
+        CHECK(bed.Number(u8"leaving") == doctest::Approx(1.0));
+        frame(0.0);
+        frame(0.25);
+        CHECK(bed.root->ChildCount() == 1);
+        CHECK(bed.Number(u8"heardOpacity") == doctest::Approx(0.0));
+        frame(0.25);
+        CHECK(bed.Number(u8"heardOpacity") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"heardElapsed") == doctest::Approx(0.5));
+        CHECK(bed.root->ChildCount() == 0);
+        CHECK(bed.errors.count == 0);
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript makes a node leave and hears its transition end (K0)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"double heard = 0; double elapsed = 0;\n"
+        u8"Button@ card;\n"
+        u8"bool onEnd(GuiEvent e) { if (e.text == \"opacity\") { heard = 1; elapsed = e.elapsed; } return false; }\n"
+        u8"void main() {\n"
+        u8"  @card = Button::of(gui::root().add(\"Button\"));\n"
+        u8"  card.addClass(\"card\");\n"
+        u8"  card.on(\"transitionend\", EventHandler(onEnd));\n"
+        u8"}\n"
+        u8"void goAway() { card.leave(); }\n"
+        u8"double leaving() { return card.isLeaving() ? 1 : 0; }\n"
+        u8"double heardOpacity() { return heard; }\n"
+        u8"double heardElapsed() { return elapsed; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckLeaving(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau makes a node leave and hears its transition end (K0)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local heard, elapsed = 0, 0\n"
+        u8"local card = Button.of(gui.root():add(\"Button\"))\n"
+        u8"card:addClass(\"card\")\n"
+        u8"card:on(\"transitionend\", function(e) if e.text == \"opacity\" then heard = 1; elapsed = e.elapsed end return false end)\n"
+        u8"function goAway() card:leave() end\n"
+        u8"function leaving() return card:isLeaving() and 1 or 0 end\n"
+        u8"function heardOpacity() return heard end\n"
+        u8"function heardElapsed() return elapsed end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckLeaving(bed);
+}
+#endif
+
+namespace
+{
     // Listener tokens (E16): the script put a Button 80 x 30 at the origin, listening for clicks
     // twice: `once` stops itself from inside, `always` stays until `stopAlways` turns it off.
     void CheckOff(GuiBed& bed)

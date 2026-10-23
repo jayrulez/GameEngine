@@ -249,6 +249,8 @@ export namespace experimental::gui
             RefPtr<Node> keepAlive = m_children[index]; // hold across detach + callback
             child->NoteOldArea(nullptr); // where it showed is to be drawn again (E15)
             child->m_parent = nullptr;
+            child->m_leaving = false; // out of its parent, it has left (K0): taken back, it is whole
+            child->m_leaveQueued = false;
             m_children.RemoveAt(index);
             ChildrenRearranged(*child);
             ChildrenStyleChanged();
@@ -535,7 +537,7 @@ export namespace experimental::gui
         // Topmost visible descendant (or self) under a world point; nullptr if none.
         [[nodiscard]] virtual Node* OverFind(core::Float2 worldPoint)
         {
-            if (!m_visible || !IsDisplayed())
+            if (!m_visible || !IsDisplayed() || m_leaving) // a leaving node takes no pointer (K0)
                 return nullptr;
             // A scroll container's bars lie over its content: a press on one is the container's.
             if (IsScrollContainer() && m_hitTestVisible)
@@ -922,6 +924,7 @@ export namespace experimental::gui
             StateSelected = 1u << 18, // after the selector's own flags (12 to 17)
             StateDropTarget = 1u << 19,
             StateDragSource = 1u << 20,
+            StateLeaving = 1u << 22, // after :root (21)
         };
         /// `states` changed on this node: it restyles (its subtree too when the sheets read them
         /// through it).
@@ -1788,6 +1791,33 @@ export namespace experimental::gui
             Invalidate();
         }
         [[nodiscard]] bool IsDragSource() const noexcept { return m_dragSourceState; }
+
+        // === Leaving (K0 of Specs/gui-lab-evolution-3.md) ===
+        // A node that goes plays its way out first: Leave puts it in `:leaving`, where the sheet's
+        // exit transition or animation runs, takes it out of the pointer, focus and navigation at
+        // once, and the style pass removes it from its parent when what the sheet started on it
+        // has ended (the next frame when nothing moves it; an infinite or paused animation is not
+        // waited for). Leaving ends when it leaves its parent, by this or any other removal, so a
+        // node taken back is whole again. Defined in Scene/GUIClusterImpl.cpp.
+
+        /// Leaves its parent after its exit plays; at once in no GUI, or in one no style pass runs over.
+        void Leave();
+        /// Whether it is leaving (`:leaving`).
+        [[nodiscard]] bool IsLeaving() const noexcept { return m_leaving; }
+        /// Whether it or an ancestor is leaving: it takes no input.
+        [[nodiscard]] bool IsTreeLeaving() const noexcept
+        {
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+                if (n->m_leaving)
+                    return true;
+            return false;
+        }
+        /// The style pass's: what moves it has ended, so it goes (at the next safe point, once).
+        void FinishLeaving();
+        /// A style pass ran over the tree this node tops (StyleManager::ApplyTree says so): a node
+        /// leaving it waits for the sheet's exit.
+        void NoteStylePass() noexcept { m_styledTree = true; }
+        [[nodiscard]] bool HasStylePass() const noexcept { return m_styledTree; }
         /// It owns a press at `local` for a drag of its own (a slider's thumb, a scroll bar, a
         /// field selecting): a drag from an ancestor is not offered.
         [[nodiscard]] virtual bool OwnsPressDrag(core::Float2 local) const
@@ -2901,6 +2931,9 @@ export namespace experimental::gui
         core::String m_dropTypes;
         bool m_dropTargetState = false;
         bool m_dragSourceState = false;
+        bool m_leaving = false;     // Leave was called; it goes when its exit ends (K0)
+        bool m_leaveQueued = false; // its removal waits in the mutation queue
+        bool m_styledTree = false;  // the top of a tree a style pass ran over
         core::Float2 m_size{0.0f, 0.0f};
         LayoutStyle m_layoutStyle;              // what it asks of layout (E2)
         Display m_displayBeforeNone = Display::Flex; // what SetDisplayed(true) gives back

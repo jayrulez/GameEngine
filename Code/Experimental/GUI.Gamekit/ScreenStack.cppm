@@ -9,7 +9,8 @@
 // covers what is under it (hides it), blocks its input (makes it inert, so a press held there is let
 // go) and pauses the game; the stack reports the pause (the game decides what pausing means). A
 // screen is a navigation scope and remembers its focus, so a pop refocuses the screen now on top;
-// on a push, its `nav-default` or its first focusable. A press on a screen's empty area leaves the
+// on a push, its `nav-default` or its first focusable, else the screen itself (a HUD: `back` still
+// starts there). A press on a screen's empty area leaves the
 // focus where it is, so `back` (Escape, the pad's East) still reaches it: the top screen hears
 // `back` first (a script's handler may take it; `back="none"` keeps it), else the stack pops, never
 // below its last screen and never in the frame that pushed. A screen popped leaves through the
@@ -142,7 +143,7 @@ export namespace experimental::gui
             m_adding = false;
             NoteJustPushed();
             Settle();
-            (void)screen->FocusElement();
+            FocusScreen(*screen);
             screen->SendNamedEvent(core::StringView(u8"screenenter"));
             screen->Enter(); // :entering for the sheet's entrance; `screenshown` once it has played (K5)
             return screen.Get();
@@ -164,7 +165,7 @@ export namespace experimental::gui
             TakeOffTop();
             Settle();
             if (Screen* top = Top())
-                (void)top->FocusElement();
+                FocusScreen(*top);
             return true;
         }
         /// Swaps the top screen for `content` (pushed as Push does); with none, pushes it.
@@ -261,6 +262,15 @@ export namespace experimental::gui
         [[nodiscard]] i32 CountScript() const noexcept { return static_cast<i32>(m_screens.Size()); }
 
     private:
+        // Its remembered focus, its `nav-default` or its first focusable; with nothing focusable
+        // (a HUD), the screen itself, so `back` and its commands still start in it.
+        void FocusScreen(Screen& screen)
+        {
+            if (screen.FocusElement())
+                return;
+            if (EventDispatcher* dispatcher = GetEventDispatcher())
+                dispatcher->SetFocusNode(&screen);
+        }
         [[nodiscard]] static core::Variant HandleOf(Screen* screen)
         {
             return screen != nullptr ? screen->HandleAs(Screen::StaticType()) : core::Variant{};

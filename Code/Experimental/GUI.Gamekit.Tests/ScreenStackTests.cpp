@@ -190,6 +190,22 @@ TEST_CASE("screens: the top screen's own back handler takes it before the stack"
     CHECK(bed.stack->Top() == game.Get());
 }
 
+TEST_CASE("screens: a screen with nothing focusable takes the focus itself, so back and its commands start there")
+{
+    Bed bed;
+    auto title = bed.MakeScreen(u8"play");
+    auto hud = core::MakeRef<Screen>(core::DefaultAllocator()); // nothing focusable on it
+    (void)bed.stack->Push(*title);
+    (void)bed.stack->Push(*hud);
+    CHECK(bed.d().GetFocusNode() == hud.Get());
+    int paused = 0;
+    (void)hud->OnCommand(SV(kBackCommand), [&paused](CommandEvent&) { ++paused; });
+    bed.Frame();
+    bed.Escape();
+    CHECK(paused == 1); // the HUD's own back: it opens a pause screen in a game
+    CHECK(bed.stack->Top() == hud.Get());
+}
+
 TEST_CASE("screens: a press on a screen's empty area keeps the focus, so back still reaches it")
 {
     Bed bed;

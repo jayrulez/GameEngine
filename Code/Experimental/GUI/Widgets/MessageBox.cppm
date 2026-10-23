@@ -8,7 +8,7 @@
 // word-wrapped message plus bottom-right buttons. Pressing a button fires the result callback
 // and closes the dialog. Shown via Window::OpenModal, a modal popup (E5): what is behind it is
 // inert and its backdrop dims it. Its default button (the rightmost, OK or Yes) has focus when it
-// opens, so Return or a pad's South picks it; Escape (or a pad's East) picks the cancel one
+// opens, so Return or a pad's South picks it; `back` (Escape, a pad's East) picks the cancel one
 // (Cancel, No, or OK when it is the only one), as its close button does. Its message wraps and
 // its height fits it; it is not resizable unless asked.
 
@@ -181,18 +181,10 @@ export namespace experimental::gui
             return index < m_buttons.Size() ? m_buttons[index].Get() : nullptr;
         }
 
-    protected:
-        // Escape (a pad's East, unbound) picks the cancel button's result.
-        void OnKeyDown(const KeyEvent& event) override
-        {
-            if (event.KeyCode != static_cast<u32>(KeyCode::Escape) || event.Modifiers != 0 || m_results.IsEmpty())
-                return;
-            event.Handled = true;
-            Finish(m_results[0].AsView()); // the leftmost: Cancel or No, or the only one
-        }
-
     public:
-        // Its close button answers as Escape does.
+        // Its close button and `back` (Escape, a pad's East) pick the cancel button's result: the
+        // leftmost, Cancel or No, or the only one.
+        [[nodiscard]] bool AnswersBack() const override { return true; }
         void RequestClose() override
         {
             if (m_results.IsEmpty())

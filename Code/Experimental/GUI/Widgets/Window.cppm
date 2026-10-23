@@ -32,6 +32,8 @@ import :event_dispatcher;
 import :button_base;
 import :draw_context;
 import :layout_style;
+import :commands; // CommandEvent
+import :keymap;   // kBackCommand
 import foundation.vg; // PathBuilder, StrokeStyle (the close cross, the grip's lines)
 
 using namespace foundation::core;
@@ -245,8 +247,12 @@ export namespace experimental::gui
             m_resizeGrip->SetDisplayed(resizable);
         }
         [[nodiscard]] bool IsResizable() const noexcept { return m_resizable; }
-        /// Asked to close (its close button): a window closes; a dialog answers as Escape does.
+        /// Asked to close (its close button, or `back` while it is open modal): a window closes; a
+        /// dialog answers as its cancel does.
         virtual void RequestClose() { Close(); }
+        /// Whether `back` (Escape, the pad's East) asks it to close while it is open modal (K1):
+        /// when it may be closed.
+        [[nodiscard]] virtual bool AnswersBack() const { return m_closable; }
         [[nodiscard]] f32 GetTitleBarHeight() const noexcept { return m_titleBarHeight; }
         void SetTitleBarHeight(f32 height)
         {
@@ -383,6 +389,9 @@ export namespace experimental::gui
                 options.TakesFocus = true;
                 Window* self = this;
                 options.OnClosed = [self](PopupCloseReason) { self->Closed(); };
+                // Back asks it to close, while it is open (under it is inert, so nothing else would hear it).
+                if (AnswersBack())
+                    m_backHandler = OnCommand(core::StringView(kBackCommand), [self](CommandEvent&) { self->RequestClose(); });
                 dispatcher->OpenPopup(owner, *this, core::Move(options));
                 return;
             }
@@ -401,6 +410,9 @@ export namespace experimental::gui
         {
             m_open = false;
             m_modal = false;
+            if (m_backHandler != 0)
+                (void)RemoveCommandHandler(m_backHandler);
+            m_backHandler = 0;
             OnWindowClosed();
             if (m_onClose)
                 m_onClose();
@@ -451,6 +463,7 @@ export namespace experimental::gui
         core::Function<void()> m_onUserArranged;
         bool m_open = false;
         bool m_modal = false;
+        u32 m_backHandler = 0; // its `back` handler while open modal
         core::Float2 m_minSize{120.0f, 60.0f};
         f32 m_titleBarHeight = 28.0f;
         f32 m_gripSize = 14.0f;

@@ -83,6 +83,9 @@ export namespace experimental::gui
             // or South (the dispatcher's while it drags).
             (void)m_keymap.Bind(core::StringView(u8"ctrl-shift-d"), core::StringView(u8"drag.pick"));
             (void)m_keymap.Bind(core::StringView(u8"pad-north"), core::StringView(u8"drag.pick"));
+            // Back (K1): one command for the keyboard and the pad, which a game rebinds like any.
+            (void)m_keymap.Bind(core::StringView(u8"escape"), core::StringView(kBackCommand));
+            (void)m_keymap.Bind(core::StringView(u8"pad-east"), core::StringView(kBackCommand));
         }
         GUIContext(const GUIContext&) = delete;
         GUIContext& operator=(const GUIContext&) = delete;
@@ -431,6 +434,10 @@ export namespace experimental::gui
         {
             if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !Untracked([&] { return command->IsEnabled(); }))
                 return false;
+            // Back closes the topmost auto popup before anything under it hears it (K1): the top
+            // layer is on top whether or not it holds the focus (a combo box's list).
+            if (id == core::StringView(kBackCommand) && m_eventDispatcher.CloseTopAutoPopup(PopupCloseReason::Escape))
+                return true;
             // Focused first, up to this root or a modal popup (below it is inert); held for the walk,
             // as a handler may end nodes on it (a dock float its own move empties).
             Array<RefPtr<Node>> path(MemoryAllocator());
@@ -470,6 +477,8 @@ export namespace experimental::gui
             (void)m_eventDispatcher.ObserveFocus();
             if (const Command* command = m_context->GetCommands().Find(id); command != nullptr && !command->IsEnabled())
                 return false;
+            if (id == core::StringView(kBackCommand) && m_eventDispatcher.HasTopAutoPopup())
+                return true;
             for (Node* n = CommandStart(); n != nullptr; n = n->GetParent())
             {
                 if (n->HandlesCommand(id))
@@ -541,7 +550,7 @@ export namespace experimental::gui
                 return false; // no binding, or unbound here: as if none
             // Nothing on the focus path handles it (a menu's keys on a bar button with no menu open,
             // E12): as if unbound, so the key goes on to navigation. One disabled is still taken.
-            bool handled = false;
+            bool handled = command.AsView() == core::StringView(kBackCommand) && m_eventDispatcher.HasTopAutoPopup();
             for (Node* n = CommandStart(); n != nullptr && !handled; n = n->GetParent())
             {
                 handled = n->HandlesCommand(command.AsView());

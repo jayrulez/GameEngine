@@ -51,6 +51,10 @@ export namespace experimental::gui
     inline constexpr const char8_t* kMenuDownCommand = u8"menu.down";
     inline constexpr const char8_t* kMenuLeftCommand = u8"menu.left";
     inline constexpr const char8_t* kMenuRightCommand = u8"menu.right";
+    /// Back out of where one is (K1 of Specs/gui-lab-evolution-3.md): Escape and the pad's East by
+    /// default. The topmost auto popup answers it by closing, a modal dialog as its close button
+    /// does, then whatever handles it on the focus path (a game's screen).
+    inline constexpr const char8_t* kBackCommand = u8"back";
 
     struct Keystroke
     {

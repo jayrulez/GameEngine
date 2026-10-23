@@ -33,7 +33,7 @@ namespace core = foundation::core;
 export namespace experimental::gui
 {
     /// How a popup closes (E5, after the web's popover kinds): `Auto` on a press outside it and on
-    /// Escape, and when another auto popup that it does not hold opens; `Manual` only from code (a
+    /// `back` (Escape, the pad's East: K1), and when another auto popup that it does not hold opens; `Manual` only from code (a
     /// dialog); `Hint` (a tooltip) on any press or key, never closing the others, never taking focus
     /// or the pointer.
     enum class PopupKind : u8
@@ -551,17 +551,6 @@ export namespace experimental::gui
                     QueryAtFocus(); // the focus's own key (a list's arrows) moved where it would drop
                 return true;
             }
-            // Escape no widget took closes the topmost auto popup (E5).
-            if (keyCode == static_cast<u32>(KeyCode::Escape) && modifiers == 0)
-                for (usize i = m_popups.Size(); i-- > 0;)
-                {
-                    if (m_popups[i].Options.Kind == PopupKind::Hint)
-                        continue;
-                    if (m_popups[i].Options.Kind != PopupKind::Auto)
-                        break; // a dialog's Escape is its own
-                    ClosePopupAt(i, PopupCloseReason::Escape);
-                    return true;
-                }
             // Tab and Shift+Tab traverse focus when nothing took them; from a widget that captures
             // Tab (E12) they are its keys, and Ctrl+Tab and Ctrl+Shift+Tab traverse instead.
             if (keyCode == static_cast<u32>(KeyCode::Tab))
@@ -654,8 +643,9 @@ export namespace experimental::gui
             SetFocusNode(target);
             return true;
         }
-        /// A gamepad button (the d-pad goes to PressDirection): the bindings first; unbound, South
-        /// activates and East is Escape (a dialog cancels, the topmost auto popup closes).
+        /// A gamepad button (the d-pad goes to PressDirection): the bindings first (East is `back`'s
+        /// by default); left to it, South activates and East is Escape, for a widget's own Escape
+        /// (an edit cancelled).
         void InjectPadButton(PadButton button)
         {
             NoteInput();
@@ -671,7 +661,7 @@ export namespace experimental::gui
             if (button == PadButton::South)
                 (void)Activate();
             else if (button == PadButton::East)
-                (void)InjectKeyDown(static_cast<u32>(KeyCode::Escape)); // unbound, East is Escape: back out of a popup or a dialog
+                (void)InjectKeyDown(static_cast<u32>(KeyCode::Escape)); // not taken as `back`: a widget's own Escape
         }
         /// Told on input a user gave this root (a press, a key, the gamepad): its GUI makes it the
         /// active root.
@@ -1065,6 +1055,17 @@ export namespace experimental::gui
             }
         }
         [[nodiscard]] bool IsPopupOpen(const Node& popup) const { return FindPopup(popup) >= 0; }
+        /// Closes the topmost auto popup, not past a dialog (a manual popup answers for itself);
+        /// false when none is open there. The `back` command's first answer (K1).
+        bool CloseTopAutoPopup(PopupCloseReason reason)
+        {
+            const i32 top = TopAutoPopup();
+            if (top < 0)
+                return false;
+            ClosePopupAt(static_cast<usize>(top), reason);
+            return true;
+        }
+        [[nodiscard]] bool HasTopAutoPopup() const { return TopAutoPopup() >= 0; }
         [[nodiscard]] usize PopupCount() const noexcept { return m_popups.Size(); }
         /// The open popups, bottom first.
         [[nodiscard]] Node* PopupAt(usize index) const { return index < m_popups.Size() ? m_popups[index].Popup.Get() : nullptr; }
@@ -2453,6 +2454,17 @@ export namespace experimental::gui
             for (usize i = 0; i < m_popups.Size(); ++i)
                 if (m_popups[i].Popup.Get() == &popup)
                     return static_cast<i32>(i);
+            return -1;
+        }
+        // The topmost auto popup's index (a hint skipped, none past a manual one), or -1.
+        [[nodiscard]] i32 TopAutoPopup() const
+        {
+            for (usize i = m_popups.Size(); i-- > 0;)
+            {
+                if (m_popups[i].Options.Kind == PopupKind::Hint)
+                    continue;
+                return m_popups[i].Options.Kind == PopupKind::Auto ? static_cast<i32>(i) : -1;
+            }
             return -1;
         }
         // The topmost modal popup's index, or -1.

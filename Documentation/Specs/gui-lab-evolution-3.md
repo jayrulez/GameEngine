@@ -1241,7 +1241,11 @@ Each a layer with its tests.
   the markup loader's warnings name it, so an editor marks a dropped element or attribute on its
   own line and a cook's warning says where; CSS highlighting waits for the editor's move, whose
   code editor (GUI.Code) lexes CSS already.
-- **E11 The web.** The lab and the engine's GUI on wasm.
+- **E11 The web.** The lab and the engine's GUI on wasm. Built (vg, 2026-10-23): a web build no
+  longer forces the experimental GUI off (the tooling group still is): the lab, its satellites,
+  their suites, Engine.GUI and the web player build for wasm with no other change than the web
+  player's entry importing the GUI's modules, as the desktop player's does. Not yet run in a
+  browser: a web game showing the engine's GUI (its canvas, its WebGPU pass) is the check owed.
 
 #### After section E (the user, 2026-10-23)
 

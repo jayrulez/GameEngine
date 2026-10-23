@@ -144,11 +144,11 @@ option(OPTION_ENABLE_ANGELSCRIPT "Build the AngelScript script backend" ON)
 option(OPTION_ENABLE_LUAU        "Build the Luau script backend" ON)
 option(OPTION_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 
-# A web (Emscripten) build ships a game, not the authoring/side toolchain: force the tooling,
-# experimental, and extension groups off up front, before the policy defines below capture them.
+# A web (Emscripten) build ships a game, not the authoring/side toolchain: force the tooling group
+# off up front, before the policy defines below capture it. The experimental GUI stays: a web game
+# has the engine's GUI (Engine.GUI) as a desktop one does (gui-lab-evolution-3.md, E11).
 if(EMSCRIPTEN)
     set(OPTION_BUILD_TOOLS OFF)
-    set(OPTION_EXPERIMENTAL_GUI OFF)
     # OPTION_EXTENSION_IMGUI stays available on web: Dear ImGui + extensions.imgui compile for
     # wasm (the renderer is pure RHI, the subsystem consumes the shell's input), so the debug
     # panel works in the browser too (WebScene's tweak UI).

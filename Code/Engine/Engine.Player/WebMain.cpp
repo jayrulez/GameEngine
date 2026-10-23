@@ -70,6 +70,11 @@ import foundation.ui.resource;
 import foundation.ui;           // View / ViewGroup / ProgressBar (the boot-splash controls)
 import engine.ui;
 import engine.gameinstance; // SceneLoadHandle (PlayerApplication async level load)
+#if OPTION_HAS_EXPERIMENTAL_GUI
+import engine.gui;                 // the engine GUI (its fonts, sheets and boot splash)
+import experimental.gui;           // the GUI's nodes and data (the splash's progress)
+import experimental.gui.resources; // GuiDocument (the GUI loading screen)
+#endif
 import foundation.xml.serialization;
 import foundation.settings;
 import engine.project;

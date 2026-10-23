@@ -683,6 +683,12 @@ namespace experimental::gui
         return root != nullptr ? root->GetContext().CreateDataTween(name, to, seconds, easing) : RefPtr<Tween>{};
     }
 
+    core::String Gui::InputKindNow()
+    {
+        SceneRoot* root = ScriptRoot();
+        return core::String(root != nullptr ? InputKindName(root->GetEventDispatcher()->ObserveInputKind()) : core::StringView(u8"pointer"));
+    }
+
     core::Variant Gui::Root()
     {
         foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
@@ -1560,6 +1566,7 @@ namespace experimental::gui
         builder.Method<&Gui::Language>("language");
         builder.Method<&Gui::GetBool>("getBool");
         builder.Method<&Gui::Set>("set");
+        builder.Method<&Gui::InputKindNow>("inputKind"); // K2b
         builder.Method<&Gui::TweenData>("tween"); // a data value moving (K3)
         builder.Method<&Gui::CreateDataTween>("createTween");
         builder.Method<&Gui::DefineCommand>("defineCommand");

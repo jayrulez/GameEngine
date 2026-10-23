@@ -61,6 +61,9 @@ export namespace experimental::gui
         /// The GUI's language ("en", "ar-EG"); empty with no localization.
         [[nodiscard]] static core::String Language();
         [[nodiscard]] static bool GetBool(core::StringView name);
+        /// What drives the calling script's GUI now (K2b): "pointer", "keyboard" or "pad" (the
+        /// root hears `inputkind` when it changes). A read a binding follows.
+        [[nodiscard]] static core::String InputKindNow();
         /// Sets the GUI's data value `name` (whatever is bound to it follows).
         static void Set(core::StringView name, const Variant& value);
         /// Moves the GUI's data value `name` to `to` over `seconds` (K3: GUIContext::AnimateData),

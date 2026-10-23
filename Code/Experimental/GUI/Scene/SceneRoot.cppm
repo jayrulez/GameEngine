@@ -665,6 +665,7 @@ export namespace experimental::gui
             context.DarkScheme = m_context->IsDarkScheme();
             context.Contrast = m_context->GetContrastPreference();
             context.ReducedMotion = m_context->IsReducedMotion();
+            context.Input = m_eventDispatcher.GetInputKind(); // K2b: `@media (input: pad)`
             return context;
         }
 

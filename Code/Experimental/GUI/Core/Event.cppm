@@ -138,6 +138,8 @@ export namespace experimental::gui
         // stopped before its end is not told.
         TransitionEnd,
         AnimationEnd,
+        // The input kind changed (K2b), told to the GUI's root, not routed: GetInputKind says which.
+        InputKindChanged,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -232,11 +234,12 @@ export namespace experimental::gui
         Copy,   ///< a drop would copy
         Alias,  ///< a drop would link
         NoDrop, ///< nothing here takes the drag
+        None,   ///< no cursor shows (K2b: a pad in use hides it; CSS's `none`)
     };
     inline constexpr const char8_t* kCursorNames[] = {
         u8"auto", u8"default", u8"pointer", u8"text", u8"move", u8"grab", u8"grabbing", u8"not-allowed",
         u8"wait", u8"progress", u8"crosshair", u8"help", u8"ew-resize", u8"ns-resize", u8"nwse-resize",
-        u8"nesw-resize", u8"copy", u8"alias", u8"no-drop",
+        u8"nesw-resize", u8"copy", u8"alias", u8"no-drop", u8"none",
     };
     /// The cursor CSS names `name`; Auto for an unknown name.
     [[nodiscard]] inline Cursor CursorNamed(core::StringView name) noexcept
@@ -249,6 +252,28 @@ export namespace experimental::gui
     [[nodiscard]] inline core::StringView CursorName(Cursor cursor) noexcept
     {
         return core::StringView(kCursorNames[static_cast<usize>(cursor)]);
+    }
+
+    /// What the player drives the GUI with now (K2b of Specs/gui-lab-evolution-3.md): the pointer
+    /// (a mouse, a finger), the keyboard or a pad. A host that tracks it (foundation.input's
+    /// InputKindTracker, through GUI.Shell's bridge) gives it; without one the dispatcher follows
+    /// what it is given: a press, a key, a pad button or direction.
+    enum class InputKind : u8
+    {
+        Pointer,
+        Keyboard,
+        Pad,
+    };
+    /// "pointer", "keyboard" or "pad": what a sheet's `@media (input: ...)` and a script name it.
+    [[nodiscard]] inline core::StringView InputKindName(InputKind kind) noexcept
+    {
+        switch (kind)
+        {
+        case InputKind::Keyboard: return core::StringView(u8"keyboard");
+        case InputKind::Pad: return core::StringView(u8"pad");
+        case InputKind::Pointer: break;
+        }
+        return core::StringView(u8"pointer");
     }
 
     /// Where on its route an input event is: going down from the root (Capture), at the node it
@@ -644,6 +669,7 @@ export namespace experimental::gui
             {u8"gesturestart", EventType::GestureStart}, {u8"gesturechange", EventType::GestureChange},
             {u8"gestureend", EventType::GestureEnd},     {u8"gesturecancel", EventType::GestureCancel},
             {u8"transitionend", EventType::TransitionEnd}, {u8"animationend", EventType::AnimationEnd},
+            {u8"inputkind", EventType::InputKindChanged},
         };
     }
     /// The event type markup and scripts call `name` ("click", "keydown"); false for one they do not.

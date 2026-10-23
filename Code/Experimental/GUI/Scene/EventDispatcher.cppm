@@ -148,7 +148,24 @@ export namespace experimental::gui
         [[nodiscard]] Node* GetOverNode() const noexcept { return m_overNode; }
         /// Whether the keyboard or the pad drives it now (the last input was a key, a pad button or
         /// a direction, not the pointer): a menu opened then lights its first item.
-        [[nodiscard]] bool IsUsingKeyboard() const noexcept { return m_keyboardMode; }
+        [[nodiscard]] bool IsUsingKeyboard() const noexcept { return m_inputKind != InputKind::Pointer; }
+
+        // === The input kind (K2b of Specs/gui-lab-evolution-3.md) ===
+        /// What drives the GUI now: the pointer, the keyboard or a pad. The focus ring follows it
+        /// (shown for the keys and the pad, hidden for the pointer, as Godot's does), a pad hides
+        /// the cursor, a sheet reads it as `@media (input: ...)`, and the root hears `inputkind`.
+        [[nodiscard]] InputKind GetInputKind() const noexcept { return m_inputKind; }
+        /// The input kind, read as a binding's dependency (a button prompt follows it).
+        [[nodiscard]] InputKind ObserveInputKind() const
+        {
+            m_inputKindChanged.Track();
+            return m_inputKind;
+        }
+        /// Sets the kind: a host's tracker saw another kind of input (foundation.input's, which
+        /// GUI.Shell's bridge passes on as it changes: a mouse moved, a stick pushed, which reach
+        /// no widget). The dispatcher also follows what it is given (a press, a key, a pad button
+        /// or direction), so a host without a tracker, or a test, still drives it.
+        void SetInputKind(InputKind kind) { ApplyInputKind(kind); }
 
         // === Tooltips (E5) ===
         // The nearest tooltip text up the parent chain from the hovered node shows as a hint popup
@@ -488,10 +505,13 @@ export namespace experimental::gui
                 RedrawMnemonics();
         }
 
-        bool InjectKeyDown(u32 keyCode, u32 modifiers = 0)
+        bool InjectKeyDown(u32 keyCode, u32 modifiers = 0) { return KeyDownFrom(InputKind::Keyboard, keyCode, modifiers); }
+        // A key down, from the keyboard or standing in for a pad's button (its East as Escape).
+        bool KeyDownFrom(InputKind from, u32 keyCode, u32 modifiers)
         {
             NoteInput();
             DropHiddenFocus();
+            ApplyInputKind(from);
             m_capture.DropText = false;
             if (keyCode == static_cast<u32>(KeyCode::LeftAlt) || keyCode == static_cast<u32>(KeyCode::RightAlt))
                 SetAltHeld(true);
@@ -650,6 +670,7 @@ export namespace experimental::gui
         {
             NoteInput();
             DropHiddenFocus();
+            ApplyInputKind(InputKind::Pad);
             UseKeyboard();
             if (m_capture.Waiting)
             {
@@ -661,7 +682,7 @@ export namespace experimental::gui
             if (button == PadButton::South)
                 (void)Activate();
             else if (button == PadButton::East)
-                (void)InjectKeyDown(static_cast<u32>(KeyCode::Escape)); // not taken as `back`: a widget's own Escape
+                (void)KeyDownFrom(InputKind::Pad, static_cast<u32>(KeyCode::Escape), 0); // not taken as `back`: a widget's own Escape
         }
         /// Told on input a user gave this root (a press, a key, the gamepad): its GUI makes it the
         /// active root.
@@ -780,6 +801,8 @@ export namespace experimental::gui
             if (m_dragActive) // a drag shows what a drop would do
                 return m_dropEffect == DropEffect::Copy ? Cursor::Copy : m_dropEffect == DropEffect::Link ? Cursor::Alias
                        : m_dropEffect == DropEffect::Move ? Cursor::Move : Cursor::NoDrop;
+            if (m_inputKind == InputKind::Pad)
+                return Cursor::None; // a pad in use: the pointer is not (K2b)
             Node* from = m_captureNode != nullptr ? m_captureNode : m_downNode != nullptr ? m_downNode : m_overNode;
             for (Node* n = from; n != nullptr; n = n->GetParent())
                 if (const Cursor cursor = n->GetCursorNow(); cursor != Cursor::Auto)
@@ -814,7 +837,7 @@ export namespace experimental::gui
             if (m_focusNode)
             {
                 RememberInScopes(*m_focusNode); // coming back to a scope returns here
-                m_focusNode->SetFocusVisible(m_keyboardMode);
+                m_focusNode->SetFocusVisible(m_inputKind != InputKind::Pointer);
                 m_focusNode->HandleFocusGained();
                 // Scrollers around it bring it into view: those inside the popup it is in, not the
                 // ones its owner sits in (a popup is placed in the root's space, not scrolled with
@@ -1209,6 +1232,7 @@ export namespace experimental::gui
         void PressDirection(NavDirection direction)
         {
             NoteInput();
+            ApplyInputKind(InputKind::Pad);
             m_holding = true;
             m_heldDirection = direction;
             m_heldFor = 0.0f;
@@ -1363,10 +1387,8 @@ export namespace experimental::gui
         {
             NoteInput();
             // A pointer in use: the focus ring hides (shown again by the next key or d-pad move).
-            m_keyboardMode = false;
+            ApplyInputKind(InputKind::Pointer);
             m_keysMovedFocus = false; // the focus's tooltip waits for the keys again (E16)
-            if (m_focusNode != nullptr)
-                m_focusNode->SetFocusVisible(false);
             m_mousePos = position;
             if (m_dragActive)
             {
@@ -2336,7 +2358,7 @@ export namespace experimental::gui
             Node* provider = m_touchActive ? m_tipProvider : TooltipProvider(m_overNode);
             // While the keys move the focus, the focused control's (E16); the pointer's first.
             bool fromFocus = false;
-            if (provider == nullptr && !m_touchActive && m_keyboardTooltips && m_keyboardMode && m_keysMovedFocus && m_focusNode != nullptr)
+            if (provider == nullptr && !m_touchActive && m_keyboardTooltips && m_inputKind != InputKind::Pointer && m_keysMovedFocus && m_focusNode != nullptr)
             {
                 provider = TooltipProvider(m_focusNode);
                 fromFocus = provider != nullptr;
@@ -2837,21 +2859,40 @@ export namespace experimental::gui
             if (m_onInput)
                 m_onInput();
         }
-        // The last input was a key or a d-pad move, not the pointer; true until the pointer is
-        // used, so a menu opening with focus on its first button shows it (as games do).
-        bool m_keyboardMode = true;
+        // What drives the GUI (K2b): the keys until the pointer is used, so a menu opening with
+        // focus on its first button shows it (as games do).
+        InputKind m_inputKind = InputKind::Keyboard;
+        Observable m_inputKindChanged;
         bool m_holding = false;      // a direction held (PressDirection)
         NavDirection m_heldDirection = NavDirection::Down;
         f32 m_heldFor = 0.0f;
         f32 m_nextRepeatAt = 0.0f;
 
-        // A key or d-pad move: the focus ring shows.
+        // A key or d-pad move (a navigation): the focus ring shows; the pointer's kind gives way
+        // to the keys'.
         void UseKeyboard()
         {
-            m_keyboardMode = true;
+            if (m_inputKind == InputKind::Pointer)
+                ApplyInputKind(InputKind::Keyboard);
             m_keysMovedFocus = true;
             if (m_focusNode != nullptr)
                 m_focusNode->SetFocusVisible(true);
+        }
+        void ApplyInputKind(InputKind kind)
+        {
+            if (kind == m_inputKind)
+                return;
+            m_inputKind = kind;
+            if (kind == InputKind::Pointer)
+                m_keysMovedFocus = false;
+            if (m_focusNode != nullptr)
+                m_focusNode->SetFocusVisible(kind != InputKind::Pointer);
+            m_inputKindChanged.Notify();
+            if (m_root != nullptr)
+            {
+                m_root->Invalidate(); // the cursor, and what a sheet shows for it
+                m_root->SendEvent(Event(EventType::InputKindChanged, m_root));
+            }
         }
     };
 }

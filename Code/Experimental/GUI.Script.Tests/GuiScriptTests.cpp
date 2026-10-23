@@ -926,6 +926,56 @@ TEST_CASE("gui-script: Luau tweens a data value (K3)")
 
 namespace
 {
+    // The input kind (K2b): the script offers `isPad()` from gui.inputKind(), and counts the
+    // root's `inputkind` events in `changes()`.
+    void CheckInputKind(GuiBed& bed)
+    {
+        REQUIRE(bed.errors.count == 0);
+        CHECK(bed.Number(u8"isPad") == doctest::Approx(0.0));
+        bed.root->GetEventDispatcher()->SetInputKind(gui::InputKind::Pad);
+        CHECK(bed.Number(u8"isPad") == doctest::Approx(1.0));
+        CHECK(bed.Number(u8"changes") == doctest::Approx(1.0));
+    }
+}
+
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("gui-script: AngelScript reads the input kind and hears it change (K2b)")
+{
+    RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"funcdef bool EventHandler(GuiEvent e);\n"
+        u8"double heard = 0;\n"
+        u8"bool onKind(GuiEvent e) { heard += 1; return false; }\n"
+        u8"void main() { gui::root().on(\"inputkind\", EventHandler(onKind)); }\n"
+        u8"double isPad() { return gui::inputKind() == \"pad\" ? 1 : 0; }\n"
+        u8"double changes() { return heard; }\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckInputKind(bed);
+}
+#endif
+
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau reads the input kind and hears it change (K2b)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local heard = 0\n"
+        u8"gui.root():on(\"inputkind\", function(e) heard = heard + 1; return false end)\n"
+        u8"function isPad() return gui.inputKind() == \"pad\" and 1 or 0 end\n"
+        u8"function changes() return heard end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    CheckInputKind(bed);
+}
+#endif
+
+namespace
+{
     // Listener tokens (E16): the script put a Button 80 x 30 at the origin, listening for clicks
     // twice: `once` stops itself from inside, `always` stays until `stopAlways` turns it off.
     void CheckOff(GuiBed& bed)

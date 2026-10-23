@@ -144,20 +144,24 @@ export namespace experimental::gui
             m_context = context;
             // The viewport's size alone (a window resized: each frame of the drag) restyles
             // everything only when a sheet reads it, through vw or vh or a size query that now
-            // answers differently; else only the widgets whose own inline style reads it.
-            MediaContext sized = before;
-            sized.Width = context.Width;
-            sized.Height = context.Height;
-            if (sized == context && m_importsExpanded)
+            // answers differently; else only the widgets whose own inline style reads it. The
+            // input kind alone (K2b: a mouse bumped while a pad plays) restyles only when a query
+            // answers differently.
+            MediaContext moved = before;
+            moved.Width = context.Width;
+            moved.Height = context.Height;
+            moved.Input = context.Input;
+            if (moved == context && m_importsExpanded)
             {
                 if (!m_relationsKnown)
                     LearnRelations();
-                bool flips = m_sheetsReadViewport;
+                const bool resized = before.Width != context.Width || before.Height != context.Height;
+                bool flips = resized && m_sheetsReadViewport;
                 for (usize i = 0; !flips && i < m_sizeQueries.Size(); ++i)
                     flips = m_sizeQueries[i]->Evaluate(before) != m_sizeQueries[i]->Evaluate(context);
                 if (!flips)
                 {
-                    m_viewportResized = true;
+                    m_viewportResized = m_viewportResized || resized;
                     return;
                 }
             }

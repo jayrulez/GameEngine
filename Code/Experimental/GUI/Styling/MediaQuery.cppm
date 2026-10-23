@@ -7,8 +7,8 @@
 // (common subset), then widened (E13 of Specs/gui-lab-evolution-2.md): a comma list of queries
 // (any one matching), each optionally `not`, a media type (`all`, `screen`; `print` never) and
 // feature tests joined by `and`: width, height and resolution (min-, max-, exact), orientation,
-// and the host's preferences, prefers-color-scheme, prefers-contrast and prefers-reduced-motion. A
-// rule carries an (optional) MediaQuery; StyleSheet::Resolve skips rules whose query does not match
+// and the host's preferences, prefers-color-scheme, prefers-contrast and prefers-reduced-motion, and
+// `input` (K2b: pointer, keyboard or pad, the kind in use). A rule carries an (optional) MediaQuery; StyleSheet::Resolve skips rules whose query does not match
 // the MediaContext; a query naming any other feature matches nothing. Deferred: aspect-ratio,
 // range syntax (`width >= 600px`), `or` inside a query.
 
@@ -19,6 +19,7 @@ export module experimental.gui:media_query;
 
 import foundation.core; // StringView, Array, f32
 import :css_values;   // ParseLength
+import :event;        // InputKind
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -43,6 +44,7 @@ export namespace experimental::gui
         bool DarkScheme = true; ///< prefers-color-scheme: dark (else light)
         ContrastPreference Contrast = ContrastPreference::NoPreference;
         bool ReducedMotion = false; ///< prefers-reduced-motion: reduce
+        InputKind Input = InputKind::Pointer; ///< `input`: what drives the GUI now (K2b)
         [[nodiscard]] bool operator==(const MediaContext&) const noexcept = default;
     };
 
@@ -67,6 +69,9 @@ export namespace experimental::gui
         ContrastAny,   ///< (prefers-contrast): any preference
         ReduceMotion,  ///< prefers-reduced-motion: reduce
         NoMotionPreference,
+        InputPointer,  ///< input: pointer (K2b: the input kind in use, not a device's presence)
+        InputKeyboard,
+        InputPad,
     };
 
     struct MediaFeature
@@ -166,6 +171,12 @@ export namespace experimental::gui
                 return c.ReducedMotion;
             case MediaFeatureType::NoMotionPreference:
                 return !c.ReducedMotion;
+            case MediaFeatureType::InputPointer:
+                return c.Input == InputKind::Pointer;
+            case MediaFeatureType::InputKeyboard:
+                return c.Input == InputKind::Keyboard;
+            case MediaFeatureType::InputPad:
+                return c.Input == InputKind::Pad;
             }
             return true;
         }
@@ -276,6 +287,16 @@ export namespace experimental::gui
                     return keyword(MediaFeatureType::ContrastLess);
                 if (text == core::StringView(u8"no-preference"))
                     return keyword(MediaFeatureType::ContrastNone);
+                return false;
+            }
+            if (name == core::StringView(u8"input"))
+            {
+                if (text == core::StringView(u8"pointer"))
+                    return keyword(MediaFeatureType::InputPointer);
+                if (text == core::StringView(u8"keyboard"))
+                    return keyword(MediaFeatureType::InputKeyboard);
+                if (text == core::StringView(u8"pad"))
+                    return keyword(MediaFeatureType::InputPad);
                 return false;
             }
             if (name == core::StringView(u8"prefers-reduced-motion"))

@@ -61,11 +61,52 @@ export namespace experimental::gui
             m_cursorTarget = mouse;
             m_shownCursor = shell::CursorType::Count; // apply on the next sync
         }
+        /// The host's input kind tracker (foundation.input's, which the host updates each frame
+        /// from its devices): the bridge passes each change of its kind on to the dispatcher (K2b of
+        /// Specs/gui-lab-evolution-3.md), for what reaches no widget (a mouse moved, a stick pushed).
+        /// Its kind when attached is not passed: the dispatcher starts as it does. Null detaches it.
+        void SetInputKindTracker(const foundation::input::InputKindTracker* tracker) noexcept
+        {
+            m_inputKind = tracker;
+            if (tracker != nullptr)
+                m_passedKind = tracker->Kind();
+        }
+        void SyncInputKind()
+        {
+            if (m_inputKind == nullptr || m_dispatcher == nullptr || m_inputKind->Kind() == m_passedKind)
+                return;
+            m_passedKind = m_inputKind->Kind();
+            m_dispatcher->SetInputKind(MapInputKind(m_passedKind));
+        }
+        [[nodiscard]] static InputKind MapInputKind(foundation::input::InputKind kind) noexcept
+        {
+            switch (kind)
+            {
+            case foundation::input::InputKind::Keyboard: return InputKind::Keyboard;
+            case foundation::input::InputKind::Pad: return InputKind::Pad;
+            case foundation::input::InputKind::Pointer: break;
+            }
+            return InputKind::Pointer;
+        }
+
+        /// The tracker's kind passed on, then the cursor: the GUI's (CSS `cursor`), hidden while it
+        /// says none (a pad in use). Only a cursor the bridge hid is shown again by it, so a game
+        /// that hides the cursor itself (mouse look) is left alone.
         void SyncCursor()
         {
+            SyncInputKind();
             if (m_cursorTarget == nullptr || m_dispatcher == nullptr)
                 return;
-            const shell::CursorType cursor = MapCursor(m_dispatcher->GetCursor());
+            const Cursor wanted = m_dispatcher->GetCursor();
+            const bool hide = wanted == Cursor::None;
+            if (hide != m_cursorHidden)
+            {
+                m_cursorHidden = hide;
+                m_cursorTarget->SetCursorVisible(!hide);
+            }
+            if (hide)
+                return;
+            const shell::CursorType cursor = MapCursor(wanted);
             if (cursor == m_shownCursor)
                 return;
             m_shownCursor = cursor;
@@ -608,6 +649,9 @@ export namespace experimental::gui
             nullptr; // window whose IME follows GUI focus (optional)
         shell::IMouse* m_cursorTarget = nullptr; // mouse whose cursor follows the GUI's (optional)
         shell::CursorType m_shownCursor = shell::CursorType::Count; // last applied (Count: none yet)
+        bool m_cursorHidden = false; // the bridge hid the cursor (a pad in use)
+        const foundation::input::InputKindTracker* m_inputKind = nullptr; // the host's (optional)
+        foundation::input::InputKind m_passedKind = foundation::input::InputKind::Pointer; // its last kind passed on
         core::ContentFit m_fit{};
         i32 m_textInputArea[5] = {-1, -1, -1, -1, -1}; // what the window was last told (SyncTextInputArea)
         bool m_hasFit = false;

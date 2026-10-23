@@ -5,7 +5,7 @@
 util_add_engine_library(GUI.Hosting ALIAS Experimental::GUI.Hosting)
 target_link_libraries(GUI.Hosting
     PUBLIC Foundation::Core Experimental::GUI Experimental::GUI.Shell Foundation::RHI Foundation::Image Foundation::Fonts
-           Foundation::VG Foundation::VG.SVG Foundation::VG.Renderer Foundation::Graphics Foundation::Shell Foundation::VFS
+           Foundation::VG Foundation::VG.SVG Foundation::VG.Renderer Foundation::Graphics Foundation::Shell Foundation::Input Foundation::VFS
            Foundation::Shaders Foundation::Shaders.System Foundation::RHI.Capture Foundation::Policy)
 
 target_sources(GUI.Hosting

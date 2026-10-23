@@ -43,6 +43,7 @@ import foundation.vg;
 import foundation.vg.renderer;
 import experimental.gui;
 import experimental.gui.shell; // GuiInputBridge, ShellClipboard
+import foundation.input;       // InputKindTracker (K2b)
 import :vg_shaders;
 import :picture_baker;
 import :hosted_content;
@@ -171,6 +172,9 @@ export namespace experimental::gui
         /// What shows behind a root that does not cover its window, as authored (sRGB).
         void SetClearColor(Color color) noexcept { m_clear = color; }
         void SetPointerFilter(PointerFilter filter) { m_pointerFilter = Move(filter); }
+        /// The input kind the host tracks from the shell's devices each frame and gives every pane
+        /// (K2b): the pointer, the keyboard or a pad. An application reads it, or sets a starting kind.
+        [[nodiscard]] foundation::input::InputKindTracker& GetInputKindTracker() noexcept { return m_inputKind; }
         /// Every pane's cursor follows its GUI again (after the application set one of its own, a
         /// boundary's resize cursor).
         void ResetCursors()
@@ -269,6 +273,7 @@ export namespace experimental::gui
             pane->Bridge->SetTextInputTarget(&window.Window());
             if (m_shell.Input() != nullptr)
                 pane->Bridge->SetCursorTarget(m_shell.Input()->Mouse());
+            pane->Bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad (K2b)
             root->GetEventDispatcher()->SetClipboard(m_clipboard.Get());
             root->SetDisplayScale(window.Window().ContentScale() * m_uiScale);
             root->SetViewportSize(Float2{area.width, area.height});
@@ -449,6 +454,10 @@ export namespace experimental::gui
 
         void Update(f32 deltaTime)
         {
+            // What the player uses now, from this frame's devices, before the panes' bridges pass
+            // it on with their input (K2b).
+            foundation::input::ShellInputSource devices(m_shell.Input());
+            m_inputKind.Update(devices);
             m_router->Update();
             ReportWindowEvents();
             RouteInput();
@@ -922,6 +931,7 @@ export namespace experimental::gui
         StyleManager m_styles;
         UniquePtr<ShellClipboard> m_clipboard;
         UniquePtr<shell::InputRouter> m_router;
+        foundation::input::InputKindTracker m_inputKind; // the host's, from the shell's devices (K2b)
         UniquePtr<shell::InputRouter> m_contentRouter; // the hosted contents' surfaces
         UniquePtr<GpuPictureBaker> m_baker;
         PictureBakerSetup m_bakerSetup;

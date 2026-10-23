@@ -333,8 +333,12 @@ namespace
         bool IsButtonReleased(shell::MouseButton) const override { return false; }
         bool RelativeMode() const override { return false; }
         void SetRelativeMode(bool) override {}
-        bool CursorVisible() const override { return true; }
-        void SetCursorVisible(bool) override {}
+        bool CursorVisible() const override { return visible; }
+        void SetCursorVisible(bool v) override
+        {
+            visible = v;
+            ++visibilitySets;
+        }
         void SetCursor(shell::CursorType c) override
         {
             cursor = c;
@@ -343,6 +347,8 @@ namespace
         void SetGlobalCapture(bool) override {}
         shell::CursorType cursor = shell::CursorType::Default;
         int cursorSets = 0;
+        bool visible = true;
+        int visibilitySets = 0;
     };
 
     class MockInputManager final : public shell::IInputManager
@@ -504,6 +510,34 @@ TEST_CASE("bridge: the cursor follows the node under the pointer; Dispatch says 
     (void)bridge.Dispatch(MouseMove(160.0f, 150.0f));
     CHECK(mouse.cursorSets == sets); // unchanged: not set again
     CHECK_FALSE(bridge.IsPointerOverGui());
+}
+
+TEST_CASE("bridge: the host's input kind tracker passes each change on, and a pad hides the cursor it shows again")
+{
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    EventDispatcher& d = *root->GetEventDispatcher();
+    GuiInputBridge bridge{&d};
+    MockMouse mouse;
+    bridge.SetCursorTarget(&mouse);
+    foundation::input::InputKindTracker tracker; // the host's, which it updates from its devices
+    bridge.SetInputKindTracker(&tracker);
+    bridge.SyncCursor();
+    CHECK(d.GetInputKind() == InputKind::Keyboard); // its kind when attached is not passed
+
+    tracker.SetKind(foundation::input::InputKind::Pad); // a stick pushed
+    bridge.SyncCursor();
+    CHECK(d.GetInputKind() == InputKind::Pad);
+    CHECK_FALSE(mouse.visible);
+    d.InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left); // a press the GUI is given says its own
+    CHECK(d.GetInputKind() == InputKind::Pointer);
+    bridge.SyncCursor(); // the tracker has not changed: nothing passed over it
+    CHECK(d.GetInputKind() == InputKind::Pointer);
+    CHECK(mouse.visible);
+
+    tracker.SetKind(foundation::input::InputKind::Keyboard);
+    (void)bridge.Dispatch(MouseMove(20.0f, 20.0f));
+    CHECK(d.GetInputKind() == InputKind::Keyboard);
+    CHECK(mouse.visibilitySets == 2); // hidden once, shown once
 }
 
 namespace

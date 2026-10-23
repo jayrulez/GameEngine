@@ -912,6 +912,65 @@ TEST_CASE("angelscript: a runtime fault in a GLOBAL INITIALIZER is a Runtime err
     CHECK(errors.lastKind == ScriptErrorKind::Runtime);
 }
 
+namespace
+{
+    struct CheckErrors final : IScriptErrorHandler
+    {
+        int count = 0;
+        ScriptErrorKind kind = ScriptErrorKind::Runtime;
+        String module;
+        i32 line = -1;
+        i32 column = -1;
+
+        void OnError(const ScriptError& error) override
+        {
+            if (count++ == 0)
+            {
+                kind = error.kind;
+                module = String(error.module);
+                line = error.line;
+                column = error.column;
+            }
+        }
+    };
+}
+
+TEST_CASE("angelscript: Check reports a compile error with its line and column")
+{
+    RefPtr<IScriptManager> manager =
+        angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
+    CheckErrors errors;
+    CHECK_FALSE(manager->Check(u8"int a = 1;\nint b = ;\n", u8"typed.as", errors));
+    REQUIRE(errors.count >= 1);
+    CHECK(errors.kind == ScriptErrorKind::Compile);
+    CHECK(errors.module == u8"typed.as");
+    CHECK(errors.line == 2);
+    CHECK(errors.column == 9);
+
+    CheckErrors none;
+    CHECK(manager->Check(u8"int Twice(int v) { return v * 2; }\n", u8"typed.as", none));
+    CHECK(none.count == 0);
+}
+
+TEST_CASE("angelscript: Check runs neither the global initializers nor main")
+{
+    RefPtr<IScriptManager> manager =
+        angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
+    // Load fails on both of these at run time (see the global initializer test above); a
+    // check that ran them would report a Runtime error.
+    CheckErrors errors;
+    CHECK(manager->Check(u8"int Zero() { return 0; }\n"
+                         u8"int boom = 10 / Zero();\n"
+                         u8"void main() { int zero = 0; int bang = 10 / zero; }\n",
+                         u8"typed.as", errors));
+    CHECK(errors.count == 0);
+
+    // The engine still initializes globals for an ordinary load afterwards.
+    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    REQUIRE(ctx->Load(u8"int Answer = 42;\n", u8"main").IsOk());
+    CHECK(ctx->GetGlobal(u8"Answer").Get<f64>() == 42.0);
+}
+
 TEST_CASE("angelscript: each context is isolated")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());

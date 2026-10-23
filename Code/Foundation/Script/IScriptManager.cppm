@@ -64,6 +64,13 @@ export namespace foundation::script
         // registered up to their creation.
         [[nodiscard]] virtual core::RefPtr<IScriptContext> CreateContext() = 0;
 
+        // Compile `source` (named `chunkName` in errors) against the registered surface and
+        // report its compile errors to `errors`, WITHOUT running any of it: no top-level code,
+        // no global initializers, no main. For checking code as it is typed, where running it
+        // would run whatever is half written. Returns whether it compiled.
+        [[nodiscard]] virtual bool Check(core::StringView source, core::StringView chunkName,
+                                         IScriptErrorHandler& errors) = 0;
+
         // Single-step garbage collection, for backends that need it kept small in
         // real-time loops. Default: no-op.
         virtual void CollectGarbage() {}

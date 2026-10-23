@@ -491,13 +491,15 @@ export namespace pipeline{
             ScriptErrorKind kind;
             String module;
             i32 line;
+            i32 column;
             String message;
         };
         Array<Entry> errors;
 
         void OnError(const ScriptError& error) override
         {
-            Entry entry{error.kind, String(error.module), error.line, String(error.message)};
+            Entry entry{error.kind, String(error.module), error.line, error.column,
+                        String(error.message)};
             errors.PushBack(Move(entry));
         }
     };
@@ -508,7 +510,7 @@ export namespace pipeline{
     inline void ReportCookProblem(CookScriptErrorSink& sink, StringView assetName, const String& message)
     {
         LOG_ERROR(u8"Script", u8"'{}': {} - cook failed", assetName, message);
-        sink.OnError(ScriptError{ScriptErrorKind::Compile, assetName, -1, message.AsView()});
+        sink.OnError(ScriptError{ScriptErrorKind::Compile, assetName, -1, -1, message.AsView()});
     }
 
     /// Logs a cook's captured compile/runtime errors as cook errors with the asset's

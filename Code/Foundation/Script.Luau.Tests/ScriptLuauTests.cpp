@@ -584,6 +584,69 @@ TEST_CASE("script.luau: a compile error reports its source line (not -1)")
     CHECK(capture.line == 3);
 }
 
+namespace
+{
+    struct CheckErrors final : IScriptErrorHandler
+    {
+        int count = 0;
+        ScriptErrorKind kind = ScriptErrorKind::Runtime;
+        String module;
+        i32 line = -1;
+        i32 column = -1;
+
+        void OnError(const ScriptError& error) override
+        {
+            if (count++ == 0)
+            {
+                kind = error.kind;
+                module = String(error.module);
+                line = error.line;
+                column = error.column;
+            }
+        }
+    };
+}
+
+TEST_CASE("script.luau: Check reports a syntax error with its line and column")
+{
+    RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
+    CheckErrors errors;
+    CHECK_FALSE(
+        manager->Check(u8"local a = 1\nlocal b = 2\nlocal c = = =\n", u8"typed.luau", errors));
+    REQUIRE(errors.count >= 1);
+    CHECK(errors.kind == ScriptErrorKind::Compile);
+    CHECK(errors.module == u8"typed.luau");
+    CHECK(errors.line == 3);
+    CHECK(errors.column == 11);
+
+    CheckErrors none;
+    CHECK(manager->Check(u8"local function twice(v) return v * 2 end\n", u8"typed.luau", none));
+    CHECK(none.count == 0);
+}
+
+TEST_CASE("script.luau: Check reports what only the compiler finds")
+{
+    // Parses, but one function holding more locals than the VM has registers fails to compile.
+    String source;
+    for (int i = 0; i < 300; ++i)
+    {
+        source += Format(u8"local v{} = {}\n", i, i);
+    }
+    RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
+    CheckErrors errors;
+    CHECK_FALSE(manager->Check(source.AsView(), u8"typed.luau", errors));
+    CHECK(errors.count == 1);
+    CHECK(errors.kind == ScriptErrorKind::Compile);
+}
+
+TEST_CASE("script.luau: Check never runs the top level")
+{
+    RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
+    CheckErrors errors;
+    CHECK(manager->Check(u8"error(\"ran\")\n", u8"typed.luau", errors));
+    CHECK(errors.count == 0);
+}
+
 TEST_CASE("script.luau: LoadBehaviorModule loads each class as its OWN chunk (per-class identity)")
 {
     struct Capture final : IScriptErrorHandler

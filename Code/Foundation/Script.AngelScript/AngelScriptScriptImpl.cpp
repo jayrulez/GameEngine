@@ -724,6 +724,37 @@ namespace foundation::script::angelscript
             return core::RefPtr<IScriptBlob>(blob.Get());
         }
 
+        // Compile without running (see IScriptManager::Check). Build would run the global
+        // initializers right after compiling, so the engine's init-after-build is off for the
+        // one build; the module is discarded before any of it could be called.
+        [[nodiscard]] bool Check(core::StringView source, core::StringView chunkName,
+                                 IScriptErrorHandler& errors) override
+        {
+            if (m_engine == nullptr)
+            {
+                return false;
+            }
+            asIScriptModule* module = m_engine->GetModule("__check", asGM_ALWAYS_CREATE);
+            if (module == nullptr)
+            {
+                return false;
+            }
+            const core::String section(chunkName);
+            (void)module->AddScriptSection(CStr(section),
+                                           reinterpret_cast<const char*>(source.Data()),
+                                           source.Size());
+            (void)module->AddScriptSection("__coroutine_support", kCoroutinePreludeSection);
+            const asPWORD initAfterBuild =
+                m_engine->GetEngineProperty(asEP_INIT_GLOBAL_VARS_AFTER_BUILD);
+            (void)m_engine->SetEngineProperty(asEP_INIT_GLOBAL_VARS_AFTER_BUILD, 0);
+            BeginMessageCapture();
+            const int built = module->Build();
+            EndMessageCapture(&errors, ScriptErrorKind::Compile);
+            (void)m_engine->SetEngineProperty(asEP_INIT_GLOBAL_VARS_AFTER_BUILD, initAfterBuild);
+            module->Discard();
+            return built >= 0;
+        }
+
         // Create an empty blob to deserialize a stored one into (see IScriptManager::CreateBlob).
         [[nodiscard]] core::RefPtr<IScriptBlob> CreateBlob() override
         {
@@ -1737,7 +1768,7 @@ namespace foundation::script::angelscript
                 if (handler != nullptr)
                 {
                     const ScriptError error{kind, core::StringView(message.section), message.row,
-                                            core::StringView(message.text)};
+                                            message.column, core::StringView(message.text)};
                     handler->OnError(error);
                 }
                 else
@@ -2021,6 +2052,7 @@ namespace foundation::script::angelscript
         {
             core::String section;
             core::i32 row;
+            core::i32 column;
             core::String text;
         };
 
@@ -2036,6 +2068,7 @@ namespace foundation::script::angelscript
                 CapturedMessage captured;
                 captured.section = core::String(ViewOfAscii(message->section));
                 captured.row = static_cast<core::i32>(message->row);
+                captured.column = message->col > 0 ? static_cast<core::i32>(message->col) : -1;
                 captured.text = core::String(ViewOfAscii(message->message));
                 self->m_capturedMessages.PushBack(core::Move(captured));
                 return;
@@ -3566,11 +3599,13 @@ namespace foundation::script::angelscript
         void ReportException(asIScriptContext* executor)
         {
             const char* section = nullptr;
-            const int line = executor->GetExceptionLineNumber(nullptr, &section);
+            int column = 0;
+            const int line = executor->GetExceptionLineNumber(&column, &section);
             if (m_errorHandler != nullptr)
             {
                 const ScriptError error{ScriptErrorKind::Runtime, ViewOfAscii(section),
                                         static_cast<core::i32>(line),
+                                        column > 0 ? static_cast<core::i32>(column) : -1,
                                         ViewOfAscii(executor->GetExceptionString())};
                 m_errorHandler->OnError(error);
                 return;

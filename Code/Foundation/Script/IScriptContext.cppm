@@ -39,6 +39,7 @@ export namespace foundation::script
         ScriptErrorKind kind;
         core::StringView module; // may be empty
         core::i32 line;          // 1-based source line, or -1 if unknown
+        core::i32 column;        // 1-based column on that line, or -1 if unknown
         core::StringView message;
     };
 

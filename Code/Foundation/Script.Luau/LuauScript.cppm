@@ -404,6 +404,12 @@ namespace foundation::script
         [[nodiscard]] Result<RefPtr<IScriptBlob>> CompileToBlob(StringView source,
                                                                StringView chunkName) override;
 
+        // Compile without running (see IScriptManager::Check): the parser reports each syntax
+        // error with its line and column; a source that parses is then compiled and loaded, never
+        // called, for the errors only the compiler finds.
+        [[nodiscard]] bool Check(StringView source, StringView chunkName,
+                                 IScriptErrorHandler& errors) override;
+
         [[nodiscard]] RefPtr<IScriptBlob> CreateBlob() override
         {
             return RefPtr<IScriptBlob>(MakeRef<LuauScriptBlob>(MemoryAllocator()).Get());
@@ -2349,6 +2355,7 @@ namespace foundation::script
         error.kind = kind;
         error.module = module;
         error.line = ParseLuauErrorLine(message); // Luau puts "<chunk>:<line>:" in the message
+        error.column = -1;
         error.message = message;
         m_errors->OnError(error);
     }
@@ -2841,6 +2848,61 @@ namespace foundation::script
         blob->SetBytecode(reinterpret_cast<const byte*>(bytecode), bytecodeSize);
         free(bytecode);
         return RefPtr<IScriptBlob>(blob.Get());
+    }
+
+    bool LuauScriptManager::Check(StringView source, StringView chunkName,
+                                  IScriptErrorHandler& errors)
+    {
+        Luau::Allocator allocator;
+        Luau::AstNameTable names(allocator);
+        const Luau::ParseResult parsed =
+            Luau::Parser::parse(reinterpret_cast<const char*>(source.Data()), source.Size(), names,
+                                allocator, Luau::ParseOptions{});
+        for (const Luau::ParseError& parseError : parsed.errors)
+        {
+            const Luau::Location& at = parseError.getLocation();
+            const std::string& text = parseError.getMessage();
+            ScriptError error;
+            error.kind = ScriptErrorKind::Compile;
+            error.module = chunkName;
+            error.line = static_cast<i32>(at.begin.line) + 1;
+            error.column = static_cast<i32>(at.begin.column) + 1;
+            error.message = StringView(reinterpret_cast<const utf8char*>(text.data()), text.size());
+            errors.OnError(error);
+        }
+        if (!parsed.errors.empty())
+        {
+            return false;
+        }
+
+        lua_CompileOptions options{};
+        options.optimizationLevel = 1;
+        options.debugLevel = 2;
+        size_t bytecodeSize = 0;
+        char* bytecode = luau_compile(reinterpret_cast<const char*>(source.Data()), source.Size(),
+                                      &options, &bytecodeSize);
+        if (bytecode == nullptr)
+        {
+            return false;
+        }
+        String chunkStorage;
+        const char* chunk = CStr(chunkName, chunkStorage);
+        lua_State* probe = luaL_newstate();
+        const int loadStatus = luau_load(probe, chunk, bytecode, bytecodeSize, 0);
+        if (loadStatus != LUA_OK)
+        {
+            const StringView text = ViewOf(lua_tostring(probe, -1));
+            ScriptError error;
+            error.kind = ScriptErrorKind::Compile;
+            error.module = chunkName;
+            error.line = ParseLuauErrorLine(text);
+            error.column = -1;
+            error.message = text;
+            errors.OnError(error);
+        }
+        lua_close(probe);
+        free(bytecode);
+        return loadStatus == LUA_OK;
     }
 
     Array<ScriptApiType> LuauScriptManager::DescribeBoundApi() const

@@ -343,7 +343,9 @@ namespace pipeline{
                 return;
             }
             const ScriptError error{ScriptErrorKind::Compile, ViewOfCStr(message->section),
-                                    static_cast<i32>(message->row), ViewOfCStr(message->message)};
+                                    static_cast<i32>(message->row),
+                                    message->col > 0 ? static_cast<i32>(message->col) : -1,
+                                    ViewOfCStr(message->message)};
             forward->sink->OnError(error);
         }
 

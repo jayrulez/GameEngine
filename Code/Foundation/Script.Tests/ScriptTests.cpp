@@ -57,6 +57,7 @@ namespace
         {
             return RefPtr<IScriptContext>(MakeRef<MockContext>(DefaultAllocator()));
         }
+        bool Check(StringView, StringView, IScriptErrorHandler&) override { return true; }
 
         [[nodiscard]] bool Has(const TypeInfo& type) const
         {
@@ -149,6 +150,10 @@ namespace
         [[nodiscard]] RefPtr<foundation::script::IScriptContext> CreateContext() override
         {
             return {};
+        }
+        bool Check(StringView, StringView, foundation::script::IScriptErrorHandler&) override
+        {
+            return true;
         }
     };
 }

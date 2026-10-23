@@ -40,6 +40,8 @@ import engine.input;
 import experimental.gui;
 import experimental.gui.gamekit;
 import experimental.gui.shell;
+import foundation.script;          // ComponentOf: a component's `.of(entity)`
+import foundation.script.facades;  // the behaviour prelude's names
 import experimental.gui.resources; // GuiDocument, GuiStyleSheet, kGuiResourceModule
 import experimental.gui.hosting;   // GuiPassRenderer, VgShaderLibrary
 import foundation.vg.renderer;     // VGPassTargets: a texture's multisampled pass
@@ -368,6 +370,8 @@ namespace engine::gui
             .Attribute("category", String(u8"GUI"))
             .Attribute("description", String(u8"Shows a GUI document in its scene, as a menu or a HUD, or draws it into a texture."))
             .DataVersion(1);
+        builder.Method<&foundation::script::ComponentOf<GuiCanvasComponent>, GuiCanvasComponent>("of");
+        builder.Method<&GuiCanvasComponent::rootNode>("root");
         builder.Property<&GuiCanvasComponent::document>("document");
         builder.Property<&GuiCanvasComponent::sheet>("sheet");
         builder.Property<&GuiCanvasComponent::order>("order");
@@ -398,6 +402,8 @@ namespace engine::gui
             .Attribute("category", String(u8"GUI"))
             .Attribute("description", String(u8"Shows a GUI document over the entity, such as a nameplate or a health bar."))
             .DataVersion(1);
+        builder.Method<&foundation::script::ComponentOf<GuiBillboardComponent>, GuiBillboardComponent>("of");
+        builder.Method<&GuiBillboardComponent::rootNode>("root");
         builder.Property<&GuiBillboardComponent::document>("document");
         builder.Property<&GuiBillboardComponent::sheet>("sheet");
         builder.Property<&GuiBillboardComponent::offset>("offset");
@@ -447,6 +453,8 @@ namespace engine::gui
             .Attribute("category", String(u8"GUI"))
             .Attribute("description", String(u8"Shows a GUI document on a panel in the world, in the entity's plane, optionally taking the pointer."))
             .DataVersion(1);
+        builder.Method<&foundation::script::ComponentOf<GuiWorldPanelComponent>, GuiWorldPanelComponent>("of");
+        builder.Method<&GuiWorldPanelComponent::rootNode>("root");
         builder.Property<&GuiWorldPanelComponent::document>("document");
         builder.Property<&GuiWorldPanelComponent::sheet>("sheet");
         builder.Property<&GuiWorldPanelComponent::sizeMeters>("sizeMeters");
@@ -466,6 +474,38 @@ namespace engine::gui
             RttiRegisterValue_GuiBillboardComponent();
             RttiRegisterEnum_GuiCanvasRenderMode();
             RttiRegisterValue_GuiWorldPanelComponent();
+            return true;
+        }();
+        (void)once;
+    }
+
+    namespace
+    {
+        [[nodiscard]] Variant NodeHandle(const RefPtr<lab::Node>& root)
+        {
+            return root ? root->HandleAs(lab::Node::StaticType()) : Variant{};
+        }
+    }
+    Variant GuiCanvasComponent::rootNode() const { return NodeHandle(root); }
+    Variant GuiBillboardComponent::rootNode() const { return NodeHandle(root); }
+    Variant GuiWorldPanelComponent::rootNode() const { return NodeHandle(root); }
+
+    void RegisterGuiScriptFacades()
+    {
+        static const bool once = []()
+        {
+            RegisterGuiComponentReflection(); // the components' TypeData, `of` among it, first
+            lab::RegisterGuiScriptSurface();  // `gui`, the widgets, the events, the tweens
+            lab::RegisterGamekitElements();   // the screen stack, screens, prompts
+            foundation::script::RegisterExtraFacadeName(u8"gui"); // the prelude imports the alias
+            const TypeInfo* const components[] = {&TypeOf<GuiCanvasComponent>(), &TypeOf<GuiBillboardComponent>(),
+                                                  &TypeOf<GuiWorldPanelComponent>()};
+            for (const TypeInfo* component : components)
+            {
+                GlobalTypeRegistry().Register(*component);
+                foundation::script::RegisterExtraScriptRootType(component);
+                foundation::script::RegisterExtraFacadeName(StringView(reinterpret_cast<const utf8char*>(component->name)));
+            }
             return true;
         }();
         (void)once;
@@ -715,6 +755,7 @@ namespace engine::gui
             m_screenRoot->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
         }
         m_screens = MakeRef<lab::ScreenStack>(m_allocator);
+        m_screens->SetId(StringView(u8"screens")); // a script's ScreenStack::of(gui::root().find("screens"))
         m_screenRoot->AddChild(m_screens.Get());
         m_overlay = MakeRef<lab::UIWidget>(m_allocator);
         m_overlay->SetTag(StringView(u8"overlays"));
@@ -724,7 +765,10 @@ namespace engine::gui
         }
         m_screenRoot->AddChild(m_overlay.Get());
         m_screenBridge = MakeBridge(*m_screenRoot);
+        m_scriptBinding.root = m_screenRoot.Get();
     }
+
+    void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& context) { lab::InstallGuiScriptService(context, m_scriptBinding); }
 
     void GuiSubsystem::OnReady()
     {
@@ -768,6 +812,7 @@ namespace engine::gui
             m_screens->Clear();
         m_overlay = nullptr;
         m_screens = nullptr;
+        m_scriptBinding.root = nullptr; // a script still running finds no root, not a freed one
         m_screenRoot = nullptr;
         m_resources->SetTextureSink(nullptr);
         m_context->SetPictureBaker(nullptr);
@@ -1622,6 +1667,7 @@ namespace engine::gui
             .id = u8"gui",
             .installScene = &AddGuiSceneManagers,
             .registerReflection = &RegisterGuiComponentReflection,
+            .registerScriptFacade = &RegisterGuiScriptFacades,
             .resources = Span<const resource::ResourceModule* const>{kResources, sizeof(kResources) / sizeof(kResources[0])}};
         return kModule;
     }

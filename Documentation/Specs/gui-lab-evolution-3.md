@@ -1176,7 +1176,13 @@ Each a layer with its tests.
     screen's and the scenes' GUI; a press stays with it. A panel takes the mouse, not fingers. The
     ray math is Engine.UI's, kept in Engine.GUI while both live. No host calls `RenderTextures`
     yet (E9). The canvas kept data version 1: no scene had saved one.
-- **E8 The script surface.** The facade per context, pushing by guid.
+- **E8 The script surface.** The facade per context, pushing by guid. Built (vg, 2026-10-23): the GUI
+  domain's script facade registers the lab's surface (`gui`, the widgets, the gamekit's stack) and
+  each component's `.of(entity)` with `root()`, the tree as a node; `gui` and the three component
+  names join the behaviour prelude (the facade name count +4 with the lab built).
+  `GuiSubsystem::ExposeToScript` gives a script context the screen tier's root: `gui::root()`, its
+  stack `ScreenStack::of(gui::root().find("screens"))` (the stack's id), which pushes a document by
+  `"{guid}"` through the provider, so no `gui.screens()` was needed. No host installs it yet (E9).
 - **E9 The player and play-in-editor.** Settings, splash, run screens.
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
 - **E11 The web.** The lab and the engine's GUI on wasm.

@@ -93,5 +93,11 @@ export namespace engine
     // 41 = + FootIkComponent.
     // 42 = + PathFollowComponent: PathFollowComponent.of(entity), a script drives its follower.
     // 43 = + InstanceMemberComponent: an entity drawn as an instance of an instanced mesh, its clip.
+    // +4 with the experimental GUI built: `gui` and its three components (GuiCanvasComponent,
+    // GuiBillboardComponent, GuiWorldPanelComponent), the GUI domain's.
+#if OPTION_HAS_EXPERIMENTAL_GUI
+    inline constexpr usize kSubsystemFacadeNameCount = 47;
+#else
     inline constexpr usize kSubsystemFacadeNameCount = 43;
+#endif
 }

@@ -38,7 +38,13 @@
 // reaching it by a ray through the scene's camera. Both draw in RenderTextures, which the host calls
 // before the scene, after the frame's bakes.
 //
-// Its script surface (E8) and the player's settings (E9) come later.
+// The script surface (E8): the lab's own (the `gui` facade, every widget reflected, the gamekit's
+// stack), installed per script context with the screen tier's root (ExposeToScript): `gui::root()`
+// is the screen root and `ScreenStack::of(gui::root().find("screens"))` its stack, which pushes a
+// document by its guid ("{guid}") through the provider. Each component's `.of(entity)` reaches its
+// tree as a node (`root()`).
+//
+// The player's settings (E9) come later.
 // GCC modules hygiene: the renderer, the shaders and the textures live in GuiSubsystemImpl.cpp.
 
 module;
@@ -58,6 +64,7 @@ import foundation.fonts;
 import foundation.image;
 import foundation.vg.svg;
 import foundation.render.api; // the two overlay roles
+import foundation.script;     // the script contexts the surface is installed in
 import foundation.shell;      // the text input target
 import foundation.input;      // InputKindTracker
 import engine.input;          // the active input source, the action runtimes
@@ -114,6 +121,9 @@ export namespace engine::gui
         RefPtr<lab::SceneRoot> renderRoot;     ///< RenderTexture: its own root, never in a scene's GUI
         rhi::Texture* renderTexture = nullptr; ///< RenderTexture: the texture (the subsystem's), once drawn
         rhi::TextureView* renderTextureView = nullptr;
+
+        /// Its tree as a script's node handle (`root()`); null before it is built.
+        [[nodiscard]] Variant rootNode() const;
     };
 
     inline void Serialize(ISerializer& ar, GuiCanvasComponent& c)
@@ -175,6 +185,9 @@ export namespace engine::gui
         RefPtr<lab::Node> root;
         RefPtr<Object> builtFrom;
         RefPtr<Object> sheetFrom;
+
+        /// Its tree as a script's node handle (`root()`); null before it is built.
+        [[nodiscard]] Variant rootNode() const;
     };
 
     inline void Serialize(ISerializer& ar, GuiBillboardComponent& c)
@@ -226,6 +239,9 @@ export namespace engine::gui
         RefPtr<Object> sheetFrom;
         rhi::Texture* renderTexture = nullptr; ///< the subsystem's, once drawn
         rhi::TextureView* renderTextureView = nullptr;
+
+        /// Its tree as a script's node handle (`root()`); null before it is built.
+        [[nodiscard]] Variant rootNode() const;
     };
 
     inline void Serialize(ISerializer& ar, GuiWorldPanelComponent& c)
@@ -283,6 +299,10 @@ export namespace engine::gui
 
     /// The components' reflection (the inspector, the scene format). Idempotent.
     void RegisterGuiComponentReflection();
+    /// The GUI's script surface: the lab's (`gui`, the widgets, the gamekit's) and each component's
+    /// `.of(entity)`, with their names in the behaviour prelude. Idempotent; before a script
+    /// manager binds the registry.
+    void RegisterGuiScriptFacades();
 
     /// The GUI's managers for a scene: the subsystem's scenes and headless scene consumers alike
     /// (Engine.Composition).
@@ -380,6 +400,10 @@ export namespace engine::gui
         /// The action layer's pointer and keyboard claims cleared after the frame read them: the
         /// next frame's BeginFrame lane republishes them (Engine.UI's, then the GUI's added).
         void EndFrame() override;
+
+        // ---- scripts ----
+        /// `context`'s scripts given the screen tier's root (`gui::root()`).
+        void ExposeToScript(foundation::script::IScriptContext& context);
 
         // ---- input ----
         /// The window whose platform text input (IME) follows the GUI's focus (the player's main
@@ -480,6 +504,7 @@ export namespace engine::gui
         RefPtr<lab::SceneRoot> m_screenRoot;
         RefPtr<lab::ScreenStack> m_screens;
         RefPtr<lab::UIWidget> m_overlay;
+        lab::GuiScriptBinding m_scriptBinding; // what each script context is given
         UniquePtr<lab::GuiInputBridge> m_screenBridge;
         Array<SceneTier> m_sceneTiers;
         Array<UniquePtr<TextureRoot>> m_textureRoots;

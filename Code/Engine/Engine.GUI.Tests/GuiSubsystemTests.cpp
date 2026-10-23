@@ -29,6 +29,7 @@ import foundation.shell;
 import foundation.input;
 import engine.input;
 import engine.domain;
+import foundation.script.facades; // the behaviour prelude's names
 import experimental.gui;
 import experimental.gui.gamekit;
 import experimental.gui.resources;
@@ -1003,5 +1004,34 @@ TEST_CASE("engine.gui: a world panel drives its sprite, and the pointer reaches 
     engine.Frame();
     CHECK(engine.gui->ActiveInputRoot() != c->renderRoot.Get());
     CHECK_FALSE(engine.gui->PointerOverGui());
+    engine.scenes.DestroyScene(level);
+}
+
+TEST_CASE("engine.gui: the script surface names gui and the components, and a component reaches its tree as a node")
+{
+    engine::gui::RegisterGuiScriptFacades();
+    engine::gui::RegisterGuiScriptFacades(); // idempotent
+    const auto named = [](StringView name)
+    {
+        usize found = 0;
+        for (const StringView known : foundation::script::ExtraFacadeNames())
+            found += known == name ? 1u : 0u;
+        return found;
+    };
+    CHECK(named(u8"gui") == 1u);
+    CHECK(named(u8"GuiCanvasComponent") == 1u);
+    CHECK(named(u8"GuiBillboardComponent") == 1u);
+    CHECK(named(u8"GuiWorldPanelComponent") == 1u);
+
+    Engine engine;
+    CHECK(engine.gui->Screens()->GetId() == StringView(u8"screens")); // what a script finds
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    const scene::EntityHandle hud = level->CreateEntity(u8"hud");
+    auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
+    engine::gui::GuiCanvasComponent& c = canvases->Add(hud);
+    CHECK(c.rootNode().IsEmpty()); // not built yet
+    c.document = MakeDocument(u8"<Panel id=\"hud-root\"/>");
+    engine.Frame();
+    CHECK_FALSE(canvases->Get(hud)->rootNode().IsEmpty());
     engine.scenes.DestroyScene(level);
 }

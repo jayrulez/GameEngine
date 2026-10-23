@@ -10,7 +10,7 @@ target_link_libraries(Engine.GUI
            Foundation::VG Foundation::VG.SVG Foundation::VG.Renderer Foundation::VG.Resource Foundation::Texture.Resource
            Foundation::Render Engine::Render Foundation::Shell Foundation::Input Engine::Input
            Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Gamekit Experimental::GUI.Resources Experimental::GUI.Hosting
-           Foundation::Profiler Foundation::Policy)
+           Foundation::Script Foundation::Script.Facades Foundation::Profiler Foundation::Policy)
 target_sources(Engine.GUI
     PRIVATE
         GuiSubsystemImpl.cpp   # implementation unit: the renderer, the shaders, the textures

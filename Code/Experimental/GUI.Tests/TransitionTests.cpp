@@ -80,13 +80,16 @@ TEST_CASE("transition: opacity moves on the GUI's clock, linearly when asked")
     CHECK(bed.root->GetActionManager()->IsEmpty());          // finished
 }
 
-TEST_CASE("transition: a property no rule sets any more moves back to its initial value, not snapping")
+TEST_CASE("transition: a property set by no rule before moves from its initial value, and back to it when no rule sets it any more")
 {
-    // Only the class sets them: taken off, opacity goes back to 1 and the transform to none.
+    // Only the class sets them: put on, opacity moves from 1 (its initial value) to 0, as CSS's
+    // does; taken off, it goes back to 1 and the transform to none.
     Bed bed(u8"box { transition: opacity 0.5s linear, transform 0.5s linear; } box.entering { opacity: 0; transform: translate(0, 8px); }");
     bed.Toggle(u8"entering");
-    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f)); // the first style of the class: no transition
-    bed.Advance(1.0);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(1.0f)); // from its initial value, not snapping
+    bed.Advance(0.25);
+    CHECK(bed.widget->GetAlpha() == doctest::Approx(0.5f));
+    bed.Advance(0.75);
     CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f));
     bed.Toggle(u8"entering");
     CHECK(bed.widget->GetAlpha() == doctest::Approx(0.0f)); // from where it was

@@ -842,8 +842,24 @@ export namespace experimental::gui
                 if (spec == nullptr || spec->Duration <= 0.0f)
                     continue;
                 const StyleValue* before = previous.Value(name);
-                if (before == nullptr || previous.Get(name) == p.Value.AsView())
-                    continue; // no starting value, or no change
+                StyleValue initial;
+                if (before == nullptr)
+                {
+                    // Set now and by no rule before (a toast's `:leaving { opacity: 0 }` over a rule
+                    // that never set it): from its initial value, as CSS's computed value was. An
+                    // inherited one took its parent's: not here.
+                    const StylePropertySpec* property = FindStyleProperty(name);
+                    if (property == nullptr || property->Inherited)
+                        continue;
+                    const core::StringView text = property->Initial != nullptr ? core::StringView(property->Initial)
+                                                  : property->Grammar == StyleGrammar::Transforms ? core::StringView(u8"none")
+                                                                                                  : core::StringView{};
+                    if (text.Size() == 0 || text == p.Value.AsView() || !ParseStyleValue(property->Grammar, text, initial))
+                        continue; // no initial value, or no change from it
+                    before = &initial;
+                }
+                else if (previous.Get(name) == p.Value.AsView())
+                    continue; // no change
                 StyleValue from = *before;
                 if (animation)
                     (void)animation->TrackValue(name, from); // retarget from where a running track is

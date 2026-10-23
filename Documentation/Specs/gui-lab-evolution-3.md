@@ -1138,7 +1138,17 @@ Each a layer with its tests.
   re-applies the sheets); `GuiDomain` (resources `gui`, `vg`, `fonts`) in the composition when the
   lab is built. Pushed screens are not rebuilt on a re-cook (the canvases are, with E7); the screen
   tier lays out at the target's size (the game's resolution and orientation come with E9).
-- **E6 Input.** The engine's input into the GUI, the active root, the action layer told.
+- **E6 Input.** The engine's input into the GUI, the active root, the action layer told. Built (vg,
+  2026-10-23): the input subsystem's active source through GUI.Shell's bridge (a bridge per root;
+  the bridge's poll now takes any devices, `PumpDevices`, an `InputSurface`'s among them), one root
+  a frame (an occupied overlay layer modal; else the GUI under the pointer, the screen tier's
+  first; else the screen tier while it holds a screen; else the first scene root with content),
+  a press kept with its root until let go, the scenes input may reach as the input subsystem's
+  binding says. The action layer's pointer and keyboard claims are added to Engine.UI's in the
+  BeginFrame lane and cleared at EndFrame, after the frame's actions read them. The engine has no
+  input kind tracker of its own: the GUI keeps one, fed from the same source. The pad's confirm on
+  release and the touch guide are Engine.UI's and not carried over; the lab's own pad handling
+  serves.
 - **E7 Components.** Canvas, billboard, world panel.
 - **E8 The script surface.** The facade per context, pushing by guid.
 - **E9 The player and play-in-editor.** Settings, splash, run screens.

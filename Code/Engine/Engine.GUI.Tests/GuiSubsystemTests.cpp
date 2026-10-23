@@ -24,6 +24,9 @@ import foundation.vg.resource;
 import foundation.vg.svg;
 import foundation.texture.resource;
 import foundation.render.api;
+import foundation.shell;
+import foundation.input;
+import engine.input;
 import engine.domain;
 import experimental.gui;
 import experimental.gui.gamekit;
@@ -150,23 +153,126 @@ namespace
         }
     };
 
-    // A context with the scene subsystem and the GUI's, started.
+    // A mouse the test moves and presses; a press or release shows as an edge for one frame.
+    struct FakeMouse final : foundation::shell::IMouse
+    {
+        f32 x = -100.0f;
+        f32 y = -100.0f;
+        bool down = false;
+        bool wasDown = false;
+        [[nodiscard]] f32 X() const override { return x; }
+        [[nodiscard]] f32 Y() const override { return y; }
+        [[nodiscard]] f32 GlobalX() const override { return x; }
+        [[nodiscard]] f32 GlobalY() const override { return y; }
+        [[nodiscard]] f32 DeltaX() const override { return 0.0f; }
+        [[nodiscard]] f32 DeltaY() const override { return 0.0f; }
+        [[nodiscard]] f32 ScrollX() const override { return 0.0f; }
+        [[nodiscard]] f32 ScrollY() const override { return 0.0f; }
+        [[nodiscard]] bool IsButtonDown(foundation::shell::MouseButton b) const override
+        {
+            return b == foundation::shell::MouseButton::Left && down;
+        }
+        [[nodiscard]] bool IsButtonPressed(foundation::shell::MouseButton b) const override
+        {
+            return b == foundation::shell::MouseButton::Left && down && !wasDown;
+        }
+        [[nodiscard]] bool IsButtonReleased(foundation::shell::MouseButton b) const override
+        {
+            return b == foundation::shell::MouseButton::Left && !down && wasDown;
+        }
+        [[nodiscard]] bool RelativeMode() const override { return false; }
+        void SetRelativeMode(bool) override {}
+        [[nodiscard]] bool CursorVisible() const override { return true; }
+        void SetCursorVisible(bool) override {}
+        void SetCursor(foundation::shell::CursorType) override {}
+        void SetGlobalCapture(bool) override {}
+    };
+
+    // The engine's active input source as a test drives it: the mouse, and this frame's events.
+    struct FakeDevices final : foundation::input::IInputSourceProvider
+    {
+        FakeMouse mouse;
+        Array<foundation::shell::InputEvent> events;
+        [[nodiscard]] foundation::shell::IKeyboard* Keyboard() override { return nullptr; }
+        [[nodiscard]] foundation::shell::IMouse* Mouse() override { return &mouse; }
+        [[nodiscard]] i32 GamepadCount() const override { return 0; }
+        [[nodiscard]] foundation::shell::IGamepad* Gamepad(i32) override { return nullptr; }
+        [[nodiscard]] Span<const foundation::shell::InputEvent> Events() override { return {events.Data(), events.Size()}; }
+        void Key(foundation::shell::KeyCode key)
+        {
+            foundation::shell::InputEvent down;
+            down.kind = foundation::shell::InputEventKind::KeyDown;
+            down.key = key;
+            events.PushBack(down);
+            foundation::shell::InputEvent up = down;
+            up.kind = foundation::shell::InputEventKind::KeyUp;
+            events.PushBack(up);
+        }
+    };
+
+    // What Engine.UI does in the same lane before the GUI: claims the pointer, when told to.
+    class ClaimingSubsystem final : public runtime::Subsystem
+    {
+    public:
+        explicit ClaimingSubsystem(engine::input::InputSubsystem& input) noexcept : m_input(input) {}
+        [[nodiscard]] i32 UpdateOrder() const noexcept override { return -650; }
+        void BeginFrame(f32) override
+        {
+            if (Claims)
+                m_input.Runtime().SetConsumptionMask({true, false});
+        }
+        bool Claims = false;
+
+    private:
+        engine::input::InputSubsystem& m_input;
+    };
+
+    // A context with the scene subsystem and the GUI's (and the input subsystem's, on fake
+    // devices), started.
     struct Engine
     {
         runtime::Context context{DefaultAllocator()};
         scene::SceneManager scenes{DefaultAllocator()};
+        FakeDevices devices;
+        engine::input::InputSubsystem* input = nullptr;
+        ClaimingSubsystem* claiming = nullptr;
         GuiSubsystem* gui = nullptr;
 
         Engine()
         {
             auto* sceneSubsystem = context.AddSubsystem<engine::scene::SceneSubsystem>();
             sceneSubsystem->RegisterManager(&scenes);
+            input = context.AddSubsystem<engine::input::InputSubsystem>(nullptr);
+            claiming = context.AddSubsystem<ClaimingSubsystem>(*input);
             gui = context.AddSubsystem<GuiSubsystem>(DefaultAllocator(), DataFs());
             context.Startup();
+            input->SetSourceProvider(&devices);
         }
-        ~Engine() { context.Shutdown(); }
-        void Frame() { context.BeginFrame(1.0f / 60.0f); }
+        ~Engine()
+        {
+            input->SetSourceProvider(nullptr);
+            context.Shutdown();
+        }
+        // A frame as the application runs one: the last one's end (EndFrame), then this one's
+        // BeginFrame lane, where the GUI pumps; the test reads what it did before its end.
+        void Frame()
+        {
+            context.EndFrame();
+            context.BeginFrame(1.0f / 60.0f);
+            devices.events.Clear();
+            devices.mouse.wasDown = devices.mouse.down;
+        }
+        [[nodiscard]] bool PointerClaimed() const { return input->Runtime().GetConsumptionMask().pointer; }
     };
+
+    RefPtr<lab::Button> MakeButton(StringView id, Float2 at)
+    {
+        RefPtr<lab::Button> button = MakeRef<lab::Button>(DefaultAllocator());
+        button->SetId(id);
+        button->SetPosition(at);
+        button->SetSize(Float2{100.0f, 40.0f});
+        return button;
+    }
 }
 
 TEST_CASE("engine.gui: the provider answers documents, sheets, vector images and textures by guid, and only as what they are")
@@ -365,4 +471,114 @@ TEST_CASE("engine.gui: the domain brings the documents' and sheets' resource mod
         documents = documents || module == &lab::kGuiResourceModule;
     CHECK(documents);
     CHECK_FALSE(domain.HasScene()); // its components come with E7
+}
+
+TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a click lands, and the action layer hears what the GUI took")
+{
+    Engine engine;
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    lab::SceneRoot* hud = engine.gui->SceneRootFor(*level);
+    REQUIRE(hud != nullptr);
+    hud->SetViewportSize(Float2{800.0f, 600.0f});
+    RefPtr<lab::Button> button = MakeButton(u8"fire", Float2{20.0f, 20.0f});
+    hud->AddChild(button.Get());
+    i32 clicks = 0;
+    (void)button->AddEventListener(lab::EventType::MouseClick, [&](const lab::Event&) { ++clicks; });
+    engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
+    engine.Frame();
+
+    // Over the button: the scene's root takes the input, and the pointer is the GUI's.
+    engine.devices.mouse.x = 50.0f;
+    engine.devices.mouse.y = 30.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+    CHECK(engine.gui->PointerOverGui());
+    CHECK(engine.PointerClaimed());
+    engine.devices.mouse.down = true;
+    engine.Frame();
+    engine.devices.mouse.down = false;
+    engine.Frame();
+    CHECK(clicks == 1);
+
+    // Over empty space: the game's pointer; and the frame's end clears the claim.
+    engine.devices.mouse.x = 500.0f;
+    engine.Frame();
+    CHECK_FALSE(engine.gui->PointerOverGui());
+    CHECK_FALSE(engine.PointerClaimed());
+    engine.devices.mouse.x = 50.0f;
+    engine.Frame();
+    CHECK(engine.PointerClaimed());
+    engine.context.EndFrame();
+    CHECK_FALSE(engine.PointerClaimed());
+
+    // Engine.UI's claim (made first in the lane) stands though the GUI takes nothing.
+    engine.claiming->Claims = true;
+    engine.devices.mouse.x = 500.0f;
+    engine.Frame();
+    CHECK_FALSE(engine.gui->PointerOverGui());
+    CHECK(engine.PointerClaimed());
+    engine.claiming->Claims = false;
+    engine.context.EndFrame();
+
+    // A press stays with the root it began in until it is let go.
+    engine.devices.mouse.x = 50.0f;
+    engine.devices.mouse.down = true;
+    engine.Frame();
+    RefPtr<lab::Button> menu = MakeButton(u8"menu", Float2{400.0f, 20.0f});
+    RefPtr<lab::UIWidget> screen = MakeRef<lab::UIWidget>(DefaultAllocator());
+    screen->AddChild(menu.Get());
+    REQUIRE(engine.gui->Screens()->Push(*screen) != nullptr);
+    engine.devices.mouse.x = 450.0f; // over the screen's button now, still held
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+    CHECK(engine.PointerClaimed()); // it began over the GUI
+    engine.devices.mouse.down = false;
+    engine.Frame();
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == engine.gui->ScreenRoot());
+    engine.scenes.DestroyScene(level);
+    CHECK(engine.gui->ActiveInputRoot() != hud);
+}
+
+TEST_CASE("engine.gui: with no GUI under the pointer the keys go to the screens a game pushed, and Back pops one")
+{
+    Engine engine;
+    engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
+    RefPtr<lab::UIWidget> title = MakeRef<lab::UIWidget>(DefaultAllocator());
+    title->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
+    RefPtr<lab::UIWidget> settings = MakeRef<lab::UIWidget>(DefaultAllocator());
+    settings->AddChild(MakeButton(u8"back", Float2{20.0f, 20.0f}).Get());
+    REQUIRE(engine.gui->Screens()->Push(*title) != nullptr);
+    REQUIRE(engine.gui->Screens()->Push(*settings) != nullptr);
+    engine.Frame();
+    engine.Frame();
+    CHECK(engine.gui->Screens()->Count() == 2u);
+    engine.devices.Key(foundation::shell::KeyCode::Escape);
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == engine.gui->ScreenRoot());
+    CHECK(engine.gui->Screens()->Count() == 1u);
+}
+
+TEST_CASE("engine.gui: a source bound to another scene never reaches this scene's GUI")
+{
+    Engine engine;
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    scene::Scene* other = engine.scenes.CreateScene(u8"other");
+    lab::SceneRoot* hud = engine.gui->SceneRootFor(*level);
+    hud->SetViewportSize(Float2{800.0f, 600.0f});
+    RefPtr<lab::Button> button = MakeButton(u8"fire", Float2{20.0f, 20.0f});
+    hud->AddChild(button.Get());
+    engine.devices.mouse.x = 50.0f;
+    engine.devices.mouse.y = 30.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+    engine.input->SetSourceProvider(&engine.devices, other); // an editor Game tab on the other scene
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() != hud);
+    CHECK_FALSE(engine.gui->PointerOverGui());
+    engine.input->SetSourceProvider(&engine.devices, level);
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+    engine.scenes.DestroyScene(other);
+    engine.scenes.DestroyScene(level);
 }

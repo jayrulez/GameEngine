@@ -18,7 +18,16 @@
 // Engine.UI's. A sheet or document whose cooked product changes restyles the GUI (hot reload). The
 // GUI ticks on unscaled time (menus move while the game is paused), so its work is in BeginFrame.
 //
-// Its input (E6), components (E7), script surface (E8) and the player's settings (E9) come later.
+// Input (E6): the engine's active input source (the player's window, an editor Game tab's view)
+// into one root a frame, through GUI.Shell's bridge (one per root, each root its own dispatcher): an
+// occupied overlay layer is modal; else the root whose GUI is under the pointer (the screen tier
+// first); else the screen tier while it holds a screen; else the first scene root with content. A
+// press stays with its root until every button is up. Which scenes input may reach follows the input
+// subsystem's binding, as Engine.UI's does. The action layer is told what the GUI took (the pointer
+// over GUI that takes it, or a press that began there; the keys while text is being edited), added
+// to what Engine.UI claims; the GUI tracks the input kind from the same source.
+//
+// Its components (E7), script surface (E8) and the player's settings (E9) come later.
 // GCC modules hygiene: the renderer, the shaders and the textures live in GuiSubsystemImpl.cpp.
 
 module;
@@ -38,8 +47,12 @@ import foundation.fonts;
 import foundation.image;
 import foundation.vg.svg;
 import foundation.render.api; // the two overlay roles
+import foundation.shell;      // the text input target
+import foundation.input;      // InputKindTracker
+import engine.input;          // the active input source, the action runtimes
 import experimental.gui;
 import experimental.gui.gamekit;
+import experimental.gui.shell; // GuiInputBridge
 
 using namespace foundation::core;
 namespace rhi = foundation::rhi;
@@ -136,6 +149,20 @@ export namespace engine::gui
         void OnReady() override;
         void OnShutdown() override;
         void BeginFrame(f32 deltaTime) override;
+        /// The action layer's pointer and keyboard claims cleared after the frame read them: the
+        /// next frame's BeginFrame lane republishes them (Engine.UI's, then the GUI's added).
+        void EndFrame() override;
+
+        // ---- input ----
+        /// The window whose platform text input (IME) follows the GUI's focus (the player's main
+        /// window); null leaves it alone (an editor, whose own bridge owns it).
+        void SetTextInputTarget(foundation::shell::IWindow* window);
+        /// The root this frame's input went to; null before any input.
+        [[nodiscard]] lab::SceneRoot* ActiveInputRoot() const noexcept { return m_activeRoot; }
+        /// Whether the GUI took the pointer this frame (what the action layer was told).
+        [[nodiscard]] bool PointerOverGui() const noexcept { return m_pointerTaken; }
+        /// The input kind, from the active source each frame (the pointer, the keys, a pad).
+        [[nodiscard]] foundation::input::InputKindTracker& GetInputKindTracker() noexcept { return m_inputKind; }
 
         // ---- the scene tier ----
         void OnSystemsReady(scene::Scene& scene) override;
@@ -163,9 +190,15 @@ export namespace engine::gui
         {
             const scene::Scene* Scene = nullptr;
             RefPtr<lab::SceneRoot> Root;
+            UniquePtr<lab::GuiInputBridge> Bridge;
         };
 
         void ApplySheets();
+        void PumpInput();
+        [[nodiscard]] lab::SceneRoot* PickInputRoot(bool pointer, Float2 point);
+        [[nodiscard]] bool InputReaches(const SceneTier& tier) const noexcept;
+        [[nodiscard]] lab::GuiInputBridge* BridgeOf(const lab::SceneRoot* root) noexcept;
+        [[nodiscard]] UniquePtr<lab::GuiInputBridge> MakeBridge(lab::SceneRoot& root);
         void StyleAndLayOut(lab::SceneRoot& root, Float2 size);
         [[nodiscard]] bool ReadDataFile(StringView path, Array<u8>& out) const;
 
@@ -180,10 +213,18 @@ export namespace engine::gui
         RefPtr<lab::SceneRoot> m_screenRoot;
         RefPtr<lab::ScreenStack> m_screens;
         RefPtr<lab::UIWidget> m_overlay;
+        UniquePtr<lab::GuiInputBridge> m_screenBridge;
         Array<SceneTier> m_sceneTiers;
         UniquePtr<RenderState> m_render;
         render::ISceneRenderer* m_sceneRenderer = nullptr; // the overlays' registration
         render::IScreenRenderer* m_screenRenderer = nullptr;
+        engine::input::InputSubsystem* m_input = nullptr;
+        foundation::input::InputKindTracker m_inputKind;
+        foundation::shell::IWindow* m_textInputTarget = nullptr;
+        lab::SceneRoot* m_activeRoot = nullptr; // the root input went to last
+        lab::SceneRoot* m_pressRoot = nullptr;  // the root a held press began in
+        bool m_pressTaken = false;              // that press began over GUI that takes the pointer
+        bool m_pointerTaken = false;
     };
 
     /// The GUI's domain (engine-composition.md): its resource modules (documents and sheets, the

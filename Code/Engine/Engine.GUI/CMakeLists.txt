@@ -8,8 +8,8 @@ target_link_libraries(Engine.GUI
            Foundation::Resource Foundation::Content Foundation::RHI Foundation::VFS Foundation::Image
            Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
            Foundation::VG Foundation::VG.SVG Foundation::VG.Resource Foundation::Texture.Resource
-           Foundation::Render Engine::Render
-           Experimental::GUI Experimental::GUI.Gamekit Experimental::GUI.Resources Experimental::GUI.Hosting
+           Foundation::Render Engine::Render Foundation::Shell Foundation::Input Engine::Input
+           Experimental::GUI Experimental::GUI.Shell Experimental::GUI.Gamekit Experimental::GUI.Resources Experimental::GUI.Hosting
            Foundation::Profiler Foundation::Policy)
 target_sources(Engine.GUI
     PRIVATE

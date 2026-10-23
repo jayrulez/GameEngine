@@ -33,8 +33,12 @@ import foundation.vg.resource;      // VectorImage: an SVG by guid
 import foundation.texture.resource; // Texture: an image by guid
 import foundation.render.api;
 import engine.render; // RenderSubsystem: the overlays' registration
+import foundation.shell;
+import foundation.input;
+import engine.input;
 import experimental.gui;
 import experimental.gui.gamekit;
+import experimental.gui.shell;
 import experimental.gui.resources; // GuiDocument, GuiStyleSheet, kGuiResourceModule
 import experimental.gui.hosting;   // GuiPassRenderer, VgShaderLibrary
 
@@ -378,6 +382,7 @@ namespace engine::gui
             m_overlay->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
         }
         m_screenRoot->AddChild(m_overlay.Get());
+        m_screenBridge = MakeBridge(*m_screenRoot);
     }
 
     void GuiSubsystem::OnReady()
@@ -385,6 +390,7 @@ namespace engine::gui
         foundation::runtime::Context* context = GetContext();
         if (context == nullptr)
             return;
+        m_input = context->GetSubsystem<engine::input::InputSubsystem>();
         if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
         {
             scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
@@ -411,7 +417,11 @@ namespace engine::gui
         if (foundation::runtime::Context* context = GetContext())
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 scenes->UnregisterObserver(this);
+        m_activeRoot = nullptr;
+        m_pressRoot = nullptr;
+        m_input = nullptr;
         m_sceneTiers.Clear();
+        m_screenBridge = nullptr;
         if (m_screens)
             m_screens->Clear();
         m_overlay = nullptr;
@@ -429,6 +439,7 @@ namespace engine::gui
             m_render->Renderer->BeginFrame();
         if (m_resources->Poll())
             ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
+        PumpInput();
         // Unscaled: menus move while the game is paused.
         m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
         if (m_screenRoot)
@@ -489,6 +500,7 @@ namespace engine::gui
         SceneTier tier;
         tier.Scene = &scene;
         tier.Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        tier.Bridge = MakeBridge(*tier.Root);
         m_sceneTiers.PushBack(Move(tier));
     }
 
@@ -497,9 +509,164 @@ namespace engine::gui
         for (usize i = 0; i < m_sceneTiers.Size(); ++i)
             if (m_sceneTiers[i].Scene == &scene)
             {
+                if (m_activeRoot == m_sceneTiers[i].Root.Get())
+                    m_activeRoot = nullptr;
+                if (m_pressRoot == m_sceneTiers[i].Root.Get())
+                    m_pressRoot = nullptr;
                 m_sceneTiers.RemoveAt(i);
                 return;
             }
+    }
+
+    UniquePtr<lab::GuiInputBridge> GuiSubsystem::MakeBridge(lab::SceneRoot& root)
+    {
+        UniquePtr<lab::GuiInputBridge> bridge = MakeUnique<lab::GuiInputBridge>(m_allocator, root.GetEventDispatcher());
+        bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad (K2b)
+        bridge->SetTextInputTarget(m_textInputTarget);
+        return bridge;
+    }
+
+    void GuiSubsystem::SetTextInputTarget(foundation::shell::IWindow* window)
+    {
+        m_textInputTarget = window;
+        if (m_screenBridge)
+            m_screenBridge->SetTextInputTarget(window);
+        for (const SceneTier& tier : m_sceneTiers)
+            tier.Bridge->SetTextInputTarget(window);
+    }
+
+    lab::GuiInputBridge* GuiSubsystem::BridgeOf(const lab::SceneRoot* root) noexcept
+    {
+        if (root != nullptr && root == m_screenRoot.Get())
+            return m_screenBridge.Get();
+        for (const SceneTier& tier : m_sceneTiers)
+            if (tier.Root.Get() == root)
+                return tier.Bridge.Get();
+        return nullptr;
+    }
+
+    // Whether this frame's input may reach `tier`'s scene: the source's own scene when it is bound
+    // to one (an editor Game tab), else every scene or none, as the input subsystem's policy says.
+    bool GuiSubsystem::InputReaches(const SceneTier& tier) const noexcept
+    {
+        if (m_input == nullptr)
+            return false;
+        if (const void* bound = m_input->BoundSceneKey(); bound != nullptr)
+            return static_cast<const void*>(tier.Scene) == bound;
+        return m_input->UnboundScenePolicy() == engine::input::UnboundInputScenePolicy::AllScenes;
+    }
+
+    lab::SceneRoot* GuiSubsystem::PickInputRoot(bool pointer, Float2 point)
+    {
+        if (!m_screenRoot)
+            return nullptr;
+        // An occupied overlay layer (a system menu, a loading screen) is modal.
+        for (usize i = 0; m_overlay && i < m_overlay->ChildCount(); ++i)
+            if (m_overlay->GetChildAt(i)->IsDisplayed())
+                return m_screenRoot.Get();
+        // The GUI under the pointer, the screen tier's over a scene's.
+        if (pointer)
+        {
+            if (m_screenRoot->GetEventDispatcher()->IsPointerOver(point))
+                return m_screenRoot.Get();
+            for (const SceneTier& tier : m_sceneTiers)
+                if (InputReaches(tier) && tier.Root->GetEventDispatcher()->IsPointerOver(point))
+                    return tier.Root.Get();
+        }
+        // The keys and a pad: the screens a game pushed, else a scene's GUI.
+        if (m_screens && m_screens->Count() > 0)
+            return m_screenRoot.Get();
+        for (const SceneTier& tier : m_sceneTiers)
+            if (InputReaches(tier) && tier.Root->ChildCount() > 0)
+                return tier.Root.Get();
+        return m_screenRoot.Get();
+    }
+
+    void GuiSubsystem::PumpInput()
+    {
+        m_pointerTaken = false;
+        if (m_input == nullptr || !m_screenRoot)
+            return;
+        foundation::input::IInputSourceProvider& devices = m_input->ActiveSource();
+        m_inputKind.Update(devices);
+        foundation::shell::IMouse* mouse = devices.Mouse();
+        foundation::shell::ITouch* touch = devices.Touch();
+        const bool fingers = touch != nullptr && touch->TouchCount() > 0;
+        Float2 point{0.0f, 0.0f};
+        if (fingers)
+        {
+            foundation::shell::TouchPoint finger;
+            if (touch->GetTouchPoint(0, finger))
+                point = Float2{finger.pointerX, finger.pointerY};
+        }
+        else if (mouse != nullptr)
+            point = Float2{mouse->X(), mouse->Y()};
+        const bool pointer = fingers || mouse != nullptr;
+        const bool held = fingers || (mouse != nullptr && (mouse->IsButtonDown(foundation::shell::MouseButton::Left) ||
+                                                           mouse->IsButtonDown(foundation::shell::MouseButton::Right) ||
+                                                           mouse->IsButtonDown(foundation::shell::MouseButton::Middle)));
+
+        // One root a frame; a held press stays with the root it began in, so its release lands.
+        lab::SceneRoot* root = held && m_pressRoot != nullptr ? m_pressRoot : PickInputRoot(pointer, point);
+        if (root != m_activeRoot && m_activeRoot != nullptr && pointer)
+        {
+            // The root input leaves: nothing in it stays hovered.
+            (void)m_activeRoot->GetEventDispatcher()->InjectMouseMove(Float2{-1.0e6f, -1.0e6f});
+        }
+        m_activeRoot = root;
+        lab::GuiInputBridge* bridge = BridgeOf(root);
+        if (bridge == nullptr)
+            return;
+        if (held && m_pressRoot == nullptr)
+        {
+            m_pressRoot = root; // the press begins: where it began says whether the GUI took it
+            m_pressTaken = root->GetEventDispatcher()->IsPointerOver(point);
+        }
+        bridge->PumpDevices(mouse, touch, devices.Keyboard());
+        // Keys, text and the pad through their events, in order; the pointer was polled above.
+        for (const foundation::shell::InputEvent& event : devices.Events())
+            switch (event.kind)
+            {
+            case foundation::shell::InputEventKind::KeyDown:
+            case foundation::shell::InputEventKind::KeyUp:
+            case foundation::shell::InputEventKind::TextInput:
+            case foundation::shell::InputEventKind::TextEditing:
+            case foundation::shell::InputEventKind::GamepadButtonDown:
+            case foundation::shell::InputEventKind::GamepadButtonUp:
+            case foundation::shell::InputEventKind::GamepadAxis:
+                (void)bridge->Dispatch(event);
+                break;
+            default:
+                break;
+            }
+        bridge->SyncInputKind(); // a pad or keys with no event this frame still count
+
+        // What the action layer is told the GUI took: the pointer over GUI that takes it, or a press
+        // that began there while it is held; the keys while text is edited. Added to Engine.UI's
+        // claim (its pump runs first in this lane); EndFrame clears them after the frame read them.
+        m_pointerTaken = pointer && (held ? m_pressTaken : root->GetEventDispatcher()->IsPointerOver(point));
+        const bool keys = root->GetEventDispatcher()->WantsTextInput();
+        if (!held)
+        {
+            m_pressRoot = nullptr;
+            m_pressTaken = false;
+        }
+        const bool pointerTaken = m_pointerTaken;
+        m_input->ForEachActionRuntime(
+            [pointerTaken, keys](foundation::input::ActionRuntime& runtime)
+            {
+                foundation::input::ActionRuntime::ConsumptionMask mask = runtime.GetConsumptionMask();
+                mask.pointer = mask.pointer || pointerTaken;
+                mask.keyboard = mask.keyboard || keys;
+                runtime.SetConsumptionMask(mask);
+            });
+    }
+
+    void GuiSubsystem::EndFrame()
+    {
+        if (m_input == nullptr)
+            return;
+        m_input->ForEachActionRuntime([](foundation::input::ActionRuntime& runtime) { runtime.SetConsumptionMask({}); });
     }
 
     void GuiSubsystem::EnsureRenderReady(rhi::Device& device, i32 frameCount)

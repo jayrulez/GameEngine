@@ -62,6 +62,11 @@ export namespace foundation::xml
         XmlNode& operator=(const XmlNode&) = delete;
 
         [[nodiscard]] XmlNodeType NodeType() const { return m_nodeType; }
+        /// The line it began on in the text it was parsed from (1-based: an element's `<`, an
+        /// attribute's name), so what reads a document can say where something is; 0 when it was
+        /// made in code.
+        [[nodiscard]] u32 Line() const noexcept { return m_line; }
+        void SetLine(u32 line) noexcept { m_line = line; }
         [[nodiscard]] XmlNode* Parent() const { return m_parent; }
         [[nodiscard]] XmlNode* FirstChild() const { return m_firstChild; }
         [[nodiscard]] XmlNode* LastChild() const { return m_lastChild; }
@@ -231,6 +236,7 @@ export namespace foundation::xml
     private:
         IAllocator* m_allocator;
         XmlNodeType m_nodeType;
+        u32 m_line = 0;
         XmlNode* m_parent = nullptr;
         XmlNode* m_firstChild = nullptr;
         XmlNode* m_lastChild = nullptr;

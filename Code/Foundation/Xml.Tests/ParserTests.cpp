@@ -281,3 +281,32 @@ TEST_CASE("xml.parse: a failed parse reports the line and column where it stoppe
     CHECK(d.ErrorColumn() == 1);
 }
 
+
+TEST_CASE("xml.parse: each element and attribute knows the line it began on; one made in code knows none")
+{
+    // What reads a document (a GUI's markup loader, its cook) says where an element it drops is.
+    XmlDocument d(DefaultAllocator());
+    REQUIRE(d.Parse(u8"<?xml version=\"1.0\"?>\n<root>\n  <a x=\"1\"\n     y=\"2\"/>\n\n  <b><c/></b>\n</root>") == XmlResult::Ok);
+    XmlElement* root = d.RootElement();
+    REQUIRE(root != nullptr);
+    CHECK(root->Line() == 2u);
+    XmlElement* a = root->GetFirstChildElement(u8"a");
+    REQUIRE(a != nullptr);
+    CHECK(a->Line() == 3u);
+    REQUIRE(a->GetAttributeNode(u8"x") != nullptr);
+    CHECK(a->GetAttributeNode(u8"x")->Line() == 3u);
+    CHECK(a->GetAttributeNode(u8"y")->Line() == 4u); // an attribute on a line of its own
+    XmlElement* b = root->GetFirstChildElement(u8"b");
+    REQUIRE(b != nullptr);
+    CHECK(b->Line() == 6u);
+    REQUIRE(b->GetFirstChildElement(u8"c") != nullptr);
+    CHECK(b->GetFirstChildElement(u8"c")->Line() == 6u);
+
+    // Parsed again: counted afresh.
+    REQUIRE(d.Parse(u8"<only/>") == XmlResult::Ok);
+    CHECK(d.RootElement()->Line() == 1u);
+
+    XmlElement* made = d.CreateElement(u8"made");
+    CHECK(made->Line() == 0u);
+    d.RootElement()->AppendChild(made);
+}

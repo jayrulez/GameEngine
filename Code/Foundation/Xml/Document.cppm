@@ -73,6 +73,9 @@ export namespace foundation::xml
             m_errorLine = 1;
             m_errorColumn = 1;
             m_parseSettings = settings;
+            m_lineFrom = text.Data();
+            m_lineEnd = text.Data() + text.Size();
+            m_lineAt = 1;
 
             StringView remaining = text;
             const XmlResult result = ParseDocument(remaining);
@@ -413,6 +416,7 @@ export namespace foundation::xml
             {
                 return XmlResult::SyntaxError;
             }
+            const u32 line = LineOf(text.Data()); // its `<`
             Advance(text, 1);
 
             String tagName;
@@ -424,6 +428,7 @@ export namespace foundation::xml
             Advance(text, nameLen);
 
             XmlElement* element = Allocator().New<XmlElement>(Allocator(), StringView(tagName));
+            element->SetLine(line);
 
             const XmlResult attrResult = ParseAttributes(text, element);
             if (attrResult != XmlResult::Ok)
@@ -497,6 +502,7 @@ export namespace foundation::xml
                     return XmlResult::Ok;
                 }
 
+                const u32 line = LineOf(text.Data()); // its name
                 String attrName;
                 usize nameLen = 0;
                 if (XmlLexer::ReadName(text, nameLen, attrName) != XmlResult::Ok)
@@ -529,6 +535,10 @@ export namespace foundation::xml
                 Advance(text, valueLen);
 
                 element->SetAttribute(attrName, attrValue);
+                if (XmlAttribute* attribute = element->GetAttributeNode(attrName))
+                {
+                    attribute->SetLine(line);
+                }
             }
         }
 
@@ -761,6 +771,28 @@ export namespace foundation::xml
         XmlParseSettings m_parseSettings = XmlParseSettings::Default();
         i32 m_errorLine = 1;
         i32 m_errorColumn = 1;
+        // Where the nodes' lines were last counted to (the parse only moves forward, so the text
+        // is counted once however many nodes ask).
+        const utf8char* m_lineFrom = nullptr;
+        const utf8char* m_lineEnd = nullptr;
+        u32 m_lineAt = 1;
+
+        // The 1-based line `at` is on, in the text being parsed.
+        [[nodiscard]] u32 LineOf(const utf8char* at) noexcept
+        {
+            if (at == nullptr || m_lineFrom == nullptr || at > m_lineEnd)
+            {
+                return 0;
+            }
+            for (; m_lineFrom < at; ++m_lineFrom)
+            {
+                if (*m_lineFrom == u8'\n')
+                {
+                    ++m_lineAt;
+                }
+            }
+            return m_lineAt;
+        }
 
         // The parsers thread ONE `remaining` view by reference, so where it stands when a
         // parse function fails is where the error is. Line/column are 1-based; a column

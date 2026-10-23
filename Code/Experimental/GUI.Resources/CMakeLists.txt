@@ -1,8 +1,9 @@
-# Experimental::GUI.Resources - `experimental.gui.resources`: cooked GUI documents and themes, free of the GUI framework.
-# foundation.ui's counterpart: UI.Resource. Specs/gui-lab-evolution-3.md.
+# Experimental::GUI.Resources - `experimental.gui.resources`: cooked GUI documents and style sheets
+# (validated text), free of the GUI framework. foundation.ui's counterpart: UI.Resource.
+# Specs/gui-lab-evolution-3.md, E2.
 util_add_engine_library(GUI.Resources ALIAS Experimental::GUI.Resources)
 target_link_libraries(GUI.Resources
-    PUBLIC Foundation::Core Experimental::GUI Foundation::Policy)
+    PUBLIC Foundation::Core Foundation::Resource Foundation::Content Foundation::Policy)
 
 target_sources(GUI.Resources
     PUBLIC

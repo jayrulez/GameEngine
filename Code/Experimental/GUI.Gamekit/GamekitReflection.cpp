@@ -2,7 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI.Gamekit - its elements' reflection: a screen's covering, blocking, pausing and back, which
-// markup and a sheet set, and the stack's script surface (push, pop, replace, clear, back, top).
+// markup and a sheet set, the stack's script surface (push, pop, replace, clear, back, top), and a
+// prompt's action, set and the binding it shows.
 
 module;
 #include "Core/Prelude.h"
@@ -57,12 +58,24 @@ namespace experimental::gui
         builder.Creator();
     }
 
+    REFLECT_MEMBERS(Prompt, "rtti::gui::gamekit")
+    {
+        builder.AccessorProperty<&Prompt::GetAction, &Prompt::SetAction>("action").PropAttribute("css", core::String(u8"action"));
+        builder.AccessorProperty<&Prompt::GetSet, &Prompt::SetSet>("set").PropAttribute("css", core::String(u8"set"));
+        // What a sheet's [binding=...] and [kind=...] read (glyphs are the sheet's).
+        builder.ComputedProperty<&Prompt::GetBinding>("binding").PropAttribute("css", core::String(u8"binding"));
+        builder.ComputedProperty<&Prompt::GetBindingKind>("kind").PropAttribute("css", core::String(u8"kind"));
+        builder.Method<&GamekitElementOf<Prompt>, Prompt, Node>("of");
+        builder.Creator();
+    }
+
     void RegisterGamekitElements()
     {
         static const bool once = []()
         {
             (void)ElementTypes::Register(ScreenStack::StaticType());
             (void)ElementTypes::Register(Screen::StaticType());
+            (void)ElementTypes::Register(Prompt::StaticType());
             return true;
         }();
         (void)once;

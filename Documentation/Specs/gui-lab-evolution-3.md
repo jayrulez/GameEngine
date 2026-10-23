@@ -983,7 +983,11 @@ Each a layer with its tests.
   it starts from as `@starting-style`, then the node's own style, then `entered`), which the
   stack's push uses (`screenshown` follows it), and `GUIContext::SetMaxClockStep`, off by default.
 - **K6 Button prompts.** The InputMap read by input kind after rebinding, the label, the sheet's
-  glyphs, live updates.
+  glyphs, live updates. Built (vg, 2026-10-23): `<Prompt action set>` reading the host's
+  `InputPrompts` (its ActionRuntime, installed on the GUI through the core's new service slot, told
+  of a rebinding by `NotifyBindingsChanged`); a pad's binding while a pad plays, a key or mouse
+  button under the keyboard or the pointer, else the action's first; `binding` is the label in
+  lower case joined by dashes (`pad-south`).
 - **K7 The sandbox's game menu on the gamekit.** The showcase's hand-built stack, Back, fades,
   pause and host plumbing replaced by the gamekit; a HUD under a pause screen; prompts that follow
   the device.

@@ -2,6 +2,7 @@
 # code and markup. Backend-neutral: its script surface is tested in Integration.ScriptFacades.
 add_executable(GUI.Gamekit.Tests
     ScreenStackTests.cpp
+    PromptTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Gamekit.Tests PRIVATE

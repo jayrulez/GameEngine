@@ -337,3 +337,68 @@ TEST_CASE("screens: from markup, the screens a stack holds are pushed in order; 
     CHECK(core::Cast<Label>(core::Cast<UIWidget>(second)->GetChildAt(1))->GetText() == SV(u8"Ada"));
     CHECK(bed.stack->PushDocument(SV(u8"missing.xml")) == nullptr);
 }
+
+namespace
+{
+    // A stack under a sheet: screens enter from transparent and leave to it, over 0.4 s.
+    struct StyledBed : Bed
+    {
+        StyleManager styles{CSSParser::Parse(SV(u8"screen { opacity: 1; transition: opacity 0.4s linear; }"
+                                                 u8"screen:entering { opacity: 0; } screen:leaving { opacity: 0; }"))};
+        StyledBed() { styles.ApplyTree(*root); }
+        void Frame(double seconds)
+        {
+            root->GetContext().Update(core::Duration::FromSeconds(seconds));
+            styles.ApplyTree(*root);
+        }
+    };
+}
+
+TEST_CASE("screens: a pushed screen is :entering while its sheet's entrance plays, and shown once it has")
+{
+    StyledBed bed;
+    auto title = bed.MakeScreen(u8"play");
+    Log log;
+    log.Watch(*title, u8"screenenter", u8"screenshown");
+    (void)bed.stack->Push(*title);
+    CHECK(title->IsEntering());
+    CHECK(bed.Focused() == SV(u8"play")); // it takes the focus at once, entrance or not
+    bed.Frame(0.0);
+    CHECK(title->GetAlpha() == doctest::Approx(0.0f));
+    bed.Frame(0.0);
+    bed.Frame(0.2);
+    CHECK(title->GetAlpha() == doctest::Approx(0.5f));
+    REQUIRE(log.Heard.Size() == 1u);
+    bed.Frame(0.2);
+    CHECK(title->GetAlpha() == doctest::Approx(1.0f));
+    REQUIRE(log.Heard.Size() == 2u);
+    CHECK(log.Heard[1] == SV(u8"screenshown"));
+}
+
+TEST_CASE("screens: a pop during an entrance leaves from where it is; the screen under it shows and takes the focus at once")
+{
+    StyledBed bed;
+    auto title = bed.MakeScreen(u8"play");
+    (void)bed.stack->Push(*title);
+    for (int i = 0; i < 4; ++i)
+        bed.Frame(0.2);
+    auto options = bed.MakeScreen(u8"volume");
+    options->SetCovers(true);
+    Log log;
+    log.Watch(*options, u8"screenshown");
+    (void)bed.stack->Push(*options);
+    CHECK_FALSE(title->IsVisible());
+    bed.Frame(0.0);
+    bed.Frame(0.0);
+    bed.Frame(0.2); // half in
+    REQUIRE(options->GetAlpha() == doctest::Approx(0.5f));
+    CHECK(bed.stack->Pop());
+    CHECK(title->IsVisible()); // shown as the cover starts leaving
+    CHECK(bed.Focused() == SV(u8"play"));
+    bed.Frame(0.0);
+    bed.Frame(0.2);
+    CHECK(options->GetAlpha() == doctest::Approx(0.25f)); // from 0.5, not from 1
+    bed.Frame(0.2);
+    CHECK(options->GetParent() == nullptr);
+    CHECK(log.Heard.IsEmpty());
+}

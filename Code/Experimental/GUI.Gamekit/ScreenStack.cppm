@@ -13,7 +13,11 @@
 // focus where it is, so `back` (Escape, the pad's East) still reaches it: the top screen hears
 // `back` first (a script's handler may take it; `back="none"` keeps it), else the stack pops, never
 // below its last screen and never in the frame that pushed. A screen popped leaves through the
-// core's Leave (its sheet's exit plays, K5), out of the stack, its focus and its input at once.
+// core's Leave (its sheet's exit plays, K5), out of the stack, its focus and its input at once; one
+// pushed enters through the core's Enter (`:entering` while its sheet's entrance plays), and a pop
+// during its entrance leaves from where it is. The screens under a covering one show again as it
+// starts leaving, not once it has gone. A game that may hitch caps the GUI's clock step
+// (GUIContext::SetMaxClockStep) so an entrance or exit is slowed rather than skipped.
 // Lifecycle as named events on the screen: `screenenter`, `screenshown`, `screenleave`,
 // `screenhidden` (covered) and `screenrevealed`; the stack tells `pausechange`.
 
@@ -43,6 +47,13 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"screen"));
             SetNavScope(NavScope::Contain); // Tab and the arrows stay in it; it remembers its focus
             SetKeepsFocus(true);            // a press on its empty area keeps the focus (and `back`) here
+            // Its entrance over (K5: the core's Enter), it is shown, while it is still on its stack.
+            Screen* self = this;
+            (void)AddEventListener(EventType::Entered, [self](const Event&)
+                                   {
+                                       if (self->m_stack != nullptr)
+                                           self->SendNamedEvent(core::StringView(u8"screenshown"));
+                                   });
         }
 
         /// It hides the screens under it (a full-screen menu over the game).
@@ -133,7 +144,7 @@ export namespace experimental::gui
             Settle();
             (void)screen->FocusElement();
             screen->SendNamedEvent(core::StringView(u8"screenenter"));
-            screen->SendNamedEvent(core::StringView(u8"screenshown")); // K5 waits for its entrance
+            screen->Enter(); // :entering for the sheet's entrance; `screenshown` once it has played (K5)
             return screen.Get();
         }
         /// Pushes the document at `path` (its markup, loaded fresh through the GUI's resources, its

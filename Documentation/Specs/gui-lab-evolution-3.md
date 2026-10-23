@@ -978,7 +978,10 @@ Each a layer with its tests.
   script surface (`push` a document, `pushNode`, `replace`, `pop`, `clear`, `back`, `top`); the
   engine's `ui::` facade waits for the move of the sample games.
 - **K5 Transitions.** Entering and leaving through the sheet; a pop during an enter; covered
-  screens shown as the cover leaves; the capped time step.
+  screens shown as the cover leaves; the capped time step. Built (vg, 2026-10-23): the core's
+  `Node::Enter` (`:entering` while the sheet's entrance plays, a keyframe animation or the values
+  it starts from as `@starting-style`, then the node's own style, then `entered`), which the
+  stack's push uses (`screenshown` follows it), and `GUIContext::SetMaxClockStep`, off by default.
 - **K6 Button prompts.** The InputMap read by input kind after rebinding, the label, the sheet's
   glyphs, live updates.
 - **K7 The sandbox's game menu on the gamekit.** The showcase's hand-built stack, Back, fades,

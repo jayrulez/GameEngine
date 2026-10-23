@@ -998,7 +998,7 @@ Each a layer with its tests.
   follows the device. Building it showed a screen with nothing focusable must take the focus
   itself, or Back never reaches it.
 
-### E The GUI's assets and the engine's GUI (design 2026-10-23; the user's go: E1 to E3)
+### E The GUI's assets and the engine's GUI (design 2026-10-23; the user's go: E1 to E3, then on)
 
 The user's direction (2026-10-23): the GUI's resources and pipeline, then `engine.gui`, the
 engine's integration, with full parity with Engine.UI. This takes up what round three's ruling 1
@@ -1103,9 +1103,9 @@ and the 0.2 backlog deferred (the engine's hosting, the decision to replace foun
 
 #### Open questions (for the user)
 
-- **Where a theme's tokens come from**: foundation.ui's games name a theme asset in the project
-  settings. The lab's default theme is its built-in sheet; a game's sheet sets tokens over it. One
-  project setting naming the game's sheet (or several, in order)?
+- **Where a theme's tokens come from**: answered (the user, 2026-10-23): a project setting naming a
+  list of sheets, applied in order over the lab's built-in sheet; one sheet is a list of one, and a
+  game layers its own over a shared one.
 
 #### Phases
 
@@ -1121,7 +1121,12 @@ Each a layer with its tests.
   (vg, 2026-10-23): guids found in the text are the product's runtime references (a guid naming no
   asset a warning); registered in Pipeline.Registration only when the lab is built (two builders,
   an importer and two creators more then).
-- **E4 Drawing into a caller's pass.** `GUI.Hosting`'s overlay path.
+- **E4 Drawing into a caller's pass.** `GUI.Hosting`'s overlay path. Built (vg, 2026-10-23):
+  `GuiPassRenderer` on a device the caller gives (no window, no shell): a root drawn into an open
+  pass at a region of its target (`GuiPassView`: format, depth-stencil, samples, encoded, frame); a
+  renderer per kind of pass, rewound once a frame; a baker of its own, recorded once a frame; images
+  registered by key told to every renderer, those made later too. The root's owner styles and lays
+  it out first.
 - **E5 `Engine.GUI`'s subsystem.** The context, the tiers, the resource provider by guid, hot
   reload, the overlays; composition.
 - **E6 Input.** The engine's input into the GUI, the active root, the action layer told.

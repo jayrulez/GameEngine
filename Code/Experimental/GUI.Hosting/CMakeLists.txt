@@ -16,4 +16,5 @@ target_sources(GUI.Hosting
             PictureBaker.cppm
             HostedContent.cppm
             GuiHost.cppm
-            Offscreen.cppm)
+            Offscreen.cppm
+            PassRenderer.cppm)

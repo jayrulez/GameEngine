@@ -1,6 +1,7 @@
 add_executable(GUI.Hosting.Tests
     PictureBakerTests.cpp
     GuiHostTests.cpp
+    PassRendererTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Hosting.Tests PRIVATE

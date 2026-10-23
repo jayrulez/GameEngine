@@ -50,6 +50,9 @@ import foundation.ui;                  // View (the `ui` binding's instantiate r
 import foundation.ui.resource;         // cooked UI documents/themes (game-ui)
 import engine.ui;        // the game screen tier (canvases + overlay + consumption)
 import engine.ui.script;   // UiScreenScriptBinding + InstallUiScreenScriptService
+#if OPTION_HAS_EXPERIMENTAL_GUI
+import engine.gui;
+#endif
 import foundation.audio;               // AudioEngine (owned by the audio subsystem)
 import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)
 import foundation.net;                 // UdpSocket / DatagramEndpoint (the transport)
@@ -253,6 +256,11 @@ namespace engine::runtime
             { ForEachInstance([&visit](GameInstance& instance) { visit(instance.InputRuntime()); }); });
         m_ui = host.Ctx().AddSubsystem<engine::ui::UISubsystem>(host.Ctx().Allocator(),
                                                                *m_dataFileSystem);
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        // The engine's GUI beside it while both live: every game has it (its screen tier, its
+        // components, `gui` in its scripts).
+        m_gui = host.Ctx().AddSubsystem<engine::gui::GuiSubsystem>(host.Ctx().Allocator(), *m_dataFileSystem);
+#endif
 
         // Entity behaviors. Facade/backend registration is
         // batteries-included here (idempotent - entry points may register more);
@@ -308,6 +316,13 @@ namespace engine::runtime
                 }
                 // `ui` -> the app-wide screen tier (finders + push/pop over the ScreenStack).
                 engine::uiscript::InstallUiScreenScriptService(context, self->m_uiScreenBinding);
+#if OPTION_HAS_EXPERIMENTAL_GUI
+                // `gui` -> the engine GUI's screen tier.
+                if (self->m_gui != nullptr)
+                {
+                    self->m_gui->ExposeToScript(context);
+                }
+#endif
             }});
 
         // Back the `ui` facade with the live screen tier: point the binding at the UISubsystem's
@@ -626,6 +641,12 @@ namespace engine::runtime
         {
             m_ui->SetResourceManager(Resources()); // the game UI's images bind through it
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gui != nullptr)
+        {
+            m_gui->SetResourceManager(Resources()); // the GUI's documents, sheets and images by guid
+        }
+#endif
     }
 
     void
@@ -665,6 +686,12 @@ namespace engine::runtime
         {
             m_ui->EnsureRenderReady(*gfx->Raw(), gfx->FramesInFlight());
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (GraphicsDevice* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr && m_gui != nullptr)
+        {
+            m_gui->EnsureRenderReady(*gfx->Raw(), static_cast<core::i32>(gfx->FramesInFlight()));
+        }
+#endif
 
         if (m_borrowedResources == nullptr && m_contentDatabase != nullptr)
         {
@@ -684,6 +711,12 @@ namespace engine::runtime
                 ProfilerOverlay().Show(*m_ui);
             }
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gui != nullptr)
+        {
+            m_gui->SetResourceManager(resources); // the GUI's documents, sheets and images by guid
+        }
+#endif
         if (resources == nullptr)
         {
             return;
@@ -719,6 +752,12 @@ namespace engine::runtime
         {
             m_ui->SetResourceManager(Resources()); // the game UI's images bind through it
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gui != nullptr)
+        {
+            m_gui->SetResourceManager(Resources());
+        }
+#endif
         if (borrowed != nullptr)
         {
             RegisterStandardFactories(*borrowed, host);
@@ -823,6 +862,12 @@ namespace engine::runtime
         {
             m_ui->RenderCanvasTextures(*frame.encoder, static_cast<core::i32>(frame.frameIndex));
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gui != nullptr)
+        {
+            m_gui->RenderTextures(*frame.encoder, frame.frameIndex); // its canvases' and panels' textures, its bakes
+        }
+#endif
         render->BeginRendering(*frame.encoder, frame.frameIndex);
         // Render every NON-headless instance's scenes (a headless dedicated
         // server simulates but isn't drawn) + the default group's loose scenes. Clear comes from

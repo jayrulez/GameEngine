@@ -132,6 +132,12 @@ namespace engine::player
             {
                 UI()->SetTextInputTarget(host.Shell()->MainWindow());
             }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+            if (GUI() != nullptr && host.Shell() != nullptr)
+            {
+                GUI()->SetTextInputTarget(host.Shell()->MainWindow()); // the GUI's text fields too
+            }
+#endif
 
             // Native game plugin (game-native-code.md N2). Placed AFTER the base startup so
             // OnLoad can resolve engine subsystems from Ctx(), and BEFORE the initial scene

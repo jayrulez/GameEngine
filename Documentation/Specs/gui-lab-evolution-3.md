@@ -1183,6 +1183,19 @@ Each a layer with its tests.
   `GuiSubsystem::ExposeToScript` gives a script context the screen tier's root: `gui::root()`, its
   stack `ScreenStack::of(gui::root().find("screens"))` (the stack's id), which pushes a document by
   `"{guid}"` through the provider, so no `gui.screens()` was needed. No host installs it yet (E9).
-- **E9 The player and play-in-editor.** Settings, splash, run screens.
+- **E9 The player and play-in-editor.** Settings, splash, run screens. Rulings (the user,
+  2026-10-23): every game constructs the GUI when the lab is built; it shares Engine.UI's fonts (the
+  project's `defaultUiFontId` and `uiFontIds`); the manifest gains the ordered sheet list and a GUI
+  loading document. In layers:
+  - **E9a The hosts.** Built (vg, 2026-10-23): DefaultApplication adds `GuiSubsystem` (`GUI()`),
+    gives it the device, the resource manager (each place it gives Engine.UI its own) and each
+    script context's surface, and calls `RenderTextures` before the scene beside Engine.UI's
+    textures; the editor's scene and game pages call it too; the player points the GUI's text
+    input at its window.
+  - **E9b The project's settings.** The sheet list and the shared fonts applied by the player and the
+    editor; the settings page and MCP's project settings.
+  - **E9c Run screens.** A screen tier per run in the editor's Game tabs, the game's resolution and
+    orientation.
+  - **E9d The GUI's loading document.** The boot splash through the GUI when the project names one.
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
 - **E11 The web.** The lab and the engine's GUI on wasm.

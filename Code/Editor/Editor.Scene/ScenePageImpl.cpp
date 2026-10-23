@@ -41,6 +41,9 @@ import foundation.ui;
 import foundation.ui.toolkit;
 import foundation.ui.runtime;
 import engine.ui; // game-UI RenderTexture canvases (live in editing viewports)
+#if OPTION_HAS_EXPERIMENTAL_GUI
+import engine.gui; // and the engine GUI's textures
+#endif
 import foundation.ui.viewport;
 import foundation.vg.renderer;
 import editor.core;
@@ -269,6 +272,12 @@ namespace editor
         {
             m_gameUI->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_gameGui != nullptr)
+        {
+            m_gameGui->RenderTextures(*frame.encoder, frame.frameIndex);
+        }
+#endif
 
         render::ViewCamera camera;
         camera.view = Float4x4::LookAtRH(m_camera.DrawEye(), m_camera.DrawEye() + m_camera.Forward(),

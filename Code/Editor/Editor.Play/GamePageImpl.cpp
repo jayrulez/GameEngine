@@ -730,6 +730,12 @@ namespace editor
         {
             m_app->UI()->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
         }
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        if (m_app != nullptr && m_app->GUI() != nullptr)
+        {
+            m_app->GUI()->RenderTextures(*frame.encoder, frame.frameIndex); // and the engine GUI's
+        }
+#endif
 
         // No camera override: the SCENE's primary camera drives the view (its clear
         // color included) - the player's presentation, not the editor's.

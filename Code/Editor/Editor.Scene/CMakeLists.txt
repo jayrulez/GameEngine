@@ -67,3 +67,7 @@ target_sources(Editor.Scene
             ScenePage.cppm
             EditorSceneModule.cppm)
 
+
+if(OPTION_EXPERIMENTAL_GUI)
+    target_link_libraries(Editor.Scene PUBLIC Engine::GUI) # the engine GUI beside the UI (gui-lab-evolution-3.md, E9)
+endif()

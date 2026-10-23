@@ -163,6 +163,35 @@ export namespace experimental::gui
         /// Read by what follows the language (a translated property's binding): it reruns when it
         /// changes.
         void TrackLanguage() const { m_languageChanged.Track(); }
+
+        /// A service a library finds through the GUI, by its key (K6: the gamekit's InputPrompts,
+        /// which the host gives): borrowed, the host's to keep alive while set; null clears it.
+        /// What reads one follows it: a binding that read it runs again when it is set.
+        void SetService(core::StringView key, void* service)
+        {
+            for (usize i = 0; i < m_services.Size(); ++i)
+                if (m_services[i].Key.AsView() == key)
+                {
+                    if (service == nullptr)
+                        m_services.RemoveAt(i);
+                    else
+                        m_services[i].Service = service;
+                    m_servicesChanged.Notify();
+                    return;
+                }
+            if (service != nullptr)
+                m_services.PushBack(ServiceEntry{core::String(key), service});
+            m_servicesChanged.Notify();
+        }
+        /// The service under `key`, or null; a read a binding follows.
+        [[nodiscard]] void* GetService(core::StringView key) const
+        {
+            m_servicesChanged.Track();
+            for (const ServiceEntry& entry : m_services)
+                if (entry.Key.AsView() == key)
+                    return entry.Service;
+            return nullptr;
+        }
         [[nodiscard]] IResourceProvider* GetResourceProvider() const noexcept { return m_resources; }
         [[nodiscard]] ElementTable* GetElementTable() noexcept { return m_elements.Get(); }
         [[nodiscard]] const ElementSet& GetElementSet() const noexcept { return m_elementSet; }
@@ -261,6 +290,13 @@ export namespace experimental::gui
         foundation::i18n::Localization* m_localization = nullptr; // the host's
         u32 m_localizationToken = 0;
         Observable m_languageChanged;
+        struct ServiceEntry
+        {
+            core::String Key;
+            void* Service = nullptr;
+        };
+        Array<ServiceEntry> m_services; // K6: what libraries find through the GUI (borrowed)
+        Observable m_servicesChanged;
         Array<Keystroke> m_chord; // a chord typed so far (in the active root)
         IAccessibilityBridge* m_accessBridge = nullptr; // the host's
         bool m_accessListening = false;                 // it listened at the last update

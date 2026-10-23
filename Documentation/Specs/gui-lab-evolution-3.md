@@ -52,7 +52,7 @@ first three: hosting, the viewport, then docking.
 | GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D6) |
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs, the breadcrumb bar | UI.Toolkit less docking and the code editor | Built (T0 to T7) |
 | GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Built (C0 to C8) |
-| GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Designed (K0 to K7; user, 2026-10-23) |
+| GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Built (K0 to K7, 2026-10-23) |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
 | GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Empty |
 | (the engine's) | | A scene's GUI, the script facade | Engine.UI, Engine.UI.Script | Not this round (ruling 1) |
@@ -990,4 +990,10 @@ Each a layer with its tests.
   lower case joined by dashes (`pad-south`).
 - **K7 The sandbox's game menu on the gamekit.** The showcase's hand-built stack, Back, fades,
   pause and host plumbing replaced by the gamekit; a HUD under a pause screen; prompts that follow
-  the device.
+  the device. Built (vg, 2026-10-23): the frame (backdrop, title, `<Screens>`) and a document per
+  screen in Data/Assets/ui/showcase/screens/, each pushed fresh and wired as it is pushed;
+  entrances and exits in the sheet; Back the stack's, the HUD's own opening the pause screen;
+  the game stops while the stack reports a pause; the score counts up through a data tween in
+  whole numbers (`whole`, as a script's numbers arrive as fractions); the HUD's pause prompt
+  follows the device. Building it showed a screen with nothing focusable must take the focus
+  itself, or Back never reaches it.

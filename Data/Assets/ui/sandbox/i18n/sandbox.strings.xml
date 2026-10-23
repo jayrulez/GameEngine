@@ -1475,12 +1475,12 @@
 			</array>
 		</object>
 		<object>
-			<string name="key">hud.prompt</string>
+			<string name="key">hud.pause</string>
 			<bool name="plural">false</bool>
 			<array name="cells" count="2">
 				<object>
 					<bool name="present">true</bool>
-					<string name="text">Esc or Start: pause</string>
+					<string name="text">Pause</string>
 					<u8 name="forms">0</u8>
 					<string name="zero"/>
 					<string name="one"/>
@@ -1491,7 +1491,7 @@
 				</object>
 				<object>
 					<bool name="present">true</bool>
-					<string name="text">Esc أو Start: إيقاف مؤقت</string>
+					<string name="text">إيقاف مؤقت</string>
 					<u8 name="forms">0</u8>
 					<string name="zero"/>
 					<string name="one"/>

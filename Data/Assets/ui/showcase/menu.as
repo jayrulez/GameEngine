@@ -1,112 +1,56 @@
 // The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): the menu's behaviour, in
-// AngelScript, through the lab's reflection alone. The markup (menu.xml) holds the widgets and the
-// sheet (menu.css) their looks; this script only switches pages, screens and the modal, binds two
-// labels to functions of the GUI's data, and runs the loading bar and the modal's fade-out. Once the
-// loading is done it plays a stand-in game under the HUD (E10 of gui-lab-evolution-2.md): the score
-// rising, health draining and healing, the run's clock, and a pause menu on Escape or Start. The host
-// calls update(dt) while it returns true.
+// AngelScript, through the lab's reflection alone, on the gamekit (K7 of gui-lab-evolution-3.md).
+// The markup holds the widgets (menu.xml the frame, screens/ a document per screen) and the sheet
+// (menu.css) their looks, entrances and exits. This script pushes and pops the screens on the
+// gamekit's stack, wires each screen's buttons as it is pushed (fresh each time), runs the loading
+// bar and, once loading is done, a stand-in game under the HUD (E10 of gui-lab-evolution-2.md):
+// the score counting up, health draining and healing, the run's clock, and a pause screen on
+// Escape, a pad's East or Start. Back (Escape, East) is the stack's: it pops the top screen, and
+// the title keeps it. The host calls update(dt) while it returns true.
 
 funcdef string TextExpression();
 funcdef bool CommandHandler();
+funcdef bool EventHandler(GuiEvent e);
 
-Node@ stage;         // the menu screen: the title and the slot
-Node@ mainPanel;     // in the slot
-Node@ settingsPanel; // in the slot, in the main menu's place
-Node@ controlsPanel; // in the slot too: the actions' keys
-Node@ loadingScreen; // a screen of its own
-Node@ modal;         // over everything, the quit question
-Node@ hud;           // in the game: health, the score, the clock and objective
-Node@ pauseMenu;     // over the HUD while paused
-bool playing = false;  // the stand-in game runs (not while paused)
+const string kScreens = "Assets/ui/showcase/screens/";
+
+ScreenStack@ stack; // the game's screens
+Node@ stage;        // the title over the menu's pages
+Screen@ hud;        // the game's HUD while a game runs (null otherwise)
+bool loadingNow = false;
+double loadTime = 0;
 double untilGame = -1; // seconds from "Ready" to the HUD (-1: not waiting)
 double gameTime = 0;
 double nextPoint = 0;
 int score = 0;
 bool popTurn = false;
-bool loadingNow = false;
-double loadTime = 0;
-double modalClosing = -1; // seconds left of the modal's fade-out (-1: not closing)
-const double kModalCloseTime = 0.25;
 
-// Shows `node` and replays its entrance (`animationClass`; a node hidden earlier lost the class
-// then, so adding it again starts the animation over).
-void reveal(Node@ node, const string &in animationClass)
+Screen@ push(const string &in name) { return stack.push(kScreens + name + ".xml"); }
+void popScreen() { stack.pop(); }
+
+// === The menu ===
+
+void showTitle()
 {
-    node.displayed = true;
-    UIWidget::of(node).addClass(animationClass);
-}
-void conceal(Node@ node, const string &in animationClass)
-{
-    node.displayed = false;
-    UIWidget::of(node).removeClass(animationClass);
-}
-
-// === Pages ===
-// A change of page is two steps: the page on show sinks out (the "leave" class), then the next rises
-// in (its own entrance), so pages sharing the slot never stack. Input mid-change is ignored until the
-// next page is up, and focus moves there with it.
-Node@ leaving;            // the page or screen sinking out
-string leavingEntrance;   // its entrance class, removed with it
-Node@ arriving;           // what comes next: a page of the menu, or the loading screen
-double leaveLeft = -1;    // seconds left of the sink (-1: no change under way)
-const double kLeaveTime = 0.2; // the sheet's .leave
-
-bool changing() { return leaveLeft >= 0; }
-
-// What is on show now: the loading screen, or the page in the slot.
-Node@ current()
-{
-    if (loadingScreen.displayed)
-        return loadingScreen;
-    if (controlsPanel.displayed)
-        return controlsPanel;
-    return mainPanel.displayed ? mainPanel : settingsPanel;
-}
-
-// Starts the change to `next` (a page, or the loading screen).
-void changeTo(Node@ next)
-{
-    if (changing())
-        return;
-    Node@ from = current();
-    if (from is next)
-        return;
-    @leaving = from;
-    leavingEntrance = (from is loadingScreen) ? "screen-in" : "enter";
-    UIWidget::of(from).removeClass(leavingEntrance); // its entrance is over; the sink takes over
-    UIWidget::of(from).addClass("leave");
-    @arriving = next;
-    leaveLeft = kLeaveTime;
-}
-
-// The sink ended: the old one goes, the next one comes in.
-void arrive()
-{
-    conceal(leaving, leavingEntrance);
-    UIWidget::of(leaving).removeClass("leave");
-    leaveLeft = -1;
-    if (arriving is loadingScreen)
-    {
-        gui::set("status", gui::tr("loading.loading"));
-        gui::set("progress", 0);
-        loadTime = 0;
-        loadingNow = true;
-        stage.displayed = false; // the loading screen replaces the menu
-        reveal(loadingScreen, "screen-in");
-        loadingScreen.focus();
-        return;
-    }
     stage.displayed = true;
-    reveal(arriving, "enter");
-    arriving.focus(); // its remembered or default widget: the keyboard and a gamepad carry on there
+    Screen@ title = push("title");
+    title.find("play").on("click", Action(onPlay));
+    title.find("settings-btn").on("click", Action(onSettings));
+    title.find("controls-btn").on("click", Action(onControls));
+    title.find("quit").on("click", Action(onQuit));
 }
 
 string volumeText() { return "" + int(gui::getNumber("volume") * 100 + 0.5) + "%"; }
 string musicText() { return gui::tr(gui::getBool("music") ? "settings.on" : "settings.off"); }
 
-void onPlay() { changeTo(loadingScreen); }
-void onSettings() { changeTo(settingsPanel); }
-void onControls() { changeTo(controlsPanel); }
+void onSettings()
+{
+    Screen@ page = push("settings");
+    page.find("settings-back").on("click", Action(popScreen));
+    // Labels that follow the data through functions of it: no handler updates them.
+    page.find("volume-text").bind("text", TextExpression(volumeText));
+    page.find("music-text").bind("text", TextExpression(musicText));
+}
 
 // === Controls (E12 of gui-lab-evolution-2.md) ===
 // Each action's key, bound to its command in the game's key context. Choosing one listens for the
@@ -115,7 +59,19 @@ void onControls() { changeTo(controlsPanel); }
 array<string> actions = {"jump", "dash", "interact", "map"};
 array<string> keys = {"space", "leftshift", "e", "m"};
 int listening = -1; // the action waiting for its key (-1: none)
+Screen@ controls;
 
+void onControls()
+{
+    @controls = push("controls");
+    controls.find("bind-jump").on("click", Action(onBindJump));
+    controls.find("bind-dash").on("click", Action(onBindDash));
+    controls.find("bind-interact").on("click", Action(onBindInteract));
+    controls.find("bind-map").on("click", Action(onBindMap));
+    controls.find("controls-back").on("click", Action(popScreen));
+    gui::set("controls-hint", gui::tr("controls.choose"));
+    showKeys();
+}
 void showKeys()
 {
     for (uint i = 0; i < actions.length(); i++)
@@ -129,8 +85,7 @@ void listen(int action)
     if (listening >= 0)
         return;
     listening = action;
-    UIWidget@ button = UIWidget::of(gui::root().find("bind-" + actions[action]));
-    button.addClass("listening");
+    UIWidget::of(controls.find("bind-" + actions[action])).addClass("listening");
     gui::set("key-" + actions[action], gui::tr("controls.press"));
     gui::set("controls-hint", gui::tr("controls.keep") + gui::keyText(keys[action]));
     gui::captureKey(KeyHandler(onCapturedKey));
@@ -139,7 +94,7 @@ void onCapturedKey(const string &in pressed)
 {
     const int action = listening;
     listening = -1;
-    UIWidget::of(gui::root().find("bind-" + actions[action])).removeClass("listening");
+    UIWidget::of(controls.find("bind-" + actions[action])).removeClass("listening");
     gui::set("controls-hint", gui::tr("controls.choose"));
     if (pressed != "")
     {
@@ -158,77 +113,81 @@ void onBindJump() { listen(0); }
 void onBindDash() { listen(1); }
 void onBindInteract() { listen(2); }
 void onBindMap() { listen(3); }
-void onBack() { loadingNow = false; changeTo(mainPanel); }
-// The quit question opens over the menu, which stays where it is behind the dimmed glass.
+
+// === Loading ===
+
+void onPlay()
+{
+    Screen@ loading = push("loading");
+    loading.find("loading-back").on("click", Action(popScreen));
+    loading.on("screenleave", EventHandler(onLoadingLeave)); // Back, or the game starting
+    stage.displayed = false; // the loading screen replaces the menu
+    gui::set("status", gui::tr("loading.loading"));
+    gui::set("progress", 0);
+    loadTime = 0;
+    loadingNow = true;
+}
+bool onLoadingLeave(GuiEvent e)
+{
+    loadingNow = false;
+    untilGame = -1;
+    stage.displayed = hud is null; // back on the menu, unless the game took over
+    return false;
+}
+
+// === Quit ===
+// The question opens over the menu, which stays where it is behind the dimmed glass; Stay and Back
+// pop it, the focus back on Quit.
 void onQuit()
 {
-    // (Re)opening, a fade-out in progress included: its closing classes go.
-    modalClosing = -1;
-    UIWidget::of(modal).removeClass("modal-out");
-    reveal(modal, "modal-in");
-    Node@ confirm = gui::root().find("confirm");
-    UIWidget::of(confirm).removeClass("leave");
-    conceal(confirm, "enter");
-    reveal(confirm, "enter");
-    modal.focus(); // Stay, the safe answer, unless one was chosen before
+    Screen@ question = push("quit");
+    question.find("confirm-yes").on("click", Action(onLeave));
+    question.find("confirm-no").on("click", Action(popScreen));
 }
-// Stay (and Back): the modal fades out, then hides (update counts it down); focus is back on Quit
-// at once.
-void onStay()
+void onLeave()
 {
-    if (modalClosing >= 0)
-        return; // already closing
-    UIWidget::of(modal).removeClass("modal-in");
-    UIWidget::of(modal).addClass("modal-out");
-    UIWidget::of(gui::root().find("confirm")).addClass("leave");
-    modalClosing = kModalCloseTime;
-    mainPanel.focus();
+    // The whole menu fades out; once `quit` is set and the fade has run, the host takes the player
+    // back to where they came from (the sandbox).
+    UIWidget::of(gui::root().find("showcase")).addClass("closing");
+    gui::set("quit", true);
 }
 
 // === The game ===
+
 void startGame()
 {
     untilGame = -1;
-    conceal(loadingScreen, "screen-in");
-    stage.displayed = false;
     score = 0;
     gameTime = 0;
     nextPoint = 1.2;
     gui::set("score", 0);
     gui::set("health", 1.0);
     gui::set("clock", "0:00");
-    reveal(hud, "screen-in");
-    playing = true;
+    @hud = null;
+    stack.clear(); // the menu and the loading screen leave as the HUD comes in
+    @hud = push("hud");
+    stage.displayed = false;
+    hud.onCommand("back", CommandHandler(onPauseCommand)); // in the game, Back pauses
 }
-void pauseGame()
-{
-    playing = false;
-    reveal(pauseMenu, "modal-in");
-    gui::root().find("resume").focus();
-}
-void onResume()
-{
-    conceal(pauseMenu, "modal-in");
-    playing = true;
-}
-void onToMenu()
-{
-    playing = false;
-    enter();
-}
-// Pause (Escape and Start in the game): opens the pause menu, or closes it.
+// Pause (Back in the game, and Start): opens the pause screen over the HUD, or closes it.
 bool onPauseCommand()
 {
-    if (!hud.displayed)
-        return false;
-    if (pauseMenu.displayed)
-        onResume();
+    if (hud is null)
+        return true; // not in a game: someone else's
+    if (stack.isPaused())
+        stack.pop();
     else
-        pauseGame();
-    return true;
+    {
+        Screen@ pause = push("pause");
+        pause.find("resume").on("click", Action(popScreen));
+        pause.find("to-menu").on("click", Action(onToMenu));
+    }
+    return false;
 }
-// A second of the stand-in game: a point now and then (the number pops), health draining and, low,
-// warning, then healed by a point.
+void onToMenu() { enter(); }
+
+// A second of the stand-in game: a point now and then (the number counts up and pops), health
+// draining and, low, warning, then healed by a point.
 void play(double dt)
 {
     gameTime += dt;
@@ -240,8 +199,8 @@ void play(double dt)
     {
         nextPoint = 1.4;
         score += 10;
-        gui::set("score", score);
-        UIWidget@ number = UIWidget::of(gui::root().find("hud-score"));
+        gui::tween("score", score, 0.35, "ease-out").whole(true); // the data counts up in whole numbers: no widget drives it
+        UIWidget@ number = UIWidget::of(hud.find("hud-score"));
         number.removeClass(popTurn ? "pop-a" : "pop-b");
         number.addClass(popTurn ? "pop-b" : "pop-a");
         popTurn = !popTurn;
@@ -251,147 +210,61 @@ void play(double dt)
     if (health < 0)
         health = 0;
     gui::set("health", health);
-    UIWidget@ bar = UIWidget::of(gui::root().find("hud-health"));
+    UIWidget@ bar = UIWidget::of(hud.find("hud-health"));
     if (health < 0.3)
         bar.addClass("hp-low");
     else
         bar.removeClass("hp-low");
 }
 
-// Back (Escape, a gamepad's East): closes what is open, one step at a time.
-bool onBackCommand()
-{
-    if (hud.displayed)
-        return onPauseCommand(); // in the game, Escape pauses and resumes
-    if (modal.displayed && modalClosing < 0)
-        onStay();
-    else if (modal.displayed)
-        return false; // closing already
-    else if (!changing() && (loadingScreen.displayed || settingsPanel.displayed || controlsPanel.displayed))
-        onBack();
-    return false;
-}
-void onLeave()
-{
-    // The whole menu fades out; once `quit` is set and the fade has run, the host takes the player
-    // back to where they came from (the sandbox).
-    UIWidget::of(gui::root().find("showcase")).addClass("leaving");
-    gui::set("quit", true);
-}
-
 void main()
 {
     Node@ root = gui::root();
+    @stack = ScreenStack::of(root.find("screens"));
     @stage = root.find("stage");
-    @mainPanel = root.find("main");
-    @settingsPanel = root.find("settings");
-    @controlsPanel = root.find("controls");
-    @loadingScreen = root.find("loading");
-    @modal = root.find("modal");
-    @hud = root.find("hud");
-    @pauseMenu = root.find("pause");
-
-    root.find("play").on("click", Action(onPlay));
-    root.find("settings-btn").on("click", Action(onSettings));
-    root.find("quit").on("click", Action(onQuit));
-    root.find("settings-back").on("click", Action(onBack));
-    root.find("controls-btn").on("click", Action(onControls));
-    root.find("controls-back").on("click", Action(onBack));
-    root.find("bind-jump").on("click", Action(onBindJump));
-    root.find("bind-dash").on("click", Action(onBindDash));
-    root.find("bind-interact").on("click", Action(onBindInteract));
-    root.find("bind-map").on("click", Action(onBindMap));
-    gui::set("controls-hint", gui::tr("controls.choose"));
-    showKeys();
-    root.find("loading-back").on("click", Action(onBack));
-    root.find("confirm-yes").on("click", Action(onLeave));
-    root.find("confirm-no").on("click", Action(onStay));
-    root.find("resume").on("click", Action(onResume));
-    root.find("to-menu").on("click", Action(onToMenu));
-
-    // Labels that follow the data through functions of it: no handler updates them.
-    root.find("volume-text").bind("text", TextExpression(volumeText));
-    root.find("music-text").bind("text", TextExpression(musicText));
-
-    // Played by keyboard and gamepad too: Back is Escape and the East button. The handlers are the
-    // menu's own: it is a modal layer of the sandbox's root, and a command from inside it stops at
-    // its edge (one on the root would never be reached while the menu is open).
-    Node@ menu = root.find("showcase");
-    menu.onCommand("back", CommandHandler(onBackCommand));
-    gui::bindKey("escape", "back", "");
-    gui::bindKey("pad-east", "back", "");
-    menu.onCommand("pause", CommandHandler(onPauseCommand));
+    // Start pauses in the game. The handler is the menu's own: it is a modal layer of the
+    // sandbox's root, and a command from inside it stops at its edge.
+    root.find("showcase").onCommand("pause", CommandHandler(onPauseCommand));
     gui::bindKey("pad-start", "pause", "");
-
     enter();
 }
 
-// The menu as it opens (the host calls this each time it shows the menu): the main page rising in,
-// the rest hidden, nothing left over from the last visit (a fade, a page change, the loading bar).
+// The menu as it opens (the host calls this each time it shows the menu): the title screen alone,
+// nothing left over from the last visit.
 void enter()
 {
-    leaveLeft = -1;
-    modalClosing = -1;
     loadingNow = false;
-    playing = false;
     untilGame = -1;
-    conceal(hud, "screen-in");
-    conceal(pauseMenu, "modal-in");
-    UIWidget::of(gui::root().find("hud-health")).removeClass("hp-low");
-    UIWidget::of(gui::root().find("showcase")).removeClass("leaving");
-    UIWidget::of(modal).removeClass("modal-out");
-    UIWidget::of(gui::root().find("confirm")).removeClass("leave");
-    conceal(modal, "modal-in");
-    conceal(settingsPanel, "enter");
-    UIWidget::of(settingsPanel).removeClass("leave");
-    conceal(controlsPanel, "enter");
-    UIWidget::of(controlsPanel).removeClass("leave");
-    conceal(loadingScreen, "screen-in");
-    UIWidget::of(loadingScreen).removeClass("leave");
-    UIWidget::of(mainPanel).removeClass("leave");
-    stage.displayed = true;
-    conceal(mainPanel, "enter");
-    reveal(mainPanel, "enter");
-    mainPanel.focus();
+    @hud = null;
+    UIWidget::of(gui::root().find("showcase")).removeClass("closing");
+    stack.clear();
+    showTitle();
 }
 
-// The loading bar fills over two and a half seconds; true while there is more to do.
+// The loading bar fills over two and a half seconds, then the game runs while it is not paused;
+// true while there is more to do.
 bool update(double dt)
 {
-    if (leaveLeft >= 0)
-    {
-        leaveLeft -= dt;
-        if (leaveLeft < 0)
-            arrive();
-    }
-    if (modalClosing >= 0)
-    {
-        modalClosing -= dt;
-        if (modalClosing < 0)
-        {
-            conceal(modal, "modal-out");
-            UIWidget::of(gui::root().find("confirm")).removeClass("leave");
-        }
-    }
     if (untilGame >= 0)
     {
         untilGame -= dt;
         if (untilGame < 0)
             startGame();
     }
-    if (playing)
+    if (hud !is null && !stack.isPaused())
         play(dt);
-    if (!loadingNow)
-        return modalClosing >= 0 || leaveLeft >= 0 || untilGame >= 0 || playing;
-    loadTime += dt;
-    double progress = loadTime / 2.5;
-    if (progress >= 1)
+    if (loadingNow)
     {
-        progress = 1;
-        loadingNow = false;
-        gui::set("status", gui::tr("loading.ready"));
-        untilGame = 0.6; // a moment on "Ready", then the game
+        loadTime += dt;
+        double progress = loadTime / 2.5;
+        if (progress >= 1)
+        {
+            progress = 1;
+            loadingNow = false;
+            gui::set("status", gui::tr("loading.ready"));
+            untilGame = 0.6; // a moment on "Ready", then the game
+        }
+        gui::set("progress", progress);
     }
-    gui::set("progress", progress);
-    return loadingNow || modalClosing >= 0 || leaveLeft >= 0 || untilGame >= 0 || playing;
+    return loadingNow || untilGame >= 0 || hud !is null;
 }

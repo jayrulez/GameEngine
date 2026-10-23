@@ -1,6 +1,8 @@
 /* The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): every look here comes
    from the lab's sheet: gradients, shadows, borders, transforms, blur filters, a frosted backdrop,
-   text glow, transitions and keyframes. No colour or position is set in code. */
+   text glow, transitions and keyframes. No colour or position is set in code. Its screens come and
+   go on the gamekit's stack (K7 of gui-lab-evolution-3.md): each plays its entrance while
+   :entering and its exit while :leaving, and the stack waits for them. */
 
 /* The sandbox's built-in theme styles its widgets beneath this sheet (one root); its tokens say
    what the menu keeps for itself: its panels have no surface of their own. */
@@ -34,14 +36,16 @@
 .subtitle { width: 520px; height: 28px; font-family: Roboto, DejaVu; font-size: 18px; color: var(--muted);
             text-align: center; vertical-align: middle; }
 
-/* The menu screen: the title sits a fixed way down, and the slot under it is top-aligned, so a
+/* The title sits a fixed way down; a page of the menu puts its panel under it, top-aligned, so a
    taller page (settings) never moves the title. */
 .stage { padding-top: 110px; }
+.menu-page { padding-top: 270px; } /* the stage's padding, the title, the subtitle and their gaps */
 
-/* Panels enter by rising into place. */
+/* Pages rise into place as they enter and sink out as they leave. */
 .panel { width: 440px; }
 .menu { height: 260px; }
-.enter { animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.menu-page:entering { animation: rise 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.menu-page:leaving { animation: sink 0.2s ease-in forwards; }
 @keyframes rise { from { opacity: 0; transform: translate(0, 26px) scale(0.97); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
 
 /* Frosted glass over the backdrop. */
@@ -50,25 +54,28 @@
          box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12); }
 #confirm { height: 160px; }
 
-/* Loading: a screen of its own, its status and bar low and centred, fading in. */
+/* Loading: a screen of its own, its status and bar low and centred. Whole screens fade in and out. */
 .loading-screen { padding-bottom: 90px; }
 .loading-status { width: 420px; height: 44px; font-family: Lilita, DejaVu; font-size: 34px; color: var(--ink);
                   text-align: center; vertical-align: middle; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6); }
-.screen-in { animation: fade-in 0.4s ease-out; }
+.screen:entering { animation: fade-in 0.4s ease-out; }
+.screen:leaving { animation: fade-out 0.25s ease-in forwards; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
-/* The modal: the screen behind dims and blurs, and its panel rises in over it. The blur and the dim
-   grow in (not the modal's opacity: a faded modal draws through a layer of its own, where its backdrop
-   blur sees nothing behind it, so the blur would snap on only as the fade ended). */
+/* A modal screen: the screen behind dims and blurs, and its panel rises in over it. The blur and the
+   dim grow in (not the modal's opacity: a faded modal draws through a layer of its own, where its
+   backdrop blur sees nothing behind it, so the blur would snap on only as the fade ended). Its
+   panel's rise lasts as long as the dim: the stack waits for the screen's own entrance. */
 .modal { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); }
-.modal-in { animation: dim-in 0.35s ease-out; }
+.modal:entering { animation: dim-in 0.35s ease-out; }
+.modal:entering .panel { animation: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes dim-in { from { background-color: rgba(6, 4, 14, 0); backdrop-filter: blur(0px); }
                     to { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); } }
-/* Closing: the dim and blur shrink away and the panel sinks out, before the script hides the modal. */
-.modal-out { animation: dim-out 0.25s ease-in forwards; }
+/* Leaving: the dim and blur shrink away and the panel sinks out, then the stack takes the screen off. */
+.modal:leaving { animation: dim-out 0.25s ease-in forwards; }
+.modal:leaving .panel { animation: sink 0.2s ease-in forwards; }
 @keyframes dim-out { from { background-color: rgba(6, 4, 14, 0.55); backdrop-filter: blur(6px); }
                      to { background-color: rgba(6, 4, 14, 0); backdrop-filter: blur(0px); } }
-.leave { animation: sink 0.2s ease-in forwards; }
 @keyframes sink { from { opacity: 1; transform: translate(0, 0) scale(1); }
                   to { opacity: 0; transform: translate(0, 14px) scale(0.98); } }
 .panel-title { width: 380px; height: 40px; font-family: Lilita, DejaVu; font-size: 32px; color: var(--ink);
@@ -137,12 +144,16 @@ progressbar::fill { background-color: #f3a047; }
 .pop-b { animation: pop-b 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes pop-a { from { transform: scale(1.35); text-glow: 14px var(--glow); } to { transform: scale(1); text-glow: 0px var(--glow); } }
 @keyframes pop-b { from { transform: scale(1.35); text-glow: 14px var(--glow); } to { transform: scale(1); text-glow: 0px var(--glow); } }
-.hud-middle { padding-top: 8px; }
-.hud-objective { width: 420px; height: 30px; font-family: Lilita, DejaVu; font-size: 26px; color: var(--ink); text-align: center;
+.hud-middle { padding-top: 8px; flex: 1 1 0; } /* what the two cards leave: a narrow window never pushes a card off the edge */
+.hud-objective { width: 100%; height: 30px; font-family: Lilita, DejaVu; font-size: 26px; color: var(--ink); text-align: center;
                  vertical-align: middle; text-shadow: 0 2px 3px rgba(0, 0, 0, 0.6); }
 .hud-clock { width: 200px; height: 24px; font-family: Roboto, DejaVu; font-size: 18px; color: var(--muted); text-align: center;
              vertical-align: middle; }
-.hud-prompt { width: 260px; height: 26px; font-family: Roboto, DejaVu; font-size: 15px; color: var(--muted); text-align: end;
+.hud-key { height: 26px; padding: 0 10px; font-family: Roboto, DejaVu; font-size: 14px; color: var(--ink);
+           vertical-align: middle; background-color: rgba(10, 6, 24, 0.55); border: 1px solid rgba(255, 255, 255, 0.24);
+           border-radius: 8; } /* the control for the device in hand: a key's or a pad button's name */
+.hud-key[kind="pad"] { border-radius: 13; } /* a pad's button a round cap (a game draws its glyphs here) */
+.hud-prompt { height: 26px; font-family: Roboto, DejaVu; font-size: 15px; color: var(--muted); text-align: start;
               vertical-align: middle; }
 #pause-panel { height: 230px; }
 
@@ -159,6 +170,6 @@ progressbar::fill { background-color: #f3a047; }
 .controls-hint { width: 380px; height: 22px; font-family: Roboto, DejaVu; font-size: 14px; color: var(--muted); text-align: center;
                  vertical-align: middle; }
 
-/* Leaving: the whole menu fades to black before the window closes. */
-.leaving { animation: fade-out 0.6s ease-in forwards; }
+/* Closing: the whole menu fades to black before the sandbox comes back. */
+.closing { animation: fade-out 0.6s ease-in forwards; }
 @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }

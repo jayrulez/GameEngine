@@ -50,6 +50,8 @@ import experimental.gui.viewport;  // the Viewport page's widget
 import experimental.gui.docking;   // the Docking page's dock space
 import experimental.gui.toolkit;   // the Toolkit page's tool and status bars
 import experimental.gui.code;      // the Code page's editors (C8)
+import experimental.gui.gamekit;   // the game menu's screens and prompts (K7)
+import foundation.input;           // the game menu's actions, which its prompts show
 import foundation.shaders;         // the Viewport page's cube compiles its shader
 import foundation.rhi.capture;     // F12 and --screenshot
 import gui.sandbox.stress; // the Stress page (E8a)
@@ -641,6 +643,9 @@ private:
     ScriptErrors m_scriptErrors;
     RefPtr<script::IScriptContext> m_menuScript;
     bool m_menuWantsUpdate = false;
+    // The game menu's actions, which its prompts read (K7): a stand-in for a game's input map.
+    foundation::input::ActionRuntime m_menuInput;
+    gui::InputPrompts m_menuPrompts;
 
     // What native hosts hold.
     UniquePtr<image::OwnedImageData> m_checker;
@@ -683,6 +688,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     gui::RegisterGuiElements(); // the lab's widgets, creatable by tag from markup
     gui::RegisterToolkitElements(); // and the toolkit's
     gui::RegisterCodeElements();    // and the code editor
+    gui::RegisterGamekitElements(); // and the gamekit's (the game menu's screens and prompts)
     m_shaders = MakeUnique<gui::VgShaderLibrary>(AppRoot(), AppRoot());
     if (!m_shaders->Load(*m_device, *m_dataFileSystem))
     {
@@ -1467,6 +1473,26 @@ void GUISandbox::BuildMenu()
                    if (!quit.IsEmpty() && quit.Get<bool>() && m_menuLeaveAt < 0.0f)
                        m_menuLeaveAt = m_totalTime + 0.7f;
                });
+    // Its actions, as a game's input map would give them: its prompts show their controls for the
+    // device in hand (K6).
+    foundation::input::InputMap actions;
+    foundation::input::ActionSet game;
+    game.name = String(u8"Game");
+    foundation::input::Action pause;
+    pause.name = String(u8"pause");
+    foundation::input::Binding escape;
+    escape.source = foundation::input::BindingSource::Key;
+    escape.code = static_cast<u32>(shell::KeyCode::Escape);
+    pause.bindings.PushBack(escape);
+    foundation::input::Binding start;
+    start.source = foundation::input::BindingSource::GamepadButton;
+    start.code = static_cast<u32>(shell::GamepadButton::Start);
+    pause.bindings.PushBack(start);
+    game.actions.PushBack(Move(pause));
+    actions.sets.PushBack(Move(game));
+    m_menuInput.SetMap(actions);
+    m_menuPrompts.SetRuntime(&m_menuInput);
+    m_menuPrompts.Install(*m_gui);
     String as(kMenuDir);
     as += StringView(u8"menu.as");
     m_menuScript = RunScript(as.AsView(), m_menuBinding);
@@ -3327,6 +3353,8 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     std::printf("GUISandbox: drew %llu of %llu frames\n", static_cast<unsigned long long>(m_guiHost->FramesDrawn()),
                 static_cast<unsigned long long>(m_frames));
     m_device->WaitIdle();
+    if (m_gui)
+        gui::InputPrompts::Uninstall(*m_gui); // the GUI may outlive the menu's actions
     // Scripts first: their handles and handlers reach the trees.
     const auto closeScript = [](RefPtr<script::IScriptContext>& context)
     {

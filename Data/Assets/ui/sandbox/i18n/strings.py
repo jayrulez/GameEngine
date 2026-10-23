@@ -78,7 +78,7 @@ TEXTS = {
     "hud.health": ("HEALTH", "الصحة"),
     "hud.score": ("SCORE", "النقاط"),
     "hud.objective": ("Gather the drifting lights", "اجمع الأضواء العائمة"),
-    "hud.prompt": ("Esc or Start: pause", "Esc أو Start: إيقاف مؤقت"),
+    "hud.pause": ("Pause", "إيقاف مؤقت"),
     "pause.title": ("Paused", "متوقف مؤقتًا"),
     "pause.resume": ("Resume", "استئناف"),
     "pause.to-menu": ("Quit to menu", "العودة إلى القائمة"),

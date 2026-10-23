@@ -1,9 +1,11 @@
 <!--
-  The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md): a game's main menu, its
-  HUD and its pause menu (E10 of gui-lab-evolution-2.md) in markup, played by mouse, keyboard or gamepad (G7: the menu wraps, settings, loading and the modal
-  keep focus inside them, Stay is the modal's safe default), styled by menu.css and brought to life by menu.as. The host loads this, sizes the root
-  and its layers (backdrop, menu screen, loading screen, modal) to the window, binds {{name}}
-  values to the GUI's data, and runs the script.
+  The GUI lab's showcase (G6 of Documentation/Specs/vg-and-gui-lab.md, on the gamekit since K7 of
+  gui-lab-evolution-3.md): a game's main menu, its HUD and its pause menu, played by mouse,
+  keyboard or gamepad. This is its frame: the backdrop, the title over the menu's pages, and the
+  gamekit's screen stack, where menu.as pushes each screen as a document of screens/ (title,
+  settings, controls, loading, hud, pause, quit), fresh each time. menu.css styles them, their
+  entrances and exits the stack's :entering and :leaving. The host sizes the frame's layers to the
+  window, binds {{name}} values to the GUI's data, and runs the script.
 -->
 <Panel id="showcase" class="showcase" display="stack" justify-items="start" align-items="start">
     <!-- The backdrop: soft orbs drifting behind everything (placed by percentages of it, drifting by transforms). -->
@@ -13,111 +15,12 @@
         <Label class="orb orb-c"/>
     </Panel>
 
-    <!-- The menu screen: the title fixed in the upper third, and below it one slot that the main
-         menu and the settings take in turn, top-aligned so neither moves the title. -->
+    <!-- The title, fixed in the upper third over the menu's pages (hidden while loading and in the game). -->
     <Panel id="stage" class="stage" flex-direction="column" align-items="center" gap="18">
         <Label id="title" class="title" text="AURORA"/>
         <Label id="subtitle" class="subtitle" text="@menu.welcome" text-args="{{name}}"/>
-
-        <Panel id="main" class="panel menu enter" flex-direction="column" align-items="center" gap="12" nav-scope="wrap" nav-default="play">
-            <Button id="play" class="menu-btn primary" text="@menu.play"/>
-            <Button id="settings-btn" class="menu-btn" text="@menu.settings"/>
-            <Button id="controls-btn" class="menu-btn" text="@menu.controls"/>
-            <Button id="quit" class="menu-btn" text="@menu.quit"/>
-        </Panel>
-
-        <!-- Settings: a page of the menu, in its place; frosted, bound to the GUI's data both ways. -->
-        <Panel id="settings" class="panel glass" flex-direction="column" align-items="center" gap="14" nav-scope="contain">
-            <Label class="panel-title" text="@menu.settings"/>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label" text="@settings.volume"/>
-                <Slider value="{{volume}}" class="row-slider"/>
-                <Label id="volume-text" class="row-value"/>
-            </Panel>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label" text="@settings.music"/>
-                <CheckBox checked="{{music}}" class="row-check"/>
-                <Label id="music-text" class="row-value"/>
-            </Panel>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label" text="@settings.name"/>
-                <TextField text="{{name}}" class="row-field"/>
-            </Panel>
-            <Button id="settings-back" class="menu-btn small" text="@menu.back"/>
-        </Panel>
-
-        <!-- Controls (E12 of gui-lab-evolution-2.md): each action's key, rebound by choosing it and
-             pressing a key or a pad button; Escape cancels, and a key another action had swaps. -->
-        <Panel id="controls" class="panel glass controls" flex-direction="column" align-items="center" gap="10" nav-scope="contain">
-            <Label class="panel-title" text="@menu.controls"/>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label wide" text="@controls.jump"/>
-                <Button id="bind-jump" class="bind-btn" text="{{key-jump}}"/>
-            </Panel>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label wide" text="@controls.dash"/>
-                <Button id="bind-dash" class="bind-btn" text="{{key-dash}}"/>
-            </Panel>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label wide" text="@controls.interact"/>
-                <Button id="bind-interact" class="bind-btn" text="{{key-interact}}"/>
-            </Panel>
-            <Panel class="row" flex-direction="row" align-items="start" gap="14">
-                <Label class="row-label wide" text="@controls.map"/>
-                <Button id="bind-map" class="bind-btn" text="{{key-map}}"/>
-            </Panel>
-            <Label class="controls-hint" text="{{controls-hint}}"/>
-            <Button id="controls-back" class="menu-btn small" text="@menu.back"/>
-        </Panel>
     </Panel>
 
-    <!-- Loading: a screen of its own, the status and bar low and centred. -->
-    <Panel id="loading" class="loading-screen" flex-direction="column" justify-content="end" align-items="center" gap="16" nav-scope="contain">
-        <Label class="loading-status" text="{{status}}"/>
-        <ProgressBar value="{{progress}}" class="loading-bar"/>
-        <Button id="loading-back" class="menu-btn small" text="@menu.back"/>
-    </Panel>
-
-    <!-- In the game: the HUD over the backdrop (health, the objective and the run's clock, the score
-         along the top; the pause prompt low on the right), its values the GUI's data, which the script moves as a stand-in game would. -->
-    <Panel id="hud" class="hud" flex-direction="column" justify-content="space-between">
-        <Panel class="hud-top" flex-direction="row" justify-content="space-between" align-items="start">
-            <Panel class="hud-card" flex-direction="column" gap="6">
-                <Label class="hud-caption" text="@hud.health"/>
-                <ProgressBar id="hud-health" value="{{health}}" class="hud-health"/>
-            </Panel>
-            <Panel class="hud-middle" flex-direction="column" align-items="center" gap="4">
-                <Label class="hud-objective" text="@hud.objective"/>
-                <Label class="hud-clock" text="{{clock}}"/>
-            </Panel>
-            <Panel class="hud-card hud-right" flex-direction="column" align-items="end" gap="2">
-                <Label class="hud-caption" text="@hud.score"/>
-                <Label id="hud-score" class="hud-score" text="{{score}}"/>
-            </Panel>
-        </Panel>
-        <Panel class="hud-bottom" flex-direction="row" justify-content="end">
-            <Label class="hud-prompt" text="@hud.prompt"/>
-        </Panel>
-    </Panel>
-
-    <!-- Paused: over the HUD, which dims and blurs and stops, as the quit question does. -->
-    <Panel id="pause" class="modal" flex-direction="column" justify-content="center" align-items="center" nav-scope="contain" nav-default="resume">
-        <Panel id="pause-panel" class="panel glass" flex-direction="column" align-items="center" gap="14">
-            <Label class="panel-title" text="@pause.title"/>
-            <Button id="resume" class="menu-btn primary" text="@pause.resume"/>
-            <Button id="to-menu" class="menu-btn" text="@pause.to-menu"/>
-        </Panel>
-    </Panel>
-
-    <!-- Quit: a modal over the whole screen, which dims and blurs what is behind it and takes
-         every click until it is answered. -->
-    <Panel id="modal" class="modal" flex-direction="column" justify-content="center" align-items="center" nav-scope="contain" nav-default="confirm-no">
-        <Panel id="confirm" class="panel glass" flex-direction="column" align-items="center" gap="14">
-            <Label class="panel-title" text="@leave.title"/>
-            <Panel class="confirm-row" flex-direction="row" align-items="start" gap="14">
-                <Button id="confirm-yes" class="menu-btn small danger" text="@leave.yes"/>
-                <Button id="confirm-no" class="menu-btn small" text="@leave.no"/>
-            </Panel>
-        </Panel>
-    </Panel>
+    <!-- The game's screens, on the gamekit's stack. -->
+    <Screens id="screens"/>
 </Panel>

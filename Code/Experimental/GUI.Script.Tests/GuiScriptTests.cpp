@@ -974,6 +974,25 @@ TEST_CASE("gui-script: Luau reads the input kind and hears it change (K2b)")
 }
 #endif
 
+#ifdef OPTION_HAS_LUAU
+TEST_CASE("gui-script: Luau hears an event a library names, with its detail (K4)")
+{
+    RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
+    GuiBed bed(*manager);
+    const Status loaded = bed.context->Load(
+        u8"local heard = \"\"\n"
+        u8"gui.root():on(\"screenenter\", function(e) heard = e.type .. \":\" .. e.text; return false end)\n"
+        u8"function heardIt() return heard == \"screenenter:title\" and 1 or 0 end\n",
+        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(bed.errors.last.CStr())));
+    REQUIRE(loaded.IsOk());
+    bed.root->SendNamedEvent(StringView(u8"screenleave"), StringView(u8"title"));
+    CHECK(bed.Number(u8"heardIt") == doctest::Approx(0.0));
+    bed.root->SendNamedEvent(StringView(u8"screenenter"), StringView(u8"title"));
+    CHECK(bed.Number(u8"heardIt") == doctest::Approx(1.0));
+}
+#endif
+
 namespace
 {
     // Listener tokens (E16): the script put a Button 80 x 30 at the origin, listening for clicks

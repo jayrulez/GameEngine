@@ -537,7 +537,7 @@ export namespace experimental::gui
         // Topmost visible descendant (or self) under a world point; nullptr if none.
         [[nodiscard]] virtual Node* OverFind(core::Float2 worldPoint)
         {
-            if (!m_visible || !IsDisplayed() || m_leaving) // a leaving node takes no pointer (K0)
+            if (!m_visible || !IsDisplayed() || m_leaving || m_inert) // a leaving or inert node takes no pointer (K0, K4)
                 return nullptr;
             // A scroll container's bars lie over its content: a press on one is the container's.
             if (IsScrollContainer() && m_hitTestVisible)
@@ -1524,8 +1524,9 @@ export namespace experimental::gui
         [[nodiscard]] Variant ChildElement(i32 index);
         [[nodiscard]] i32 ElementChildCount() const noexcept { return static_cast<i32>(m_children.Size()); }
         /// Calls `handler` on each event named `eventName` (click, mousedown, mouseup,
-        /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur). A
-        /// token for Off (0 for no such event).
+        /// mouseenter, mouseleave, mousemove, wheel, keydown, keyup, textinput, focus, blur, and the
+        /// rest of the core's), or of a name a library sends (SendNamedEvent: a screen's
+        /// `screenenter`). A token for Off (0 for an empty name).
         i32 On(core::StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler);
         /// Opens `content` (a node's handle) as a popup below this node (E16): closed by a press
         /// outside it or Escape, focus going into it and back; whether it opened.
@@ -1804,11 +1805,27 @@ export namespace experimental::gui
         void Leave();
         /// Whether it is leaving (`:leaving`).
         [[nodiscard]] bool IsLeaving() const noexcept { return m_leaving; }
-        /// Whether it or an ancestor is leaving: it takes no input.
+        /// Whether it or an ancestor is leaving.
         [[nodiscard]] bool IsTreeLeaving() const noexcept
         {
             for (const Node* n = this; n != nullptr; n = n->m_parent)
                 if (n->m_leaving)
+                    return true;
+            return false;
+        }
+
+        // === Inert (K4 of Specs/gui-lab-evolution-3.md, HTML's `inert`) ===
+        /// An inert node and what it holds take no pointer, focus, navigation, keys or commands,
+        /// and still draw (a game's screen under a blocking one). Made inert, what the dispatcher
+        /// held in it lets go, as of a removed subtree: a press held, the hover, the focus, its
+        /// popups. Defined in Scene/GUIClusterImpl.cpp.
+        void SetInert(bool inert);
+        [[nodiscard]] bool IsInert() const noexcept { return m_inert; }
+        /// Whether it or an ancestor is inert or leaving: it takes no input.
+        [[nodiscard]] bool IsTreeInert() const noexcept
+        {
+            for (const Node* n = this; n != nullptr; n = n->m_parent)
+                if (n->m_leaving || n->m_inert)
                     return true;
             return false;
         }
@@ -2518,6 +2535,19 @@ export namespace experimental::gui
                 }
             return false;
         }
+        /// Tells this node's listeners of the event a library names `name` (EventType::Named),
+        /// with a detail as text.
+        void SendNamedEvent(core::StringView name, core::StringView detail = {}) { SendEvent(NamedEvent(this, name, detail)); }
+        /// Calls `callback` on each event named `name` this node is told (SendNamedEvent); a token
+        /// for RemoveEventListener.
+        u32 AddNamedListener(core::StringView name, EventCallback callback)
+        {
+            return AddEventListener(EventType::Named, [name = core::String(name), callback = core::Move(callback)](const Event& event)
+                                    {
+                                        if (static_cast<const NamedEvent&>(event).Name == name.AsView())
+                                            callback(event);
+                                    });
+        }
         /// Tells this node's listeners of an event about it (not routed: geometry, focus, change).
         void SendEvent(const Event& event)
         {
@@ -2932,6 +2962,7 @@ export namespace experimental::gui
         bool m_dropTargetState = false;
         bool m_dragSourceState = false;
         bool m_leaving = false;     // Leave was called; it goes when its exit ends (K0)
+        bool m_inert = false;       // takes no input (K4)
         bool m_leaveQueued = false; // its removal waits in the mutation queue
         bool m_styledTree = false;  // the top of a tree a style pass ran over
         core::Float2 m_size{0.0f, 0.0f};

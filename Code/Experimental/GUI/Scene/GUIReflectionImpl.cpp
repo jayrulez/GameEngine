@@ -168,6 +168,7 @@ namespace experimental::gui
                 break;
             }
             case EventType::ItemActivate: out.index = static_cast<const ItemEvent&>(event).Item; break;
+            case EventType::Named: out.text = core::String(static_cast<const NamedEvent&>(event).Detail); break;
             case EventType::TransitionEnd:
             case EventType::AnimationEnd:
             {
@@ -340,15 +341,21 @@ namespace experimental::gui
     i32 Node::On(StringView eventName, RefPtr<foundation::script::IScriptDelegate> handler)
     {
         EventType type = EventType::MouseClick;
-        if (!handler || !EventTypeNamed(eventName, type))
+        if (!handler || eventName.IsEmpty())
             return 0;
+        // A name the core does not know is one a library sends (a gamekit screen's `screenenter`).
+        const bool named = !EventTypeNamed(eventName, type);
+        if (named)
+            type = EventType::Named;
         // The node holds the handler (and with it the script function); the script holds the node
         // only weakly, so neither keeps the other alive.
         // The handler gets the event's data (one ignoring it may take no parameter), and takes the
         // event by returning true.
         return static_cast<i32>(AddEventListener(type,
-                               [handler, name = core::String(eventName)](const Event& event)
+                               [handler, named, name = core::String(eventName)](const Event& event)
                                {
+                                   if (named && static_cast<const NamedEvent&>(event).Name != name.AsView())
+                                       return;
                                    core::Variant args[1] = {core::Variant::From<GuiEvent>(ScriptEventOf(event, name.AsView()))};
                                    Result<core::Variant> result = handler->Invoke(Span<core::Variant>(args, 1));
                                    const bool* took = result.HasValue() ? result.Value().TryGet<bool>() : nullptr;

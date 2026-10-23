@@ -144,6 +144,16 @@ namespace experimental::gui
                        });
     }
 
+    void Node::SetInert(bool inert)
+    {
+        if (inert == m_inert)
+            return;
+        m_inert = inert;
+        if (inert)
+            if (EventDispatcher* dispatcher = GetEventDispatcher())
+                dispatcher->NotifySubtreeRemoved(*this); // it holds nothing of the input now
+    }
+
     void Node::NotifyRemovingChild(Node& child)
     {
         if (EventDispatcher* dispatcher = GetEventDispatcher())

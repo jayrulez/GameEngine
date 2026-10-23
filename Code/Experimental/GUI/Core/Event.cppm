@@ -140,6 +140,9 @@ export namespace experimental::gui
         AnimationEnd,
         // The input kind changed (K2b), told to the GUI's root, not routed: GetInputKind says which.
         InputKindChanged,
+        // An event a library names for itself (a NamedEvent: a gamekit screen's `screenenter`),
+        // told to the node it is about, not routed; a script listens for it by its name.
+        Named,
     };
 
     /// What drives the pointer: the mouse, or a finger (the first one down).
@@ -555,6 +558,19 @@ export namespace experimental::gui
 
         MotionEndEvent(EventType type, Node* target, core::StringView name, f32 elapsed) noexcept
             : Event(type, target), Name(name), Elapsed(elapsed)
+        {
+        }
+    };
+
+    /// An event a library names (EventType::Named): its name, which `on` listens by, and a detail
+    /// it may carry as text (a script reads it as `text`).
+    struct NamedEvent : Event
+    {
+        core::StringView Name;
+        core::StringView Detail;
+
+        NamedEvent(Node* target, core::StringView name, core::StringView detail = {}) noexcept
+            : Event(EventType::Named, target), Name(name), Detail(detail)
         {
         }
     };

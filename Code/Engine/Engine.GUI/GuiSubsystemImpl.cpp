@@ -376,12 +376,69 @@ namespace engine::gui
         builder.Property<&GuiCanvasComponent::referenceResolution>("referenceResolution");
     }
 
+    REFLECT_ENUM(GuiBillboardOrientation, "rtti::engine::gui")
+    {
+        builder.Value("Screen", GuiBillboardOrientation::Screen);
+        builder.Value("Cylindrical", GuiBillboardOrientation::Cylindrical);
+    }
+
+    REFLECT_ENUM(GuiBillboardScale, "rtti::engine::gui")
+    {
+        builder.Value("Fixed", GuiBillboardScale::Fixed);
+        builder.Value("Distance", GuiBillboardScale::Distance);
+    }
+
+    REFLECT_VALUE(GuiBillboardComponent, "rtti::engine::gui")
+    {
+        builder.Attribute("displayName", String(u8"GUI Billboard"))
+            .Attribute("category", String(u8"GUI"))
+            .Attribute("description", String(u8"Shows a GUI document over the entity, such as a nameplate or a health bar."))
+            .DataVersion(1);
+        builder.Property<&GuiBillboardComponent::document>("document");
+        builder.Property<&GuiBillboardComponent::sheet>("sheet");
+        builder.Property<&GuiBillboardComponent::offset>("offset");
+        builder.Property<&GuiBillboardComponent::orientation>("orientation");
+        builder.Property<&GuiBillboardComponent::scaleMode>("scaleMode");
+        builder.Property<&GuiBillboardComponent::referenceDistance>("referenceDistance");
+        builder.Property<&GuiBillboardComponent::minScale>("minScale");
+        builder.Property<&GuiBillboardComponent::maxScale>("maxScale");
+        builder.Property<&GuiBillboardComponent::visible>("visible");
+    }
+
+    GuiBillboardPlacement PlaceBillboard(const GuiBillboardComponent& billboard, const Float4x4& entityWorld, const Float4x4& viewProjection,
+                                         Float3 cameraPosition, Float2 viewport) noexcept
+    {
+        GuiBillboardPlacement placement;
+        Float3 point;
+        if (billboard.orientation == GuiBillboardOrientation::Cylindrical)
+        {
+            const Float3 anchor = TransformPoint(Float3{0.0f, 0.0f, 0.0f}, entityWorld);
+            point = Float3{anchor.x + billboard.offset.x, anchor.y + billboard.offset.y, anchor.z + billboard.offset.z};
+        }
+        else
+            point = TransformPoint(billboard.offset, entityWorld);
+        const Float4 clip = Float4{point.x, point.y, point.z, 1.0f} * viewProjection;
+        if (clip.w <= 0.0f)
+            return placement; // behind the camera
+        placement.Shown = true;
+        placement.Anchor = Float2{(clip.x / clip.w * 0.5f + 0.5f) * viewport.x, (0.5f - clip.y / clip.w * 0.5f) * viewport.y};
+        if (billboard.scaleMode == GuiBillboardScale::Distance)
+        {
+            const f32 distance = Max(Length(Float3{point.x - cameraPosition.x, point.y - cameraPosition.y, point.z - cameraPosition.z}), 0.001f);
+            placement.Scale = Clamp(billboard.referenceDistance / distance, billboard.minScale, billboard.maxScale);
+        }
+        return placement;
+    }
+
     void RegisterGuiComponentReflection()
     {
         static const bool once = []()
         {
             RttiRegisterEnum_GuiScalerMode();
             RttiRegisterValue_GuiCanvasComponent();
+            RttiRegisterEnum_GuiBillboardOrientation();
+            RttiRegisterEnum_GuiBillboardScale();
+            RttiRegisterValue_GuiBillboardComponent();
             return true;
         }();
         (void)once;
@@ -528,7 +585,10 @@ namespace engine::gui
         if (m_resources->Poll())
             ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
         for (SceneTier& tier : m_sceneTiers)
+        {
+            SyncBillboards(tier);
             SyncCanvases(tier);
+        }
         PumpInput();
         // Unscaled: menus move while the game is paused.
         m_context->Update(Duration::FromSeconds(static_cast<f64>(deltaTime)));
@@ -594,6 +654,10 @@ namespace engine::gui
             lab::Node::StyleWriteScope defaults(*tier.Root);
             tier.Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // each canvas fills it
         }
+        // The billboards' layer, under every canvas; it paints nothing, so it takes no pointer.
+        tier.Billboards = MakeRef<lab::UIWidget>(m_allocator);
+        tier.Billboards->SetTag(StringView(u8"billboards"));
+        tier.Root->AddChild(tier.Billboards.Get());
         tier.Bridge = MakeBridge(*tier.Root);
         m_sceneTiers.PushBack(Move(tier));
     }
@@ -699,6 +763,102 @@ namespace engine::gui
             tier.Root->SetChildIndex(host, tier.Root->ChildCount() - 1);
     }
 
+    // Each billboard's tree in line with its component, in the scene's billboard layer (rebuilt
+    // when its document changes, its sheet, shown while it and its entity are); the trees of
+    // billboards gone swept. Where each shows is a view's (PlaceBillboards).
+    void GuiSubsystem::SyncBillboards(SceneTier& tier)
+    {
+        auto* billboards = tier.Scene->GetSystem<GuiBillboardComponentManager>();
+        Array<const lab::Node*> seen(m_allocator);
+        if (billboards != nullptr)
+            billboards->ForEach(
+                [&](GuiBillboardComponent& c, scene::EntityHandle entity)
+                {
+                    lab::GuiDocument* document = c.document.Get();
+                    if (document != c.builtFrom.Get())
+                    {
+                        if (c.root && c.root->GetParent() != nullptr)
+                            c.root->GetParent()->RemoveChild(c.root.Get());
+                        c.root = nullptr;
+                        c.sheetFrom = nullptr;
+                        if (document != nullptr && !document->markup.IsEmpty())
+                        {
+                            lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), m_fonts.Get());
+                            loader.SetDataModel(m_context->GetDataRef());
+                            c.root = loader.LoadFromString(document->markup.AsView());
+                            if (!c.root)
+                                LOG_WARNING(u8"GUI", u8"a billboard's document did not build");
+                        }
+                        c.builtFrom = RefPtr<Object>(document);
+                    }
+                    if (!c.root)
+                        return;
+                    if (c.root->GetParent() == nullptr)
+                    {
+                        c.root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Placement = lab::Position::Absolute; });
+                        tier.Billboards->AddChild(c.root.Get());
+                    }
+                    seen.PushBack(c.root.Get());
+                    lab::GuiStyleSheet* sheet = c.sheet.Get();
+                    if (sheet != c.sheetFrom.Get())
+                    {
+                        if (sheet != nullptr)
+                            (void)m_styles.SetSubtreeSheet(*c.root, lab::CSSParser::Parse(sheet->css.AsView(), StringView(u8"billboard")));
+                        else
+                            m_styles.RemoveSubtreeSheet(*c.root);
+                        c.sheetFrom = RefPtr<Object>(sheet);
+                    }
+                    c.root->SetDisplayed(c.visible && tier.Scene->IsEffectivelyActive(entity));
+                });
+        for (usize i = tier.Billboards->ChildCount(); i-- > 0;)
+        {
+            lab::Node* child = tier.Billboards->GetChildAt(i);
+            bool live = false;
+            for (const lab::Node* known : seen)
+                live = live || known == child;
+            if (!live)
+                tier.Billboards->RemoveChild(child);
+        }
+    }
+
+    // Each shown billboard placed for `view`: hung by its bottom centre on its projected point (its
+    // size the last layout's: a new one settles the next frame), scaled toward that point, hidden
+    // behind the camera, keeping its layout so nothing else moves.
+    void GuiSubsystem::PlaceBillboards(SceneTier& tier, const render::SceneOverlayView& view)
+    {
+        auto* billboards = tier.Scene->GetSystem<GuiBillboardComponentManager>();
+        if (billboards == nullptr)
+            return;
+        const Float2 viewport{static_cast<f32>(view.viewportWidth), static_cast<f32>(view.viewportHeight)};
+        billboards->ForEach(
+            [&](GuiBillboardComponent& c, scene::EntityHandle entity)
+            {
+                if (!c.root || !c.root->IsDisplayed())
+                    return;
+                const GuiBillboardPlacement placement =
+                    PlaceBillboard(c, tier.Scene->GetWorldMatrix(entity), view.viewProjection, view.cameraPosition, viewport);
+                c.root->SetVisible(placement.Shown);
+                if (!placement.Shown)
+                    return;
+                const Float2 size = c.root->GetSize();
+                const Float2 corner{placement.Anchor.x - size.x * 0.5f, placement.Anchor.y - size.y};
+                c.root->EditLayoutStyle(
+                    [corner](lab::LayoutStyle& s)
+                    {
+                        s.Left = lab::LayoutLength::Px(corner.x);
+                        s.Top = lab::LayoutLength::Px(corner.y);
+                    });
+                c.root->SetScaleOrigin(Float2{size.x * 0.5f, size.y});
+                c.root->SetScale(Float2{placement.Scale, placement.Scale});
+            });
+    }
+
+    // Whether a scene's GUI shows anything: a canvas, or a billboard.
+    bool GuiSubsystem::HasContent(const SceneTier& tier) noexcept
+    {
+        return !tier.Canvases.IsEmpty() || (tier.Billboards && tier.Billboards->ChildCount() > 0);
+    }
+
     UniquePtr<lab::GuiInputBridge> GuiSubsystem::MakeBridge(lab::SceneRoot& root)
     {
         UniquePtr<lab::GuiInputBridge> bridge = MakeUnique<lab::GuiInputBridge>(m_allocator, root.GetEventDispatcher());
@@ -758,7 +918,7 @@ namespace engine::gui
         if (m_screens && m_screens->Count() > 0)
             return m_screenRoot.Get();
         for (const SceneTier& tier : m_sceneTiers)
-            if (InputReaches(tier) && tier.Root->ChildCount() > 0)
+            if (InputReaches(tier) && HasContent(tier))
                 return tier.Root.Get();
         return m_screenRoot.Get();
     }
@@ -883,8 +1043,15 @@ namespace engine::gui
         for (const SceneTier& tier : m_sceneTiers)
             if (static_cast<const void*>(tier.Scene) == view.sceneKey)
                 root = tier.Root.Get();
-        if (root == nullptr || root->ChildCount() == 0)
+        if (root == nullptr)
             return;
+        SceneTier* tier = nullptr;
+        for (SceneTier& known : m_sceneTiers)
+            if (known.Root.Get() == root)
+                tier = &known;
+        if (tier == nullptr || !HasContent(*tier))
+            return;
+        PlaceBillboards(*tier, view);
         // Laid out at the viewport's size (a split screen's half lays out its own) and drawn there.
         StyleAndLayOut(*root, Float2{static_cast<f32>(view.viewportWidth), static_cast<f32>(view.viewportHeight)});
         lab::GuiPassView pass;

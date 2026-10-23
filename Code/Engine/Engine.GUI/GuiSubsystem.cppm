@@ -30,6 +30,9 @@
 // Components (E7): `gui.Canvas` shows a document (with a sheet of its own over the game's) in its
 // scene's root, ordered among the scene's canvases, at the target's pixels or scaled from a
 // reference resolution to fit; despawned, its tree goes; a re-cooked document rebuilds it.
+// `gui.Billboard` shows a document over its entity (a nameplate, a health bar), in a layer under
+// the scene's canvases, placed through each view's camera as it draws: hung by its bottom centre on
+// the projected point, hidden behind the camera, scaled with distance when asked.
 //
 // Its script surface (E8) and the player's settings (E9) come later.
 // GCC modules hygiene: the renderer, the shaders and the textures live in GuiSubsystemImpl.cpp.
@@ -122,12 +125,89 @@ export namespace engine::gui
         GuiCanvasComponentManager() : SerializableComponentManager<GuiCanvasComponent>(u8"gui.Canvas") {}
     };
 
+    enum class GuiBillboardOrientation : u8
+    {
+        Screen = 0,  ///< the offset in the entity's own space (it turns with the entity)
+        Cylindrical, ///< the offset in world space (a fixed lift above the entity)
+    };
+    enum class GuiBillboardScale : u8
+    {
+        Fixed = 0, ///< the same size at any distance
+        Distance,  ///< referenceDistance / distance, within minScale and maxScale
+    };
+
+    /// A document over its entity, facing the view: a nameplate, a health bar.
+    struct GuiBillboardComponent
+    {
+        // Authored:
+        resource::Ref<lab::GuiDocument> document;
+        resource::Ref<lab::GuiStyleSheet> sheet; ///< over the game's sheets, for this billboard alone (optional)
+        Float3 offset{0.0f, 0.0f, 0.0f};
+        GuiBillboardOrientation orientation = GuiBillboardOrientation::Cylindrical;
+        GuiBillboardScale scaleMode = GuiBillboardScale::Fixed;
+        f32 referenceDistance = 10.0f;
+        f32 minScale = 0.3f;
+        f32 maxScale = 2.0f;
+        bool visible = true;
+
+        // Runtime:
+        RefPtr<lab::Node> root;
+        RefPtr<Object> builtFrom;
+        RefPtr<Object> sheetFrom;
+    };
+
+    inline void Serialize(ISerializer& ar, GuiBillboardComponent& c)
+    {
+        foundation::core::Serialize(ar, "document", c.document);
+        foundation::core::Serialize(ar, "sheet", c.sheet);
+        foundation::core::Serialize(ar, "offset", c.offset);
+        u8 orientation = static_cast<u8>(c.orientation);
+        foundation::core::Serialize(ar, "orientation", orientation);
+        c.orientation = static_cast<GuiBillboardOrientation>(orientation);
+        u8 scale = static_cast<u8>(c.scaleMode);
+        foundation::core::Serialize(ar, "scaleMode", scale);
+        c.scaleMode = static_cast<GuiBillboardScale>(scale);
+        foundation::core::Serialize(ar, "referenceDistance", c.referenceDistance);
+        foundation::core::Serialize(ar, "minScale", c.minScale);
+        foundation::core::Serialize(ar, "maxScale", c.maxScale);
+        foundation::core::Serialize(ar, "visible", c.visible);
+    }
+
+    inline void ResolveResources(resource::ResourceManager& manager, GuiBillboardComponent& c)
+    {
+        c.document.Bind(manager);
+        c.sheet.Bind(manager);
+    }
+
+    class GuiBillboardComponentManager final : public scene::SerializableComponentManager<GuiBillboardComponent>
+    {
+    public:
+        GuiBillboardComponentManager() : SerializableComponentManager<GuiBillboardComponent>(u8"gui.Billboard") {}
+    };
+
+    /// Where a billboard shows in a view: the point it hangs from (its bottom centre), in the
+    /// view's pixels, and its scale; not shown when the point is behind the camera.
+    struct GuiBillboardPlacement
+    {
+        bool Shown = false;
+        Float2 Anchor{0.0f, 0.0f};
+        f32 Scale = 1.0f;
+    };
+    /// `billboard` on an entity at `entityWorld`, seen through `viewProjection` (unjittered) from
+    /// `cameraPosition` in a view of `viewport` pixels.
+    [[nodiscard]] GuiBillboardPlacement PlaceBillboard(const GuiBillboardComponent& billboard, const Float4x4& entityWorld,
+                                                       const Float4x4& viewProjection, Float3 cameraPosition, Float2 viewport) noexcept;
+
     /// The components' reflection (the inspector, the scene format). Idempotent.
     void RegisterGuiComponentReflection();
 
     /// The GUI's managers for a scene: the subsystem's scenes and headless scene consumers alike
     /// (Engine.Composition).
-    inline void AddGuiSceneManagers(scene::Scene& scene) { scene.AddSystem<GuiCanvasComponentManager>(); }
+    inline void AddGuiSceneManagers(scene::Scene& scene)
+    {
+        scene.AddSystem<GuiCanvasComponentManager>();
+        scene.AddSystem<GuiBillboardComponentManager>();
+    }
 
     /// The lab's resources by asset guid, through the application's resource manager.
     class GuiResourceProvider final : public lab::IResourceProvider
@@ -256,11 +336,15 @@ export namespace engine::gui
             RefPtr<lab::SceneRoot> Root;
             UniquePtr<lab::GuiInputBridge> Bridge;
             Array<RefPtr<lab::UIWidget>> Canvases; ///< its canvases' hosts, in the root
+            RefPtr<lab::UIWidget> Billboards;      ///< the layer under them its billboards are in
         };
 
         void ApplySheets();
         void PumpInput();
         void SyncCanvases(SceneTier& tier);
+        void SyncBillboards(SceneTier& tier);
+        void PlaceBillboards(SceneTier& tier, const render::SceneOverlayView& view);
+        [[nodiscard]] static bool HasContent(const SceneTier& tier) noexcept;
         [[nodiscard]] lab::SceneRoot* PickInputRoot(bool pointer, Float2 point);
         [[nodiscard]] bool InputReaches(const SceneTier& tier) const noexcept;
         [[nodiscard]] lab::GuiInputBridge* BridgeOf(const lab::SceneRoot* root) noexcept;

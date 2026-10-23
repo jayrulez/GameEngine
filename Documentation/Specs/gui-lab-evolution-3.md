@@ -1156,7 +1156,13 @@ Each a layer with its tests.
     root; rebuilt when its document's product changes, its host swept when it goes, the hosts kept
     in order. One sheet per canvas: a sheet imports others. The document's root is the canvas's
     area (the host arranges it), so it never takes the pointer unless it paints.
-  - **E7b Billboards.** A document over an entity, projected through the view's camera.
+  - **E7b Billboards.** A document over an entity, projected through the view's camera. Built (vg,
+    2026-10-23): `gui.Billboard` (a document, a sheet of its own, an offset in world or the
+    entity's space, fixed or distance scale within limits, visible) in a `billboards` layer under
+    the scene's canvases; placed as each view draws (`PlaceBillboard`, pure: hung by its bottom
+    centre on the projected point, hidden behind the camera keeping its layout, scaled toward that
+    point), from its last layout's size (a new one settles the next frame). A scene's GUI draws, and
+    takes the keys, only while it holds a canvas or a billboard.
   - **E7c Render textures and world panels.** A canvas drawn into a texture, a world panel's quad,
     the pointer by a ray, the bakes recorded before the scene.
 - **E8 The script surface.** The facade per context, pushing by guid.

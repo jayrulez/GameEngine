@@ -445,7 +445,17 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
     lab::NodeBox badgeLook;
     badgeLook.BackgroundColor = Color{0.0f, 1.0f, 0.0f, 1.0f};
     badge->SetBox(Move(badgeLook));
-    root->AddChild(badge.Get());
+    {
+        // A canvas holds it: a scene's GUI draws while it shows something.
+        auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
+        const scene::EntityHandle hudEntity = level->CreateEntity(u8"hud");
+        RefPtr<lab::GuiDocument> document = MakeRef<lab::GuiDocument>(DefaultAllocator());
+        document->markup = String(u8"<Panel/>");
+        canvases->Add(hudEntity).document = document;
+        engine.Frame();
+        REQUIRE(canvases->Get(hudEntity)->root);
+        canvases->Get(hudEntity)->root->AddChild(badge.Get());
+    }
     foundation::render::SceneOverlayView sceneView;
     sceneView.sceneKey = level;
     sceneView.viewportX = 160;
@@ -627,15 +637,16 @@ TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, 
     engine.Frame();
     lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
     REQUIRE(root != nullptr);
-    REQUIRE(root->ChildCount() == 2u);
-    CHECK(FindById(*root->GetChildAt(0), u8"score") != nullptr); // order 1 under order 5
-    CHECK(FindById(*root->GetChildAt(1), u8"pause-menu") != nullptr);
-    CHECK(Cast<lab::UIWidget>(root->GetChildAt(0))->GetTag() == StringView(u8"canvas"));
+    REQUIRE(root->ChildCount() == 3u); // the billboards' layer, then the canvases
+    CHECK(Cast<lab::UIWidget>(root->GetChildAt(0))->GetTag() == StringView(u8"billboards"));
+    CHECK(FindById(*root->GetChildAt(1), u8"score") != nullptr); // order 1 under order 5
+    CHECK(FindById(*root->GetChildAt(2), u8"pause-menu") != nullptr);
+    CHECK(Cast<lab::UIWidget>(root->GetChildAt(1))->GetTag() == StringView(u8"canvas"));
 
     // Reordered.
     canvases->Get(hud)->order = 9;
     engine.Frame();
-    CHECK(FindById(*root->GetChildAt(1), u8"score") != nullptr);
+    CHECK(FindById(*root->GetChildAt(2), u8"score") != nullptr);
 
     // Hidden, then its entity inactive; not interactive.
     engine::gui::GuiCanvasComponent* c = canvases->Get(hud);
@@ -663,7 +674,7 @@ TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, 
     // Despawned: its host goes.
     level->DestroyEntity(hud);
     engine.Frame();
-    CHECK(root->ChildCount() == 1u);
+    CHECK(root->ChildCount() == 2u);
     CHECK(FindById(*root, u8"lives") == nullptr);
     engine.scenes.DestroyScene(level);
 }
@@ -758,4 +769,109 @@ TEST_CASE("engine.gui: a canvas component round-trips through the scene format")
     CHECK_FALSE(b.interactive);
     CHECK(b.scalerMode == engine::gui::GuiScalerMode::ReferenceResolution);
     CHECK(b.referenceResolution.x == doctest::Approx(1280.0f));
+}
+
+namespace
+{
+    // A projection a test reads at a glance: clip = (x, y, z, z), so a point's place on screen is
+    // (x / z, y / z) and it is behind the camera when z <= 0.
+    Float4x4 SimpleProjection()
+    {
+        Float4x4 m = Float4x4::Identity();
+        m.m[2][3] = 1.0f;
+        m.m[3][3] = 0.0f;
+        return m;
+    }
+    Float4x4 At(Float3 position)
+    {
+        Float4x4 m = Float4x4::Identity();
+        m.m[3][0] = position.x;
+        m.m[3][1] = position.y;
+        m.m[3][2] = position.z;
+        return m;
+    }
+}
+
+TEST_CASE("engine.gui: a billboard hangs from its entity's projected point, lifted by its offset, hidden behind the camera, scaled with distance")
+{
+    engine::gui::GuiBillboardComponent billboard;
+    const Float4x4 projection = SimpleProjection();
+    const Float2 viewport{200.0f, 100.0f};
+
+    engine::gui::GuiBillboardPlacement placed = engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, 1.0f}), projection, Float3{}, viewport);
+    REQUIRE(placed.Shown);
+    CHECK(placed.Anchor.x == doctest::Approx(100.0f)); // the view's centre
+    CHECK(placed.Anchor.y == doctest::Approx(50.0f));
+    CHECK(placed.Scale == doctest::Approx(1.0f));
+
+    billboard.offset = Float3{0.0f, 0.5f, 0.0f}; // lifted half the view's height at that distance
+    placed = engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, 1.0f}), projection, Float3{}, viewport);
+    CHECK(placed.Anchor.y == doctest::Approx(25.0f));
+
+    // Screen orientation: the offset turns with the entity (a half turn about z flips the lift).
+    billboard.orientation = engine::gui::GuiBillboardOrientation::Screen;
+    Float4x4 turned = At(Float3{0.0f, 0.0f, 1.0f});
+    turned.m[0][0] = -1.0f;
+    turned.m[1][1] = -1.0f;
+    placed = engine::gui::PlaceBillboard(billboard, turned, projection, Float3{}, viewport);
+    CHECK(placed.Anchor.y == doctest::Approx(75.0f));
+
+    CHECK_FALSE(engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, -1.0f}), projection, Float3{}, viewport).Shown);
+
+    billboard.offset = Float3{};
+    billboard.scaleMode = engine::gui::GuiBillboardScale::Distance;
+    billboard.referenceDistance = 10.0f;
+    CHECK(engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, 20.0f}), projection, Float3{}, viewport).Scale == doctest::Approx(0.5f));
+    CHECK(engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, 1.0f}), projection, Float3{}, viewport).Scale == doctest::Approx(2.0f)); // at most maxScale
+    CHECK(engine::gui::PlaceBillboard(billboard, At(Float3{0.0f, 0.0f, 100.0f}), projection, Float3{}, viewport).Scale == doctest::Approx(0.3f)); // at least minScale
+}
+
+TEST_CASE("engine.gui: billboards live in a layer under the canvases, placed as each view draws, and go when despawned")
+{
+    rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
+    Engine engine;
+    engine.gui->EnsureRenderReady(device, 2);
+    REQUIRE(engine.gui->IsRenderReady());
+    scene::Scene* level = engine.scenes.CreateScene(u8"level");
+    auto* billboards = level->GetSystem<engine::gui::GuiBillboardComponentManager>();
+    REQUIRE(billboards != nullptr);
+    const scene::EntityHandle guard = level->CreateEntity(u8"guard");
+    level->SetLocalPosition(guard, Float3{0.0f, 0.0f, 1.0f});
+    level->UpdateTransforms();
+    billboards->Add(guard).document = MakeDocument(u8"<Panel width=\"40\" height=\"20\" id=\"plate\"/>");
+    engine.Frame();
+    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    lab::Node* layer = root->GetChildAt(0);
+    REQUIRE(layer->ChildCount() == 1u);
+    lab::Node* plate = billboards->Get(guard)->root.Get();
+    REQUIRE(plate == layer->GetChildAt(0));
+
+    foundation::render::SceneOverlayView view;
+    view.sceneKey = level;
+    view.viewProjection = SimpleProjection();
+    view.viewportWidth = 200;
+    view.viewportHeight = 100;
+    view.targetWidth = 200;
+    view.targetHeight = 100;
+    view.targetFormat = rhi::TextureFormat::RGBA8Unorm;
+    rhi::null::NullCommandEncoder encoder;
+    rhi::RenderPassEncoder* pass = encoder.BeginRenderPass(rhi::RenderPassDesc{});
+    REQUIRE(pass != nullptr);
+    engine.gui->Render(*pass, view); // its size is known after this layout
+    engine.gui->Render(*pass, view);
+    CHECK(plate->GetSize().x == doctest::Approx(40.0f));
+    CHECK(plate->GetPosition().x == doctest::Approx(80.0f)); // centred on 100
+    CHECK(plate->GetPosition().y == doctest::Approx(30.0f)); // its bottom on 50
+    CHECK(plate->IsVisible());
+
+    level->SetLocalPosition(guard, Float3{0.0f, 0.0f, -1.0f}); // behind the camera
+    level->UpdateTransforms();
+    engine.gui->Render(*pass, view);
+    CHECK_FALSE(plate->IsVisible());
+    pass->End();
+
+    level->DestroyEntity(guard);
+    engine.Frame();
+    CHECK(layer->ChildCount() == 0u);
+    engine.scenes.DestroyScene(level);
 }

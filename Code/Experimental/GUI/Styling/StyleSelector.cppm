@@ -201,6 +201,15 @@ export namespace experimental::gui
         [[nodiscard]] bool IsEmpty() const noexcept { return m_rules.Size() == 0; }
         [[nodiscard]] usize RuleCount() const noexcept { return m_rules.Size(); }
         [[nodiscard]] const StyleSelectorRule& RuleAt(usize i) const { return m_rules[i]; }
+        /// It can match nothing: a compound names a pseudo-class or function the lab does not know,
+        /// or does not parse (E1: what a cook warns of).
+        [[nodiscard]] bool IsNever() const noexcept
+        {
+            for (const StyleSelectorRule& rule : m_rules)
+                if (rule.IsNever())
+                    return true;
+            return false;
+        }
         // The pseudo-element of the subject (rightmost) rule; empty for a normal selector.
         [[nodiscard]] core::StringView PseudoElement() const
         {

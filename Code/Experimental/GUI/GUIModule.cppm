@@ -16,6 +16,7 @@
 export module experimental.gui;
 
 export import :rect;
+export import :diagnostic;
 export import :transform2d;
 export import :thickness;
 export import :layout_style;
@@ -119,6 +120,7 @@ export import :sorting_proxy_model;
 
 // Markup (Phase 8: declarative XML widget-tree loading)
 export import :markup;
+export import :style_check; // E1: what a sheet names that nothing takes
 
 // CSS styling (Phase 6)
 export import :resource_provider;

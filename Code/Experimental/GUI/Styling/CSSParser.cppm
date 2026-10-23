@@ -10,6 +10,10 @@
 // (`@import`) are skipped, and nesting is not read. A quoted string is whole, as CSS tokenizes
 // one: no `;`, brace or comment opener inside it ends or starts anything, and no `;` inside
 // parentheses ends a declaration either (an inline SVG's markup, `url(data:...;base64,...)`).
+// Given a diagnostics list (E1), what it skips goes there with its line, for a cook: an at-rule it
+// does not read, a declaration with no colon, text with no rule block, a rule not closed, a
+// selector that can match nothing. Property names are checked apart (CheckStyleSheetNames: they
+// depend on the element types registered).
 
 module;
 #include "Core/Prelude.h"
@@ -21,6 +25,7 @@ import :style_rule;
 import :style_sheet;
 import :style_selector; // StyleSelector::SplitList
 import :media_query;
+import :diagnostic; // GuiDiagnostic
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -104,12 +109,14 @@ export namespace experimental::gui
     public:
         /// Parses CSS source into a StyleSheet named `name` (a path, "theme": where its rules came
         /// from, which each rule keeps with its line and selector, for the inspector).
-        [[nodiscard]] static StyleSheet Parse(core::StringView css, core::StringView name = {})
+        /// Given `diagnostics`, what it skips is said there (E1).
+        [[nodiscard]] static StyleSheet Parse(core::StringView css, core::StringView name = {},
+                                              Array<GuiDiagnostic>* diagnostics = nullptr)
         {
             const core::String cleaned = StripComments(css);
             StyleSheet sheet;
             sheet.SetName(name);
-            Source source{cleaned.AsView(), {}};
+            Source source{cleaned.AsView(), {}, diagnostics};
             source.LineStarts.PushBack(0);
             for (usize i = 0; i < cleaned.Size(); ++i)
                 if (cleaned[i] == u8'\n')
@@ -124,6 +131,13 @@ export namespace experimental::gui
         {
             core::StringView Whole;
             Array<usize> LineStarts;
+            Array<GuiDiagnostic>* Diagnostics = nullptr; // E1: where what is skipped is said
+            // Says what was skipped at `part` (its line), when diagnostics were asked for.
+            void Skipped(core::StringView part, core::String message) const
+            {
+                if (Diagnostics != nullptr)
+                    Diagnostics->PushBack(GuiDiagnostic{GuiDiagnostic::Severity::Warning, LineOf(part), core::Move(message)});
+            }
             // The 1-based line of `part`'s first character other than white space.
             [[nodiscard]] u32 LineOf(core::StringView part) const
             {
@@ -163,9 +177,15 @@ export namespace experimental::gui
                         ++i;
                         // @import url(path) or "path" (E13): the style manager loads it through
                         // its resource provider. Other at-statements are skipped.
+                        bool read = false;
                         if (prelude.Size() > 7 && prelude.SubStr(0, 7) == core::StringView(u8"@import"))
                             if (const core::StringView path = ImportPath(prelude.SubStr(7, prelude.Size() - 7)); path.Size() != 0)
+                            {
                                 sheet.AddImport(path);
+                                read = true;
+                            }
+                        if (!read)
+                            source.Skipped(prelude, core::Format(u8"an at-rule it does not read: {}", prelude));
                         continue;
                     }
                     if (i >= n)
@@ -205,18 +225,19 @@ export namespace experimental::gui
                     }
                     else if (IsKeyframes(prelude))
                     {
-                        ParseKeyframes(sheet, Trim(prelude.SubStr(10, prelude.Size() - 10)),
+                        ParseKeyframes(source, sheet, Trim(prelude.SubStr(10, prelude.Size() - 10)),
                                        inner); // after "@keyframes"
                     }
                     else if (prelude == core::StringView(u8"@font-face"))
                     {
-                        ParseFontFace(sheet, inner);
+                        ParseFontFace(source, sheet, inner);
                     }
                     else if (prelude.Size() > 13 && prelude.SubStr(0, 13) == core::StringView(u8"@spritesheet "))
                     {
-                        ParseSpritesheet(sheet, Trim(prelude.SubStr(13, prelude.Size() - 13)), inner);
+                        ParseSpritesheet(source, sheet, Trim(prelude.SubStr(13, prelude.Size() - 13)), inner);
                     }
-                    // unknown at-rule blocks are consumed and skipped
+                    else // unknown at-rule blocks are consumed and skipped
+                        source.Skipped(prelude, core::Format(u8"an at-rule it does not read: {}", prelude));
                     continue;
                 }
 
@@ -224,7 +245,11 @@ export namespace experimental::gui
                 const usize selStart = i;
                 i = ScanTo(src, i, core::StringView(u8"{}"));
                 if (i >= n || src[i] != u8'{')
+                {
+                    const core::StringView stray = Trim(src.SubStr(selStart, i - selStart));
+                    source.Skipped(src.SubStr(selStart, i - selStart), core::Format(u8"text with no rule block: {}", stray));
                     break;
+                }
                 const core::StringView selectorList = src.SubStr(selStart, i - selStart);
                 ++i; // consume '{'
 
@@ -233,18 +258,20 @@ export namespace experimental::gui
                 const core::StringView block = src.SubStr(blockStart, i - blockStart);
                 if (i < n)
                     ++i; // consume '}'
+                else
+                    source.Skipped(selectorList, core::Format(u8"the rule for {} is not closed", Trim(selectorList)));
 
-                EmitRules(sheet, source.LineOf(selectorList), selectorList, block, media);
+                EmitRules(source, sheet, source.LineOf(selectorList), selectorList, block, media);
             }
         }
 
         // An @spritesheet's block (E13): `src: url(atlas.png);` and a `name: x y width height;` per
         // sprite, in the image's pixels (px or none). One without a source is dropped.
-        static void ParseSpritesheet(StyleSheet& sheet, core::StringView name, core::StringView block)
+        static void ParseSpritesheet(const Source& source, StyleSheet& sheet, core::StringView name, core::StringView block)
         {
             Spritesheet out;
             out.Name = core::String(name);
-            for (const StyleProperty& p : ParseDeclList(block))
+            for (const StyleProperty& p : ParseDeclList(source, block))
             {
                 const core::StringView value = Trim(p.Value.AsView());
                 if (p.Name.AsView() == core::StringView(u8"src"))
@@ -312,10 +339,10 @@ export namespace experimental::gui
 
         // An @font-face's declarations: font-family and src (its first url, a path), font-weight
         // (a number, normal or bold) and font-style; one without a family or a source is dropped.
-        static void ParseFontFace(StyleSheet& sheet, core::StringView block)
+        static void ParseFontFace(const Source& source, StyleSheet& sheet, core::StringView block)
         {
             FontFaceRule face;
-            for (const StyleProperty& p : ParseDeclList(block))
+            for (const StyleProperty& p : ParseDeclList(source, block))
             {
                 const core::StringView value = Trim(p.Value.AsView());
                 if (p.Name.AsView() == core::StringView(u8"font-family"))
@@ -356,7 +383,7 @@ export namespace experimental::gui
 
         // Parse the inner of @keyframes: a run of `<offset-list> { decls }` stops (offset is a
         // percentage, or from/to). Comma-separated offsets share a block.
-        static void ParseKeyframes(StyleSheet& sheet, core::StringView name, core::StringView inner)
+        static void ParseKeyframes(const Source& source, StyleSheet& sheet, core::StringView name, core::StringView inner)
         {
             Keyframes keyframes;
             keyframes.Name = core::String(name);
@@ -395,7 +422,7 @@ export namespace experimental::gui
                         {
                             KeyframeStop stop;
                             stop.Offset = offset;
-                            stop.Properties = ParseDeclList(block);
+                            stop.Properties = ParseDeclList(source, block);
                             keyframes.Stops.PushBack(core::Move(stop));
                         }
                         s = k + 1;
@@ -451,7 +478,7 @@ export namespace experimental::gui
         }
 
         // One rule per comma-separated selector, each carrying the block's declarations + media.
-        static void EmitRules(StyleSheet& sheet, u32 line, core::StringView selectorList,
+        static void EmitRules(const Source& source, StyleSheet& sheet, u32 line, core::StringView selectorList,
                               core::StringView block, const MediaQuery& media)
         {
             // Commas inside :is(), :not() or [a="b,c"] do not split.
@@ -459,7 +486,10 @@ export namespace experimental::gui
             {
                 StyleRule rule{selector};
                 rule.SetSource(Trim(selector), line);
-                ApplyDeclarations(rule, block);
+                if (rule.Selector().IsNever())
+                    source.Skipped(selectorList, core::Format(u8"the selector {} matches nothing (a pseudo-class or function it does not know, or a typo)",
+                                                              Trim(selector)));
+                ApplyDeclarations(source, rule, block);
                 if (!media.IsEmpty())
                     rule.SetMedia(media);
                 sheet.AddRule(core::Move(rule));
@@ -467,14 +497,14 @@ export namespace experimental::gui
         }
 
         // Split `name: value;` declarations into the rule (later same-name wins via SetProperty).
-        static void ApplyDeclarations(StyleRule& rule, core::StringView block)
+        static void ApplyDeclarations(const Source& source, StyleRule& rule, core::StringView block)
         {
-            for (const StyleProperty& p : ParseDeclList(block))
+            for (const StyleProperty& p : ParseDeclList(source, block))
                 rule.SetProperty(p.Name.AsView(), p.Value.AsView(), p.Important);
         }
 
         // Parse `name: value;` declarations into a flat property list (in source order).
-        [[nodiscard]] static Array<StyleProperty> ParseDeclList(core::StringView block)
+        [[nodiscard]] static Array<StyleProperty> ParseDeclList(const Source& source, core::StringView block)
         {
             Array<StyleProperty> out;
             usize start = 0;
@@ -486,7 +516,11 @@ export namespace experimental::gui
                 start = end + 1;
                 const usize colon = FindChar(decl, u8':');
                 if (colon == kNotFound)
+                {
+                    if (Trim(decl).Size() != 0)
+                        source.Skipped(decl, core::Format(u8"a declaration with no colon: {}", Trim(decl)));
                     continue;
+                }
                 const core::StringView name = Trim(decl.SubStr(0, colon));
                 core::StringView value = Trim(decl.SubStr(colon + 1, decl.Size() - colon - 1));
 

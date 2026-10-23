@@ -10,6 +10,7 @@ target_sources(GUI
     PUBLIC
         FILE_SET gui_modules TYPE CXX_MODULES FILES
             Core/Rect.cppm
+            Core/Diagnostic.cppm
             Core/Transform2D.cppm
             Core/Thickness.cppm
             Core/Transformable.cppm
@@ -116,6 +117,7 @@ target_sources(GUI
             Styling/StyleManager.cppm
             Styling/Theme.cppm
             Markup/MarkupLoader.cppm
+            Markup/StyleCheck.cppm
             GUIModule.cppm
     PRIVATE
         # Module implementation unit: Node method bodies that call the EventDispatcher

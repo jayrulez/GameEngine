@@ -500,6 +500,7 @@ export namespace experimental::gui
         }
         [[nodiscard]] const Array<FontFaceRule>& FontFaces() const noexcept { return m_fontFaces; }
         [[nodiscard]] usize KeyframesCount() const noexcept { return m_keyframes.Size(); }
+        [[nodiscard]] const Array<Keyframes>& AllKeyframes() const noexcept { return m_keyframes; }
         [[nodiscard]] const Keyframes* FindKeyframes(core::StringView name) const
         {
             for (const Keyframes& k : m_keyframes)

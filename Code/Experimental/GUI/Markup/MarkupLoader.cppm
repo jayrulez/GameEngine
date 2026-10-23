@@ -23,7 +23,8 @@
 //     to make nodes from later (an item view's rows); loaded with item bindings, a value with
 //     `{{item}}`, `{{item.Column}}` or `{{index}}` in it is recorded for the row to fill,
 // so the whole CSS property vocabulary (width/height/padding/margin/background-color/border/
-// text-align/units/...) works in markup for free.
+// text-align/units/...) works in markup for free. Given a diagnostics list (E1), what it drops and
+// a parse error go there, for a cook; without one they are logged.
 //
 // Example:
 //   <Panel flex-direction="row" gap="8" padding="12" class="panel">
@@ -49,6 +50,7 @@ import :css_values;    // LengthContext
 import :resource_provider;
 import :element_types; // ElementSet
 import :data_model;    // DataModel, FormatVariant
+import :diagnostic;    // GuiDiagnostic
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -82,6 +84,10 @@ export namespace experimental::gui
         {
         }
 
+        /// Where what it drops (an element no type makes, an attribute nothing takes) and a parse
+        /// error go, instead of the log (E1: a cook's warnings and errors). Null: the log.
+        void SetDiagnostics(Array<GuiDiagnostic>* diagnostics) noexcept { m_diagnostics = diagnostics; }
+
         /// The data model `{{name}}` values bind to (a SceneRoot's, GetDataRef); without one they
         /// stay as written.
         void SetDataModel(RefPtr<DataModel> model) { m_data = core::Move(model); }
@@ -106,10 +112,19 @@ export namespace experimental::gui
         [[nodiscard]] RefPtr<Node> LoadFromString(core::StringView markup)
         {
             xml::XmlDocument document(*m_allocator);
-            if (document.Parse(markup) != xml::XmlResult::Ok)
+            if (const xml::XmlResult result = document.Parse(markup); result != xml::XmlResult::Ok)
+            {
+                Report(GuiDiagnostic::Severity::Error, static_cast<u32>(core::Max(document.ErrorLine(), 0)),
+                       core::Format(u8"the markup does not parse: {}", xml::Describe(result)));
                 return {};
+            }
             xml::XmlElement* root = FirstElementChild(document);
-            return root != nullptr ? Inflate(*root) : RefPtr<Node>{};
+            if (root == nullptr)
+            {
+                Report(GuiDiagnostic::Severity::Error, 0, core::String(u8"the markup has no element"));
+                return {};
+            }
+            return Inflate(*root);
         }
 
     private:
@@ -120,7 +135,8 @@ export namespace experimental::gui
             {
                 // An element this GUI does not make (a typo, or one its element set leaves out): said,
                 // rather than the subtree vanishing without a word.
-                LOG_WARNING(u8"GUI", u8"markup: no element <{}>; it and what it holds are left out", element.TagName());
+                Report(GuiDiagnostic::Severity::Warning, 0,
+                       core::Format(u8"no element <{}>; it and what it holds are left out", element.TagName()));
                 return {};
             }
 
@@ -168,7 +184,8 @@ export namespace experimental::gui
                 if (uinode != nullptr && uinode->SetMarkupAttribute(name, value))
                     continue;
                 if (!IsStyleName(uinode, name, value))
-                    LOG_WARNING(u8"GUI", u8"markup: <{}> has no attribute or style property '{}'", element.TagName(), name);
+                    Report(GuiDiagnostic::Severity::Warning, 0,
+                           core::Format(u8"<{}> has no attribute or style property '{}'", element.TagName(), name));
                 inlineStyle.Set(name, value); // an inline CSS property
                 if (uinode != nullptr)
                     uinode->SetInlineStyle(name, value); // kept: it outranks the sheets at every restyle
@@ -196,6 +213,17 @@ export namespace experimental::gui
             }
 
             return widget;
+        }
+
+        // Said: into the diagnostics when given, else to the log.
+        void Report(GuiDiagnostic::Severity level, u32 line, core::String message)
+        {
+            if (m_diagnostics != nullptr)
+            {
+                m_diagnostics->PushBack(GuiDiagnostic{level, line, core::Move(message)});
+                return;
+            }
+            LOG_WARNING(u8"GUI", u8"markup: {}", message.AsView());
         }
 
         // Whether an attribute names something a style sets: a property the sheets know, a shorthand
@@ -361,6 +389,7 @@ export namespace experimental::gui
         LengthContext m_lengths;
         RefPtr<DataModel> m_data;
         Array<ItemBinding>* m_itemBindings = nullptr;
+        Array<GuiDiagnostic>* m_diagnostics = nullptr; // E1: where what it drops goes (null: the log)
     };
 
 }

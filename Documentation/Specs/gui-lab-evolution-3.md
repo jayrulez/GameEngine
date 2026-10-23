@@ -53,9 +53,9 @@ first three: hosting, the viewport, then docking.
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs, the breadcrumb bar | UI.Toolkit less docking and the code editor | Built (T0 to T7) |
 | GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Built (C0 to C8) |
 | GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Built (K0 to K7, 2026-10-23) |
-| GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
-| GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Empty |
-| (the engine's) | | A scene's GUI, the script facade | Engine.UI, Engine.UI.Script | Not this round (ruling 1) |
+| GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and sheets, framework free | UI.Resource | Built (E2) |
+| GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Built (E1, E3) |
+| Engine.GUI | `engine.gui` | The engine's GUI: screens, scene canvases, billboards, world panels, the script facade, the player and play-in-editor | Engine.UI, Engine.UI.Script | Designed (E4 to E11; awaiting approval; the user's direction 2026-10-23 lifts ruling 1) |
 
 ## The phases
 
@@ -997,3 +997,136 @@ Each a layer with its tests.
   whole numbers (`whole`, as a script's numbers arrive as fractions); the HUD's pause prompt
   follows the device. Building it showed a screen with nothing focusable must take the focus
   itself, or Back never reaches it.
+
+### E The GUI's assets and the engine's GUI (design 2026-10-23; the user's go: E1 to E3)
+
+The user's direction (2026-10-23): the GUI's resources and pipeline, then `engine.gui`, the
+engine's integration, with full parity with Engine.UI. This takes up what round three's ruling 1
+and the 0.2 backlog deferred (the engine's hosting, the decision to replace foundation.ui).
+
+#### Rulings (user, 2026-10-23)
+
+1. **They coexist for a while, then the GUI takes over.** The engine's sandbox and the native
+   samples (`Code/Samples`) move onto `engine.gui`; the sample games follow. Nothing is removed
+   (foundation.ui, Engine.UI, Engine.UI.Script, the editor's game UI pages, their pipeline) until
+   the work is blocked and the user says how to proceed. (The user first said they would not
+   coexist, then, the same day, that they must for a while.)
+2. **Sources are `.gml` (markup) and `.css` (sheets).** A distinct markup extension, so the
+   importer never takes an unrelated XML file; plain CSS for sheets.
+3. **References are asset guids.** A sheet's `url("{guid}")`, a document pushed by its guid, an
+   image's source: as every other asset reference in the engine, so a rename or a move breaks
+   nothing.
+4. **Full parity with Engine.UI**, designed now and built in phases.
+5. **The plain script names are the GUI's.** foundation.ui reflects nothing to scripts; only
+   Engine.UI.Script's handles clashed with the lab's (Label, Button, Slider, ProgressBar, RichText,
+   Image, Screen). They took a `UI` prefix on master (`UILabel`, `UIScreen`, ..., 4f9511667, which
+   the mirror engine ports), so one process binds both while the games move.
+6. **The order:** E1 to E3 (the loaders' reports, the resources, the pipeline), then the user
+   hears before `Engine.GUI` starts.
+
+#### What foundation.ui's chain does (the survey)
+
+- **Resources** (`UI.Resource`): a document and a theme, each cooked as validated text the runtime
+  parses again (`UIDocumentSource{markup}`, `UIThemeSource{stylesheet, icons}`); a theme embeds
+  the SVG of each `@icon`. Its module, `kUIResourceModule` ("ui"), belongs to the UI domain with
+  the vector images' and the fonts'.
+- **Pipeline** (`UI.Pipeline`): linked-source assets (the text in `Sources/`, as a script's), each
+  builder validating by parsing (a document through the gamekit's markup, a theme through the
+  stylesheet loader, its icons read with `ReadVectorImage`) and failing the cook on an error; one
+  importer for `.sml` and `.sss`; creators for File > New and MCP's `asset_create`. Registered in
+  `Pipeline.Registration` (the importer and builder counts are tripwires, as are the composition
+  test's resource module count and its factory count).
+- **The engine** (`Engine.UI`, 4200 lines): one subsystem for the application, a screen tier (a
+  root with the gamekit's stack and an overlay layer) and a scene tier (a root per scene), a tier
+  per game run in the editor; components `ui.Canvas` (a document and theme, an order, a scaler,
+  over the screen or into a render texture), `ui.Billboard` and `ui.WorldPanel` (a render-texture
+  quad, picked by a ray); documents rebuilt when their cooked product changes (hot reload); images
+  by guid through the engine's textures; input from the engine's input subsystem (one active root a
+  frame, the action layer told what the GUI took); drawn as a scene overlay and a screen overlay.
+- **Its script surface** (`Engine.UI.Script`): `ui::push(guid)`, `pop`, `replace`, `clear`,
+  `back`, `find*`, a screen's `find*`; the application installs it per script context.
+- **The player and the editor**: project settings for the default theme, the fonts and the loading
+  document; the player's boot splash; the editor's run screens per Game tab; asset pages for a
+  document (with a live preview) and a theme.
+- **The lab today**: `GUI.Resources` and `GUI.Pipeline` are empty; `GuiHost` owns its windows and
+  their backbuffer (it cannot draw into a pass the engine owns); `GUI.Shell`'s bridge takes shell
+  events; the gamekit pushes a document by path through the GUI's resource provider; the lab is off
+  in a web build.
+
+#### The design
+
+- **`GUI.Resources`** (`experimental.gui.resources`, framework free: Core, Resource, Content): a
+  `GuiDocument` (its markup) and a `GuiStyleSheet` (its CSS), each cooked as validated text
+  (`GuiDocumentSource`, `GuiStyleSheetSource`), and the module `kGuiResourceModule` ("gui"). No
+  icons embedded: a sheet reads an SVG by guid as it reads any image, through the vector images'
+  own resource (VG.Resource), so an icon is cooked once however many sheets use it.
+- **`GUI.Pipeline`** (`experimental.gui.pipeline`, tools only): a `GuiDocumentAsset` (`.gml`) and a
+  `GuiStyleSheetAsset` (`.css`), linked-source assets; builders that validate by parsing (the
+  markup through the lab's loader with every element type the tools register, the core's,
+  the gamekit's, the toolkit's and the code editor's; the sheet through the CSS parser) and fail
+  the cook on an error, warnings for what was dropped; what a document or sheet reads by guid
+  (images, vector images, fonts, sheets it imports, documents) recorded as the cook's dependencies;
+  one importer for both extensions; creators for both (File > New, `asset_create`); registered in
+  `Pipeline.Registration`, its counts bumped. The core's markup loader and CSS parser learn to
+  report what they drop (the cook's warnings).
+- **References by guid**: the lab's `IResourceProvider` already takes a string; the engine's
+  provider answers `{guid}` from its resources (a document's or sheet's text, an image from a
+  texture, an SVG from a vector image), so markup, sheets and the gamekit (`PushDocument("{guid}")`)
+  need no change, and a path still works in the sandbox.
+- **`Engine.GUI`** (`engine.gui`, built when the lab is): the engine's GUI, at parity with
+  Engine.UI:
+  - *A subsystem* for the application: one `GUIContext`, its style manager, the project's default
+    sheet and fonts, the engine's resource provider; a screen tier (a root holding the gamekit's
+    stack and an overlay layer) and a scene tier (a root per scene); a tier per game run in the
+    editor's Game tabs; documents and sheets rebuilt when their cooked products change (hot
+    reload).
+  - *Drawing into the engine's frame*: `GUI.Hosting` gains a way to draw a root into a pass the
+    caller owns (the screen and scene overlays) besides its window host, and its offscreen picture
+    for render textures.
+  - *Input from the engine's input subsystem*: its active source's events through `GUI.Shell`'s
+    bridge, the input kind from the engine's tracker (K2), one active root a frame as Engine.UI
+    picks it, the action layer told what the GUI took.
+  - *Components*: `gui.Canvas` (a document and sheets, an order, a scaler, over the screen or into
+    a render texture), `gui.Billboard`, `gui.WorldPanel` (a render-texture quad, picked by a ray).
+  - *The script surface*: the lab's `gui` facade and the gamekit's stack, installed per script
+    context with the screen tier's (or a run's) root; `gui.screens()` the screen tier's stack,
+    pushing by guid; a screen's `find`.
+  - *The player and play-in-editor*: project settings for the default sheet, the fonts and the
+    loading document, the boot splash, the run screens.
+  - *Composition*: its domain (resources `gui`, `vg`, `fonts`) beside the UI domain while both live
+    (ruling 1); the composition tests' counts follow.
+- **The editor**: asset pages for a `.gml` document (a code editor and a live preview, drawn by the
+  lab offscreen into the editor's view) and a `.css` sheet; the inspector naming the new asset
+  types; the MCP guide updated (the generic asset tools serve them).
+- **The web**: the engine's GUI ships in a web game, so the lab, its hosting and the engine's GUI
+  build for wasm (WebGPU), which they do not today.
+
+#### Open questions (for the user)
+
+- **Where a theme's tokens come from**: foundation.ui's games name a theme asset in the project
+  settings. The lab's default theme is its built-in sheet; a game's sheet sets tokens over it. One
+  project setting naming the game's sheet (or several, in order)?
+
+#### Phases
+
+Each a layer with its tests.
+
+- **E1 The loaders report.** The markup loader's and CSS parser's warnings (what they dropped). Built (vg,
+  2026-10-23): `GuiDiagnostic` (a level, a line, a message); the loader's and parser's optional lists
+  (else the log); `CheckStyleSheetNames` against the style table and the registered types' CSS names.
+- **E2 `GUI.Resources`.** The two resources, their factories, the module. Built (vg, 2026-10-23):
+  `GuiDocument` and `GuiStyleSheet` (cooked as `GuiDocumentSource`, `GuiStyleSheetSource`),
+  `kGuiResourceModule` ("gui"), free of the GUI framework.
+- **E3 `GUI.Pipeline`.** The assets, builders, dependencies, importer, creators; registration. Built
+  (vg, 2026-10-23): guids found in the text are the product's runtime references (a guid naming no
+  asset a warning); registered in Pipeline.Registration only when the lab is built (two builders,
+  an importer and two creators more then).
+- **E4 Drawing into a caller's pass.** `GUI.Hosting`'s overlay path.
+- **E5 `Engine.GUI`'s subsystem.** The context, the tiers, the resource provider by guid, hot
+  reload, the overlays; composition.
+- **E6 Input.** The engine's input into the GUI, the active root, the action layer told.
+- **E7 Components.** Canvas, billboard, world panel.
+- **E8 The script surface.** The facade per context, pushing by guid.
+- **E9 The player and play-in-editor.** Settings, splash, run screens.
+- **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
+- **E11 The web.** The lab and the engine's GUI on wasm.

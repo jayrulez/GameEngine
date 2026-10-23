@@ -567,6 +567,7 @@ export namespace experimental::gui
             SetTag(core::StringView(u8"graphview"));
             SetTabFocusable(true);
             SetClipChildren(true);
+            SetPlacesChildren(true); // the nodes at their points on the canvas, which stays left to right
         }
         ~GraphView() override
         {

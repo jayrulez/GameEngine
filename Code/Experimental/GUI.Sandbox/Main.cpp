@@ -1820,19 +1820,26 @@ void GUISandbox::Settle()
 namespace
 {
     // The widgets a mirror audit checks: shown and sized, outside what is placed physically on
-    // purpose (a dock's sides, a popup or a window at a point; what a window holds is checked) and
-    // an item view's rows, which it recycles from item to item (the unit tests check theirs).
-    void CollectMirrored(gui::Node& node, Array<gui::Node*>& out)
+    // purpose (a dock's sides, a popup or a window at a point, a canvas's children at theirs; what
+    // a window or a canvas's child holds is checked), what runs one way whatever the page (a
+    // direction set on it) and an item view's rows, which it recycles from item to item (the unit
+    // tests check theirs).
+    void CollectMirrored(gui::Node& node, Array<gui::Node*>& out, bool placed = false)
     {
         if (!node.IsVisible() || !node.IsDisplayed() || node.IsInTopLayer())
             return;
-        if (node.GetSize().x > 0.0f && node.GetSize().y > 0.0f && Cast<gui::UIWidget>(&node) != nullptr &&
+        if (!placed && node.GetSize().x > 0.0f && node.GetSize().y > 0.0f && Cast<gui::UIWidget>(&node) != nullptr &&
             Cast<gui::Window>(&node) == nullptr)
             out.PushBack(&node);
         if (node.GetLayoutStyle().Kind == gui::Display::Dock || Cast<gui::ItemView>(&node) != nullptr)
             return;
         for (usize i = 0; i < node.ChildCount(); ++i)
-            CollectMirrored(*node.GetChildAt(i), out);
+        {
+            gui::Node& child = *node.GetChildAt(i);
+            const gui::Node::LayoutDirection direction = child.GetLayoutDirection(); // the page's own is the audit's
+            if (direction != gui::Node::LayoutDirection::LeftToRight && direction != gui::Node::LayoutDirection::RightToLeft)
+                CollectMirrored(child, out, node.GetPlacesChildren());
+        }
     }
 }
 

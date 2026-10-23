@@ -273,6 +273,7 @@ TEST_CASE("GraphView: right to left, the canvas still runs left to right, inputs
     bed.root->SetLayoutDirection(experimental::gui::Node::LayoutDirection::RightToLeft);
     (void)bed.root->UpdateLayout();
     REQUIRE(bed.view->IsRightToLeft());
+    CHECK(bed.view->GetPlacesChildren()); // its nodes at their canvas points, which right to left leaves
     GraphNodeWidget& node = *bed.view->GetNodeWidget(bed.a);
     GraphPinRow& in = node.PinRowAt(0);
     GraphPinRow& out = node.PinRowAt(1);

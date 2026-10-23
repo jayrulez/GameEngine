@@ -2097,6 +2097,11 @@ export namespace experimental::gui
             DirectionChanged();
         }
         [[nodiscard]] LayoutDirection GetLayoutDirection() const noexcept { return m_direction; }
+        /// It places its children itself, at points of its own rather than in a flow (a canvas:
+        /// a node graph's nodes), so right to left does not move them; what is inside each child
+        /// still runs as its direction says.
+        void SetPlacesChildren(bool places) noexcept { m_placesChildren = places; }
+        [[nodiscard]] bool GetPlacesChildren() const noexcept { return m_placesChildren; }
         void SetDirectionName(const core::String& name)
         {
             SetLayoutDirection(name == core::StringView(u8"rtl")    ? LayoutDirection::RightToLeft
@@ -2947,6 +2952,7 @@ export namespace experimental::gui
         u8 m_quietInvalidations = 0;            // inside BeginQuietInvalidation's
         AutoTranslate m_autoTranslate = AutoTranslate::Inherit;
         LayoutDirection m_direction = LayoutDirection::Inherit;
+        bool m_placesChildren = false; // its children at points of its own, not mirrored
         bool m_mirrorOnRtl = false;
         bool m_accessDirty = true;       // its accessibility node waits to be sent (E9d)
         bool m_accessChildDirty = false; // some descendant's does

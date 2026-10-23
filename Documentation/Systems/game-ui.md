@@ -18,6 +18,10 @@ to end (P1-P3 + the overlay-roles refactor + split-screen + the world tier).
   resources + factories.
 - **`ui.pipeline`** (`Code/Pipeline/UI.Pipeline`) - `UIDocumentAsset` / `UIThemeAsset` + builders (cook
   = validate markup/styling + write-through, recording image/font dependency edges).
+- **`foundation.vg.resource`** (`Code/Foundation/VG.Resource`) and **`vg.pipeline`**
+  (`Code/Pipeline/VG.Pipeline`) - the vector image a theme's `@icon` names: the cooked
+  `VectorImage` and its factory, and `VectorImageAsset` with its validating builder and the `.svg`
+  importer. Not the UI's: free of either UI framework, for anything that draws an SVG.
 - **`engine.ui`** (`Code/Engine/Engine.UI`) - `UISubsystem`, the canvas / billboard / world-panel
   components, the overlay-role bridges, the consumption mask, `GameTheme`, and the UI script facade.
 - **`editor.gameui`** (`Code/Editor/Editor.GameUI`) - `UIDocumentPage` (text pane + live preview
@@ -92,9 +96,9 @@ Play-in-editor works by construction (the same event stream through the viewport
   (`void (const string &in name)`, the @keyframes' name) when one of the view's animations ends or
   begins another iteration, after the frame's tick, so a screen can chain a slide-in into the
   next step or remove a toast once it has faded.
-- **Vector images** - an `.svg` imports as a `UIVectorImage` asset (linked in `Sources/`, validated
-  at cook by the same SVG loader that draws it: the icon-systems subset, paths and basic shapes with
-  fills and strokes). A game theme names one with `@icon heart "{guid}"` and draws it with
+- **Vector images** - an `.svg` imports as a `VectorImageAsset` (VG.Pipeline; linked in
+  `Sources/`, validated at cook by the same SVG loader that draws it: the icon-systems subset,
+  paths and basic shapes with fills and strokes). A game theme names one with `@icon heart "{guid}"` and draws it with
   `svg(heart, tint=#E53935)` wherever a drawable goes, e.g. `.lives-icon { background: svg(heart); }`
   on a sized `<Panel class="lives-icon" width="28" height="28"/>`. The theme's cook embeds every icon
   it names (`UIThemeSource::icons`, a `reads` edge so a changed SVG recooks the theme), so the sheet

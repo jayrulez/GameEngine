@@ -52,6 +52,8 @@ import foundation.navigation.resource;
 import navigation.pipeline;
 import foundation.ui.resource;
 import ui.pipeline;
+import foundation.vg.resource;
+import vg.pipeline;
 import foundation.audio;
 import foundation.audio.resource;
 import audio.pipeline;
@@ -133,6 +135,8 @@ namespace pipeline
         foundation::navigation::RegisterNavigationResource();
         RegisterUIAssets();
         foundation::ui::RegisterUIResource();
+        RegisterVGAssets();
+        foundation::vg::RegisterVGResource();
         RegisterAudioAssets();
         foundation::audio::RegisterAudioResource();
         RegisterScriptAssets();
@@ -186,7 +190,7 @@ namespace pipeline
         AddBuilder<NavigationZoneAssetBuilder>(registry);
         AddBuilder<UIDocumentAssetBuilder>(registry);
         AddBuilder<UIThemeAssetBuilder>(registry);
-        AddBuilder<UIVectorImageAssetBuilder>(registry);
+        AddBuilder<VectorImageAssetBuilder>(registry);
         AddBuilder<AudioClipAssetBuilder>(registry);
         AddBuilder<AudioBusLayoutAssetBuilder>(registry);
         AddBuilder<SoundCueAssetBuilder>(registry);
@@ -198,6 +202,7 @@ namespace pipeline
         AddImporter<TextureFileImporter>(registry);
         AddImporter<ModelFileImporter>(registry);
         AddImporter<UIFileImporter>(registry);
+        AddImporter<VectorImageFileImporter>(registry);
         AddImporter<AudioFileImporter>(registry);
         AddImporter<ScriptFileImporter>(registry);
         AddImporter<ShaderFileImporter>(registry);

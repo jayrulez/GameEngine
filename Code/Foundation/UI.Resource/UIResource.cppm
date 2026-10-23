@@ -177,55 +177,6 @@ export namespace foundation::ui
         IAllocator* m_allocator;
     };
 
-    /// Cooked vector image: a validated `.svg` document. A theme names one with `@icon` (the
-    /// theme's cook embeds it); the product carries it for anything else that draws one.
-    class UIVectorImageSource : public ISerializable
-    {
-        RTTI_OBJECT(UIVectorImageSource, ISerializable)
-    public:
-        String svg;
-
-        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "svg", svg); }
-    };
-
-    class UIVectorImage : public Object
-    {
-        RTTI_OBJECT(UIVectorImage, Object)
-    public:
-        String svg;
-    };
-
-    class UIVectorImageFactory final : public IResourceFactory
-    {
-    public:
-        explicit UIVectorImageFactory(IAllocator& allocator) noexcept : m_allocator(&allocator) {}
-
-        [[nodiscard]] const TypeInfo* ProductType() const override
-        {
-            return &UIVectorImage::StaticType();
-        }
-        [[nodiscard]] const TypeInfo* CookedType() const override
-        {
-            return &UIVectorImageSource::StaticType();
-        }
-        [[nodiscard]] RefPtr<Object> Create(ResourceManager&,
-                                            foundation::content::Instance& instance) override
-        {
-            RefPtr<ISerializable> object = instance.ReadObject();
-            UIVectorImageSource* source = Cast<UIVectorImageSource>(object.Get());
-            if (source == nullptr)
-            {
-                return RefPtr<Object>{};
-            }
-            RefPtr<UIVectorImage> image = MakeRef<UIVectorImage>(*m_allocator);
-            image->svg = Move(source->svg);
-            return image;
-        }
-
-    private:
-        IAllocator* m_allocator;
-    };
-
     inline void RegisterUIResource()
     {
         GlobalTypeRegistry().Register(UIDocumentSource::StaticType());
@@ -234,9 +185,6 @@ export namespace foundation::ui
         GlobalTypeRegistry().Register(UIThemeSource::StaticType());
         RegisterSerializable<UIThemeSource>();
         GlobalTypeRegistry().Register(UITheme::StaticType());
-        GlobalTypeRegistry().Register(UIVectorImageSource::StaticType());
-        RegisterSerializable<UIVectorImageSource>();
-        GlobalTypeRegistry().Register(UIVectorImage::StaticType());
     }
 
     RTTI_DEFINE_OBJECT(UIDocumentSource, "rtti::ui")
@@ -244,8 +192,6 @@ export namespace foundation::ui
     // v2: the icons the sheet names, embedded.
     RTTI_DEFINE_OBJECT_VERSIONED(UIThemeSource, "rtti::ui", 2)
     RTTI_DEFINE_OBJECT(UITheme, "rtti::ui")
-    RTTI_DEFINE_OBJECT(UIVectorImageSource, "rtti::ui")
-    RTTI_DEFINE_OBJECT(UIVectorImage, "rtti::ui")
 }
 
 export namespace foundation::ui
@@ -255,7 +201,6 @@ export namespace foundation::ui
     inline constexpr foundation::resource::ResourceFactoryDesc kUIResourceFactories[] = {
         foundation::resource::FactoryWithAllocator<UIDocument, UIDocumentSource, UIDocumentFactory>(),
         foundation::resource::FactoryWithAllocator<UITheme, UIThemeSource, UIThemeFactory>(),
-        foundation::resource::FactoryWithAllocator<UIVectorImage, UIVectorImageSource, UIVectorImageFactory>(),
     };
     inline constexpr foundation::resource::ResourceModule kUIResourceModule{
         u8"ui", &RegisterUIResource, kUIResourceFactories,

@@ -18,6 +18,8 @@ import foundation.ui;
 import foundation.ui.gamekit; // UIScreen + RegisterGamekitMarkup (the <screen> HUD repro)
 import foundation.ui.resource;
 import ui.pipeline;
+import foundation.vg.resource; // the vector image a theme's @icon names
+import vg.pipeline;
 
 using namespace foundation::core;
 using namespace pipeline;
@@ -418,57 +420,20 @@ namespace
         u8"<path d=\"M12 21 L3 12 A5 5 0 0 1 12 5 A5 5 0 0 1 21 12 Z\" fill=\"#E53935\"/></svg>";
 }
 
-TEST_CASE("ui.pipeline: a vector image cooks when it is an SVG the engine reads, and fails when not")
+TEST_CASE("ui.pipeline: the UI importer takes documents and themes; an .svg is the vector image importer's")
 {
-    RegisterUIResource();
-    RegisterUIAssets();
-    RemoveAll(u8"scratch_uipipe_svg_db");
-    REQUIRE(CreateDirectories(u8"scratch_uipipe_svg_db"));
-    foundation::vfs::NativeFileSystem outMount(u8"scratch_uipipe_svg_db", DefaultAllocator());
-    content::ContentDatabase outDb(DefaultAllocator(), outMount, BinarySerializerFactory(), u8".rasset");
-    const StringView sourcesRoot = u8"scratch_uipipe_svg_src";
-    StageSource(sourcesRoot, u8"heart.svg", kHeartSvg);
-    WriteText(PathJoin(sourcesRoot, u8"broken.svg").AsView(), u8"<html>not a vector image</html>");
-    foundation::vfs::NativeFileSystem sourcesMount(sourcesRoot, DefaultAllocator());
-
-    UIVectorImageAssetBuilder builder;
-    auto* heart = outDb.RootGroup()->CreateInstance(u8"heart", UIVectorImageSource::StaticType());
-    {
-        UIVectorImageAsset asset;
-        asset.fileName = foundation::vfs::SourcePath(u8"heart.svg");
-        pipeline::AssetBuildContext ctx{DefaultAllocator()};
-        ctx.sources = &sourcesMount;
-        ctx.output = heart;
-        REQUIRE(builder.Build(asset, ctx).IsOk());
-    }
-    {
-        UIVectorImageAsset asset;
-        asset.fileName = foundation::vfs::SourcePath(u8"broken.svg");
-        pipeline::AssetBuildContext ctx{DefaultAllocator()};
-        ctx.sources = &sourcesMount;
-        ctx.output = outDb.RootGroup()->CreateInstance(u8"broken", UIVectorImageSource::StaticType());
-        CHECK_FALSE(builder.Build(asset, ctx).IsOk());
-    }
-
-    UIVectorImageFactory factory(DefaultAllocator());
-    ResourceManager manager(DefaultAllocator(), outDb);
-    manager.AddFactory(&factory);
-    Proxy<UIVectorImage> image = manager.Bind<UIVectorImage>(heart->Id());
-    REQUIRE(image);
-    CHECK(image->svg.AsView() == kHeartSvg);
-
-    // The importer takes an .svg as a vector image.
     UIFileImporter importer;
-    CHECK(importer.Accepts(u8"svg"));
-
-    RemoveAll(sourcesRoot);
-    RemoveAll(u8"scratch_uipipe_svg_db");
+    CHECK(importer.Accepts(u8"sml"));
+    CHECK(importer.Accepts(u8"sss"));
+    CHECK_FALSE(importer.Accepts(u8"svg"));
 }
 
 TEST_CASE("ui.pipeline: a theme's @icon embeds the vector image it names, and an unknown one fails")
 {
     RegisterUIResource();
     RegisterUIAssets();
+    foundation::vg::RegisterVGResource();
+    RegisterVGAssets();
     RemoveAll(u8"scratch_uipipe_icon_db");
     REQUIRE(CreateDirectories(u8"scratch_uipipe_icon_db"));
     foundation::vfs::NativeFileSystem outMount(u8"scratch_uipipe_icon_db", DefaultAllocator());
@@ -478,14 +443,14 @@ TEST_CASE("ui.pipeline: a theme's @icon embeds the vector image it names, and an
     foundation::vfs::NativeFileSystem sourcesMount(sourcesRoot, DefaultAllocator());
 
     // The vector image, cooked first (the theme's `reads` edge orders it so in a real cook).
-    auto* heart = outDb.RootGroup()->CreateInstance(u8"heart", UIVectorImageSource::StaticType());
+    auto* heart = outDb.RootGroup()->CreateInstance(u8"heart", foundation::vg::VectorImageSource::StaticType());
     {
-        UIVectorImageAsset asset;
+        VectorImageAsset asset;
         asset.fileName = foundation::vfs::SourcePath(u8"heart.svg");
         pipeline::AssetBuildContext ctx{DefaultAllocator()};
         ctx.sources = &sourcesMount;
         ctx.output = heart;
-        REQUIRE(UIVectorImageAssetBuilder{}.Build(asset, ctx).IsOk());
+        REQUIRE(VectorImageAssetBuilder{}.Build(asset, ctx).IsOk());
     }
     const String reference = Format(u8"{{{}}}", heart->Id());
     String sheet(u8"@icon heart \"");

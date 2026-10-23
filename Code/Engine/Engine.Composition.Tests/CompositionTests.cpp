@@ -86,8 +86,8 @@ TEST_CASE("engine.composition: the resource facet - every domain's resource modu
           "factory described, every cooked type registered")
 {
     const engine::EngineComposition& composition = engine::FullComposition();
-    // The nineteen resource libraries + the scene documents + the render profiles.
-    CHECK(composition.ResourceModules().Size() == 21u);
+    // The twenty resource libraries + the scene documents + the render profiles.
+    CHECK(composition.ResourceModules().Size() == 22u);
     for (const resource::ResourceModule* module : composition.ResourceModules())
     {
         usize same = 0;

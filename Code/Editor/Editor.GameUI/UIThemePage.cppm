@@ -32,6 +32,7 @@ import foundation.ui;
 import foundation.ui.toolkit;
 import foundation.xml; // the markup probe (XmlDocument) behind the editors' diagnostics
 import foundation.ui.resource;
+import foundation.vg.resource; // VectorImage: what an @icon names
 import foundation.resource; // ResourceManager (the preview reads vector images through it)
 import foundation.image;    // IResourceProvider::LoadImage
 import ui.pipeline;
@@ -68,7 +69,7 @@ export namespace editor
             {
                 return false;
             }
-            auto image = resources->Bind<foundation::ui::UIVectorImage>(id);
+            auto image = resources->Bind<foundation::vg::VectorImage>(id);
             if (!image || image->svg.IsEmpty())
             {
                 return false;

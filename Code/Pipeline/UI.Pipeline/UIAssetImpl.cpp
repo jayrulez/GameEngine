@@ -36,10 +36,4 @@ namespace pipeline{
         // previewMarkup is editor-only scaffolding (page-edited, not an inspector field) - persisted
         // via Serialize, deliberately NOT reflected as a Property.
     }
-
-    REFLECT_MEMBERS(UIVectorImageAsset, "rtti::pipeline::ui")
-    {
-        builder.Attribute("displayName", String(u8"Vector Image"))
-            .Attribute("category", String(u8"UI"));
-    }
 }

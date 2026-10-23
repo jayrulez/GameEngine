@@ -1,7 +1,7 @@
 
 add_executable(UI.Pipeline.Tests TestsMain.cpp UIPipelineTests.cpp UIReflectionTests.cpp)
 target_link_libraries(UI.Pipeline.Tests PRIVATE
-    Pipeline::UI Foundation::UI.Resource Foundation::UI Pipeline::Core
+    Pipeline::UI Pipeline::VG Foundation::UI.Resource Foundation::VG.Resource Foundation::UI Pipeline::Core
     Foundation::Content Foundation::Resource Foundation::VFS doctest::doctest)
 target_compile_definitions(UI.Pipeline.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 target_compile_options(UI.Pipeline.Tests PRIVATE

@@ -8,7 +8,7 @@ target_link_libraries(Pipeline.Registration PUBLIC
     Foundation::Core Foundation::Content Foundation::VFS
     Foundation::Script.Facades Foundation::UI Foundation::UI.Gamekit
     Foundation::Scene Foundation::Scene.Resource
-    Pipeline::Core Pipeline::Importer
+    Pipeline::Core Pipeline::Importer Pipeline::VG Foundation::VG.Resource
     Pipeline::Texture Pipeline::Fonts Pipeline::Image Pipeline::Heightfield Pipeline::Terrain Pipeline::Vegetation Pipeline::Geometry
     Pipeline::Animation Pipeline::PropertyAnimation Pipeline::Materials Pipeline::Shaders Pipeline::Particles
     Foundation::Input Foundation::Input.Resource Pipeline::Input

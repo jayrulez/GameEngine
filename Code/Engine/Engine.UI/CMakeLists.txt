@@ -4,7 +4,7 @@ target_link_libraries(Engine.UI
     PUBLIC Foundation::Core Foundation::Runtime Foundation::Scene Engine::Scene
            Foundation::Resource Foundation::Shell Foundation::RHI Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
            Foundation::Input Engine::Input Foundation::UI Foundation::UI.Shell Foundation::UI.Gamekit
-           Foundation::UI.Resource
+           Foundation::UI.Resource Foundation::VG.Resource
            Foundation::Script Foundation::Script.Facades Engine::UI.Script
            Foundation::VG Foundation::VG.Renderer Foundation::Shaders Foundation::Shaders.System
            Foundation::Render Engine::Render Foundation::Image Foundation::Texture.Resource Foundation::Profiler Foundation::VFS Engine::Domain Foundation::Policy)

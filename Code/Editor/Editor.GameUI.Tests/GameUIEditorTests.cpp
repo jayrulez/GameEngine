@@ -16,6 +16,7 @@ import foundation.vfs;
 import foundation.content;
 import foundation.resource;
 import foundation.ui.resource;
+import foundation.vg.resource;
 
 using namespace foundation::core;
 namespace toolkit = foundation::ui::toolkit;
@@ -63,6 +64,7 @@ TEST_CASE("gameui editor: a linked source reads empty without a project")
 TEST_CASE("gameui editor: the theme preview reads an @icon's vector image through the resources")
 {
     foundation::ui::RegisterUIResource();
+    foundation::vg::RegisterVGResource();
     const StringView dir = u8"scratch_theme_preview_db";
     (void)RemoveDirectoryRecursive(dir);
     REQUIRE(CreateDirectories(dir));
@@ -70,12 +72,12 @@ TEST_CASE("gameui editor: the theme preview reads an @icon's vector image throug
         foundation::vfs::NativeFileSystem mount(dir, DefaultAllocator());
         foundation::content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
         foundation::content::Instance* instance =
-            db.RootGroup()->CreateInstance(u8"heart", foundation::ui::UIVectorImageSource::StaticType());
-        foundation::ui::UIVectorImageSource source;
+            db.RootGroup()->CreateInstance(u8"heart", foundation::vg::VectorImageSource::StaticType());
+        foundation::vg::VectorImageSource source;
         source.svg = String(u8"<svg viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"9\" fill=\"#E53935\"/></svg>");
         REQUIRE(instance->WriteObject(source).IsOk());
 
-        foundation::ui::UIVectorImageFactory factory(DefaultAllocator());
+        foundation::vg::VectorImageFactory factory(DefaultAllocator());
         foundation::resource::ResourceManager manager(DefaultAllocator(), db);
         manager.AddFactory(&factory);
         editor::ThemePreviewResources resources(&manager, nullptr);

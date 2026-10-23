@@ -1,9 +1,9 @@
 <root>
 	<string name="guid">6faf9764-c33a-444f-8126-91cc8eade4f5</string>
-	<string name="typeNamespace">rtti::pipeline::ui</string>
-	<string name="typeName">UIVectorImageAsset</string>
+	<string name="typeNamespace">rtti::pipeline::vg</string>
+	<string name="typeName">VectorImageAsset</string>
 	<array name="dataVersions" count="1">
-		<u64 name="type">9065859165864019562</u64>
+		<u64 name="type">16629563329266334117</u64>
 		<u32 name="version">0</u32>
 	</array>
 	<object name="payload">

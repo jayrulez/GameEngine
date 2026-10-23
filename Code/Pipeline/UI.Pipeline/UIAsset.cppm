@@ -34,7 +34,7 @@ import foundation.content;
 import foundation.ui;
 import foundation.ui.gamekit; // RegisterGamekitMarkup - so <screen> roots validate at cook
 import foundation.ui.resource;
-import foundation.vg.svg; // a vector image validates by loading
+import vg.pipeline;       // ReadVectorImage: a theme's @icon embeds the vector image it names
 import foundation.image;  // IResourceProvider::LoadImage (a theme cook resolves no images)
 
 using namespace foundation::core;
@@ -84,15 +84,6 @@ export namespace pipeline{
             // Editor-only preview markup (never read by the builder - see the field).
             foundation::core::Serialize(ar, "previewMarkup", previewMarkup);
         }
-    };
-
-    // A vector image: a LINKED `.svg` in Sources/, like the documents and themes. A theme names it
-    // with `@icon name "{guid}"` and draws it with `svg(name, tint=...)`.
-    class UIVectorImageAsset final : public pipeline::Asset
-    {
-        RTTI_OBJECT(UIVectorImageAsset, pipeline::Asset)
-    public:
-        void Serialize(ISerializer& ar) override { pipeline::Asset::Serialize(ar); }
     };
 
     class UIDocumentAssetBuilder final : public pipeline::DefaultAssetBuilder
@@ -160,33 +151,6 @@ export namespace pipeline{
             return ctx.output->WriteObject(cooked);
         }
     };
-
-    // The SVG a vector image asset carries: its cooked product when the cook has made it, else its
-    // linked source file (a headless or source-database cook). Empty when `id` names no vector
-    // image.
-    inline Status ReadVectorImage(const pipeline::AssetBuildContext& ctx, const Guid& id, String& out)
-    {
-        foundation::content::IContentDatabase* dbs[] = {ctx.db, ctx.sourceDb};
-        for (foundation::content::IContentDatabase* db : dbs)
-        {
-            foundation::content::Instance* instance = db != nullptr ? db->GetInstance(id) : nullptr;
-            if (instance == nullptr)
-            {
-                continue;
-            }
-            RefPtr<ISerializable> object = instance->ReadObject();
-            if (const UIVectorImageSource* cooked = Cast<UIVectorImageSource>(object.Get()))
-            {
-                out = String(cooked->svg.AsView(), *ctx.allocator);
-                return Status{};
-            }
-            if (const UIVectorImageAsset* asset = Cast<UIVectorImageAsset>(object.Get()))
-            {
-                return pipeline::DefaultAssetBuilder::ReadSourceText(ctx, asset->fileName.View(), out);
-            }
-        }
-        return Status{ErrorCode::NotFound};
-    }
 
     // A stylesheet's view of the cook: `@icon name "{guid}"` reads the vector image the guid names
     // and records it, so the cooked theme carries every icon it draws; a reference that names
@@ -337,55 +301,10 @@ export namespace pipeline{
         }
     };
 
-    class UIVectorImageAssetBuilder final : public pipeline::DefaultAssetBuilder
-    {
-    public:
-        [[nodiscard]] const TypeInfo* AssetType() const override
-        {
-            return &UIVectorImageAsset::StaticType();
-        }
-        [[nodiscard]] const TypeInfo* ProductType() const override
-        {
-            return &UIVectorImageSource::StaticType();
-        }
-
-        [[nodiscard]] Status Build(const pipeline::Asset& asset,
-                                   pipeline::AssetBuildContext& ctx) override
-        {
-            const UIVectorImageAsset& va = static_cast<const UIVectorImageAsset&>(asset);
-            if (ctx.output == nullptr)
-            {
-                return Status{ErrorCode::InvalidArgument};
-            }
-            if (va.fileName.IsEmpty())
-            {
-                LOG_ERROR(u8"UI", u8"vector image has no linked source file - cook failed");
-                return Status{ErrorCode::InvalidArgument};
-            }
-            String svg;
-            if (const Status read = ReadSourceText(ctx, va.fileName.View(), svg); !read.IsOk())
-            {
-                LOG_ERROR(u8"UI", u8"vector image '{}': source file missing - cook failed",
-                          va.fileName.View());
-                return read;
-            }
-            // Validation is the cook: the document must load as the renderer reads it.
-            if (!foundation::vg::svg::SVGLoader::Load(svg.AsView()).HasValue())
-            {
-                LOG_ERROR(u8"UI", u8"vector image '{}' is not an SVG this engine reads - cook failed",
-                          va.fileName.View());
-                return Status{ErrorCode::InvalidArgument};
-            }
-            UIVectorImageSource cooked;
-            cooked.svg = Move(svg);
-            return ctx.output->WriteObject(cooked);
-        }
-    };
-
-    /// Drag-drop importer for `.sml` / `.sss` / `.svg` files. The dropped file is STAGED into the
-    /// project's Sources/ tree and the asset LINKS it through fileName - the authored text is
-    /// never embedded in the asset (mirrors ScriptFileImporter). The cook reads the source
-    /// file back through the sources mount.
+    /// Drag-drop importer for `.sml` / `.sss` files (an `.svg` is VG.Pipeline's vector image). The
+    /// dropped file is STAGED into the project's Sources/ tree and the asset LINKS it through
+    /// fileName - the authored text is never embedded in the asset (mirrors ScriptFileImporter).
+    /// The cook reads the source file back through the sources mount.
     class UIFileImporter final : public pipeline::IFileImporter
     {
     public:
@@ -395,13 +314,11 @@ export namespace pipeline{
         [[nodiscard]] static StringView AssetTypeNameFor(StringView sourcePath)
         {
             const String extension = pipeline::FileExtensionLower(sourcePath);
-            return extension == u8"sss"   ? StringView(u8"UIThemeAsset")
-                   : extension == u8"svg" ? StringView(u8"UIVectorImageAsset")
-                                          : StringView(u8"UIDocumentAsset");
+            return extension == u8"sss" ? StringView(u8"UIThemeAsset") : StringView(u8"UIDocumentAsset");
         }
         [[nodiscard]] bool Accepts(StringView extension) const override
         {
-            return extension == u8"sml" || extension == u8"sss" || extension == u8"svg";
+            return extension == u8"sml" || extension == u8"sss";
         }
 
         [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView sourcePath,
@@ -432,9 +349,7 @@ export namespace pipeline{
             }
 
             const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
-            const TypeInfo& type = extension == u8"sss"   ? UIThemeAsset::StaticType()
-                                   : extension == u8"svg" ? UIVectorImageAsset::StaticType()
-                                                          : UIDocumentAsset::StaticType();
+            const TypeInfo& type = extension == u8"sss" ? UIThemeAsset::StaticType() : UIDocumentAsset::StaticType();
             foundation::content::Instance* instance =
                 group.CreateInstance(pipeline::SingleAssetName(options, stem), type);
             if (instance == nullptr)
@@ -446,12 +361,6 @@ export namespace pipeline{
             if (extension == u8"sss")
             {
                 UIThemeAsset asset;
-                asset.fileName = linked;
-                written = instance->WriteObject(asset);
-            }
-            else if (extension == u8"svg")
-            {
-                UIVectorImageAsset asset;
                 asset.fileName = linked;
                 written = instance->WriteObject(asset);
             }
@@ -475,8 +384,6 @@ export namespace pipeline{
         RegisterSerializable<UIDocumentAsset>();
         GlobalTypeRegistry().Register(UIThemeAsset::StaticType(), TypeDomain(u8"Pipeline"));
         RegisterSerializable<UIThemeAsset>();
-        GlobalTypeRegistry().Register(UIVectorImageAsset::StaticType(), TypeDomain(u8"Pipeline"));
-        RegisterSerializable<UIVectorImageAsset>();
     }
 
     // UIDocumentAsset/UIThemeAsset StaticType() are defined WITH reflected properties in

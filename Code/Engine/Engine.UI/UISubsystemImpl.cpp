@@ -39,6 +39,7 @@ import foundation.vg;
 import foundation.vg.renderer;
 import foundation.ui;
 import foundation.ui.resource;
+import foundation.vg.resource; // vector images, a theme's icons' source asset
 import foundation.image;            // ImageDataRef: the key a texture image draws under
 import foundation.texture.resource; // texture::Texture: what an image source names
 import foundation.render.api;
@@ -3067,6 +3068,7 @@ namespace engine::ui
     {
         static const foundation::resource::ResourceModule* const kResources[] = {
             &foundation::ui::kUIResourceModule,
+            &foundation::vg::kVGResourceModule,
             &foundation::fonts::kFontsResourceModule};
         static const engine::DomainModule kModule{
             .id = u8"ui",

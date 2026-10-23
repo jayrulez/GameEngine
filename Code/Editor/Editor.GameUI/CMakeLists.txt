@@ -2,7 +2,7 @@
 util_add_engine_library(Editor.GameUI ALIAS Editor::GameUI)
 target_link_libraries(Editor.GameUI PUBLIC
     Foundation::Core Foundation::Content Foundation::Runtime.Client Foundation::UI Foundation::UI.Toolkit Foundation::Xml
-    Foundation::UI.Resource Pipeline::UI Engine::UI Foundation::UI.Runtime Foundation::UI.Viewport
+    Foundation::UI.Resource Foundation::VG.Resource Pipeline::UI Engine::UI Foundation::UI.Runtime Foundation::UI.Viewport
     Foundation::Graphics Foundation::RHI Foundation::VG.Renderer
     Editor::Core Editor::App Foundation::Policy)
 target_sources(Editor.GameUI

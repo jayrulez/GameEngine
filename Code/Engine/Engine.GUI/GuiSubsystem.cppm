@@ -493,6 +493,18 @@ export namespace engine::gui
         /// The screen tier: what PrepareOverlay recorded for this view, else recorded now.
         void Render(rhi::RenderPassEncoder& encoder, const render::ScreenOverlayView& view) override;
 
+        // ---- an editor's preview ----
+        /// `markup` built for an editor's page in the GUI's own context (the game's fonts, theme and
+        /// sheets), in a root of its own that is never in a tier and takes no input; `css`, when
+        /// given, a sheet over it alone (a sheet's page). What the loader dropped goes to
+        /// `diagnostics`. Null when the markup does not build.
+        [[nodiscard]] RefPtr<lab::SceneRoot> CreatePreview(StringView markup, StringView css = {},
+                                                           Array<lab::GuiDiagnostic>* diagnostics = nullptr);
+        /// `root` laid out at `width` x `height` and drawn into `target` (in RenderTarget state, and
+        /// left so) in a pass of its own on `encoder`, over what is there.
+        void RenderPreview(lab::SceneRoot& root, rhi::CommandEncoder& encoder, rhi::TextureView* target, rhi::TextureFormat format,
+                           u32 width, u32 height, u32 frameIndex);
+
         /// The GPU side, by whoever owns graphics (the application's startup): the VG shaders from
         /// the data mount, the renderer. Idempotent; without it the overlays draw nothing.
         void EnsureRenderReady(rhi::Device& device, i32 frameCount);
@@ -517,6 +529,7 @@ export namespace engine::gui
         };
 
         void ApplySheets();
+        void ApplyUserAgentSheet();
         void PumpInput();
         void SyncCanvases(SceneTier& tier);
         void SyncBillboards(SceneTier& tier);

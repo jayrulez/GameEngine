@@ -63,12 +63,19 @@ export namespace pipeline
         void Serialize(ISerializer& ar) override { pipeline::Asset::Serialize(ar); }
     };
 
-    /// A GUI style sheet: a LINKED `.css` in Sources/.
+    /// A GUI style sheet: a LINKED `.css` in Sources/, and the markup its editor page previews it
+    /// against (editor-only: never cooked).
     class GuiStyleSheetAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(GuiStyleSheetAsset, pipeline::Asset)
     public:
-        void Serialize(ISerializer& ar) override { pipeline::Asset::Serialize(ar); }
+        String previewMarkup;
+
+        void Serialize(ISerializer& ar) override
+        {
+            pipeline::Asset::Serialize(ar);
+            SerializeAppended(ar, "previewMarkup", previewMarkup);
+        }
     };
 
     /// Registers every element type a GUI document may name, once (the tools' set).

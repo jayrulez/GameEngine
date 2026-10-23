@@ -1220,6 +1220,23 @@ Each a layer with its tests.
     names one, its load progress the GUI's data value `bootProgress` (0 to 1, which the document
     binds), else the UI's splash as before. The project settings' asset count follows (8).
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
+  Built (vg, 2026-10-23): `Editor.GUI` (with the lab): `GuiAssetEditorPage` for a `.gml` document
+  (its markup, XML-lexed, beside a live preview) and a `.css` sheet (its CSS beside preview markup
+  of its own, kept on `GuiStyleSheetAsset` as editor-only `previewMarkup`, "Preview Document..."
+  copying a document's in); the cook's diagnostics mark the lines, a document that does not build
+  keeps the last good preview; Save writes the linked source and asks for the validating cook. The
+  preview is the runtime's `GuiSubsystem::CreatePreview` (the GUI's own context, fonts, theme and
+  the game's sheets; never in a tier, no input; a sheet over that tree alone) drawn by
+  `RenderPreview` into the page's target. The inspector already names the assets ("GUI Document",
+  "GUI Style Sheet", E3) and the components ("GUI Canvas", ..., E7); the MCP guide says how the
+  generic asset tools make and import them. The pages are foundation.ui's, as the editor is, until
+  its own move; CSS is plain text until the toolkit has a CSS lexer. Running the pages in the
+  editor (over MCP, `editor_screenshot`) showed a document's text missing: the style applier gives
+  text a font only where a family is declared, and nothing declared one in the engine's GUI (the
+  sandbox's sheets and code set fonts themselves). The GUI's user agent sheet now declares the
+  font service's default family at the body size on every tree's top elements (`:root`), which a
+  game's sheets override; with it the pages show their text. Seen there too, for later: a lab
+  Button with no width fills its line (the showcase gives every button one).
 - **E11 The web.** The lab and the engine's GUI on wasm.
 
 #### After section E (the user, 2026-10-23)

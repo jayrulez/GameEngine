@@ -736,6 +736,7 @@ namespace engine::gui
         foundation::fonts::IFontService* fonts = Fonts();
         m_context->SetFontService(fonts);
         m_styles.SetFontService(fonts);
+        ApplyUserAgentSheet(); // the default family is the new service's
         if (m_render && m_render->Renderer)
             m_render->Renderer->SetFontService(fonts);
         if (m_screen.Root)
@@ -782,7 +783,7 @@ namespace engine::gui
         m_fonts = Move(fonts);
         m_context->SetFontService(m_fonts.Get());
         m_styles.SetFontService(m_fonts.Get());
-        m_styles.SetUserAgentSheet(lab::CSSParser::Parse(lab::DefaultThemeCSS(), StringView(u8"theme")));
+        ApplyUserAgentSheet();
         ApplySheets();
 
         // The shared screen tier: the screen stack, and the overlay layer above it, each filling the
@@ -936,6 +937,22 @@ namespace engine::gui
             if (!sheet.IsNil())
                 m_sheets.PushBack(sheet);
         ApplySheets();
+    }
+
+    // The user agent's sheet: the built-in theme, and the text of every tree in the default family
+    // at the body size. The style applier gives text a font only where a family is declared, and a
+    // root is no text node to hold one: each tree's top elements (:root) declare it, the rest
+    // inherit, and the game's sheets, above the user agent, choose otherwise.
+    void GuiSubsystem::ApplyUserAgentSheet()
+    {
+        String css(lab::DefaultThemeCSS(), m_allocator);
+        if (foundation::fonts::IFontService* fonts = Fonts(); fonts != nullptr && !fonts->DefaultFontFamily().IsEmpty())
+        {
+            css.Append(StringView(u8"\n:root { font-family: \""));
+            css.Append(fonts->DefaultFontFamily());
+            css.Append(StringView(u8"\"; font-size: var(--font-body); }\n"));
+        }
+        m_styles.SetUserAgentSheet(lab::CSSParser::Parse(css.AsView(), StringView(u8"theme")));
     }
 
     // The game's sheets as one author sheet importing each, in order: the style manager expands
@@ -1791,6 +1808,54 @@ namespace engine::gui
         const f32 scale = fit.Scale().y;
         const f32 dpi = scale > 0.0f ? 1.0f / scale : 1.0f;
         return Float2{(point.x - source.x) * dpi, (point.y - source.y) * dpi};
+    }
+
+    RefPtr<lab::SceneRoot> GuiSubsystem::CreatePreview(StringView markup, StringView css, Array<lab::GuiDiagnostic>* diagnostics)
+    {
+        if (markup.IsEmpty())
+            return {};
+        lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), Fonts());
+        loader.SetDataModel(m_context->GetDataRef());
+        loader.SetDiagnostics(diagnostics);
+        RefPtr<lab::Node> tree = loader.LoadFromString(markup);
+        if (!tree)
+            return {};
+        RefPtr<lab::SceneRoot> root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        {
+            lab::Node::StyleWriteScope defaults(*root);
+            root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // the document fills it
+        }
+        root->AddChild(tree.Get());
+        if (!css.IsEmpty())
+            (void)m_styles.SetSubtreeSheet(*tree, lab::CSSParser::Parse(css, StringView(u8"preview")));
+        return root;
+    }
+
+    void GuiSubsystem::RenderPreview(lab::SceneRoot& root, rhi::CommandEncoder& encoder, rhi::TextureView* target, rhi::TextureFormat format,
+                                     u32 width, u32 height, u32 frameIndex)
+    {
+        if (!IsRenderReady() || target == nullptr || width == 0 || height == 0)
+            return;
+        lab::GuiPassRenderer& renderer = *m_render->Renderer;
+        (void)renderer.RecordBakes(encoder, frameIndex); // before the pass samples them, once a frame
+        StyleAndLayOut(root, Float2{static_cast<f32>(width), static_cast<f32>(height)});
+        lab::GuiPassView view;
+        view.Width = width;
+        view.Height = height;
+        view.Format = format;
+        view.FrameIndex = frameIndex;
+        const lab::GuiPassRenderer::Prepared prepared = renderer.Prepare(root, view, &encoder);
+        rhi::RenderPassDesc pass{};
+        rhi::ColorAttachment color{};
+        color.view = target;
+        color.loadOp = rhi::LoadOp::Load;
+        color.storeOp = rhi::StoreOp::Store;
+        pass.colorAttachments.Add(color);
+        if (rhi::RenderPassEncoder* passEncoder = encoder.BeginRenderPass(pass))
+        {
+            renderer.Draw(*passEncoder, prepared);
+            passEncoder->End();
+        }
     }
 
     usize GuiSubsystem::TextureCount() const noexcept { return m_render ? m_render->Targets.Size() : 0; }

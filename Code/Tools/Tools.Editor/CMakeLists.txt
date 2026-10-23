@@ -49,3 +49,7 @@ if(UNIX AND NOT APPLE)
     set_property(TARGET Tools.Editor PROPERTY INSTALL_RPATH "$ORIGIN")
 endif()
 
+
+if(OPTION_EXPERIMENTAL_GUI)
+    target_link_libraries(Tools.Editor PRIVATE Editor::GUI) # the engine GUI's asset pages
+endif()

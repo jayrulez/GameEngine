@@ -1224,3 +1224,61 @@ TEST_CASE("engine.gui: a document on the overlay layer shows above every screen,
     CHECK_FALSE(engine.gui->PushOverlay(*empty)); // nothing to build
     engine.scenes.DestroyScene(level);
 }
+
+TEST_CASE("engine.gui: an editor's preview builds in the GUI's context, a sheet over it alone, and draws into the editor's target")
+{
+    rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
+    Engine engine;
+    engine.gui->EnsureRenderReady(device, 2);
+    Array<lab::GuiDiagnostic> found;
+    CHECK_FALSE(engine.gui->CreatePreview(u8"<NoSuchElement/>", {}, &found)); // nothing builds
+    CHECK_FALSE(found.IsEmpty());
+
+    RefPtr<lab::SceneRoot> preview =
+        engine.gui->CreatePreview(u8"<Panel><Panel class=\"title\" id=\"t\"/></Panel>", u8".title { width: 66px; height: 4px; }");
+    REQUIRE(preview);
+    CHECK(engine.gui->ScreenRoot()->ChildCount() == 2u); // not in a tier: the screen's stack and overlays alone
+
+    rhi::Texture* texture = nullptr;
+    rhi::TextureView* target = nullptr;
+    REQUIRE(device.CreateTexture(rhi::TextureDesc::RenderTarget(rhi::TextureFormat::RGBA8UnormSrgb, 320, 200), texture).IsOk());
+    REQUIRE(device.CreateTextureView(texture, rhi::TextureViewDesc{}, target).IsOk());
+    rhi::null::NullCommandEncoder encoder;
+    const u64 passes = encoder.counters->Snapshot().renderPasses;
+    engine.gui->RenderPreview(*preview, encoder, target, rhi::TextureFormat::RGBA8UnormSrgb, 320, 200, 0);
+    CHECK(encoder.counters->Snapshot().renderPasses == passes + 1); // its own pass
+    CHECK(preview->GetViewportSize().x == doctest::Approx(320.0f));
+    lab::Node* title = FindById(*preview, u8"t");
+    REQUIRE(title != nullptr);
+    CHECK(title->GetSize().x == doctest::Approx(66.0f)); // the sheet styled it
+
+    preview = nullptr;
+    device.DestroyTextureView(target);
+    device.DestroyTexture(texture);
+}
+
+TEST_CASE("engine.gui: a game's text draws in the default family with no sheet naming one, and a sheet still chooses its own")
+{
+    // The style applier gives text a font only where a family is declared: the GUI's own sheet
+    // declares the default family on every tree's top elements (the editor showed text missing
+    // from a document's preview before it did).
+    Engine engine;
+    REQUIRE(engine.gui->Fonts() != nullptr);
+    REQUIRE_FALSE(engine.gui->Fonts()->DefaultFontFamily().IsEmpty()); // the built-in font loaded
+    RefPtr<lab::SceneRoot> preview = engine.gui->CreatePreview(
+        u8"<Panel flex-direction=\"column\" align-items=\"center\" padding=\"24\">"
+        u8"<Label id=\"title\" text=\"New document\"/><Button id=\"ok\" text=\"OK\"/></Panel>");
+    REQUIRE(preview);
+    preview->SetViewportSize(Float2{800.0f, 500.0f});
+    engine.gui->Styles().SetMediaContext(preview->GetMediaContext());
+    engine.gui->Styles().ApplyTree(*preview);
+    preview->UpdateLayout();
+    lab::Node* title = FindById(*preview, u8"title");
+    lab::Node* ok = FindById(*preview, u8"ok");
+    REQUIRE(title != nullptr);
+    REQUIRE(ok != nullptr); // (a button with no width fills its line: the lab's Button, not this)
+    CHECK(title->GetSize().x > 0.0f); // its text measured
+    CHECK(title->GetSize().y > 0.0f);
+    CHECK(ok->GetSize().y > 0.0f);
+    CHECK(Cast<lab::UINode>(title)->GetTextStyle().FontFamily.AsView() == engine.gui->Fonts()->DefaultFontFamily());
+}

@@ -194,6 +194,13 @@ and bindings, a material, a physics material, a sound cue) is edited through its
 `asset_data_read` gives the XML, and `asset_data_write` takes the edited whole back, loading it
 exactly as the engine would and refusing it, unchanged, when it does not load. Enum fields are
 numbers there; `type_info` on the field's type names the cases.
+The engine GUI's assets (a build with the experimental GUI) are linked text, as scripts are:
+`asset_create` with `GUI Document` (`.gml` markup) or `GUI Style Sheet` (`.css`), or
+`asset_import` of such a file, each validated by its cook (what the loader or parser dropped is a
+warning, markup that does not build an error); they reference images, vector images, fonts, sheets
+and documents by asset guid (`{guid}`), each a dependency of the cook. A scene shows them with
+`gui.Canvas`, `gui.Billboard` and `gui.WorldPanel`; the editor's page for each is its text beside a
+live preview.
 
 **Scenes**: read `docs://generated/SceneSchema.json` once (or `component_schema` for one
 component), copy from `docs://generated/SceneExample.scene.xml`, read the target with

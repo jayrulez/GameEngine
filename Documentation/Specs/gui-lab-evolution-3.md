@@ -52,7 +52,7 @@ first three: hosting, the viewport, then docking.
 | GUI.Docking | `experimental.gui.docking` | Docking: splits, tab groups, drop zones, floating panels in the window and as OS windows, layouts saved and restored; its default sheet | UI.Toolkit's docking and UI.Application | Designed (D0 to D6) |
 | GUI.Toolkit | `experimental.gui.toolkit` | Editor widgets: tool and status bars, the property grid, colour, curves, gradients, the timeline, node graphs, the breadcrumb bar | UI.Toolkit less docking and the code editor | Built (T0 to T7) |
 | GUI.Code | `experimental.gui.code` | The code editor | UI.Toolkit's CodeEditView | Built (C0 to C8) |
-| GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Empty |
+| GUI.Gamekit | `experimental.gui.gamekit` | A game's screens: a screen stack, input modes, transitions, prompts (toasts are the core's, T7) | UI.Gamekit | Designed (K0 to K7; user, 2026-10-23) |
 | GUI.Resources | `experimental.gui.resources` | Cooked GUI documents and themes, framework free | UI.Resource | Empty |
 | GUI.Pipeline | `experimental.gui.pipeline` | Cooking and validating them (tools only) | UI.Pipeline | Empty |
 | (the engine's) | | A scene's GUI, the script facade | Engine.UI, Engine.UI.Script | Not this round (ruling 1) |
@@ -832,3 +832,148 @@ Each a layer with its tests.
 - **C7 Folding, soft wrap, whitespace.**
 - **C8 The sandbox's Code page**: its own AngelScript with the engine's compiler's diagnostics as
   it is typed, breakpoint markers, and a shader.
+
+### K The gamekit (approved by the user, 2026-10-23)
+
+`GUI.Gamekit` (`experimental.gui.gamekit`): a game's screens. The survey (2026-10-23) read
+foundation.ui's `UI.Gamekit` (about 800 lines) and engine.ui's script facade over it, Godot,
+RmlUi, ezEngine, traktor, doriax, eepp, LunarSong, LumixEngine and ZeroEngine (the last two have
+nothing for a game's screens), and what the lab's core already has.
+
+foundation.ui's keeps a `ScreenStack` of `UIScreen`s (push, pop, replace, clear; Overlay, Modal or
+Opaque; a transition kind in markup, played in code), a `ButtonPrompt`, `MenuList`, `Bar`,
+`Ticker` and toasts. Its pitfalls: an exiting screen stays clickable until its animation ends, so a
+second Back pops the screen under it; a pop during a push transition fades a view still fading in;
+an Opaque screen sliding out reveals a lower one only when the slide ends; Replace and Clear drop
+their saved focus without restoring it (the focus stack's depth leaks); Back is a script call, not
+bound to Escape or the pad, and a screen cannot refuse it; markup sets a transition's kind but not
+its time or easing; a prompt shows an action's first binding whatever the device.
+
+Findings that decide the design:
+
+- **RmlUi**: each element remembers its focused child and the context keeps a history of
+  documents, so closing one refocuses the leaf of the one under it, with no saved tokens to leak;
+  Back is each document's own (`onescape`); transitions are CSS, with `transitionend` and
+  `animationend`.
+- **eepp**: a closing window stays alive through its fade, guarded against closing twice;
+  **traktor**: the old stage fades out before the next enters, and a stage says whether it keeps
+  updating meanwhile.
+- **ezEngine**: the world clock pauses while the menu is open and goes back to what it was; the
+  Escape that opened the menu cannot close it in the same frame.
+- **LunarSong, doriax**: a full-screen document hides overlays by an override that is removed, not
+  undone; screens covered get a release so nothing stays pressed; a transition's time step is
+  capped so a hitch does not skip it.
+- **Input modes and prompts**: no reference tracks the device in use or draws prompts by device.
+  Godot shows the focus ring on any navigation action and hides it on a pointer press, and counts a
+  stick only past its dead zone on a fresh press; every reference that names a binding names the
+  first one, whatever the device (foundation.ui's `ButtonPrompt` too); ezEngine broadcasts a change
+  when a binding changes.
+- **The lab's core already has** focus scopes with remembered focus and `nav-default`, pad
+  navigation (the stick with hysteresis), `:focus-visible`, key contexts and `pad-*` keys, commands
+  that stop at a modal, modal popups that save and restore focus, tweens, CSS transitions and
+  keyframes, `prefers-reduced-motion`, toasts and data binding. It lacks a screen stack, a way for a
+  node to play its exit and then go (no `animationend` or `transitionend`), one Back across layers
+  (Escape is the dispatcher's special case for popups, run before the keymap), an input kind that
+  tells the pad from the keyboard (a C++-only bit, no change event), a hidden cursor, and a tween
+  of a data model value. The sandbox's game menu builds every one of these by hand in its script
+  and its host.
+
+The sample games use foundation.ui's gamekit through `<screen>` roots alone (46 documents in all
+six games: 30 modal, 16 overlay; 29 fade and 2 scale transitions; `default-focus`) and the facade
+(`ui::push` 54 times, `ui::pop` 19, `ui::clear` 23, `ui::find*` and `Screen.find*` about 400).
+None uses `MenuList`, `Bar`, `Ticker`, `ButtonPrompt` or the gamekit's toasts.
+
+#### Rulings (user, 2026-10-23)
+
+1. **The input kind lives in `foundation.input`**, so a game without the GUI (a prompt in the 3D
+   world) has it too; the GUI reads it through its host.
+2. **Glyphs come from the sheet**: a prompt shows its binding as an attribute and a game's sheet
+   draws the glyph; no glyph table in code.
+3. **The stack is an element**, any number per root.
+4. **Pausing is reported, not done**: the stack says the game is paused; the game stops its clock.
+5. **`Bar` and `Ticker` stay out**: the core's data tween and a sandbox pattern instead.
+6. **The gamekit may depend on `foundation.input`** (the InputMap is Foundation's, not the
+   engine's).
+
+#### The design
+
+- **What goes in the core**, because it is not a game's alone:
+  - *Leaving*: `Node::Leave()` puts a node in a leaving state (`:leaving`, the sheet's exit
+    transition or animation runs), takes it out of hit testing and focus, and removes it when its
+    transitions and animations end (at the next update when there are none; reduced motion is the sheet's to answer, as a theme's `prefers-reduced-motion` rule does, so a toast may still fade; an infinite or paused animation is not waited for);
+    `transitionend` and `animationend` events.
+  - *Back*: a `back` command bound to Escape and the pad's east button in the keymap; an open popup
+    answers it by closing, and the dispatcher's Escape special case goes.
+  - *The input kind* (ruling 1): `foundation.input` keeps it, pointer, keyboard or pad, from the
+    events it sees (the pad only on a press or a stick past its dead zone), with a change
+    notification, for any consumer; the GUI core holds the kind its host gives it (GUI.Shell's
+    bridge passes the tracker's on), with a change event, script access (`gui.inputKind`) and a CSS
+    hook (a media feature, `@media (input: pad)`), and without a host keeps today's pointer or
+    keyboard switch; the focus ring follows it as Godot's does; a pad hides the cursor (`cursor:
+    none` added).
+  - *A data value tweened*: a tween route for a data model value, so a score counts up with no
+    widget to drive it (the reason `Ticker` existed).
+- **The screen stack** (the gamekit): a `screens` element, placed where a game's screens go (any
+  number per root), holding `screen` elements. Push takes a document (loaded fresh each time) or a
+  node; pop, replace and clear; a screen says whether it covers what is under it (hides it),
+  blocks its input, and pauses the game (the stack reports `IsPaused`; the game decides what pausing
+  means, as a library must). A screen remembers its focus (the core's remembered focus), so a pop
+  refocuses the screen now on top, with no tokens; on push, `nav-default` or the first focusable.
+  A screen under a covering one gets a pointer release, so nothing stays pressed.
+- **Transitions** are the sheet's: a screen pushed is `:entering` until its enter transition ends,
+  one popped `:leaving` (the core's Leave); the stack takes a popped screen off at once (it no
+  longer counts for Back, focus or input) and keeps it drawing until it has left; a pop during an
+  enter cancels the enter and leaves from where it is; screens under a covering one show again
+  when it starts leaving, not when it has gone.
+- **Back on the stack**: the top screen gets `back` first (a script's handler may take it, or the
+  screen may say `back="none"`); else the stack pops, never below its last screen; the Back that
+  pushed a screen cannot pop it in the same frame.
+- **Lifecycle** as events a script listens to with `on`: `screenenter`, `screenshown` (enter
+  ended), `screenleave`, `screenhidden` (covered) and `screenrevealed`.
+- **Input modes**: the stack answers whether the game should have the input (no blocking screen
+  on top, and the pointer not over a widget that takes it: the core's `IsPointerOver`).
+- **Button prompts**: a `prompt` element names an action (and its set); it reads the game's
+  InputMap (`foundation.input`, which the gamekit may depend on; ruling of 2026-10-23) after the
+  player's rebinding, honouring set priority and enabled sets, takes the binding for the input
+  kind in use (else any, else nothing), labels it with `foundation.input`'s `BindingNames`, and
+  updates when the input kind or the bindings change. It shows its binding to the sheet as an
+  attribute (`binding="pad-south"`, `kind="pad"`), so a game's sheet draws its own glyphs
+  (`prompt[binding="pad-south"] { background-image: url(...) }`) and the text label is the
+  fallback: a satellite's theme is a sheet (ruling 4), and no glyph table is code.
+- **Not in the gamekit**: toasts (the core's, T7); `MenuList` (markup, navigation and commands
+  make one); `Bar` (its drain is one tween; a lagging damage trail is two bars and a tween, shown
+  in the sandbox); `Ticker` (the core's data tween); presets and a game's policy (the library is
+  not an application); more than one player (one input kind, one stack's input) until a game
+  needs it; the engine's hosting (ruling 1).
+- **The script facade** keeps the call shapes the sample games use where they fit (`push`, `pop`,
+  `replace`, `clear`, `back`, `top`, a screen's `find*`), so moving them is a change of documents
+  and themes more than of scripts.
+
+#### Moving the sample games (when the engine moves onto the lab)
+
+Each game's `.sml` screens and `.sss` theme become the lab's markup and CSS by a migration script,
+then are looked at against the old pictures (the images are the user's to approve); `<screen
+mode="modal">` becomes a screen that blocks, `mode="overlay"` one that does not, `transition` the
+sheet's enter and leave rules; the scripts move to the facade above; each game is played through
+its screens in the editor and in its exported player.
+
+#### Phases
+
+Each a layer with its tests.
+
+- **K0 Leaving.** `Node::Leave`, `:leaving`, `transitionend` and `animationend`.
+- **K1 Back.** The `back` command in the keymap; popups answer it; the Escape special case goes.
+- **K2 The input kind.** K2a in `foundation.input` (on master, as Foundation work): the tracker,
+  its rules and its change notification. K2b in the lab: the core's kind given by the host and the
+  bridge passing it on, the change event, `gui.inputKind`, the media feature, the focus ring's
+  rules, `cursor: none` and the hidden cursor on a pad.
+- **K3 A data value tweened.**
+- **K4 The screen stack.** Push, pop, replace, clear; covering, blocking, pausing; focus per
+  screen; the release under a cover; Back; the lifecycle events; the facade.
+- **K5 Transitions.** Entering and leaving through the sheet; a pop during an enter; covered
+  screens shown as the cover leaves; the capped time step.
+- **K6 Button prompts.** The InputMap read by input kind after rebinding, the label, the sheet's
+  glyphs, live updates.
+- **K7 The sandbox's game menu on the gamekit.** The showcase's hand-built stack, Back, fades,
+  pause and host plumbing replaced by the gamekit; a HUD under a pause screen; prompts that follow
+  the device.

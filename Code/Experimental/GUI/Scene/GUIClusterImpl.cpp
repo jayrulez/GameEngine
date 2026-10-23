@@ -108,11 +108,9 @@ namespace experimental::gui
         if (m_leaving || m_parent == nullptr)
             return;
         EventDispatcher* dispatcher = GetEventDispatcher();
-        // A sheet plays the exit: in no GUI, in one no style pass runs over, or not styled itself
-        // (a sheet styles widgets), it has none.
-        if (dispatcher == nullptr || !GetRootNode()->HasStylePass() || Cast<UIWidget>(this) == nullptr)
+        if (dispatcher == nullptr)
         {
-            RemoveFromParent();
+            RemoveFromParent(); // in no GUI: nothing to wait for, nothing walking it
             return;
         }
         m_leaving = true;
@@ -126,6 +124,11 @@ namespace experimental::gui
         dispatcher->NotifySubtreeRemoved(*this);
         MarkStyleStateDirty(StateLeaving);
         Invalidate();
+        // A sheet plays the exit: in a GUI no style pass runs over, or not styled itself (a sheet
+        // styles widgets), it has none, and goes at the GUI's next drain (never inside the event
+        // that sent it away).
+        if (!GetRootNode()->HasStylePass() || Cast<UIWidget>(this) == nullptr)
+            FinishLeaving();
     }
 
     void Node::FinishLeaving()

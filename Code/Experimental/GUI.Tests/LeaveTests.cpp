@@ -96,12 +96,15 @@ TEST_CASE("leave: with no exit in the sheet, it goes at the next update")
     CHECK_FALSE(bed.Attached());
 }
 
-TEST_CASE("leave: in a GUI no style pass runs over, or detached, it goes at once")
+TEST_CASE("leave: in a GUI no style pass runs over it goes at the next update, never inside the event that sent it; detached, at once")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     auto widget = core::MakeRef<UIWidget>(core::DefaultAllocator());
     root->AddChild(widget.Get());
     widget->Leave();
+    CHECK(widget->GetParent() == root.Get()); // a click handler that closed it still finds it there
+    CHECK(widget->IsLeaving());
+    root->GetContext().Update(core::Duration{});
     CHECK(widget->GetParent() == nullptr);
     CHECK_FALSE(widget->IsLeaving());
 

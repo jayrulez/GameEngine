@@ -260,7 +260,9 @@ TEST_CASE("screens: lifecycle events, replace and clear")
     CHECK(bed.stack->Count() == 1u);
     CHECK(bed.stack->Top() == b.Get());
     CHECK(a->GetStack() == nullptr);
-    CHECK(a->GetParent() == nullptr); // no style pass here: it left at once
+    CHECK(a->IsLeaving()); // no style pass here: it goes at the next update
+    bed.Frame();
+    CHECK(a->GetParent() == nullptr);
     (void)bed.stack->Push(*c);
     bed.stack->Clear();
     CHECK(bed.stack->Count() == 0u);

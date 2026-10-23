@@ -1803,7 +1803,8 @@ export namespace experimental::gui
         // waited for). Leaving ends when it leaves its parent, by this or any other removal, so a
         // node taken back is whole again. Defined in Scene/GUIClusterImpl.cpp.
 
-        /// Leaves its parent after its exit plays; at once in no GUI, or in one no style pass runs over.
+        /// Leaves its parent after its exit plays: at the GUI's next update when nothing plays one (no
+        /// style pass, or a node no sheet styles), at once in no GUI.
         void Leave();
         /// Whether it is leaving (`:leaving`).
         [[nodiscard]] bool IsLeaving() const noexcept { return m_leaving; }

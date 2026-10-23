@@ -54,6 +54,10 @@ import foundation.ui.resource;
 import ui.pipeline;
 import foundation.vg.resource;
 import vg.pipeline;
+#if OPTION_HAS_EXPERIMENTAL_GUI
+import experimental.gui.resources; // the lab GUI's documents and sheets (gui-lab-evolution-3.md E3)
+import experimental.gui.pipeline;
+#endif
 import foundation.audio;
 import foundation.audio.resource;
 import audio.pipeline;
@@ -137,6 +141,10 @@ namespace pipeline
         foundation::ui::RegisterUIResource();
         RegisterVGAssets();
         foundation::vg::RegisterVGResource();
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        RegisterGuiAssets();
+        experimental::gui::RegisterGuiResource();
+#endif
         RegisterAudioAssets();
         foundation::audio::RegisterAudioResource();
         RegisterScriptAssets();
@@ -191,6 +199,10 @@ namespace pipeline
         AddBuilder<UIDocumentAssetBuilder>(registry);
         AddBuilder<UIThemeAssetBuilder>(registry);
         AddBuilder<VectorImageAssetBuilder>(registry);
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        AddBuilder<GuiDocumentAssetBuilder>(registry);
+        AddBuilder<GuiStyleSheetAssetBuilder>(registry);
+#endif
         AddBuilder<AudioClipAssetBuilder>(registry);
         AddBuilder<AudioBusLayoutAssetBuilder>(registry);
         AddBuilder<SoundCueAssetBuilder>(registry);
@@ -203,6 +215,9 @@ namespace pipeline
         AddImporter<ModelFileImporter>(registry);
         AddImporter<UIFileImporter>(registry);
         AddImporter<VectorImageFileImporter>(registry);
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        AddImporter<GuiFileImporter>(registry);
+#endif
         AddImporter<AudioFileImporter>(registry);
         AddImporter<ScriptFileImporter>(registry);
         AddImporter<ShaderFileImporter>(registry);
@@ -235,6 +250,9 @@ namespace pipeline
         RegisterRenderCreators(registry);
         RegisterAudioCreators(registry);
         RegisterUICreators(registry);
+#if OPTION_HAS_EXPERIMENTAL_GUI
+        RegisterGuiCreators(registry);
+#endif
         RegisterHeightfieldCreators(registry);
         RegisterTerrainCreators(registry);
         RegisterVegetationCreators(registry);

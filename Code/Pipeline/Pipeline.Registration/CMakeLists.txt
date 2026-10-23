@@ -24,6 +24,11 @@ target_link_libraries(Pipeline.Registration PUBLIC
     Pipeline::Scene
     Foundation::Policy)
 
+# The lab GUI's documents and sheets, when the lab is built (gui-lab-evolution-3.md E3).
+if(OPTION_EXPERIMENTAL_GUI)
+    target_link_libraries(Pipeline.Registration PUBLIC Experimental::GUI.Pipeline Experimental::GUI.Resources)
+endif()
+
 target_sources(Pipeline.Registration
     PRIVATE
         RegistrationImpl.cpp

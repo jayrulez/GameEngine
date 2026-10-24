@@ -1686,3 +1686,35 @@ TEST_CASE("vg.context: a box takes a border colour per side, analytic or tessell
         CHECK(seen[3]);
     }
 }
+
+TEST_CASE("vg.context: premultiplied pictures from one texture, one after another, are one command, each its tint")
+{
+    VGContext ctx;
+    const u8 px[16] = {};
+    image::OwnedImageData atlas(2, 2, image::PixelFormat::RGBA8, Span<const u8>(px, 16));
+    image::OwnedImageData other(2, 2, image::PixelFormat::RGBA8, Span<const u8>(px, 16));
+    const Color red{1.0f, 0.0f, 0.0f, 1.0f};
+    const Color green{0.0f, 1.0f, 0.0f, 0.5f};
+
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{0, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{20, 0, 16, 16}, Rectangle{1, 0, 1, 1}, green);
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.CommandCount() == 1u); // two icons of one atlas: one draw
+    CHECK(batch.GetCommand(0).indexCount == 12);
+    CHECK(batch.vertices[0].color.r == doctest::Approx(1.0f));
+    CHECK(batch.vertices[0].color.g == doctest::Approx(0.0f));
+    CHECK(batch.vertices[4].color.g == doctest::Approx(1.0f));
+    CHECK(batch.vertices[4].color.a == doctest::Approx(0.5f));
+
+    // Another texture, or anything drawn between, starts a command of its own.
+    ctx.DrawImagePremultiplied(&other, Rectangle{40, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    CHECK(batch.CommandCount() == 2u);
+    ctx.FillRect(Rectangle{0, 0, 5, 5}, Color::Blue);
+    ctx.DrawImagePremultiplied(&other, Rectangle{60, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    CHECK(batch.CommandCount() == 4u);
+    // A different clip does too.
+    ctx.PushClipRect(Rectangle{0, 0, 30, 30});
+    ctx.DrawImagePremultiplied(&other, Rectangle{80, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    ctx.PopClip();
+    CHECK(batch.CommandCount() == 5u);
+}

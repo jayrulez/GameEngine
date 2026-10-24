@@ -183,6 +183,10 @@ namespace
             height = h;
             return ready ? &key : nullptr;
         }
+        core::Optional<PictureRegion> AtlasRegion(const foundation::vg::svg::SVGDocument&, core::u32, core::u32, bool) override
+        {
+            return {}; // a skin bakes alone
+        }
         core::u64 Generation() const override { return generation; }
     };
 }
@@ -217,16 +221,20 @@ TEST_CASE("border-image: an SVG skin draws from its bake once there is one, size
     {
         foundation::vg::VGContext ctx;
         draw(ctx);
-        core::usize pieces = 0;
+        core::usize draws = 0;
+        core::i32 indices = 0;
         for (const foundation::vg::VGCommand& command : ctx.GetBatch().commands)
         {
             if (command.drawMode != foundation::vg::VGDrawMode::Layer)
                 continue;
-            ++pieces;
+            ++draws;
+            indices += command.indexCount;
             CHECK(command.compositeLayer == -1);
             CHECK(ctx.GetBatch().textures[static_cast<core::usize>(command.textureIndex)] == &baker.key);
         }
-        CHECK(pieces == 9u); // a premultiplied quad a piece, the middle filled
+        // A premultiplied quad a piece, the middle filled: nine quads of one texture, one draw.
+        CHECK(draws == 1u);
+        CHECK(indices == 9 * 6);
         CHECK(ctx.GetBatch().vertices.Size() == 36u);
     }
 }

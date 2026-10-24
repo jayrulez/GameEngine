@@ -766,7 +766,7 @@ export namespace foundation::ui
     }
 
     /// A 2D matrix as translation, rotation, skew and scale: M = T * R(angle) * K(skew) * S, K the
-    /// x-shear (x' = x + skew y), the scale's y taking a reflection's sign (the GUI lab's
+    /// x-shear (x' = x + skew y), the scale's y taking a reflection's sign (the GUI's
     /// decomposition, after CSS's).
     struct DecomposedTransform
     {

@@ -8,7 +8,7 @@
 // shell::InputEvent (already gated/transformed by InputSurface/InputRouter, see [[viewport-input]]) into
 // InputManager calls, and drives the window's text input (IME) from focus via UIContext::WantsTextInput()
 // - the mechanism Sedulous shell never finished. Reimplemented for us (NOT ported from Sedulous.
-// UI.Shell), mirroring the experimental.gui GuiInputBridge, per the port plan: InputSurface consumption lives
+// UI.Shell), mirroring the foundation.gui GuiInputBridge, per the port plan: InputSurface consumption lives
 // here, never in the core.
 
 module;

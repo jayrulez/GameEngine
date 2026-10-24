@@ -115,7 +115,7 @@ Gaps the phases left, by area (each phase's own notes say more):
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 
 The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API
-over the core (`experimental.gui.inspector`: the tree, a node described with its states, box,
+over the core (`foundation.gui.inspector`: the tree, a node described with its states, box,
 reflected properties, commands and listeners, a selector query, a property set as markup sets
 it, and `StyleManager::ExplainStyle` for where each style came from). Serve the same answers as
 MCP tools, as eepp's server and LunarSong's tools do, so an agent can read and drive a running

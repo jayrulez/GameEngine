@@ -32,16 +32,16 @@ import foundation.input;
 import engine.input;
 import engine.domain;
 import foundation.script.facades; // the behaviour prelude's names
-import experimental.gui;
-import experimental.gui.gamekit;
-import experimental.gui.resources;
+import foundation.gui;
+import foundation.gui.gamekit;
+import foundation.gui.resources;
 import engine.gui;
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
 namespace runtime = foundation::runtime;
 namespace rhi = foundation::rhi;
-namespace lab = experimental::gui;
+using namespace foundation::gui;
 using engine::gui::GuiResourceProvider;
 using engine::gui::GuiSubsystem;
 
@@ -54,12 +54,12 @@ namespace
         return fs;
     }
 
-    lab::Node* FindById(lab::Node& node, StringView id)
+    Node* FindById(Node& node, StringView id)
     {
-        if (const lab::UIWidget* widget = Cast<lab::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+        if (const UIWidget* widget = Cast<UIWidget>(&node); widget != nullptr && widget->GetId() == id)
             return &node;
         for (usize i = 0; i < node.ChildCount(); ++i)
-            if (lab::Node* found = FindById(*node.GetChildAt(i), id))
+            if (Node* found = FindById(*node.GetChildAt(i), id))
                 return found;
         return nullptr;
     }
@@ -80,15 +80,15 @@ namespace
         String folder;
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<foundation::content::ContentDatabase> db;
-        lab::GuiDocumentFactory documents{DefaultAllocator()};
-        lab::GuiStyleSheetFactory sheets{DefaultAllocator()};
+        GuiDocumentFactory documents{DefaultAllocator()};
+        GuiStyleSheetFactory sheets{DefaultAllocator()};
         foundation::vg::VectorImageFactory vectors{DefaultAllocator()};
         UniquePtr<foundation::texture::TextureFactory> textures;
         UniquePtr<foundation::resource::ResourceManager> resources;
 
         explicit Project(StringView name) : folder(name)
         {
-            lab::RegisterGuiResource();
+            RegisterGuiResource();
             foundation::vg::RegisterVGResource();
             foundation::texture::RegisterTextureResource();
             Clean();
@@ -118,22 +118,22 @@ namespace
         }
         Guid Document(StringView name, StringView markup)
         {
-            auto* instance = db->RootGroup()->CreateInstance(name, lab::GuiDocumentSource::StaticType());
-            lab::GuiDocumentSource source;
+            auto* instance = db->RootGroup()->CreateInstance(name, GuiDocumentSource::StaticType());
+            GuiDocumentSource source;
             source.markup = String(markup);
             REQUIRE(instance->WriteObject(source).IsOk());
             return instance->Id();
         }
         Guid Sheet(StringView name, StringView css)
         {
-            auto* instance = db->RootGroup()->CreateInstance(name, lab::GuiStyleSheetSource::StaticType());
+            auto* instance = db->RootGroup()->CreateInstance(name, GuiStyleSheetSource::StaticType());
             RewriteSheet(instance->Id(), css);
             return instance->Id();
         }
         // The sheet cooked again with `css`, and reloaded as the editor's re-cook does.
         void RewriteSheet(const Guid& id, StringView css)
         {
-            lab::GuiStyleSheetSource source;
+            GuiStyleSheetSource source;
             source.css = String(css);
             REQUIRE(db->GetInstance(id)->WriteObject(source).IsOk());
             (void)resources->Reload(id);
@@ -274,9 +274,9 @@ namespace
         [[nodiscard]] bool PointerClaimed() const { return input->Runtime().GetConsumptionMask().pointer; }
     };
 
-    RefPtr<lab::Button> MakeButton(StringView id, Float2 at)
+    RefPtr<Button> MakeButton(StringView id, Float2 at)
     {
-        RefPtr<lab::Button> button = MakeRef<lab::Button>(DefaultAllocator());
+        RefPtr<Button> button = MakeRef<Button>(DefaultAllocator());
         button->SetId(id);
         button->SetPosition(at);
         button->SetSize(Float2{100.0f, 40.0f});
@@ -347,7 +347,7 @@ TEST_CASE("engine.gui: a sheet cooked again is seen at the next poll, once")
 TEST_CASE("engine.gui: the screen tier holds the screen stack under the overlay layer, and each scene a root of its own")
 {
     Engine engine;
-    lab::SceneRoot* screen = engine.gui->ScreenRoot();
+    SceneRoot* screen = engine.gui->ScreenRoot();
     REQUIRE(screen != nullptr);
     REQUIRE(screen->ChildCount() == 2u);
     CHECK(screen->GetChildAt(0) == engine.gui->Screens());
@@ -356,7 +356,7 @@ TEST_CASE("engine.gui: the screen tier holds the screen stack under the overlay 
     CHECK(engine.gui->Fonts() != nullptr);
 
     scene::Scene* level = engine.scenes.CreateScene(u8"level");
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
     REQUIRE(root != nullptr);
     CHECK(root != screen);
     engine.scenes.DestroyScene(level);
@@ -376,11 +376,11 @@ TEST_CASE("engine.gui: the game's sheets apply in order over the theme, restyle 
     engine.gui->SetStyleSheets(Span<const Guid>(sheets, 2));
     CHECK(engine.gui->StyleSheets().Size() == 2u);
 
-    lab::Screen* pushed = engine.gui->Screens()->PushDocument(Braced(menu).AsView());
+    Screen* pushed = engine.gui->Screens()->PushDocument(Braced(menu).AsView());
     REQUIRE(pushed != nullptr);
     engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
     engine.Frame();
-    lab::Node* box = FindById(*engine.gui->ScreenRoot(), u8"box");
+    Node* box = FindById(*engine.gui->ScreenRoot(), u8"box");
     REQUIRE(box != nullptr);
     CHECK(box->GetSize().x == doctest::Approx(200.0f)); // the game's over the shared one
     CHECK(box->GetSize().y == doctest::Approx(10.0f));  // what it leaves is the shared one's
@@ -405,15 +405,15 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
     CHECK(engine.gui->Context().GetPictureBaker() != nullptr);
 
     // A faded group on a screen: its layer is drawn before the screen's pass.
-    RefPtr<lab::Panel> group = MakeRef<lab::Panel>(DefaultAllocator());
+    RefPtr<Panel> group = MakeRef<Panel>(DefaultAllocator());
     group->SetSize(Float2{60.0f, 40.0f});
-    lab::NodeBox look;
+    NodeBox look;
     look.BackgroundColor = Color{1.0f, 0.0f, 0.0f, 1.0f};
     group->SetBox(Move(look));
     group->SetAlpha(0.5f);
-    RefPtr<lab::Panel> inner = MakeRef<lab::Panel>(DefaultAllocator());
+    RefPtr<Panel> inner = MakeRef<Panel>(DefaultAllocator());
     inner->SetSize(Float2{20.0f, 20.0f});
-    lab::NodeBox innerLook;
+    NodeBox innerLook;
     innerLook.BackgroundColor = Color{0.0f, 0.0f, 1.0f, 1.0f};
     inner->SetBox(Move(innerLook));
     group->AddChild(inner.Get());
@@ -442,18 +442,18 @@ TEST_CASE("engine.gui: both tiers draw into the engine's overlay passes, the scr
 
     // The scene tier: the view's scene root, laid out at its viewport.
     scene::Scene* level = engine.scenes.CreateScene(u8"level");
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
     REQUIRE(root != nullptr);
-    RefPtr<lab::Panel> badge = MakeRef<lab::Panel>(DefaultAllocator());
+    RefPtr<Panel> badge = MakeRef<Panel>(DefaultAllocator());
     badge->SetSize(Float2{30.0f, 30.0f});
-    lab::NodeBox badgeLook;
+    NodeBox badgeLook;
     badgeLook.BackgroundColor = Color{0.0f, 1.0f, 0.0f, 1.0f};
     badge->SetBox(Move(badgeLook));
     {
         // A canvas holds it: a scene's GUI draws while it shows something.
         auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
         const scene::EntityHandle hudEntity = level->CreateEntity(u8"hud");
-        RefPtr<lab::GuiDocument> document = MakeRef<lab::GuiDocument>(DefaultAllocator());
+        RefPtr<GuiDocument> document = MakeRef<GuiDocument>(DefaultAllocator());
         document->markup = String(u8"<Panel/>");
         canvases->Add(hudEntity).document = document;
         engine.Frame();
@@ -487,7 +487,7 @@ TEST_CASE("engine.gui: the domain brings the documents' and sheets' resource mod
     CHECK(domain.id == StringView(u8"gui"));
     bool documents = false;
     for (const foundation::resource::ResourceModule* module : domain.resources)
-        documents = documents || module == &lab::kGuiResourceModule;
+        documents = documents || module == &kGuiResourceModule;
     CHECK(documents);
     CHECK(domain.HasScene()); // its components
 }
@@ -496,13 +496,13 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
 {
     Engine engine;
     scene::Scene* level = engine.scenes.CreateScene(u8"level");
-    lab::SceneRoot* hud = engine.gui->SceneRootFor(*level);
+    SceneRoot* hud = engine.gui->SceneRootFor(*level);
     REQUIRE(hud != nullptr);
     hud->SetViewportSize(Float2{800.0f, 600.0f});
-    RefPtr<lab::Button> button = MakeButton(u8"fire", Float2{20.0f, 20.0f});
+    RefPtr<Button> button = MakeButton(u8"fire", Float2{20.0f, 20.0f});
     hud->AddChild(button.Get());
     i32 clicks = 0;
-    (void)button->AddEventListener(lab::EventType::MouseClick, [&](const lab::Event&) { ++clicks; });
+    (void)button->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
     engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
     engine.Frame();
 
@@ -543,8 +543,8 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
     engine.devices.mouse.x = 50.0f;
     engine.devices.mouse.down = true;
     engine.Frame();
-    RefPtr<lab::Button> menu = MakeButton(u8"menu", Float2{400.0f, 20.0f});
-    RefPtr<lab::UIWidget> screen = MakeRef<lab::UIWidget>(DefaultAllocator());
+    RefPtr<Button> menu = MakeButton(u8"menu", Float2{400.0f, 20.0f});
+    RefPtr<UIWidget> screen = MakeRef<UIWidget>(DefaultAllocator());
     screen->AddChild(menu.Get());
     REQUIRE(engine.gui->Screens()->Push(*screen) != nullptr);
     engine.devices.mouse.x = 450.0f; // over the screen's button now, still held
@@ -563,9 +563,9 @@ TEST_CASE("engine.gui: with no GUI under the pointer the keys go to the screens 
 {
     Engine engine;
     engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
-    RefPtr<lab::UIWidget> title = MakeRef<lab::UIWidget>(DefaultAllocator());
+    RefPtr<UIWidget> title = MakeRef<UIWidget>(DefaultAllocator());
     title->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
-    RefPtr<lab::UIWidget> settings = MakeRef<lab::UIWidget>(DefaultAllocator());
+    RefPtr<UIWidget> settings = MakeRef<UIWidget>(DefaultAllocator());
     settings->AddChild(MakeButton(u8"back", Float2{20.0f, 20.0f}).Get());
     REQUIRE(engine.gui->Screens()->Push(*title) != nullptr);
     REQUIRE(engine.gui->Screens()->Push(*settings) != nullptr);
@@ -583,9 +583,9 @@ TEST_CASE("engine.gui: a source bound to another scene never reaches this scene'
     Engine engine;
     scene::Scene* level = engine.scenes.CreateScene(u8"level");
     scene::Scene* other = engine.scenes.CreateScene(u8"other");
-    lab::SceneRoot* hud = engine.gui->SceneRootFor(*level);
+    SceneRoot* hud = engine.gui->SceneRootFor(*level);
     hud->SetViewportSize(Float2{800.0f, 600.0f});
-    RefPtr<lab::Button> button = MakeButton(u8"fire", Float2{20.0f, 20.0f});
+    RefPtr<Button> button = MakeButton(u8"fire", Float2{20.0f, 20.0f});
     hud->AddChild(button.Get());
     engine.devices.mouse.x = 50.0f;
     engine.devices.mouse.y = 30.0f;
@@ -604,14 +604,14 @@ TEST_CASE("engine.gui: a source bound to another scene never reaches this scene'
 
 namespace
 {
-    RefPtr<lab::GuiDocument> MakeDocument(StringView markup)
+    RefPtr<GuiDocument> MakeDocument(StringView markup)
     {
-        RefPtr<lab::GuiDocument> document = MakeRef<lab::GuiDocument>(DefaultAllocator());
+        RefPtr<GuiDocument> document = MakeRef<GuiDocument>(DefaultAllocator());
         document->markup = String(markup);
         return document;
     }
     // The scene's GUI styled and laid out at `size`, as a frame's draw does.
-    void LayOut(GuiSubsystem& gui, lab::SceneRoot& root, Float2 size)
+    void LayOut(GuiSubsystem& gui, SceneRoot& root, Float2 size)
     {
         root.SetViewportSize(size);
         gui.Styles().SetMediaContext(root.GetMediaContext());
@@ -639,13 +639,13 @@ TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, 
         c.order = 1;
     }
     engine.Frame();
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
     REQUIRE(root != nullptr);
     REQUIRE(root->ChildCount() == 3u); // the billboards' layer, then the canvases
-    CHECK(Cast<lab::UIWidget>(root->GetChildAt(0))->GetTag() == StringView(u8"billboards"));
+    CHECK(Cast<UIWidget>(root->GetChildAt(0))->GetTag() == StringView(u8"billboards"));
     CHECK(FindById(*root->GetChildAt(1), u8"score") != nullptr); // order 1 under order 5
     CHECK(FindById(*root->GetChildAt(2), u8"pause-menu") != nullptr);
-    CHECK(Cast<lab::UIWidget>(root->GetChildAt(1))->GetTag() == StringView(u8"canvas"));
+    CHECK(Cast<UIWidget>(root->GetChildAt(1))->GetTag() == StringView(u8"canvas"));
 
     // Reordered.
     canvases->Get(hud)->order = 9;
@@ -654,7 +654,7 @@ TEST_CASE("engine.gui: a canvas shows its document in its scene's GUI, ordered, 
 
     // Hidden, then its entity inactive; not interactive.
     engine::gui::GuiCanvasComponent* c = canvases->Get(hud);
-    lab::Node* tree = c->root.Get();
+    Node* tree = c->root.Get();
     REQUIRE(tree != nullptr);
     c->visible = false;
     engine.Frame();
@@ -694,8 +694,8 @@ TEST_CASE("engine.gui: a canvas scaled from a reference resolution fits the view
     added.scalerMode = engine::gui::GuiScalerMode::ReferenceResolution;
     added.referenceResolution = Float2{400.0f, 300.0f};
     engine.Frame();
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
-    lab::Node* tree = canvases->Get(hud)->root.Get();
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
+    Node* tree = canvases->Get(hud)->root.Get();
     REQUIRE(tree != nullptr);
 
     LayOut(*engine.gui, *root, Float2{1000.0f, 600.0f});
@@ -720,7 +720,7 @@ TEST_CASE("engine.gui: a canvas's own sheet styles its document alone, over the 
     auto* canvases = level->GetSystem<engine::gui::GuiCanvasComponentManager>();
     const scene::EntityHandle styled = level->CreateEntity(u8"styled");
     const scene::EntityHandle plain = level->CreateEntity(u8"plain");
-    RefPtr<lab::GuiStyleSheet> sheet = MakeRef<lab::GuiStyleSheet>(DefaultAllocator());
+    RefPtr<GuiStyleSheet> sheet = MakeRef<GuiStyleSheet>(DefaultAllocator());
     sheet->css = String(u8".title { width: 77px; height: 5px; }");
     {
         engine::gui::GuiCanvasComponent& c = canvases->Add(styled);
@@ -729,10 +729,10 @@ TEST_CASE("engine.gui: a canvas's own sheet styles its document alone, over the 
     }
     canvases->Add(plain).document = MakeDocument(u8"<Panel><Panel class=\"title\" id=\"b\"/></Panel>");
     engine.Frame();
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
     LayOut(*engine.gui, *root, Float2{800.0f, 600.0f});
-    lab::Node* a = FindById(*root, u8"a");
-    lab::Node* b = FindById(*root, u8"b");
+    Node* a = FindById(*root, u8"a");
+    Node* b = FindById(*root, u8"b");
     REQUIRE(a != nullptr);
     REQUIRE(b != nullptr);
     CHECK(a->GetSize().x == doctest::Approx(77.0f));
@@ -844,10 +844,10 @@ TEST_CASE("engine.gui: billboards live in a layer under the canvases, placed as 
     level->UpdateTransforms();
     billboards->Add(guard).document = MakeDocument(u8"<Panel width=\"40\" height=\"20\" id=\"plate\"/>");
     engine.Frame();
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
-    lab::Node* layer = root->GetChildAt(0);
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
+    Node* layer = root->GetChildAt(0);
     REQUIRE(layer->ChildCount() == 1u);
-    lab::Node* plate = billboards->Get(guard)->root.Get();
+    Node* plate = billboards->Get(guard)->root.Get();
     REQUIRE(plate == layer->GetChildAt(0));
 
     foundation::render::SceneOverlayView view;
@@ -916,7 +916,7 @@ TEST_CASE("engine.gui: a render-texture canvas draws into a texture of its own, 
     engine.Frame();
     engine::gui::GuiCanvasComponent* c = canvases->Get(screen);
     REQUIRE(c->renderRoot);
-    lab::SceneRoot* root = engine.gui->SceneRootFor(*level);
+    SceneRoot* root = engine.gui->SceneRootFor(*level);
     CHECK(root->ChildCount() == 1u); // the billboards' layer alone: not in the scene's GUI
     CHECK(FindById(*c->renderRoot, u8"monitor") != nullptr);
 
@@ -974,7 +974,7 @@ TEST_CASE("engine.gui: a world panel drives its sprite, and the pointer reaches 
     engine::gui::GuiWorldPanelComponent* c = panels->Get(kiosk);
     REQUIRE(c->renderRoot);
     i32 clicks = 0;
-    (void)c->root->AddEventListener(lab::EventType::MouseClick, [&](const lab::Event&) { ++clicks; });
+    (void)c->root->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
 
     rhi::null::NullCommandEncoder encoder;
     engine.gui->RenderTextures(encoder, 0);
@@ -1112,7 +1112,7 @@ TEST_CASE("engine.gui: at a render resolution the screen tier lays out at it, dr
     engine.gui->EnsureRenderReady(device, 2);
     engine.gui->SetScreenResolution(400, 300, FitMode::Letterbox);
     CHECK(engine.gui->HasScreenResolution());
-    RefPtr<lab::UIWidget> menu = MakeRef<lab::UIWidget>(DefaultAllocator());
+    RefPtr<UIWidget> menu = MakeRef<UIWidget>(DefaultAllocator());
     menu->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
     REQUIRE(engine.gui->Screens()->Push(*menu) != nullptr);
 
@@ -1122,7 +1122,7 @@ TEST_CASE("engine.gui: at a render resolution the screen tier lays out at it, dr
     view.targetFormat = rhi::TextureFormat::RGBA8UnormSrgb;
     rhi::null::NullCommandEncoder encoder;
     engine.gui->PrepareOverlay(encoder, view);
-    lab::SceneRoot* root = engine.gui->ScreenRoot();
+    SceneRoot* root = engine.gui->ScreenRoot();
     CHECK(root->GetSize().x == doctest::Approx(400.0f)); // laid out at the game's resolution
     CHECK(root->GetSize().y == doctest::Approx(300.0f));
     CHECK(root->GetDisplayScale() == doctest::Approx(2.0f)); // drawn crisp at the target's
@@ -1156,8 +1156,8 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     int runB = 0;
     CHECK(engine.gui->ScreensFor(&runA) == engine.gui->Screens()); // off: one tier for every run
     engine.gui->SetRunScreens(true);
-    lab::ScreenStack* a = engine.gui->ScreensFor(&runA);
-    lab::ScreenStack* b = engine.gui->ScreensFor(&runB);
+    ScreenStack* a = engine.gui->ScreensFor(&runA);
+    ScreenStack* b = engine.gui->ScreensFor(&runB);
     REQUIRE(a != nullptr);
     CHECK(a != b);
     CHECK(a != engine.gui->Screens());
@@ -1167,7 +1167,7 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     CHECK(a->GetId() == StringView(u8"screens")); // what its scripts find under their root
 
     // A's tab draws A's screens under the shared tier; a run's resolution is its own.
-    RefPtr<lab::UIWidget> menu = MakeRef<lab::UIWidget>(DefaultAllocator());
+    RefPtr<UIWidget> menu = MakeRef<UIWidget>(DefaultAllocator());
     menu->AddChild(MakeButton(u8"play", Float2{20.0f, 20.0f}).Get());
     REQUIRE(a->Push(*menu) != nullptr);
     engine.gui->SetScreenResolution(&runA, 320, 180, FitMode::Letterbox);
@@ -1198,17 +1198,17 @@ TEST_CASE("engine.gui: a document on the overlay layer shows above every screen,
     Engine engine;
     engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
     scene::Scene* level = engine.scenes.CreateScene(u8"level");
-    lab::SceneRoot* hud = engine.gui->SceneRootFor(*level);
+    SceneRoot* hud = engine.gui->SceneRootFor(*level);
     hud->SetViewportSize(Float2{800.0f, 600.0f});
-    RefPtr<lab::Button> fire = MakeButton(u8"fire", Float2{20.0f, 20.0f});
+    RefPtr<Button> fire = MakeButton(u8"fire", Float2{20.0f, 20.0f});
     hud->AddChild(fire.Get());
     engine.devices.mouse.x = 50.0f;
     engine.devices.mouse.y = 30.0f;
     engine.Frame();
     CHECK(engine.gui->ActiveInputRoot() == hud);
 
-    RefPtr<lab::GuiDocument> loading = MakeDocument(u8"<Panel id=\"loading\"/>");
-    RefPtr<lab::Node> splash = engine.gui->PushOverlay(*loading);
+    RefPtr<GuiDocument> loading = MakeDocument(u8"<Panel id=\"loading\"/>");
+    RefPtr<Node> splash = engine.gui->PushOverlay(*loading);
     REQUIRE(splash);
     CHECK(engine.gui->OverlayCount() == 1u);
     CHECK(FindById(*engine.gui->OverlayLayer(), u8"loading") != nullptr);
@@ -1220,7 +1220,7 @@ TEST_CASE("engine.gui: a document on the overlay layer shows above every screen,
     engine.Frame();
     CHECK(engine.gui->ActiveInputRoot() == hud);
 
-    RefPtr<lab::GuiDocument> empty = MakeDocument(u8"");
+    RefPtr<GuiDocument> empty = MakeDocument(u8"");
     CHECK_FALSE(engine.gui->PushOverlay(*empty)); // nothing to build
     engine.scenes.DestroyScene(level);
 }
@@ -1230,11 +1230,11 @@ TEST_CASE("engine.gui: an editor's preview builds in the GUI's context, a sheet 
     rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
     Engine engine;
     engine.gui->EnsureRenderReady(device, 2);
-    Array<lab::GuiDiagnostic> found;
+    Array<GuiDiagnostic> found;
     CHECK_FALSE(engine.gui->CreatePreview(u8"<NoSuchElement/>", {}, &found)); // nothing builds
     CHECK_FALSE(found.IsEmpty());
 
-    RefPtr<lab::SceneRoot> preview =
+    RefPtr<SceneRoot> preview =
         engine.gui->CreatePreview(u8"<Panel><Panel class=\"title\" id=\"t\"/></Panel>", u8".title { width: 66px; height: 4px; }");
     REQUIRE(preview);
     CHECK(engine.gui->ScreenRoot()->ChildCount() == 2u); // not in a tier: the screen's stack and overlays alone
@@ -1248,7 +1248,7 @@ TEST_CASE("engine.gui: an editor's preview builds in the GUI's context, a sheet 
     engine.gui->RenderPreview(*preview, encoder, target, rhi::TextureFormat::RGBA8UnormSrgb, 320, 200, 0);
     CHECK(encoder.counters->Snapshot().renderPasses == passes + 1); // its own pass
     CHECK(preview->GetViewportSize().x == doctest::Approx(320.0f));
-    lab::Node* title = FindById(*preview, u8"t");
+    Node* title = FindById(*preview, u8"t");
     REQUIRE(title != nullptr);
     CHECK(title->GetSize().x == doctest::Approx(66.0f)); // the sheet styled it
 
@@ -1265,7 +1265,7 @@ TEST_CASE("engine.gui: a game's text draws in the default family with no sheet n
     Engine engine;
     REQUIRE(engine.gui->Fonts() != nullptr);
     REQUIRE_FALSE(engine.gui->Fonts()->DefaultFontFamily().IsEmpty()); // the built-in font loaded
-    RefPtr<lab::SceneRoot> preview = engine.gui->CreatePreview(
+    RefPtr<SceneRoot> preview = engine.gui->CreatePreview(
         u8"<Panel flex-direction=\"column\" align-items=\"center\" padding=\"24\">"
         u8"<Label id=\"title\" text=\"New document\"/><Button id=\"ok\" text=\"OK\"/></Panel>");
     REQUIRE(preview);
@@ -1273,12 +1273,12 @@ TEST_CASE("engine.gui: a game's text draws in the default family with no sheet n
     engine.gui->Styles().SetMediaContext(preview->GetMediaContext());
     engine.gui->Styles().ApplyTree(*preview);
     preview->UpdateLayout();
-    lab::Node* title = FindById(*preview, u8"title");
-    lab::Node* ok = FindById(*preview, u8"ok");
+    Node* title = FindById(*preview, u8"title");
+    Node* ok = FindById(*preview, u8"ok");
     REQUIRE(title != nullptr);
-    REQUIRE(ok != nullptr); // (a button with no width fills its line: the lab's Button, not this)
+    REQUIRE(ok != nullptr); // (a button with no width fills its line: the GUI's Button, not this)
     CHECK(title->GetSize().x > 0.0f); // its text measured
     CHECK(title->GetSize().y > 0.0f);
     CHECK(ok->GetSize().y > 0.0f);
-    CHECK(Cast<lab::UINode>(title)->GetTextStyle().FontFamily.AsView() == engine.gui->Fonts()->DefaultFontFamily());
+    CHECK(Cast<UINode>(title)->GetTextStyle().FontFamily.AsView() == engine.gui->Fonts()->DefaultFontFamily());
 }

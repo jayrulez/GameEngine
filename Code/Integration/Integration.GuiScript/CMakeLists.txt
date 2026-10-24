@@ -1,14 +1,12 @@
-# Integration.GuiScript - the experimental GUI and its satellites driven from the script backends
-# (the lab's reflected widgets built, styled, bound and clicked, the gamekit's screen stack, and the
+# Integration.GuiScript - the GUI (foundation.gui) and its satellites driven from the script backends
+# (the GUI's reflected widgets built, styled, bound and clicked, the gamekit's screen stack, the
 # sandbox's game menu played from its real files, and the engine's GUI (Engine.GUI) found and
-# driven from a script, from AngelScript + Luau). Cross-layer (scripting x a GUI library), so it lives here and the
-# libraries' own suites stay backend-neutral. Apart from
-# Integration.ScriptFacades: the lab and foundation.ui both reflect a Label, a Button and a
-# ScreenStack, and one process binds only one of them to its scripts. Each backend leg is
+# driven from a script, from AngelScript + Luau). Cross-layer (scripting x a GUI library), so it
+# lives here and the libraries' own suites stay backend-neutral. Each backend leg is
 # #ifdef OPTION_HAS_<backend>-guarded; link only the enabled backends via ${SCRIPTLIB_*}.
 add_executable(Integration.GuiScript TestsMain.cpp GuiScriptTests.cpp GamekitScriptTests.cpp ShowcaseScriptTests.cpp EngineGuiScriptTests.cpp)
 target_link_libraries(Integration.GuiScript PRIVATE
-    Experimental::GUI.Gamekit Experimental::GUI Experimental::GUI.Resources Engine::GUI Foundation::Runtime
+    Foundation::GUI.Gamekit Foundation::GUI Foundation::GUI.Resources Engine::GUI Foundation::Runtime
     Foundation::Content Foundation::Resource Foundation::VFS Foundation::Core Foundation::Input Foundation::Script Foundation::Script.Facades
     ${SCRIPTLIB_ANGELSCRIPT} ${SCRIPTLIB_LUAU}
     doctest::doctest)

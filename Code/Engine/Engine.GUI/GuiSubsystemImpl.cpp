@@ -37,16 +37,17 @@ import engine.render; // RenderSubsystem: the overlays' registration
 import foundation.shell;
 import foundation.input;
 import engine.input;
-import experimental.gui;
-import experimental.gui.gamekit;
-import experimental.gui.shell;
+import foundation.gui;
+import foundation.gui.gamekit;
+import foundation.gui.shell;
 import foundation.script;          // ComponentOf: a component's `.of(entity)`
 import foundation.script.facades;  // the behaviour prelude's names
-import experimental.gui.resources; // GuiDocument, GuiStyleSheet, kGuiResourceModule
-import experimental.gui.hosting;   // GuiPassRenderer, VgShaderLibrary
+import foundation.gui.resources; // GuiDocument, GuiStyleSheet, kGuiResourceModule
+import foundation.gui.hosting;   // GuiPassRenderer, VgShaderLibrary
 import foundation.vg.renderer;     // VGPassTargets: a texture's multisampled pass
 
 using namespace foundation::core;
+using namespace foundation::gui;
 
 namespace engine::gui
 {
@@ -156,7 +157,7 @@ namespace engine::gui
     };
 
     GuiResourceProvider::GuiResourceProvider(IAllocator& allocator)
-        : lab::IResourceProvider(allocator), m_state(MakeUnique<State>(allocator, allocator))
+        : IResourceProvider(allocator), m_state(MakeUnique<State>(allocator, allocator))
     {
     }
     GuiResourceProvider::~GuiResourceProvider() = default;
@@ -213,7 +214,7 @@ namespace engine::gui
         {
             const foundation::content::Instance* instance = state.InstanceOf(id);
             if (instance == nullptr || IsCookedAs(*instance, foundation::vg::VectorImageSource::StaticType()) ||
-                IsCookedAs(*instance, lab::GuiDocumentSource::StaticType()) || IsCookedAs(*instance, lab::GuiStyleSheetSource::StaticType()))
+                IsCookedAs(*instance, GuiDocumentSource::StaticType()) || IsCookedAs(*instance, GuiStyleSheetSource::StaticType()))
                 return nullptr; // not a texture (the texture records are several cooked types)
             UniquePtr<State::Image> made = MakeUnique<State::Image>(*state.Allocator);
             made->Id = id;
@@ -241,10 +242,10 @@ namespace engine::gui
             if (instance == nullptr)
                 return false;
             RefPtr<resource::ResourceHandle> handle;
-            if (IsCookedAs(*instance, lab::GuiDocumentSource::StaticType()))
-                handle = state.Resources->Bind(lab::GuiDocument::StaticType(), id);
-            else if (IsCookedAs(*instance, lab::GuiStyleSheetSource::StaticType()))
-                handle = state.Resources->Bind(lab::GuiStyleSheet::StaticType(), id);
+            if (IsCookedAs(*instance, GuiDocumentSource::StaticType()))
+                handle = state.Resources->Bind(GuiDocument::StaticType(), id);
+            else if (IsCookedAs(*instance, GuiStyleSheetSource::StaticType()))
+                handle = state.Resources->Bind(GuiStyleSheet::StaticType(), id);
             else
                 return false;
             state.Texts.PushBack(State::Text{id, Move(handle), {}});
@@ -252,12 +253,12 @@ namespace engine::gui
         }
         Object* product = entry->Handle->Get();
         entry->Seen = RefPtr<Object>(product);
-        if (const lab::GuiDocument* document = Cast<lab::GuiDocument>(product))
+        if (const GuiDocument* document = Cast<GuiDocument>(product))
         {
             out = document->markup;
             return true;
         }
-        if (const lab::GuiStyleSheet* sheet = Cast<lab::GuiStyleSheet>(product))
+        if (const GuiStyleSheet* sheet = Cast<GuiStyleSheet>(product))
         {
             out = sheet->css;
             return true;
@@ -313,7 +314,7 @@ namespace engine::gui
         // document laid out at the root's size, or at the reference resolution and scaled
         // uniformly to fit, centred on a whole pixel. Paints nothing, so it never takes the
         // pointer from the game: only what its document paints does.
-        class CanvasHost final : public lab::UIWidget
+        class CanvasHost final : public UIWidget
         {
         public:
             CanvasHost() { SetTag(StringView(u8"canvas")); }
@@ -343,10 +344,10 @@ namespace engine::gui
                 }
                 for (usize i = 0; i < ChildCount(); ++i)
                 {
-                    lab::Node* child = GetChildAt(i);
+                    Node* child = GetChildAt(i);
                     child->SetScaleOrigin(Float2{0.0f, 0.0f});
                     child->SetScale(Float2{scale, scale});
-                    child->Arrange(lab::Rect{offset.x, offset.y, inner.x, inner.y});
+                    child->Arrange(Rect{offset.x, offset.y, inner.x, inner.y});
                 }
             }
 
@@ -481,22 +482,22 @@ namespace engine::gui
 
     namespace
     {
-        [[nodiscard]] Variant NodeHandle(const RefPtr<lab::Node>& root)
+        [[nodiscard]] foundation::core::Variant NodeHandle(const RefPtr<Node>& root)
         {
-            return root ? root->HandleAs(lab::Node::StaticType()) : Variant{};
+            return root ? root->HandleAs(Node::StaticType()) : foundation::core::Variant{};
         }
     }
-    Variant GuiCanvasComponent::rootNode() const { return NodeHandle(root); }
-    Variant GuiBillboardComponent::rootNode() const { return NodeHandle(root); }
-    Variant GuiWorldPanelComponent::rootNode() const { return NodeHandle(root); }
+    foundation::core::Variant GuiCanvasComponent::rootNode() const { return NodeHandle(root); }
+    foundation::core::Variant GuiBillboardComponent::rootNode() const { return NodeHandle(root); }
+    foundation::core::Variant GuiWorldPanelComponent::rootNode() const { return NodeHandle(root); }
 
     void RegisterGuiScriptFacades()
     {
         static const bool once = []()
         {
             RegisterGuiComponentReflection(); // the components' TypeData, `of` among it, first
-            lab::RegisterGuiScriptSurface();  // `gui`, the widgets, the events, the tweens
-            lab::RegisterGamekitElements();   // the screen stack, screens, prompts
+            RegisterGuiScriptSurface();  // `gui`, the widgets, the events, the tweens
+            RegisterGamekitElements();   // the screen stack, screens, prompts
             foundation::script::RegisterExtraFacadeName(u8"gui"); // the prelude imports the alias
             const TypeInfo* const components[] = {&TypeOf<GuiCanvasComponent>(), &TypeOf<GuiBillboardComponent>(),
                                                   &TypeOf<GuiWorldPanelComponent>()};
@@ -599,11 +600,11 @@ namespace engine::gui
     {
 
         rhi::Device* Device = nullptr;
-        lab::VgShaderLibrary Shaders;
-        UniquePtr<lab::GuiPassRenderer> Renderer;
+        VgShaderLibrary Shaders;
+        UniquePtr<GuiPassRenderer> Renderer;
         // What PrepareOverlay recorded for the screen tier, and for which view.
-        lab::GuiPassRenderer::Prepared Screen{};
-        lab::GuiPassRenderer::Prepared RunScreen{}; // the drawn run's tier, under the shared one
+        GuiPassRenderer::Prepared Screen{};
+        GuiPassRenderer::Prepared RunScreen{}; // the drawn run's tier, under the shared one
         bool HasRunScreen = false;
         render::ScreenOverlayView ScreenView{};
         bool ScreenPrepared = false;
@@ -613,7 +614,7 @@ namespace engine::gui
         struct Target
         {
             explicit Target(IAllocator&) noexcept {}
-            const lab::SceneRoot* Root = nullptr; // whose
+            const SceneRoot* Root = nullptr; // whose
             scene::Scene* Scene = nullptr;
             scene::EntityHandle Entity{};
             rhi::Texture* Texture = nullptr;
@@ -648,7 +649,7 @@ namespace engine::gui
         }
         // `root`'s texture at `width` x `height`, made or made again at that size (the GPU waited
         // for: the scene may still sample the old one); null when the device makes none.
-        Target* EnsureTarget(const lab::SceneRoot& root, scene::Scene& scene, scene::EntityHandle entity, u32 width, u32 height,
+        Target* EnsureTarget(const SceneRoot& root, scene::Scene& scene, scene::EntityHandle entity, u32 width, u32 height,
                              IAllocator& allocator)
         {
             Target* found = nullptr;
@@ -703,7 +704,7 @@ namespace engine::gui
         : m_allocator(allocator, RegisterMemoryTag("GUI")), m_dataFileSystem(&dataFileSystem), m_otherFonts(m_allocator), m_sheets(m_allocator),
           m_sceneTiers(m_allocator), m_textureRoots(m_allocator)
     {
-        m_context = MakeRef<lab::GUIContext>(m_allocator);
+        m_context = MakeRef<GUIContext>(m_allocator);
         m_resources = MakeUnique<GuiResourceProvider>(m_allocator, m_allocator);
         m_context->SetResourceProvider(m_resources.Get());
         m_styles.SetResourceProvider(m_resources.Get()); // the sheets' @import, url() and fonts
@@ -765,8 +766,8 @@ namespace engine::gui
 
     void GuiSubsystem::OnInit()
     {
-        lab::RegisterGuiElements();     // the lab's widgets, by tag from markup
-        lab::RegisterGamekitElements(); // and a game's screens and prompts
+        RegisterGuiElements();     // the GUI's widgets, by tag from markup
+        RegisterGamekitElements(); // and a game's screens and prompts
         // Before any font loads: a font gets its shaper and its atlas's glyphs when it loads.
         foundation::fonts::HarfBuzzShaping::Install();
         foundation::fonts::BidiAlgorithm::Install();
@@ -789,11 +790,11 @@ namespace engine::gui
         // The shared screen tier: the screen stack, and the overlay layer above it, each filling the
         // root. Neither paints, so neither takes the pointer from the game until something in it does.
         MakeScreenTier(m_screen);
-        m_overlay = MakeRef<lab::UIWidget>(m_allocator);
+        m_overlay = MakeRef<UIWidget>(m_allocator);
         m_overlay->SetTag(StringView(u8"overlays"));
         {
-            lab::Node::StyleWriteScope defaults(*m_overlay);
-            m_overlay->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
+            Node::StyleWriteScope defaults(*m_overlay);
+            m_overlay->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
         }
         m_screen.Root->AddChild(m_overlay.Get());
         // A script's root is its run's screen tier (the shared one in the player).
@@ -803,38 +804,38 @@ namespace engine::gui
     // A screen tier's root, filled by its stack (its id what a script finds), with its input.
     void GuiSubsystem::MakeScreenTier(ScreenTier& tier)
     {
-        tier.Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        tier.Root = MakeRef<SceneRoot>(m_allocator, m_context);
         {
-            lab::Node::StyleWriteScope defaults(*tier.Root);
-            tier.Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; });
+            Node::StyleWriteScope defaults(*tier.Root);
+            tier.Root->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
         }
-        tier.Screens = MakeRef<lab::ScreenStack>(m_allocator);
+        tier.Screens = MakeRef<ScreenStack>(m_allocator);
         tier.Screens->SetId(StringView(u8"screens")); // a script's ScreenStack::of(gui::root().find("screens"))
         tier.Root->AddChild(tier.Screens.Get());
         tier.Bridge = MakeBridge(*tier.Root);
     }
 
-    RefPtr<lab::Node> GuiSubsystem::PushOverlay(const lab::GuiDocument& document)
+    RefPtr<Node> GuiSubsystem::PushOverlay(const GuiDocument& document)
     {
-        RefPtr<lab::Node> tree = BuildDocument(document);
+        RefPtr<Node> tree = BuildDocument(document);
         if (tree)
             PushOverlay(*tree);
         return tree;
     }
 
-    void GuiSubsystem::PushOverlay(lab::Node& overlay)
+    void GuiSubsystem::PushOverlay(Node& overlay)
     {
         if (m_overlay && overlay.GetParent() == nullptr)
             m_overlay->AddChild(&overlay);
     }
 
-    void GuiSubsystem::RemoveOverlay(lab::Node& overlay)
+    void GuiSubsystem::RemoveOverlay(Node& overlay)
     {
         if (m_overlay && overlay.GetParent() == m_overlay.Get())
             m_overlay->RemoveChild(&overlay);
     }
 
-    void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& context) { lab::InstallGuiScriptService(context, m_scriptBinding); }
+    void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& context) { InstallGuiScriptService(context, m_scriptBinding); }
 
     void GuiSubsystem::OnReady()
     {
@@ -945,14 +946,14 @@ namespace engine::gui
     // inherit, and the game's sheets, above the user agent, choose otherwise.
     void GuiSubsystem::ApplyUserAgentSheet()
     {
-        String css(lab::DefaultThemeCSS(), m_allocator);
+        String css(DefaultThemeCSS(), m_allocator);
         if (foundation::fonts::IFontService* fonts = Fonts(); fonts != nullptr && !fonts->DefaultFontFamily().IsEmpty())
         {
             css.Append(StringView(u8"\n:root { font-family: \""));
             css.Append(fonts->DefaultFontFamily());
             css.Append(StringView(u8"\"; font-size: var(--font-body); }\n"));
         }
-        m_styles.SetUserAgentSheet(lab::CSSParser::Parse(css.AsView(), StringView(u8"theme")));
+        m_styles.SetUserAgentSheet(CSSParser::Parse(css.AsView(), StringView(u8"theme")));
     }
 
     // The game's sheets as one author sheet importing each, in order: the style manager expands
@@ -966,11 +967,11 @@ namespace engine::gui
             css.Append(Format(u8"{}", sheet).AsView());
             css.Append(StringView(u8"}\";\n"));
         }
-        m_styles.SetStyleSheet(lab::CSSParser::Parse(css.AsView(), StringView(u8"game")));
+        m_styles.SetStyleSheet(CSSParser::Parse(css.AsView(), StringView(u8"game")));
         ++m_sheetGeneration;
     }
 
-    void GuiSubsystem::StyleAndLayOut(lab::SceneRoot& root, Float2 size)
+    void GuiSubsystem::StyleAndLayOut(SceneRoot& root, Float2 size)
     {
         if (root.GetViewportSize() != size)
             root.SetViewportSize(size);
@@ -979,7 +980,7 @@ namespace engine::gui
         root.UpdateLayout();
     }
 
-    lab::SceneRoot* GuiSubsystem::SceneRootFor(const scene::Scene& scene) noexcept
+    SceneRoot* GuiSubsystem::SceneRootFor(const scene::Scene& scene) noexcept
     {
         for (const SceneTier& tier : m_sceneTiers)
             if (tier.Scene == &scene)
@@ -993,13 +994,13 @@ namespace engine::gui
             return;
         SceneTier tier;
         tier.Scene = &scene;
-        tier.Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        tier.Root = MakeRef<SceneRoot>(m_allocator, m_context);
         {
-            lab::Node::StyleWriteScope defaults(*tier.Root);
-            tier.Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // each canvas fills it
+            Node::StyleWriteScope defaults(*tier.Root);
+            tier.Root->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; }); // each canvas fills it
         }
         // The billboards' layer, under every canvas; it paints nothing, so it takes no pointer.
-        tier.Billboards = MakeRef<lab::UIWidget>(m_allocator);
+        tier.Billboards = MakeRef<UIWidget>(m_allocator);
         tier.Billboards->SetTag(StringView(u8"billboards"));
         tier.Root->AddChild(tier.Billboards.Get());
         tier.Bridge = MakeBridge(*tier.Root);
@@ -1029,13 +1030,13 @@ namespace engine::gui
             }
     }
 
-    RefPtr<lab::Node> GuiSubsystem::BuildDocument(const lab::GuiDocument& document)
+    RefPtr<Node> GuiSubsystem::BuildDocument(const GuiDocument& document)
     {
         if (document.markup.IsEmpty())
             return {};
-        lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), Fonts());
+        MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), Fonts());
         loader.SetDataModel(m_context->GetDataRef());
-        RefPtr<lab::Node> root = loader.LoadFromString(document.markup.AsView());
+        RefPtr<Node> root = loader.LoadFromString(document.markup.AsView());
         if (!root)
             LOG_WARNING(u8"GUI", u8"a component's document did not build");
         return root;
@@ -1046,12 +1047,12 @@ namespace engine::gui
     template <typename Component>
     bool GuiSubsystem::RebuildIfChanged(Component& c)
     {
-        lab::GuiDocument* document = c.document.Get();
+        GuiDocument* document = c.document.Get();
         if (document == c.builtFrom.Get())
             return false;
         if (c.root && c.root->GetParent() != nullptr)
             c.root->GetParent()->RemoveChild(c.root.Get());
-        c.root = document != nullptr ? BuildDocument(*document) : RefPtr<lab::Node>{};
+        c.root = document != nullptr ? BuildDocument(*document) : RefPtr<Node>{};
         c.sheetFrom = nullptr;
         c.builtFrom = RefPtr<Object>(document);
         return true;
@@ -1061,11 +1062,11 @@ namespace engine::gui
     template <typename Component>
     void GuiSubsystem::ApplySheet(Component& c, StringView name)
     {
-        lab::GuiStyleSheet* sheet = c.sheet.Get();
+        GuiStyleSheet* sheet = c.sheet.Get();
         if (!c.root || sheet == c.sheetFrom.Get())
             return;
         if (sheet != nullptr)
-            (void)m_styles.SetSubtreeSheet(*c.root, lab::CSSParser::Parse(sheet->css.AsView(), name));
+            (void)m_styles.SetSubtreeSheet(*c.root, CSSParser::Parse(sheet->css.AsView(), name));
         else
             m_styles.RemoveSubtreeSheet(*c.root);
         c.sheetFrom = RefPtr<Object>(sheet);
@@ -1073,7 +1074,7 @@ namespace engine::gui
 
     // The root of its own a texture's content (a render-texture canvas, a world panel) is drawn
     // in: made for the entity the first time, holding `content` alone, kept while seen each frame.
-    RefPtr<lab::SceneRoot> GuiSubsystem::TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, lab::Node& content)
+    RefPtr<SceneRoot> GuiSubsystem::TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, Node& content)
     {
         TextureRoot* found = nullptr;
         for (const UniquePtr<TextureRoot>& known : m_textureRoots)
@@ -1084,10 +1085,10 @@ namespace engine::gui
             UniquePtr<TextureRoot> made = MakeUnique<TextureRoot>(m_allocator);
             made->Scene = &scene;
             made->Entity = entity;
-            made->Root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+            made->Root = MakeRef<SceneRoot>(m_allocator, m_context);
             {
-                lab::Node::StyleWriteScope defaults(*made->Root);
-                made->Root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // the content fills it
+                Node::StyleWriteScope defaults(*made->Root);
+                made->Root->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; }); // the content fills it
             }
             made->Bridge = MakeBridge(*made->Root);
             found = made.Get();
@@ -1112,7 +1113,7 @@ namespace engine::gui
     void GuiSubsystem::SyncCanvases(SceneTier& tier)
     {
         auto* canvases = tier.Scene->GetSystem<GuiCanvasComponentManager>();
-        Array<const lab::Node*> seen(m_allocator);
+        Array<const Node*> seen(m_allocator);
         if (canvases != nullptr)
             canvases->ForEach(
                 [&](GuiCanvasComponent& c, scene::EntityHandle entity)
@@ -1128,7 +1129,7 @@ namespace engine::gui
                     if (wantsTexture)
                     {
                         c.host = nullptr; // swept below, unseen
-                        c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<lab::SceneRoot>{};
+                        c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<SceneRoot>{};
                     }
                     else
                     {
@@ -1160,7 +1161,7 @@ namespace engine::gui
         {
             CanvasHost* host = static_cast<CanvasHost*>(tier.Canvases[i].Get());
             bool live = false;
-            for (const lab::Node* known : seen)
+            for (const Node* known : seen)
                 live = live || known == host;
             if (live)
             {
@@ -1193,7 +1194,7 @@ namespace engine::gui
     void GuiSubsystem::SyncBillboards(SceneTier& tier)
     {
         auto* billboards = tier.Scene->GetSystem<GuiBillboardComponentManager>();
-        Array<const lab::Node*> seen(m_allocator);
+        Array<const Node*> seen(m_allocator);
         if (billboards != nullptr)
             billboards->ForEach(
                 [&](GuiBillboardComponent& c, scene::EntityHandle entity)
@@ -1203,7 +1204,7 @@ namespace engine::gui
                         return;
                     if (c.root->GetParent() == nullptr)
                     {
-                        c.root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Placement = lab::Position::Absolute; });
+                        c.root->EditLayoutStyle([](LayoutStyle& s) { s.Placement = Position::Absolute; });
                         tier.Billboards->AddChild(c.root.Get());
                     }
                     seen.PushBack(c.root.Get());
@@ -1212,9 +1213,9 @@ namespace engine::gui
                 });
         for (usize i = tier.Billboards->ChildCount(); i-- > 0;)
         {
-            lab::Node* child = tier.Billboards->GetChildAt(i);
+            Node* child = tier.Billboards->GetChildAt(i);
             bool live = false;
-            for (const lab::Node* known : seen)
+            for (const Node* known : seen)
                 live = live || known == child;
             if (!live)
                 tier.Billboards->RemoveChild(child);
@@ -1231,7 +1232,7 @@ namespace engine::gui
             [&](GuiWorldPanelComponent& c, scene::EntityHandle entity)
             {
                 (void)RebuildIfChanged(c);
-                c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<lab::SceneRoot>{};
+                c.renderRoot = c.root ? TextureRootFor(*tier.Scene, entity, *c.root) : RefPtr<SceneRoot>{};
                 if (!c.root)
                 {
                     c.renderTexture = nullptr;
@@ -1266,10 +1267,10 @@ namespace engine::gui
                 const Float2 size = c.root->GetSize();
                 const Float2 corner{placement.Anchor.x - size.x * 0.5f, placement.Anchor.y - size.y};
                 c.root->EditLayoutStyle(
-                    [corner](lab::LayoutStyle& s)
+                    [corner](LayoutStyle& s)
                     {
-                        s.Left = lab::LayoutLength::Px(corner.x);
-                        s.Top = lab::LayoutLength::Px(corner.y);
+                        s.Left = LayoutLength::Px(corner.x);
+                        s.Top = LayoutLength::Px(corner.y);
                     });
                 c.root->SetScaleOrigin(Float2{size.x * 0.5f, size.y});
                 c.root->SetScale(Float2{placement.Scale, placement.Scale});
@@ -1282,9 +1283,9 @@ namespace engine::gui
         return !tier.Canvases.IsEmpty() || (tier.Billboards && tier.Billboards->ChildCount() > 0);
     }
 
-    UniquePtr<lab::GuiInputBridge> GuiSubsystem::MakeBridge(lab::SceneRoot& root)
+    UniquePtr<GuiInputBridge> GuiSubsystem::MakeBridge(SceneRoot& root)
     {
-        UniquePtr<lab::GuiInputBridge> bridge = MakeUnique<lab::GuiInputBridge>(m_allocator, root.GetEventDispatcher());
+        UniquePtr<GuiInputBridge> bridge = MakeUnique<GuiInputBridge>(m_allocator, root.GetEventDispatcher());
         bridge->SetInputKindTracker(&m_inputKind); // the pointer, the keys or a pad (K2b)
         bridge->SetTextInputTarget(m_textInputTarget);
         return bridge;
@@ -1301,7 +1302,7 @@ namespace engine::gui
             tier.Bridge->SetTextInputTarget(window);
     }
 
-    lab::GuiInputBridge* GuiSubsystem::BridgeOf(const lab::SceneRoot* root) noexcept
+    GuiInputBridge* GuiSubsystem::BridgeOf(const SceneRoot* root) noexcept
     {
         if (ScreenTier* tier = TierOfRoot(root))
             return tier->Bridge.Get();
@@ -1435,14 +1436,14 @@ namespace engine::gui
         }
         if (target.Panel)
             m_panelPoint = target.Point;
-        lab::SceneRoot* root = target.Root;
+        SceneRoot* root = target.Root;
         if (root != m_activeRoot && m_activeRoot != nullptr && pointer)
         {
             // The root input leaves: nothing in it stays hovered.
             (void)m_activeRoot->GetEventDispatcher()->InjectMouseMove(Float2{-1.0e6f, -1.0e6f});
         }
         m_activeRoot = root;
-        lab::GuiInputBridge* bridge = BridgeOf(root);
+        GuiInputBridge* bridge = BridgeOf(root);
         if (bridge == nullptr)
             return;
         if (held && m_pressRoot == nullptr)
@@ -1516,10 +1517,10 @@ namespace engine::gui
             LOG_ERROR(u8"GUI", u8"no shader compiler and no shader pack: the GUI will not draw");
             return;
         }
-        m_render->Renderer = MakeUnique<lab::GuiPassRenderer>(m_allocator, m_allocator, device, static_cast<u32>(frameCount < 1 ? 1 : frameCount),
+        m_render->Renderer = MakeUnique<GuiPassRenderer>(m_allocator, m_allocator, device, static_cast<u32>(frameCount < 1 ? 1 : frameCount),
                                                               Fonts(), m_render->Shaders.Set());
         m_context->SetPictureBaker(m_render->Renderer->Baker());
-        lab::GuiPassRenderer* renderer = m_render->Renderer.Get();
+        GuiPassRenderer* renderer = m_render->Renderer.Get();
         m_resources->SetTextureSink(
             [renderer](const image::ImageData* key, rhi::TextureView* view)
             {
@@ -1534,7 +1535,7 @@ namespace engine::gui
     {
         if (!IsRenderReady() || view.viewportWidth == 0 || view.viewportHeight == 0)
             return;
-        lab::SceneRoot* root = nullptr;
+        SceneRoot* root = nullptr;
         for (const SceneTier& tier : m_sceneTiers)
             if (static_cast<const void*>(tier.Scene) == view.sceneKey)
                 root = tier.Root.Get();
@@ -1549,7 +1550,7 @@ namespace engine::gui
         PlaceBillboards(*tier, view);
         // Laid out at the viewport's size (a split screen's half lays out its own) and drawn there.
         StyleAndLayOut(*root, Float2{static_cast<f32>(view.viewportWidth), static_cast<f32>(view.viewportHeight)});
-        lab::GuiPassView pass;
+        GuiPassView pass;
         pass.X = view.viewportX;
         pass.Y = view.viewportY;
         pass.Width = view.viewportWidth;
@@ -1562,9 +1563,9 @@ namespace engine::gui
 
     namespace
     {
-        [[nodiscard]] lab::GuiPassView ScreenPass(const render::ScreenOverlayView& view) noexcept
+        [[nodiscard]] GuiPassView ScreenPass(const render::ScreenOverlayView& view) noexcept
         {
-            lab::GuiPassView pass;
+            GuiPassView pass;
             pass.Width = view.width;
             pass.Height = view.height;
             pass.Format = view.targetFormat;
@@ -1583,12 +1584,12 @@ namespace engine::gui
     // A screen tier placed on `view`'s target and recorded (its layers on `encoder` when given): laid
     // out at the game's resolution over its scale and drawn into the fitted rectangle, turned with the
     // game's image, or at the target's own size over all of it.
-    static lab::GuiPassRenderer::Prepared PrepareScreenTier(lab::GuiPassRenderer& renderer, lab::SceneRoot& root,
+    static GuiPassRenderer::Prepared PrepareScreenTier(GuiPassRenderer& renderer, SceneRoot& root,
                                                             const GuiScreenPlacement& place, Float2 target,
                                                             const render::ScreenOverlayView& view, rhi::CommandEncoder* encoder,
-                                                            const Function<void(lab::SceneRoot&, Float2)>& layOut)
+                                                            const Function<void(SceneRoot&, Float2)>& layOut)
     {
-        lab::GuiPassView pass = ScreenPass(view);
+        GuiPassView pass = ScreenPass(view);
         Float2 size = target;
         f32 scale = 1.0f;
         if (place.Fitted)
@@ -1617,7 +1618,7 @@ namespace engine::gui
         if (!m_screen.Root || view.width == 0 || view.height == 0)
             return;
         const Float2 target{static_cast<f32>(view.width), static_cast<f32>(view.height)};
-        const Function<void(lab::SceneRoot&, Float2)> layOut = [this](lab::SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
+        const Function<void(SceneRoot&, Float2)> layOut = [this](SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
         const auto prepare = [&](ScreenTier& tier)
         {
             tier.TargetSize = target;
@@ -1650,7 +1651,7 @@ namespace engine::gui
         }
         // Not prepared for this view: recorded now, their layers drawn in place.
         const Float2 target{static_cast<f32>(view.width), static_cast<f32>(view.height)};
-        const Function<void(lab::SceneRoot&, Float2)> layOut = [this](lab::SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
+        const Function<void(SceneRoot&, Float2)> layOut = [this](SceneRoot& root, Float2 size) { StyleAndLayOut(root, size); };
         const auto draw = [&](ScreenTier& tier)
         {
             tier.TargetSize = target;
@@ -1718,7 +1719,7 @@ namespace engine::gui
         return nullptr;
     }
 
-    GuiSubsystem::ScreenTier* GuiSubsystem::TierOfRoot(const lab::SceneRoot* root) noexcept
+    GuiSubsystem::ScreenTier* GuiSubsystem::TierOfRoot(const SceneRoot* root) noexcept
     {
         if (root == nullptr)
             return nullptr;
@@ -1730,14 +1731,14 @@ namespace engine::gui
         return nullptr;
     }
 
-    lab::ScreenStack* GuiSubsystem::ScreensFor(const void* run)
+    ScreenStack* GuiSubsystem::ScreensFor(const void* run)
     {
-        lab::SceneRoot* root = ScreenRootFor(run);
+        SceneRoot* root = ScreenRootFor(run);
         ScreenTier* tier = TierOfRoot(root);
         return tier != nullptr ? tier->Screens.Get() : nullptr;
     }
 
-    lab::SceneRoot* GuiSubsystem::ScreenRootFor(const void* run)
+    SceneRoot* GuiSubsystem::ScreenRootFor(const void* run)
     {
         if (!m_runScreens || run == nullptr || !m_screen.Root)
             return m_screen.Root.Get();
@@ -1746,7 +1747,7 @@ namespace engine::gui
         UniquePtr<ScreenTier> tier = MakeUnique<ScreenTier>(m_allocator);
         tier->Run = run;
         MakeScreenTier(*tier);
-        lab::SceneRoot* root = tier->Root.Get();
+        SceneRoot* root = tier->Root.Get();
         m_runTiers.PushBack(Move(tier));
         return root;
     }
@@ -1770,7 +1771,7 @@ namespace engine::gui
         for (usize i = 0; i < m_runTiers.Size(); ++i)
             if (m_runTiers[i]->Run == run)
             {
-                lab::SceneRoot* root = m_runTiers[i]->Root.Get();
+                SceneRoot* root = m_runTiers[i]->Root.Get();
                 if (m_activeRoot == root)
                     m_activeRoot = nullptr;
                 if (m_pressRoot == root)
@@ -1810,41 +1811,41 @@ namespace engine::gui
         return Float2{(point.x - source.x) * dpi, (point.y - source.y) * dpi};
     }
 
-    RefPtr<lab::SceneRoot> GuiSubsystem::CreatePreview(StringView markup, StringView css, Array<lab::GuiDiagnostic>* diagnostics)
+    RefPtr<SceneRoot> GuiSubsystem::CreatePreview(StringView markup, StringView css, Array<GuiDiagnostic>* diagnostics)
     {
         if (markup.IsEmpty())
             return {};
-        lab::MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), Fonts());
+        MarkupLoader loader(m_context->GetElementSet(), m_allocator, m_resources.Get(), Fonts());
         loader.SetDataModel(m_context->GetDataRef());
         loader.SetDiagnostics(diagnostics);
-        RefPtr<lab::Node> tree = loader.LoadFromString(markup);
+        RefPtr<Node> tree = loader.LoadFromString(markup);
         if (!tree)
             return {};
-        RefPtr<lab::SceneRoot> root = MakeRef<lab::SceneRoot>(m_allocator, m_context);
+        RefPtr<SceneRoot> root = MakeRef<SceneRoot>(m_allocator, m_context);
         {
-            lab::Node::StyleWriteScope defaults(*root);
-            root->EditLayoutStyle([](lab::LayoutStyle& s) { s.Kind = lab::Display::Stack; }); // the document fills it
+            Node::StyleWriteScope defaults(*root);
+            root->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; }); // the document fills it
         }
         root->AddChild(tree.Get());
         if (!css.IsEmpty())
-            (void)m_styles.SetSubtreeSheet(*tree, lab::CSSParser::Parse(css, StringView(u8"preview")));
+            (void)m_styles.SetSubtreeSheet(*tree, CSSParser::Parse(css, StringView(u8"preview")));
         return root;
     }
 
-    void GuiSubsystem::RenderPreview(lab::SceneRoot& root, rhi::CommandEncoder& encoder, rhi::TextureView* target, rhi::TextureFormat format,
+    void GuiSubsystem::RenderPreview(SceneRoot& root, rhi::CommandEncoder& encoder, rhi::TextureView* target, rhi::TextureFormat format,
                                      u32 width, u32 height, u32 frameIndex)
     {
         if (!IsRenderReady() || target == nullptr || width == 0 || height == 0)
             return;
-        lab::GuiPassRenderer& renderer = *m_render->Renderer;
+        GuiPassRenderer& renderer = *m_render->Renderer;
         (void)renderer.RecordBakes(encoder, frameIndex); // before the pass samples them, once a frame
         StyleAndLayOut(root, Float2{static_cast<f32>(width), static_cast<f32>(height)});
-        lab::GuiPassView view;
+        GuiPassView view;
         view.Width = width;
         view.Height = height;
         view.Format = format;
         view.FrameIndex = frameIndex;
-        const lab::GuiPassRenderer::Prepared prepared = renderer.Prepare(root, view, &encoder);
+        const GuiPassRenderer::Prepared prepared = renderer.Prepare(root, view, &encoder);
         rhi::RenderPassDesc pass{};
         rhi::ColorAttachment color{};
         color.view = target;
@@ -1864,10 +1865,10 @@ namespace engine::gui
     {
         // A texture's content drawn into it: laid out at its size (inset by `padding` on each side,
         // left clear), offscreen layers first, then its pass, the texture left ready to sample.
-        void DrawTexture(lab::GuiPassRenderer& renderer, rhi::CommandEncoder& encoder, auto& target, lab::SceneRoot& root, u32 padding,
+        void DrawTexture(GuiPassRenderer& renderer, rhi::CommandEncoder& encoder, auto& target, SceneRoot& root, u32 padding,
                          u32 frameIndex)
         {
-            lab::GuiPassView view;
+            GuiPassView view;
             view.X = static_cast<i32>(padding);
             view.Y = static_cast<i32>(padding);
             view.Width = target.Width - 2 * padding;
@@ -1880,7 +1881,7 @@ namespace engine::gui
                 view.DepthStencilFormat = config.depthStencilFormat;
             }
             view.FrameIndex = frameIndex;
-            const lab::GuiPassRenderer::Prepared prepared = renderer.Prepare(root, view, &encoder);
+            const GuiPassRenderer::Prepared prepared = renderer.Prepare(root, view, &encoder);
             encoder.TransitionTexture(target.Texture, target.State, rhi::ResourceState::RenderTarget);
             const rhi::ClearColor clear{0.0f, 0.0f, 0.0f, 0.0f};
             rhi::RenderPassDesc pass{};
@@ -1910,7 +1911,7 @@ namespace engine::gui
         if (!IsRenderReady() || m_texturesSerial == m_frameSerial)
             return;
         m_texturesSerial = m_frameSerial; // several pages of an editor share one GUI: once a frame
-        lab::GuiPassRenderer& renderer = *m_render->Renderer;
+        GuiPassRenderer& renderer = *m_render->Renderer;
         (void)renderer.RecordBakes(encoder, frameIndex); // before any pass samples them
         for (const UniquePtr<RenderState::Target>& target : m_render->Targets)
             target->Seen = false;
@@ -2007,7 +2008,7 @@ namespace engine::gui
     const engine::DomainModule& GuiDomain() noexcept
     {
         static const resource::ResourceModule* const kResources[] = {
-            &lab::kGuiResourceModule, &foundation::vg::kVGResourceModule, &foundation::fonts::kFontsResourceModule};
+            &kGuiResourceModule, &foundation::vg::kVGResourceModule, &foundation::fonts::kFontsResourceModule};
         static const engine::DomainModule kModule{
             .id = u8"gui",
             .installScene = &AddGuiSceneManagers,

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Engine::GUI - the `engine.gui` module: the engine's GUI on the lab (E5 of
+// Engine::GUI - the `engine.gui` module: the engine's GUI on foundation.gui (E5 of
 // Specs/gui-lab-evolution-3.md), Engine.UI's counterpart, beside it while both live.
 //
-// GuiResourceProvider answers the lab's resource requests by asset guid ("{guid}" or the bare
+// GuiResourceProvider answers the GUI's resource requests by asset guid ("{guid}" or the bare
 // guid), as every other reference in the engine: a document's markup and a sheet's CSS from their
 // cooked products, an SVG from a vector image, an image from a texture (a render texture a camera
 // draws into among them). The markup, the sheets and the gamekit need no change: they ask by string
 // as they do in the sandbox.
 //
-// GuiSubsystem: one GUIContext and style manager for the application, the lab's built-in theme
+// GuiSubsystem: one GUIContext and style manager for the application, the GUI's built-in theme
 // under the game's sheets (a list, in order, each an @import of its guid), the fonts; a screen tier
 // (a root holding the gamekit's screen stack and an overlay layer above it, outside any scene, so
 // it survives a scene swap) and a scene tier (a root per scene, drawn wherever the scene renders);
@@ -38,7 +38,7 @@
 // reaching it by a ray through the scene's camera. Both draw in RenderTextures, which the host calls
 // before the scene, after the frame's bakes.
 //
-// The script surface (E8): the lab's own (the `gui` facade, every widget reflected, the gamekit's
+// The script surface (E8): the GUI's own (the `gui` facade, every widget reflected, the gamekit's
 // stack), installed per script context with the screen tier's root (ExposeToScript): `gui::root()`
 // is the screen root and `ScreenStack::of(gui::root().find("screens"))` its stack, which pushes a
 // document by its guid ("{guid}") through the provider. Each component's `.of(entity)` reaches its
@@ -74,17 +74,17 @@ import foundation.script;     // the script contexts the surface is installed in
 import foundation.shell;      // the text input target
 import foundation.input;      // InputKindTracker
 import engine.input;          // the active input source, the action runtimes
-import experimental.gui;
-import experimental.gui.gamekit;
-import experimental.gui.resources; // the documents and sheets components name
-import experimental.gui.shell;     // GuiInputBridge
+import foundation.gui;
+import foundation.gui.gamekit;
+import foundation.gui.resources; // the documents and sheets components name
+import foundation.gui.shell;     // GuiInputBridge
 
 using namespace foundation::core;
+using namespace foundation::gui;
 namespace rhi = foundation::rhi;
 
 export namespace engine::gui
 {
-    namespace lab = experimental::gui;
     namespace render = foundation::render;
     namespace scene = foundation::scene;
     namespace resource = foundation::resource;
@@ -108,8 +108,8 @@ export namespace engine::gui
     struct GuiCanvasComponent
     {
         // Authored:
-        resource::Ref<lab::GuiDocument> document;
-        resource::Ref<lab::GuiStyleSheet> sheet; ///< over the game's sheets, for this canvas alone (optional)
+        resource::Ref<GuiDocument> document;
+        resource::Ref<GuiStyleSheet> sheet; ///< over the game's sheets, for this canvas alone (optional)
         i32 order = 0;                           ///< among the scene's canvases: higher on top
         bool visible = true;
         bool interactive = true;
@@ -120,16 +120,16 @@ export namespace engine::gui
         u32 renderTextureHeight = 512;
 
         // Runtime:
-        RefPtr<lab::Node> root;       ///< the tree built from the document
-        RefPtr<lab::UIWidget> host;   ///< its place in the scene's root (order, scaler)
+        RefPtr<Node> root;       ///< the tree built from the document
+        RefPtr<UIWidget> host;   ///< its place in the scene's root (order, scaler)
         RefPtr<Object> builtFrom;     ///< the document product it was built from (held: a new one never takes its address)
         RefPtr<Object> sheetFrom;     ///< the sheet product applied
-        RefPtr<lab::SceneRoot> renderRoot;     ///< RenderTexture: its own root, never in a scene's GUI
+        RefPtr<SceneRoot> renderRoot;     ///< RenderTexture: its own root, never in a scene's GUI
         rhi::Texture* renderTexture = nullptr; ///< RenderTexture: the texture (the subsystem's), once drawn
         rhi::TextureView* renderTextureView = nullptr;
 
         /// Its tree as a script's node handle (`root()`); null before it is built.
-        [[nodiscard]] Variant rootNode() const;
+        [[nodiscard]] foundation::core::Variant rootNode() const;
     };
 
     inline void Serialize(ISerializer& ar, GuiCanvasComponent& c)
@@ -177,8 +177,8 @@ export namespace engine::gui
     struct GuiBillboardComponent
     {
         // Authored:
-        resource::Ref<lab::GuiDocument> document;
-        resource::Ref<lab::GuiStyleSheet> sheet; ///< over the game's sheets, for this billboard alone (optional)
+        resource::Ref<GuiDocument> document;
+        resource::Ref<GuiStyleSheet> sheet; ///< over the game's sheets, for this billboard alone (optional)
         Float3 offset{0.0f, 0.0f, 0.0f};
         GuiBillboardOrientation orientation = GuiBillboardOrientation::Cylindrical;
         GuiBillboardScale scaleMode = GuiBillboardScale::Fixed;
@@ -188,12 +188,12 @@ export namespace engine::gui
         bool visible = true;
 
         // Runtime:
-        RefPtr<lab::Node> root;
+        RefPtr<Node> root;
         RefPtr<Object> builtFrom;
         RefPtr<Object> sheetFrom;
 
         /// Its tree as a script's node handle (`root()`); null before it is built.
-        [[nodiscard]] Variant rootNode() const;
+        [[nodiscard]] foundation::core::Variant rootNode() const;
     };
 
     inline void Serialize(ISerializer& ar, GuiBillboardComponent& c)
@@ -231,23 +231,23 @@ export namespace engine::gui
     struct GuiWorldPanelComponent
     {
         // Authored:
-        resource::Ref<lab::GuiDocument> document;
-        resource::Ref<lab::GuiStyleSheet> sheet; ///< over the game's sheets, for this panel alone (optional)
+        resource::Ref<GuiDocument> document;
+        resource::Ref<GuiStyleSheet> sheet; ///< over the game's sheets, for this panel alone (optional)
         Float2 sizeMeters{1.6f, 0.9f};           ///< the quad's extent in the world
         f32 pixelsPerMeter = 200.0f;             ///< the texture's density
         bool interactive = true;
         bool visible = true;
 
         // Runtime:
-        RefPtr<lab::Node> root;
-        RefPtr<lab::SceneRoot> renderRoot; ///< its own root, never in a scene's GUI
+        RefPtr<Node> root;
+        RefPtr<SceneRoot> renderRoot; ///< its own root, never in a scene's GUI
         RefPtr<Object> builtFrom;
         RefPtr<Object> sheetFrom;
         rhi::Texture* renderTexture = nullptr; ///< the subsystem's, once drawn
         rhi::TextureView* renderTextureView = nullptr;
 
         /// Its tree as a script's node handle (`root()`); null before it is built.
-        [[nodiscard]] Variant rootNode() const;
+        [[nodiscard]] foundation::core::Variant rootNode() const;
     };
 
     inline void Serialize(ISerializer& ar, GuiWorldPanelComponent& c)
@@ -305,7 +305,7 @@ export namespace engine::gui
 
     /// The components' reflection (the inspector, the scene format). Idempotent.
     void RegisterGuiComponentReflection();
-    /// The GUI's script surface: the lab's (`gui`, the widgets, the gamekit's) and each component's
+    /// The GUI's script surface: the GUI's (`gui`, the widgets, the gamekit's) and each component's
     /// `.of(entity)`, with their names in the behaviour prelude. Idempotent; before a script
     /// manager binds the registry.
     void RegisterGuiScriptFacades();
@@ -333,8 +333,8 @@ export namespace engine::gui
         Float4x4 Transform = Float4x4::Identity();
     };
 
-    /// The lab's resources by asset guid, through the application's resource manager.
-    class GuiResourceProvider final : public lab::IResourceProvider
+    /// The GUI's resources by asset guid, through the application's resource manager.
+    class GuiResourceProvider final : public IResourceProvider
     {
     public:
         /// Told when an image key starts or stops standing for a texture (`view` null: it stops):
@@ -387,10 +387,10 @@ export namespace engine::gui
         /// After Engine.UI's (-650), so a game's GUI sees the same frame; all work in BeginFrame.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -640; }
 
-        [[nodiscard]] lab::GUIContext& Context() noexcept { return *m_context; }
-        [[nodiscard]] const RefPtr<lab::GUIContext>& ContextRef() const noexcept { return m_context; }
+        [[nodiscard]] GUIContext& Context() noexcept { return *m_context; }
+        [[nodiscard]] const RefPtr<GUIContext>& ContextRef() const noexcept { return m_context; }
         /// The style manager every root is styled through: the built-in theme, the game's sheets.
-        [[nodiscard]] lab::StyleManager& Styles() noexcept { return m_styles; }
+        [[nodiscard]] StyleManager& Styles() noexcept { return m_styles; }
         [[nodiscard]] GuiResourceProvider& Resources() noexcept { return *m_resources; }
         /// The fonts the GUI's text draws with.
         [[nodiscard]] foundation::fonts::IFontService* Fonts() const noexcept;
@@ -411,8 +411,8 @@ export namespace engine::gui
 
         /// The screen tier, outside any scene: its root, the gamekit's screen stack in it, and the
         /// overlay layer above the stack (a loading screen, a system menu).
-        [[nodiscard]] lab::SceneRoot* ScreenRoot() noexcept { return m_screen.Root.Get(); }
-        [[nodiscard]] lab::ScreenStack* Screens() noexcept { return m_screen.Screens.Get(); }
+        [[nodiscard]] SceneRoot* ScreenRoot() noexcept { return m_screen.Root.Get(); }
+        [[nodiscard]] ScreenStack* Screens() noexcept { return m_screen.Screens.Get(); }
 
         // ---- the game's screen ----
         /// The screen tier at the game's render resolution, fitted into its target by `fit`, its
@@ -432,8 +432,8 @@ export namespace engine::gui
         [[nodiscard]] bool RunScreens() const noexcept { return m_runScreens; }
         /// `run`'s screen stack and root, made on first use; the shared tier's with run screens off
         /// or no run.
-        [[nodiscard]] lab::ScreenStack* ScreensFor(const void* run);
-        [[nodiscard]] lab::SceneRoot* ScreenRootFor(const void* run);
+        [[nodiscard]] ScreenStack* ScreensFor(const void* run);
+        [[nodiscard]] SceneRoot* ScreenRootFor(const void* run);
         void SetScreenResolution(const void* run, u32 width, u32 height, FitMode fit);
         void SetScreenOrientation(const void* run, ScreenOrientation orientation);
         /// The run whose screen tier the next screen overlay draws under the shared one's overlays
@@ -442,17 +442,17 @@ export namespace engine::gui
         /// The run ended: its screen tier and every screen on it go.
         void EndRunScreens(const void* run);
         [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
-        [[nodiscard]] lab::Node* OverlayLayer() noexcept { return m_overlay.Get(); }
+        [[nodiscard]] Node* OverlayLayer() noexcept { return m_overlay.Get(); }
         /// `document` built and shown on the overlay layer, above every screen (a loading screen, a
         /// system menu), modal while it shows; the tree, to take off again, or null when it does
         /// not build.
-        RefPtr<lab::Node> PushOverlay(const lab::GuiDocument& document);
+        RefPtr<Node> PushOverlay(const GuiDocument& document);
         /// A tree made in code shown on the overlay layer.
-        void PushOverlay(lab::Node& overlay);
-        void RemoveOverlay(lab::Node& overlay);
+        void PushOverlay(Node& overlay);
+        void RemoveOverlay(Node& overlay);
         [[nodiscard]] usize OverlayCount() const noexcept { return m_overlay ? m_overlay->ChildCount() : 0; }
         /// The scene tier's root for `scene`; null when the scene is unknown.
-        [[nodiscard]] lab::SceneRoot* SceneRootFor(const scene::Scene& scene) noexcept;
+        [[nodiscard]] SceneRoot* SceneRootFor(const scene::Scene& scene) noexcept;
 
         // ---- lifecycle ----
         void OnInit() override;
@@ -472,7 +472,7 @@ export namespace engine::gui
         /// window); null leaves it alone (an editor, whose own bridge owns it).
         void SetTextInputTarget(foundation::shell::IWindow* window);
         /// The root this frame's input went to; null before any input.
-        [[nodiscard]] lab::SceneRoot* ActiveInputRoot() const noexcept { return m_activeRoot; }
+        [[nodiscard]] SceneRoot* ActiveInputRoot() const noexcept { return m_activeRoot; }
         /// Whether the GUI took the pointer this frame (what the action layer was told).
         [[nodiscard]] bool PointerOverGui() const noexcept { return m_pointerTaken; }
         /// The input kind, from the active source each frame (the pointer, the keys, a pad).
@@ -498,11 +498,11 @@ export namespace engine::gui
         /// sheets), in a root of its own that is never in a tier and takes no input; `css`, when
         /// given, a sheet over it alone (a sheet's page). What the loader dropped goes to
         /// `diagnostics`. Null when the markup does not build.
-        [[nodiscard]] RefPtr<lab::SceneRoot> CreatePreview(StringView markup, StringView css = {},
-                                                           Array<lab::GuiDiagnostic>* diagnostics = nullptr);
+        [[nodiscard]] RefPtr<SceneRoot> CreatePreview(StringView markup, StringView css = {},
+                                                           Array<GuiDiagnostic>* diagnostics = nullptr);
         /// `root` laid out at `width` x `height` and drawn into `target` (in RenderTarget state, and
         /// left so) in a pass of its own on `encoder`, over what is there.
-        void RenderPreview(lab::SceneRoot& root, rhi::CommandEncoder& encoder, rhi::TextureView* target, rhi::TextureFormat format,
+        void RenderPreview(SceneRoot& root, rhi::CommandEncoder& encoder, rhi::TextureView* target, rhi::TextureFormat format,
                            u32 width, u32 height, u32 frameIndex);
 
         /// The GPU side, by whoever owns graphics (the application's startup): the VG shaders from
@@ -522,10 +522,10 @@ export namespace engine::gui
         struct SceneTier
         {
             scene::Scene* Scene = nullptr;
-            RefPtr<lab::SceneRoot> Root;
-            UniquePtr<lab::GuiInputBridge> Bridge;
-            Array<RefPtr<lab::UIWidget>> Canvases; ///< its canvases' hosts, in the root
-            RefPtr<lab::UIWidget> Billboards;      ///< the layer under them its billboards are in
+            RefPtr<SceneRoot> Root;
+            UniquePtr<GuiInputBridge> Bridge;
+            Array<RefPtr<UIWidget>> Canvases; ///< its canvases' hosts, in the root
+            RefPtr<UIWidget> Billboards;      ///< the layer under them its billboards are in
         };
 
         void ApplySheets();
@@ -538,7 +538,7 @@ export namespace engine::gui
         void SyncPanels(SceneTier& tier);
         // A document's tree (null when it does not build), and a component's tree in line with its
         // document and sheet: rebuilt when the document's product changes.
-        [[nodiscard]] RefPtr<lab::Node> BuildDocument(const lab::GuiDocument& document);
+        [[nodiscard]] RefPtr<Node> BuildDocument(const GuiDocument& document);
         template <typename Component>
         bool RebuildIfChanged(Component& c);
         template <typename Component>
@@ -548,15 +548,15 @@ export namespace engine::gui
         {
             scene::Scene* Scene = nullptr;
             scene::EntityHandle Entity{};
-            RefPtr<lab::SceneRoot> Root;
-            UniquePtr<lab::GuiInputBridge> Bridge;
+            RefPtr<SceneRoot> Root;
+            UniquePtr<GuiInputBridge> Bridge;
             bool Seen = false;
         };
-        RefPtr<lab::SceneRoot> TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, lab::Node& content);
+        RefPtr<SceneRoot> TextureRootFor(scene::Scene& scene, scene::EntityHandle entity, Node& content);
         // Where the pointer goes this frame: a root, and the point in it (a panel's in its pixels).
         struct InputTarget
         {
-            lab::SceneRoot* Root = nullptr;
+            SceneRoot* Root = nullptr;
             Float2 Point{0.0f, 0.0f}; ///< in the root's pixels
             bool Mapped = false;      ///< the point is not the pointer's own (a panel's, a fitted tier's)
             bool Panel = false;
@@ -566,9 +566,9 @@ export namespace engine::gui
         struct ScreenTier
         {
             const void* Run = nullptr; ///< null: the shared tier
-            RefPtr<lab::SceneRoot> Root;
-            RefPtr<lab::ScreenStack> Screens;
-            UniquePtr<lab::GuiInputBridge> Bridge;
+            RefPtr<SceneRoot> Root;
+            RefPtr<ScreenStack> Screens;
+            UniquePtr<GuiInputBridge> Bridge;
             Float2 Resolution{0.0f, 0.0f};
             FitMode Fit = FitMode::Letterbox;
             ScreenOrientation Orientation = ScreenOrientation::Any;
@@ -579,7 +579,7 @@ export namespace engine::gui
         void MakeScreenTier(ScreenTier& tier);
         static void ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit);
         [[nodiscard]] ScreenTier* FindRunTier(const void* run) noexcept;
-        [[nodiscard]] ScreenTier* TierOfRoot(const lab::SceneRoot* root) noexcept;
+        [[nodiscard]] ScreenTier* TierOfRoot(const SceneRoot* root) noexcept;
         // The tier input reaches: the run of the scene the input is bound to, when it has a tier.
         [[nodiscard]] ScreenTier& InputTier() noexcept;
         // A render-space point in the tier's root pixels (the crop's offset off, at its scale).
@@ -587,15 +587,15 @@ export namespace engine::gui
         [[nodiscard]] InputTarget PanelUnderPointer(Float2 point, bool centreAim);
         [[nodiscard]] InputTarget PickInputRoot(bool pointer, Float2 point, bool centreAim);
         [[nodiscard]] bool InputReaches(const SceneTier& tier) const noexcept;
-        [[nodiscard]] lab::GuiInputBridge* BridgeOf(const lab::SceneRoot* root) noexcept;
-        [[nodiscard]] UniquePtr<lab::GuiInputBridge> MakeBridge(lab::SceneRoot& root);
-        void StyleAndLayOut(lab::SceneRoot& root, Float2 size);
+        [[nodiscard]] GuiInputBridge* BridgeOf(const SceneRoot* root) noexcept;
+        [[nodiscard]] UniquePtr<GuiInputBridge> MakeBridge(SceneRoot& root);
+        void StyleAndLayOut(SceneRoot& root, Float2 size);
         [[nodiscard]] bool ReadDataFile(StringView path, Array<u8>& out) const;
 
         TaggedAllocator m_allocator;
         foundation::vfs::IFileSystem* m_dataFileSystem; // borrowed
-        RefPtr<lab::GUIContext> m_context;
-        lab::StyleManager m_styles;
+        RefPtr<GUIContext> m_context;
+        StyleManager m_styles;
         UniquePtr<GuiResourceProvider> m_resources;
         UniquePtr<foundation::fonts::IFontService> m_fonts;        // the built-in font
         UniquePtr<foundation::fonts::IFontService> m_projectFonts; // the project's, when it names a default
@@ -607,8 +607,8 @@ export namespace engine::gui
         Array<UniquePtr<ScreenTier>> m_runTiers; // a tier per run, with run screens on
         bool m_runScreens = false;
         const void* m_renderRun = nullptr;
-        RefPtr<lab::UIWidget> m_overlay;
-        lab::GuiScriptBinding m_scriptBinding; // what each script context is given
+        RefPtr<UIWidget> m_overlay;
+        GuiScriptBinding m_scriptBinding; // what each script context is given
         Array<SceneTier> m_sceneTiers;
         Array<UniquePtr<TextureRoot>> m_textureRoots;
         u64 m_frameSerial = 0;
@@ -620,8 +620,8 @@ export namespace engine::gui
         engine::input::InputSubsystem* m_input = nullptr;
         foundation::input::InputKindTracker m_inputKind;
         foundation::shell::IWindow* m_textInputTarget = nullptr;
-        lab::SceneRoot* m_activeRoot = nullptr; // the root input went to last
-        lab::SceneRoot* m_pressRoot = nullptr;  // the root a held press began in
+        SceneRoot* m_activeRoot = nullptr; // the root input went to last
+        SceneRoot* m_pressRoot = nullptr;  // the root a held press began in
         bool m_pressTaken = false;              // that press began over GUI that takes the pointer
         bool m_pointerTaken = false;
     };

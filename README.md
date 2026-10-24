@@ -189,7 +189,7 @@ themselves: toon bands, and lighting that walks the scene's lights. Its lessons 
 
 ```
 Code/
-  Foundation/     Core, RHI and backends, Shell, Resource, VFS, Scene, Render, UI, VG,
+  Foundation/     Core, RHI and backends, Shell, Resource, VFS, Scene, Render, UI, GUI, VG,
                   Fonts, Audio, Physics, Navigation, Net, Script, Shaders, Mcp, ...
   Engine/         The subsystems over Foundation, the composition root, the default
                   application, the game instance, the player
@@ -201,8 +201,6 @@ Code/
   Samples/        Low-level C++ samples, one per engine area, and the RHI samples
                   (Code/Samples/README.md)
   Extensions/     Dear ImGui as a debug UI extension
-  Experimental/   A retained-mode UI framework in progress and its sandbox
-                  (OPTION_EXPERIMENTAL_GUI)
 Data/             Engine data (shaders, fonts, themes) and the sample projects
 ThirdParty/       Vendored dependencies
 scripts/          Distribution, export template and Steam Deck builds

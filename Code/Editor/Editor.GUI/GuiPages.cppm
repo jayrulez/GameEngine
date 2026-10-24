@@ -30,7 +30,7 @@ import foundation.ui;
 import foundation.ui.toolkit;
 import foundation.ui.runtime;
 import foundation.ui.viewport;
-import experimental.gui;
+import foundation.gui;
 import engine.gui;
 import editor.core;
 import editor.app;
@@ -42,6 +42,7 @@ export namespace editor
     namespace runtime = foundation::runtime;
     namespace ui = foundation::ui;
     namespace rhi = foundation::rhi;
+    namespace gui = foundation::gui;
 
     namespace gui_pages
     {
@@ -57,13 +58,13 @@ export namespace editor
 
         /// The cook's diagnostics on `editor`'s lines, as its margin marks them (from 0; a
         /// diagnostic with no line on the first).
-        inline void MarkLines(ui::toolkit::CodeEditView& editor, const Array<experimental::gui::GuiDiagnostic>& found)
+        inline void MarkLines(ui::toolkit::CodeEditView& editor, const Array<gui::GuiDiagnostic>& found)
         {
             Array<ui::toolkit::CodeDiagnostic> marks;
-            for (const experimental::gui::GuiDiagnostic& diagnostic : found)
+            for (const gui::GuiDiagnostic& diagnostic : found)
             {
                 ui::toolkit::CodeDiagnostic mark;
-                mark.isError = diagnostic.Level == experimental::gui::GuiDiagnostic::Severity::Error;
+                mark.isError = diagnostic.Level == gui::GuiDiagnostic::Severity::Error;
                 mark.line = diagnostic.Line > 0 ? static_cast<i32>(diagnostic.Line) - 1 : 0;
                 mark.message = diagnostic.Message;
                 marks.PushBack(Move(mark));
@@ -96,7 +97,7 @@ export namespace editor
 
         /// What the preview shows now (null before one built), and the text it was built from: for
         /// a test, and a tool.
-        [[nodiscard]] experimental::gui::SceneRoot* PreviewRoot() const noexcept { return m_previewRoot.Get(); }
+        [[nodiscard]] gui::SceneRoot* PreviewRoot() const noexcept { return m_previewRoot.Get(); }
         [[nodiscard]] StringView Text() const noexcept { return m_text.AsView(); }
         [[nodiscard]] StringView StatusText() const noexcept { return m_statusText.AsView(); }
         /// The text as if typed, the preview rebuilt now (no pause): a test's and a tool's.
@@ -126,7 +127,7 @@ export namespace editor
         RefPtr<ui::Label> m_status;
         String m_statusText;
         RefPtr<ui::viewport::ViewportView> m_viewport;
-        RefPtr<experimental::gui::SceneRoot> m_previewRoot; // in the RUNTIME context's GUI
+        RefPtr<gui::SceneRoot> m_previewRoot; // in the RUNTIME context's GUI
     };
 
     /// The page for one of the GUI's asset types.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The GUI lab's game menu (the sandbox's showcase, K7 of Specs/gui-lab-evolution-3.md) played
+// The GUI's game menu (the sandbox's showcase, K7 of Specs/gui-lab-evolution-3.md) played
 // end to end from its real files: Data/Assets/ui/showcase's frame, sheet and screen documents, and
 // its AngelScript, on the gamekit's stack. A player's keys and pad drive it: pages and Back, the
 // quit question, loading into the game, the HUD's prompt following the device, the score counting
@@ -16,14 +16,14 @@ import foundation.vg.svg;
 import foundation.script;
 import foundation.shell;
 import foundation.input;
-import experimental.gui;
-import experimental.gui.gamekit;
+import foundation.gui;
+import foundation.gui.gamekit;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
 
 #ifdef OPTION_HAS_ANGELSCRIPT
-namespace gui = experimental::gui;
+namespace gui = foundation::gui;
 namespace core = foundation::core;
 namespace script = foundation::script;
 namespace input = foundation::input;

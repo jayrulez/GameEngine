@@ -20,8 +20,8 @@ import foundation.ui;
 import foundation.ui.toolkit;
 import foundation.ui.runtime;
 import foundation.ui.viewport;
-import experimental.gui;
-import experimental.gui.pipeline; // the assets, their validation, the starters
+import foundation.gui;
+import gui.pipeline; // the assets, their validation, the starters
 import pipeline.core;             // Asset: the linked source every one of them has
 import engine.gui;
 import editor.core;
@@ -32,7 +32,7 @@ namespace rhi = foundation::rhi;
 namespace runtime = foundation::runtime;
 namespace ui = foundation::ui;
 namespace vg = foundation::vg;
-namespace lab = experimental::gui;
+namespace gui = foundation::gui;
 
 namespace editor
 {
@@ -264,7 +264,7 @@ namespace editor
     void GuiAssetEditorPage::RebuildPreview()
     {
         // What the cook would report, on the lines it is about.
-        Array<lab::GuiDiagnostic> found;
+        Array<gui::GuiDiagnostic> found;
         bool builds = true;
         if (m_kind == Kind::Document)
             builds = pipeline::ValidateGuiDocument(m_text.AsView(), found, Allocator());
@@ -273,7 +273,7 @@ namespace editor
         gui_pages::MarkLines(*m_editor, found);
         if (m_kind == Kind::StyleSheet)
         {
-            Array<lab::GuiDiagnostic> previewFound;
+            Array<gui::GuiDiagnostic> previewFound;
             builds = pipeline::ValidateGuiDocument(m_previewMarkup.AsView(), previewFound, Allocator());
             gui_pages::MarkLines(*m_previewEditor, previewFound);
         }
@@ -288,7 +288,7 @@ namespace editor
             return;
         }
         // The real preview, in the runtime's GUI (its fonts, theme and the game's sheets).
-        RefPtr<lab::SceneRoot> fresh = m_kind == Kind::Document ? m_gui->CreatePreview(m_text.AsView())
+        RefPtr<gui::SceneRoot> fresh = m_kind == Kind::Document ? m_gui->CreatePreview(m_text.AsView())
                                                                 : m_gui->CreatePreview(m_previewMarkup.AsView(), m_text.AsView());
         if (!fresh)
         {
@@ -301,7 +301,7 @@ namespace editor
             SetStatus(u8"OK");
             return;
         }
-        String text(found[0].Level == lab::GuiDiagnostic::Severity::Error ? u8"Error: " : u8"Warning: ");
+        String text(found[0].Level == gui::GuiDiagnostic::Severity::Error ? u8"Error: " : u8"Warning: ");
         text.Append(found[0].Message.AsView());
         if (found.Size() > 1)
             text.Append(Format(u8" (+{} more)", found.Size() - 1).AsView());

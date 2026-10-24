@@ -41,9 +41,7 @@ import foundation.ui;
 import foundation.ui.toolkit;
 import foundation.ui.runtime;
 import engine.ui; // game-UI RenderTexture canvases (live in editing viewports)
-#if OPTION_HAS_EXPERIMENTAL_GUI
 import engine.gui; // and the engine GUI's textures
-#endif
 import foundation.ui.viewport;
 import foundation.vg.renderer;
 import editor.core;
@@ -107,9 +105,7 @@ export namespace editor
             m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
             m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
             m_gameUI = host.Ctx().GetSubsystem<engine::ui::UISubsystem>();
-#if OPTION_HAS_EXPERIMENTAL_GUI
             m_gameGui = host.Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
-#endif
 
             // Own live Scene per page in this page's OWN SceneManager (registered with the subsystem
             // so it ticks on the Context lane; there is no shared default manager).
@@ -627,9 +623,7 @@ export namespace editor
         foundation::messaging::EventBus m_pageEvents; // the page's run-scope bus (edit-mode Simulate)
         engine::render::RenderSubsystem* m_render = nullptr;
         engine::ui::UISubsystem* m_gameUI = nullptr; // RT-canvas host seam (borrowed)
-#if OPTION_HAS_EXPERIMENTAL_GUI
         engine::gui::GuiSubsystem* m_gameGui = nullptr; // the engine GUI's textures seam (borrowed)
-#endif
 
         String m_title;
         scene::Scene* m_scene = nullptr;           // owned by the SceneSubsystem

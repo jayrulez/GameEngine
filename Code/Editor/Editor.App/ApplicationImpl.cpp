@@ -409,12 +409,10 @@ namespace editor::app
         {
             m_embeddedApp->UI()->SetRunScreens(true);
         }
-#if OPTION_HAS_EXPERIMENTAL_GUI
         if (m_embeddedApp->GUI() != nullptr)
         {
             m_embeddedApp->GUI()->SetRunScreens(true); // and the engine GUI's
         }
-#endif
         m_runtimeContext.Startup();
         m_embeddedApp->OnStartup(*m_embeddedHost);
 
@@ -702,7 +700,6 @@ namespace editor::app
         {
             m_embeddedApp->UI()->SetExtraFonts(Span<const foundation::fonts::Font* const>(extras.Data(), extras.Size()));
         }
-#if OPTION_HAS_EXPERIMENTAL_GUI
         // The engine GUI shares the fonts, and takes the project's sheets in order (a sheet not
         // cooked yet resolves once it is: the cook-finished callback lands here again).
         if (m_embeddedApp->GUI() != nullptr)
@@ -711,7 +708,6 @@ namespace editor::app
             const Array<Guid>& sheets = m_project->Settings().guiStyleSheetIds;
             m_embeddedApp->GUI()->SetStyleSheets(Span<const Guid>(sheets.Data(), sheets.Size()));
         }
-#endif
     }
 
     void EditorApplication::ShowToast(editor::NoticeKind kind, StringView message)

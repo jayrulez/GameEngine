@@ -16,9 +16,9 @@ import foundation.content;
 import foundation.resource;
 import foundation.script;
 import foundation.script.facades; // the base behaviour facades (Entity, which a component's `of` takes)
-import experimental.gui;
-import experimental.gui.gamekit;
-import experimental.gui.resources;
+import foundation.gui;
+import foundation.gui.gamekit;
+import foundation.gui.resources;
 import engine.gui;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -27,7 +27,7 @@ import foundation.script.angelscript;
 import foundation.script.luau;
 #endif
 
-namespace lab = experimental::gui;
+using namespace foundation::gui;
 namespace core = foundation::core;
 namespace script = foundation::script;
 using namespace foundation::core;
@@ -52,7 +52,7 @@ namespace
         String folder{u8"scratch_engine_gui_script"};
         UniquePtr<foundation::vfs::NativeFileSystem> mount;
         UniquePtr<foundation::content::ContentDatabase> db;
-        lab::GuiDocumentFactory documents{DefaultAllocator()};
+        GuiDocumentFactory documents{DefaultAllocator()};
         UniquePtr<foundation::resource::ResourceManager> resources;
         foundation::vfs::NativeFileSystem data{foundation::vfs::FindDataRoot(), DefaultAllocator()};
         foundation::runtime::Context context{DefaultAllocator()};
@@ -61,12 +61,12 @@ namespace
 
         Bed()
         {
-            lab::RegisterGuiResource();
+            RegisterGuiResource();
             Clean();
             mount = MakeUnique<foundation::vfs::NativeFileSystem>(DefaultAllocator(), folder.AsView(), DefaultAllocator());
             db = MakeUnique<foundation::content::ContentDatabase>(DefaultAllocator(), DefaultAllocator(), *mount, BinarySerializerFactory(), u8".rasset");
-            auto* instance = db->RootGroup()->CreateInstance(u8"menu", lab::GuiDocumentSource::StaticType());
-            lab::GuiDocumentSource source;
+            auto* instance = db->RootGroup()->CreateInstance(u8"menu", GuiDocumentSource::StaticType());
+            GuiDocumentSource source;
             source.markup = String(u8"<Screen pauses=\"true\"><Label id=\"status\" text=\"Ready\"/></Screen>");
             REQUIRE(instance->WriteObject(source).IsOk());
             menu = instance->Id();
@@ -124,7 +124,7 @@ namespace
             REQUIRE(loaded.IsOk());
             const auto number = [&](const char8_t* function)
             {
-                Result<Variant> result = scripts->Call(function, Span<Variant>{});
+                Result<foundation::core::Variant> result = scripts->Call(function, Span<foundation::core::Variant>{});
                 INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
                 REQUIRE(result.HasValue());
                 const double* value = result.Value().TryGet<double>();
@@ -137,7 +137,7 @@ namespace
             CHECK(gui->Screens()->IsPaused());
             CHECK(number(u8"hasStatus") == doctest::Approx(1.0));
             CHECK(errors.count == 0);
-            lab::ClearGuiScriptService(*scripts);
+            ClearGuiScriptService(*scripts);
             scripts->SetErrorHandler(nullptr);
         }
     };

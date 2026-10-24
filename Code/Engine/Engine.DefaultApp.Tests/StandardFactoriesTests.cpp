@@ -27,9 +27,7 @@ import foundation.heightfield;          // Heightfield product type (terrain fac
 import foundation.terrain.resource;     // TerrainResource + Splatmap product types
 import engine.defaultapp;
 import engine.composition; // FullComposition: the set the runtime composes from
-#if OPTION_HAS_EXPERIMENTAL_GUI
-import engine.gui; // the engine GUI every game has with the lab built
-#endif
+import engine.gui; // the engine GUI every game has with the GUI built
 
 using namespace foundation::core;
 namespace runtime = foundation::runtime;
@@ -97,8 +95,7 @@ TEST_CASE("defaultapp: attaching a manager registers the composition's headless 
     CHECK(!resources.HasFactory(foundation::texture::Texture::StaticType().id));
 }
 
-#if OPTION_HAS_EXPERIMENTAL_GUI
-TEST_CASE("defaultapp: with the lab built every game has the engine GUI, and it resolves guids through the game's resource manager")
+TEST_CASE("defaultapp: with the GUI built every game has the engine GUI, and it resolves guids through the game's resource manager")
 {
     foundation::vfs::NativeFileSystem mount(u8"scratch_defaultapp_gui", foundation::core::DefaultAllocator());
     foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount, foundation::xml::XmlSerializerFactory(),
@@ -114,4 +111,3 @@ TEST_CASE("defaultapp: with the lab built every game has the engine GUI, and it 
     app.AttachResourceManager(nullptr, host);
     CHECK(app.GUI()->Resources().GetResourceManager() == nullptr);
 }
-#endif

@@ -132,12 +132,10 @@ namespace engine::player
             {
                 UI()->SetTextInputTarget(host.Shell()->MainWindow());
             }
-#if OPTION_HAS_EXPERIMENTAL_GUI
             if (GUI() != nullptr && host.Shell() != nullptr)
             {
                 GUI()->SetTextInputTarget(host.Shell()->MainWindow()); // the GUI's text fields too
             }
-#endif
 
             // Native game plugin (game-native-code.md N2). Placed AFTER the base startup so
             // OnLoad can resolve engine subsystems from Ctx(), and BEFORE the initial scene
@@ -357,7 +355,6 @@ namespace engine::player
                 }
             }
 
-#if OPTION_HAS_EXPERIMENTAL_GUI
             // The engine GUI: the project's fonts (the UI's, shared) and its sheets, in order.
             if (GUI() != nullptr && Resources() != nullptr)
             {
@@ -372,7 +369,6 @@ namespace engine::player
                 GUI()->SetFonts(defaultFont, Span<const foundation::fonts::Font* const>(others.Data(), others.Size()));
                 GUI()->SetStyleSheets(Span<const Guid>(m_settings.guiStyleSheetIds.Data(), m_settings.guiStyleSheetIds.Size()));
             }
-#endif
 
             // The resolution the game draws at, fitted into whatever window it got.
             SetRenderResolution(m_settings.renderWidth, m_settings.renderHeight, m_settings.renderFit);
@@ -586,7 +582,6 @@ namespace engine::player
             LOG_INFO(u8"Player", u8"running scene '{}'", m_bootScenePath);
         }
 
-#if OPTION_HAS_EXPERIMENTAL_GUI
         // The engine GUI's splash, when the project names one (guiLoadingDocumentId): on the GUI's
         // overlay layer, its progress the GUI's data value `bootProgress`. False when there is none
         // or it does not resolve (the UI's splash shows instead).
@@ -596,7 +591,7 @@ namespace engine::player
             {
                 return false;
             }
-            auto proxy = Resources()->Bind<experimental::gui::GuiDocument>(m_settings.guiLoadingDocumentId);
+            auto proxy = Resources()->Bind<foundation::gui::GuiDocument>(m_settings.guiLoadingDocumentId);
             if (proxy.Get() == nullptr)
             {
                 LOG_WARNING(u8"Player", u8"the GUI loading screen did not resolve; the UI's shows");
@@ -606,16 +601,13 @@ namespace engine::player
             m_guiSplash = GUI()->PushOverlay(*proxy.Get());
             return static_cast<bool>(m_guiSplash);
         }
-#endif
 
         [[nodiscard]] RefPtr<foundation::ui::View> PushSplash()
         {
-#if OPTION_HAS_EXPERIMENTAL_GUI
             if (PushGuiSplash())
             {
                 return {};
             }
-#endif
             if (UI() == nullptr)
             {
                 return {};
@@ -649,23 +641,19 @@ namespace engine::player
                 UI()->RemoveScreenOverlay(m_splashView.Get());
             }
             m_splashView = nullptr;
-#if OPTION_HAS_EXPERIMENTAL_GUI
             if (m_guiSplash && GUI() != nullptr)
             {
                 GUI()->RemoveOverlay(*m_guiSplash);
             }
             m_guiSplash = nullptr;
-#endif
         }
 
         void DriveSplash(f32 progress)
         {
-#if OPTION_HAS_EXPERIMENTAL_GUI
             if (m_guiSplash && GUI() != nullptr)
             {
                 GUI()->Context().GetData().Set(StringView(u8"bootProgress"), Variant::From<f64>(static_cast<f64>(progress)));
             }
-#endif
             foundation::ui::ViewGroup* root = Cast<foundation::ui::ViewGroup>(m_splashView.Get());
             if (root == nullptr)
             {
@@ -693,9 +681,7 @@ namespace engine::player
         // Boot splash + async default-scene load (task #123 step 4).
         engine::runtime::SceneLoadHandle m_bootLoad;     // the in-flight async boot load
         RefPtr<foundation::ui::View> m_splashView; // the pushed splash overlay (null = none)
-#if OPTION_HAS_EXPERIMENTAL_GUI
-        RefPtr<experimental::gui::Node> m_guiSplash; // the GUI's splash, when the project names one
-#endif
+        RefPtr<foundation::gui::Node> m_guiSplash; // the GUI's splash, when the project names one
         String m_bootScenePath;
         bool m_booting = false;
     };

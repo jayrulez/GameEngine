@@ -9,13 +9,13 @@
 import foundation.core;
 import foundation.ui;
 import foundation.ui.toolkit;
-import experimental.gui;
-import experimental.gui.pipeline;
+import foundation.gui;
+import gui.pipeline;
 import editor.gui;
 
 using namespace foundation::core;
 namespace toolkit = foundation::ui::toolkit;
-namespace lab = experimental::gui;
+namespace gui = foundation::gui;
 
 TEST_CASE("gui editor: what the cook reports marks the editor's lines, and clears when clean")
 {
@@ -23,7 +23,7 @@ TEST_CASE("gui editor: what the cook reports marks the editor's lines, and clear
     toolkit::CodeEditView& editor = *view;
     const StringView broken = u8"<Panel>\n  <NoSuchElement/>\n</Panel>";
     editor.SetText(broken);
-    Array<lab::GuiDiagnostic> found;
+    Array<gui::GuiDiagnostic> found;
     (void)pipeline::ValidateGuiDocument(broken, found, DefaultAllocator());
     REQUIRE_FALSE(found.IsEmpty()); // an element nothing makes is dropped, and said so
     editor::gui_pages::MarkLines(editor, found);
@@ -32,14 +32,14 @@ TEST_CASE("gui editor: what the cook reports marks the editor's lines, and clear
     CHECK(editor.Document().Diagnostics()[0].line == 1); // the editor counts from 0
     CHECK_FALSE(editor.Document().Diagnostics()[0].message.IsEmpty());
 
-    Array<lab::GuiDiagnostic> none;
+    Array<gui::GuiDiagnostic> none;
     editor::gui_pages::MarkLines(editor, none);
     CHECK(editor.Document().Diagnostics().IsEmpty());
 }
 
 TEST_CASE("gui editor: the markup a sheet is first previewed over builds clean")
 {
-    Array<lab::GuiDiagnostic> found;
+    Array<gui::GuiDiagnostic> found;
     CHECK(pipeline::ValidateGuiDocument(editor::gui_pages::kStockPreviewMarkup, found, DefaultAllocator()));
     CHECK(found.IsEmpty());
 }

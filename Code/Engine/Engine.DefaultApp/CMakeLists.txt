@@ -44,6 +44,4 @@ target_sources(Engine.DefaultApp
             DefaultApplication.cppm
             ProfilerOverlayHost.cppm)
 
-if(OPTION_EXPERIMENTAL_GUI)
-    target_link_libraries(Engine.DefaultApp PUBLIC Engine::GUI) # the engine GUI beside the UI (gui-lab-evolution-3.md, E9)
-endif()
+target_link_libraries(Engine.DefaultApp PUBLIC Engine::GUI) # the engine GUI beside the UI (gui-lab-evolution-3.md, E9)

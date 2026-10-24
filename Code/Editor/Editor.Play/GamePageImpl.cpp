@@ -483,12 +483,10 @@ namespace editor
         {
             m_app->UI()->EndRunScreens(m_gameInstance);
         }
-#if OPTION_HAS_EXPERIMENTAL_GUI
         if (m_app != nullptr && m_app->GUI() != nullptr && m_gameInstance != nullptr)
         {
             m_app->GUI()->EndRunScreens(m_gameInstance);
         }
-#endif
         m_running = false;
         RefreshToolbar();
     }
@@ -736,12 +734,10 @@ namespace editor
         {
             m_app->UI()->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
         }
-#if OPTION_HAS_EXPERIMENTAL_GUI
         if (m_app != nullptr && m_app->GUI() != nullptr)
         {
             m_app->GUI()->RenderTextures(*frame.encoder, frame.frameIndex); // and the engine GUI's
         }
-#endif
 
         // No camera override: the SCENE's primary camera drives the view (its clear
         // color included) - the player's presentation, not the editor's.
@@ -825,14 +821,12 @@ namespace editor
             m_app->UI()->SetScreenOrientation(m_gameInstance, m_orientation);
             m_app->UI()->SetRenderRun(m_gameInstance);
         }
-#if OPTION_HAS_EXPERIMENTAL_GUI
         if (m_app != nullptr && m_app->GUI() != nullptr)
         {
             m_app->GUI()->SetScreenResolution(m_gameInstance, m_renderWidth, m_renderHeight, m_renderFit);
             m_app->GUI()->SetScreenOrientation(m_gameInstance, m_orientation);
             m_app->GUI()->SetRenderRun(m_gameInstance);
         }
-#endif
         render->RenderOverlays(*frame.encoder, m_viewport->ColorTargetView(),
                                m_viewport->ColorFormat(), w, h, frame.frameIndex,
                                m_viewport->ColorTargetAlternateView()); // the screen UI blends encoded
@@ -840,12 +834,10 @@ namespace editor
         {
             m_app->UI()->SetRenderRun(nullptr);
         }
-#if OPTION_HAS_EXPERIMENTAL_GUI
         if (m_app != nullptr && m_app->GUI() != nullptr)
         {
             m_app->GUI()->SetRenderRun(nullptr);
         }
-#endif
         frame.encoder->TransitionTexture(m_viewport->ColorTexture(),
                                          rhi::ResourceState::RenderTarget,
                                          rhi::ResourceState::ShaderRead);

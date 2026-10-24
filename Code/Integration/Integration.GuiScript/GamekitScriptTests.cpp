@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// experimental.gui.gamekit - the screen stack's script surface (K4 of
+// foundation.gui.gamekit - the screen stack's script surface (K4 of
 // Specs/gui-lab-evolution-3.md) exercised end-to-end on both backends: a script makes a stack,
 // pushes a node and a document, reads the top's covering and the pause, hears a screen leave and
 // pops. The gamekit's own suite stays backend-neutral.
@@ -12,8 +12,8 @@ import foundation.core;
 import foundation.image;
 import foundation.vg.svg;
 import foundation.script;
-import experimental.gui;
-import experimental.gui.gamekit;
+import foundation.gui;
+import foundation.gui.gamekit;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
@@ -21,7 +21,7 @@ import foundation.script.angelscript;
 import foundation.script.luau;
 #endif
 
-namespace gui = experimental::gui;
+namespace gui = foundation::gui;
 namespace core = foundation::core;
 namespace script = foundation::script;
 

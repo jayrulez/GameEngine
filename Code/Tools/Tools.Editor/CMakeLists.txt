@@ -50,6 +50,4 @@ if(UNIX AND NOT APPLE)
 endif()
 
 
-if(OPTION_EXPERIMENTAL_GUI)
-    target_link_libraries(Tools.Editor PRIVATE Editor::GUI) # the engine GUI's asset pages
-endif()
+target_link_libraries(Tools.Editor PRIVATE Editor::GUI) # the engine GUI's asset pages

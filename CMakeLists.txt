@@ -132,9 +132,8 @@ endmacro()
 option(OPTION_BUILD_TESTS "Build unit tests" ON)
 option(OPTION_BUILD_SAMPLES "Build sample applications" ON)
 option(OPTION_BUILD_TOOLS "Build editor/authoring tooling (the editor libraries + CLI exes)" ON)
-# Experimental modules and optional extensions are independently switchable; each exposes a
-# OPTION_HAS_* compile define (see the policy block) so C++ can guard usage with #if.
-option(OPTION_EXPERIMENTAL_GUI "Build the experimental GUI framework (experimental.gui + shell/vfs)" ON)
+# Optional extensions are independently switchable; each exposes an OPTION_HAS_* compile define
+# (see the policy block) so C++ can guard usage with #if.
 option(OPTION_GUI_LIBFUZZER "Build a libFuzzer executable per GUI fuzz target (clang; configure the tree with -fsanitize=fuzzer-no-link,address)" OFF)
 option(OPTION_EXTENSION_IMGUI  "Build the Dear ImGui debug-UI extension (extensions.imgui)" ON)
 # Script backends are independently switchable; each defines OPTION_HAS_<backend> (presence macro,
@@ -145,8 +144,8 @@ option(OPTION_ENABLE_LUAU        "Build the Luau script backend" ON)
 option(OPTION_WARNINGS_AS_ERRORS "Treat warnings as errors" ON)
 
 # A web (Emscripten) build ships a game, not the authoring/side toolchain: force the tooling group
-# off up front, before the policy defines below capture it. The experimental GUI stays: a web game
-# has the engine's GUI (Engine.GUI) as a desktop one does (gui-lab-evolution-3.md, E11).
+# off up front, before the policy defines below capture it. The GUI (foundation.gui) stays: a web
+# game has the engine's GUI (Engine.GUI) as a desktop one does (gui-lab-evolution-3.md, E11).
 if(EMSCRIPTEN)
     set(OPTION_BUILD_TOOLS OFF)
     # OPTION_EXTENSION_IMGUI stays available on web: Dear ImGui + extensions.imgui compile for
@@ -231,8 +230,7 @@ target_compile_definitions(policy INTERFACE
     BUILD_CONFIG=\"$<CONFIG>\"
     BUILD_COMPILER=\"${_dr_comp}\"
     # Optional-module presence flags (0/1) - guard usage in C++ with e.g.
-    # `#if OPTION_HAS_EXTENSION_IMGUI` / `#if OPTION_HAS_EXPERIMENTAL_GUI`.
-    OPTION_HAS_EXPERIMENTAL_GUI=$<BOOL:${OPTION_EXPERIMENTAL_GUI}>
+    # `#if OPTION_HAS_EXTENSION_IMGUI`.
     OPTION_HAS_EXTENSION_IMGUI=$<BOOL:${OPTION_EXTENSION_IMGUI}>
     USER_DATA_DIR_NAME=u8\"${USER_DATA_DIR_NAME_VALUE}\"
     TEMPLATE_ID_PREFIX=u8\"${TEMPLATE_ID_PREFIX_VALUE}\")
@@ -309,14 +307,13 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/Code/Engine
     ${CMAKE_SOURCE_DIR}/Code/Editor
     ${CMAKE_SOURCE_DIR}/Code/Tools
-    ${CMAKE_SOURCE_DIR}/Code/Experimental
     ${CMAKE_SOURCE_DIR}/Code/Extensions)
 
 # --- Targets -----------------------------------------------------------------
 # ONE canonical, dependency-ordered list for every platform. Order is a valid topological order -
 # a few libs probe siblings at configure time with if(TARGET ...) (Graphics->RHI backends,
 # Editor.Core->Shaders, Script->AngelScript). Web builds the SAME list: the groups it cannot run
-# yet - tooling, experimental, extensions - are forced off for EMSCRIPTEN above, so they skip in
+# yet - tooling - are forced off for EMSCRIPTEN above, so they skip in
 # place. No separate web climb to keep in sync; web-only samples + return() sit at the tail.
 if(EMSCRIPTEN)
     # Emscripten defaults are sized for tiny demos: 64KB stack (engine code overflows it) and a
@@ -449,9 +446,7 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(Code/Foundation/UI.Runtime)
     add_subdirectory(Code/Foundation/UI.Application)
 endif()
-if(OPTION_EXPERIMENTAL_GUI)
-    add_subdirectory(Code/Experimental/GUI)   # fresh eepp-derived UI framework
-endif()
+add_subdirectory(Code/Foundation/GUI)   # fresh eepp-derived UI framework
 add_subdirectory(Code/Foundation/Script)
 # --- Script backends: independently switchable via OPTION_ENABLE_* (declared up top) -----------
 # Both OPTION_ENABLE_ANGELSCRIPT/LUAU flags are defined in the option block above. Only AngelScript
@@ -519,27 +514,23 @@ else()
 endif()
 add_subdirectory(Code/Foundation/Input)     # action-mapping layer (InputMap + ActionRuntime + asset/cooked) over Core + Shell
 add_subdirectory(Code/Foundation/Input.Resource)
-if(OPTION_EXPERIMENTAL_GUI)
-    add_subdirectory(Code/Experimental/GUI.Shell)  # platform input bridge (Shell InputEvents -> GUI EventDispatcher)
-    add_subdirectory(Code/Experimental/GUI.Inspector)  # the lab's inspector (E8e)
-    add_subdirectory(Code/Experimental/GUI.Testing)  # test helpers for lab GUIs (E8f)
-    add_subdirectory(Code/Experimental/GUI.VFS)   # VFS-backed IResourceProvider (background-image: url())
-endif()
+add_subdirectory(Code/Foundation/GUI.Shell)  # platform input bridge (Shell InputEvents -> GUI EventDispatcher)
+add_subdirectory(Code/Foundation/GUI.Inspector)  # the GUI's inspector (E8e)
+add_subdirectory(Code/Foundation/GUI.Testing)  # test helpers for GUIs (E8f)
+add_subdirectory(Code/Foundation/GUI.VFS)   # VFS-backed IResourceProvider (background-image: url())
 add_subdirectory(Code/Foundation/Graphics)  # GraphicsDevice/RenderWindow render host over RHI+Shell; below Runtime
 add_subdirectory(Code/Foundation/Runtime)
 add_subdirectory(Code/Foundation/Runtime.Client)
-if(OPTION_EXPERIMENTAL_GUI)
-    # The lab's satellites (Specs/gui-lab-evolution-3.md), over the graphics and runtime hosts.
-    add_subdirectory(Code/Experimental/GUI.Hosting)   # the host: windows, roots, renderers, input, offscreen pictures
-    add_subdirectory(Code/Experimental/GUI.Viewport)  # 3D content in a node, its input gated
-    add_subdirectory(Code/Experimental/GUI.Docking)   # docking, floating panels as OS windows
-    add_subdirectory(Code/Experimental/GUI.Toolkit)   # editor widgets
-    add_subdirectory(Code/Experimental/GUI.Code)      # the code editor
-    add_subdirectory(Code/Experimental/GUI.Gamekit)   # a game's screens
-    add_subdirectory(Code/Experimental/GUI.Resources) # cooked documents and themes
-    if(OPTION_BUILD_TOOLS)
-        add_subdirectory(Code/Experimental/GUI.Pipeline) # cooking them (tools only)
-    endif()
+# The GUI's satellites (Specs/gui-lab-evolution-3.md), over the graphics and runtime hosts.
+add_subdirectory(Code/Foundation/GUI.Hosting)   # the host: windows, roots, renderers, input, offscreen pictures
+add_subdirectory(Code/Foundation/GUI.Viewport)  # 3D content in a node, its input gated
+add_subdirectory(Code/Foundation/GUI.Docking)   # docking, floating panels as OS windows
+add_subdirectory(Code/Foundation/GUI.Toolkit)   # editor widgets
+add_subdirectory(Code/Foundation/GUI.Code)      # the code editor
+add_subdirectory(Code/Foundation/GUI.Gamekit)   # a game's screens
+add_subdirectory(Code/Foundation/GUI.Resources) # cooked documents and themes
+if(OPTION_BUILD_TOOLS)
+    add_subdirectory(Code/Pipeline/GUI.Pipeline) # cooking them (tools only)
 endif()
 add_subdirectory(Code/Engine/Engine.GameInstance)
 add_subdirectory(Code/Engine/Engine.UI.Script)  # UI script surface: reflected view handles + `ui` screen-tier facade (over UI.Gamekit)
@@ -559,9 +550,7 @@ add_subdirectory(Code/Engine/Engine.Integration) # cross-subsystem composition h
 # The scene-surface composition root: aggregates every domain's Add<Domain>SceneManagers (the same
 # functions the subsystems' OnSceneCreated delegate to) for headless scene consumers (export
 # transcode, MCP scene_validate). Must come after all the domain libs it aggregates (incl. Script).
-if(OPTION_EXPERIMENTAL_GUI)
-    add_subdirectory(Code/Engine/Engine.GUI) # the engine's GUI on the lab (Specs/gui-lab-evolution-3.md, section E)
-endif()
+add_subdirectory(Code/Engine/Engine.GUI) # the engine's GUI on foundation.gui (Specs/gui-lab-evolution-3.md, section E)
 add_subdirectory(Code/Engine/Engine.Composition) # THE composition root: the one list of domains, facets on demand (scene, reflection, resource types, factories, facades)
 if(OPTION_EXTENSION_IMGUI)
     add_subdirectory(Code/Extensions/Imgui) # Dear ImGui debug UI (RHI renderer + subsystem) over Runtime
@@ -601,9 +590,7 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Input) # input-map editing page (editor exe only)
     add_subdirectory(Code/Editor/Editor.PropertyAnimation) # property-animation clip page (editor exe only)
     add_subdirectory(Code/Editor/Editor.GameUI) # UI document page: text + live preview (editor exe only)
-    if(OPTION_EXPERIMENTAL_GUI)
-        add_subdirectory(Code/Editor/Editor.GUI) # the engine GUI's asset pages: .gml and .css, text + live preview
-    endif()
+    add_subdirectory(Code/Editor/Editor.GUI) # the engine GUI's asset pages: .gml and .css, text + live preview
     add_subdirectory(Code/Editor/Editor.Audio)  # audio clip audition page: waveform + play (editor exe only)
     add_subdirectory(Code/Editor/Editor.Texture) # texture asset page: import settings + preview (editor exe only)
     add_subdirectory(Code/Editor/Editor.Image) # image asset page: inspect + color-space intent (editor exe only)
@@ -743,21 +730,21 @@ if(OPTION_BUILD_TESTS)
     endif()
     util_test_suite(Code/Engine/Engine.UI.Tests                     Engine::UI)
     util_test_suite(Code/Engine/Engine.UI.Script.Tests              Engine::UI.Script)
-    util_test_suite(Code/Experimental/GUI.Shell.Tests               Experimental::GUI.Shell)
-    util_test_suite(Code/Experimental/GUI.Inspector.Tests           Experimental::GUI.Inspector)
-    util_test_suite(Code/Experimental/GUI.Testing.Tests             Experimental::GUI.Testing)
-    util_test_suite(Code/Experimental/GUI.Fuzz.Tests                Experimental::GUI.Testing)
-    util_test_suite(Code/Experimental/GUI.Tests                     Experimental::GUI)
-    util_test_suite(Code/Experimental/GUI.VFS.Tests                 Experimental::GUI.VFS)
-    util_test_suite(Code/Experimental/GUI.Hosting.Tests             Experimental::GUI.Hosting)
-    util_test_suite(Code/Experimental/GUI.Viewport.Tests            Experimental::GUI.Viewport)
-    util_test_suite(Code/Experimental/GUI.Docking.Tests             Experimental::GUI.Docking)
-    util_test_suite(Code/Experimental/GUI.Toolkit.Tests             Experimental::GUI.Toolkit)
-    util_test_suite(Code/Experimental/GUI.Code.Tests                Experimental::GUI.Code)
-    util_test_suite(Code/Experimental/GUI.Gamekit.Tests             Experimental::GUI.Gamekit)
-    util_test_suite(Code/Experimental/GUI.Resources.Tests           Experimental::GUI.Resources)
+    util_test_suite(Code/Foundation/GUI.Shell.Tests               Foundation::GUI.Shell)
+    util_test_suite(Code/Foundation/GUI.Inspector.Tests           Foundation::GUI.Inspector)
+    util_test_suite(Code/Foundation/GUI.Testing.Tests             Foundation::GUI.Testing)
+    util_test_suite(Code/Foundation/GUI.Fuzz.Tests                Foundation::GUI.Testing)
+    util_test_suite(Code/Foundation/GUI.Tests                     Foundation::GUI)
+    util_test_suite(Code/Foundation/GUI.VFS.Tests                 Foundation::GUI.VFS)
+    util_test_suite(Code/Foundation/GUI.Hosting.Tests             Foundation::GUI.Hosting)
+    util_test_suite(Code/Foundation/GUI.Viewport.Tests            Foundation::GUI.Viewport)
+    util_test_suite(Code/Foundation/GUI.Docking.Tests             Foundation::GUI.Docking)
+    util_test_suite(Code/Foundation/GUI.Toolkit.Tests             Foundation::GUI.Toolkit)
+    util_test_suite(Code/Foundation/GUI.Code.Tests                Foundation::GUI.Code)
+    util_test_suite(Code/Foundation/GUI.Gamekit.Tests             Foundation::GUI.Gamekit)
+    util_test_suite(Code/Foundation/GUI.Resources.Tests           Foundation::GUI.Resources)
     if(OPTION_BUILD_TOOLS)
-        util_test_suite(Code/Experimental/GUI.Pipeline.Tests        Experimental::GUI.Pipeline)
+        util_test_suite(Code/Pipeline/GUI.Pipeline.Tests        Pipeline::GUI)
     endif()
     util_test_suite(Code/Engine/Engine.GUI.Tests                    Engine::GUI)
     util_test_suite(Code/Foundation/Animation.Resource.Tests        Foundation::Animation.Resource)
@@ -880,10 +867,9 @@ if(OPTION_BUILD_TESTS)
     if(OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU)
         util_test_suite(Code/Integration/Integration.ScriptFacades     Engine::UI)
     endif()
-    # The experimental GUI's satellites from scripts (the gamekit's screen stack), apart from the
-    # facades above: the lab and foundation.ui reflect types of the same names.
-    if(OPTION_EXPERIMENTAL_GUI AND (OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU))
-        util_test_suite(Code/Integration/Integration.GuiScript         Experimental::GUI.Gamekit)
+    # The GUI (foundation.gui) and its satellites from scripts, the engine's GUI among them.
+    if(OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU)
+        util_test_suite(Code/Integration/Integration.GuiScript         Foundation::GUI.Gamekit)
     endif()
     util_test_suite(Code/Integration/Integration.Mcp                Editor::Mcp)  # golden: create->open->inspect a project
     # Engine composition x pipeline registration: every factory description's cooked form has a builder.
@@ -918,11 +904,6 @@ endif()
 
 if(OPTION_BUILD_SAMPLES)
     add_subdirectory(Code/Samples)
-    # The experimental GUI's sandbox lives beside the framework it shows; it draws through the
-    # samples' framework, so it joins after it.
-    if(OPTION_EXPERIMENTAL_GUI AND TARGET Samples::Framework)
-        add_subdirectory(Code/Experimental/GUI.Sandbox) # experimental.gui widgets + CSS on the VG renderer
-    endif()
 endif()
 
 # Game native code (game-native-code.md N3): the game's native directory joins the

@@ -91,9 +91,7 @@ import editor.navigation; // RegisterNavigationEditorSettings* (domain-contribut
 import foundation.ui.resource;
 import ui.pipeline;
 import editor.gameui;
-#if OPTION_HAS_EXPERIMENTAL_GUI
 import editor.gui; // the engine GUI's asset pages
-#endif
 import editor.audio;
 import editor.texture;
 import editor.image;
@@ -336,9 +334,7 @@ int main(int argc, char** argv)
         editor::RegisterGameAudioEditorSettings(app.Context());
         editor::RegisterPropertyAnimationEditor(app.Context(), host);
         editor::RegisterGameUIEditor(app.Context(), host, uiHost);
-#if OPTION_HAS_EXPERIMENTAL_GUI
         editor::RegisterGuiEditor(app.Context(), host, uiHost); // the engine GUI's .gml and .css pages
-#endif
         editor::RegisterAudioClipEditor(app.Context(), host);
         editor::RegisterBusLayoutEditor(app.Context(), host);
         editor::RegisterTextureEditor(app.Context());

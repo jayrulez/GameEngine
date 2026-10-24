@@ -33,25 +33,19 @@ namespace resource = foundation::resource;
 
 namespace
 {
-    // The GUI domain (gui-lab-evolution-3.md, section E), there when the lab is built: one domain,
+    // The GUI domain (gui-lab-evolution-3.md, section E), there when the GUI is built: one domain,
     // one resource module of its own (its vector images and fonts are the UI domain's too), two
     // factories.
-#if OPTION_HAS_EXPERIMENTAL_GUI
     constexpr usize kGuiDomains = 1;
     constexpr usize kGuiResourceModules = 1;
     constexpr usize kGuiFactories = 2;
-#else
-    constexpr usize kGuiDomains = 0;
-    constexpr usize kGuiResourceModules = 0;
-    constexpr usize kGuiFactories = 0;
-#endif
 }
 
 TEST_CASE("engine.composition: the one list covers every domain, and the scene facet every manager")
 {
     const engine::EngineComposition& composition = engine::FullComposition();
     // Thirteen scene domains (the old scene list) + input + the two facade-only libraries, and the
-    // GUI's when the lab is built.
+    // GUI's when the GUI is built.
     CHECK(composition.Modules().Size() == 16u + kGuiDomains);
     CHECK(composition.Scene().ModuleCount() == 13u + kGuiDomains);
     CHECK(&engine::FullSceneComposition() == &composition.Scene());
@@ -116,7 +110,7 @@ TEST_CASE("engine.composition: the resource facet - every domain's resource modu
     }
     // 30 = the standard headless set (24) + the texture factory + the image and shader factories
     // no host registered before the composition brought them + the two render profiles + the UI
-    // vector image, and the GUI's documents and sheets when the lab is built.
+    // vector image, and the GUI's documents and sheets when the GUI is built.
     CHECK(composition.FactoryDescriptionCount() == 30u + kGuiFactories);
 
     engine::RegisterAllResourceTypes();

@@ -1255,3 +1255,12 @@ final names). Then the engine's sandbox and the native samples (`Code/Samples`) 
 `Engine.GUI`, then the sample games. After that, the editor's move is planned properly before any
 of it is built: a design for the whole editor, its sheet, its icons, its transitions, everything
 (which also gives the mirror engine time to port the GUI).
+
+The cleanup (built 2026-10-23, the user's rulings): the lab's libraries moved to
+`Code/Foundation/GUI*` (modules `foundation.gui*`, namespace `foundation::gui`, CMake
+`Foundation::GUI*`), its pipeline to `Code/Pipeline/GUI.Pipeline` (`gui.pipeline`, `Pipeline::GUI`)
+and its sandbox to `Code/Samples/GUISandbox`; `OPTION_EXPERIMENTAL_GUI` and every guard went (the
+GUI is built on every platform); code that qualifies foundation.ui (`ui::`) qualifies the GUI the
+same way (`gui::`), the rest names its types plainly under `using namespace foundation::gui`; the
+drag payload types became `gui/tab`, `gui/dock-surface` and `gui/dock-stack`. This record keeps
+the old paths and names where it was written with them.

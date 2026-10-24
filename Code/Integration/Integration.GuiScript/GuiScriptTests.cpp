@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - the lab driven from scripts (G1 of Specs/vg-and-gui-lab.md), with no UI-script layer: the
+// GUI - the GUI driven from scripts (G1 of Specs/vg-and-gui-lab.md), with no UI-script layer: the
 // widgets reach AngelScript and Luau through their reflection. Each language runs the same story
 // against one native checker: build a small tree under `gui.root()`, set properties, add a class a
 // sheet styles, listen to a click the dispatcher delivers; then the weak-handle rule: a destroyed
@@ -16,7 +16,7 @@
 import foundation.core;
 import foundation.script;
 import foundation.i18n; // a script's localized texts (E16)
-import experimental.gui;
+import foundation.gui;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
@@ -26,7 +26,7 @@ import foundation.script.luau;
 
 using namespace foundation::core;
 using namespace foundation::script;
-namespace gui = experimental::gui;
+namespace gui = foundation::gui;
 
 namespace
 {
@@ -416,7 +416,7 @@ TEST_CASE("gui-script: Luau binds widgets to data and to each other")
 #endif // OPTION_HAS_LUAU
 
 #ifdef OPTION_HAS_ANGELSCRIPT
-TEST_CASE("gui-script: AngelScript builds, styles and clicks the lab's widgets, and holds them weakly")
+TEST_CASE("gui-script: AngelScript builds, styles and clicks the GUI's widgets, and holds them weakly")
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
@@ -466,7 +466,7 @@ TEST_CASE("gui-script: AngelScript builds, styles and clicks the lab's widgets, 
 #endif // OPTION_HAS_ANGELSCRIPT
 
 #ifdef OPTION_HAS_LUAU
-TEST_CASE("gui-script: Luau builds, styles and clicks the lab's widgets, and holds them weakly")
+TEST_CASE("gui-script: Luau builds, styles and clicks the GUI's widgets, and holds them weakly")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);

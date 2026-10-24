@@ -476,6 +476,14 @@ export namespace foundation::gui
                 data.NeedsFrame = needs;
             }
             PlaceContents();
+            // A content that changes as it is placed (a viewport made again at a new size, its old
+            // image let go) invalidates its node: its window draws, rather than encode a batch that
+            // still names what was let go. Its root's own flag, not NeedsFrame, which closes the
+            // frame's stats.
+            for (const Attached& attached : m_attached)
+                for (const UniquePtr<GuiWindowData::Pane>& pane : attached.Data->Panes)
+                    if (pane->Root->NeedsRedraw())
+                        attached.Data->NeedsFrame = true;
             m_bakesRecorded = false;
         }
 

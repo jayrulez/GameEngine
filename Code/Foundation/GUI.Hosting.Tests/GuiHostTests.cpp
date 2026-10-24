@@ -501,3 +501,51 @@ TEST_CASE("gui.hosting: a press's release reaches its window though the pointer 
     device->Raw()->DestroyShaderModule(vs);
 }
 
+
+namespace
+{
+    // Hosted content that changes as it is placed (a viewport made again at a new size): it
+    // invalidates its node from Place, after the frame's verdict was taken.
+    class ResizingContent final : public IHostedContent
+    {
+    public:
+        explicit ResizingContent(Node& node) : m_node(node) {}
+        Node* HostedNode() override { return &m_node; }
+        void Bind(rhi::Device&, foundation::vg::renderer::VGRenderer*, shell::IInputManager*, u32) override {}
+        void Place(Rectangle, Float2) override
+        {
+            if (resizeNext)
+            {
+                resizeNext = false;
+                m_node.Invalidate();
+            }
+        }
+        void Record(rhi::CommandEncoder&, i32) override {}
+        shell::InputSurface* HostedSurface() override { return nullptr; }
+        bool resizeNext = false;
+
+    private:
+        Node& m_node;
+    };
+}
+
+TEST_CASE("gui.hosting: content that invalidates its node as it is placed has its window draw, not reuse its last batch")
+{
+    // The last batch would name the image the content let go (Sedulous found the use after free).
+    Bed bed;
+    RefPtr<SceneRoot> root = bed.MakeRoot();
+    RefPtr<Panel> panel = MakeRef<Panel>(DefaultAllocator());
+    root->AddChild(panel.Get());
+    ResizingContent content(*panel);
+    bed.host->AttachWindow(*bed.main, root);
+    bed.host->AddContent(content);
+    bed.Frame(bed.main.Get());
+    bed.Frame(bed.main.Get()); // nothing changed: reused
+    const u64 drawn = bed.host->FramesDrawn();
+    const u64 reused = bed.host->FramesReused();
+    content.resizeNext = true;
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->FramesDrawn() == drawn + 1);
+    CHECK(bed.host->FramesReused() == reused);
+    bed.host->RemoveContent(content);
+}

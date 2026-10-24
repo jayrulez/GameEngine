@@ -285,3 +285,9 @@ Rulings (the user, 2026-10-23):
 9. Rewritten in place on `editor-gui` (off vg at 4fe177db2); parked libraries leave the build,
    never commented out; vg gets no more changes.
 10. Editor.GameUI stays with the old editor.
+11. A page carries its own panes: a scene page its hierarchy and inspector, in its own splits, so
+    pages stand side by side; the dock holds pages and the shared panels (assets, console, profiler).
+12. The scene's own settings are the scene selected: the hierarchy's top row is the scene, and
+    selecting it (or selecting nothing) shows the scene's settings in the same inspector. No
+    Entity and Scene tabs.
+13. The accent is azure (#2f6fdf); the default density is compact (0.85).

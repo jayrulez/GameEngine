@@ -20,6 +20,7 @@ target_link_libraries(Editor.App
 
 target_sources(Editor.App
     PRIVATE
+        ApplicationImpl.cpp
         EditorSplashImpl.cpp
         EditorWindowToolsImpl.cpp
         EditorProfilerToolsImpl.cpp
@@ -37,6 +38,7 @@ target_sources(Editor.App
             EditorSession.cppm
             EditorMcpService.cppm
             EditorAppActions.cppm
+            Application.cppm
             PlaybackActions.cppm
             AssetFilter.cppm
             PropertyNames.cppm

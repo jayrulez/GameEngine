@@ -574,7 +574,7 @@ if(OPTION_BUILD_TOOLS)
     # comes back with its port commit (the spec's ledger, 4.1, keeps the list): Preview, Scene,
     # Play, Animation, Particles, PropertyAnimation, Generic, Texture, Fonts, Image, Heightfield,
     # Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain, Script (and its
-    # AngelScript and Luau lexers), Shaders, GUI, GameUI; and Tools.Editor, which assembles them.
+    # AngelScript and Luau lexers), Shaders, GUI, GameUI.
     # Editor.App, the shell, comes back in parts (the spec's 5.1): its source list names the files
     # on the GUI so far.
     add_subdirectory(Code/Editor/Editor.App)
@@ -620,6 +620,8 @@ if(OPTION_BUILD_TOOLS)
     # RegisterAllBuilders/RegisterAllImporters/RegisterPipelineTypes set every host consumes. Must
     # come AFTER all pipeline modules (incl. the fonts block) since it links them.
     add_subdirectory(Code/Pipeline/Pipeline.Registration)
+
+    add_subdirectory(Code/Tools/Tools.Editor)        # Editor executable: the shell on the GUI, its pages coming back as they port
 
     add_subdirectory(Code/Tools/Tools.Cook)          # Tools.Cook CLI cooker (headless)
     add_subdirectory(Code/Tools/Tools.Mcp)          # headless MCP stdio server (agent access)

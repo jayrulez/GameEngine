@@ -46,7 +46,6 @@ import foundation.particles.resource;
 import foundation.animation;
 import foundation.particles;
 import engine.particles;
-import foundation.ui.runtime;
 import foundation.resource;
 import foundation.geometry;
 import foundation.geometry.resource;
@@ -58,13 +57,6 @@ import pipeline.importer; // the import framework (a consumer imports it itself)
 import engine.composition; // RegisterAllScriptFacades - the COMPLETE engine facade surface
 import editor.core;
 import editor.app;
-import editor.scene;
-import editor.animation;
-import editor.play;
-import editor.render;
-import editor.particles;
-import editor.geometry;
-import editor.materials;
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -80,8 +72,6 @@ import particles.pipeline;
 import foundation.input;
 import foundation.input.resource;
 import input.pipeline;
-import editor.input;
-import editor.propertyanimation;
 import engine.input;
 import foundation.physics;
 import foundation.physics.resource;
@@ -90,20 +80,6 @@ import navigation.pipeline;
 import editor.navigation; // RegisterNavigationEditorSettings* (domain-contributed prefs)
 import foundation.ui.resource;
 import ui.pipeline;
-import editor.gameui;
-import editor.gui; // the engine GUI's asset pages
-import editor.audio;
-import editor.texture;
-import editor.image;
-import editor.heightfield;
-import editor.terrain;
-import editor.vegetation; // the Paint Vegetation brush + its panel
-import editor.spline;
-import editor.fonts;
-import editor.physics;
-import editor.generic;
-import editor.script;
-import editor.shaders;
 import engine.physics;
 import modelimporter;
 import foundation.audio;
@@ -113,11 +89,9 @@ import foundation.script;
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 import script.angelscript.pipeline;
-import editor.script.angelscript;
 #endif
 #ifdef OPTION_HAS_LUAU
 import script.luau.pipeline;
-import editor.script.luau;
 #endif
 import foundation.script.resource;
 import script.pipeline;
@@ -152,7 +126,6 @@ namespace
         // Domain editor-settings SECTIONS register before the app boots (the user settings
         // file loads in the app ctor; see RegisterNavigationEditorSettingsTypes).
         editor::navigation::RegisterNavigationEditorSettingsTypes();
-        editor::RegisterGameAudioEditorSettingsTypes();
         pipeline::RegisterAllBuilders(registry, dataRoot);
         // The COMPLETE engine script surface into the global registry (run/ui/physics/audio/...
         // facades), so BOTH the editor's cook AND its live script validation (ScriptApiSurface
@@ -160,14 +133,6 @@ namespace
         // foundation-only registration above is missing every Engine-level facade. Metadata only
         // (no device/GPU/world), idempotent.
         engine::RegisterAllScriptFacades();
-        // Per-language EDITOR-UI services (CodeEditView lexers; completion providers later).
-        editor::RegisterHlslEditorUI(editor::EditorRootAllocator());
-#ifdef OPTION_HAS_ANGELSCRIPT
-        editor::RegisterAngelScriptEditorUI();
-#endif
-#ifdef OPTION_HAS_LUAU
-        editor::RegisterLuauEditorUI();
-#endif
     }
 
     // `--seed-primitives`: the headless seed also creates EVERY primitive the creator table
@@ -292,16 +257,10 @@ int main(int argc, char** argv)
         }
     }
     config.startInProjectManager = config.projectDirectory.IsEmpty();
-    {
-        // Fonts resolve from the data root. The UI font also has an embedded twin (below) as a
-        // last resort, so UI text renders even if the data file is missing.
-        config.fontPath = foundation::vfs::DataPath(EditorDataRoot(),
-                                                    u8"Assets/fonts/roboto/Roboto-Regular.ttf");
-        config.monoFontPath = foundation::vfs::DataPath(
-            EditorDataRoot(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf");
-    }
-    config.embeddedFont = reinterpret_cast<const u8*>(g_embeddedEditorFont);
-    config.embeddedFontSize = static_cast<usize>(g_embeddedEditorFontSize);
+    // The splash's face, from the data root, with an embedded twin as the last resort (the editor's
+    // own faces are its sheet's, through its resources).
+    const String splashFontPath = foundation::vfs::DataPath(EditorDataRoot(), u8"Assets/fonts/roboto/Roboto-Regular.ttf");
+    const Span<const u8> embeddedFont(reinterpret_cast<const u8*>(g_embeddedEditorFont), static_cast<usize>(g_embeddedEditorFontSize));
     config.logBuffer = &logBuffer;
 
     // Assembly: THIS is where the engine subsystems and per-subsystem editor
@@ -311,67 +270,21 @@ int main(int argc, char** argv)
     // editor's runtime context - the editor registers NONE itself.
     config.seedNewProject = [](editor::EditorContext& ctx, editor::EditorProject& project)
     { SeedNewProject(ctx, project); };
-    config.registerEditors = [](editor::app::EditorApplication& app,
-                                foundation::runtime::IApplicationHost& host,
-                                foundation::ui::runtime::UIHost& uiHost)
+    // The pages are parked while the editor moves onto the GUI (Documentation/Specs/editor-gui.md,
+    // 4.1): each one's RegisterEditor comes back here with its port.
+    config.registerEditors = [](editor::app::EditorApplication& app, foundation::runtime::IApplicationHost& host)
     {
         app.SetSceneRenderer(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
-        editor::RegisterSceneEditor(app.Context(), host, uiHost);
-        editor::RegisterPlayInEditor(app.Context(), host, uiHost, app.EmbeddedApplication());
-        editor::RegisterMaterialEditor(app.Context(), host, uiHost);
-        editor::RegisterShaderEditor(
-            app.Context(), host, uiHost,
-            foundation::vfs::DataPath(g_dataRoot.AsView(), foundation::shaders::kShaderFolder)
-                .AsView());
-        editor::RegisterSettingsProfileEditor(app.Context(), host, uiHost);
-        editor::RegisterMeshEditor(app.Context(), host, uiHost);
-        editor::RegisterParticleEditor(app.Context(), host, uiHost);
-        editor::RegisterAnimationGraphEditor(app.Context(), host, uiHost);
-        editor::RegisterAnimationClipEditor(app.Context(), host, uiHost);
-        editor::RegisterSkeletonEditor(app.Context(), host, uiHost);
-        editor::RegisterInputEditor(app.Context(), host);
         editor::navigation::RegisterNavigationEditorSettings(app.Context());
-        editor::RegisterGameAudioEditorSettings(app.Context());
-        editor::RegisterPropertyAnimationEditor(app.Context(), host);
-        editor::RegisterGameUIEditor(app.Context(), host, uiHost);
-        editor::RegisterGuiEditor(app.Context(), host, uiHost); // the engine GUI's .gml and .css pages
-        editor::RegisterAudioClipEditor(app.Context(), host);
-        editor::RegisterBusLayoutEditor(app.Context(), host);
-        editor::RegisterTextureEditor(app.Context());
-        editor::RegisterImageEditor(app.Context());
-        editor::RegisterHeightfieldEditor(app.Context());
-        editor::RegisterTerrainEditor(app.Context(), host, uiHost);
-        // Palette order = registration order: the Terrain dropdown, the Vegetation dropdown,
-        // then the lone Spline tool.
-        editor::RegisterTerrainViewportTools(); // the scene-viewport terrain sculpt + splat brushes
-        editor::RegisterTerrainToolPanels();    // their bottom-dock brush settings panels
-        editor::RegisterVegetationViewportTools(); // the scene-viewport vegetation mask brush
-        editor::RegisterVegetationToolPanels();    // its brush settings panel
-        editor::RegisterSplineViewportTools(); // the scene-viewport spline control-point editor
-        editor::RegisterFontEditor(app.Context());
-        editor::RegisterCollisionShapeEditor(app.Context(), host, uiHost);
-        // The FALLBACK page registers like any factory: nearest-base dispatch routes every
-        // bespoke page first; anything else lands on the generic serialize-driven form
-        // instead of the hard "No editor registered" failure.
-        editor::RegisterGenericAssetEditor(app.Context());
-        // Thumbnail-generator tripwire: each domain's Register<X>Editor
-        // above also registers its thumbnail generator - bump the expected count when a domain
-        // gains one, so a silently-unregistered generator fails loudly here, not as icons.
-        DIAGNOSTIC_ASSERT(app.Context().Thumbnails() != nullptr &&
-                          app.Context().Thumbnails()->GeneratorCount() == 5);
-        // 2 = mesh + material (RegisterSceneEditor); the GPU lane's stage renders these.
-        DIAGNOSTIC_ASSERT(app.Context().Thumbnails()->SceneGeneratorCount() == 8);
-        // Script behavior page + per-backend "New Asset > <Lang> Script" creators.
-        // RegisterScriptEditor fans creators over backends that have a registered COOK, so the
-        // cooks must be registered FIRST - RegisterAllBuilders (below) also registers them for the
-        // cook service, but that runs later, so register them here too (idempotent by languageId).
+        // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
+        // the cook service too). The script page and its "New Asset > <Lang> Script" creators come
+        // back with the Script page's port.
 #ifdef OPTION_HAS_ANGELSCRIPT
         pipeline::RegisterAngelScriptScriptCook();
 #endif
 #ifdef OPTION_HAS_LUAU
         pipeline::RegisterLuauScriptCook();
 #endif
-        editor::RegisterScriptEditor(app.Context());
         // File > New: every pipeline domain's creators, the scripts' among them.
         (void)pipeline::RegisterAllCreators(app.Context().Creators());
         RegisterEditorBuilders(app.Builders(), g_dataRoot.AsView()); // the cook service's set
@@ -405,8 +318,7 @@ int main(int argc, char** argv)
     // The splash, from now until the editor is ready: startup holds the main thread with
     // nothing drawn (the device, the shader compiles, the fonts, the project and its pages).
     UniquePtr<editor::app::EditorSplash> splash = editor::app::OpenEditorSplash(
-        *shellPtr, EditorDataRoot(), config.fontPath.AsView(),
-        Span<const u8>(config.embeddedFont, config.embeddedFontSize),
+        *shellPtr, EditorDataRoot(), splashFontPath.AsView(), embeddedFont,
         Format(u8"Version {}", engine::project::kEngineVersionString).AsView(), editor::EditorRootAllocator());
     if (splash)
     {

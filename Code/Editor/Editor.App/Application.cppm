@@ -145,7 +145,7 @@ export namespace editor::app
         [[nodiscard]] Array<u32> CapturableWindows();
         void TakeEditorScreenshot();
         void UpdateCaptures(runtime::IApplicationHost& host, f32 dt);
-        void UpdateJobStatus();
+        void UpdateStatusBar();
 
         TaggedAllocator m_editorAllocator{editor::EditorRootAllocator(), RegisterMemoryTag("Editor")};
         EditorAppConfig m_config;

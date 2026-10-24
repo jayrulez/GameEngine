@@ -32,6 +32,7 @@ import foundation.gui.docking; // its sheet
 import foundation.gui.toolkit; // its sheet and elements
 import foundation.gui.code;    // its sheet and elements
 import editor.core;
+import :status_bar;
 
 using namespace foundation::core;
 
@@ -118,8 +119,11 @@ export namespace editor::app
                 return false;
             }
             m_root->AddChild(m_frame.Get());
+            m_status = MakeUnique<EditorStatusBar>(m_allocator, *m_frame);
+            // The toasts stack at the bottom right of the dock, over it, above the status bar.
             m_toasts = MakeRef<gui::ToastHost>(m_allocator);
-            m_frame->AddChild(m_toasts.Get());
+            gui::Node* dock = FindById(u8"frame-dock");
+            (dock != nullptr ? *dock : *m_frame).AddChild(m_toasts.Get());
             SetLook(look);
             // The editor's own files changed on disk: its sheet applies again.
             m_reload = MakeUnique<gui::Effect>(m_allocator, [self]()
@@ -162,7 +166,8 @@ export namespace editor::app
             return loader.LoadFromString(text.AsView());
         }
 
-        /// A toast over the frame, its severity the notice's.
+        /// A toast over the dock, its severity the notice's; the same message again counts on the
+        /// one shown. An error stays until it is dismissed.
         void ShowToast(editor::NoticeKind kind, StringView message)
         {
             if (!m_toasts)
@@ -173,14 +178,17 @@ export namespace editor::app
                                : kind == editor::NoticeKind::Error   ? gui::ToastSeverity::Error
                                                                      : gui::ToastSeverity::Info;
             request.Title = String(message);
+            request.Key = String(message);
             (void)m_toasts->Post(Move(request));
         }
-        /// The status bar's message (the frame's `status-message` label).
+        /// The status bar's message.
         void SetStatus(StringView message)
         {
-            if (auto* label = Cast<gui::Label>(FindById(u8"status-message")))
-                label->SetText(message);
+            if (m_status)
+                m_status->SetMessage(message);
         }
+        /// The status bar: its message, the job running, the agent; null with no interface.
+        [[nodiscard]] EditorStatusBar* StatusBar() const noexcept { return m_status.Get(); }
 
         /// A frame's node by its id (the dock's host, the status bar's items).
         [[nodiscard]] gui::Node* FindById(StringView id) const { return m_frame ? FindIn(*m_frame, id) : nullptr; }
@@ -212,6 +220,7 @@ export namespace editor::app
             if (m_host && m_window != nullptr)
                 m_host->DetachWindow(*m_window);
             m_toasts = {};
+            m_status.Reset();
             m_frame = {};
             m_root = {};
             m_host.Reset();
@@ -287,6 +296,7 @@ export namespace editor::app
         RefPtr<gui::SceneRoot> m_root;
         RefPtr<gui::Node> m_frame;
         RefPtr<gui::ToastHost> m_toasts;
+        UniquePtr<EditorStatusBar> m_status;
         UniquePtr<gui::Effect> m_reload; // the sheet again when the editor's files change
         f32 m_sinceSweep = 0.0f;
     };

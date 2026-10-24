@@ -483,7 +483,7 @@ namespace editor::app
         m_jobService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
         if (m_export)
             m_export->Pump();
-        UpdateJobStatus();
+        UpdateStatusBar();
         if (foundation::resource::ResourceManager* resources = m_session.Resources())
         {
             resources->Pump();           // async loads finish
@@ -493,22 +493,26 @@ namespace editor::app
         m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
     }
 
-    // A running job's step and percent on the status line.
-    void EditorApplication::UpdateJobStatus()
+    // The status bar's job (a job's title, how far, its step of how many; else a cook, of unknown
+    // length) and agent (the MCP host while it listens).
+    void EditorApplication::UpdateStatusBar()
     {
-        if (!m_jobService.IsBusy())
+        EditorStatusBar* status = m_window.StatusBar();
+        if (status == nullptr)
             return;
-        const editor::EditorJobService::ProgressView progress = m_jobService.Progress();
-        if (!progress.active)
-            return;
-        String line(progress.title.AsView());
-        if (!progress.step.IsEmpty())
+        const editor::EditorJobService::ProgressView progress = m_jobService.IsBusy() ? m_jobService.Progress() : editor::EditorJobService::ProgressView{};
+        if (progress.active)
         {
-            line += u8": ";
-            line += progress.step;
+            const String name = progress.step.IsEmpty() ? progress.title : Format(u8"{}: {}", progress.title, progress.step);
+            const String count = progress.stepCount > 0 ? Format(u8"{} of {}", progress.stepIndex + 1, progress.stepCount) : String();
+            status->SetJob(name.AsView(), progress.fraction, count.AsView());
         }
-        line += Format(u8" ({}%)", static_cast<u32>(progress.fraction * 100.0f + 0.5f)).AsView();
-        m_context.SetStatus(line.AsView());
+        else if (m_cookService.IsCooking())
+            status->SetJob(u8"Cooking", -1.0f, {});
+        else if (status->ShowsJob())
+            status->ClearJob();
+        const EditorMcpHost* host = m_mcp ? m_mcp->Host() : nullptr;
+        status->SetAgent(host != nullptr && host->IsRunning() ? Format(u8"MCP on 127.0.0.1:{}", host->BoundPort()).AsView() : StringView{});
     }
 
     // Window screenshots: last frame's written, missing windows failed, the user told, and the

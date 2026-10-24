@@ -13,6 +13,7 @@ target_sources(GUI.Hosting
         FILE_SET guihosting_modules TYPE CXX_MODULES FILES
             HostingModule.cppm
             VgShaders.cppm
+            AtlasPacker.cppm
             PictureBaker.cppm
             HostedContent.cppm
             GuiHost.cppm

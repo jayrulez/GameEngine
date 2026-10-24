@@ -14,6 +14,7 @@ module;
 export module foundation.gui.hosting;
 
 export import :vg_shaders;
+export import :atlas_packer;
 export import :picture_baker;
 export import :gui_host;
 export import :offscreen;

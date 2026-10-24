@@ -1,4 +1,5 @@
 add_executable(GUI.Hosting.Tests
+    AtlasPackerTests.cpp
     PictureBakerTests.cpp
     GuiHostTests.cpp
     PassRendererTests.cpp

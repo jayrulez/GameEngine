@@ -143,3 +143,69 @@ TEST_CASE("gui.hosting.baker: a renderer added late learns the bakes; one taken 
     CHECK(bed.target.IsExternalTextureRegistered(key));
     second.Dispose();
 }
+
+TEST_CASE("gui.hosting.baker: an icon asked for in the atlas is queued, baked on its page when the frame records, then its region")
+{
+    Bed bed;
+    CHECK_FALSE(bed.baker.AtlasRegion(bed.document, 24, 12, true).HasValue()); // queued
+    CHECK(bed.baker.AtlasPictureCount() == 1u);
+    CHECK(bed.Frame(0));
+    CHECK(bed.baker.Generation() == 1u);
+    const Optional<PictureRegion> region = bed.baker.AtlasRegion(bed.document, 24, 12, true);
+    REQUIRE(region.HasValue());
+    REQUIRE(region.Value().Page != nullptr);
+    CHECK(region.Value().Page->Width() == GpuPictureBaker::kAtlasPageSize);
+    CHECK(region.Value().Source.width == doctest::Approx(24.0f));
+    CHECK(region.Value().Source.height == doctest::Approx(12.0f));
+    CHECK(region.Value().Source.x >= static_cast<f32>(GpuPictureBaker::kAtlasGutter)); // inside its gutter
+    CHECK(bed.target.IsExternalTextureRegistered(region.Value().Page));
+
+    // The same picture as authored is a bake of its own, on the same page, beside it.
+    CHECK_FALSE(bed.baker.AtlasRegion(bed.document, 24, 12, false).HasValue());
+    CHECK(bed.Frame(1));
+    const Optional<PictureRegion> coloured = bed.baker.AtlasRegion(bed.document, 24, 12, false);
+    REQUIRE(coloured.HasValue());
+    CHECK(coloured.Value().Page == region.Value().Page);
+    CHECK(coloured.Value().Source.x != doctest::Approx(region.Value().Source.x));
+    CHECK(bed.baker.AtlasPageCount() == 1u);
+    CHECK_FALSE(bed.Frame(0)); // nothing new
+}
+
+TEST_CASE("gui.hosting.baker: a picture larger than an atlas keeps is not taken; one no draw asks for goes")
+{
+    Bed bed;
+    CHECK_FALSE(bed.baker.AtlasRegion(bed.document, IPictureBaker::kLargestAtlasPicture + 1, 12, true).HasValue());
+    CHECK(bed.baker.AtlasPictureCount() == 0u);
+    (void)bed.baker.AtlasRegion(bed.document, 24, 12, true);
+    (void)bed.Frame(0);
+    for (u64 frame = 0; frame <= GpuPictureBaker::kKeepFrames + 1; ++frame)
+        (void)bed.Frame(static_cast<i32>(frame % 2));
+    CHECK(bed.baker.AtlasPictureCount() == 0u);
+}
+
+TEST_CASE("gui.hosting.baker: a full atlas is packed anew from the pictures asked for lately")
+{
+    Bed bed;
+    // Pictures of the largest size an atlas keeps, each its own document: every page full.
+    const u32 side = IPictureBaker::kLargestAtlasPicture;
+    const u32 perRow = GpuPictureBaker::kAtlasPageSize / (side + 2 * GpuPictureBaker::kAtlasGutter);
+    const usize fit = static_cast<usize>(perRow) * perRow * GpuPictureBaker::kMostAtlasPages;
+    Array<vg::svg::SVGDocument> documents(DefaultAllocator());
+    for (usize i = 0; i <= fit; ++i)
+        documents.PushBack(vg::svg::SVGLoader::Load(StringView(u8"<svg width='8' height='8'><rect width='8' height='8'/></svg>")).Value());
+    for (usize i = 0; i < fit; ++i)
+        (void)bed.baker.AtlasRegion(documents[i], side, side, true);
+    CHECK(bed.baker.AtlasPictureCount() == fit);
+    CHECK(bed.baker.AtlasPageCount() == GpuPictureBaker::kMostAtlasPages);
+    // Long after, only the first asked for still; then one more than fits: packed anew round it.
+    for (u64 frame = 0; frame <= GpuPictureBaker::kRecentFrames + 1; ++frame)
+    {
+        (void)bed.baker.AtlasRegion(documents[0], side, side, true);
+        (void)bed.Frame(static_cast<i32>(frame % 2));
+    }
+    (void)bed.baker.AtlasRegion(documents[fit], side, side, true);
+    CHECK(bed.baker.AtlasPictureCount() == 2u);
+    (void)bed.Frame(0);
+    CHECK(bed.baker.AtlasRegion(documents[0], side, side, true).HasValue()); // drawn again
+    CHECK(bed.baker.AtlasRegion(documents[fit], side, side, true).HasValue());
+}

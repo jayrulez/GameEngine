@@ -23,10 +23,29 @@ using namespace foundation::core;
 
 export namespace foundation::gui
 {
+    /// Where an atlas keeps a picture: the page the renderer samples (premultiplied colour, as a
+    /// bake's texture) and the picture's rectangle on it, in the page's pixels.
+    struct PictureRegion
+    {
+        const foundation::image::ImageData* Page = nullptr;
+        Rectangle Source{};
+    };
+
     class IPictureBaker
     {
     public:
         virtual ~IPictureBaker() = default;
+
+        /// The largest side a picture keeps in an atlas: larger ones are baked alone (Baked).
+        static constexpr u32 kLargestAtlasPicture = 128;
+
+        /// `document` at `width` by `height` device pixels in an atlas shared by many pictures (an
+        /// icon), so pictures drawn one after another are one draw: its page and rectangle, or
+        /// nothing while it is not baked yet (asking queues it) or it is larger than an atlas
+        /// keeps. A `mask` picture is baked white where it covers, to take a tint when it is drawn
+        /// (VGContext::DrawImagePremultiplied with the tint); otherwise as authored.
+        [[nodiscard]] virtual Optional<PictureRegion> AtlasRegion(const foundation::vg::svg::SVGDocument& document, u32 width,
+                                                                  u32 height, bool mask) = 0;
 
         /// `document` drawn at `width` by `height` device pixels: the image the renderer samples
         /// its texture by (premultiplied colour: VGContext::DrawImagePremultiplied), or null while

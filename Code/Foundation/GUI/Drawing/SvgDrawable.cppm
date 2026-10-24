@@ -4,9 +4,12 @@
 // GUI - :svg_drawable partition
 //
 // SvgDrawable: an SVG picture as image content (an Image widget's picture, a menu item's or a
-// button's icon), drawn as VG paths at the size it lands, crisp at any size, as an SVG background
-// layer is (NodeBox). Its intrinsic size is the document's. A tint other than white recolours it
-// whole, as VG's SVG renderer does (an icon taking its colour); white draws it as authored.
+// button's icon), at the size it lands in device pixels, crisp at any size. Its intrinsic size is
+// the document's. A tint other than white recolours it whole, as VG's SVG renderer does (an icon
+// taking its colour); white draws it as authored. With a picture baker it is baked once per size
+// into the baker's atlas (white, when tinted: one bake for every tint) and drawn as one textured
+// quad, pictures one after another one draw; as VG paths without one, until the bake lands, or
+// when it is larger than an atlas keeps.
 // It owns its document when made from SVG text (FromText: an icon set compiled into the binary,
 // as the editor's are) and borrows the resource provider's for a source (PictureDrawable, which
 // picks the kind by the source: an SVG by a .svg ending or a data:image/svg+xml URL, a raster
@@ -61,6 +64,21 @@ export namespace foundation::gui
             if (m_document == nullptr || dest.width <= 0.0f || dest.height <= 0.0f)
                 return;
             const bool white = tint.r >= 1.0f && tint.g >= 1.0f && tint.b >= 1.0f && tint.a >= 1.0f;
+            if (IPictureBaker* baker = ctx.PictureBaker())
+            {
+                const f32 scale = ctx.DeviceScale();
+                const f32 width = Round(dest.width * scale), height = Round(dest.height * scale);
+                if (width >= 1.0f && height >= 1.0f && width <= static_cast<f32>(IPictureBaker::kLargestAtlasPicture) &&
+                    height <= static_cast<f32>(IPictureBaker::kLargestAtlasPicture))
+                    if (const Optional<PictureRegion> region =
+                            baker->AtlasRegion(*m_document, static_cast<u32>(width), static_cast<u32>(height), !white);
+                        region.HasValue())
+                    {
+                        ctx.VG().DrawImagePremultiplied(region.Value().Page, dest.ToRectangle(), region.Value().Source,
+                                                        white ? Color::White : tint);
+                        return;
+                    }
+            }
             foundation::vg::svg::SVGRenderer::Render(ctx.VG(), *m_document, dest.ToRectangle(),
                                                      white ? Optional<Color>{} : Optional<Color>{tint});
         }

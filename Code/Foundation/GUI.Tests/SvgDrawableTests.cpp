@@ -269,3 +269,69 @@ TEST_CASE("svg-drawable: an inline SVG as a sheet's background, an Image's src a
     CHECK(AllRed(ctx));
     CHECK(pictures.svgs == 0);
 }
+
+namespace
+{
+    // An atlas that has a picture the second time it is asked for it, and says what it was asked.
+    class AtlasBaker : public IPictureBaker
+    {
+    public:
+        image::ImageDataRef page{512, 512};
+        int asked = 0;
+        core::u32 width = 0, height = 0;
+        bool mask = false;
+        const image::ImageData* Baked(const foundation::vg::svg::SVGDocument&, core::u32, core::u32) override { return nullptr; }
+        core::Optional<PictureRegion> AtlasRegion(const foundation::vg::svg::SVGDocument&, core::u32 w, core::u32 h, bool m) override
+        {
+            ++asked;
+            width = w;
+            height = h;
+            mask = m;
+            if (asked == 1)
+                return {};
+            return PictureRegion{&page, core::Rectangle{100.0f, 40.0f, static_cast<core::f32>(w), static_cast<core::f32>(h)}};
+        }
+        core::u64 Generation() const override { return 0; }
+    };
+}
+
+TEST_CASE("svg drawable: with a baker it is asked for in its atlas at its device size, drawn as paths until it is there, then as one quad")
+{
+    core::RefPtr<SvgDrawable> icon = SvgDrawable::FromText(core::DefaultAllocator(), core::StringView(kBar));
+    REQUIRE(icon);
+    AtlasBaker baker;
+    const core::Color tint{0.2f, 0.4f, 1.0f, 1.0f};
+    const auto draw = [&](vg::VGContext& ctx, core::Color with)
+    {
+        DrawContext dc{ctx};
+        dc.SetPictureBaker(&baker);
+        ctx.SetTransform(core::Float4x4::Scale(core::Float3{2.0f, 2.0f, 1.0f})); // two device pixels a unit
+        icon->DrawTinted(dc, Rect{0.0f, 0.0f, 12.0f, 6.0f}, with);
+    };
+    {
+        vg::VGContext ctx;
+        draw(ctx, tint);
+        CHECK(baker.asked == 1);
+        CHECK(baker.width == 24u); // its size on the device
+        CHECK(baker.height == 12u);
+        CHECK(baker.mask); // tinted: baked white, to take the tint
+        for (const vg::VGCommand& cmd : ctx.GetBatch().commands)
+            CHECK(cmd.drawMode != vg::VGDrawMode::Layer); // paths meanwhile
+    }
+    {
+        vg::VGContext ctx;
+        draw(ctx, tint);
+        const vg::VGBatch& batch = ctx.GetBatch();
+        REQUIRE(batch.CommandCount() == 1u);
+        CHECK(batch.GetCommand(0).drawMode == vg::VGDrawMode::Layer);
+        CHECK(batch.textures[static_cast<core::usize>(batch.GetCommand(0).textureIndex)] == &baker.page);
+        CHECK(batch.GetCommand(0).indexCount == 6); // one quad
+        CHECK(batch.vertices[0].color.b == doctest::Approx(1.0f)); // the tint, on the quad
+        CHECK(batch.vertices[0].color.r == doctest::Approx(0.2f));
+    }
+    {
+        vg::VGContext ctx;
+        draw(ctx, core::Color::White);
+        CHECK_FALSE(baker.mask); // white: as authored
+    }
+}

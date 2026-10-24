@@ -36,7 +36,7 @@ export namespace foundation::gui
         i32 AddNode(i32 parentId, core::StringView text)
         {
             const i32 id = static_cast<i32>(m_nodes.Size());
-            m_nodes.PushBack(Node{core::String(text), parentId, {}, false});
+            m_nodes.PushBack(Node{core::String(text), {}, {}, parentId, {}, false});
             Array<i32>& siblings = parentId == kRoot ? m_roots : m_nodes[static_cast<usize>(parentId)].Children;
             siblings.PushBack(id);
             NotifyRowsInserted(IndexOfNode(parentId), static_cast<i32>(siblings.Size()) - 1, 1);
@@ -60,6 +60,15 @@ export namespace foundation::gui
             if (!IsLive(nodeId))
                 return;
             m_nodes[static_cast<usize>(nodeId)].Text = core::String(text);
+            NotifyRowsChanged(IndexOfNode(m_nodes[static_cast<usize>(nodeId)].Parent), RowOf(nodeId), 1);
+        }
+        /// A node's icon: its image's source, and a class on it a sheet styles (empty: none).
+        void SetIcon(i32 nodeId, core::StringView source, core::StringView iconClass = {})
+        {
+            if (!IsLive(nodeId))
+                return;
+            m_nodes[static_cast<usize>(nodeId)].Icon = core::String(source);
+            m_nodes[static_cast<usize>(nodeId)].IconClass = core::String(iconClass);
             NotifyRowsChanged(IndexOfNode(m_nodes[static_cast<usize>(nodeId)].Parent), RowOf(nodeId), 1);
         }
         /// Moves a node (with what is under it) under `parentId` at `row` (past the end: last).
@@ -189,8 +198,13 @@ export namespace foundation::gui
             const i32 id = static_cast<i32>(index.InternalId);
             if (id < 0 || static_cast<usize>(id) >= m_nodes.Size())
                 return Variant{};
+            const Node& node = m_nodes[static_cast<usize>(id)];
             if (role == ModelRole::Display || role == ModelRole::Sort)
-                return Variant(m_nodes[static_cast<usize>(id)].Text.AsView());
+                return Variant(node.Text.AsView());
+            if (role == ModelRole::Icon && node.Icon.Size() != 0)
+                return Variant(node.Icon.AsView());
+            if (role == ModelRole::IconClass && node.IconClass.Size() != 0)
+                return Variant(node.IconClass.AsView());
             return Variant{};
         }
 
@@ -198,6 +212,8 @@ export namespace foundation::gui
         struct Node
         {
             core::String Text;
+            core::String Icon;      // its image's source, or none
+            core::String IconClass; // a class on that image
             i32 Parent = kRoot;
             Array<i32> Children;
             bool Removed = false; // detached: its slot kept so ids stay stable

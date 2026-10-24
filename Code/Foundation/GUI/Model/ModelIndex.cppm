@@ -23,8 +23,9 @@ export namespace foundation::gui
     {
         Display,
         Sort,
-        Icon,
-        Custom
+        Icon,      ///< an image's source (a path), or nothing
+        Custom,
+        IconClass, ///< a class on that image, which a sheet styles (a type's category tint)
     };
 
     struct ModelIndex

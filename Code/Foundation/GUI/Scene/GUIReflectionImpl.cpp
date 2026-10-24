@@ -1413,6 +1413,8 @@ namespace foundation::gui
     {
         builder.AccessorProperty<&TreeItem::GetText, &TreeItem::SetText>("text");
         builder.AccessorProperty<&TreeItem::IsExpanded, &TreeItem::SetExpanded>("expanded").PropAttribute("css", core::String(u8"expanded"));
+        builder.AccessorProperty<&TreeItem::GetIcon, &TreeItem::SetIcon>("icon").PropAttribute("css", core::String(u8"icon"));
+        builder.AccessorProperty<&TreeItem::GetIconClass, &TreeItem::SetIconClass>("iconClass").PropAttribute("css", core::String(u8"icon-class"));
         builder.Creator();
     }
 
@@ -1421,6 +1423,7 @@ namespace foundation::gui
         builder.Attribute("accessRole", core::String(u8"tree")); // what a screen reader takes it for (E9d)
         builder.AccessorProperty<&TreeView::GetIndentWidth, &TreeView::SetIndentWidth>("indentWidth").PropAttribute("css", core::String(u8"indent-width"));
         builder.AccessorProperty<&TreeView::GetArrowSize, &TreeView::SetArrowSize>("arrowSize").PropAttribute("css", core::String(u8"arrow-size"));
+        builder.AccessorProperty<&TreeView::GetIconSize, &TreeView::SetIconSize>("iconSize").PropAttribute("css", core::String(u8"icon-size"));
         builder.Method<&TreeView::ExpandItem>("expandItem");
         builder.Method<&TreeView::CollapseItem>("collapseItem");
         builder.Method<&ElementOf<TreeView>, TreeView, Node>("of");

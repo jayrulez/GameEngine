@@ -179,3 +179,55 @@ TEST_CASE("tree-view: a sheet sets its arrow's column and its indent")
     d->InjectMouseUp(core::Float2{5.0f, 10.0f}, MouseButton::Left);
     CHECK(tree->IsItemExpanded(0));
 }
+
+TEST_CASE("tree-view: a row shows the model's icon, with its class, between the arrow and the text")
+{
+    Tree t;
+    t.model.SetIcon(t.a, SV(u8"Icons/folder.svg"), SV(u8"cat-rendering"));
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &t.model);
+    tree->SetIconSize(14.0f);
+    (void)root->UpdateLayout();
+
+    const auto* withIcon = core::Cast<TreeRowContent>(tree->RowForItem(0)->GetContent()); // A
+    const auto* without = core::Cast<TreeRowContent>(tree->RowForItem(1)->GetContent());  // B
+    REQUIRE(withIcon != nullptr);
+    REQUIRE(without != nullptr);
+    REQUIRE(withIcon->GetIcon() != nullptr);
+    CHECK(withIcon->GetIcon()->GetSource() == core::String(u8"Icons/folder.svg"));
+    CHECK(withIcon->GetIcon()->HasClass(SV(u8"cat-rendering")));
+    CHECK(withIcon->GetIcon()->GetSize().x == doctest::Approx(14.0f));
+    // The icon after the arrow's column, the text after the icon; a row with none starts its text earlier.
+    CHECK(withIcon->GetIcon()->GetPosition().x >= withIcon->GetArrow()->GetPosition().x + withIcon->GetArrow()->GetSize().x);
+    CHECK(withIcon->GetLabel()->GetPosition().x >= withIcon->GetIcon()->GetPosition().x + 14.0f);
+    CHECK(without->GetLabel()->GetPosition().x < withIcon->GetLabel()->GetPosition().x);
+
+    // The icon goes when the model takes it away, and the text moves back.
+    t.model.SetIcon(t.a, SV(u8""));
+    (void)root->UpdateLayout();
+    const auto* cleared = core::Cast<TreeRowContent>(tree->RowForItem(0)->GetContent());
+    CHECK((cleared->GetIcon() == nullptr || !cleared->GetIcon()->IsDisplayed()));
+    CHECK(cleared->GetLabel()->GetPosition().x == doctest::Approx(without->GetLabel()->GetPosition().x));
+}
+
+TEST_CASE("tree-view: markup's items take an icon and its class")
+{
+    RegisterGuiElements();
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 400.0f});
+    MarkupLoader loader(*root->GetElementSet(), core::DefaultAllocator());
+    auto loaded = loader.LoadFromString(SV(u8R"(<TreeView width="300" height="300" row-height="20">
+        <TreeItem text="Sun" icon="Icons/light.svg" icon-class="cat-rendering"/>
+        <TreeItem text="Group"/>
+    </TreeView>)"));
+    auto* tree = core::Cast<TreeView>(loaded.Get());
+    REQUIRE(tree != nullptr);
+    root->AddChild(tree);
+    (void)root->UpdateLayout();
+    const auto* sun = core::Cast<TreeRowContent>(tree->RowForItem(0)->GetContent());
+    REQUIRE(sun != nullptr);
+    REQUIRE(sun->GetIcon() != nullptr);
+    CHECK(sun->GetIcon()->GetSource() == core::String(u8"Icons/light.svg"));
+    CHECK(sun->GetIcon()->HasClass(SV(u8"cat-rendering")));
+    CHECK(core::Cast<TreeRowContent>(tree->RowForItem(1)->GetContent())->GetIcon() == nullptr);
+}

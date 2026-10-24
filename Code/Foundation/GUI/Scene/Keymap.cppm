@@ -605,9 +605,41 @@ export namespace foundation::gui
             if (binding.Sequence.IsEmpty() || !binding.Context.Parse(context))
                 return false;
             binding.Command = core::String(command);
+            binding.ContextText = core::String(core::Trim(context));
             m_bindings.PushBack(Move(binding));
             m_changed.Notify();
             return true;
+        }
+        /// Binds `keys` to `command` where `context` holds in place of the keys bound to it there
+        /// before (by a Bind or Rebind with the same context): those keys no longer run it, as a
+        /// user's shortcut setting does (a Bind adds, the old key still working). False when the
+        /// keys or the context do not parse; nothing changes then.
+        bool Rebind(core::StringView keys, core::StringView command, core::StringView context = {})
+        {
+            ContextPredicate check;
+            if (!check.Parse(context))
+                return false;
+            for (const core::StringView part : SplitTopLevel(keys, u8' '))
+                if (!ParseKeystroke(part).HasValue())
+                    return false;
+            (void)UnbindCommand(command, context);
+            return Bind(keys, command, context);
+        }
+        /// Takes away the keys bound to `command` where `context` holds (by a Bind with the same
+        /// context): how many bindings went. Other commands on those keys keep them.
+        usize UnbindCommand(core::StringView command, core::StringView context = {})
+        {
+            const core::StringView where = core::Trim(context);
+            usize removed = 0;
+            for (usize i = m_bindings.Size(); i-- > 0;)
+                if (m_bindings[i].Command.AsView() == command && m_bindings[i].ContextText.AsView() == where)
+                {
+                    m_bindings.RemoveAt(i);
+                    ++removed;
+                }
+            if (removed != 0)
+                m_changed.Notify();
+            return removed;
         }
         /// Binds one keystroke (made, not parsed: from an input map) to `command` where `context`
         /// holds; false when the context does not parse.
@@ -618,6 +650,7 @@ export namespace foundation::gui
             if (!binding.Context.Parse(context))
                 return false;
             binding.Command = core::String(command);
+            binding.ContextText = core::String(core::Trim(context));
             m_bindings.PushBack(Move(binding));
             m_changed.Notify();
             return true;
@@ -742,6 +775,7 @@ export namespace foundation::gui
             Array<Keystroke> Sequence;
             core::String Command;
             ContextPredicate Context;
+            core::String ContextText; // as written, so a Rebind finds the bindings it replaces
         };
         Array<KeyBinding> m_bindings;
         Observable m_changed; // a binding added: shortcut text follows

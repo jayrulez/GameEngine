@@ -376,3 +376,39 @@ TEST_CASE("keymap: a keystroke's name reads back as the same keystroke")
     }
     CHECK(KeystrokeName(Keystroke{static_cast<core::u32>(KeyCode::Unknown), 0, false}).IsEmpty());
 }
+
+TEST_CASE("keymap: a rebinding replaces the command's keys where it was bound; a bind adds")
+{
+    Keymap keymap;
+    const auto runs = [&keymap](const char8_t* keys) -> core::String
+    {
+        core::String command;
+        const Keystroke stroke = ParseKeystroke(SV(keys)).Value();
+        return keymap.Match(core::Span<const Keystroke>(&stroke, 1), core::Span<const KeyContextLayer>{}, command) == KeymapMatch::Matched
+                   ? command
+                   : core::String{};
+    };
+    REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"save")));
+    REQUIRE(keymap.Bind(SV(u8"ctrl-shift-s"), SV(u8"save-all")));
+    REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"menu.save"), SV(u8"menu"))); // another context's
+
+    // Rebound, the old key is free: it no longer saves, and the new one does.
+    REQUIRE(keymap.Rebind(SV(u8"f2"), SV(u8"save")));
+    CHECK(runs(u8"f2") == core::String(u8"save"));
+    CHECK(runs(u8"ctrl-s").Size() == 0u);
+    CHECK(keymap.ShortcutText(SV(u8"save")) == SV(u8"F2"));
+    CHECK(runs(u8"ctrl-shift-s") == core::String(u8"save-all")); // another command keeps its keys
+    CHECK(keymap.ShortcutText(SV(u8"menu.save")) == SV(u8"Ctrl+S")); // and another context its own
+
+    // A bind adds: both keys work. Keys that do not parse change nothing.
+    REQUIRE(keymap.Bind(SV(u8"ctrl-s"), SV(u8"save")));
+    CHECK(runs(u8"f2") == core::String(u8"save"));
+    CHECK(runs(u8"ctrl-s") == core::String(u8"save"));
+    CHECK_FALSE(keymap.Rebind(SV(u8"ctrl-nokey"), SV(u8"save")));
+    CHECK(runs(u8"ctrl-s") == core::String(u8"save"));
+
+    // Unbound, it has no keys there.
+    CHECK(keymap.UnbindCommand(SV(u8"save")) == 2u);
+    CHECK(runs(u8"f2").Size() == 0u);
+    CHECK(keymap.ShortcutText(SV(u8"save")).Size() == 0u);
+}

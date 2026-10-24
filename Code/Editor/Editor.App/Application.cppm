@@ -33,6 +33,7 @@ import :editor_window;
 import :editor_dock;
 import :pages;
 import :action_menus;
+import :action_shortcuts;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -167,6 +168,7 @@ export namespace editor::app
         EditorDock m_dock{m_editorAllocator};
         UniquePtr<EditorPages> m_pages; // made with the dock, in OnStartup
         UniquePtr<ActionMenuBar> m_menus; // the frame's menu bar, from the actions
+        UniquePtr<ActionShortcuts> m_shortcuts; // the actions' keys in the GUI's keymap
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

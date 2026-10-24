@@ -314,13 +314,15 @@ namespace editor::app
             (void)m_pages->Open(*instance);
     }
 
-    // The frame's menu bar from the action registry, File > New <creator> leading the File menu
-    // (a creator with a category in a submenu of that name).
+    // The frame's menu bar and keys from the action registry, File > New <creator> leading the
+    // File menu (a creator with a category in a submenu of that name).
     void EditorApplication::BuildMenus()
     {
         auto* bar = Cast<gui::MenuBar>(m_window.FindById(u8"menubar"));
         if (bar == nullptr || m_window.Root() == nullptr)
             return; // no interface
+        m_shortcuts = MakeUnique<ActionShortcuts>(m_editorAllocator, m_editorAllocator, m_window.Host()->Context().GetKeymap(), *m_window.Root(),
+                                                  m_context.Actions());
         m_menus = MakeUnique<ActionMenuBar>(m_editorAllocator, m_editorAllocator, *bar, m_context.Actions());
         // The application's menus in their places; a domain's menu (Scene) or an extension's takes
         // the "*" slot, so Help stays last however late they register.
@@ -631,6 +633,7 @@ namespace editor::app
             m_runtimeContext.Shutdown();
         }
         m_menus.Reset();
+        m_shortcuts.Reset();
         m_dock.Close(); // its floats' windows, then the GUI before the device goes
         m_window.Close();
     }

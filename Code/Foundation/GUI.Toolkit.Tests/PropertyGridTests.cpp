@@ -651,3 +651,52 @@ TEST_CASE("property grid: a sheet sets the column a row keeps for a group's arro
     // The name after the 10 px column and its 2 px gap.
     CHECK(name->GetScreenBounds().x - content->GetScreenBounds().x - content->GetPadding().Left == doctest::Approx(12.0f));
 }
+
+TEST_CASE("property grid: the toolkit's sheet gives the row being edited the quiet row tone, not the views' fallback blue")
+{
+    Bed bed;
+    bed.Add(u8"speed", PropertyKind::Float, Variant(1.0));
+    bed.Show();
+    StyleManager styles;
+    const core::String theme = core::Format(u8"{}\n{}\n:root {{ --row-hover: #102030; }}", DefaultThemeCSS(), ToolkitSheetCSS());
+    styles.SetUserAgentSheet(CSSParser::Parse(theme.AsView()));
+    styles.ApplyTree(*bed.root.Get());
+    const PartStyle& current = bed.grid->GetPartStyle(u8"selection");
+    REQUIRE(current.HasBackground);
+    CHECK(current.Box.BackgroundColor.r == doctest::Approx(0x10 / 255.0f).epsilon(0.01));
+    CHECK(current.Box.BackgroundColor.g == doctest::Approx(0x20 / 255.0f).epsilon(0.01));
+    CHECK(current.Box.BackgroundColor.b == doctest::Approx(0x30 / 255.0f).epsilon(0.01));
+}
+
+TEST_CASE("property grid: the row whose editor takes the focus is the current one, whatever the editor")
+{
+    Bed bed;
+    bed.Add(u8"name", PropertyKind::String, Variant(core::String(u8"Crate")));
+    bed.Add(u8"speed", PropertyKind::Float, Variant(1.0));
+    bed.Show();
+    const auto field = [&](const char8_t* path) -> Node*
+    {
+        PropertyEditor* editor = bed.grid->FindEditor(SV(path));
+        REQUIRE(editor != nullptr);
+        core::Array<TextField*> fields(core::DefaultAllocator());
+        // A text field's editor, a number field's: both are text fields underneath.
+        for (usize i = 0; i < editor->ChildCount(); ++i)
+            if (auto* f = core::Cast<TextField>(editor->GetChildAt(i)))
+                fields.PushBack(f);
+        REQUIRE_FALSE(fields.IsEmpty());
+        return fields[0];
+    };
+    const auto rowOf = [&](const char8_t* path)
+    {
+        for (usize i = 0; i < bed.grid->GetRowCount(); ++i)
+            if (bed.grid->GetRow(static_cast<i32>(i))->Path == core::StringView(path))
+                return static_cast<i32>(i);
+        return -1;
+    };
+    CHECK_FALSE(bed.grid->IsItemSelected(rowOf(u8"name")));
+    field(u8"name")->RequestFocus();
+    CHECK(bed.grid->IsItemSelected(rowOf(u8"name")));
+    field(u8"speed")->RequestFocus();
+    CHECK(bed.grid->IsItemSelected(rowOf(u8"speed")));
+    CHECK_FALSE(bed.grid->IsItemSelected(rowOf(u8"name")));
+}

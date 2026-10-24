@@ -512,6 +512,19 @@ export namespace foundation::gui
         }
 
     protected:
+        // The row whose editor took the focus is the current one, however it took it (a click, Tab,
+        // code): every editor alike, quietly marked, and where the arrow keys go on from.
+        void OnDescendantFocused(Node& focused) override
+        {
+            ItemView::OnDescendantFocused(focused);
+            for (Node* node = &focused; node != nullptr && node != this; node = node->GetParent())
+                if (const ItemRow* row = Cast<ItemRow>(node))
+                {
+                    if (row->GetItemIndex() >= 0 && !IsItemSelected(row->GetItemIndex()))
+                        SetSelectedItem(row->GetItemIndex());
+                    return;
+                }
+        }
         [[nodiscard]] core::RefPtr<Node> CreateContent(u32) override { return {}; }
         void BindContent(Node&, i32, const ModelIndex&) override {}
         [[nodiscard]] core::StringView RowTag() const override { return core::StringView(u8"propertyrow"); }

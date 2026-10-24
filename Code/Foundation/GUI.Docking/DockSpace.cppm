@@ -658,7 +658,14 @@ export namespace foundation::gui
                     RemoveChild(shown);
                 if (top)
                 {
-                    top->EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
+                    // The space's size, never its content's: a stack holding a long tree or a tall
+                    // page clips it rather than growing the split past the space.
+                    top->EditLayoutStyle([](LayoutStyle& s)
+                    {
+                        s.Grow = 1.0f;
+                        s.MinWidth = LayoutLength::Px(0.0f);
+                        s.MinHeight = LayoutLength::Px(0.0f);
+                    });
                     if (top->GetParent() != nullptr)
                         top->RemoveFromParent();
                     AddChildAt(top.Get(), 0); // under the preview

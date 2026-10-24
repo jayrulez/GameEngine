@@ -662,6 +662,12 @@ namespace foundation::gui
         m_label = core::MakeRef<Label>(MemoryAllocator());
         m_label->SetTag(core::StringView(u8"propertyname"));
         m_label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
+        {
+            // A name longer than its column ends in an ellipsis rather than running under the
+            // editor (a default: a sheet's text-overflow wins).
+            StyleWriteScope defaults(*m_label);
+            m_label->SetTextOverflow(TextOverflow::Ellipsis);
+        }
         m_label->SetHitTestVisible(false);
         AddChild(m_label.Get());
         if (m_editor)

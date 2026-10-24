@@ -285,3 +285,34 @@ TEST_CASE("dock space: a closable panel's tab shows its close part, chosen or ho
     CHECK(bed.StackOf(u8"hierarchy") == kNoDock);
     CHECK(bed.StackOf(u8"fixed") != kNoDock);
 }
+
+TEST_CASE("dock space: content taller than the space is clipped; the split keeps the space's size and every strip its height")
+{
+    Bed bed;
+    // A panel far taller than the space (a long tree, a page with a large picture).
+    DockPanelDescription tall;
+    tall.Id = core::String(u8"tall");
+    tall.Title = core::String(u8"Tall");
+    tall.Factory = []()
+    {
+        core::RefPtr<Panel> content = core::MakeRef<Panel>(core::DefaultAllocator());
+        content->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(3000.0f); });
+        return core::RefPtr<Node>(content);
+    };
+    REQUIRE(bed.controller.Register(core::Move(tall)));
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"tall"), bed.Central()); }).Ok());
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertBeside(SV(u8"console"), bed.Central(), DockSide::Bottom, 0.3f); }).Ok());
+    bed.Lay();
+    REQUIRE(bed.space->ChildCount() >= 1u);
+    auto* splitter = Cast<Splitter>(bed.space->GetChildAt(0));
+    REQUIRE(splitter != nullptr);
+    CHECK(splitter->GetSize().y == doctest::Approx(600.0f)); // the space's, not 3000 and more
+    auto* central = Cast<TabView>(bed.space->WidgetOf(bed.Central()));
+    auto* bottom = Cast<TabView>(bed.space->WidgetOf(bed.StackOf(u8"console")));
+    REQUIRE(central != nullptr);
+    REQUIRE(bottom != nullptr);
+    CHECK(bottom->GetPosition().y + bottom->GetSize().y <= doctest::Approx(600.0f)); // in the space
+    // The tall page's strip keeps the height of the short one's: the page shrinks, not the strip.
+    CHECK(bottom->GetBar()->GetSize().y > 0.0f);
+    CHECK(central->GetBar()->GetSize().y == doctest::Approx(bottom->GetBar()->GetSize().y));
+}

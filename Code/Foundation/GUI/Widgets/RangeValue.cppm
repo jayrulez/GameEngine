@@ -42,7 +42,16 @@ export namespace foundation::gui
         [[nodiscard]] f64 Constrain(f64 v) const noexcept
         {
             if (Step > 0.0)
+            {
+                // Snapped, then rounded to the step's decimals: a step that came from a float
+                // (0.1f is 0.100000001) would otherwise leave its error in the value (12 snapped to
+                // it is 12.0000001788).
                 v = Min + RoundHalfAway((v - Min) / Step) * Step;
+                f64 scale = 1.0;
+                for (i32 d = Decimals(); d > 0; --d)
+                    scale *= 10.0;
+                v = RoundHalfAway(v * scale) / scale;
+            }
             if (!AllowGreater)
                 v = core::Min(v, Upper());
             if (!AllowLesser)
@@ -90,9 +99,11 @@ export namespace foundation::gui
         {
             if (Step <= 0.0)
                 return 3;
+            // Whole once within a float's precision of a whole number: a step read from a float
+            // (0.1f is 0.100000001) shows its own decimals, not eight.
             i32 decimals = 0;
             f64 s = Step;
-            while (decimals < 8 && core::Abs(s - RoundHalfAway(s)) > 1e-9)
+            while (decimals < 8 && core::Abs(s - RoundHalfAway(s)) > 1e-6 * core::Max(1.0, core::Abs(s)))
             {
                 s *= 10.0;
                 ++decimals;

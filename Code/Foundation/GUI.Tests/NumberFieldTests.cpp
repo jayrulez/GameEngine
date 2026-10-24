@@ -252,3 +252,21 @@ TEST_CASE("number: markup sets its range, its form and its value")
     CHECK(f->GetValue() == doctest::Approx(2.3)); // to the step
     CHECK(f->GetText() == core::StringView(u8"2.3 m"));
 }
+
+TEST_CASE("number: a field too narrow for its number and its arrows gives the arrows' room to the number")
+{
+    Bed bed;
+    CHECK(bed.field->ShowsArrows()); // 120 wide: both fit
+    CHECK(bed.field->GetUpButton()->IsVisible());
+    bed.field->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(40.0f); });
+    (void)bed.root->UpdateLayout();
+    CHECK_FALSE(bed.field->ShowsArrows());
+    CHECK_FALSE(bed.field->GetUpButton()->IsVisible());
+    CHECK_FALSE(bed.field->GetDownButton()->IsVisible());
+    // Its keys still step it.
+    bed.field->SetStep(1.0);
+    bed.field->SetValue(5.0);
+    bed.field->RequestFocus();
+    bed.D().InjectKeyDown(Bed::K(KeyCode::Up));
+    CHECK(bed.field->GetValue() == doctest::Approx(6.0));
+}

@@ -610,3 +610,22 @@ TEST_CASE("property grid: Copy and Paste go through the source, from the menu or
     CHECK(said == core::String(u8"\"Lamp\" is no number"));
     CHECK(commits == 1);
 }
+
+TEST_CASE("property grid: a name longer than its column ends in an ellipsis, inside the column")
+{
+    Bed bed;
+    bed.Add(u8"aVeryLongPropertyNameThatCannotFitItsColumn", PropertyKind::Float, Variant(1.0));
+    bed.Show();
+    PropertyEditor* editor = bed.grid->FindEditor(SV(u8"aVeryLongPropertyNameThatCannotFitItsColumn"));
+    REQUIRE(editor != nullptr);
+    Node* content = editor->GetParent();
+    REQUIRE(content != nullptr);
+    Label* name = nullptr;
+    for (usize i = 0; i < content->ChildCount(); ++i)
+        if (auto* label = core::Cast<Label>(content->GetChildAt(i)); label != nullptr && label->GetTag() == SV(u8"propertyname"))
+            name = label;
+    REQUIRE(name != nullptr);
+    CHECK(name->GetTextOverflow() == TextOverflow::Ellipsis);
+    // Its box ends before the editor starts.
+    CHECK(name->GetScreenBounds().x + name->GetScreenBounds().width <= editor->GetScreenBounds().x);
+}

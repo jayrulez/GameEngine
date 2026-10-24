@@ -581,6 +581,7 @@ export namespace foundation::gui
                 Synced();
             }
             Commit();
+            KeepCaretInView(); // unfocused: back to the start of its line
             Invalidate();
         }
 

@@ -237,3 +237,23 @@ TEST_CASE("slider: vertical grows upward; exponential spreads a wide range")
     steps.Step = 0.25;
     CHECK(steps.Decimals() == 2);
 }
+
+TEST_CASE("range value: a step read from a float shows its own decimals and leaves no error in the value")
+{
+    RangeValue range;
+    range.Min = 0.0;
+    range.Max = 1000.0;
+    range.Step = static_cast<double>(0.1f); // 0.100000001: a reflected range's step
+    CHECK(range.Decimals() == 1);
+    CHECK(range.Constrain(12.0) == 12.0); // not 12.0000001788
+    CHECK(range.Constrain(0.6) == doctest::Approx(0.6).epsilon(1e-12));
+    range.Min = -8.0;
+    range.Max = 8.0;
+    CHECK(range.Constrain(0.0) == 0.0); // not 1.2e-07
+    range.Step = static_cast<double>(0.05f);
+    CHECK(range.Decimals() == 2);
+    range.Step = 0.25;
+    CHECK(range.Decimals() == 2);
+    range.Step = 1.0;
+    CHECK(range.Decimals() == 0);
+}

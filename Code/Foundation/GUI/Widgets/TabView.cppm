@@ -143,6 +143,12 @@ export namespace foundation::gui
                 });
             }
             m_bar = core::MakeRef<TabBar>(MemoryAllocator());
+            {
+                // The strip keeps its height over pages taller than the view: a flex item shrinks in
+                // proportion to its basis, so a tall page would otherwise take the strip with it.
+                StyleWriteScope defaults(*m_bar);
+                m_bar->EditLayoutStyle([](LayoutStyle& s) { s.Shrink = 0.0f; });
+            }
             AddChild(m_bar.Get());
             m_host = core::MakeRef<TabPageHost>(MemoryAllocator(), *this);
             AddChild(m_host.Get());

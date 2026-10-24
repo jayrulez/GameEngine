@@ -772,3 +772,20 @@ TEST_CASE("textfield: an IME's composition shows in place of the selection until
     fx.field->ReleaseFocus();
     CHECK(fx.field->GetText() == core::StringView(u8"ab XYcd"));
 }
+
+TEST_CASE("textfield: not focused, a line too long for the field rests on its start")
+{
+    Fixture fx;
+    fx.d()->InjectText(core::StringView(u8"0123456789012345678901234567890123456789")); // 240px in 200
+    CHECK(fx.field->GetScrollX() > 0.0f); // focused: the caret, at the end, in view
+    fx.field->ReleaseFocus();
+    CHECK(fx.field->GetScrollX() == doctest::Approx(0.0f)); // left: its start shows
+    // Set while not focused (a value shown by code): its start too.
+    core::RefPtr<TextField> other = Make<TextField>();
+    other->SetSize(core::Float2{60.0f, 24.0f});
+    other->SetFont(&fx.font);
+    fx.root->AddChild(other.Get());
+    other->SetText(core::StringView(u8"-9.81234567"));
+    (void)fx.root->UpdateLayout();
+    CHECK(other->GetScrollX() == doctest::Approx(0.0f));
+}

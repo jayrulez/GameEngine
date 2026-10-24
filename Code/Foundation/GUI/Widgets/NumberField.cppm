@@ -292,6 +292,17 @@ export namespace foundation::gui
 
         /// Being edited as text (typed into, or a press let go on it); otherwise a press scrubs.
         [[nodiscard]] bool IsEditing() const noexcept { return m_editing; }
+        /// Whether its arrows show: only while its number keeps room beside them. A field too narrow
+        /// for both (a vector's part in a narrow inspector) gives the arrows' room to the number;
+        /// a drag still scrubs it and the arrow keys still step it.
+        [[nodiscard]] bool ShowsArrows() const
+        {
+            const Thickness b = GetBorderThickness();
+            const Thickness p = GetPadding();
+            const f32 text = GetSize().x - b.TotalHorizontal() - p.TotalHorizontal() - kSpinWidth - kSpinGap;
+            return text >= kNumberRoom;
+        }
+
         [[nodiscard]] SpinButton* GetUpButton() const noexcept { return m_up.Get(); }
         [[nodiscard]] SpinButton* GetDownButton() const noexcept { return m_down.Get(); }
 
@@ -449,6 +460,8 @@ export namespace foundation::gui
         {
             const Rect content = GetContentBounds();
             const Thickness b = GetBorderThickness();
+            if (!ShowsArrows())
+                return content;
             if (IsRightToLeft())
             {
                 const f32 left = core::Max(content.x, b.Left + kSpinWidth + kSpinGap);
@@ -465,6 +478,9 @@ export namespace foundation::gui
             const core::Float2 size = GetSize();
             const f32 h = core::Max(0.0f, size.y - b.TotalVertical());
             const f32 x = IsRightToLeft() ? b.Left : size.x - b.Right - kSpinWidth;
+            const bool arrows = ShowsArrows();
+            m_up->SetVisible(arrows);
+            m_down->SetVisible(arrows);
             m_up->Arrange(Rect{x, b.Top, kSpinWidth, h * 0.5f});
             m_down->Arrange(Rect{x, b.Top + h * 0.5f, kSpinWidth, h - h * 0.5f});
         }
@@ -472,6 +488,7 @@ export namespace foundation::gui
     private:
         static constexpr f32 kSpinWidth = 16.0f;
         static constexpr f32 kSpinGap = 2.0f; // between its text and its arrows
+        static constexpr f32 kNumberRoom = 32.0f; // the least room its number keeps beside its arrows
         static constexpr f32 kScrubThreshold = 4.0f; // pixels a press moves before it scrubs
         static constexpr f32 kPixelsPerStep = 4.0f;
 

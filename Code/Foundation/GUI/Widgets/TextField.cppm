@@ -87,9 +87,20 @@ export namespace foundation::gui
                 return core::Float2{origin.x + Slack(layout, view - layout.Width), origin.y};
             return core::Float2{origin.x - ScrollFromLeft(layout, view), origin.y};
         }
-        // Scrolls by the least that shows the caret, and no further than the text needs.
+        // Scrolls by the least that shows the caret, and no further than the text needs. Not
+        // focused, a line too long for the field rests on its start: a value shows its beginning
+        // (-9.81, not 81), wherever its caret was left.
         void KeepCaretInView() override
         {
+            if (!IsFocused())
+            {
+                if (m_scrollX != 0.0f)
+                {
+                    m_scrollX = 0.0f;
+                    Invalidate();
+                }
+                return;
+            }
             const TextLayout& layout = EditLayout();
             const f32 view = View(EditBounds());
             const f32 caret = layout.CaretX(DisplayCaret());

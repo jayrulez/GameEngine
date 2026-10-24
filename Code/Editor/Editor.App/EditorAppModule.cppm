@@ -20,6 +20,7 @@ export import :asset_creation;
 export import :layout;
 export import :session;
 export import :mcp_service;
+export import :app_actions;
 export import :playback_actions;
 export import :asset_filter;
 export import :property_names;

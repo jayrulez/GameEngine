@@ -15,6 +15,7 @@ export module editor.app;
 export import :ui_page;
 export import :editor_window;
 export import :editor_dock;
+export import :pages;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

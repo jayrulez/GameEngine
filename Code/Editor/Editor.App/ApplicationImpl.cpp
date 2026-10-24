@@ -49,7 +49,8 @@ namespace editor::app
         services.context = &m_context;
         services.cook = &m_cookService;
         services.builders = &m_builders;
-        // A new asset's page opens once pages are on the dock (layer 6).
+        EditorApplication* self = this;
+        services.openPage = [self](foundation::content::Instance& instance) { (void)self->m_pages->Open(instance); };
         return services;
     }
 
@@ -74,8 +75,15 @@ namespace editor::app
         services.opened = [self](editor::EditorProject& project)
         {
             // The project's layout, else the default (the one before was another project's).
-            if (foundation::settings::Settings* store = self->m_session.Store(); store == nullptr || !ApplyDockLayout(self->m_dock.Controller(), *store).IsOk())
+            foundation::settings::Settings* store = self->m_session.Store();
+            if (store == nullptr || !ApplyDockLayout(self->m_dock.Controller(), *store).IsOk())
                 self->m_dock.ResetLayout();
+            // The pages from the last session (a restored layout kept their places), else the
+            // project's default scene.
+            const auto progress = [self](StringView name, f32 done)
+            { self->ReportStartup(Format(u8"Opening {}", name).AsView(), 0.72f + 0.26f * done); };
+            if (store == nullptr || !self->m_pages->Restore(*store, progress))
+                self->OpenDefaultScene(project);
             if (self->m_export)
                 self->m_export->SetProject(&project);
             self->m_creation.SetProject(&project);
@@ -84,13 +92,18 @@ namespace editor::app
         };
         services.closing = [self]()
         {
+            self->m_pages->CloseAll(); // their resources while the project's services live
             if (self->m_mcp)
                 self->m_mcp->Stop(); // no agent call may run against services that are going away
             if (self->m_export)
                 self->m_export->SetProject(nullptr);
             self->m_creation.SetProject(nullptr);
         };
-        services.captureState = [self](foundation::settings::Settings& store) { CaptureDockLayout(self->m_dock.Controller(), store); };
+        services.captureState = [self](foundation::settings::Settings& store)
+        {
+            CaptureDockLayout(self->m_dock.Controller(), store);
+            self->m_pages->Capture(store);
+        };
         services.cookFinished = [self]()
         {
             // Failures stay until dismissed (the Console has the log); a cook of nothing says nothing.
@@ -133,6 +146,7 @@ namespace editor::app
     void EditorApplication::OnStartup(runtime::IApplicationHost& host)
     {
         m_host = &host;
+        OpenPages(); // first: every frame hands them its hooks
         if (host.MainRenderWindow() == nullptr)
             return;
         m_starting = true; // the splash hears startup's steps until the editor is ready
@@ -181,6 +195,8 @@ namespace editor::app
         mcp.templatesRoot = [self]() { return self->m_export->TemplatesRoot(); };
         mcp.created = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         { self->m_creation.AfterCreate(creator, instance); };
+        mcp.openPage = [self](const Guid& id) -> editor::EditorPage* { return self->m_pages->Open(id); };
+        mcp.closePage = [self](editor::EditorPage* page) { self->m_pages->Close(page); };
         mcp.windows.windows = [self]() { return self->CapturableWindows(); };
         mcp.windows.request = [self](Span<const WindowShotRequest> requests) { self->m_windowCapture.Request(requests); };
         mcp.windows.shots = [self]() { return self->m_windowCapture.Shots(); };
@@ -271,12 +287,39 @@ namespace editor::app
         m_dock.Open(*into, m_window.Host(), Move(contents));
     }
 
+    // The pages in the dock; their dialogs over the main window.
+    void EditorApplication::OpenPages()
+    {
+        EditorPages::Services services;
+        services.context = &m_context;
+        services.dock = &m_dock;
+        services.cook = &m_cookService;
+        EditorApplication* self = this;
+        services.project = [self]() { return self->m_session.Project(); };
+        services.resources = [self]() { return self->m_session.Resources(); };
+        services.dialogRoot = [self]() { return self->m_window.Root(); };
+        m_pages = MakeUnique<EditorPages>(m_editorAllocator, m_editorAllocator, Move(services));
+    }
+
+    // A project's first open: its default scene, by guid (else by path, for a manifest without one).
+    void EditorApplication::OpenDefaultScene(editor::EditorProject& project)
+    {
+        foundation::content::Instance* instance = nullptr;
+        if (!project.Settings().defaultSceneId.IsNil())
+            instance = project.SourceDb().GetInstance(project.Settings().defaultSceneId);
+        if (instance == nullptr && !project.Settings().defaultScene.IsEmpty())
+            instance = project.SourceDb().GetInstance(project.Settings().defaultScene.AsView());
+        if (instance != nullptr)
+            (void)m_pages->Open(*instance);
+    }
+
     void EditorApplication::RegisterActions()
     {
         EditorActionRegistry& actions = m_context.Actions();
         EditorApplication* self = this;
 
         FileActions file;
+        file.save = [self](editor::EditorPage& page) { self->m_pages->Save(page); };
         file.exit = [self]()
         {
             if (self->m_host != nullptr)
@@ -299,6 +342,12 @@ namespace editor::app
         build.cookAll = [self]() { self->m_cookService.RequestCook(false); };
         build.rebuildAll = [self]() { self->m_cookService.RequestCook(true); };
         RegisterBuildActions(actions, Move(build));
+
+        GameActions game;
+        game.context = &m_context;
+        game.play = [self]() { self->m_pages->OpenGame(false); };
+        game.playNewInstance = [self]() { self->m_pages->OpenGame(true); };
+        RegisterGameActions(actions, Move(game));
 
         ViewActions view;
         view.resetLayout = [self]() { self->m_dock.ResetLayout(); };
@@ -394,6 +443,7 @@ namespace editor::app
             resources->CollectGarbage(); // products a hot reload replaced go
         }
         m_window.Update(dt);
+        m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
     }
 
     // A running job's step and percent on the status line.
@@ -473,10 +523,11 @@ namespace editor::app
         if (frame.valid && frame.window == host.MainRenderWindow())
         {
             if (m_sceneRenderer != nullptr)
-            {
                 m_sceneRenderer->BeginRendering(*frame.encoder, frame.frameIndex);
+            m_pages->Render(host, frame);
+            if (m_sceneRenderer != nullptr)
                 m_sceneRenderer->EndRendering();
-            }
+            m_pages->AfterSceneRender(host, frame); // overlays on the composed targets (the Game tab's UI)
             if (m_embeddedApp)
                 m_runtimeContext.EndFrame();
         }

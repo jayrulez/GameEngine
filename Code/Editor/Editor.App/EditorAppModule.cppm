@@ -13,6 +13,7 @@ export module editor.app;
 // The shell's files on the GUI so far (Documentation/Specs/editor-gui.md, 5.1); the rest return
 // with their ports.
 export import :ui_page;
+export import :editor_window;
 export import :playback_actions;
 export import :asset_filter;
 export import :property_names;

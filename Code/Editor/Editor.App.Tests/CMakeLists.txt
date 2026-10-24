@@ -1,6 +1,6 @@
 add_executable(Editor.App.Tests TestsMain.cpp PropertyNamesTests.cpp EditorWindowToolsTests.cpp EditorProfilerToolsTests.cpp
     FontAtlasDiskCacheTests.cpp EditorMcpHostTests.cpp EditorProjectOperationsTests.cpp EditorPageToolsTests.cpp
-    EditorSplashTests.cpp UIPageTests.cpp) # the shell's files on the GUI so far; the others' suites return with them
+    EditorSplashTests.cpp UIPageTests.cpp EditorWindowTests.cpp) # the shell's files on the GUI so far; the others' suites return with them
 target_link_libraries(Editor.App.Tests PRIVATE Foundation::VFS Foundation::Content Pipeline::Importer Pipeline::Core
     Foundation::Net Foundation::Http Foundation::Json Foundation::Mcp Foundation::Mcp.Http Editor::Mcp # the MCP host over loopback
     Editor::App Editor::Core doctest::doctest)

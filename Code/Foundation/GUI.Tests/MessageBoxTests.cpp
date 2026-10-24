@@ -330,3 +330,50 @@ TEST_CASE("message box: a button of the caller's own answers with its name")
     CHECK(box->GetResultName() == core::String(u8"discard"));
     CHECK_FALSE(standard); // no standard result
 }
+
+TEST_CASE("message box: each button has a role: the primary is focused, the cancel answers back")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    root->AddChild(box.Get());
+    box->Configure(core::StringView(u8"Save?"), core::StringView(u8"Unsaved changes."), MessageBox::Buttons::OkCancel);
+    REQUIRE(box->ButtonCount() == 2u);
+    CHECK(box->GetButtonRole(0) == DialogRole::Cancel);
+    CHECK(box->ButtonAt(0)->HasClass(core::StringView(u8"cancel")));
+    CHECK(box->GetButtonRole(1) == DialogRole::Primary);
+    CHECK(box->ButtonAt(1)->HasClass(core::StringView(u8"primary")));
+
+    // A verb of the caller's own after them is not the default: the primary still is.
+    (void)box->AddButton(core::StringView(u8"Discard"), core::StringView(u8"discard"), DialogRole::Destructive);
+    CHECK(box->ButtonAt(2)->HasClass(core::StringView(u8"destructive")));
+    REQUIRE(box->Show());
+    CHECK(root->GetEventDispatcher()->GetFocusNode() == box->ButtonAt(1));
+    box->RequestClose(); // as Escape would
+    CHECK(box->GetResultName() == core::String(u8"cancel"));
+}
+
+TEST_CASE("message box: verbs from markup; with no primary a destructive button is never the default")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    root->AddChild(box.Get());
+    CHECK(box->SetMarkupAttribute(core::StringView(u8"buttons"), core::StringView(u8"Cancel:cancel:cancel | Delete:delete:destructive")));
+    REQUIRE(box->ButtonCount() == 2u);
+    CHECK(box->ButtonAt(0)->GetText() == core::StringView(u8"Cancel"));
+    CHECK(box->ButtonAt(1)->GetText() == core::StringView(u8"Delete"));
+    CHECK(box->GetButtonRole(1) == DialogRole::Destructive);
+    // Return alone cannot destroy: the focus goes to the last button that destroys nothing.
+    CHECK(box->GetDefaultButton() == box->ButtonAt(0));
+    REQUIRE(box->Show());
+    CHECK(root->GetEventDispatcher()->GetFocusNode() == box->ButtonAt(0));
+    CHECK(box->ButtonAt(1)->HandleActivate());
+    CHECK(box->GetResultName() == core::String(u8"delete"));
+
+    // A verb with no result answers with its text in lower case; with no role it is normal.
+    CHECK(box->SetMarkupAttribute(core::StringView(u8"buttons"), core::StringView(u8"Keep|Create:create:primary")));
+    REQUIRE(box->ButtonCount() == 2u);
+    CHECK(box->GetButtonRole(0) == DialogRole::Normal);
+    CHECK(box->GetDefaultButton() == box->ButtonAt(1));
+    CHECK(box->ButtonAt(0)->HandleActivate());
+    CHECK(box->GetResultName() == core::String(u8"keep"));
+}

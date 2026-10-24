@@ -3,14 +3,19 @@
 
 // GUI - :message_box partition
 //
-// MessageBox: a modal dialog with a message and a row of standard buttons (OK / OK-Cancel /
-// Yes-No). Modeled on eepp's UIMessageBox (role only) - a Window subclass whose content is a
-// word-wrapped message plus bottom-right buttons. Pressing a button fires the result callback
-// and closes the dialog. Shown via Window::OpenModal, a modal popup (E5): what is behind it is
-// inert and its backdrop dims it. Its default button (the rightmost, OK or Yes) has focus when it
-// opens, so Return or a pad's South picks it; `back` (Escape, a pad's East) picks the cancel one
-// (Cancel, No, or OK when it is the only one), as its close button does. Its message wraps and
-// its height fits it; it is not resizable unless asked.
+// MessageBox: a modal dialog with a message and a row of buttons: standard ones (OK / OK-Cancel /
+// Yes-No) or verbs of the caller's own ("Delete", "Create"). Modeled on eepp's UIMessageBox (role
+// only) - a Window subclass whose content is a word-wrapped message plus bottom-right buttons.
+// Pressing a button fires the result callback and closes the dialog. Shown via Window::OpenModal,
+// a modal popup (E5): what is behind it is inert and its backdrop dims it.
+//
+// Each button has a role, as Qt's button roles and GTK's responses do, and a class of the same
+// name for the sheet: `primary` (the default: focused when it opens, so Return or a pad's South
+// picks it), `cancel` (what `back`, Escape or a pad's East, and its close button pick) and
+// `destructive` (it destroys something: styled so, and never focused on its own, so Return alone
+// cannot destroy). With no primary, the last button that destroys nothing has the focus; with no
+// cancel, `back` picks the first. Its message wraps and its height fits it; it is not resizable
+// unless asked.
 
 module;
 #include "Core/Prelude.h"
@@ -36,6 +41,36 @@ namespace fonts = foundation::fonts;
 
 export namespace foundation::gui
 {
+    /// What a dialog's button does, beyond its answer: the sheet styles each by a class of its name.
+    enum class DialogRole : u8
+    {
+        Normal,
+        Primary,     ///< the default: focused when the dialog opens
+        Cancel,      ///< what `back` (Escape) and the close button answer
+        Destructive, ///< destroys something: never the default on its own
+    };
+    [[nodiscard]] inline core::StringView DialogRoleName(DialogRole role) noexcept
+    {
+        switch (role)
+        {
+        case DialogRole::Primary: return core::StringView(u8"primary");
+        case DialogRole::Cancel: return core::StringView(u8"cancel");
+        case DialogRole::Destructive: return core::StringView(u8"destructive");
+        case DialogRole::Normal:
+        default: return core::StringView(u8"normal");
+        }
+    }
+    [[nodiscard]] inline DialogRole DialogRoleNamed(core::StringView name) noexcept
+    {
+        if (name == core::StringView(u8"primary"))
+            return DialogRole::Primary;
+        if (name == core::StringView(u8"cancel"))
+            return DialogRole::Cancel;
+        if (name == core::StringView(u8"destructive"))
+            return DialogRole::Destructive;
+        return DialogRole::Normal;
+    }
+
     class MessageBox : public Window
     {
         RTTI_OBJECT(MessageBox, Window)
@@ -96,12 +131,16 @@ export namespace foundation::gui
             SetResizable(false);
             SetSize(core::Float2{kWidth, 180.0f});
             LayoutContent();
-            // Open, the default button takes focus.
+            // Open, the default button takes focus (else the cancel one: never a destructive one alone).
             MessageBox* self = this;
             (void)AddEventListener(EventType::Toggle, [self](const Event& e)
                                    {
-                                       if (e.Target == self && static_cast<const ToggleEvent&>(e).Open && !self->m_buttons.IsEmpty())
-                                           self->m_buttons.Back()->RequestFocus();
+                                       if (e.Target != self || !static_cast<const ToggleEvent&>(e).Open)
+                                           return;
+                                       if (Button* focus = self->GetDefaultButton())
+                                           focus->RequestFocus();
+                                       else if (Button* cancel = self->ButtonAt(self->CancelIndex()))
+                                           cancel->RequestFocus();
                                    });
         }
 
@@ -118,13 +157,40 @@ export namespace foundation::gui
         {
             m_onResult = core::Move(callback);
         }
-        /// Adds a button of its own after the standard ones: `text` its label, `resultName` what
-        /// GetResultName reads (and the change event reports) when it is pressed.
-        void AddButton(core::StringView text, core::StringView resultName)
+        /// Adds a button of its own after the standard ones: `text` its label (a verb: "Delete"),
+        /// `resultName` what GetResultName reads (and the change event reports) when it is pressed,
+        /// `role` what else it does (the default, the cancel, a destructive one).
+        Button& AddButton(core::StringView text, core::StringView resultName, DialogRole role = DialogRole::Normal)
         {
-            Button& button = MakeButton(core::String(resultName));
+            Button& button = MakeButton(core::String(resultName), role);
             button.SetText(text);
             LayoutContent();
+            return button;
+        }
+        /// Its buttons, none: for a dialog of the caller's own verbs (AddButton).
+        void ClearButtons()
+        {
+            for (const RefPtr<Button>& b : m_buttons)
+                b->RemoveFromParent();
+            m_buttons.Clear();
+            m_results.Clear();
+            m_roles.Clear();
+            LayoutContent();
+        }
+        [[nodiscard]] DialogRole GetButtonRole(usize index) const noexcept
+        {
+            return index < m_roles.Size() ? m_roles[index] : DialogRole::Normal;
+        }
+        /// The button focused when it opens: the primary one, else the last that destroys nothing.
+        [[nodiscard]] Button* GetDefaultButton() const
+        {
+            for (usize i = 0; i < m_roles.Size(); ++i)
+                if (m_roles[i] == DialogRole::Primary)
+                    return m_buttons[i].Get();
+            for (usize i = m_roles.Size(); i-- > 0;)
+                if (m_roles[i] != DialogRole::Destructive)
+                    return m_buttons[i].Get();
+            return nullptr;
         }
 
         void SetMessageColor(Color color) { m_message->SetTextColor(color); }
@@ -132,7 +198,10 @@ export namespace foundation::gui
         // === Markup ===
         // `<MessageBox id="confirm" title="Delete?" text="..." buttons="ok-cancel"/>` waits in its
         // page, unseen, until shown (Show, a script's show()); answered, it goes back there, its
-        // `result` the answer, reported as `change`.
+        // `result` the answer, reported as `change`. `buttons` is ok, ok-cancel or yes-no, or the
+        // caller's own verbs, each `Text:result:role` and separated by `|`
+        // (`buttons="Cancel:cancel:cancel|Delete:delete:destructive"`); a missing result is the
+        // text in lower case, a missing role normal.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
             if (name == core::StringView(u8"text"))
@@ -144,7 +213,10 @@ export namespace foundation::gui
             if (name == core::StringView(u8"buttons"))
             {
                 const core::StringView v = core::Trim(value);
-                BuildButtons(v == core::StringView(u8"ok-cancel") ? Buttons::OkCancel : v == core::StringView(u8"yes-no") ? Buttons::YesNo : Buttons::Ok);
+                if (v == core::StringView(u8"ok-cancel") || v == core::StringView(u8"yes-no") || v == core::StringView(u8"ok") || v.IsEmpty())
+                    BuildButtons(v == core::StringView(u8"ok-cancel") ? Buttons::OkCancel : v == core::StringView(u8"yes-no") ? Buttons::YesNo : Buttons::Ok);
+                else
+                    BuildVerbs(v);
                 LayoutContent();
                 if (!IsOpen())
                     SetDisplayed(false); // written in a page: unseen until shown
@@ -183,14 +255,14 @@ export namespace foundation::gui
 
     public:
         // Its close button and `back` (Escape, a pad's East) pick the cancel button's result: the
-        // leftmost, Cancel or No, or the only one.
+        // one whose role is cancel (Cancel, No), else the first.
         [[nodiscard]] bool AnswersBack() const override { return true; }
         void RequestClose() override
         {
             if (m_results.IsEmpty())
                 Close();
             else
-                Finish(m_results[0].AsView());
+                Finish(m_results[CancelIndex()].AsView());
         }
 
     protected:
@@ -205,12 +277,18 @@ export namespace foundation::gui
         }
 
     private:
+        // The button `back` answers with: the cancel one, else the first.
+        [[nodiscard]] usize CancelIndex() const noexcept
+        {
+            for (usize i = 0; i < m_roles.Size(); ++i)
+                if (m_roles[i] == DialogRole::Cancel)
+                    return i;
+            return 0;
+        }
+
         void BuildButtons(Buttons buttons)
         {
-            for (const RefPtr<Button>& b : m_buttons)
-                b->RemoveFromParent();
-            m_buttons.Clear();
-            m_results.Clear();
+            ClearButtons();
 
             switch (buttons)
             {
@@ -228,25 +306,61 @@ export namespace foundation::gui
             }
         }
 
+        // The caller's verbs from markup: `Text:result:role|...`.
+        void BuildVerbs(core::StringView list)
+        {
+            ClearButtons();
+            usize start = 0;
+            while (start <= list.Size())
+            {
+                usize end = start;
+                while (end < list.Size() && list[end] != u8'|')
+                    ++end;
+                core::StringView fields[3];
+                usize field = 0, from = start;
+                for (usize i = start; i <= end && field < 3; ++i)
+                    if (i == end || list[i] == u8':')
+                    {
+                        fields[field++] = core::Trim(list.SubStr(from, i - from));
+                        from = i + 1;
+                    }
+                if (!fields[0].IsEmpty())
+                {
+                    core::String result(fields[1]);
+                    if (result.Size() == 0)
+                        for (usize i = 0; i < fields[0].Size(); ++i)
+                        {
+                            const char8_t c = fields[0][i];
+                            result.PushBack(c >= u8'A' && c <= u8'Z' ? static_cast<char8_t>(c - u8'A' + u8'a') : c);
+                        }
+                    (void)AddButton(fields[0], result.AsView(), DialogRoleNamed(fields[2]));
+                }
+                start = end + 1;
+            }
+        }
+
         // A standard button: its label translated (gui.ok, ...) where the GUI's tables have it,
-        // else English.
+        // else English. OK and Yes are the default; Cancel and No what `back` picks.
         void AddStandard(Result result)
         {
             static constexpr core::StringView kKeys[] = {u8"gui.ok", u8"gui.cancel", u8"gui.yes", u8"gui.no"};
             static constexpr core::StringView kEnglish[] = {u8"OK", u8"Cancel", u8"Yes", u8"No"};
+            static constexpr DialogRole kRoles[] = {DialogRole::Primary, DialogRole::Cancel, DialogRole::Primary, DialogRole::Cancel};
             const usize i = static_cast<usize>(result);
-            Button& button = MakeButton(core::String(kNames[i]));
+            Button& button = MakeButton(core::String(kNames[i]), kRoles[i]);
             button.SetText(kEnglish[i]);
             (void)button.BindTranslation(core::StringView(u8"text"), kKeys[i], {}, {}, {}, kEnglish[i]);
         }
 
         static constexpr core::StringView kNames[] = {u8"ok", u8"cancel", u8"yes", u8"no"};
 
-        Button& MakeButton(core::String resultName)
+        Button& MakeButton(core::String resultName, DialogRole role)
         {
             auto button = core::MakeRef<Button>(MemoryAllocator());
             ShareTextStyle(*button, false);
             button->AddClass(core::StringView(u8"dialogbutton"));
+            if (role != DialogRole::Normal)
+                button->AddClass(DialogRoleName(role));
             MessageBox* self = this;
             button->SetOnClick([self, resultName]() { self->Finish(resultName.AsView()); });
             {
@@ -261,6 +375,7 @@ export namespace foundation::gui
             Button& made = *button;
             m_buttons.PushBack(core::Move(button));
             m_results.PushBack(core::Move(resultName));
+            m_roles.PushBack(role);
             return made;
         }
 
@@ -304,6 +419,7 @@ export namespace foundation::gui
         RefPtr<Panel> m_buttonRow;
         Array<RefPtr<Button>> m_buttons;
         Array<core::String> m_results; // each button's result name, in order
+        Array<DialogRole> m_roles;     // and its role
         core::Function<void(Result)> m_onResult;
         core::String m_resultName;
         core::RefPtr<Node> m_home; // the page it was shown from, while it is open

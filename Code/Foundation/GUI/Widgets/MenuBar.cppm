@@ -69,6 +69,10 @@ export namespace foundation::gui
             return true;
         }
 
+        /// Its height and each button's padding either side of its text: a sheet sets them as
+        /// `bar-height` and `item-padding` (an editor's compact bar, a game's large one).
+        [[nodiscard]] f32 GetBarHeight() const noexcept { return m_barHeight; }
+        [[nodiscard]] f32 GetItemPadding() const noexcept { return m_hpad; }
         void SetBarHeight(f32 height)
         {
             m_barHeight = core::Max(1.0f, height);

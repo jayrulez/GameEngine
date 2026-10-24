@@ -1494,6 +1494,8 @@ namespace foundation::gui
     REFLECT_MEMBERS(MenuBar, "rtti::gui")
     {
         builder.Attribute("accessRole", core::String(u8"menubar")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&MenuBar::GetBarHeight, &MenuBar::SetBarHeight>("barHeight").PropAttribute("css", core::String(u8"bar-height"));
+        builder.AccessorProperty<&MenuBar::GetItemPadding, &MenuBar::SetItemPadding>("itemPadding").PropAttribute("css", core::String(u8"item-padding"));
         builder.Method<&ElementOf<MenuBar>, MenuBar, Node>("of");
         builder.Creator();
     }

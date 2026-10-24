@@ -126,3 +126,15 @@ TEST_CASE("menubar: an outside click dismisses the open menu and clears the bar 
     CHECK_FALSE(fx.fileMenu->IsOpen());
     CHECK(fx.fileMenu->GetParent() == nullptr);
 }
+
+TEST_CASE("menubar: a sheet sets its height and its buttons' padding")
+{
+    BarFixture fx;
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(core::StringView(u8"menubar { bar-height: calc(20px + 2px); item-padding: 8px; }")));
+    styles.ApplyTree(*fx.root.Get());
+    CHECK(fx.bar->GetBarHeight() == doctest::Approx(22.0f));
+    CHECK(fx.bar->GetSize().y == doctest::Approx(22.0f));
+    CHECK(fx.bar->ButtonAt(0)->GetSize().y == doctest::Approx(22.0f));
+    CHECK(fx.bar->ButtonAt(0)->GetSize().x == doctest::Approx(16.0f)); // 2 * padding, no font
+}

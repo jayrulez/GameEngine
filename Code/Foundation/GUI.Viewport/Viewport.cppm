@@ -15,8 +15,9 @@
 //
 // From foundation.ui's ViewportView (UI.Viewport): its fit (core::ContentFit, for the picture and
 // the pointer alike), its formats (RGBA16Float and Depth32Float by default), a fixed resolution, a
-// clear when there is nothing to draw. Not carried: the editor's game-in-a-panel keyboard capture
-// and hosted text input, which wait for an embedded GUI to need them.
+// clear when there is nothing to draw. A game in a panel takes every key while focused through the
+// node's SetCapturesAllKeys (its release chord, Shift+F1 by default, frees it). Not carried: hosted
+// text input, which waits for an embedded GUI to need it.
 
 module;
 #include "Core/Prelude.h"

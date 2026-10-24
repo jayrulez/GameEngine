@@ -471,3 +471,43 @@ TEST_CASE("keyboard: an open menu types ahead, runs a letter that is one item's 
     CHECK(deleted == 1);
     CHECK_FALSE(file->IsOpen());
 }
+
+TEST_CASE("keyboard: a focus that captures every key takes Tab, Escape and bound keys; its release chord frees it")
+{
+    // A game in an editor's panel: while focused and capturing, the GUI acts on no key.
+    Bed bed;
+    Button& game = bed.Add(u8"game");
+    bed.Add(u8"next").SetPosition(core::Float2{0.0f, 40.0f});
+    int keys = 0, saves = 0, backs = 0, released = 0;
+    (void)game.AddEventListener(EventType::KeyDown, [&keys](const Event&) { ++keys; });
+    (void)game.AddEventListener(EventType::Named, [&released](const Event& e)
+                                {
+                                    if (static_cast<const NamedEvent&>(e).Name == SV(u8"keysreleased"))
+                                        ++released;
+                                });
+    (void)bed.root->GetContext().DefineCommand(SV(u8"save"));
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"ctrl-s"), SV(u8"save")));
+    (void)bed.root->OnCommand(SV(u8"save"), [&saves](CommandEvent&) { ++saves; });
+    (void)bed.root->OnCommand(SV(kBackCommand), [&backs](CommandEvent&) { ++backs; });
+    game.SetCapturesAllKeys(true);
+    game.RequestFocus();
+
+    bed.Tab();
+    CHECK(bed.Focused() == SV(u8"game"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::S), KeyModCtrl);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down));
+    CHECK(bed.Focused() == SV(u8"game"));
+    CHECK(saves == 0);
+    CHECK(backs == 0);
+    CHECK(keys == 4); // Tab, Escape, Ctrl+S and Down all reached it
+
+    // Shift+F1 releases it: the keys are the GUI's again.
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::F1), KeyModShift);
+    CHECK(released == 1);
+    CHECK_FALSE(game.GetCapturesAllKeys());
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::S), KeyModCtrl);
+    CHECK(saves == 1);
+    bed.Tab();
+    CHECK(bed.Focused() == SV(u8"next"));
+}

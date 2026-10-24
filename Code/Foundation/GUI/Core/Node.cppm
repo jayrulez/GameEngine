@@ -1943,6 +1943,12 @@ export namespace foundation::gui
         /// Tab and Shift+Tab reach it as keys rather than moving focus (CSS-like `tab-captures`, E12:
         /// a code editor, a terminal); Ctrl+Tab and Ctrl+Shift+Tab move focus from it instead.
         void SetTabCaptures(bool captures) noexcept { m_tabCaptures = captures; }
+        /// While it has focus, every key is its own (a game in an editor's panel): the GUI runs no
+        /// binding, moves no focus (Tab, the arrows), backs out of nothing (Escape) and takes no
+        /// access key. One chord releases it (the dispatcher's capture release, Shift+F1 by default):
+        /// it stops capturing and hears the named event `keysreleased`.
+        void SetCapturesAllKeys(bool captures) noexcept { m_capturesAllKeys = captures; }
+        [[nodiscard]] bool GetCapturesAllKeys() const noexcept { return m_capturesAllKeys; }
         /// A press in it leaves the focus where it is, rather than moving it to what was pressed or
         /// clearing it (the web's prevented `mousedown`): a code editor's completion list, whose
         /// row a click picks while the editor keeps the keys. A focusable widget inside it still
@@ -3099,6 +3105,7 @@ export namespace foundation::gui
         bool m_keepsFocus = false; // a press in it leaves the focus where it is
         i32 m_tabIndex = 0; // where Tab reaches it: positive first, 0 in tree order, below 0 never
         bool m_tabCaptures = false; // Tab is its key, not focus's
+        bool m_capturesAllKeys = false; // every key is its own while focused (a game in a panel)
         bool m_hitTestVisible = true;
         u32 m_nextListenerId = 0;
         // The style transform's matrix and origin in local units, from the functions and the size.

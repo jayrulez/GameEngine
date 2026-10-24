@@ -513,6 +513,10 @@ export namespace foundation::gui
         }
 
         bool InjectKeyDown(u32 keyCode, u32 modifiers = 0) { return KeyDownFrom(InputKind::Keyboard, keyCode, modifiers); }
+        /// The chord that frees a focus capturing every key (Node::SetCapturesAllKeys): Shift+F1 by
+        /// default, as a game in an editor's panel offers it.
+        void SetCaptureRelease(const Keystroke& stroke) noexcept { m_captureRelease = stroke; }
+        [[nodiscard]] const Keystroke& GetCaptureRelease() const noexcept { return m_captureRelease; }
         // A key down, from the keyboard or standing in for a pad's button (its East as Escape).
         bool KeyDownFrom(InputKind from, u32 keyCode, u32 modifiers)
         {
@@ -565,6 +569,21 @@ export namespace foundation::gui
                     m_dragModifiers = modifiers;
                     QueryDrop(m_mousePos);
                 }
+                return true;
+            }
+            // A focus that captures every key (a game in a panel) takes this one, whatever it is,
+            // and the GUI acts on none; its release chord alone frees it.
+            if (m_focusNode != nullptr && m_focusNode->GetCapturesAllKeys())
+            {
+                const u32 strokeModifiers = modifiers & ~ModifierOfKey(static_cast<KeyCode>(keyCode));
+                if (Keystroke{keyCode, strokeModifiers, false} == m_captureRelease)
+                {
+                    Node* released = m_focusNode;
+                    released->SetCapturesAllKeys(false);
+                    released->SendEvent(NamedEvent(released, core::StringView(u8"keysreleased")));
+                    return true;
+                }
+                (void)RouteKey(EventType::KeyDown, keyCode, modifiers);
                 return true;
             }
             // A key hides a tooltip, and keeps it hidden until the pointer moves on (as a press does).
@@ -2369,6 +2388,7 @@ export namespace foundation::gui
             usize HomeIndex = 0;
         };
         Array<PopupEntry> m_popups; // the top layer, bottom first
+        Keystroke m_captureRelease{static_cast<u32>(KeyCode::F1), static_cast<u32>(KeyModShift), false};
         // Closed popups playing their exit (LeavesOnClose): drawn under the open ones, no input.
         struct LeavingPopup
         {

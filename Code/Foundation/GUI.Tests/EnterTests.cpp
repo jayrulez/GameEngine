@@ -133,3 +133,29 @@ TEST_CASE("enter: a capped clock slows a hitch's motion rather than skipping it"
     CHECK(bed.card->GetAlpha() == doctest::Approx(0.8f));
     CHECK(bed.root->GetContext().GetMaxClockStep() == doctest::Approx(0.1f));
 }
+
+TEST_CASE("enter: a popup enters each time it opens")
+{
+    // A menu, a combo box's list, a tooltip or a dialog plays the sheet's entrance when it opens,
+    // and again when it opens the next time (it left the tree between).
+    EnterBed bed(u8".card { opacity: 1; transition: opacity 0.2s linear; } .card:entering { opacity: 0; }");
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+    for (int open = 0; open < 2; ++open)
+    {
+        PopupOptions options;
+        options.AnchorRect = Rect{20.0f, 20.0f, 0.0f, 0.0f};
+        options.HasAnchorRect = true;
+        d.OpenPopup(*bed.root, *bed.card, core::Move(options));
+        CHECK(bed.card->IsEntering());
+        bed.Frame(0.0);
+        CHECK(bed.card->GetAlpha() == doctest::Approx(0.0f));
+        bed.Frame(0.0);
+        bed.Frame(0.1);
+        CHECK(bed.card->GetAlpha() == doctest::Approx(0.5f));
+        bed.Frame(0.1);
+        CHECK(bed.card->GetAlpha() == doctest::Approx(1.0f));
+        CHECK(d.ClosePopup(*bed.card));
+        bed.Frame(0.0);
+    }
+    CHECK(bed.entered == 2);
+}

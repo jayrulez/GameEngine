@@ -985,9 +985,10 @@ export namespace foundation::gui
         // === Popups: the top layer (E5) ===
         // A popup stays in its owner's subtree (its styles, its events' route) and is promoted into
         // this root's top layer while open: drawn after the whole tree in opening order, unclipped,
-        // hit-tested first, placed against its anchor every layout pass. Opening an auto popup
-        // closes the open ones that do not hold its owner (nesting comes from the tree); closing one
-        // closes those it holds. A closed popup leaves the tree (its owner keeps it).
+        // hit-tested first, placed against its anchor every layout pass, entering (`:entering`) each
+        // time it opens. Opening an auto popup closes the open ones that do not hold its owner
+        // (nesting comes from the tree); closing one closes those it holds. A closed popup leaves the
+        // tree (its owner keeps it).
 
         /// Opens `popup` as a child of `owner` (attached there if it is not yet).
         void OpenPopup(Node& owner, Node& popup, PopupOptions options)
@@ -1040,6 +1041,7 @@ export namespace foundation::gui
             popup.SetRouteStop(entry.Options.Modal);
             m_popups.PushBack(core::Move(entry));
             PlacePopups();
+            popup.Enter(); // the sheet's entrance plays (`:entering`), each time it opens
             if (focusing)
             {
                 core::Array<Node*> stops;

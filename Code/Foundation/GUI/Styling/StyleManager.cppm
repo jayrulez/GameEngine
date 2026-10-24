@@ -423,8 +423,10 @@ export namespace foundation::gui
             };
 
             // Transitions: each property that changed since the last apply and a `transition`
-            // entry covers, from what shows now.
-            if (const ResolvedStyle* previous = m_cache.Find(&widget))
+            // entry covers, from what shows now. An entrance's first style moves from nothing: it
+            // is where the entrance starts.
+            const bool entranceStart = widget.TakeEntranceStart();
+            if (const ResolvedStyle* previous = entranceStart ? nullptr : m_cache.Find(&widget))
             {
                 const Array<TransitionSpec> transitions =
                     ComposeTransitions(resolved.Get(u8"transition-property"), resolved.Get(u8"transition-duration"),

@@ -163,6 +163,7 @@ namespace foundation::gui
             return;
         }
         m_enterPhase = 1;
+        m_entranceStart = true;
         MarkStyleStateDirty(StateEntering);
         Invalidate();
     }

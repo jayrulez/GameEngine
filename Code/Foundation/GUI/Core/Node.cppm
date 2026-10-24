@@ -1855,6 +1855,15 @@ export namespace foundation::gui
         [[nodiscard]] bool IsArriving() const noexcept { return m_enterPhase != 0; }
         /// Whether the style pass tells it when what moves it settles (MotionSettled): leaving or arriving.
         [[nodiscard]] bool WatchesMotion() const noexcept { return m_leaving || m_enterPhase != 0; }
+        /// The style pass's: whether this is its entrance's first style (told once). That style
+        /// starts from `:entering`'s values, as CSS's @starting-style, not from where an earlier
+        /// visit left it (a popup opened again), so nothing transitions from before.
+        [[nodiscard]] bool TakeEntranceStart() noexcept
+        {
+            const bool start = m_entranceStart;
+            m_entranceStart = false;
+            return start;
+        }
         /// The style pass's: nothing the sheet started on it waits now. A leaving node goes; an
         /// arriving one takes its entrance's next step (at the GUI's next drain).
         void MotionSettled();
@@ -2992,6 +3001,7 @@ export namespace foundation::gui
         bool m_inert = false;       // takes no input (K4)
         bool m_leaveQueued = false; // its removal waits in the mutation queue
         u8 m_enterPhase = 0;        // K5: 1 in :entering, 2 moving to its own style, 0 arrived
+        bool m_entranceStart = false; // its entrance's first style is still to come (TakeEntranceStart)
         bool m_enterQueued = false; // its entrance's next step waits in the mutation queue
         bool m_styledTree = false;  // the top of a tree a style pass ran over
         core::Float2 m_size{0.0f, 0.0f};

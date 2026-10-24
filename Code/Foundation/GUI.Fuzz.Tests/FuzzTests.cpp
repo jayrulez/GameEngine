@@ -57,6 +57,9 @@ namespace
 
     template <usize N>
     usize Count(const char* const (&)[N]) { return N; }
+
+    // Bindings as a keymap writes them: each of the three lines binds.
+    const std::string kKeymapSeed = "ctrl-s|file.save|\nctrl-k ctrl-c|edit.comment|editing && !readonly\npad-south|ui.activate|menu";
 }
 
 TEST_CASE("fuzz: the CSS parser and cascade take any sheet")
@@ -76,7 +79,7 @@ TEST_CASE("fuzz: the markup loader takes any markup")
     for (std::string& found : FoundSeeds("markup"))
         seeds.push_back(std::move(found));
     seeds.push_back("");
-    seeds.push_back("<panel><panel><panel><button text=\"{{a.b}}\" style=\"color: red\"/></panel></panel></panel>");
+    seeds.push_back("<Panel><Panel><Panel><Button text=\"{{a.b}}\" style=\"color: red\"/></Panel></Panel></Panel>");
     seeds.push_back("<unknown attr=\"\"><label text=\"&#x110000;\"/></unknown>");
     Run(seeds, kMarkupTokens, Count(kMarkupTokens), [](const std::string& text) { FuzzMarkup(text); });
 }
@@ -84,9 +87,28 @@ TEST_CASE("fuzz: the markup loader takes any markup")
 TEST_CASE("fuzz: the keymap takes any bindings")
 {
     std::vector<std::string> seeds = FoundSeeds("keymap");
+    seeds.push_back(kKeymapSeed);
     seeds.push_back("Ctrl+S|file.save|\nCtrl+K Ctrl+C|edit.comment|editing && !readonly\nPad.South|ui.activate|menu");
     seeds.push_back("|||\n+\nCtrl+\n(((((\n");
-    Run(seeds, kKeymapTokens, Count(kKeymapTokens), [](const std::string& text) { FuzzKeymap(text); });
+    Run(seeds, kKeymapTokens, Count(kKeymapTokens), [](const std::string& text) { (void)FuzzKeymap(text); });
+}
+
+// The seeds reach past the parsers: a target fed only what they refuse fuzzes nothing behind them.
+TEST_CASE("fuzz: the seeds are what the parsers take: the CSS target's tree and every sandbox page load, the keymap seed binds")
+{
+    gui::RegisterGuiElements();
+    static const gui::ElementSet elements = gui::ElementSet::All();
+    gui::MarkupLoader loader(elements, core::DefaultAllocator());
+    core::RefPtr<gui::Node> tree = loader.LoadFromString(core::StringView(kCssTree));
+    REQUIRE(tree.Get() != nullptr);
+    CHECK(tree->ChildCount() == 7u);
+
+    const std::vector<std::string> pages = SandboxSeeds(".xml");
+    REQUIRE_FALSE(pages.empty());
+    for (const std::string& page : pages)
+        CHECK(loader.LoadFromString(View(page)).Get() != nullptr);
+
+    CHECK(FuzzKeymap(kKeymapSeed) == 3u);
 }
 
 TEST_CASE("fuzz: the string table reader takes any XML")

@@ -88,12 +88,15 @@ namespace guifuzz
     };
     inline constexpr const char* kMarkupTokens[] = {
         "<", ">", "</", "/>", "=\"", "\"", "'", "&amp;", "&#x1F600;", "&bogus;", "<!--", "-->", "<![CDATA[",
-        "]]>", "<?xml ?>", "<button", "<panel>", "</panel>", "<label text=\"", "style=\"", "class=\"", "id=\"",
+        "]]>", "<?xml ?>", "<Button", "<Panel>", "</Panel>", "<Label text=\"", "<ScrollView>", "</ScrollView>",
+        "<TextField", "<button", "style=\"", "class=\"", "id=\"",
         "{{name}}", "{{", "}}", "data-x=\"", "-count=\"", "-args=\"", "\xEF\xBB\xBF", "\0", "\xE2\x80\xAE",
     };
     inline constexpr const char* kKeymapTokens[] = {
         "Ctrl+", "Shift+", "Alt+", "Super+", "+", " ", "K", "F12", "Escape", "Pad.South", "Pad.", "&&", "||", "!",
         "(", ")", "editing", "menu && !popup", "\xC3\xA9", "Ctrl+K Ctrl+", "++", "  ",
+        // As a binding writes them (ParseKeystroke's syntax), so mutations reach past the parse.
+        "ctrl-", "shift-", "alt-", "super-", "-", "k", "f12", "escape", "pad-south", "pad-",
     };
     inline constexpr const char* kXmlTokens[] = {
         "<", ">", "</", "/>", "=\"", "\"", "<Entry", "<Locale", "</Locales>", "&lt;", "&#0;", "&#xFFFFFF;",
@@ -155,7 +158,12 @@ namespace guifuzz
 
     // === The targets ===
 
-    /// A sheet parsed, then applied to a small tree of every element kind.
+    /// The tree a sheet is applied to: a small one of the common element kinds, by their tags.
+    inline constexpr const char8_t* kCssTree =
+        u8"<Panel><Button text=\"b\"/><Label class=\"note\" text=\"l\"/><TextField/><Slider/>"
+        u8"<CheckBox/><ListBox/><ScrollView><Label text=\"in\"/></ScrollView></Panel>";
+
+    /// A sheet parsed, then applied to kCssTree.
     inline void FuzzCss(const std::string& text)
     {
         gui::RegisterGuiElements();
@@ -163,9 +171,7 @@ namespace guifuzz
         root->SetSize(core::Float2{320.0f, 240.0f});
         static const gui::ElementSet elements = gui::ElementSet::All();
         gui::MarkupLoader loader(elements, core::DefaultAllocator());
-        if (core::RefPtr<gui::Node> tree = loader.LoadFromString(core::StringView(
-                u8"<panel><button text=\"b\"/><label class=\"note\" text=\"l\"/><textfield/><slider/>"
-                u8"<checkbox/><listbox/><scrollview><label text=\"in\"/></scrollview></panel>")))
+        if (core::RefPtr<gui::Node> tree = loader.LoadFromString(core::StringView(kCssTree)))
             root->AddChild(tree.Get());
         gui::StyleManager styles(gui::CSSParser::Parse(View(text)));
         styles.ApplyTree(*root.Get());
@@ -193,9 +199,11 @@ namespace guifuzz
     }
 
     /// Lines of `keys|command|context` bound into a keymap, then keystrokes matched against it.
-    inline void FuzzKeymap(const std::string& text)
+    /// Binding lines (keys|command|context) bound; how many bound.
+    inline usize FuzzKeymap(const std::string& text)
     {
         gui::Keymap keymap;
+        usize bound = 0;
         usize start = 0;
         while (start <= text.size())
         {
@@ -206,10 +214,12 @@ namespace guifuzz
             const std::string keys = line.substr(0, a);
             const std::string command = a == std::string::npos ? "c" : line.substr(a + 1, b == std::string::npos ? std::string::npos : b - a - 1);
             const std::string context = b == std::string::npos ? "" : line.substr(b + 1);
-            (void)keymap.Bind(View(keys), View(command), View(context));
+            if (keymap.Bind(View(keys), View(command), View(context)))
+                ++bound;
             (void)gui::ParseKeystroke(View(keys));
             start = end + 1;
         }
+        return bound;
     }
 
     /// A string table read from XML, then asked for its texts.

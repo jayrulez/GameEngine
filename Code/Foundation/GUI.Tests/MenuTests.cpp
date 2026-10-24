@@ -672,3 +672,34 @@ TEST_CASE("menu bar: at a scale its width does not land on the device grid, it s
     CHECK_FALSE(root->HasLayoutDirtyDescendant());
     CHECK_FALSE(bar->IsLayoutDirty());
 }
+
+TEST_CASE("menu: its padding insets its rows, and its size takes the padding in")
+{
+    auto menu = Make<Menu>();
+    menu->SetWidth(140.0f);
+    menu->SetItemHeight(25.0f);
+    menu->SetPadding(Thickness{4.0f, 6.0f, 4.0f, 6.0f});
+    MenuItem* cut = menu->AddItem(core::StringView(u8"Cut"), [] {});
+    MenuItem* copy = menu->AddItem(core::StringView(u8"Copy"), [] {});
+    CHECK(menu->GetSize().x == doctest::Approx(148.0f));
+    CHECK(menu->GetSize().y == doctest::Approx(62.0f)); // 2 * 25 + 12
+    CHECK(cut->GetPosition().x == doctest::Approx(4.0f));
+    CHECK(cut->GetPosition().y == doctest::Approx(6.0f));
+    CHECK(cut->GetSize().x == doctest::Approx(140.0f)); // a lit row inset from the edge
+    CHECK(copy->GetPosition().y == doctest::Approx(31.0f));
+}
+
+TEST_CASE("menu: the built-in theme dims an item that cannot run")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto menu = Make<Menu>();
+    MenuItem* undo = menu->AddItem(core::StringView(u8"Undo"), [] {});
+    MenuItem* redo = menu->AddItem(core::StringView(u8"Redo"), [] {});
+    root->AddChild(menu.Get());
+    redo->SetEnabled(false);
+    StyleManager styles;
+    styles.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
+    styles.ApplyTree(*root.Get());
+    CHECK(undo->GetAlpha() == doctest::Approx(1.0f));
+    CHECK(redo->GetAlpha() == doctest::Approx(0.45f));
+}

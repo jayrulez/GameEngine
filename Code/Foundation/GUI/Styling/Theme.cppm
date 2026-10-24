@@ -111,6 +111,7 @@ export namespace foundation::gui
             .dialogbutton:hover { opacity: 0.9; }
             menu       { background-color: var(--menu-background, var(--chrome)); }
             menuitem::highlight, menusubmenu::highlight { background-color: var(--menu-highlight, var(--selection)); }
+            menuitem:disabled, menusubmenu:disabled { opacity: var(--disabled-opacity); } /* what cannot run says so */
             menuseparator::line { background-color: var(--menu-separator, var(--separator)); }
             splitter-handle { background-color: var(--splitter-handle, var(--separator)); }
             splitter-handle:hover, splitter-handle:active, splitter-handle:focus-visible

@@ -879,29 +879,41 @@ export namespace foundation::gui
             for (MenuRow* row : m_rows)
                 e.Content += row->RowHeight();
             const Node* root = GetRootNode();
-            const f32 room = root != nullptr && root != this && root->GetSize().y > 0.0f ? root->GetSize().y - 2.0f * kScreenMargin : 0.0f;
+            const f32 room = root != nullptr && root != this && root->GetSize().y > 0.0f
+                                 ? root->GetSize().y - 2.0f * kScreenMargin - Inset().TotalVertical()
+                                 : 0.0f;
             e.Scrolls = room > 2.0f * kArrowHeight + m_itemHeight && e.Content > room;
             e.Height = e.Scrolls ? room : e.Content;
             return e;
         }
 
+        // Its padding and border: its rows and arrows inside them, its size theirs added (a sheet's
+        // padding insets a lit row from the menu's rounded edge).
+        [[nodiscard]] Thickness Inset() const
+        {
+            const Thickness p = GetPadding();
+            const Thickness b = GetBorderThickness();
+            return Thickness{p.Left + b.Left, p.Top + b.Top, p.Right + b.Right, p.Bottom + b.Bottom};
+        }
+
         void Relayout()
         {
             const Extent extent = MeasureItems();
+            const Thickness inset = Inset();
             // Being placed (a popup shrunk to the room beside its anchor), it keeps the height it was
             // given and scrolls within it; else the height it measures.
             const bool placed = IsBeingPlaced() && GetSize().y > 0.0f;
             const f32 width = extent.Width, content = extent.Content;
-            const f32 height = placed ? core::Min(GetSize().y, extent.Content) : extent.Height;
+            const f32 height = placed ? core::Min(core::Max(0.0f, GetSize().y - inset.TotalVertical()), extent.Content) : extent.Height;
             m_scrolls = placed ? content > height + 0.5f && height > 2.0f * kArrowHeight + m_itemHeight : extent.Scrolls;
             const f32 top = m_scrolls ? kArrowHeight : 0.0f;
             const f32 view = height - 2.0f * top;
             m_scroll = m_scrolls ? core::Clamp(m_scroll, 0.0f, core::Max(0.0f, content - view)) : 0.0f;
-            f32 y = top - m_scroll;
+            f32 y = inset.Top + top - m_scroll;
             for (MenuRow* row : m_rows)
             {
                 const f32 h = row->RowHeight();
-                row->SetPosition(core::Float2{0.0f, y});
+                row->SetPosition(core::Float2{inset.Left, y});
                 row->SetSize(core::Float2{width, h});
                 y += h;
             }
@@ -923,18 +935,19 @@ export namespace foundation::gui
                     arrow->SetDisplayed(m_scrolls);
                     arrow->SetColors(m_panelColor, GetTextColor());
                 }
-                m_scrollUp->SetPosition(core::Float2{0.0f, 0.0f});
+                m_scrollUp->SetPosition(core::Float2{inset.Left, inset.Top});
                 m_scrollUp->SetSize(core::Float2{width, kArrowHeight});
                 m_scrollUp->SetLive(m_scroll > 0.0f);
-                m_scrollDown->SetPosition(core::Float2{0.0f, height - kArrowHeight});
+                m_scrollDown->SetPosition(core::Float2{inset.Left, inset.Top + height - kArrowHeight});
                 m_scrollDown->SetSize(core::Float2{width, kArrowHeight});
                 m_scrollDown->SetLive(m_scroll < content - view);
             }
             SetClipChildren(m_scrolls);
             // Sized by its items without pinning the size (as SetSize does): a popup that fits its
             // content measures it again each pass, and a pinned size would hold a stale height.
-            if (GetSize().x != width || GetSize().y != height)
-                Arrange(Rect{GetPosition().x, GetPosition().y, width, height});
+            const f32 outerWidth = width + inset.TotalHorizontal(), outerHeight = height + inset.TotalVertical();
+            if (GetSize().x != outerWidth || GetSize().y != outerHeight)
+                Arrange(Rect{GetPosition().x, GetPosition().y, outerWidth, outerHeight});
         }
         // Scrolls so `row` shows whole between the arrows (a key moved to it).
         void ScrollRowIntoView(const MenuRow& row)
@@ -948,7 +961,7 @@ export namespace foundation::gui
                     break;
                 y += r->RowHeight();
             }
-            const f32 view = GetSize().y - 2.0f * kArrowHeight;
+            const f32 view = GetSize().y - Inset().TotalVertical() - 2.0f * kArrowHeight;
             if (y < m_scroll)
                 m_scroll = y;
             else if (y + row.RowHeight() > m_scroll + view)

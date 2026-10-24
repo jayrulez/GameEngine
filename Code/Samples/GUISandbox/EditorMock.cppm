@@ -66,6 +66,21 @@ export namespace sandbox
             m_sideBySide = side;
         }
 
+        /// The kit page in front (--mock-kit): every shared piece in its states.
+        void ShowKit()
+        {
+            if (m_dock)
+                Said(m_dock->Edit([](gui::DockLayout& layout) { return layout.Activate(u8"kit"); }));
+        }
+
+        /// The kit page scrolled down this far (--scroll, for a screenshot further down).
+        void ScrollKit(f32 pixels)
+        {
+            if (m_kit)
+                if (gui::Node* scroll = FindById(*m_kit, u8"kit-scroll"))
+                    scroll->SetScrollOffset(Float2{0.0f, pixels});
+        }
+
         /// The scheme from the start (--light).
         void SetDark(bool dark)
         {
@@ -174,6 +189,8 @@ export namespace sandbox
             String sheet = m_host.Read(u8"Editor/editor.css");
             sheet += StringView(u8"\n");
             sheet += m_host.Read(kDensities[m_density].Sheet).AsView();
+            sheet += StringView(u8"\n");
+            sheet += m_host.Read(u8"Editor/Mock/kit.css").AsView(); // the kit page's own layout
             sheet += inputs.AsView();
             m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"Editor/editor.css")));
             m_context.SetColorScheme(m_dark);
@@ -188,8 +205,8 @@ export namespace sandbox
         }
 
         // The dock: pages in the middle (two scene pages, each with its own hierarchy and
-        // inspector, so they can stand side by side), the shared panels below: assets and the
-        // console.
+        // inspector, so they can stand side by side, and the kit page), the shared panels below:
+        // assets and the console.
         void BuildDock()
         {
             gui::Node* host = FindById(*m_frame, u8"frame-dock");
@@ -199,6 +216,7 @@ export namespace sandbox
             m_dock = MakeUnique<gui::DockController>(m_allocator, m_allocator);
             Register(u8"scene", u8"Level 1", u8"Editor/Mock/scene.gml");
             Register(u8"scene-2", u8"Level 2", u8"Editor/Mock/scene.gml");
+            Register(u8"kit", u8"Kit", u8"Editor/Mock/kit.gml");
             Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.gml");
             Register(u8"console", u8"Console", u8"Editor/Mock/console.gml");
             Said(m_dock->Adopt(DefaultLayout(false)));
@@ -224,6 +242,7 @@ export namespace sandbox
                 Said(layout.InsertBeside(u8"scene-2", central, gui::DockSide::End, 0.5f));
             else
                 Said(layout.InsertTab(u8"scene-2", central));
+            Said(layout.InsertTab(u8"kit", central));
             Said(layout.Activate(u8"scene"));
             Said(layout.InsertBeside(u8"assets", central, gui::DockSide::Bottom, 0.28f));
             Said(layout.InsertTab(u8"console", layout.StackOf(u8"assets")));
@@ -238,13 +257,15 @@ export namespace sandbox
             description.Title = String(title);
             description.Close = gui::DockClosePolicy::Hide;
             description.Closable = true;
-            description.Default.Central = id.StartsWith(StringView(u8"scene"));
+            description.Default.Central = id.StartsWith(StringView(u8"scene")) || id == StringView(u8"kit");
             EditorMock* self = this;
             const String path(markup);
             const String panel(id);
             description.Factory = [self, path, panel]()
             {
                 RefPtr<gui::Node> content = self->m_host.Load(path.AsView());
+                if (content && panel.AsView() == StringView(u8"kit"))
+                    self->m_kit = content;
                 if (content && panel.AsView().StartsWith(StringView(u8"scene")))
                     self->FillScenePage(*content, panel.AsView() == StringView(u8"scene-2"));
                 if (content && panel.AsView() == StringView(u8"assets"))
@@ -316,6 +337,7 @@ export namespace sandbox
         RefPtr<gui::Node> m_frame;
         UniquePtr<gui::DockController> m_dock;
         RefPtr<gui::DockArea> m_dockArea;
+        RefPtr<gui::Node> m_kit; // the kit page's content, once the dock has made it
         Array<RefPtr<Object>> m_shown; // what each page's inspector shows
         Array<UniquePtr<gui::ReflectedPropertySource>> m_sources;
         bool m_dark = true;

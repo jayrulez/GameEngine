@@ -291,6 +291,7 @@ public:
     void SetEditorMock(bool on) { m_editorMockMode = on; }
     [[nodiscard]] bool IsEditorMock() const noexcept { return m_editorMockMode; }
     void SetMockSideBySide(bool on) { m_mockSideBySide = on; }
+    void SetMockKit(bool on) { m_mockKit = on; }
     // --mock-size <w>x<h>: the mock's window at another size (a large monitor, a laptop).
     void SetMockSize(u32 width, u32 height) { m_mockWidth = width; m_mockHeight = height; }
     [[nodiscard]] u32 MockWidth() const noexcept { return m_mockWidth; }
@@ -435,6 +436,7 @@ private:
     bool m_lightAtStart = false; // --light: the light colour scheme from the start
     bool m_editorMockMode = false; // --editor-mock: the editor's mock instead of the sandbox
     bool m_mockSideBySide = false; // --mock-side-by-side: its two scene pages side by side
+    bool m_mockKit = false;        // --mock-kit: the kit page in front
     u32 m_mockWidth = 1920;        // a full HD display, the user's (2026-10-24)
     u32 m_mockHeight = 1080;
     UniquePtr<sandbox::EditorMock> m_editorMock;
@@ -1038,6 +1040,8 @@ void GUISandbox::BuildEditorMock()
         m_editorMock->SetDark(false);
     if (m_mockSideBySide)
         m_editorMock->SetSideBySide(true);
+    if (m_mockKit)
+        m_editorMock->ShowKit();
     (void)m_root->OnCommand(u8"inspector.toggle", [app](gui::CommandEvent&) { app->ToggleInspector(); });
     (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
     m_root->SetDebugFont(m_font);
@@ -2110,7 +2114,9 @@ void GUISandbox::OnUpdate(runtime::IApplicationHost&, f32 deltaTime)
     RouteInput();
     TypeKeys(*m_root);
     // --scroll: once the GUI is up (held a few frames while the page settles).
-    if (m_scroll > 0.0f && m_frames >= 10 && m_frames <= 20 && m_content != nullptr)
+    if (m_scroll > 0.0f && m_frames >= 10 && m_frames <= 20 && m_editorMock)
+        m_editorMock->ScrollKit(m_scroll);
+    else if (m_scroll > 0.0f && m_frames >= 10 && m_frames <= 20 && m_content != nullptr)
         m_content->SetScrollOffset(Float2{0.0f, m_scroll});
     if (m_sweep)
     {
@@ -3492,6 +3498,8 @@ int main(int argc, char** argv)
             app.SetEditorMock(true);
         else if (arg == StringView(u8"--mock-side-by-side"))
             app.SetMockSideBySide(true);
+        else if (arg == StringView(u8"--mock-kit"))
+            app.SetMockKit(true);
         else if (arg == StringView(u8"--mock-size") && i + 1 < argc)
         {
             unsigned width = 0, height = 0;

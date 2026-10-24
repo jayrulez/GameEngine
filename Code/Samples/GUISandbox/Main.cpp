@@ -58,6 +58,7 @@ import gui.sandbox.stress; // the Stress page (E8a)
 import gui.sandbox.lamps;  // the Toolkit page's property source (T1)
 import gui.sandbox.camera; // the Toolkit page's reflected object (T3)
 import gui.sandbox.code;   // the Code page (C8)
+import gui.sandbox.editor_mock; // --editor-mock: the editor's design (X0 of Specs/editor-gui.md)
 import foundation.script; // the pages' and the game menu's scripts
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
@@ -287,6 +288,13 @@ public:
     }
     void SetOpenMenu(bool open) { m_openMenuAtStart = open; }
     void SetLightAtStart(bool light) { m_lightAtStart = light; }
+    void SetEditorMock(bool on) { m_editorMockMode = on; }
+    [[nodiscard]] bool IsEditorMock() const noexcept { return m_editorMockMode; }
+    void SetMockSideBySide(bool on) { m_mockSideBySide = on; }
+    // --mock-size <w>x<h>: the mock's window at another size (a large monitor, a laptop).
+    void SetMockSize(u32 width, u32 height) { m_mockWidth = width; m_mockHeight = height; }
+    [[nodiscard]] u32 MockWidth() const noexcept { return m_mockWidth; }
+    [[nodiscard]] u32 MockHeight() const noexcept { return m_mockHeight; }
     void SetMenuCall(StringView function) { m_menuCall = String(function); }
     void SetKeys(StringView keys) { m_keys = String(keys); }
     void SetAlwaysRedraw(bool always) { m_alwaysRedraw = always; }
@@ -425,6 +433,12 @@ private:
     bool m_narrate = false;
     bool m_openMenuAtStart = false;
     bool m_lightAtStart = false; // --light: the light colour scheme from the start
+    bool m_editorMockMode = false; // --editor-mock: the editor's mock instead of the sandbox
+    bool m_mockSideBySide = false; // --mock-side-by-side: its two scene pages side by side
+    u32 m_mockWidth = 1920;        // a full HD display, the user's (2026-10-24)
+    u32 m_mockHeight = 1080;
+    UniquePtr<sandbox::EditorMock> m_editorMock;
+    void BuildEditorMock();
     String m_menuCall; // a game-menu script function to call once it is up (a screenshot of a panel)
     String m_keys;     // keystrokes to type into the root on show, one every 15 frames
     bool m_layoutOverlay = false; // F9: the debug overlay's layout half
@@ -707,7 +721,8 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     // The window's GUI: its input, its frames, its renderer and the picture baker. The sandbox blends
     // in linear light, as its references were drawn.
     m_guiHost = MakeUnique<gui::GuiHost>(AppRoot(), AppRoot(), *host.Graphics(), *m_shell, m_fontService.Get(), m_shaders->Set());
-    m_guiHost->SetBlendSpace(vg::VGBlendSpace::Linear);
+    if (!m_editorMockMode) // the mock blends as the editor will: the host's default, sRGB, as CSS does
+        m_guiHost->SetBlendSpace(vg::VGBlendSpace::Linear);
     m_styles = &m_guiHost->Styles();
     // The windows the host opens for a root (the Docking page's floats in OS windows) are the
     // runtime host's.
@@ -917,6 +932,11 @@ void GUISandbox::BuildSandbox()
     m_root->SetDisplayScale(m_window != nullptr ? m_window->ContentScale() : 1.0f);
     m_root->SetViewportSize(Float2{static_cast<f32>(m_width), static_cast<f32>(m_height)});
     m_sandboxBinding.root = m_root.Get();
+    if (m_editorMockMode)
+    {
+        BuildEditorMock();
+        return;
+    }
 
     String path(kSandboxDir);
     path += StringView(u8"shell.xml");
@@ -992,6 +1012,38 @@ void GUISandbox::BuildSandbox()
     if (m_openInspector)
         ToggleInspector();
     m_root->GetEventDispatcher()->SetTooltipDelay(0.4f); // tooltips are the GUI's own (E5)
+}
+
+// The editor's mock in place of the sandbox: the GUI's theme and its satellites' sheets as the
+// user agent's, the editor's sheet the mock sets over them, the inspector on Ctrl+Shift+I.
+void GUISandbox::BuildEditorMock()
+{
+    GUISandbox* app = this;
+    m_styles->SetFontService(m_fontService.Get());
+    m_styles->SetFontFaceLoader([app](StringView face, StringView source) { return app->LoadFontFace(face, source); });
+    m_gui->SetFontService(m_fontService.Get());
+    m_resources = MakeUnique<SandboxResources>(AppRoot(), [app](StringView path) { return app->DataPath(path); });
+    m_styles->SetResourceProvider(m_resources.Get());
+    m_gui->SetResourceProvider(m_resources.Get());
+    const String theme = Format(u8"{}\n{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS(),
+                                gui::CodeSheetCSS());
+    m_styles->SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
+    sandbox::EditorMock::Host host;
+    host.Load = [app](StringView path) { return app->LoadMarkup(app->ReadText(path).AsView()); };
+    host.Read = [app](StringView path) { return app->ReadText(path); };
+    m_editorMock = MakeUnique<sandbox::EditorMock>(AppRoot(), AppRoot(), *m_gui, *m_root, *m_styles, Move(host));
+    if (!m_editorMock->Build())
+        std::fprintf(stderr, "GUISandbox: the editor mock did not load\n");
+    if (m_lightAtStart)
+        m_editorMock->SetDark(false);
+    if (m_mockSideBySide)
+        m_editorMock->SetSideBySide(true);
+    (void)m_root->OnCommand(u8"inspector.toggle", [app](gui::CommandEvent&) { app->ToggleInspector(); });
+    (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
+    m_root->SetDebugFont(m_font);
+    if (m_openInspector)
+        ToggleInspector();
+    m_root->GetEventDispatcher()->SetTooltipDelay(0.4f);
 }
 
 void GUISandbox::LoadPages()
@@ -3436,6 +3488,16 @@ int main(int argc, char** argv)
             app.SetStartPage(next());
         else if (arg == StringView(u8"--showcase"))
             app.SetOpenMenu(true);
+        else if (arg == StringView(u8"--editor-mock"))
+            app.SetEditorMock(true);
+        else if (arg == StringView(u8"--mock-side-by-side"))
+            app.SetMockSideBySide(true);
+        else if (arg == StringView(u8"--mock-size") && i + 1 < argc)
+        {
+            unsigned width = 0, height = 0;
+            if (std::sscanf(argv[++i], "%ux%u", &width, &height) == 2 && width > 0 && height > 0)
+                app.SetMockSize(width, height);
+        }
         else if (arg == StringView(u8"--light"))
             app.SetLightAtStart(true);
         else if (arg == StringView(u8"--menu-call") && i + 1 < argc)
@@ -3496,9 +3558,9 @@ int main(int argc, char** argv)
     app.SetScreenshots(rhi::ScreenshotOptionsFromArguments(argc, argv));
 
     shell::WindowSettings settings;
-    settings.title = u8"GUI Sandbox";
-    settings.width = 960;
-    settings.height = 820;
+    settings.title = app.IsEditorMock() ? u8"Editor mock" : u8"GUI Sandbox";
+    settings.width = app.IsEditorMock() ? app.MockWidth() : 960; // the mock at a full HD display's size
+    settings.height = app.IsEditorMock() ? app.MockHeight() : 820;
     settings.drawsTextComposition = true; // its fields show an IME's composition in place
     UniquePtr<shell::IShell> shellPtr = shell::CreateShell(AppRoot(), settings);
     if (shellPtr.Get() == nullptr || shellPtr->MainWindow() == nullptr)

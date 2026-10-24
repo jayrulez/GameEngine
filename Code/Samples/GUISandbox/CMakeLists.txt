@@ -1,7 +1,7 @@
 # GUI Sandbox - foundation.gui's widgets, styles, motion and input, an application on the runtime host
 # through the GUI's GuiHost (GUI.Hosting).
-add_executable(GUISandbox Main.cpp ReflectedCameraImpl.cpp)
-target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm LampSource.cppm ReflectedCamera.cppm CodePage.cppm) # the Stress page (E8a), the Toolkit page's lamps (T1) and camera (T3), the Code page (C8)
+add_executable(GUISandbox Main.cpp ReflectedCameraImpl.cpp MockTypesImpl.cpp)
+target_sources(GUISandbox PRIVATE FILE_SET sandbox_modules TYPE CXX_MODULES FILES StressPage.cppm LampSource.cppm ReflectedCamera.cppm CodePage.cppm MockTypes.cppm EditorMock.cppm) # the Stress page (E8a), the Toolkit page's lamps (T1) and camera (T3), the Code page (C8), the editor mock (X0)
 target_link_libraries(GUISandbox PRIVATE
     Foundation::Core Foundation::RHI Foundation::VFS
     Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop

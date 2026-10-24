@@ -11,7 +11,7 @@
 // panel that had no id on close and crashed reaching it after). Closing a panel follows its policy:
 // Hide keeps its content and its place, Rebuild lets its content go and keeps its place (the
 // factory makes it again when shown), Destroy lets both go. A panel may ask before it closes (a
-// document with unsaved changes).
+// document with unsaved changes), and its title and tab classes change while it is docked.
 //
 // The layout changes through the controller, which tells every DockSpace showing it to show it
 // again. What the user already did in the widgets (a separator dragged, a tab chosen or dragged to
@@ -43,6 +43,7 @@ export namespace foundation::gui
         String Id;
         String Title; ///< its tab's text (the id when empty)
         String Icon;  ///< its tab's icon, by path
+        String TabClasses; ///< its tab's classes, space-separated (a document's unsaved mark)
         Function<RefPtr<Node>()> Factory;
         DockClosePolicy Close = DockClosePolicy::Hide;
         bool Closable = true;
@@ -256,6 +257,35 @@ export namespace foundation::gui
             return outcome;
         }
 
+        /// A registered panel's tab text, shown at once wherever it is docked; false for a panel
+        /// not registered.
+        bool SetTitle(core::StringView panel, core::StringView title)
+        {
+            DockPanelDescription* description = Find(panel);
+            if (description == nullptr)
+                return false;
+            if (description->Title.AsView() != title)
+            {
+                description->Title = String(title);
+                ShowEverywhere();
+            }
+            return true;
+        }
+        /// A registered panel's tab classes (space-separated), replacing the ones before, shown at
+        /// once wherever it is docked; false for a panel not registered.
+        bool SetTabClasses(core::StringView panel, core::StringView classes)
+        {
+            DockPanelDescription* description = Find(panel);
+            if (description == nullptr)
+                return false;
+            if (description->TabClasses.AsView() != classes)
+            {
+                description->TabClasses = String(classes);
+                ShowEverywhere();
+            }
+            return true;
+        }
+
         /// A registered panel's content: made by its factory the first time it is asked for, kept
         /// after; null for a panel not registered (or one whose factory makes none).
         RefPtr<Node> Content(core::StringView panel)
@@ -328,6 +358,13 @@ export namespace foundation::gui
             String Panel;
             RefPtr<Node> Content;
         };
+        [[nodiscard]] DockPanelDescription* Find(core::StringView panel) noexcept
+        {
+            for (DockPanelDescription& description : m_panels)
+                if (description.Id.AsView() == panel)
+                    return &description;
+            return nullptr;
+        }
         void ForgetContent(core::StringView panel)
         {
             for (usize i = 0; i < m_contents.Size(); ++i)

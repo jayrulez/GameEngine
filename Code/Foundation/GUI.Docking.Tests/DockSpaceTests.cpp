@@ -7,7 +7,7 @@
 // placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
 // user does in the widgets (a separator dragged, a tab chosen, dragged or closed, by its close part
 // or a middle click) noted back; a panel wider than its stack moves no separator, the stack
-// clipping it; a panel that asks before it closes.
+// clipping it; a panel that asks before it closes; a title and tab classes changed while docked.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -359,4 +359,38 @@ TEST_CASE("dock space: a panel asks before it closes, by its tab or the controll
     CHECK(bed.controller.Close(SV(u8"document")).Ok());
     CHECK(asked == 3);
     CHECK(bed.StackOf(u8"document") == kNoDock);
+}
+
+TEST_CASE("dock space: a docked panel's title and tab classes change where it shows; a panel not registered has none to change")
+{
+    Bed bed;
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"scene"), bed.Central()); }).Ok());
+    bed.Lay();
+    TabPage* page = bed.space->PageOf(SV(u8"scene"));
+    REQUIRE(page != nullptr);
+    REQUIRE(page->GetTab() != nullptr);
+    CHECK(page->GetTab()->GetText() == SV(u8"Scene"));
+
+    CHECK(bed.controller.SetTitle(SV(u8"scene"), SV(u8"Scene*")));
+    CHECK(bed.controller.SetTabClasses(SV(u8"scene"), SV(u8"dirty active")));
+    CHECK(bed.space->PageOf(SV(u8"scene")) == page); // the same page, told
+    CHECK(page->GetTab()->GetText() == SV(u8"Scene*"));
+    CHECK(page->GetTab()->HasClass(SV(u8"dirty")));
+    CHECK(page->GetTab()->HasClass(SV(u8"active")));
+    CHECK(bed.controller.SetTabClasses(SV(u8"scene"), SV(u8"active")));
+    CHECK_FALSE(page->GetTab()->HasClass(SV(u8"dirty")));
+    CHECK(bed.controller.Describe(SV(u8"scene"))->Title == core::String(u8"Scene*"));
+
+    CHECK_FALSE(bed.controller.SetTitle(SV(u8"nowhere"), SV(u8"Nowhere")));
+    CHECK_FALSE(bed.controller.SetTabClasses(SV(u8"nowhere"), SV(u8"dirty")));
+
+    // Shown again elsewhere, it keeps them.
+    REQUIRE(bed.controller.Close(SV(u8"scene")).Ok());
+    REQUIRE(bed.controller.Show(SV(u8"scene")).Ok());
+    bed.Lay();
+    TabPage* again = bed.space->PageOf(SV(u8"scene"));
+    REQUIRE(again != nullptr);
+    REQUIRE(again->GetTab() != nullptr);
+    CHECK(again->GetTab()->GetText() == SV(u8"Scene*"));
+    CHECK(again->GetTab()->HasClass(SV(u8"active")));
 }

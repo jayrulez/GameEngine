@@ -959,7 +959,9 @@ export namespace foundation::gui
                 for (const Page& had : shown.Pages)
                     if (had.Panel == panel && (had.Registered || !registered)) // a placeholder whose panel came is made again
                         page = had.Widget;
-                if (!page)
+                if (page)
+                    ShowDescription(*page, panel.AsView()); // its title or tab classes may have changed
+                else
                     page = MakePage(panel.AsView());
                 pages.PushBack(Page{panel, page, registered});
             }
@@ -990,11 +992,7 @@ export namespace foundation::gui
         RefPtr<TabPage> MakePage(core::StringView panel)
         {
             RefPtr<TabPage> page = MakeRef<TabPage>(MemoryAllocator());
-            const DockPanelDescription* description = m_controller->Describe(panel);
-            page->SetTitle(description != nullptr && !description->Title.IsEmpty() ? description->Title.AsView() : panel);
-            if (description != nullptr && !description->Icon.IsEmpty())
-                page->SetIconSource(description->Icon);
-            page->SetClosable(description == nullptr || description->Closable);
+            ShowDescription(*page, panel);
             DockController* controller = m_controller;
             IAllocator* allocator = &MemoryAllocator();
             const String id(panel);
@@ -1014,6 +1012,21 @@ export namespace foundation::gui
                     into.AddChild(content.Get());
                 });
             return page;
+        }
+
+        // A page's tab as its panel's description has it now.
+        void ShowDescription(TabPage& page, core::StringView panel)
+        {
+            const DockPanelDescription* description = m_controller->Describe(panel);
+            const core::StringView title = description != nullptr && !description->Title.IsEmpty() ? description->Title.AsView() : panel;
+            if (page.GetTitle() != title)
+                page.SetTitle(title);
+            if (description != nullptr && page.GetIconSource() != description->Icon)
+                page.SetIconSource(description->Icon);
+            page.SetClosable(description == nullptr || description->Closable);
+            const String classes = description != nullptr ? description->TabClasses : String();
+            if (page.GetTabClassesString() != classes)
+                page.SetTabClasses(classes.AsView());
         }
 
         [[nodiscard]] const String* PanelAt(DockNodeId stack, TabView& view, i32 index) const

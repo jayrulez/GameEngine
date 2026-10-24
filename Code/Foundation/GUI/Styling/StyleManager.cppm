@@ -328,15 +328,7 @@ export namespace foundation::gui
 
         [[nodiscard]] static bool SameCustomProperties(const ResolvedStyle& a, const ResolvedStyle& b)
         {
-            const auto contains = [](const ResolvedStyle& in, const ResolvedProperty& p)
-            { return in.Get(p.Name.AsView()) == p.Value.AsView() && in.Has(p.Name.AsView()); };
-            for (const ResolvedProperty& p : a.Properties())
-                if (ResolvedStyle::IsCustomProperty(p.Name.AsView()) && !contains(b, p))
-                    return false;
-            for (const ResolvedProperty& p : b.Properties())
-                if (ResolvedStyle::IsCustomProperty(p.Name.AsView()) && !contains(a, p))
-                    return false;
-            return true;
+            return ResolvedStyle::SameCustomProperties(a, b);
         }
 
         // What applying `resolved` to `widget` needs: the length-resolution context (the viewport

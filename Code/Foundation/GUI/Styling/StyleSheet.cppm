@@ -35,6 +35,99 @@ export namespace foundation::gui
         bool Important = false;
     };
 
+    /// The custom properties an element sees (they inherit). One set is shared, unchanged, by an
+    /// element and every element below it that sets none of its own, so a sheet's hundreds of
+    /// tokens on :root are not copied into every element; an element that sets some gets a set of
+    /// its own (its parent's with its own over them). Kept by name hash, so a var() finds its
+    /// property without walking the list.
+    class CustomProperties : public core::RefCounted
+    {
+    public:
+        explicit CustomProperties(IAllocator& allocator) : m_entries(allocator) {}
+        CustomProperties(IAllocator& allocator, const CustomProperties& from) : m_entries(allocator)
+        {
+            m_entries.Reserve(from.m_entries.Size());
+            for (const Entry& e : from.m_entries)
+                m_entries.PushBack(e);
+        }
+
+        [[nodiscard]] const ResolvedProperty* Find(core::StringView name) const
+        {
+            const u64 hash = core::HashText(name);
+            for (usize i = LowerBound(hash); i < m_entries.Size() && m_entries[i].Hash == hash; ++i)
+                if (m_entries[i].Property.Name.AsView() == name)
+                    return &m_entries[i].Property;
+            return nullptr;
+        }
+        /// Sets `name` (an !important value resists a later normal one).
+        void Put(core::StringView name, core::StringView value, bool important)
+        {
+            const u64 hash = core::HashText(name);
+            usize i = LowerBound(hash);
+            for (usize k = i; k < m_entries.Size() && m_entries[k].Hash == hash; ++k)
+                if (m_entries[k].Property.Name.AsView() == name)
+                {
+                    ResolvedProperty& p = m_entries[k].Property;
+                    if (p.Important && !important)
+                        return;
+                    p.Value = core::String(value);
+                    p.Important = important;
+                    return;
+                }
+            m_entries.Insert(i, Entry{hash, ResolvedProperty{core::String(name), core::String(value), StyleValue{}, important}});
+        }
+        void Remove(core::StringView name)
+        {
+            const u64 hash = core::HashText(name);
+            for (usize i = LowerBound(hash); i < m_entries.Size() && m_entries[i].Hash == hash; ++i)
+                if (m_entries[i].Property.Name.AsView() == name)
+                {
+                    m_entries.RemoveAt(i);
+                    return;
+                }
+        }
+        [[nodiscard]] usize Size() const noexcept { return m_entries.Size(); }
+        /// The same names with the same values.
+        [[nodiscard]] bool SameAs(const CustomProperties& other) const
+        {
+            if (m_entries.Size() != other.m_entries.Size())
+                return false;
+            for (usize i = 0; i < m_entries.Size(); ++i)
+                if (m_entries[i].Hash != other.m_entries[i].Hash ||
+                    m_entries[i].Property.Name.AsView() != other.m_entries[i].Property.Name.AsView() ||
+                    m_entries[i].Property.Value.AsView() != other.m_entries[i].Property.Value.AsView())
+                    return false;
+            return true;
+        }
+        template <typename Visit>
+        void ForEach(Visit&& visit) const
+        {
+            for (const Entry& e : m_entries)
+                visit(e.Property);
+        }
+
+    private:
+        struct Entry
+        {
+            u64 Hash = 0;
+            ResolvedProperty Property;
+        };
+        [[nodiscard]] usize LowerBound(u64 hash) const noexcept
+        {
+            usize lo = 0, hi = m_entries.Size();
+            while (lo < hi)
+            {
+                const usize mid = lo + (hi - lo) / 2;
+                if (m_entries[mid].Hash < hash)
+                    lo = mid + 1;
+                else
+                    hi = mid;
+            }
+            return lo;
+        }
+        Array<Entry> m_entries; // by hash
+    };
+
     /// The cascaded properties of one element: longhands, var() substituted and parsed.
     class ResolvedStyle
     {
@@ -71,6 +164,14 @@ export namespace foundation::gui
         [[nodiscard]] bool Has(core::StringView name) const { return Find(name) != nullptr; }
         void Remove(core::StringView name)
         {
+            if (IsCustomProperty(name))
+            {
+                if (name == core::StringView(kCurrentColorProperty))
+                    m_hasCurrentColor = false;
+                else if (m_customs && m_customs->Find(name) != nullptr)
+                    OwnCustoms().Remove(name);
+                return;
+            }
             for (usize i = 0; i < m_props.Size(); ++i)
                 if (m_props[i].Name.AsView() == name)
                 {
@@ -148,8 +249,29 @@ export namespace foundation::gui
             return p != nullptr && p->Typed.Kind != StyleValueKind::None ? &p->Typed : nullptr;
         }
 
-        [[nodiscard]] usize Count() const noexcept { return m_props.Size(); }
+        /// Every property it holds, its custom properties counted.
+        [[nodiscard]] usize Count() const noexcept
+        {
+            return m_props.Size() + (m_customs ? m_customs->Size() : 0) + (m_hasCurrentColor ? 1 : 0);
+        }
+        /// Its properties but the custom ones (Customs has those).
         [[nodiscard]] const Array<ResolvedProperty>& Properties() const noexcept { return m_props; }
+        /// Its custom properties (shared with the elements that set none of their own), or null.
+        [[nodiscard]] const CustomProperties* Customs() const noexcept { return m_customs.Get(); }
+        /// The same custom properties as `other` (the same set shared: at once), and the same
+        /// colour for currentColor: what an element's children inherit from it.
+        [[nodiscard]] static bool SameCustomProperties(const ResolvedStyle& a, const ResolvedStyle& b)
+        {
+            if (a.m_hasCurrentColor != b.m_hasCurrentColor ||
+                (a.m_hasCurrentColor && a.m_currentColor.Value.AsView() != b.m_currentColor.Value.AsView()))
+                return false;
+            if (a.m_customs.Get() == b.m_customs.Get())
+                return true;
+            const usize sa = a.m_customs ? a.m_customs->Size() : 0, sb = b.m_customs ? b.m_customs->Size() : 0;
+            if (sa != sb)
+                return false;
+            return sa == 0 || a.m_customs->SameAs(*b.m_customs);
+        }
         [[nodiscard]] bool IsFinalized() const noexcept { return m_finalized; }
 
         /// Settles what Set left as written: substitutes var() anywhere in a value (its own custom
@@ -244,7 +366,10 @@ export namespace foundation::gui
         {
             core::String resolved;
             if (ResolveText(core::StringView(u8"color"), colorText, inherited, resolved))
-                Put(kCurrentColorProperty, resolved.AsView(), StyleValue{}, false);
+            {
+                m_currentColor = ResolvedProperty{core::String(kCurrentColorProperty), Move(resolved), StyleValue{}, false};
+                m_hasCurrentColor = true;
+            }
         }
         [[nodiscard]] static bool HasCurrentColor(core::StringView value)
         {
@@ -292,11 +417,27 @@ export namespace foundation::gui
         }
 
         /// This style's custom properties and `parent`'s it does not set (custom properties inherit).
+        /// Sharing its set when it sets none of its own; else adding the parent's it does not set.
         void InheritCustomProperties(const ResolvedStyle& parent)
         {
-            for (const ResolvedProperty& p : parent.m_props)
-                if (IsCustomProperty(p.Name.AsView()) && Find(p.Name.AsView()) == nullptr)
-                    m_props.PushBack(p);
+            if (!m_hasCurrentColor && parent.m_hasCurrentColor)
+            {
+                m_currentColor = parent.m_currentColor;
+                m_hasCurrentColor = true;
+            }
+            if (!parent.m_customs || parent.m_customs->Size() == 0)
+                return;
+            if (!m_customs || m_customs->Size() == 0)
+            {
+                m_customs = parent.m_customs; // shared: nothing of its own
+                return;
+            }
+            CustomProperties& own = OwnCustoms();
+            parent.m_customs->ForEach([&own](const ResolvedProperty& p)
+            {
+                if (own.Find(p.Name.AsView()) == nullptr)
+                    own.Put(p.Name.AsView(), p.Value.AsView(), p.Important);
+            });
         }
 
         [[nodiscard]] static bool IsCustomProperty(core::StringView name) noexcept
@@ -307,14 +448,41 @@ export namespace foundation::gui
     private:
         [[nodiscard]] const ResolvedProperty* Find(core::StringView name) const
         {
+            if (IsCustomProperty(name))
+            {
+                if (name == core::StringView(kCurrentColorProperty))
+                    return m_hasCurrentColor ? &m_currentColor : nullptr;
+                return m_customs ? m_customs->Find(name) : nullptr;
+            }
             for (const ResolvedProperty& p : m_props)
                 if (p.Name.AsView() == name)
                     return &p;
             return nullptr;
         }
 
+        // Its own set to change: made, or copied when shared (copy on write).
+        CustomProperties& OwnCustoms()
+        {
+            if (!m_customs)
+                m_customs = core::MakeRef<CustomProperties>(m_props.Allocator(), m_props.Allocator());
+            else if (m_customs->RefCount() > 1)
+                m_customs = core::MakeRef<CustomProperties>(m_props.Allocator(), m_props.Allocator(), *m_customs);
+            return *m_customs;
+        }
+
         void Put(core::StringView name, core::StringView value, const StyleValue& typed, bool important)
         {
+            if (IsCustomProperty(name))
+            {
+                if (name == core::StringView(kCurrentColorProperty))
+                {
+                    m_currentColor = ResolvedProperty{core::String(name), core::String(value), typed, important};
+                    m_hasCurrentColor = true;
+                }
+                else
+                    OwnCustoms().Put(name, value, important);
+                return;
+            }
             for (ResolvedProperty& p : m_props)
             {
                 if (p.Name.AsView() != name)
@@ -329,7 +497,10 @@ export namespace foundation::gui
             m_props.PushBack(ResolvedProperty{core::String(name), core::String(value), typed, important});
         }
 
-        Array<ResolvedProperty> m_props;
+        Array<ResolvedProperty> m_props; // but the custom ones
+        core::RefPtr<CustomProperties> m_customs; // shared down the tree (copy on write)
+        ResolvedProperty m_currentColor; // currentColor's colour, which inherits
+        bool m_hasCurrentColor = false;
         bool m_finalized = true; // an empty style is settled
     };
 

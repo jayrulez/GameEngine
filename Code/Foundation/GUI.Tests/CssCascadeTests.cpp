@@ -98,3 +98,36 @@ TEST_CASE("css-vars: end-to-end through the applier")
 
     CHECK(w->GetBox().BackgroundColor.b == doctest::Approx(1.0f)); // var(--bg) -> #0000ff -> blue
 }
+
+TEST_CASE("css-vars: a child with no variables of its own shares its parent's, and a write copies them")
+{
+    ResolvedStyle parent;
+    parent.Set(SV(u8"--accent"), SV(u8"red"));
+    parent.Set(SV(u8"--space"), SV(u8"4px"));
+    parent.Set(SV(u8"opacity"), SV(u8"0.5"));
+
+    // Nothing of its own: the same set, not a copy (a theme's hundreds of tokens per node).
+    ResolvedStyle child;
+    child.Set(SV(u8"opacity"), SV(u8"1"));
+    child.InheritCustomProperties(parent);
+    CHECK(child.Customs() == parent.Customs());
+    CHECK(child.Count() == 3); // opacity and the two variables
+    CHECK(child.Get(SV(u8"--accent")) == SV(u8"red"));
+    CHECK(ResolvedStyle::SameCustomProperties(child, parent));
+
+    // A write of its own copies first: the parent keeps its value.
+    child.Set(SV(u8"--accent"), SV(u8"blue"));
+    CHECK(child.Customs() != parent.Customs());
+    CHECK(child.Get(SV(u8"--accent")) == SV(u8"blue"));
+    CHECK(child.Get(SV(u8"--space")) == SV(u8"4px"));
+    CHECK(parent.Get(SV(u8"--accent")) == SV(u8"red"));
+    CHECK_FALSE(ResolvedStyle::SameCustomProperties(child, parent));
+
+    // A child with variables of its own takes the parent's it lacks, its own winning.
+    ResolvedStyle own;
+    own.Set(SV(u8"--accent"), SV(u8"green"));
+    own.InheritCustomProperties(parent);
+    CHECK(own.Get(SV(u8"--accent")) == SV(u8"green"));
+    CHECK(own.Get(SV(u8"--space")) == SV(u8"4px"));
+    CHECK(parent.Customs()->Size() == 2);
+}

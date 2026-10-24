@@ -444,6 +444,33 @@ TEST_CASE("dnd: a drag near a scroller's edge scrolls it, faster deeper in, and 
     s.D().InjectMouseUp(core::Float2{270.0f, 219.0f}, MouseButton::Left);
 }
 
+TEST_CASE("dnd: a drag that cannot land in a scroller passes its edge without scrolling it")
+{
+    // A panel dragged to dock: the list under the way takes nothing of it.
+    Scene s;
+    auto list = Box(*s.root, 200.0f, 120.0f, 150.0f, 100.0f);
+    list->EditLayoutStyle([](LayoutStyle& st) { st.OverflowY = Overflow::Auto; });
+    for (int i = 0; i < 20; ++i)
+    {
+        auto row = core::MakeRef<Panel>(core::DefaultAllocator());
+        row->EditLayoutStyle([](LayoutStyle& st)
+        {
+            st.Height = LayoutLength::Px(30.0f);
+            st.Shrink = 0.0f;
+        });
+        list->AddChild(row.Get());
+    }
+    (void)s.root->UpdateLayout();
+    s.DragTo(core::Float2{270.0f, 170.0f});
+    s.D().InjectMouseMove(core::Float2{270.0f, 219.0f}); // at its bottom edge
+    s.D().Tick(0.1f);
+    s.D().Tick(0.1f);
+    CHECK(s.D().GetDropTarget() == nullptr);
+    CHECK(list->GetScrollOffset().y == doctest::Approx(0.0f));
+    s.D().CancelDrag();
+    s.D().InjectMouseUp(core::Float2{270.0f, 219.0f}, MouseButton::Left);
+}
+
 TEST_CASE("dnd: a drag resting a moment opens a closed tree node and selects a tab")
 {
     TreeModel model; // outlives the scene, whose tree is its client

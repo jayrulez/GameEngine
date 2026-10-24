@@ -2212,7 +2212,9 @@ export namespace foundation::gui
         }
 
         // A drag's tick: the scroller under the pointer near its edge scrolls (the innermost that
-        // can move that way), and a drag resting on a node a moment opens it.
+        // can move that way, and only one the drag can land in: the drop target is it or inside
+        // it, so a panel dragged to dock past a list does not scroll the list), and a drag
+        // resting on a node a moment opens it.
         void TickDrag(f32 seconds)
         {
             if (m_dragOver != this || m_dragOutside)
@@ -2221,7 +2223,7 @@ export namespace foundation::gui
             bool moved = false;
             for (Node* n = hit; n != nullptr && !moved; n = n->GetParent())
             {
-                if (!n->IsScrollContainer())
+                if (!n->IsScrollContainer() || !IsInSubtree(m_dropTarget, n))
                     continue;
                 const core::Float2 p = n->ConvertToNodeSpace(m_mousePos);
                 const core::Float2 size = n->GetSize();

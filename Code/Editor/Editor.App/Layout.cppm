@@ -11,8 +11,8 @@
 //   EditorDockLayoutSettings  - the dock's layout (GUI.Docking's DockLayoutDocument), panels
 //                               by their ids; a panel the layout names that is not registered
 //                               keeps its place until it is (version 2; version 1 held the old
-//                               dock's binary tree, read once and set aside: the dock then starts
-//                               from its default, the open pages still reopening)
+//                               dock's binary tree, read once into the new layout: its splits,
+//                               shares, tab groups and chosen tabs)
 //   EditorFavoritesSettings   - pinned asset guids (EditorContext favorites)
 //   EditorOpenPagesSettings   - open page instance guids + the active one
 //
@@ -48,37 +48,103 @@ export namespace editor::app
 
     namespace detail
     {
-        // Version 1's dock tree (the old dock's), read only to be set aside: a node is a tab
-        // group (its panels) or a split (its two children), each written with presence flags.
-        inline void SkipLegacyLayoutNode(ISerializer& ar)
+        // Version 1's dock tree (the old dock's): a node is a split of two children, the first's
+        // share `ratio` (left or top), across (`direction` 0) or down (1), or a tab group of panels.
+        struct LegacyDockNode
         {
-            ar.BeginObject();
-            u32 type = 0;
             u32 direction = 0;
-            f32 ratio = 0.0f;
+            f32 ratio = 0.5f;
             i32 activeTab = 0;
             Array<String> panels;
+            UniquePtr<LegacyDockNode> first;
+            UniquePtr<LegacyDockNode> second;
+            [[nodiscard]] bool IsSplit() const noexcept { return first && second; }
+        };
+
+        inline void ReadLegacyDockNode(ISerializer& ar, LegacyDockNode& node)
+        {
+            ar.BeginObject();
+            u32 type = 0; // the node is told by its children, not this
             foundation::core::Serialize(ar, "type", type);
-            foundation::core::Serialize(ar, "direction", direction);
-            foundation::core::Serialize(ar, "ratio", ratio);
-            foundation::core::Serialize(ar, "activeTab", activeTab);
-            foundation::core::Serialize(ar, "panels", panels);
+            foundation::core::Serialize(ar, "direction", node.direction);
+            foundation::core::Serialize(ar, "ratio", node.ratio);
+            foundation::core::Serialize(ar, "activeTab", node.activeTab);
+            foundation::core::Serialize(ar, "panels", node.panels);
             bool hasFirst = false;
             bool hasSecond = false;
             foundation::core::Serialize(ar, "hasFirst", hasFirst);
             foundation::core::Serialize(ar, "hasSecond", hasSecond);
             if (hasFirst)
             {
+                node.first = MakeUnique<LegacyDockNode>(editor::EditorRootAllocator());
                 ar.Key("first");
-                SkipLegacyLayoutNode(ar);
+                ReadLegacyDockNode(ar, *node.first);
             }
             if (hasSecond)
             {
+                node.second = MakeUnique<LegacyDockNode>(editor::EditorRootAllocator());
                 ar.Key("second");
-                SkipLegacyLayoutNode(ar);
+                ReadLegacyDockNode(ar, *node.second);
             }
             ar.EndObject();
         }
+
+        // The first panel of a subtree, in order (left or top first); null when it holds none.
+        [[nodiscard]] inline const String* FirstLegacyPanel(const LegacyDockNode& node)
+        {
+            if (node.IsSplit())
+            {
+                if (const String* found = FirstLegacyPanel(*node.first))
+                    return found;
+                return FirstLegacyPanel(*node.second);
+            }
+            return node.panels.IsEmpty() ? nullptr : &node.panels[0];
+        }
+
+        // Places `node`'s panels into `stack` and stacks split from it. `stack` holds nothing
+        // yet, or the node's first panel: a split puts its second half's first panel beside it
+        // (taking the second half's share), so each half then splits only its own stack.
+        inline void PlaceLegacyNode(gui::DockLayout& layout, const LegacyDockNode& node, gui::DockNodeId stack)
+        {
+            if (!node.IsSplit())
+            {
+                for (const String& panel : node.panels)
+                    if (layout.StackOf(panel.AsView()) == gui::kNoDock)
+                        (void)layout.InsertTab(panel.AsView(), stack);
+                if (node.activeTab >= 0 && static_cast<usize>(node.activeTab) < node.panels.Size())
+                    (void)layout.Activate(node.panels[static_cast<usize>(node.activeTab)].AsView());
+                return;
+            }
+            const String* firstPanel = FirstLegacyPanel(*node.first);
+            const String* secondPanel = FirstLegacyPanel(*node.second);
+            if (firstPanel == nullptr || secondPanel == nullptr)
+            {
+                PlaceLegacyNode(layout, firstPanel != nullptr ? *node.first : *node.second, stack);
+                return;
+            }
+            if (layout.StackOf(firstPanel->AsView()) == gui::kNoDock)
+                (void)layout.InsertTab(firstPanel->AsView(), stack);
+            const gui::DockSide side = node.direction == 0 ? gui::DockSide::End : gui::DockSide::Bottom;
+            const f32 share = Clamp(1.0f - node.ratio, 0.05f, 0.95f);
+            if (!layout.InsertBeside(secondPanel->AsView(), stack, side, share).Ok())
+            {
+                PlaceLegacyNode(layout, *node.first, stack); // a panel named twice: the first half alone
+                return;
+            }
+            const gui::DockNodeId beside = layout.StackOf(secondPanel->AsView());
+            PlaceLegacyNode(layout, *node.first, stack);
+            PlaceLegacyNode(layout, *node.second, beside);
+        }
+    }
+
+    /// The old dock's tree as the GUI dock's layout: its first panel's group in the central stack,
+    /// each split's halves beside one another with the same shares, each group's tabs in order with
+    /// its chosen one. A panel named twice keeps its first place.
+    [[nodiscard]] inline gui::DockLayout LayoutFromLegacy(const detail::LegacyDockNode& root)
+    {
+        gui::DockLayout layout;
+        detail::PlaceLegacyNode(layout, root, layout.CentralStack());
+        return layout;
     }
 
     // The dock's layout: its document when one was captured.
@@ -93,16 +159,18 @@ export namespace editor::app
         {
             if (ar.Mode() == SerializeMode::Read && ar.Version() == 1)
             {
-                // The old dock's tree: read past and dropped (a layout from it would not map onto
-                // the GUI's dock reliably); the dock starts from its default.
+                // The old dock's tree, taken into the GUI dock's layout (saved as version 2 after).
                 bool hasRoot = false;
                 foundation::core::Serialize(ar, "hasRoot", hasRoot);
+                captured = false;
                 if (hasRoot)
                 {
+                    detail::LegacyDockNode root;
                     ar.Key("root");
-                    detail::SkipLegacyLayoutNode(ar);
+                    detail::ReadLegacyDockNode(ar, root);
+                    document.Layout = LayoutFromLegacy(root);
+                    captured = detail::FirstLegacyPanel(root) != nullptr;
                 }
-                captured = false;
                 return;
             }
             foundation::core::Serialize(ar, "captured", captured);
@@ -166,7 +234,7 @@ export namespace editor::app
         GlobalTypeRegistry().Register(EditorDockLayoutSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorDockLayoutSettings>();
-        // Version 1 (the old dock's tree) still reads, to be set aside: a legacy reader one
+        // Version 1 (the old dock's tree) still reads, into the new layout: a legacy reader one
         // version back, removed once projects have saved past it (Process/CONVENTIONS.md).
         const_cast<TypeInfo&>(EditorDockLayoutSettings::StaticType()).minReadDataVersion = 1;
         GlobalTypeRegistry().Register(EditorFavoritesSettings::StaticType(),

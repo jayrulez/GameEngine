@@ -68,6 +68,8 @@ export namespace editor::app
             Function<void()> closing;
             /// A cook finished (its summary on the cook service): the views refresh, the user hears.
             Function<void()> cookFinished;
+            /// The views' state into the store before it is written (the dock's layout).
+            Function<void(foundation::settings::Settings&)> captureState;
         };
 
         EditorSession(IAllocator& allocator, Services services) : m_allocator(allocator), m_services(Move(services)) {}
@@ -164,6 +166,7 @@ export namespace editor::app
             if (!m_project)
                 return;
             editor::EditorContext& context = *m_services.context;
+            SaveStore(); // the views' state, while they are up
             if (m_services.closing)
                 m_services.closing();
             m_services.cook->Shutdown(); // joins a cook in flight before the databases go
@@ -204,11 +207,14 @@ export namespace editor::app
         [[nodiscard]] foundation::settings::Settings* Store() const noexcept { return m_store.Get(); }
         [[nodiscard]] foundation::resource::ResourceManager* Resources() const noexcept { return m_resources.Get(); }
 
-        /// Writes the per-project store (the layout, the open pages captured into it first).
+        /// Writes the per-project store, the views' state captured into it first.
         void SaveStore()
         {
-            if (m_project && m_store)
-                (void)SaveProjectEditorSettings(*m_store, m_project->EditorStateRoot().AsView());
+            if (!m_project || !m_store)
+                return;
+            if (m_services.captureState)
+                m_services.captureState(*m_store);
+            (void)SaveProjectEditorSettings(*m_store, m_project->EditorStateRoot().AsView());
         }
 
         /// The game UI's defaults from the project's settings: its theme, its default and other

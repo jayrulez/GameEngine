@@ -73,6 +73,9 @@ namespace editor::app
         };
         services.opened = [self](editor::EditorProject& project)
         {
+            // The project's layout, else the default (the one before was another project's).
+            if (foundation::settings::Settings* store = self->m_session.Store(); store == nullptr || !ApplyDockLayout(self->m_dock.Controller(), *store).IsOk())
+                self->m_dock.ResetLayout();
             if (self->m_export)
                 self->m_export->SetProject(&project);
             self->m_creation.SetProject(&project);
@@ -87,6 +90,7 @@ namespace editor::app
                 self->m_export->SetProject(nullptr);
             self->m_creation.SetProject(nullptr);
         };
+        services.captureState = [self](foundation::settings::Settings& store) { CaptureDockLayout(self->m_dock.Controller(), store); };
         services.cookFinished = [self]()
         {
             // Failures stay until dismissed (the Console has the log); a cook of nothing says nothing.

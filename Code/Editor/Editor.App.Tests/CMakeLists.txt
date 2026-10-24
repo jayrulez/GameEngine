@@ -1,7 +1,9 @@
-add_executable(Editor.App.Tests TestsMain.cpp PropertyNamesTests.cpp ShellTests.cpp EditorWindowToolsTests.cpp EditorProfilerToolsTests.cpp ProfilerPanelTests.cpp AssetsViewTests.cpp ActionSurfacesTests.cpp PageToolbarTests.cpp ActionToolsTests.cpp LogViewTests.cpp ToolPanelTests.cpp AssetPickerSlotTests.cpp ContainerListEditorTests.cpp FontAtlasDiskCacheTests.cpp ImportDialogTests.cpp EditorIconsTests.cpp EditorMcpHostTests.cpp EditorProjectOperationsTests.cpp EditorPageToolsTests.cpp EditorLayoutToolsTests.cpp CommandPaletteTests.cpp ShortcutCaptureTests.cpp TemplatesDialogTests.cpp ExportDialogTests.cpp EditorSplashTests.cpp ProjectLauncherTests.cpp ProjectHomeTests.cpp)
+add_executable(Editor.App.Tests TestsMain.cpp PropertyNamesTests.cpp EditorWindowToolsTests.cpp EditorProfilerToolsTests.cpp
+    FontAtlasDiskCacheTests.cpp EditorMcpHostTests.cpp EditorProjectOperationsTests.cpp EditorPageToolsTests.cpp
+    EditorSplashTests.cpp) # the shell's files on the GUI so far; the others' suites return with them
 target_link_libraries(Editor.App.Tests PRIVATE Foundation::VFS Foundation::Content Pipeline::Importer Pipeline::Core
     Foundation::Net Foundation::Http Foundation::Json Foundation::Mcp Foundation::Mcp.Http Editor::Mcp # the MCP host over loopback
-    Editor::App Editor::Core Editor::ViewportTools doctest::doctest)
+    Editor::App Editor::Core doctest::doctest)
 target_compile_definitions(Editor.App.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
     RAPTOR_SOURCE_DIR="${CMAKE_SOURCE_DIR}") # the branding files the splash and logo tests read
 target_compile_options(Editor.App.Tests PRIVATE

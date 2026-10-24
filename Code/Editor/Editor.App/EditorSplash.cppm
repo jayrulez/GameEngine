@@ -22,7 +22,6 @@ import foundation.core;
 import foundation.shell;
 import foundation.image;
 import foundation.fonts.truetype;
-import foundation.ui;
 
 using namespace foundation::core;
 
@@ -83,10 +82,10 @@ export namespace editor::app
                                                            StringView fontPath, Span<const u8> embeddedFont,
                                                            StringView version, IAllocator& allocator);
 
-    /// The AssiduousEngine logo (mark and wordmark, for a dark background) as a drawable, from
-    /// <dataRoot>/Assets/branding/assiduous-logo.svg; null when it does not load. Its aspect is
-    /// kEditorLogoAspect (width over height).
-    [[nodiscard]] foundation::ui::DrawablePtr LoadEditorLogo(StringView dataRoot, IAllocator& allocator);
+    /// The AssiduousEngine logo (mark and wordmark, for a dark background), relative to the data
+    /// root: what a page's markup shows (`<Image src="...">`, through the editor's resources). Its
+    /// aspect is kEditorLogoAspect (width over height).
+    inline constexpr const char8_t* kEditorLogoPath = u8"Assets/branding/assiduous-logo.svg";
     inline constexpr f32 kEditorLogoAspect = 931.0f / 200.0f;
 
     /// The AssiduousEngine icon on `window` (its title bar, the taskbar), from

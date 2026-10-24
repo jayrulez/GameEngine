@@ -3,60 +3,23 @@
 
 // Editor::App - the `editor.app` module.
 //
-// The editor UI shell on foundation.ui: the EditorShell chrome
-// (MenuBar / DockManager / StatusBar + the five standard panels), per-user dock-layout
-// persistence, and EditorApplication (the runtime IApplication assembling UIHost +
-// RuntimeDockableWindowHost + EditorContext/EditorProject). Per-subsystem editor plugins
-// register into the context from the executable.
+// The editor's shell: its window, frame, menus and shortcuts from the actions, the dock and its
+// layout, the MCP host and its tools, the project home. On the GUI in parts
+// (Documentation/Specs/editor-gui.md, 5.1). Per-subsystem editor plugins register into the
+// context from the executable.
 
 export module editor.app;
 
-export import :layout;
-export import :log_view;
-export import :ui_page;
-export import :page_toolbar;
+// The shell's files on the GUI so far (Documentation/Specs/editor-gui.md, 5.1); the rest return
+// with their ports.
 export import :playback_actions;
-export import :action_menus;
-export import :action_shortcuts;
-export import :tool_panel;
-export import :tool_panel_widgets;
-export import :assets_view;
-export import :asset_picker_dialog;
-export import :asset_create_dialog;
-export import :confirm_dialog;
-export import :path_picker_dialog;
-    export import :group_picker_dialog;
-export import :import_dialog;
-export import :settings_dialog;
-export import :preferences_dialog;
-export import :command_palette;
-export import :shortcut_capture;
-export import :editor_icons;
-    export import :asset_picker_slot;
-    export import :container_list_editor;
-    export import :resource_ref_editor;
-    export import :compact_asset_slot;
-    export import :list_header;
-    export import :view_mode_toggles;
-    export import :asset_filter;
-    export import :property_names;
-    export import :category_tabs;
-    export import :templates_dialog;
-    export import :export_dialog;
-    export import :splash;
-export import :asset_drag_data;
-export import :project_picture;
-export import :project_manager_view;
-export import :project_home;
-export import :shell;
+export import :asset_filter;
+export import :property_names;
+export import :splash;
 export import :font_atlas_cache;
 export import :mcp_host;
 export import :mcp_operations;
 export import :mcp_page_tools;
-export import :mcp_layout_tools;
 export import :window_capture;
 export import :mcp_window_tools;
 export import :mcp_profiler_tools;
-export import :profiler_panel;
-export import :mcp_action_tools;
-export import :application;

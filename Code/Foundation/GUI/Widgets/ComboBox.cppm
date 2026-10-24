@@ -290,14 +290,22 @@ export namespace foundation::gui
             if (dispatcher == nullptr || m_items.IsEmpty())
                 return;
             BuildDropdown();
-            const f32 h = core::Min(static_cast<f32>(m_items.Size()) * m_itemHeight, m_dropdownMaxHeight);
-            m_dropdown->SetSize(core::Float2{GetSize().x, h});
+            // As wide as the combo box; as tall as its rows with its own padding and border (a sheet's
+            // popup surface), measured by the layout rather than pinned, up to the most it shows.
+            const f32 width = GetSize().x, most = m_dropdownMaxHeight;
+            m_dropdown->EditLayoutStyle([width, most](LayoutStyle& s)
+            {
+                s.Width = LayoutLength::Px(width);
+                s.Height = LayoutLength{};
+                s.MaxHeight = LayoutLength::Px(most);
+            });
             if (m_selected >= 0)
                 m_dropdown->SetSelectedIndex(m_selected); // the current item lit, in view
             PopupOptions options;
             options.Anchor = this;
             options.Placement = PopupPlacement{PopupSide::Below, PopupAlign::Start, 0.0f, true};
             options.TakesFocus = true; // the list: the arrows move, Return picks; focus back on close
+            options.FitContent = true; // measured each pass: its rows, its padding and border
             dispatcher->OpenPopup(*this, *m_dropdown, core::Move(options));
         }
 

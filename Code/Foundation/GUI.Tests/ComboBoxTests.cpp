@@ -186,3 +186,29 @@ TEST_CASE("combobox: new items drop the old selection's text; the selection bind
     combo->SetSelectedIndex(0);
     CHECK(changes == 1); // code's change is no user's
 }
+
+TEST_CASE("combobox: the dropdown is as tall as its rows with its own padding and border, so it does not scroll")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{400.0f, 400.0f});
+    auto cb = core::MakeRef<ComboBox>(core::DefaultAllocator());
+    cb->SetSize(core::Float2{120.0f, 26.0f});
+    cb->AddItem(core::StringView(u8"Red"));
+    cb->AddItem(core::StringView(u8"Green"));
+    cb->AddItem(core::StringView(u8"Blue"));
+    root->AddChild(cb.Get());
+    (void)root->UpdateLayout();
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(core::StringView(u8"combobox > listbox { padding: 4px; border: 1px solid #888888; }")));
+    EventDispatcher* d = root->GetEventDispatcher();
+    d->InjectMouseDown(core::Float2{10.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{10.0f, 10.0f}, MouseButton::Left);
+    REQUIRE(cb->IsOpen());
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout();
+    const ListBox* list = cb->GetDropdown();
+    REQUIRE(list != nullptr);
+    const core::f32 rows = 3.0f * list->GetItemHeight();
+    CHECK(list->GetSize().x == doctest::Approx(120.0f));
+    CHECK(list->GetSize().y == doctest::Approx(rows + 10.0f)); // its rows, 4 + 1 above and below
+}

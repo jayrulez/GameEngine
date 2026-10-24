@@ -19,6 +19,7 @@ export import :editor_dock;
 export import :pages;
 export import :action_menus;
 export import :action_shortcuts;
+export import :command_palette;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

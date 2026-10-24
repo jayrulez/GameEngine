@@ -360,6 +360,17 @@ namespace editor::app
         });
     }
 
+    // The palette over the main window, its frame the editor's markup (made the first time).
+    void EditorApplication::OpenCommandPalette()
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        if (!m_palette)
+            m_palette = MakeUnique<CommandPalette>(m_editorAllocator, m_editorAllocator, m_context.Actions(), m_window.LoadMarkup(u8"Editor/CommandPalette.gml"));
+        (void)m_palette->Open(*root);
+    }
+
     void EditorApplication::RegisterActions()
     {
         EditorActionRegistry& actions = m_context.Actions();
@@ -399,6 +410,7 @@ namespace editor::app
         ViewActions view;
         view.resetLayout = [self]() { self->m_dock.ResetLayout(); };
         view.screenshot = [self]() { self->TakeEditorScreenshot(); };
+        view.commandPalette = [self]() { self->OpenCommandPalette(); };
         RegisterViewActions(actions, Move(view));
 
         HelpActions help;
@@ -636,6 +648,7 @@ namespace editor::app
             m_embeddedApp->OnShutdown(*m_embeddedHost);
             m_runtimeContext.Shutdown();
         }
+        m_palette.Reset();
         m_menus.Reset();
         m_shortcuts.Reset();
         m_dock.Close(); // its floats' windows, then the GUI before the device goes

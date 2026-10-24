@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The command palette over a registry: the rows a filter yields and their order, the highlight
-// under the arrow keys, Enter running the highlighted action over the active subject (a refused
-// one keeps the palette open and says so), and the keys intercepted ahead of the filter box.
+// The command palette over a registry and its own markup (Data/Editor/CommandPalette.gml): the rows
+// a query yields and their order, the lit row under the arrow keys (taken ahead of the search
+// field), Enter running the lit action and closing the palette (a disabled one keeps it open and
+// says so), a row's chord and dimmed state, and Escape closing it.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
 using namespace editor;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace
 {
-    EditorActionDeclaration Declare(StringView id, StringView label, StringView description,
-                                    StringView menuPath)
+    EditorActionDeclaration Declare(StringView id, StringView label, StringView description, StringView menuPath)
     {
         EditorActionDeclaration d;
         d.id = String(id);
@@ -30,107 +30,125 @@ namespace
         d.execute = [](EditorPage*) {};
         return d;
     }
-    String Labels(const app::CommandPaletteDialog& palette)
+    String Labels(const app::CommandPalette& palette)
     {
         String out;
-        for (const EditorActionDeclaration* row : palette.Rows())
+        for (const EditorActionDeclaration* row : palette.Shown())
         {
             if (!out.IsEmpty())
-            {
                 out += u8"|";
-            }
             out += row->label.AsView();
         }
         return out;
     }
+    RefPtr<gui::Node> LoadPalette()
+    {
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), u8"Editor/CommandPalette.gml");
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        gui::RegisterGuiElements();
+        static const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+    template <typename T>
+    T* FindKind(gui::Node& node)
+    {
+        if (auto* found = Cast<T>(&node))
+            return found;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (T* found = FindKind<T>(*node.GetChildAt(i)))
+                return found;
+        return nullptr;
+    }
 }
 
-TEST_CASE("command-palette: the rows follow the filter - label starts first, label contains next, "
-          "description or id last; the highlight moves clamped; Enter runs the highlighted action "
-          "and a refused one keeps the palette open")
+TEST_CASE("command-palette: the rows follow the query - label starts first, label holds next, description or id last; "
+          "the lit row moves clamped under the keys; Enter runs it and closes, a disabled one keeps the palette open")
 {
     EditorActionRegistry actions;
     u32 saves = 0;
     u32 resets = 0;
     bool dirty = false;
     EditorActionDeclaration save = Declare(u8"file.save", u8"Save", u8"Save the active page", u8"File/Save");
-    save.shortcut = EditorShortcut{ui::KeyCode::S, ui::KeyModifiers::Ctrl};
+    save.shortcut = EditorShortcut::Of(u8"ctrl-s");
     save.enabled = [&dirty](EditorPage*) { return dirty; };
     save.execute = [&saves](EditorPage*) { ++saves; };
     REQUIRE(actions.Register(Move(save)));
     REQUIRE(actions.Register(Declare(u8"file.saveAs", u8"Save As...", u8"Save the active page under a new name", u8"File/Save As...")));
-    EditorActionDeclaration reset = Declare(u8"view.resetLayout", u8"Reset Layout",
-                                            u8"Reset the panel layout to the default", u8"View/Reset Layout");
+    EditorActionDeclaration reset = Declare(u8"view.resetLayout", u8"Reset Layout", u8"Reset the panel layout to the default", u8"View/Reset Layout");
     reset.execute = [&resets](EditorPage*) { ++resets; };
     REQUIRE(actions.Register(Move(reset)));
     REQUIRE(actions.Register(Declare(u8"edit.undo", u8"Undo", u8"Take the last edit back", u8"Edit/Undo")));
     REQUIRE(actions.Register(Declare(u8"scene.entity.saveSelection", u8"Duplicate", u8"Copy the selection beside itself", u8"Scene/Entity/Duplicate")));
 
-    auto palette = MakeRef<app::CommandPaletteDialog>(DefaultAllocator(), actions);
-    // No filter: everything, in registration order, the first row highlighted.
-    CHECK(Labels(*palette) == u8"Save|Save As...|Reset Layout|Undo|Duplicate");
-    CHECK(palette->Highlighted() == 0);
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{1000.0f, 700.0f});
+    RefPtr<gui::Node> content = LoadPalette();
+    REQUIRE(content.Get() != nullptr);
+    app::CommandPalette palette(DefaultAllocator(), actions, content);
+    REQUIRE(palette.Open(*root));
+    CHECK(palette.IsOpen());
+    gui::TextField* field = FindKind<gui::TextField>(*content);
+    REQUIRE(field != nullptr);
+    CHECK(field->IsFocused());
 
-    // "sav": the labels starting with it first, then the one whose id contains it (Duplicate's
-    // id has "save"), never Undo or Reset Layout.
-    palette->SetFilter(u8"sav");
-    CHECK(Labels(*palette) == u8"Save|Save As...|Duplicate");
-    CHECK(palette->Highlighted() == 0);
-    // "layout": a label containing it (not at the start) and a description containing it.
-    palette->SetFilter(u8"LAYOUT");
-    CHECK(Labels(*palette) == u8"Reset Layout");
-    // A description match alone.
-    palette->SetFilter(u8"last edit");
-    CHECK(Labels(*palette) == u8"Undo");
-    // Nothing.
-    palette->SetFilter(u8"zzz");
-    CHECK(palette->Rows().IsEmpty());
-    CHECK(palette->Highlighted() == -1);
-    CHECK(palette->ExecuteHighlighted().Code() == ErrorCode::NotFound);
+    // No query: everything, in registration order, the first row lit; a row shows its chord.
+    CHECK(Labels(palette) == String(u8"Save|Save As...|Reset Layout|Undo|Duplicate"));
+    CHECK(palette.Lit() == 0);
+    auto* first = FindKind<app::CommandPaletteRow>(*content);
+    REQUIRE(first != nullptr);
+    CHECK(first->HasClass(u8"current"));
+    CHECK(first->HasClass(u8"disabled")); // Save: nothing to save
+    bool chordShown = false;
+    for (usize i = 0; i < first->ChildCount(); ++i)
+        if (auto* label = Cast<gui::Label>(first->GetChildAt(i)); label != nullptr && label->HasClass(u8"key"))
+            chordShown = label->GetText() == FormatShortcut(EditorShortcut::Of(u8"ctrl-s")).AsView();
+    CHECK(chordShown);
 
-    // The highlight under the keys, clamped at both ends.
-    palette->SetFilter(u8"");
-    ui::KeyEventArgs down;
-    down.Key = ui::KeyCode::Down;
-    palette->OnKeyDownCapture(down);
-    CHECK(down.Handled);
-    CHECK(palette->Highlighted() == 1);
-    palette->MoveHighlight(10);
-    CHECK(palette->Highlighted() == 4);
-    ui::KeyEventArgs up;
-    up.Key = ui::KeyCode::Up;
+    // "sav": the labels starting with it first, then the one whose id holds it (Duplicate's id
+    // has "save"), never Undo or Reset Layout.
+    palette.SetQuery(u8"sav");
+    CHECK(Labels(palette) == String(u8"Save|Save As...|Duplicate"));
+    palette.SetQuery(u8"LAYOUT");
+    CHECK(Labels(palette) == String(u8"Reset Layout"));
+    palette.SetQuery(u8"last edit"); // a description alone
+    CHECK(Labels(palette) == String(u8"Undo"));
+    palette.SetQuery(u8"zzz");
+    CHECK(palette.Shown().IsEmpty());
+    CHECK(palette.Lit() == -1);
+    CHECK(palette.RunLit().Code() == ErrorCode::NotFound);
+    CHECK(palette.Hint() == StringView(u8"Nothing matches zzz."));
+
+    // The lit row under the keys (the field has the focus: the palette takes them first), clamped.
+    palette.SetQuery({});
+    gui::EventDispatcher& d = *root->GetEventDispatcher();
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Down));
+    CHECK(palette.Lit() == 1);
+    palette.Step(10);
+    CHECK(palette.Lit() == 4);
     for (int i = 0; i < 9; ++i)
-    {
-        palette->OnKeyDownCapture(up);
-    }
-    CHECK(palette->Highlighted() == 0);
-    // A letter is the filter box's, not the palette's.
-    ui::KeyEventArgs letter;
-    letter.Key = ui::KeyCode::A;
-    palette->OnKeyDownCapture(letter);
-    CHECK_FALSE(letter.Handled);
+        d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Up));
+    CHECK(palette.Lit() == 0);
 
-    // Enter on a disabled action refuses and keeps the palette (no close), saying so.
-    palette->SetFilter(u8"sav");
-    bool closed = false;
-    palette->OnClosed.Add(ui::Event<void(ui::Dialog*, ui::DialogResult)>::Handler{
-        [&closed](ui::Dialog*, ui::DialogResult) { closed = true; }});
-    ui::KeyEventArgs enter;
-    enter.Key = ui::KeyCode::Return;
-    palette->OnKeyDownCapture(enter);
-    CHECK(enter.Handled);
+    // Enter on a disabled action refuses and keeps the palette open, saying so.
+    palette.SetQuery(u8"sav");
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Return));
     CHECK(saves == 0u);
-    CHECK_FALSE(closed);
-    // Enabled: it runs and the palette closes with OK.
+    CHECK(palette.IsOpen());
+    CHECK(palette.Hint() == StringView(u8"Save is not available now."));
+    // Enabled: it runs and the palette closes.
     dirty = true;
-    CHECK(palette->ExecuteHighlighted().IsOk());
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Return));
     CHECK(saves == 1u);
-    CHECK(closed);
-    CHECK(palette->Result == ui::DialogResult::OK);
+    CHECK_FALSE(palette.IsOpen());
 
-    // Another palette runs a different row through the highlight.
-    auto second = MakeRef<app::CommandPaletteDialog>(DefaultAllocator(), actions);
-    second->SetFilter(u8"reset");
-    CHECK(second->ExecuteHighlighted().IsOk());
+    // Opened again: the query empty; a row run by its place; Escape closes.
+    REQUIRE(palette.Open(*root));
+    CHECK(Labels(palette) == String(u8"Save|Save As...|Reset Layout|Undo|Duplicate"));
+    CHECK(palette.Run(2).IsOk());
     CHECK(resets == 1u);
+    REQUIRE(palette.Open(*root));
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape));
+    CHECK_FALSE(palette.IsOpen());
 }

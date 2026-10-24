@@ -8,8 +8,11 @@
 // typed, versioned sections instead of the former bespoke trio (layout.xml + favorites.bin +
 // pages.bin; those are deleted on the first save, no legacy read):
 //
-//   EditorDockLayoutSettings  - the dock tree (DockManager Export/ApplyLayout snapshot);
-//                               panels matched back by PersistenceId, unknown ids skipped
+//   EditorDockLayoutSettings  - the dock's layout (GUI.Docking's DockLayoutDocument), panels
+//                               by their ids; a panel the layout names that is not registered
+//                               keeps its place until it is (version 2; version 1 held the old
+//                               dock's binary tree, read once and set aside: the dock then starts
+//                               from its default, the open pages still reopening)
 //   EditorFavoritesSettings   - pinned asset guids (EditorContext favorites)
 //   EditorOpenPagesSettings   - open page instance guids + the active one
 //
@@ -21,6 +24,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include "Core/Log/Log.h"
 
 export module editor.app:layout;
 
@@ -29,73 +33,85 @@ import foundation.vfs;
 import foundation.settings;
 import foundation.xml.serialization;
 import editor.core; // EditorContext (favorites)
-import foundation.ui.toolkit;
+import foundation.gui.docking; // DockLayoutDocument, DockController
 
 using namespace foundation::core;
 namespace vfs = foundation::vfs;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
     namespace settings = foundation::settings;
 
     // The one per-project editor-state file (hand-editable XML, like every settings store).
     inline constexpr StringView kProjectEditorSettingsFile = u8"editor.project.settings.xml";
 
-    // Bidirectional field walk of one dock node (children recurse via presence flags).
-    inline void SerializeLayoutNode(ISerializer& ar, ui::toolkit::DockLayoutNode& node)
+    namespace detail
     {
-        ar.BeginObject();
-        foundation::core::Serialize(ar, "type", node.Type);
-        foundation::core::Serialize(ar, "direction", node.Direction);
-        foundation::core::Serialize(ar, "ratio", node.SplitRatio);
-        foundation::core::Serialize(ar, "activeTab", node.ActiveTabIndex);
-        foundation::core::Serialize(ar, "panels", node.PanelIds);
-
-        bool hasFirst = static_cast<bool>(node.First);
-        bool hasSecond = static_cast<bool>(node.Second);
-        foundation::core::Serialize(ar, "hasFirst", hasFirst);
-        foundation::core::Serialize(ar, "hasSecond", hasSecond);
-        if (hasFirst)
+        // Version 1's dock tree (the old dock's), read only to be set aside: a node is a tab
+        // group (its panels) or a split (its two children), each written with presence flags.
+        inline void SkipLegacyLayoutNode(ISerializer& ar)
         {
-            if (ar.Mode() == SerializeMode::Read)
+            ar.BeginObject();
+            u32 type = 0;
+            u32 direction = 0;
+            f32 ratio = 0.0f;
+            i32 activeTab = 0;
+            Array<String> panels;
+            foundation::core::Serialize(ar, "type", type);
+            foundation::core::Serialize(ar, "direction", direction);
+            foundation::core::Serialize(ar, "ratio", ratio);
+            foundation::core::Serialize(ar, "activeTab", activeTab);
+            foundation::core::Serialize(ar, "panels", panels);
+            bool hasFirst = false;
+            bool hasSecond = false;
+            foundation::core::Serialize(ar, "hasFirst", hasFirst);
+            foundation::core::Serialize(ar, "hasSecond", hasSecond);
+            if (hasFirst)
             {
-                node.First = MakeUnique<ui::toolkit::DockLayoutNode>(editor::EditorRootAllocator());
+                ar.Key("first");
+                SkipLegacyLayoutNode(ar);
             }
-            ar.Key("first");
-            SerializeLayoutNode(ar, *node.First);
-        }
-        if (hasSecond)
-        {
-            if (ar.Mode() == SerializeMode::Read)
+            if (hasSecond)
             {
-                node.Second = MakeUnique<ui::toolkit::DockLayoutNode>(editor::EditorRootAllocator());
+                ar.Key("second");
+                SkipLegacyLayoutNode(ar);
             }
-            ar.Key("second");
-            SerializeLayoutNode(ar, *node.Second);
+            ar.EndObject();
         }
-        ar.EndObject();
     }
 
-    // The dock-tree section: owns a DockLayoutNode snapshot (absent root = never captured).
+    // The dock's layout: its document when one was captured.
     class EditorDockLayoutSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorDockLayoutSettings, ISerializable)
     public:
-        UniquePtr<ui::toolkit::DockLayoutNode> root;
+        bool captured = false;
+        gui::DockLayoutDocument document;
 
         void Serialize(ISerializer& ar) override
         {
-            bool hasRoot = static_cast<bool>(root);
-            foundation::core::Serialize(ar, "hasRoot", hasRoot);
-            if (hasRoot)
+            if (ar.Mode() == SerializeMode::Read && ar.Version() == 1)
             {
-                if (ar.Mode() == SerializeMode::Read)
+                // The old dock's tree: read past and dropped (a layout from it would not map onto
+                // the GUI's dock reliably); the dock starts from its default.
+                bool hasRoot = false;
+                foundation::core::Serialize(ar, "hasRoot", hasRoot);
+                if (hasRoot)
                 {
-                    root = MakeUnique<ui::toolkit::DockLayoutNode>(editor::EditorRootAllocator());
+                    ar.Key("root");
+                    detail::SkipLegacyLayoutNode(ar);
                 }
-                ar.Key("root");
-                SerializeLayoutNode(ar, *root);
+                captured = false;
+                return;
+            }
+            foundation::core::Serialize(ar, "captured", captured);
+            if (captured)
+            {
+                ar.Key("layout");
+                ar.BeginObject();
+                document.Serialize(ar);
+                ar.EndObject();
             }
         }
     };
@@ -150,6 +166,9 @@ export namespace editor::app
         GlobalTypeRegistry().Register(EditorDockLayoutSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorDockLayoutSettings>();
+        // Version 1 (the old dock's tree) still reads, to be set aside: a legacy reader one
+        // version back, removed once projects have saved past it (Process/CONVENTIONS.md).
+        const_cast<TypeInfo&>(EditorDockLayoutSettings::StaticType()).minReadDataVersion = 1;
         GlobalTypeRegistry().Register(EditorFavoritesSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorFavoritesSettings>();
@@ -163,31 +182,29 @@ export namespace editor::app
 
     // ---- store <-> live state ------------------------------------------------------------
 
-    // Snapshot `dock`'s current layout into the store. NotFound when the dock tree is empty.
-    [[nodiscard]] inline Status CaptureDockLayout(ui::toolkit::DockManager& dock,
-                                                  settings::Settings& store)
+    // The dock's layout into the store.
+    inline void CaptureDockLayout(const gui::DockController& dock, settings::Settings& store)
     {
-        UniquePtr<ui::toolkit::DockLayoutNode> layout = dock.ExportLayout();
-        if (!layout)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        store.Section<EditorDockLayoutSettings>().root = Move(layout);
+        EditorDockLayoutSettings& section = store.Section<EditorDockLayoutSettings>();
+        section.document.Layout = dock.GetLayout();
+        section.captured = true;
         store.MarkChanged<EditorDockLayoutSettings>();
-        return Status{};
     }
 
-    // Rebuild `dock` from the store's snapshot (panels matched by PersistenceId).
-    // NotFound when no snapshot was ever captured (caller keeps its default layout).
-    [[nodiscard]] inline Status ApplyDockLayout(ui::toolkit::DockManager& dock,
-                                                settings::Settings& store)
+    // The store's layout into `dock` (its registered panels placed where it says, the rest at
+    // their defaults). NotFound when none was captured (the caller keeps its default layout);
+    // a refusal (a layout that breaks the dock's rules) said in the log, the dock as it was.
+    [[nodiscard]] inline Status ApplyDockLayout(gui::DockController& dock, settings::Settings& store)
     {
         const EditorDockLayoutSettings* section = store.Find<EditorDockLayoutSettings>();
-        if (section == nullptr || !section->root)
-        {
+        if (section == nullptr || !section->captured)
             return Status{ErrorCode::NotFound};
+        const gui::DockOutcome outcome = dock.Adopt(section->document.Layout);
+        if (!outcome.Ok())
+        {
+            LOG_WARNING(u8"Editor", u8"the saved dock layout was refused ({}); the default stands", outcome.Refused.AsView());
+            return Status{ErrorCode::InvalidArgument};
         }
-        dock.ApplyLayout(section->root.Get());
         return Status{};
     }
 
@@ -283,7 +300,7 @@ export namespace editor::app
         return saved;
     }
 
-    RTTI_DEFINE_OBJECT_VERSIONED(EditorDockLayoutSettings, "rtti::editor::editor::app", 1)
+    RTTI_DEFINE_OBJECT_VERSIONED(EditorDockLayoutSettings, "rtti::editor::editor::app", 2)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorFavoritesSettings, "rtti::editor::editor::app", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorOpenPagesSettings, "rtti::editor::editor::app", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorAssetBrowserSettings, "rtti::editor::editor::app", 1)

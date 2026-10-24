@@ -310,3 +310,19 @@ TEST_CASE("xml.parse: each element and attribute knows the line it began on; one
     CHECK(made->Line() == 0u);
     d.RootElement()->AppendChild(made);
 }
+
+TEST_CASE("xml.parse: a CRLF ends one line and a lone CR ends one too, for node lines and error lines alike")
+{
+    XmlDocument d(DefaultAllocator());
+    // CRLF: the same lines as LF.
+    REQUIRE(d.Parse(u8"<root>\r\n  <a/>\r\n  <b/>\r\n</root>") == XmlResult::Ok);
+    CHECK(d.RootElement()->GetFirstChildElement(u8"a")->Line() == 2u);
+    CHECK(d.RootElement()->GetFirstChildElement(u8"b")->Line() == 3u);
+    // A lone CR (old Mac text) ends a line.
+    REQUIRE(d.Parse(u8"<root>\r  <a/>\r  <b/>\r</root>") == XmlResult::Ok);
+    CHECK(d.RootElement()->GetFirstChildElement(u8"a")->Line() == 2u);
+    CHECK(d.RootElement()->GetFirstChildElement(u8"b")->Line() == 3u);
+    // An error's line counts them the same way.
+    REQUIRE(d.Parse(u8"<root>\r\n  <a/>\r  </other>") == XmlResult::TagMismatch);
+    CHECK(d.ErrorLine() == 3);
+}

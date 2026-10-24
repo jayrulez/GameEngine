@@ -777,6 +777,13 @@ export namespace foundation::xml
         const utf8char* m_lineEnd = nullptr;
         u32 m_lineAt = 1;
 
+        // Whether the character at `c` ends a line: a `\n`, or a `\r` that a `\n` does not follow (a
+        // CRLF ends one line, at its `\n`; a lone CR, as old Mac text has it, ends one too).
+        [[nodiscard]] static bool EndsLine(const utf8char* c, const utf8char* end) noexcept
+        {
+            return *c == u8'\n' || (*c == u8'\r' && (c + 1 >= end || c[1] != u8'\n'));
+        }
+
         // The 1-based line `at` is on, in the text being parsed.
         [[nodiscard]] u32 LineOf(const utf8char* at) noexcept
         {
@@ -786,7 +793,7 @@ export namespace foundation::xml
             }
             for (; m_lineFrom < at; ++m_lineFrom)
             {
-                if (*m_lineFrom == u8'\n')
+                if (EndsLine(m_lineFrom, m_lineEnd))
                 {
                     ++m_lineAt;
                 }
@@ -813,7 +820,7 @@ export namespace foundation::xml
             for (const utf8char* c = begin; c < at; ++c)
             {
                 const unsigned char b = static_cast<unsigned char>(*c);
-                if (b == '\n')
+                if (EndsLine(c, end))
                 {
                     ++line;
                     column = 1;

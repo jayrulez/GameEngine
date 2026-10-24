@@ -159,3 +159,73 @@ TEST_CASE("enter: a popup enters each time it opens")
     }
     CHECK(bed.entered == 2);
 }
+
+TEST_CASE("leave: a dialog closed plays its exit on top, then goes; opened again meanwhile it is whole")
+{
+    // Closed, a modal window is out of the popups at once (input and IsOpen move on) and fades on
+    // top, taking no input, until its exit ends; then it goes and hears it has. Menus close at once.
+    EnterBed bed(u8".card { opacity: 1; transition: opacity 0.2s linear; } .card:leaving { opacity: 0; }");
+    auto dialog = core::MakeRef<Window>(core::DefaultAllocator());
+    dialog->AddClass(core::StringView(u8"card"));
+    dialog->SetSize(core::Float2{120.0f, 80.0f});
+    int closed = 0;
+    dialog->SetOnClose([&closed] { ++closed; });
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+
+    dialog->OpenModal(*bed.root);
+    bed.Frame(0.0);
+    bed.Frame(0.0);
+    REQUIRE(dialog->IsOpen());
+    dialog->Close();
+    CHECK_FALSE(dialog->IsOpen());
+    CHECK(closed == 1);
+    CHECK(d.PopupCount() == 0u);
+    CHECK(dialog->GetParent() == bed.root.Get()); // still there, fading
+    CHECK(dialog->IsInTopLayer());
+    CHECK(dialog->IsTreeInert());
+    bed.Frame(0.0);
+    bed.Frame(0.1);
+    CHECK(dialog->GetAlpha() == doctest::Approx(0.5f));
+    bed.Frame(0.1);
+    bed.Frame(0.0); // the exit ended: it goes at the next drain
+    bed.Frame(0.0);
+    CHECK(dialog->GetParent() == nullptr);
+    CHECK_FALSE(dialog->IsInTopLayer());
+
+    // Opened again halfway through its exit: whole and open, and it does not go.
+    dialog->OpenModal(*bed.root);
+    bed.Frame(0.0);
+    bed.Frame(0.0);
+    dialog->Close();
+    bed.Frame(0.0);
+    bed.Frame(0.1);
+    dialog->OpenModal(*bed.root);
+    CHECK(dialog->IsOpen());
+    CHECK_FALSE(dialog->IsLeaving());
+    CHECK(d.PopupCount() == 1u);
+    for (int i = 0; i < 4; ++i)
+        bed.Frame(0.1);
+    CHECK(dialog->GetParent() == bed.root.Get());
+    CHECK(dialog->IsOpen());
+    CHECK(dialog->GetAlpha() == doctest::Approx(1.0f));
+}
+
+TEST_CASE("leave: a message box shown from a page goes back there once its exit has played")
+{
+    EnterBed bed(u8"messagebox { opacity: 1; transition: opacity 0.2s linear; } messagebox:leaving { opacity: 0; }");
+    auto page = core::MakeRef<Panel>(core::DefaultAllocator());
+    bed.root->AddChild(page.Get());
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    page->AddChild(box.Get());
+    box->Configure(core::StringView(u8"Delete?"), core::StringView(u8"It goes to the trash."), MessageBox::Buttons::OkCancel);
+    REQUIRE(box->Show());
+    bed.Frame(0.0);
+    bed.Frame(0.0);
+    box->RequestClose(); // as Escape would
+    CHECK(box->GetResultName() == core::String(u8"cancel"));
+    CHECK(box->GetParent() == bed.root.Get()); // fading over the root
+    for (int i = 0; i < 5; ++i)
+        bed.Frame(0.1);
+    CHECK(box->GetParent() == page.Get()); // home, unseen
+    CHECK_FALSE(box->IsDisplayed());
+}

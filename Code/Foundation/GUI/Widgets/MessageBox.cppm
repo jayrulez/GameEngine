@@ -234,7 +234,8 @@ export namespace foundation::gui
             Node* root = GetRootNode();
             if (root == nullptr || root == this)
                 return false;
-            if (Node* home = GetParent())
+            // Shown again while its exit plays, its page is still the one it came from.
+            if (Node* home = GetParent(); home != nullptr && !m_home)
             {
                 m_home = core::RefPtr<Node>(home);
                 m_homeIndex = home->GetChildIndex(this);
@@ -388,8 +389,8 @@ export namespace foundation::gui
             Close();
             SendEvent(Event(EventType::Changed, this));
         }
-        // Shown from a page: back there, unseen.
-        void OnWindowClosed() override
+        // Shown from a page: back there, unseen, once its exit has played.
+        void OnWindowGone() override
         {
             if (!m_home)
                 return;

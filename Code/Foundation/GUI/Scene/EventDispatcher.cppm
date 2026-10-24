@@ -67,6 +67,13 @@ export namespace foundation::gui
         bool ReturnHome = false;
         /// Told when it closes, and why (after the `toggle` event).
         core::Function<void(PopupCloseReason)> OnClosed;
+        /// Closed, it plays the sheet's exit (`:leaving`) before it goes: out of the popups at once
+        /// (input, focus and OnClosed move on), still drawn on top, taking no input, until what
+        /// the sheet started has ended (a dialog fading out). Else it goes at once (a menu).
+        bool LeavesOnClose = false;
+        /// Told when it has gone: out of the top layer and the tree (or back home), after its
+        /// exit when it plays one; not when it opens again first.
+        core::Function<void()> OnGone;
     };
 
     // A drag's layer in the top layer (E7): the root's size, passing the pointer through, its
@@ -995,6 +1002,17 @@ export namespace foundation::gui
         {
             if (FindPopup(popup) >= 0)
                 return;
+            // Opened again while its exit plays: whole again, its exit and going forgotten.
+            for (usize i = m_leaving.Size(); i-- > 0;)
+                if (m_leaving[i].Popup.Get() == &popup)
+                {
+                    const core::RefPtr<Node> keep(&popup);
+                    popup.SetInTopLayer(false);
+                    popup.RemoveFromParent(); // ends its leaving
+                    if (Node* home = m_leaving[i].Home.table != nullptr ? m_leaving[i].Home.table->Resolve(m_leaving[i].Home.slot, m_leaving[i].Home.generation) : nullptr)
+                        (void)home->AddChildAt(&popup, core::Min(m_leaving[i].HomeIndex, home->ChildCount()));
+                    m_leaving.RemoveAt(i);
+                }
             if (options.Kind != PopupKind::Manual)
             {
                 // An auto popup closes the popups that do not hold its owner (a hint, the other hints).
@@ -1194,6 +1212,17 @@ export namespace foundation::gui
         void DrawPopups(DrawContext& ctx)
         {
             PlacePopups();
+            // Those playing their exit first, under the open ones (a dialog fading out, a menu
+            // opened since over it).
+            for (const LeavingPopup& leaving : m_leaving)
+            {
+                const core::RefPtr<Node> popup = leaving.Popup;
+                if (popup->GetParent() == nullptr)
+                    continue;
+                if (leaving.Modal && m_root != nullptr)
+                    popup->DrawBackdrop(ctx, Rect{0.0f, 0.0f, m_root->GetSize().x, m_root->GetSize().y});
+                popup->Draw(ctx);
+            }
             for (usize i = 0; i < m_popups.Size(); ++i)
             {
                 const core::RefPtr<Node> popup = m_popups[i].Popup; // held: drawing changes nothing, but be sure
@@ -1267,6 +1296,7 @@ export namespace foundation::gui
         void Tick(f32 seconds)
         {
             m_time += seconds; // the clock click counting, tooltips and long presses read
+            SettleLeavingPopups();
             DropHiddenFocus();
             if (m_dragActive)
                 TickDrag(seconds);
@@ -2339,6 +2369,16 @@ export namespace foundation::gui
             usize HomeIndex = 0;
         };
         Array<PopupEntry> m_popups; // the top layer, bottom first
+        // Closed popups playing their exit (LeavesOnClose): drawn under the open ones, no input.
+        struct LeavingPopup
+        {
+            core::RefPtr<Node> Popup;
+            Node::ElementRef Home{};
+            usize HomeIndex = 0;
+            bool Modal = false;
+            core::Function<void()> OnGone;
+        };
+        Array<LeavingPopup> m_leaving;
         bool m_swallowing = false;  // a press that closed a popup: its release is consumed too
         // Tooltips: the node whose text shows or waits, the content shown, the clock.
         Node* m_tipProvider = nullptr;
@@ -2588,15 +2628,50 @@ export namespace foundation::gui
             PopupEntry entry = core::Move(m_popups[static_cast<usize>(still)]);
             m_popups.RemoveAt(static_cast<usize>(still));
             const bool focusInside = m_focusNode == nullptr || IsInSubtree(m_focusNode, popup.Get());
+            // One that plays an exit stays drawn on top, taking no input, until it has played it.
+            const bool leaves = entry.Options.LeavesOnClose && popup->GetParent() != nullptr && popup->GetRootNode()->HasStylePass();
             Demote(*popup, entry);
-            popup->RemoveFromParent(); // a closed popup leaves the tree; its owner keeps it
-            // Or it goes back where it stood (ReturnHome), while that is still there.
-            if (Node* home = entry.Home.table != nullptr ? entry.Home.table->Resolve(entry.Home.slot, entry.Home.generation) : nullptr)
-                (void)home->AddChildAt(popup.Get(), core::Min(entry.HomeIndex, home->ChildCount()));
+            if (leaves)
+            {
+                popup->SetInTopLayer(true); // drawn over the tree while it leaves
+                m_leaving.PushBack(LeavingPopup{popup, entry.Home, entry.HomeIndex, entry.Options.Modal, core::Move(entry.Options.OnGone)});
+                popup->Leave();
+            }
+            else
+            {
+                popup->RemoveFromParent(); // a closed popup leaves the tree; its owner keeps it
+                // Or it goes back where it stood (ReturnHome), while that is still there.
+                if (Node* home = entry.Home.table != nullptr ? entry.Home.table->Resolve(entry.Home.slot, entry.Home.generation) : nullptr)
+                    (void)home->AddChildAt(popup.Get(), core::Min(entry.HomeIndex, home->ChildCount()));
+            }
             if (focusInside && !entry.SavedFocus.IsEmpty())
                 RestoreFocus(entry, nullptr);
             if (entry.Options.OnClosed)
                 entry.Options.OnClosed(reason);
+            if (!leaves && entry.Options.OnGone)
+                entry.Options.OnGone();
+        }
+        // The popups whose exit has ended (they left their parent): out of the top layer, back
+        // home where they came from, told they are gone.
+        void SettleLeavingPopups()
+        {
+            for (usize i = 0; i < m_leaving.Size();)
+            {
+                Node& popup = *m_leaving[i].Popup;
+                if (popup.GetParent() != nullptr && popup.IsLeaving())
+                {
+                    ++i;
+                    continue;
+                }
+                LeavingPopup gone = core::Move(m_leaving[i]);
+                m_leaving.RemoveAt(i);
+                popup.SetInTopLayer(false);
+                if (popup.GetParent() == nullptr)
+                    if (Node* home = gone.Home.table != nullptr ? gone.Home.table->Resolve(gone.Home.slot, gone.Home.generation) : nullptr)
+                        (void)home->AddChildAt(&popup, core::Min(gone.HomeIndex, home->ChildCount()));
+                if (gone.OnGone)
+                    gone.OnGone();
+            }
         }
         // A popup leaving with a subtree: out of the stack, told, focus given back when it can be.
         void DropPopupAt(usize index, PopupCloseReason reason, const Node* leaving)

@@ -306,6 +306,7 @@ export namespace foundation::gui
             const core::RefPtr<Node> keep(this); // the tree may hold its only reference (a script's window)
             RemoveFromParent();
             Closed();
+            OnWindowGone();
         }
 
         [[nodiscard]] bool IsOpen() const noexcept { return m_open; }
@@ -347,8 +348,11 @@ export namespace foundation::gui
         }
 
     protected:
-        /// It closed (a dialog written in a page goes back there).
+        /// It closed: IsOpen is false, though a modal one may still be playing its exit.
         virtual void OnWindowClosed() {}
+        /// It has gone: out of the top layer, after its exit (a dialog written in a page goes back
+        /// there now). Not when it opens again before its exit ends.
+        virtual void OnWindowGone() {}
         void OnSizeChange() override { Relayout(); }
         // Its parts at their places: the title bar across the top, the content under it, the
         // grip in the corner.
@@ -389,6 +393,9 @@ export namespace foundation::gui
                 options.TakesFocus = true;
                 Window* self = this;
                 options.OnClosed = [self](PopupCloseReason) { self->Closed(); };
+                // Closed, it plays the sheet's exit (a dialog fades out) before it goes.
+                options.LeavesOnClose = true;
+                options.OnGone = [self]() { self->OnWindowGone(); };
                 // Back asks it to close, while it is open (under it is inert, so nothing else would hear it).
                 if (AnswersBack())
                     m_backHandler = OnCommand(core::StringView(kBackCommand), [self](CommandEvent&) { self->RequestClose(); });

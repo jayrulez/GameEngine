@@ -6,7 +6,8 @@ util_add_engine_library(Editor.Core ALIAS Editor::Core)
 target_link_libraries(Editor.Core
     PUBLIC Editor::Project
            Foundation::Mcp # domain-contributed MCP tools (EditorContext::RegisterMcpToolContribution)
-           Foundation::Image Foundation::Image.IO Foundation::UI)
+           Foundation::Image Foundation::Image.IO
+           Foundation::GUI) # the editor's UI types: keystrokes, menus, the clipboard, drawables (editor-gui X2)
 
 target_sources(Editor.Core
     PRIVATE

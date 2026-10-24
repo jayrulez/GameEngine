@@ -9,14 +9,14 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui; // Effect (what changes), Menu (action items)
 import foundation.settings;
 import foundation.xml.serialization;
 import editor.core;
 
 using namespace foundation::core;
 using namespace editor;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace
 {
@@ -66,8 +66,19 @@ namespace
         d.label = String(label);
         return d;
     }
-    constexpr EditorShortcut CtrlS{ui::KeyCode::S, ui::KeyModifiers::Ctrl};
-    constexpr EditorShortcut F5{ui::KeyCode::F5, ui::KeyModifiers::None};
+    // A menu's items, in order (the rows AppendActionItems added).
+    Array<gui::MenuItem*> ItemsOf(foundation::gui::Node& node)
+    {
+        Array<gui::MenuItem*> out;
+        if (auto* item = Cast<gui::MenuItem>(&node))
+            out.PushBack(item);
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            for (gui::MenuItem* inner : ItemsOf(*node.GetChildAt(i)))
+                out.PushBack(inner);
+        return out;
+    }
+    const EditorShortcut CtrlS = EditorShortcut::Of(u8"ctrl-s");
+    const EditorShortcut F5 = EditorShortcut::Of(u8"f5");
 }
 
 TEST_CASE("actions: declarations bind through the active page and its published interface; "
@@ -76,7 +87,8 @@ TEST_CASE("actions: declarations bind through the active page and its published 
     EditorContext context{DefaultAllocator()};
     EditorActionRegistry& actions = context.Actions();
     u32 changes = 0;
-    actions.OnActionsChanged.Add([&changes]() { ++changes; });
+    gui::Effect watch([&]() { actions.TrackChanges(); ++changes; }); // a surface following the actions
+    changes = 0; // its first run reads them; the changes are what follow
 
     // Editor-wide, always enabled.
     u32 exits = 0;
@@ -201,14 +213,15 @@ TEST_CASE("actions: the shortcut table - the default chord, the user's override,
     REQUIRE(actions.Register(Move(save)));
     EditorActionDeclaration run = Declare(u8"sim.run", u8"Simulate");
     run.shortcut = F5;
-    run.alternateShortcut = EditorShortcut{ui::KeyCode::F6, ui::KeyModifiers::None};
+    run.alternateShortcut = EditorShortcut::Of(u8"f6");
     run.execute = [](EditorPage*) {};
     REQUIRE(actions.Register(Move(run)));
     EditorActionDeclaration bare = Declare(u8"view.reset", u8"Reset Layout"); // no chord
     bare.execute = [](EditorPage*) {};
     REQUIRE(actions.Register(Move(bare)));
     u32 changes = 0;
-    actions.OnActionsChanged.Add([&changes]() { ++changes; });
+    gui::Effect watch([&]() { actions.TrackChanges(); ++changes; }); // a surface following the actions
+    changes = 0; // its first run reads them; the changes are what follow
 
     CHECK(actions.Shortcut(u8"page.save") == CtrlS);
     CHECK_FALSE(actions.Shortcut(u8"view.reset").IsSet());
@@ -217,14 +230,14 @@ TEST_CASE("actions: the shortcut table - the default chord, the user's override,
     CHECK(actions.HolderOf(EditorShortcut{}) == nullptr); // the unset chord is nobody's
     CHECK_FALSE(actions.HasOverride(u8"page.save"));
     // The alternate is the action's too: taken, reported, never rebound.
-    const EditorShortcut f6{ui::KeyCode::F6, ui::KeyModifiers::None};
+    const EditorShortcut f6 = EditorShortcut::Of(u8"f6");
     CHECK(actions.AlternateShortcut(u8"sim.run") == f6);
     CHECK_FALSE(actions.AlternateShortcut(u8"page.save").IsSet());
     CHECK(actions.HolderOf(f6) == actions.Find(u8"sim.run"));
     CHECK(actions.Rebind(u8"view.reset", f6).Code() == ErrorCode::AlreadyExists);
 
     // A free chord binds; the declaration's default no longer applies.
-    const EditorShortcut ctrlShiftS{ui::KeyCode::S, ui::KeyModifiers::Ctrl | ui::KeyModifiers::Shift};
+    const EditorShortcut ctrlShiftS = EditorShortcut::Of(u8"ctrl-shift-s");
     REQUIRE(actions.Rebind(u8"page.save", ctrlShiftS).IsOk());
     CHECK(changes == 1u);
     CHECK(actions.Shortcut(u8"page.save") == ctrlShiftS);
@@ -296,6 +309,7 @@ TEST_CASE("actions: AppendActionItems adds a context menu's items from the decla
     EditorActionRegistry actions;
     u32 runs = 0;
     EditorActionDeclaration run = Declare(u8"sim.run", u8"Simulate");
+    run.shortcut = F5;
     run.enabled = [](EditorPage* page) { return page != nullptr; };
     run.execute = [&runs](EditorPage*) { ++runs; };
     REQUIRE(actions.Register(Move(run)));
@@ -304,20 +318,24 @@ TEST_CASE("actions: AppendActionItems adds a context menu's items from the decla
     REQUIRE(actions.Register(Move(exit)));
 
     SimPage page;
-    auto menu = MakeRef<foundation::ui::ContextMenu>(DefaultAllocator());
+    auto menu = MakeRef<gui::Menu>(DefaultAllocator());
     const StringView ids[] = {u8"sim.run", u8"nobody.home", u8"file.exit"};
     CHECK(AppendActionItems(*menu, actions, &page, Span<const StringView>(ids, 3)) == 2u);
-    REQUIRE(menu->ItemCount() == 2);
-    CHECK(menu->ItemAt(0)->Label == u8"Simulate");
-    CHECK(menu->ItemAt(0)->Enabled);
-    CHECK(menu->ItemAt(1)->Label == u8"Exit");
-    menu->ItemAt(0)->Action();
+    const Array<gui::MenuItem*> items = ItemsOf(*menu);
+    REQUIRE(items.Size() == 2u);
+    CHECK(items[0]->GetText() == u8"Simulate");
+    CHECK(items[0]->GetShortcut() == u8"F5"); // its chord, as the menu shows it
+    CHECK(items[0]->IsEnabled());
+    CHECK(items[1]->GetText() == u8"Exit");
+    (void)items[0]->HandleActivate();
     CHECK(runs == 1u);
     // Over no subject the page-bound item is disabled; its click is refused by the registry.
-    auto bare = MakeRef<foundation::ui::ContextMenu>(DefaultAllocator());
+    auto bare = MakeRef<gui::Menu>(DefaultAllocator());
     CHECK(AppendActionItems(*bare, actions, nullptr, Span<const StringView>(ids, 1)) == 1u);
-    CHECK_FALSE(bare->ItemAt(0)->Enabled);
-    bare->ItemAt(0)->Action();
+    const Array<gui::MenuItem*> bareItems = ItemsOf(*bare);
+    REQUIRE(bareItems.Size() == 1u);
+    CHECK_FALSE(bareItems[0]->IsEnabled());
+    (void)bareItems[0]->HandleActivate();
     CHECK(runs == 1u);
 }
 
@@ -326,10 +344,10 @@ TEST_CASE("actions: FormatShortcut spells a chord the way a shortcut column show
     CHECK(FormatShortcut(EditorShortcut{}).IsEmpty());
     CHECK(FormatShortcut(CtrlS) == u8"Ctrl+S");
     CHECK(FormatShortcut(F5) == u8"F5");
-    CHECK(FormatShortcut(EditorShortcut{ui::KeyCode::Z, ui::KeyModifiers::Ctrl | ui::KeyModifiers::Shift}) ==
+    CHECK(FormatShortcut(EditorShortcut::Of(u8"ctrl-shift-z")) ==
           u8"Ctrl+Shift+Z");
-    CHECK(FormatShortcut(EditorShortcut{ui::KeyCode::PageUp, ui::KeyModifiers::Alt}) == u8"Alt+Page Up");
-    CHECK(FormatShortcut(EditorShortcut{ui::KeyCode::Delete, ui::KeyModifiers::None}) == u8"Delete");
+    CHECK(FormatShortcut(EditorShortcut::Of(u8"alt-pageup")) == u8"Alt+PgUp");
+    CHECK(FormatShortcut(EditorShortcut::Of(u8"delete")) == u8"Del");
 }
 
 
@@ -349,7 +367,7 @@ TEST_CASE("actions: shortcut overrides persist - captured from the registry into
     declare(u8"page.save", CtrlS);
     declare(u8"sim.run", F5);
     declare(u8"view.reset", EditorShortcut{});
-    const EditorShortcut ctrlShiftS{ui::KeyCode::S, ui::KeyModifiers::Ctrl | ui::KeyModifiers::Shift};
+    const EditorShortcut ctrlShiftS = EditorShortcut::Of(u8"ctrl-shift-s");
     REQUIRE(actions.Rebind(u8"page.save", ctrlShiftS).IsOk());
     REQUIRE(actions.Rebind(u8"sim.run", EditorShortcut{}).IsOk()); // cleared on purpose
 
@@ -358,7 +376,7 @@ TEST_CASE("actions: shortcut overrides persist - captured from the registry into
     EditorShortcutSettings& section = store.Section<EditorShortcutSettings>();
     ShortcutOverrideEntry foreign;
     foreign.id = String(u8"terrain.sculpt"); // a domain not loaded here
-    foreign.key = static_cast<u32>(ui::KeyCode::T);
+    foreign.keys = String(u8"t");
     section.overrides.PushBack(Move(foreign));
     CHECK(CaptureShortcutOverrides(actions, section) == 3u);
     REQUIRE(section.Find(u8"page.save") != nullptr);
@@ -382,7 +400,7 @@ TEST_CASE("actions: shortcut overrides persist - captured from the registry into
     REQUIRE(back != nullptr);
     REQUIRE(back->overrides.Size() == 2u);
     CHECK(back->Find(u8"page.save")->Chord() == ctrlShiftS);
-    CHECK(back->Find(u8"terrain.sculpt")->Chord().key == ui::KeyCode::T);
+    CHECK(back->Find(u8"terrain.sculpt")->Chord() == EditorShortcut::Of(u8"t"));
 
     // Apply to a fresh registry: the known override binds, the unknown id is skipped, and a
     // chord another action holds is refused and skipped (the holder keeps it).
@@ -422,8 +440,8 @@ TEST_CASE("actions: ShortcutEdits apply together - a chosen chord, a swap betwee
         d.execute = [](EditorPage*) {};
         REQUIRE(actions.Register(Move(d)));
     };
-    const EditorShortcut CtrlZ{ui::KeyCode::Z, ui::KeyModifiers::Ctrl};
-    const EditorShortcut CtrlY{ui::KeyCode::Y, ui::KeyModifiers::Ctrl};
+    const EditorShortcut CtrlZ = EditorShortcut::Of(u8"ctrl-z");
+    const EditorShortcut CtrlY = EditorShortcut::Of(u8"ctrl-y");
     declare(u8"page.save", CtrlS);
     declare(u8"edit.undo", CtrlZ);
     declare(u8"edit.redo", CtrlY);
@@ -436,12 +454,12 @@ TEST_CASE("actions: ShortcutEdits apply together - a chosen chord, a swap betwee
     CHECK(edits.IsEmpty());
     // A chord for a bare action; a swap of undo and redo; a reset of one with an override;
     // a collision with an action nobody staged.
-    REQUIRE(actions.Rebind(u8"sim.run", EditorShortcut{ui::KeyCode::F7, ui::KeyModifiers::None}).IsOk());
-    edits.Set(u8"view.reset", EditorShortcut{ui::KeyCode::F6, ui::KeyModifiers::None});
+    REQUIRE(actions.Rebind(u8"sim.run", EditorShortcut::Of(u8"f7")).IsOk());
+    edits.Set(u8"view.reset", EditorShortcut::Of(u8"f6"));
     edits.Set(u8"edit.undo", CtrlY);
     edits.Set(u8"edit.redo", CtrlZ);
     edits.Reset(u8"sim.run");
-    edits.Set(u8"view.reset", EditorShortcut{ui::KeyCode::F6, ui::KeyModifiers::None}); // re-staged: still one entry
+    edits.Set(u8"view.reset", EditorShortcut::Of(u8"f6")); // re-staged: still one entry
     CHECK(edits.Count() == 4u);
     REQUIRE(edits.Pending(u8"sim.run") != nullptr);
     CHECK(edits.Pending(u8"sim.run")->reset);
@@ -454,7 +472,7 @@ TEST_CASE("actions: ShortcutEdits apply together - a chosen chord, a swap betwee
     Array<String> collisions;
     const usize applied = edits.Apply(actions, section, &collisions);
     CHECK(edits.IsEmpty());
-    CHECK(actions.Shortcut(u8"view.reset").key == ui::KeyCode::F6);
+    CHECK(actions.Shortcut(u8"view.reset") == EditorShortcut::Of(u8"f6"));
     CHECK(actions.Shortcut(u8"edit.undo") == CtrlY);
     CHECK(actions.Shortcut(u8"edit.redo") == CtrlZ);
     CHECK(actions.Shortcut(u8"sim.run") == F5);
@@ -474,4 +492,16 @@ TEST_CASE("actions: ShortcutEdits apply together - a chosen chord, a swap betwee
     edits.Set(u8"nobody.home", F5);
     CHECK(edits.Apply(actions, section, &collisions) == 0u);
     CHECK(collisions.Size() == 1u);
+}
+
+TEST_CASE("actions: a shortcut override kept as a key code before chords were text reads as its keys")
+{
+    // foundation.ui's codes were USB HID usages with its modifier bits: T is 23, F5 is 62, Ctrl
+    // the bits 0x00C0, Shift 0x0003.
+    CHECK(editor::detail::LegacyChordKeys(23u, 0x0040u) == String(u8"ctrl-t"));
+    CHECK(editor::detail::LegacyChordKeys(62u, 0u) == String(u8"f5"));
+    CHECK(editor::detail::LegacyChordKeys(76u, 0x0001u) == String(u8"shift-delete"));
+    CHECK(editor::detail::LegacyChordKeys(29u, 0x0042u) == String(u8"ctrl-shift-z"));
+    CHECK(editor::detail::LegacyChordKeys(0u, 0u).IsEmpty());
+    CHECK(EditorShortcut::Of(editor::detail::LegacyChordKeys(29u, 0x0042u).AsView()) == EditorShortcut::Of(u8"ctrl-shift-z"));
 }

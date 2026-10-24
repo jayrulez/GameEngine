@@ -16,7 +16,7 @@ module;
 module editor.core;
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import foundation.resource;
 import pipeline.importer;
 import foundation.content;
@@ -190,14 +190,15 @@ namespace editor
         Notify(NoticeKind::Success, Format(u8"Copied {}", what).AsView());
     }
 
-    bool EditorContext::CopyText(foundation::ui::IClipboard* clipboard, StringView text,
+    bool EditorContext::CopyText(foundation::gui::IClipboard* clipboard, StringView text,
                                  StringView what)
     {
-        if (clipboard == nullptr || !clipboard->SetText(text).IsOk())
+        if (clipboard == nullptr)
         {
             Notify(NoticeKind::Warning, Format(u8"Could not copy {} to the clipboard", what).AsView());
             return false;
         }
+        clipboard->SetText(text);
         Notify(NoticeKind::Success, Format(u8"Copied {}", what).AsView());
         return true;
     }

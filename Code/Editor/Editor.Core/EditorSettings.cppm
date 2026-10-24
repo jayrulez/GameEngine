@@ -143,25 +143,73 @@ export namespace editor
         return String(StringView(text, 36));
     }
 
-    // One shortcut the user rebound: the action's id and the chord (an unset chord - key 0 -
-    // is "no shortcut", on purpose, distinct from the declaration's default).
+    namespace detail
+    {
+        // A chord the settings kept before they wrote keys as text: foundation.ui's key code
+        // (the USB HID usage) and modifier bits, as the binding text the keymap reads ("ctrl-t");
+        // empty for a key it did not name.
+        inline String LegacyChordKeys(u32 key, u32 modifiers)
+        {
+            static constexpr const char8_t* kNamed[][2] = {
+                {u8"40", u8"return"},  {u8"41", u8"escape"},    {u8"42", u8"backspace"},  {u8"43", u8"tab"},
+                {u8"44", u8"space"},   {u8"45", u8"minus"},     {u8"46", u8"equals"},     {u8"47", u8"leftbracket"},
+                {u8"48", u8"rightbracket"}, {u8"49", u8"backslash"}, {u8"51", u8"semicolon"}, {u8"52", u8"apostrophe"},
+                {u8"53", u8"grave"},   {u8"54", u8"comma"},     {u8"55", u8"period"},     {u8"56", u8"slash"},
+                {u8"73", u8"insert"},  {u8"74", u8"home"},      {u8"75", u8"pageup"},     {u8"76", u8"delete"},
+                {u8"77", u8"end"},     {u8"78", u8"pagedown"},  {u8"79", u8"right"},      {u8"80", u8"left"},
+                {u8"81", u8"down"},    {u8"82", u8"up"},
+            };
+            String name;
+            if (key >= 4 && key <= 29)
+                name.PushBack(static_cast<utf8char>(u8'a' + (key - 4)));
+            else if (key >= 30 && key <= 38)
+                name.PushBack(static_cast<utf8char>(u8'1' + (key - 30)));
+            else if (key == 39)
+                name.PushBack(u8'0');
+            else if (key >= 58 && key <= 69)
+                name = Format(u8"f{}", key - 57);
+            else
+                for (const auto& named : kNamed)
+                    if (Format(u8"{}", key).AsView() == StringView(named[0]))
+                        name = String(named[1]);
+            if (name.IsEmpty())
+                return {};
+            String keys;
+            if ((modifiers & 0x00C0u) != 0)
+                keys += u8"ctrl-";
+            if ((modifiers & 0x0300u) != 0)
+                keys += u8"alt-";
+            if ((modifiers & 0x0003u) != 0)
+                keys += u8"shift-";
+            keys += name.AsView();
+            return keys;
+        }
+    }
+
+    // One shortcut the user rebound: the action's id and the chord as a binding writes it
+    // ("ctrl-shift-z"; empty is "no shortcut", on purpose, distinct from the declaration's
+    // default). A section written before the chord was text kept a key code and modifier bits:
+    // read, they become the text.
     struct ShortcutOverrideEntry
     {
         String id;
-        u32 key = 0;
-        u32 modifiers = 0;
+        String keys;
 
         void Serialize(ISerializer& ar)
         {
             foundation::core::Serialize(ar, "id", id);
-            foundation::core::Serialize(ar, "key", key);
-            foundation::core::Serialize(ar, "modifiers", modifiers);
+            if (ar.Mode() == SerializeMode::Read && ar.HasKey("key"))
+            {
+                u32 key = 0;
+                u32 modifiers = 0;
+                foundation::core::Serialize(ar, "key", key);
+                foundation::core::Serialize(ar, "modifiers", modifiers);
+                keys = detail::LegacyChordKeys(key, modifiers);
+                return;
+            }
+            foundation::core::Serialize(ar, "keys", keys);
         }
-        [[nodiscard]] EditorShortcut Chord() const noexcept
-        {
-            return EditorShortcut{static_cast<foundation::ui::KeyCode>(key),
-                                  static_cast<foundation::ui::KeyModifiers>(modifiers)};
-        }
+        [[nodiscard]] EditorShortcut Chord() const { return EditorShortcut::Of(keys.AsView()); }
     };
     inline void Serialize(ISerializer& ar, ShortcutOverrideEntry& e)
     {
@@ -323,8 +371,7 @@ export namespace editor
                 out.overrides.PushBack(Move(fresh));
                 entry = &out.overrides[out.overrides.Size() - 1];
             }
-            entry->key = static_cast<u32>(chord.key);
-            entry->modifiers = static_cast<u32>(chord.modifiers);
+            entry->keys = chord.Keys();
         }
         return out.overrides.Size();
     }

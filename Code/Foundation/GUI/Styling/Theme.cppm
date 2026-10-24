@@ -157,8 +157,10 @@ export namespace foundation::gui
             /* The focus ring: where the keyboard is (a field shows it while it has the caret). */
             button:focus-visible, combobox:focus-visible, checkbox:focus-visible, radio:focus-visible,
             switch:focus-visible, tab:focus-visible, expanderheader:focus-visible, listbox:focus-visible,
-            listview:focus-visible, treeview:focus-visible, tableview:focus-visible, editablelabel:focus-visible,
-            menubar:focus-within { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            listview:focus-visible, treeview:focus-visible, tableview:focus-visible, editablelabel:focus-visible
+                { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
+            /* A menu bar has no ring of its own: its focused button shows one when the keyboard got
+               there (F10), and a click opening a menu shows none. */
             textfield:focus, textarea:focus, numberfield:focus { box-shadow: 0 0 0 var(--focus-width) var(--focus-ring); }
             checkbox::box  { border-color: var(--checkbox-box, var(--outline)); }
             checkbox::mark { background-color: var(--checkbox-mark, var(--accent-strong)); }

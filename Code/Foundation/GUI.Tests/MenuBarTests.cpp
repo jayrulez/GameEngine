@@ -138,3 +138,17 @@ TEST_CASE("menubar: a sheet sets its height and its buttons' padding")
     CHECK(fx.bar->ButtonAt(0)->GetSize().y == doctest::Approx(22.0f));
     CHECK(fx.bar->ButtonAt(0)->GetSize().x == doctest::Approx(16.0f)); // 2 * padding, no font
 }
+
+TEST_CASE("menubar: the built-in theme rings no menu bar: a click opening a menu shows no ring")
+{
+    BarFixture fx;
+    StyleManager styles;
+    styles.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
+    // A click on the first button: it takes the focus and opens its menu.
+    fx.d()->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    fx.d()->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    REQUIRE(fx.fileMenu->IsOpen());
+    REQUIRE(fx.bar->IsFocusWithin()); // what the old ring keyed on
+    styles.ApplyTree(*fx.root.Get());
+    CHECK(fx.bar->GetBox().Shadows.IsEmpty());
+}

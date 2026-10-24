@@ -234,7 +234,7 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it); the rest out, unedited, until their layers | X3 (layers 1 to 5) |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions; the rest out, unedited, until their layers | X3 (layers 1 to 8) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
@@ -308,7 +308,8 @@ The layers:
 8. Shortcuts: the actions' chords into the keymap (Bind, Rebind with the user's overrides).
 9. The status bar and toasts.
 10. The command palette.
-11. The small dialogs and the exit gates on MessageBox with button roles.
+11. The small dialogs and the exit gates on MessageBox with button roles: Save As (a name), the
+    unsaved pages at exit and at a project's close.
 12. Preferences: theme, accent, density, motion and UI scale (EditorUiSettings), shortcuts, MCP.
 13. The project home and the project manager.
 14. MCP layout tools on DockLayout (layout_get's shape as the guide says; panel_dock as Edit).

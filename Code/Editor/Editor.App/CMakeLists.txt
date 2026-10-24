@@ -32,6 +32,7 @@ target_sources(Editor.App
             EditorWindow.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
+            EditorAssetCreation.cppm
             PlaybackActions.cppm
             AssetFilter.cppm
             PropertyNames.cppm

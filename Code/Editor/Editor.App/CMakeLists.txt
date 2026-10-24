@@ -28,6 +28,7 @@ target_sources(Editor.App
         EditorPageToolsImpl.cpp
     PUBLIC
         FILE_SET editorapp_modules TYPE CXX_MODULES FILES
+            UIPage.cppm
             PlaybackActions.cppm
             AssetFilter.cppm
             PropertyNames.cppm

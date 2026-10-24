@@ -10,7 +10,8 @@
 // panel moved to another stack or window, or hidden, keeps it (foundation.ui's port destroyed a
 // panel that had no id on close and crashed reaching it after). Closing a panel follows its policy:
 // Hide keeps its content and its place, Rebuild lets its content go and keeps its place (the
-// factory makes it again when shown), Destroy lets both go.
+// factory makes it again when shown), Destroy lets both go. A panel may ask before it closes (a
+// document with unsaved changes).
 //
 // The layout changes through the controller, which tells every DockSpace showing it to show it
 // again. What the user already did in the widgets (a separator dragged, a tab chosen or dragged to
@@ -45,6 +46,10 @@ export namespace foundation::gui
         Function<RefPtr<Node>()> Factory;
         DockClosePolicy Close = DockClosePolicy::Hide;
         bool Closable = true;
+        /// Asked before it closes, by its tab, a menu, a key or its window: false keeps it open (a
+        /// document with unsaved changes asks the user first, and closes with CloseNow after). It
+        /// registers no panel while it asks.
+        Function<bool()> CanClose;
         DockDefault Default; ///< where it goes when a restored layout does not place it (its Panel: the id)
     };
 
@@ -193,8 +198,19 @@ export namespace foundation::gui
                 ShowEverywhere();
             return outcome;
         }
-        /// Closes a docked panel as its description says.
+        /// Closes a docked panel as its description says, once it agrees (its CanClose).
         DockOutcome Close(core::StringView panel)
+        {
+            const DockPanelDescription* description = Describe(panel);
+            if (description != nullptr && !description->Closable)
+                return DockOutcome::Refuse(u8"it cannot be closed");
+            if (description != nullptr && description->CanClose && !description->CanClose())
+                return DockOutcome::Refuse(u8"it asked to stay open");
+            return CloseNow(panel);
+        }
+        /// Closes a docked panel as its description says without asking it (what a panel that
+        /// asked the user calls once they agreed).
+        DockOutcome CloseNow(core::StringView panel)
         {
             const DockPanelDescription* description = Describe(panel);
             if (description != nullptr && !description->Closable)

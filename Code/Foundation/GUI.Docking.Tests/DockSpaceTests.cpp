@@ -6,8 +6,8 @@
 // when its tab is first shown and kept by the controller; closing by the panel's policy; a
 // placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
 // user does in the widgets (a separator dragged, a tab chosen, dragged or closed, by its close part
-// or a middle click) noted back; a
-// panel wider than its stack moves no separator, the stack clipping it.
+// or a middle click) noted back; a panel wider than its stack moves no separator, the stack
+// clipping it; a panel that asks before it closes.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -315,4 +315,48 @@ TEST_CASE("dock space: content taller than the space is clipped; the split keeps
     // The tall page's strip keeps the height of the short one's: the page shrinks, not the strip.
     CHECK(bottom->GetBar()->GetSize().y > 0.0f);
     CHECK(central->GetBar()->GetSize().y == doctest::Approx(bottom->GetBar()->GetSize().y));
+}
+
+TEST_CASE("dock space: a panel asks before it closes, by its tab or the controller; CloseNow closes it without asking")
+{
+    Bed bed;
+    int asked = 0;
+    bool agrees = false;
+    DockPanelDescription document;
+    document.Id = core::String(u8"document");
+    document.Factory = []() { return core::RefPtr<Node>(core::MakeRef<Panel>(core::DefaultAllocator())); };
+    document.CanClose = [&]()
+    {
+        ++asked;
+        return agrees;
+    };
+    REQUIRE(bed.controller.Register(core::Move(document)));
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"document"), bed.Central()); }).Ok());
+    bed.Lay();
+
+    CHECK_FALSE(bed.controller.Close(SV(u8"document")).Ok());
+    CHECK(asked == 1);
+    CHECK(bed.StackOf(u8"document") != kNoDock);
+
+    // Its tab's close part asks the same.
+    TabBar& bar = *Cast<TabView>(bed.space->WidgetOf(bed.Central()))->GetBar();
+    REQUIRE(bar.GetTabCount() == 1);
+    const Rect close = bar.GetTab(0)->GetClosePart()->GetScreenBounds();
+    const core::Float2 at{close.x + close.width * 0.5f, close.y + close.height * 0.5f};
+    EventDispatcher& d = *bed.root->GetEventDispatcher();
+    d.InjectMouseMove(at);
+    d.InjectMouseDown(at, MouseButton::Left);
+    d.InjectMouseUp(at, MouseButton::Left);
+    CHECK(asked == 2);
+    CHECK(bed.StackOf(u8"document") != kNoDock);
+
+    CHECK(bed.controller.CloseNow(SV(u8"document")).Ok()); // the user agreed elsewhere
+    CHECK(asked == 2);
+    CHECK(bed.StackOf(u8"document") == kNoDock);
+
+    REQUIRE(bed.controller.Show(SV(u8"document")).Ok());
+    agrees = true;
+    CHECK(bed.controller.Close(SV(u8"document")).Ok());
+    CHECK(asked == 3);
+    CHECK(bed.StackOf(u8"document") == kNoDock);
 }

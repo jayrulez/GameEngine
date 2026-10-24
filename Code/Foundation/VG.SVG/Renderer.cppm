@@ -89,7 +89,7 @@ export namespace foundation::vg::svg
                 if (element.strokeColor.HasValue() && element.strokeWidth > 0.0f)
                     vg.StrokePath(element.path.Value(),
                                   tint.HasValue() ? tint.Value() : element.strokeColor.Value(),
-                                  StrokeStyle(element.strokeWidth));
+                                  StrokeStyle(element.strokeWidth, element.strokeCap, element.strokeJoin));
             }
 
             if (element.opacity < 1.0f)

@@ -197,3 +197,57 @@ TEST_CASE("svg.loader: an unrecognised container is skipped WHOLE - the siblings
     CHECK(doc.elements[2].children[0].type == SVGElementType::Rectangle);
 }
 
+
+TEST_CASE("svg.loader: paint is inherited from the svg element and groups")
+{
+    // An icon written once on its root: every shape strokes white, with no fill, round ends.
+    const StringView svg =
+        u8"<svg viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"#ffffff\" stroke-width=\"1.5\" "
+        u8"stroke-linecap=\"round\" stroke-linejoin=\"round\">"
+        u8"  <path d=\"M3 8h10\"/>"
+        u8"  <g stroke=\"#ff0000\" stroke-linecap=\"square\">"
+        u8"    <circle cx=\"8\" cy=\"8\" r=\"4\"/>"
+        u8"    <rect x=\"1\" y=\"1\" width=\"2\" height=\"2\" fill=\"blue\" stroke-linejoin=\"bevel\"/>"
+        u8"  </g>"
+        u8"</svg>";
+
+    const Result<SVGDocument> r = SVGLoader::Load(svg);
+    REQUIRE(r.HasValue());
+    const SVGDocument& doc = r.Value();
+    REQUIRE(doc.elements.Size() == 2u);
+
+    const SVGElement& line = doc.elements[0];
+    CHECK_FALSE(line.fillColor.HasValue());
+    REQUIRE(line.strokeColor.HasValue());
+    CHECK(line.strokeColor.Value() == Color::White);
+    CHECK(line.strokeWidth == doctest::Approx(1.5f));
+    CHECK(line.strokeCap == VGLineCap::Round);
+    CHECK(line.strokeJoin == VGLineJoin::Round);
+
+    REQUIRE(doc.elements[1].children.Size() == 2u);
+    const SVGElement& circle = doc.elements[1].children[0];
+    CHECK_FALSE(circle.fillColor.HasValue());
+    REQUIRE(circle.strokeColor.HasValue());
+    CHECK(circle.strokeColor.Value() == Color::Red); // the group's
+    CHECK(circle.strokeWidth == doctest::Approx(1.5f)); // the root's, through the group
+    CHECK(circle.strokeCap == VGLineCap::Square);
+    CHECK(circle.strokeJoin == VGLineJoin::Round);
+
+    const SVGElement& box = doc.elements[1].children[1];
+    REQUIRE(box.fillColor.HasValue());
+    CHECK(box.fillColor.Value() == Color::Blue); // its own
+    CHECK(box.strokeJoin == VGLineJoin::Bevel);
+}
+
+TEST_CASE("svg.loader: a shape with no paint of its own keeps SVG's defaults")
+{
+    const StringView svg = u8"<svg viewBox=\"0 0 8 8\"><path d=\"M0 0h8v8z\"/></svg>";
+    const Result<SVGDocument> r = SVGLoader::Load(svg);
+    REQUIRE(r.HasValue());
+    const SVGElement& shape = r.Value().elements[0];
+    REQUIRE(shape.fillColor.HasValue());
+    CHECK(shape.fillColor.Value() == Color::Black);
+    CHECK_FALSE(shape.strokeColor.HasValue());
+    CHECK(shape.strokeCap == VGLineCap::Butt);
+    CHECK(shape.strokeJoin == VGLineJoin::Miter);
+}

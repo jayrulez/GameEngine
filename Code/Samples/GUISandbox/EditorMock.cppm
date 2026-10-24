@@ -51,6 +51,8 @@ export namespace sandbox
             if (!m_frame)
                 return false;
             m_root.AddChild(m_frame.Get());
+            m_toasts = MakeRef<gui::ToastHost>(m_allocator);
+            m_frame->AddChild(m_toasts.Get());
             DefineCommands();
             BuildDock();
             ApplyLook();
@@ -151,6 +153,8 @@ export namespace sandbox
             Define(u8"mock.view-unlit", u8"Unlit");
             Define(u8"mock.view-wire", u8"Wireframe");
             Define(u8"mock.about", u8"About AssiduousEngine");
+            Define(u8"mock.toast", u8"Show a Toast");
+            Define(u8"mock.dialog", u8"Show a Dialog");
             m_context.DefineCommand(u8"mock.grid").SetChecked(true);
             m_context.DefineCommand(u8"mock.space").SetChecked(true);
             gui::Command& pause = m_context.DefineCommand(u8"mock.pause");
@@ -162,6 +166,10 @@ export namespace sandbox
 
             // The Look menu: Preferences' appearance inputs, here to compare.
             EditorMock* self = this;
+            // What moves (3.3), to judge with less motion on and off: a toast of each severity in
+            // turn, and a dialog.
+            (void)m_root.OnCommand(u8"mock.toast", [self](gui::CommandEvent&) { self->ShowToast(); });
+            (void)m_root.OnCommand(u8"mock.dialog", [self](gui::CommandEvent&) { self->ShowDialog(); });
             (void)m_root.OnCommand(u8"mock.side-by-side", [self](gui::CommandEvent&) { self->SetSideBySide(!self->m_sideBySide); });
             Define(u8"look.dark", u8"Dark");
             Define(u8"look.light", u8"Light");
@@ -179,6 +187,40 @@ export namespace sandbox
             }
             Define(u8"look.motion", u8"Reduce Motion");
             (void)m_root.OnCommand(u8"look.motion", [self](gui::CommandEvent&) { self->m_reduceMotion = !self->m_reduceMotion; self->ApplyLook(); });
+        }
+
+        void ShowToast()
+        {
+            struct Sample
+            {
+                gui::ToastSeverity Severity;
+                const char8_t* Title;
+                const char8_t* Message;
+                const char8_t* Action;
+            };
+            static constexpr Sample kSamples[] = {
+                {gui::ToastSeverity::Success, u8"Exported Sky Hopper", u8"Linux, 48 MB, in 12 s", u8"Open Folder"},
+                {gui::ToastSeverity::Warning, u8"3 textures have no mipmaps", u8"They were generated for this cook.", nullptr},
+                {gui::ToastSeverity::Error, u8"Player.as failed to compile", u8"'speed' is not a member of Player", u8"Show in Console"},
+                {gui::ToastSeverity::Info, u8"Agent connected", u8"On 127.0.0.1:7405", nullptr},
+            };
+            const Sample& sample = kSamples[m_toastsShown++ % (sizeof(kSamples) / sizeof(kSamples[0]))];
+            gui::ToastRequest request;
+            request.Severity = sample.Severity;
+            request.Title = String(sample.Title);
+            request.Message = String(sample.Message);
+            if (sample.Action != nullptr)
+                request.AddAction(String(u8"action"), String(sample.Action), String{});
+            (void)m_toasts->Post(Move(request));
+        }
+
+        void ShowDialog()
+        {
+            if (!m_dialog)
+                m_dialog = MakeRef<gui::MessageBox>(m_allocator);
+            m_dialog->Configure(u8"Delete 3 assets?", u8"These go to the project's trash. 2 scenes still use Wood.",
+                                gui::MessageBox::Buttons::OkCancel);
+            m_dialog->OpenModal(m_root);
         }
 
         // The editor's sheet, the density's after it, then the inputs; the scheme and motion
@@ -301,7 +343,12 @@ export namespace sandbox
                     add->SetDisplayed(false);
             }
             else
+            {
                 shown = MakeRef<MockEntity>(m_allocator);
+                // A tool's panel shows on the second page only, so the first keeps a clear view.
+                if (gui::Node* tool = FindById(content, u8"tool-panel"))
+                    tool->SetDisplayed(false);
+            }
             UniquePtr<gui::ReflectedPropertySource> source = MakeUnique<gui::ReflectedPropertySource>(m_allocator, m_allocator);
             const Instance objects[] = {Instance(shown.Get(), shown->GetType())};
             source->SetObjects(Span<const Instance>(objects, 1));
@@ -338,6 +385,9 @@ export namespace sandbox
         UniquePtr<gui::DockController> m_dock;
         RefPtr<gui::DockArea> m_dockArea;
         RefPtr<gui::Node> m_kit; // the kit page's content, once the dock has made it
+        RefPtr<gui::ToastHost> m_toasts;
+        RefPtr<gui::MessageBox> m_dialog;
+        usize m_toastsShown = 0;
         Array<RefPtr<Object>> m_shown; // what each page's inspector shows
         Array<UniquePtr<gui::ReflectedPropertySource>> m_sources;
         bool m_dark = true;

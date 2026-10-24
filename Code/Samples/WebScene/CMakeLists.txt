@@ -25,9 +25,9 @@ set(_webscene_common_libs
     Foundation::Materials
     Foundation::Particles
     Engine::Particles
-    Foundation::UI
-    Foundation::UI.Resource
-    Engine::UI
+    Foundation::GUI
+    Foundation::GUI.Resources
+    Engine::GUI
     Foundation::Policy)
 
 if(EMSCRIPTEN)

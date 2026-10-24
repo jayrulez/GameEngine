@@ -1367,9 +1367,10 @@ namespace engine::gui
     {
         if (!m_screen.Root)
             return {};
-        // The shared tier's overlay layer, occupied (a system menu, a loading screen), is modal.
+        // The shared tier's overlay layer, occupied (a system menu, a loading screen), is modal; a
+        // passive one (a watermark, `pointer-events: none`) draws over everything and takes nothing.
         for (usize i = 0; m_overlay && i < m_overlay->ChildCount(); ++i)
-            if (m_overlay->GetChildAt(i)->IsDisplayed())
+            if (m_overlay->GetChildAt(i)->IsDisplayed() && m_overlay->GetChildAt(i)->IsHitTestVisible())
                 return InputTarget{m_screen.Root.Get(), ScreenPointerPoint(m_screen, point), m_screen.HasResolution(), false};
         // The screen tier input reaches (the bound run's), its pointer in its own pixels.
         ScreenTier& tier = InputTier();

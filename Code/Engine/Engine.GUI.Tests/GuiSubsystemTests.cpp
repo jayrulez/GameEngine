@@ -1220,6 +1220,14 @@ TEST_CASE("engine.gui: a document on the overlay layer shows above every screen,
     engine.Frame();
     CHECK(engine.gui->ActiveInputRoot() == hud);
 
+    // A passive overlay (a watermark: pointer-events none on its root) takes nothing.
+    RefPtr<Node> badge = engine.gui->PushOverlay(*MakeDocument(u8"<Panel pointer-events=\"none\"><Label text=\"badge\"/></Panel>"));
+    REQUIRE(badge);
+    CHECK_FALSE(badge->IsHitTestVisible());
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == hud);
+    engine.gui->RemoveOverlay(*badge);
+
     RefPtr<GuiDocument> empty = MakeDocument(u8"");
     CHECK_FALSE(engine.gui->PushOverlay(*empty)); // nothing to build
     engine.scenes.DestroyScene(level);

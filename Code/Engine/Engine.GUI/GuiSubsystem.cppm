@@ -444,8 +444,8 @@ export namespace engine::gui
         [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
         [[nodiscard]] Node* OverlayLayer() noexcept { return m_overlay.Get(); }
         /// `document` built and shown on the overlay layer, above every screen (a loading screen, a
-        /// system menu), modal while it shows; the tree, to take off again, or null when it does
-        /// not build.
+        /// system menu), modal while it shows, unless it takes no pointer (`pointer-events: none`
+        /// on its root: a watermark); the tree, to take off again, or null when it does not build.
         RefPtr<Node> PushOverlay(const GuiDocument& document);
         /// A tree made in code shown on the overlay layer.
         void PushOverlay(Node& overlay);

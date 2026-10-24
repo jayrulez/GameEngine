@@ -36,9 +36,9 @@ import engine.navigation;
 import foundation.materials;
 import foundation.particles;
 import engine.particles;
-import foundation.ui;
-import foundation.ui.resource; // UIDocument (runtime markup documents)
-import engine.ui;
+import foundation.gui;
+import foundation.gui.resources; // GuiDocument (the documents made in code)
+import engine.gui;
 #if OPTION_HAS_EXTENSION_IMGUI
 import extensions.imgui;
 #endif

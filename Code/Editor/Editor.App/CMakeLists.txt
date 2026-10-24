@@ -30,6 +30,7 @@ target_sources(Editor.App
         FILE_SET editorapp_modules TYPE CXX_MODULES FILES
             UIPage.cppm
             EditorWindow.cppm
+            EditorNativeModule.cppm
             PlaybackActions.cppm
             AssetFilter.cppm
             PropertyNames.cppm

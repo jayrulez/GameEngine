@@ -14,6 +14,7 @@ export module editor.app;
 // with their ports.
 export import :ui_page;
 export import :editor_window;
+export import :native_module;
 export import :playback_actions;
 export import :asset_filter;
 export import :property_names;

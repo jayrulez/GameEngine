@@ -185,6 +185,25 @@ export namespace foundation::gui
             ShowEverywhere(); // a placeholder for it may show it now
             return true;
         }
+        /// A panel let go for good (a document closed): out of the layout without asking, its
+        /// content and its place forgotten, its description gone. False for one not registered.
+        bool Unregister(core::StringView panel)
+        {
+            usize index = m_panels.Size();
+            for (usize i = 0; i < m_panels.Size(); ++i)
+                if (m_panels[i].Id.AsView() == panel)
+                    index = i;
+            if (index == m_panels.Size())
+                return false;
+            const String id(panel); // `panel` may be the description's own id
+            ForgetContent(id.AsView());
+            if (m_layout.StackOf(id.AsView()) != kNoDock)
+                (void)m_layout.Close(id.AsView());
+            (void)m_layout.Forget(id.AsView());
+            m_panels.RemoveAt(index);
+            ShowEverywhere();
+            return true;
+        }
         [[nodiscard]] const DockPanelDescription* Describe(core::StringView panel) const noexcept
         {
             for (const DockPanelDescription& description : m_panels)

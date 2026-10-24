@@ -7,8 +7,8 @@
 // placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
 // user does in the widgets (a separator dragged, a tab chosen, dragged or closed, by its close part
 // or a middle click) noted back; a panel wider than its stack moves no separator, the stack
-// clipping it; a panel that asks before it closes; a title and tab classes changed while docked;
-// the active panel following the focus.
+// clipping it; a panel that asks before it closes, and one unregistered; a title and tab classes
+// changed while docked; the active panel following the focus.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -360,6 +360,38 @@ TEST_CASE("dock space: a panel asks before it closes, by its tab or the controll
     CHECK(bed.controller.Close(SV(u8"document")).Ok());
     CHECK(asked == 3);
     CHECK(bed.StackOf(u8"document") == kNoDock);
+}
+
+TEST_CASE("dock space: a panel unregistered leaves the layout without asking, its content, place and description gone")
+{
+    Bed bed;
+    int asked = 0;
+    DockPanelDescription document;
+    document.Id = core::String(u8"document");
+    document.Factory = []() { return core::RefPtr<Node>(core::MakeRef<Panel>(core::DefaultAllocator())); };
+    document.CanClose = [&]()
+    {
+        ++asked;
+        return false;
+    };
+    REQUIRE(bed.controller.Register(core::Move(document)));
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"document"), bed.Central()); }).Ok());
+    bed.Lay();
+    core::RefPtr<Node> content = bed.controller.Content(SV(u8"document"));
+    REQUIRE(content.Get() != nullptr);
+    REQUIRE(content->GetParent() != nullptr);
+
+    CHECK(bed.controller.Unregister(SV(u8"document")));
+    CHECK(asked == 0);
+    CHECK(bed.StackOf(u8"document") == kNoDock);
+    CHECK(bed.controller.GetLayout().FindHidden(SV(u8"document")) == nullptr); // no place kept
+    CHECK(bed.controller.Describe(SV(u8"document")) == nullptr);
+    CHECK_FALSE(bed.controller.HasContent(SV(u8"document")));
+    CHECK(content->GetParent() == nullptr);
+    CHECK_FALSE(bed.controller.Show(SV(u8"document")).Ok());
+    CHECK_FALSE(bed.controller.Unregister(SV(u8"document")));
+    bed.Lay();
+    CHECK(bed.space->PageOf(SV(u8"document")) == nullptr);
 }
 
 TEST_CASE("dock space: a docked panel's title and tab classes change where it shows; a panel not registered has none to change")

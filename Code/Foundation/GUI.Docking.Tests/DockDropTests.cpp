@@ -276,6 +276,22 @@ TEST_CASE("dock drop: a stack's grip, dragged, carries the whole stack: into a s
         CHECK(split.Axis == DockAxis::Vertical);
         CHECK(split.Children[0] == bed.StackOf(u8"hierarchy"));
         CHECK(split.Children[1] == console);
+        CHECK_FALSE(bed.space->WidgetOf(console)->HasClass(SV(u8"dock-torn"))); // shown again, not dimmed
+    }
+    {
+        // Along the whole area's bottom edge (the surface's own band): moved there, not dimmed.
+        Bed bed;
+        const DockNodeId console = bed.StackOf(u8"console");
+        GrabStack(bed, u8"console");
+        const Rect area = Bed::Bounds(*bed.space);
+        const core::Float2 bottom{area.x + area.width * 0.5f, area.y + area.height - 4.0f};
+        bed.Over(bottom);
+        bed.Release(bottom);
+        REQUIRE(bed.space->WidgetOf(bed.StackOf(u8"console")) != nullptr);
+        const DockNodeId stacks[] = {bed.StackOf(u8"console"), console};
+        for (const DockNodeId stack : stacks)
+            if (const UIWidget* widget = bed.space->WidgetOf(stack))
+                CHECK_FALSE(widget->HasClass(SV(u8"dock-torn")));
     }
 }
 

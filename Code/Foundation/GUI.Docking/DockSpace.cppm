@@ -1190,6 +1190,12 @@ export namespace foundation::gui
             HidePreview();
             if (offer.Valid && m_controller != nullptr)
                 (void)m_controller->Edit([&offer](DockLayout& layout) { return ApplyDrop(layout, offer.Dragged, offer.Drop); });
+            // A stack carried by its grip is dimmed while it goes; dropped, it is shown again where
+            // the drop left it. Moved, its widgets left the tree and came back, and its grip may
+            // never hear the drag end.
+            if (offer.Dragged.IsStack())
+                if (UIWidget* stack = WidgetOf(offer.Dragged.Stack))
+                    stack->RemoveClass(core::StringView(u8"dock-torn"));
         }
 
         // Where `node` stands in `layout`'s surface as this widget would show it: the shares of each

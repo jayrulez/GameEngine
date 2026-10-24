@@ -424,6 +424,36 @@ TEST_CASE("tabview: pages pair with tabs; only the selected one shows; hidden on
     CHECK(changes == 2);
 }
 
+TEST_CASE("tabview: a page's classes for its tab reach the tab, set before it has one or after, each set replacing the last")
+{
+    auto root = MakeRoot();
+    auto view = Make<TabView>();
+    root->AddChild(view.Get());
+    auto early = Make<TabPage>();
+    early->SetTitle(core::StringView(u8"Early"));
+    early->SetTabClasses(core::StringView(u8"dirty  pinned"));
+    view->AddPage(*early);
+    Tab* tab = early->GetTab();
+    REQUIRE(tab != nullptr);
+    CHECK(tab->HasClass(core::StringView(u8"dirty")));
+    CHECK(tab->HasClass(core::StringView(u8"pinned")));
+    CHECK_FALSE(early->HasClass(core::StringView(u8"dirty"))); // the tab's, not the page's
+
+    early->SetTabClasses(core::StringView(u8"pinned"));
+    CHECK_FALSE(tab->HasClass(core::StringView(u8"dirty")));
+    CHECK(tab->HasClass(core::StringView(u8"pinned")));
+    early->SetTabClasses(core::StringView{});
+    CHECK_FALSE(tab->HasClass(core::StringView(u8"pinned")));
+
+    RegisterGuiElements();
+    static const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    auto tree = loader.LoadFromString(core::StringView(u8R"(<TabView><TabPage title="Scene" tab-class="dirty"/></TabView>)"));
+    auto* marked = core::Cast<TabView>(tree.Get());
+    REQUIRE(marked != nullptr);
+    CHECK(marked->GetBar()->GetTab(0)->HasClass(core::StringView(u8"dirty")));
+}
+
 TEST_CASE("tabs: in right to left a tab dragged toward the left passes the next one")
 {
     auto root = MakeRoot();

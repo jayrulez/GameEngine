@@ -96,6 +96,28 @@ export namespace foundation::gui
                     return true;
             return false;
         }
+        /// Each class of a space-separated list added (markup's `class`), or removed.
+        void AddClasses(core::StringView classes)
+        {
+            ForEachClass(classes, [this](core::StringView cls) { AddClass(cls); });
+        }
+        void RemoveClasses(core::StringView classes)
+        {
+            ForEachClass(classes, [this](core::StringView cls) { RemoveClass(cls); });
+        }
+        /// Calls `each` with every class of a space-separated list.
+        template <typename F>
+        static void ForEachClass(core::StringView classes, F&& each)
+        {
+            usize start = 0;
+            for (usize i = 0; i <= classes.Size(); ++i)
+                if (i == classes.Size() || core::IsWhiteSpace(classes[i]))
+                {
+                    if (i > start)
+                        each(classes.SubStr(start, i - start));
+                    start = i + 1;
+                }
+        }
         void ToggleClass(core::StringView cls)
         {
             if (HasClass(cls))

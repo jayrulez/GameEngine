@@ -70,6 +70,20 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsClosable() const noexcept { return m_closable; }
 
+        /// The classes its tab carries, space-separated (a document's unsaved mark, say): the tab's
+        /// own, replacing the ones set before.
+        void SetTabClasses(core::StringView classes)
+        {
+            if (m_tab != nullptr)
+            {
+                m_tab->RemoveClasses(m_tabClasses.AsView());
+                m_tab->AddClasses(classes);
+            }
+            m_tabClasses = core::String(classes);
+        }
+        void SetTabClassesString(const core::String& classes) { SetTabClasses(classes.AsView()); }
+        [[nodiscard]] core::String GetTabClassesString() const { return m_tabClasses; }
+
         /// Builds what it holds the first time it is shown (a heavy page left unbuilt until wanted).
         void SetContentFactory(core::Function<void(TabPage& page)> factory) { m_factory = core::Move(factory); }
         /// Its tab (null while it is in no view).
@@ -77,7 +91,7 @@ export namespace foundation::gui
 
     private:
         friend class TabView;
-        // Its tab, which then takes its title, icon and closable.
+        // Its tab, which then takes its title, icon, closable and classes.
         void Attach(Tab* tab)
         {
             m_tab = tab;
@@ -87,6 +101,7 @@ export namespace foundation::gui
             if (!m_icon.IsEmpty())
                 tab->SetIconSource(m_icon);
             tab->SetClosable(m_closable);
+            tab->AddClasses(m_tabClasses.AsView());
         }
         void Realize()
         {
@@ -98,6 +113,7 @@ export namespace foundation::gui
 
         core::String m_title;
         core::String m_icon;
+        core::String m_tabClasses;
         bool m_closable = true;
         Tab* m_tab = nullptr; // owned by the view's bar
         core::Function<void(TabPage&)> m_factory;

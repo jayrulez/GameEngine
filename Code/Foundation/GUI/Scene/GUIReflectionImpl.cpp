@@ -1298,6 +1298,7 @@ namespace foundation::gui
         builder.AccessorProperty<&TabPage::GetTitleString, &TabPage::SetTitleString>("title").PropAttribute("access", core::String(u8"name")).PropAttribute("css", core::String(u8"title"));
         builder.AccessorProperty<&TabPage::GetIconSource, &TabPage::SetIconSource>("icon").PropAttribute("css", core::String(u8"icon"));
         builder.AccessorProperty<&TabPage::IsClosable, &TabPage::SetClosable>("closable").PropAttribute("css", core::String(u8"closable"));
+        builder.AccessorProperty<&TabPage::GetTabClassesString, &TabPage::SetTabClassesString>("tabClass").PropAttribute("css", core::String(u8"tab-class"));
         builder.Method<&ElementOf<TabPage>, TabPage, Node>("of");
         builder.Creator();
     }

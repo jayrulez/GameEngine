@@ -167,7 +167,8 @@ export namespace foundation::gui
                 }
                 if (name == core::StringView(u8"class"))
                 {
-                    AddClasses(uiwidget, value);
+                    if (uiwidget != nullptr)
+                        uiwidget->AddClasses(value);
                     continue;
                 }
                 if (m_itemBindings != nullptr && IsItemTemplate(value))
@@ -346,23 +347,6 @@ export namespace foundation::gui
                                                                      : part.Text.AsView());
                                          return Variant::From<core::String>(core::Move(text));
                                      });
-        }
-
-        static void AddClasses(UIWidget* widget, core::StringView classes)
-        {
-            if (widget == nullptr)
-                return;
-            usize start = 0;
-            for (usize i = 0; i <= classes.Size(); ++i)
-            {
-                const bool boundary = (i == classes.Size()) || core::IsWhiteSpace(classes[i]);
-                if (boundary)
-                {
-                    if (i > start)
-                        widget->AddClass(classes.SubStr(start, i - start));
-                    start = i + 1;
-                }
-            }
         }
 
         [[nodiscard]] static xml::XmlElement* FirstElementChild(xml::XmlNode& node)

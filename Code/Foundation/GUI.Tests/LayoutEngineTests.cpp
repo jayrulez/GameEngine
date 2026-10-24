@@ -948,3 +948,44 @@ TEST_CASE("layout: z-index orders siblings for drawing and the pointer, else the
     REQUIRE(order.Size() == 2u);
     CHECK(order[1] == under.Get()); // drawn last
 }
+
+namespace
+{
+    // A leaf whose content is off the device grid, as shaped text is.
+    class FractionalLeaf : public Node
+    {
+    public:
+        core::Float2 MeasureContent(core::Float2) override { return core::Float2{29.06f, 15.2f}; }
+    };
+}
+
+TEST_CASE("layout: a content size rounds up to the device grid, so a box keeps all of its content")
+{
+    // Each edge rounds to the grid on its own: a label 29.06 wide placed off the grid was 29
+    // wide, and its text ended in an ellipsis. Measured up to the grid, it is 30 wherever it lands.
+    const f32 scales[] = {1.0f, 2.0f};
+    for (const f32 scale : scales)
+    {
+        Bed bed;
+        bed.root->SetDisplayScale(scale);
+        auto row = Box(*bed.root.Get(), [](LayoutStyle& s)
+        {
+            s.Direction = FlexDirection::Row;
+            s.AlignItems = Align::Start;
+        });
+        row->SetPadding(Thickness{7.3f, 0.0f, 7.3f, 0.0f}); // the leaf lands off the grid
+        auto leaf = core::MakeRef<FractionalLeaf>(core::DefaultAllocator());
+        leaf->EditLayoutStyle([](LayoutStyle& s)
+        {
+            s.Shrink = 1.0f;
+            s.MinWidth = LayoutLength::Px(0.0f);
+        });
+        row->AddChild(leaf.Get());
+        bed.Layout();
+        const f32 wide = core::Ceil(29.06f * scale) / scale;
+        const f32 tall = core::Ceil(15.2f * scale) / scale;
+        CHECK(leaf->GetSize().x == doctest::Approx(wide));
+        CHECK(leaf->GetSize().y == doctest::Approx(tall));
+        CHECK(leaf->GetSize().x >= 29.06f);
+    }
+}

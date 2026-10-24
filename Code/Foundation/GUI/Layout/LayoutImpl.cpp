@@ -310,7 +310,7 @@ namespace foundation::gui
                                 {
                                     Node& n = *item.node;
                                     const Thickness chrome = n.GetChrome();
-                                    const core::Float2 content = n.MeasureContent(row ? core::Float2{0.0f, Less(crossAvail, item.marginCross + chrome.TotalVertical())}
+                                    const core::Float2 content = n.MeasureContentOnGrid(row ? core::Float2{0.0f, Less(crossAvail, item.marginCross + chrome.TotalVertical())}
                                                                                       : core::Float2{Less(crossAvail, item.marginCross + chrome.TotalHorizontal()), 0.0f});
                                     f32 minContent = row ? content.x + chrome.TotalHorizontal() : content.y + chrome.TotalVertical();
                                     const LayoutStyle& ns = n.GetLayoutStyle();
@@ -882,7 +882,7 @@ namespace foundation::gui
                     availH = kUnbounded;
                 else if (s.Height.Kind == LayoutLengthKind::MinContent)
                     availH = cv;
-                const core::Float2 content = MeasureContent(core::Float2{Less(availW, ch), Less(availH, cv)});
+                const core::Float2 content = MeasureContentOnGrid(core::Float2{Less(availW, ch), Less(availH, cv)});
                 size.x = w.HasValue() ? w.Value() : content.x + ch;
                 size.y = h.HasValue() ? h.Value() : content.y + cv;
             }
@@ -911,6 +911,18 @@ namespace foundation::gui
         }
         m_measures[slot] = MeasureEntry{constraints, size};
         return size;
+    }
+
+    core::Float2 Node::MeasureContentOnGrid(core::Float2 available)
+    {
+        const core::Float2 content = MeasureContent(available);
+        const Node* top = this;
+        while (top->m_parent != nullptr)
+            top = top->m_parent;
+        const f32 s = top->TopPixelScale();
+        // A hair over the grid is float noise, not a pixel more.
+        const auto up = [s](f32 v) { return v < kUnbounded ? core::Ceil(v * s - 1.0e-3f) / s : v; };
+        return core::Float2{up(content.x), up(content.y)};
     }
 
     core::Float2 Node::MeasureContent(core::Float2 available)

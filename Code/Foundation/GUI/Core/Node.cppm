@@ -1155,6 +1155,11 @@ export namespace foundation::gui
         /// (MeasureContent) plus its chrome where they are auto, then kept within its min and max
         /// and the constraints. Cached until its style, content or children change.
         core::Float2 Measure(const LayoutConstraints& constraints);
+        /// MeasureContent rounded up to the device grid its tree lays out on. A box's edges round
+        /// to the grid on their own (Arrange), so a content size off it can lose up to a device
+        /// pixel there: text measured 29.06 wide, laid out in 29, would end in an ellipsis. Up on
+        /// the grid, a box placed on it keeps all of its content.
+        core::Float2 MeasureContentOnGrid(core::Float2 available);
         /// The size of what is inside the chrome, given the space `available` there (kUnbounded on
         /// an axis with no limit). A widget with content of its own (text, an image) answers it;
         /// the default measures the children by the display kind.

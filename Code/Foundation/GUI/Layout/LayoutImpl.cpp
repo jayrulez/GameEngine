@@ -266,6 +266,7 @@ namespace foundation::gui
                     items[i].frozen = false;
                     used += items[i].base + items[i].marginMain;
                 }
+                f32 grown = 0.0f; // the free space the line's items grew into
                 if (mainDefinite)
                 {
                     const f32 free = mainAvail - used;
@@ -275,8 +276,11 @@ namespace foundation::gui
                         for (usize i = line.start; i < line.start + line.count; ++i)
                             grow += items[i].node->GetLayoutStyle().Grow;
                         if (grow > 0.0f)
+                        {
                             for (usize i = line.start; i < line.start + line.count; ++i)
                                 items[i].main += free * items[i].node->GetLayoutStyle().Grow / grow;
+                            grown = free;
+                        }
                     }
                     else if (free < 0.0f)
                     {
@@ -364,7 +368,12 @@ namespace foundation::gui
                 }
                 line.baseline = aboveBaseline;
                 line.cross = core::Max(line.cross, aboveBaseline + belowBaseline);
-                contentMain = core::Max(contentMain, lineMain);
+                // Measuring, the space along is a limit, not a size: the content is as long as its
+                // items before they grow (a button's text grows to fill the button, yet a button
+                // asked its size in a wide column is as wide as its text, not the column). Placing,
+                // it is the size the items were given. The items' depth is at their grown size
+                // either way, the size they get when the container fills the space.
+                contentMain = core::Max(contentMain, f.arrange || grown <= 0.0f ? lineMain : core::Max(lineMain - grown, core::Min(used, lineMain)));
             }
             // One line is as deep as the container, once it is laid out at its size. Measuring, the
             // space across is a limit, not a size: the content is as deep as its line (a size the

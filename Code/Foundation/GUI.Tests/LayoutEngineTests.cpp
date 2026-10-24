@@ -989,3 +989,35 @@ TEST_CASE("layout: a content size rounds up to the device grid, so a box keeps a
         CHECK(leaf->GetSize().x >= 29.06f);
     }
 }
+
+TEST_CASE("layout: a row whose items grow is as wide as its items when measured, not the space offered")
+{
+    // A button's text grows to fill the button. Centred in a column 300 wide, the button was
+    // measured 300 wide (its text grown into all of it), so it filled the column; as in CSS, a
+    // row's content is its items before they grow, and they grow in the size it is given.
+    Bed bed;
+    auto column = Box(*bed.root.Get(), [](LayoutStyle& s)
+    {
+        s.Direction = FlexDirection::Column;
+        s.Width = LayoutLength::Px(300.0f);
+        s.AlignItems = Align::Center;
+    });
+    auto button = Box(*column.Get(), [](LayoutStyle& s) { s.Direction = FlexDirection::Row; });
+    auto icon = Fixed(*button.Get(), 16.0f, 16.0f);
+    auto text = Box(*button.Get(), [](LayoutStyle& s)
+    {
+        s.Grow = 1.0f;
+        s.Width = LayoutLength::Px(40.0f);
+        s.Height = LayoutLength::Px(16.0f);
+    });
+    bed.Layout();
+    CHECK(button->GetSize().x == doctest::Approx(56.0f));
+    CHECK(button->GetPosition().x == doctest::Approx((300.0f - 56.0f) * 0.5f));
+    CHECK(text->GetSize().x == doctest::Approx(40.0f));
+
+    // Stretched across the column, it is the column's width and its text grows into it.
+    column->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Stretch; });
+    bed.Layout();
+    CHECK(button->GetSize().x == doctest::Approx(300.0f));
+    CHECK(text->GetSize().x == doctest::Approx(284.0f));
+}

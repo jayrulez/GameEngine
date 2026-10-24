@@ -260,6 +260,60 @@ to follow the same order.
 Each phase is one or more layers, one commit each with tests; the editor is run and screenshotted
 over MCP before each is reported, and the look is the user's to judge.
 
+### 5.1 X3, the shell, in layers
+
+Mapped from Editor.App on 2026-10-24 (about 22k lines, ApplicationImpl.cpp 3.4k). Editor.App comes
+back in parts: a file not ported yet stays out of its source list, unedited. Each layer is one
+commit with its tests; the GUI library additions go first and are grouped with the other GUI
+commits.
+
+GUI library additions X3 needs (GUI.Docking and the core):
+- a close veto (a dirty page asks before it closes): DockSpace closes through the controller today;
+- an activation callback (the active page follows the focused stack);
+- a panel's title and classes changed while it is docked (a dirty marker, the active mark);
+- a modal-open interceptor on the GUI context (MCP's unattended actions close the dialogs they
+  open as cancelled; foundation.ui's DialogInterceptor).
+
+The layers:
+1. Editor.App back in the build with its UI-free files only (font atlas cache, window capture,
+   splash, the MCP host, project operations, the page, window and profiler tools, playback actions,
+   property names, the asset filter) and their tests.
+2. UIEditorPage's content is a GUI node.
+3. The application on GuiHost, and broken up (the user, 2026-10-24: one 3.4k-line file had grown
+   to hold everything). EditorApplication keeps the lifecycle alone (configure, start the pieces,
+   hand out the frame, shut down); each piece is a file and a partition of its own with its
+   tests, ported in its own commit:
+   - EditorWindow: GuiHost, the fonts, EditorResources and the editor sheet, screenshots after the
+     GUI draws, toasts and the status line;
+   - EditorSession: opening and closing a project, the manager mode, the settings stores, saving
+     the layout;
+   - EditorPages: open, close (the dirty prompt), save and save as, titles, the active page, the
+     Game tab, cooking what a page needs, pending asset edits;
+   - EditorNativeModule: a project's native code staged and reloaded;
+   - EditorExport: export jobs, presets, templates, the resource memory report;
+   - EditorAssetCreation: File > New's create-and-open;
+   - the actions, one registration per menu (File, Edit, Project, View, Help);
+   - the MCP host's start and stop with its tools.
+   Tools.Editor comes back with a trimmed Main (no pages).
+4. The frame and the dock: Shell on DockController and DockArea, OS floats through
+   DockHostWindows, the Project, Assets and Console panels (the last two placeholders until X4).
+5. Layout persistence: the store section holds a DockLayoutDocument (section version 2); a version
+   1 tree migrates where it maps, else the default layout.
+6. Pages through the dock: open, close with the dirty prompt, the active page, titles, reveal, the
+   open pages saved.
+7. The menu bar from the actions, File > New from the creators.
+8. Shortcuts: the actions' chords into the keymap (Bind, Rebind with the user's overrides).
+9. The status bar and toasts.
+10. The command palette.
+11. The small dialogs and the exit gates on MessageBox with button roles.
+12. Preferences: theme, accent, density, motion and UI scale (EditorUiSettings), shortcuts, MCP.
+13. The project home and the project manager.
+14. MCP layout tools on DockLayout (layout_get's shape as the guide says; panel_dock as Edit).
+15. MCP action tools with the GUI's modal interceptor.
+
+Left for later phases: the Console's and Assets' contents (X4), the page toolbar and tool panels
+(X5), the profiler panel (X7).
+
 ## 6. Tests
 
 Editor tests move from UIContext with synthetic events to GUI.Testing (Finder by selector or id,
@@ -305,3 +359,5 @@ Rulings (the user, 2026-10-23):
 14. Menus, combo lists and tooltips close at once; only dialogs (and toasts) fade out (2026-10-24).
 15. Vector fields in a narrow inspector stay as they are for now: each part hides its arrows below
     32 px of number room and then shrinks (2026-10-24; stacking or dropping the letters later).
+16. MCP's layout_get gives a split as it is in the GUI's dock: `{split, children, weights}`, any
+    number of children (2026-10-24); the guide changes with it, panel_dock's arguments do not.

@@ -234,8 +234,8 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | Parked; ported in parts from X3 | |
-| Tools.Editor | Parked with the shell it assembles; back with X3 | |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions); the rest out, unedited, until their layers | X3 (layers 1 to 3) |
+| Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
 | Editor.Generic, Texture, Fonts, Image, Heightfield, Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain | Parked | |
@@ -268,9 +268,12 @@ commit with its tests; the GUI library additions go first and are grouped with t
 commits.
 
 GUI library additions X3 needs (GUI.Docking and the core):
-- a close veto (a dirty page asks before it closes): DockSpace closes through the controller today;
-- an activation callback (the active page follows the focused stack);
-- a panel's title and classes changed while it is docked (a dirty marker, the active mark);
+- a close veto (a dirty page asks before it closes): done, a description's CanClose, and CloseNow
+  once the user agreed;
+- an activation callback (the active page follows the focused stack): done, the controller's
+  ActivePanel and SetOnActiveChanged;
+- a panel's title and classes changed while it is docked (a dirty marker, the active mark): done,
+  the controller's SetTitle and SetTabClasses over a TabPage's tab classes;
 - a modal-open interceptor on the GUI context (MCP's unattended actions close the dialogs they
   open as cancelled; foundation.ui's DialogInterceptor).
 

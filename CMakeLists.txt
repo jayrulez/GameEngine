@@ -569,6 +569,12 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Project) # the headless project half: project/cook/export/jobs/log (tooling; hosts without an editor stand on it)
     add_subdirectory(Code/Editor/Editor.Core) # the editor-facing half: context/commands/pages/selection/actions over Editor.Project (tooling)
     add_subdirectory(Code/Editor/Editor.Mcp) # MCP project tools (project_create/open/info); headless
+    # The editor moves onto the GUI on this branch (Documentation/Specs/editor-gui.md, 4): a library
+    # still on foundation.ui is PARKED, out of the build with its tests, its source untouched, and
+    # comes back with its port commit (the spec's ledger, 4.1, keeps the list): App, Preview, Scene,
+    # Play, Animation, Particles, PropertyAnimation, Generic, Texture, Fonts, Image, Heightfield,
+    # Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain, Script (and its
+    # AngelScript and Luau lexers), Shaders, GUI, GameUI; and Tools.Editor, which assembles them.
     add_subdirectory(Code/Pipeline/Physics.Pipeline)    # collision/material assets + builders (tooling)
     add_subdirectory(Code/Pipeline/Render.Pipeline)     # render profile assets + builders (tooling)
     add_subdirectory(Code/Pipeline/Navigation.Pipeline) # navmesh-zone asset + builder (tooling)
@@ -580,37 +586,13 @@ if(OPTION_BUILD_TOOLS)
     # Per-backend cook + editor-UI (lexer) - each gated on its OPTION_ENABLE_* flag.
     if(OPTION_ENABLE_ANGELSCRIPT)
         add_subdirectory(Code/Pipeline/Script.AngelScript.Pipeline)  # AngelScript cook service
-        add_subdirectory(Code/Editor/Editor.Script.AngelScript)  # AngelScript editor-UI (lexers)
     endif()
     if(OPTION_ENABLE_LUAU)
         add_subdirectory(Code/Pipeline/Script.Luau.Pipeline)  # Luau cook service
-        add_subdirectory(Code/Editor/Editor.Script.Luau)  # Luau editor-UI (CodeEditView lexer)
     endif()
-    add_subdirectory(Code/Editor/Editor.App) # editor UI shell (chrome + layout persistence + EditorApplication)
-    add_subdirectory(Code/Editor/Editor.Input) # input-map editing page (editor exe only)
-    add_subdirectory(Code/Editor/Editor.PropertyAnimation) # property-animation clip page (editor exe only)
-    add_subdirectory(Code/Editor/Editor.GameUI) # UI document page: text + live preview (editor exe only)
-    add_subdirectory(Code/Editor/Editor.GUI) # the engine GUI's asset pages: .gml and .css, text + live preview
-    add_subdirectory(Code/Editor/Editor.Audio)  # audio clip audition page: waveform + play (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Texture) # texture asset page: import settings + preview (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Image) # image asset page: inspect + color-space intent (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Heightfield) # heightfield asset page: 2D grayscale preview + fields (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Terrain) # terrain asset page: 3D preview + references/layers (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Vegetation) # Paint Vegetation brush: the terrain's vegetation mask planes (editor exe only)
     add_subdirectory(Code/Editor/Editor.Spline) # interactive spline viewport tool (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Generic) # fallback asset page: serialize-driven property form (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Script) # script behavior source page: edit + recook + inline errors (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Shaders) # custom shader editor side: the HLSL lexer (editor exe only)
     add_subdirectory(Code/Editor/Editor.ViewportTools) # viewport tool-mode framework (IViewportTool + manager + provider registry)
     add_subdirectory(Code/Editor/Editor.Camera) # shared free-fly viewport camera (lean, foundation-only) for all editor pages
-    add_subdirectory(Code/Editor/Editor.Preview) # shared 3D preview viewport substrate (PreviewViewport, over editor.camera) for bespoke asset pages
-    add_subdirectory(Code/Editor/Editor.Scene) # scene editor plugin (SceneEditorPage + RegisterSceneEditor)
-    add_subdirectory(Code/Editor/Editor.Animation) # animation graph, clip and skeleton pages (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Materials) # material page: preview + parameters (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Geometry) # mesh page: preview + stats (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Particles) # particle effect page: live preview + emitters (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Render) # settings profile page, over the scene editor (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Play) # play in editor: the Game tab and the PIE tools, over the scene editor (editor exe only)
     add_subdirectory(Code/Editor/Editor.Navigation) # navmesh bake tooling (collect + Recast bake -> zone asset)
 
     add_subdirectory(Code/Pipeline/Animation.Pipeline)
@@ -629,8 +611,6 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Pipeline/Texture.Pipeline)
     if(TARGET Foundation::Fonts.DistanceField.Baker)
         add_subdirectory(Code/Pipeline/Fonts.Pipeline)
-        add_subdirectory(Code/Editor/Editor.Fonts) # font asset page: bake intent + live atlas preview
-        add_subdirectory(Code/Editor/Editor.Physics) # collision-shape asset page: mesh picker + cook
     endif()
 
     # The pipeline's composition root: links every pipeline module above and exposes the single
@@ -638,7 +618,6 @@ if(OPTION_BUILD_TOOLS)
     # come AFTER all pipeline modules (incl. the fonts block) since it links them.
     add_subdirectory(Code/Pipeline/Pipeline.Registration)
 
-    add_subdirectory(Code/Tools/Tools.Editor)        # Editor executable (editor assembly)
     add_subdirectory(Code/Tools/Tools.Cook)          # Tools.Cook CLI cooker (headless)
     add_subdirectory(Code/Tools/Tools.Mcp)          # headless MCP stdio server (agent access)
     add_subdirectory(Code/Tools/Tools.Export)        # Export dist packager

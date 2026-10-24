@@ -13,6 +13,9 @@
 // factory makes it again when shown), Destroy lets both go. A panel may ask before it closes (a
 // document with unsaved changes), and its title and tab classes change while it is docked.
 //
+// The active panel is the one the user works in: the chosen panel of the stack the focus was last
+// in. An application follows it (its active document, say) through SetOnActiveChanged.
+//
 // The layout changes through the controller, which tells every DockSpace showing it to show it
 // again. What the user already did in the widgets (a separator dragged, a tab chosen or dragged to
 // another place in its strip) is noted into the layout quietly: the widgets already show it.
@@ -286,6 +289,14 @@ export namespace foundation::gui
             return true;
         }
 
+        // === The active panel ===
+        /// The panel the user works in: the chosen one of the stack the focus was last in (empty
+        /// before the focus was in any). It follows a tab chosen in that stack, the focus going into
+        /// another stack, and a close: the stack's next chosen panel, or none when the stack went.
+        [[nodiscard]] core::StringView ActivePanel() const noexcept { return m_active.AsView(); }
+        /// Told each time the active panel changes (its id, empty when none is).
+        void SetOnActiveChanged(Function<void(core::StringView)> handler) { m_onActiveChanged = core::Move(handler); }
+
         /// A registered panel's content: made by its factory the first time it is asked for, kept
         /// after; null for a panel not registered (or one whose factory makes none).
         RefPtr<Node> Content(core::StringView panel)
@@ -312,7 +323,22 @@ export namespace foundation::gui
 
         // === What the widgets already show, noted quietly ===
         void NoteWeights(DockNodeId split, Span<const f32> weights) { (void)m_layout.SetWeights(split, weights); }
-        void NoteActive(core::StringView panel) { (void)m_layout.Activate(panel); }
+        void NoteActive(core::StringView panel)
+        {
+            (void)m_layout.Activate(panel);
+            const DockNodeId stack = m_layout.StackOf(panel);
+            if (stack != kNoDock && stack == m_activeStack)
+                SetActive(panel, stack);
+        }
+        /// The focus went into a stack: its chosen panel is the active one.
+        void NoteFocused(DockNodeId stack)
+        {
+            const DockNode* node = m_layout.FindNode(stack);
+            if (node == nullptr || !node->IsStack() || node->Panels.IsEmpty())
+                return;
+            const String panel = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
+            SetActive(panel.AsView(), stack);
+        }
         void NoteTabPlace(core::StringView panel, DockNodeId stack, i32 index) { (void)m_layout.MoveToTab(panel, stack, index); }
         void NoteSurfaceBounds(DockSurfaceId surface, Rectangle bounds)
         {
@@ -365,6 +391,39 @@ export namespace foundation::gui
                     return &description;
             return nullptr;
         }
+        void SetActive(core::StringView panel, DockNodeId stack)
+        {
+            m_activeStack = stack;
+            if (m_active.AsView() == panel)
+                return;
+            m_active = String(panel);
+            if (m_onActiveChanged)
+                m_onActiveChanged(m_active.AsView()); // a handler may change the layout: nothing after
+        }
+        // After a change: the active panel moved stays active (in its new stack); one closed gives
+        // way to its stack's chosen panel, or to none when its stack went.
+        void KeepActive()
+        {
+            if (m_active.IsEmpty())
+                return;
+            const DockNodeId stack = m_layout.StackOf(m_active.AsView());
+            if (stack != kNoDock)
+            {
+                m_activeStack = stack;
+                return;
+            }
+            const DockNode* node = m_layout.FindNode(m_activeStack);
+            if (node != nullptr && node->IsStack() && !node->Panels.IsEmpty())
+            {
+                const String next = node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)];
+                SetActive(next.AsView(), m_activeStack);
+                return;
+            }
+            m_activeStack = kNoDock;
+            m_active = String();
+            if (m_onActiveChanged)
+                m_onActiveChanged(core::StringView{});
+        }
         void ForgetContent(core::StringView panel)
         {
             for (usize i = 0; i < m_contents.Size(); ++i)
@@ -393,12 +452,16 @@ export namespace foundation::gui
                     m_views[static_cast<usize>(m_showAt)]->ShowLayout();
             } while (m_showAgain);
             m_showing = false;
+            KeepActive();
         }
 
         DockLayout m_layout;
         Array<DockPanelDescription> m_panels;
         Array<Made> m_contents;
         Array<IDockView*> m_views;
+        String m_active;                 // the active panel (empty: none)
+        DockNodeId m_activeStack = kNoDock; // the stack it is in, or was in when it closed
+        Function<void(core::StringView)> m_onActiveChanged;
         bool m_showing = false;   // a pass of ShowEverywhere is on
         bool m_showAgain = false; // the layout changed during it
         i64 m_showAt = 0;         // the view it is at

@@ -163,6 +163,7 @@ export namespace foundation::gui
         void OnDragLeave(const DragEvent& event) override;
         void OnDrop(const DragEvent& event) override;
         void OnContextMenu(const MouseEvent& event) override;
+        void OnDescendantFocused(Node& focused) override;
 
     private:
         DockSpace* m_space;
@@ -1326,6 +1327,13 @@ export namespace foundation::gui
     }
     inline void DockStack::OnDragLeave(const DragEvent&) { m_space->Withdraw(*this); }
     inline void DockStack::OnDrop(const DragEvent&) { m_space->TakeOffer(*this); }
+    // The focus came into it: its chosen panel is the active one.
+    inline void DockStack::OnDescendantFocused(Node& focused)
+    {
+        TabView::OnDescendantFocused(focused);
+        if (m_space->m_controller != nullptr)
+            m_space->m_controller->NoteFocused(m_node);
+    }
     // A tab's context menu: where its panel may go.
     inline void DockStack::OnContextMenu(const MouseEvent& event)
     {

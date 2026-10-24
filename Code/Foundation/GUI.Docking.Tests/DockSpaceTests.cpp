@@ -7,7 +7,8 @@
 // placeholder for a panel not registered, filled when it is; a maximized stack alone; and what the
 // user does in the widgets (a separator dragged, a tab chosen, dragged or closed, by its close part
 // or a middle click) noted back; a panel wider than its stack moves no separator, the stack
-// clipping it; a panel that asks before it closes; a title and tab classes changed while docked.
+// clipping it; a panel that asks before it closes; a title and tab classes changed while docked;
+// the active panel following the focus.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -393,4 +394,62 @@ TEST_CASE("dock space: a docked panel's title and tab classes change where it sh
     REQUIRE(again->GetTab() != nullptr);
     CHECK(again->GetTab()->GetText() == SV(u8"Scene*"));
     CHECK(again->GetTab()->HasClass(SV(u8"active")));
+}
+
+TEST_CASE("dock space: the active panel is the chosen one of the stack the focus went into; it follows a tab chosen there and a close")
+{
+    Bed bed;
+    // Contents that take the focus.
+    const char8_t* const ids[] = {u8"first", u8"second", u8"side"};
+    for (const char8_t* id : ids)
+    {
+        DockPanelDescription description;
+        description.Id = core::String(id);
+        description.Factory = []() { return core::RefPtr<Node>(core::MakeRef<Button>(core::DefaultAllocator())); };
+        REQUIRE(bed.controller.Register(core::Move(description)));
+    }
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"first"), bed.Central()); }).Ok());
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"second"), bed.Central()); }).Ok());
+    REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertBeside(SV(u8"side"), bed.Central(), DockSide::Start, 0.25f); }).Ok());
+    bed.Lay();
+    core::Array<core::String> heard;
+    bed.controller.SetOnActiveChanged([&](core::StringView panel) { heard.PushBack(core::String(panel)); });
+    CHECK(bed.controller.ActivePanel().IsEmpty()); // the focus was in no stack yet
+
+    TabView& central = *Cast<TabView>(bed.space->WidgetOf(bed.Central()));
+    const auto chosen = [&](TabView& view) { return Cast<TabPage>(view.GetPage(view.GetSelectedIndex())); };
+    const auto focusIn = [&](const char8_t* panel)
+    {
+        TabPage* page = bed.space->PageOf(SV(panel));
+        REQUIRE(page != nullptr);
+        REQUIRE(page->ChildCount() == 1);
+        page->GetChildAt(0)->RequestFocus();
+    };
+    REQUIRE(chosen(central) == bed.space->PageOf(SV(u8"second")));
+    focusIn(u8"second");
+    CHECK(bed.controller.ActivePanel() == SV(u8"second"));
+    REQUIRE(heard.Size() == 1u);
+
+    central.GetBar()->SelectByUser(0); // a tab chosen in the active stack
+    bed.Lay();
+    CHECK(bed.controller.ActivePanel() == SV(u8"first"));
+
+    focusIn(u8"side"); // into another stack
+    CHECK(bed.controller.ActivePanel() == SV(u8"side"));
+    central.GetBar()->SelectByUser(1); // a tab chosen in a stack the focus is not in: no change
+    bed.Lay();
+    CHECK(bed.controller.ActivePanel() == SV(u8"side"));
+    REQUIRE(heard.Size() == 3u);
+
+    REQUIRE(bed.controller.Close(SV(u8"side")).Ok()); // its stack went with it: none is active
+    CHECK(bed.controller.ActivePanel().IsEmpty());
+    REQUIRE(heard.Size() == 4u);
+    CHECK(heard[3].IsEmpty());
+
+    bed.Lay();
+    focusIn(u8"second");
+    CHECK(bed.controller.ActivePanel() == SV(u8"second"));
+    REQUIRE(bed.controller.Close(SV(u8"second")).Ok()); // its stack's next chosen panel
+    CHECK(bed.controller.ActivePanel() == SV(u8"first"));
+    CHECK(heard.Back() == core::String(u8"first"));
 }

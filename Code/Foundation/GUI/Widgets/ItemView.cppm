@@ -55,7 +55,7 @@ import :variant;
 import :model_index;
 import :model;
 import :text_field;
-import :text;             // StartsWithIgnoringCase (type-ahead)
+import :text;             // TypeAheadSearch
 import :event_dispatcher; // GetTime (type-ahead)
 import :reactive;         // Observable (what bindings follow)
 import :element_types;    // ElementSet (a template's elements)
@@ -1249,8 +1249,7 @@ export namespace foundation::gui
         f32 m_scrollAnchorDelta = 0.0f;
         bool m_realizing = false;
         // Type-ahead.
-        core::String m_typed;
-        f32 m_typedAt = -10.0f;
+        TypeAheadSearch m_typeAhead;
         // Editing.
         core::RefPtr<TextField> m_editor;
         bool m_editing = false;
@@ -1616,34 +1615,14 @@ export namespace foundation::gui
         if (typed.Size() == 0 || ItemCount() == 0)
             return false;
         const EventDispatcher* d = GetEventDispatcher();
-        const f32 now = d != nullptr ? d->GetTime() : 0.0f;
-        if (now - m_typedAt > 1.0f)
-            m_typed = core::String{};
-        m_typedAt = now;
-        m_typed.Append(typed);
-        // One character typed again: the next item starting with it.
-        core::StringView prefix = m_typed.AsView();
-        usize firstEnd = 0;
-        (void)core::DecodeUtf8(prefix, firstEnd);
-        const core::StringView first = prefix.SubStr(0, firstEnd);
-        bool repeated = prefix.Size() > firstEnd;
-        for (usize at = firstEnd; at < prefix.Size() && repeated; at += firstEnd)
-            repeated = prefix.Size() - at >= firstEnd && prefix.SubStr(at, firstEnd) == first;
-        if (repeated)
-            prefix = first;
-        const i32 items = static_cast<i32>(ItemCount());
-        const i32 current = GetCurrentItem();
-        const i32 start = (prefix.Size() == firstEnd || current < 0) ? current + 1 : current; // one character: past the current
-        for (i32 n = 0; n < items; ++n)
+        core::String text; // the item's, alive while it is matched
+        const i32 item = m_typeAhead.Find(typed, d != nullptr ? d->GetTime() : 0.0f, static_cast<i32>(ItemCount()), GetCurrentItem(),
+                                          [this, &text](i32 i) { text = TypeAheadText(i); return text.AsView(); });
+        if (item >= 0)
         {
-            const i32 item = ((start + n) % items + items) % items;
-            if (StartsWithIgnoringCase(TypeAheadText(item).AsView(), prefix))
-            {
-                SelectOnly(item);
-                NotifySelectionByUser();
-                ScrollToItem(item);
-                break;
-            }
+            SelectOnly(item);
+            NotifySelectionByUser();
+            ScrollToItem(item);
         }
         return true;
     }

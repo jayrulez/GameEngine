@@ -145,6 +145,8 @@ export namespace foundation::gui
         /// Its text as it shows (the `&` taken out).
         [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
         [[nodiscard]] char32_t GetMnemonic() const override { return m_mnemonic; }
+        // Focused, it takes typed text for its menu (type-ahead and access keys, Menu::OnTextInput).
+        [[nodiscard]] bool WantsTextInput() const override { return IsTreeEnabled(); }
         void SetShortcut(core::StringView text)
         {
             m_shortcut.SetString(text);
@@ -546,6 +548,13 @@ export namespace foundation::gui
             Menu* self = this;
             (void)OnCommand(core::StringView(kMenuDownCommand), [self](CommandEvent&) { self->Step(1); });
             (void)OnCommand(core::StringView(kMenuUpCommand), [self](CommandEvent&) { self->Step(-1); });
+            // Return and Space by default: the focused item runs (or its submenu opens).
+            (void)OnCommand(core::StringView(kMenuActivateCommand), [self](CommandEvent& e)
+            {
+                Node* focus = self->GetEventDispatcher() != nullptr ? self->GetEventDispatcher()->GetFocusNode() : nullptr;
+                if (focus == nullptr || !self->HoldsRow(focus) || !focus->IsTreeEnabled() || !focus->HandleActivate())
+                    e.Propagate = true;
+            });
             // The arrow toward the inline start (Left, Right in right to left) in a submenu closes it,
             // focus going back to its item; in a menu of a bar, either goes on to the bar (which
             // moves along it).
@@ -792,6 +801,44 @@ export namespace foundation::gui
         }
 
         void OnSizeChange() override { Relayout(); }
+        // Typed text in it (E12; its items ask for it while focused): a character that is one
+        // item's access key runs that item, as a desktop's menus do; else the focus goes to the
+        // next item whose text starts with what was typed (TypeAheadSearch).
+        void OnTextInput(const TextInputEvent& event) override
+        {
+            if (!HoldsRow(event.Target) || event.Text.Size() == 0)
+                return;
+            event.Handled = true;
+            usize end = 0;
+            const char32_t typed = SimpleLowerCase(static_cast<char32_t>(core::DecodeUtf8(event.Text, end)));
+            MenuItem* keyed = nullptr;
+            usize keys = 0;
+            for (MenuRow* row : m_rows)
+                if (MenuItem* it = core::Cast<MenuItem>(row); it != nullptr && it->IsTreeEnabled() && it->GetMnemonic() == typed)
+                {
+                    keyed = it;
+                    ++keys;
+                }
+            if (keys == 1 && end == event.Text.Size())
+            {
+                keyed->RequestFocus();
+                (void)keyed->HandleActivate();
+                return;
+            }
+            const EventDispatcher* d = GetEventDispatcher();
+            i32 current = -1;
+            for (usize i = 0; i < m_rows.Size(); ++i)
+                if (m_rows[i]->IsFocusWithin())
+                    current = static_cast<i32>(i);
+            const i32 found = m_typeAhead.Find(event.Text, d != nullptr ? d->GetTime() : 0.0f, static_cast<i32>(m_rows.Size()), current,
+                                               [this](i32 i)
+                                               {
+                                                   const MenuItem* it = core::Cast<MenuItem>(m_rows[static_cast<usize>(i)]);
+                                                   return it != nullptr && it->IsSelectable() && it->IsTreeEnabled() ? it->GetText() : core::StringView{};
+                                               });
+            if (found >= 0)
+                (void)FocusItem(found, 1);
+        }
         // Measured as it lays itself out: its rows' width, and the height it keeps (a popup fitting
         // its content asks this, so a menu that scrolls is placed at the height it shows).
         [[nodiscard]] core::Float2 MeasureContent(core::Float2) override
@@ -801,6 +848,14 @@ export namespace foundation::gui
         }
 
     private:
+        // Whether `node` is one of its rows.
+        [[nodiscard]] bool HoldsRow(const Node* node) const noexcept
+        {
+            for (const MenuRow* row : m_rows)
+                if (row == node)
+                    return true;
+            return false;
+        }
         // Up and down go round the items (from the menu itself: the first or the last).
         void Step(i32 step)
         {
@@ -1120,6 +1175,7 @@ export namespace foundation::gui
         core::RefPtr<Node> m_markupHost;           // where markup's children land, then taken in
         bool m_adopting = false;
         Array<MenuRow*> m_rows;                    // rows, owned as children
+        TypeAheadSearch m_typeAhead;               // typed text (E12)
         Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (their items' children only while open)
         bool m_autoWidth = false;
         // The safe area toward an open submenu: the pointer's last two places, a hover deferred.

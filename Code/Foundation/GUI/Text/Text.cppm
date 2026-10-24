@@ -70,6 +70,49 @@ export namespace foundation::gui
         return true;
     }
 
+    /// Type-ahead (E12): what a list, a tree or an open menu matches as text is typed. The text
+    /// typed within a second of the last is one prefix; one character typed again cycles through
+    /// the items starting with it. Typed text, so it follows the keyboard layout and an IME.
+    class TypeAheadSearch
+    {
+    public:
+        /// Takes `typed` at `now` (seconds) and finds the item it matches among `count`, from
+        /// `current` (-1: none), each item's text from `textOf(i)`: the item, or -1 when none
+        /// matches. A new prefix of one character starts past the current item, so typing it again
+        /// moves on; a longer one may stay on the current item.
+        template <typename TextOf>
+        i32 Find(core::StringView typed, f32 now, i32 count, i32 current, TextOf&& textOf)
+        {
+            if (typed.Size() == 0 || count <= 0)
+                return -1;
+            if (now - m_typedAt > 1.0f)
+                m_typed = core::String{};
+            m_typedAt = now;
+            m_typed.Append(typed);
+            core::StringView prefix = m_typed.AsView();
+            usize firstEnd = 0;
+            (void)core::DecodeUtf8(prefix, firstEnd);
+            const core::StringView first = prefix.SubStr(0, firstEnd);
+            bool repeated = prefix.Size() > firstEnd;
+            for (usize at = firstEnd; at < prefix.Size() && repeated; at += firstEnd)
+                repeated = prefix.Size() - at >= firstEnd && prefix.SubStr(at, firstEnd) == first;
+            if (repeated)
+                prefix = first;
+            const i32 start = (prefix.Size() == firstEnd || current < 0) ? current + 1 : current;
+            for (i32 n = 0; n < count; ++n)
+            {
+                const i32 item = ((start + n) % count + count) % count;
+                if (StartsWithIgnoringCase(core::StringView(textOf(item)), prefix))
+                    return item;
+            }
+            return -1;
+        }
+
+    private:
+        core::String m_typed;
+        f32 m_typedAt = -10.0f;
+    };
+
     /// A label's text with its access key marked (`&File`, E12 of Specs/gui-lab-evolution-2.md):
     /// what it shows (`File`, `&&` an ampersand), the key (the marked character, lower case; 0 for
     /// none) and the bytes of the shown text it underlines.

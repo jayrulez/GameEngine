@@ -416,3 +416,58 @@ TEST_CASE("keyboard: type-ahead matches letters in either case in Latin, Greek a
     CHECK_FALSE(StartsWithIgnoringCase(SV(u8"Apple"), SV(u8"b")));
     CHECK_FALSE(StartsWithIgnoringCase(SV(u8"A"), SV(u8"ab")));
 }
+
+TEST_CASE("keyboard: an open menu types ahead, runs a letter that is one item's access key, and runs the focus by menu.activate")
+{
+    Bed bed;
+    bed.root->SetSize(core::Float2{600.0f, 400.0f});
+    core::RefPtr<MenuBar> bar = Make<MenuBar>();
+    bed.root->AddChild(bar.Get());
+    Menu* file = bar->AddMenu(SV(u8"File"));
+    int saved = 0, settings = 0, deleted = 0;
+    file->AddItem(SV(u8"Open"), [] {});
+    file->AddItem(SV(u8"Save"), [&saved] { ++saved; });
+    file->AddItem(SV(u8"Save All"), [] {});
+    file->AddItem(SV(u8"Settings"), [&settings] { ++settings; });
+    file->AddItem(SV(u8"&Delete"), [&deleted] { ++deleted; });
+    bed.root->UpdateLayout();
+    const auto item = [&]() -> core::StringView
+    {
+        const MenuItem* it = core::Cast<MenuItem>(bed.D().GetFocusNode());
+        return it != nullptr ? it->GetText() : core::StringView{};
+    };
+    bar->ButtonAt(0)->RequestFocus();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down), 0); // opens File at Open
+    REQUIRE(file->IsOpen());
+    REQUIRE(item() == SV(u8"Open"));
+    CHECK(bed.D().WantsTextInput()); // its item asks for typed text
+
+    // One letter again and again goes round the items starting with it; more letters narrow.
+    bed.D().InjectText(SV(u8"s"));
+    CHECK(item() == SV(u8"Save"));
+    bed.D().InjectText(SV(u8"s"));
+    CHECK(item() == SV(u8"Save All"));
+    bed.D().InjectText(SV(u8"s"));
+    CHECK(item() == SV(u8"Settings"));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5)); // a pause: a new prefix
+    bed.D().InjectText(SV(u8"o"));
+    CHECK(item() == SV(u8"Open"));
+    CHECK(saved == 0); // type-ahead only moves
+
+    // Return runs the focus: menu.activate, a binding in the menu context a game rebinds.
+    REQUIRE(bed.root->GetContext().GetKeymap().Bind(SV(u8"e"), SV(kMenuActivateCommand), SV(kMenuKeyContext)));
+    bed.root->GetContext().Update(core::Duration::FromSeconds(1.5));
+    bed.D().InjectText(SV(u8"sa"));
+    REQUIRE(item() == SV(u8"Save"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::E), 0);
+    CHECK(saved == 1);
+    CHECK_FALSE(file->IsOpen());
+
+    // A letter that is one item's access key runs it, without Alt.
+    bar->ButtonAt(0)->RequestFocus();
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Down), 0);
+    REQUIRE(file->IsOpen());
+    bed.D().InjectText(SV(u8"d"));
+    CHECK(deleted == 1);
+    CHECK_FALSE(file->IsOpen());
+}

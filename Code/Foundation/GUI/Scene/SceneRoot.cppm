@@ -79,6 +79,8 @@ export namespace foundation::gui
             (void)m_keymap.Bind(core::StringView(u8"down"), core::StringView(kMenuDownCommand), core::StringView(kMenuKeyContext));
             (void)m_keymap.Bind(core::StringView(u8"left"), core::StringView(kMenuLeftCommand), core::StringView(kMenuKeyContext));
             (void)m_keymap.Bind(core::StringView(u8"right"), core::StringView(kMenuRightCommand), core::StringView(kMenuKeyContext));
+            (void)m_keymap.Bind(core::StringView(u8"return"), core::StringView(kMenuActivateCommand), core::StringView(kMenuKeyContext));
+            (void)m_keymap.Bind(core::StringView(u8"space"), core::StringView(kMenuActivateCommand), core::StringView(kMenuKeyContext));
             // A drag from the keys and the pad (E7): picked up at the focus, dropped with Return
             // or South (the dispatcher's while it drags).
             (void)m_keymap.Bind(core::StringView(u8"ctrl-shift-d"), core::StringView(u8"drag.pick"));

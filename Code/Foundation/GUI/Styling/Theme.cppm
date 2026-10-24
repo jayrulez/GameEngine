@@ -65,6 +65,9 @@ export namespace foundation::gui
                         padding: var(--button-padding, var(--space-l)); text-align: center; transition: opacity var(--motion-fast); }
             button:hover  { opacity: 0.9; }
             button:active { opacity: 0.78; }
+            /* What cannot be used says so: a disabled control fades, as a disabled menu item does. */
+            button:disabled, checkbox:disabled, radio:disabled, switch:disabled, textfield:disabled, textarea:disabled,
+            numberfield:disabled, combobox:disabled, slider:disabled { opacity: var(--disabled-opacity); }
             tab           { background-color: var(--tab-background, var(--control-raised)); color: var(--tab-text, var(--text-dim));
                             padding: var(--space-m) 10; column-gap: var(--space-m); text-align: start; }
             tab:hover     { background-color: var(--tab-hover-background, var(--control-hover)); }

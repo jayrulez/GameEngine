@@ -419,3 +419,29 @@ TEST_CASE("theme: a widget's own face gives way to a sheet's: menus, their bar, 
         CHECK(w->GetBox().BackgroundColor.g == doctest::Approx(0.0f));
     }
 }
+
+TEST_CASE("theme: a disabled control fades, an enabled one beside it does not")
+{
+    // Only menu items and tool buttons faded: a disabled button, check or field looked usable.
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    auto button = Make<Button>();
+    auto check = Make<CheckBox>();
+    auto field = Make<TextField>();
+    auto enabled = Make<Button>();
+    button->SetEnabled(false);
+    check->SetEnabled(false);
+    field->SetEnabled(false);
+    root->AddChild(button.Get());
+    root->AddChild(check.Get());
+    root->AddChild(field.Get());
+    root->AddChild(enabled.Get());
+
+    StyleManager mgr;
+    mgr.SetStyleSheet(CSSParser::Parse(DefaultThemeCSS()));
+    mgr.ApplyTree(*root.Get());
+
+    CHECK(button->GetAlpha() == doctest::Approx(0.45f));
+    CHECK(check->GetAlpha() == doctest::Approx(0.45f));
+    CHECK(field->GetAlpha() == doctest::Approx(0.45f));
+    CHECK(enabled->GetAlpha() == doctest::Approx(1.0f));
+}

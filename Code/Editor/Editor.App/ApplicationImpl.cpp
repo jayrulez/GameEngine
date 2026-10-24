@@ -140,7 +140,8 @@ namespace editor::app
         EditorLook look;
         if (const editor::EditorUiSettings* ui = m_editorSettings.Find<editor::EditorUiSettings>())
             look.uiScale = Clamp(ui->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
-        (void)m_window.Open(host, m_config.dataRoot.AsView(), look);
+        if (m_window.Open(host, m_config.dataRoot.AsView(), look))
+            OpenDock();
         EditorApplication* self = this;
         m_context.OnNotice = [self](editor::NoticeKind kind, StringView message)
         {
@@ -238,6 +239,34 @@ namespace editor::app
         m_embeddedApp->OnStartup(*m_embeddedHost);
     }
 
+    // The dock in the frame: the shared panels, their contents the window's markup (Assets and
+    // Console a line each until their contents port, X4).
+    void EditorApplication::OpenDock()
+    {
+        gui::Node* into = m_window.FindById(u8"frame-dock");
+        if (into == nullptr)
+        {
+            LOG_ERROR(u8"Editor", u8"the frame has no frame-dock: the editor runs without its dock");
+            return;
+        }
+        EditorApplication* self = this;
+        const auto placeholder = [self](StringView text)
+        {
+            return [self, line = String(text)]()
+            {
+                RefPtr<gui::Label> label = MakeRef<gui::Label>(self->m_editorAllocator);
+                label->AddClass(u8"panel-placeholder");
+                label->SetText(line.AsView());
+                return RefPtr<gui::Node>(label);
+            };
+        };
+        EditorDock::Contents contents;
+        contents.welcome = [self]() { return self->m_window.LoadMarkup(u8"Editor/Welcome.gml"); };
+        contents.assets = placeholder(u8"The asset browser is not on the new interface yet.");
+        contents.console = placeholder(u8"The console is not on the new interface yet.");
+        m_dock.Open(*into, m_window.Host(), Move(contents));
+    }
+
     void EditorApplication::RegisterActions()
     {
         EditorActionRegistry& actions = m_context.Actions();
@@ -268,6 +297,7 @@ namespace editor::app
         RegisterBuildActions(actions, Move(build));
 
         ViewActions view;
+        view.resetLayout = [self]() { self->m_dock.ResetLayout(); };
         view.screenshot = [self]() { self->TakeEditorScreenshot(); };
         RegisterViewActions(actions, Move(view));
 
@@ -500,6 +530,7 @@ namespace editor::app
             m_embeddedApp->OnShutdown(*m_embeddedHost);
             m_runtimeContext.Shutdown();
         }
-        m_window.Close(); // the GUI before the device goes
+        m_dock.Close(); // its floats' windows, then the GUI before the device goes
+        m_window.Close();
     }
 }

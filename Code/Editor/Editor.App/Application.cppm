@@ -30,6 +30,7 @@ import engine.defaultapp; // the embedded game application
 import editor.core;
 import :window_capture;   // EditorWindowCapture (View > Screenshot, --screenshot, the MCP tool)
 import :editor_window;
+import :editor_dock;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -109,6 +110,7 @@ export namespace editor::app
         [[nodiscard]] foundation::resource::ResourceManager* Resources() const noexcept { return m_session.Resources(); }
         [[nodiscard]] engine::runtime::DefaultApplication* EmbeddedApplication() const noexcept { return m_embeddedApp.Get(); }
         [[nodiscard]] EditorWindow& Window() noexcept { return m_window; }
+        [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }
         [[nodiscard]] EditorAssetCreation& AssetCreation() noexcept { return m_creation; }
 
         void SetSceneRenderer(foundation::render::ISceneRenderer* renderer) noexcept { m_sceneRenderer = renderer; }
@@ -130,6 +132,7 @@ export namespace editor::app
         void AddNativeCode();
         void BuildNativeModule();
         void ShowAbout();
+        void OpenDock();
         [[nodiscard]] EditorAssetCreation::Services CreationServices();
         [[nodiscard]] EditorSession::Services SessionServices();
         [[nodiscard]] Array<u32> CapturableWindows();
@@ -155,6 +158,7 @@ export namespace editor::app
 
         // The parts, in the order they start; they stop in reverse.
         EditorWindow m_window{m_editorAllocator};
+        EditorDock m_dock{m_editorAllocator};
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

@@ -31,6 +31,7 @@ target_sources(Editor.App
         FILE_SET editorapp_modules TYPE CXX_MODULES FILES
             UIPage.cppm
             EditorWindow.cppm
+            EditorDock.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

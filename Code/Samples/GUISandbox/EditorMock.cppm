@@ -219,7 +219,11 @@ export namespace sandbox
             if (!m_dialog)
                 m_dialog = MakeRef<gui::MessageBox>(m_allocator);
             m_dialog->Configure(u8"Delete 3 assets?", u8"These go to the project's trash. 2 scenes still use Wood.",
-                                gui::MessageBox::Buttons::OkCancel);
+                                gui::MessageBox::Buttons::Ok);
+            // A confirmation names its verb (catalog 2.4): Cancel, and Delete styled as destroying.
+            m_dialog->ClearButtons();
+            (void)m_dialog->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+            (void)m_dialog->AddButton(u8"Delete", u8"delete", gui::DialogRole::Destructive);
             m_dialog->OpenModal(m_root);
         }
 

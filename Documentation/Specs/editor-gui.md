@@ -45,7 +45,7 @@ added to (a rebinding leaves the old key working); keyboard capture for a game i
 (GUI.Viewport takes no keys of its own: Tab and Escape still act); dialog buttons with a role
 (primary, destructive, cancel) and verbs in markup; an icon in a tree row; dialogs that leave
 through `:leaving` (popups are removed at once; menus, lists and tooltips stay so, ruling 14); a
-rule for vector fields in a narrow inspector;
+rule for vector fields in a narrow inspector (left as it is for now, ruling 15);
 an access key on a field's label. A float docks back whole by its title within the window;
 one in its own OS window does not. Not needed: the press-drag-release menu bar (menus
 keep opening on release, ruling); popups as OS windows (foundation.ui has none either: its popups
@@ -246,7 +246,7 @@ to follow the same order.
 | Phase | What lands |
 |---|---|
 | X0 | Designed over the catalog ([editor-gui-catalog.md](editor-gui-catalog.md)): every surface built from its design set. The design language: `tokens.css`, `editor.css`, the icon set (drawn by us), Inter and JetBrains Mono, the new accent, and a static mock of the shell in the GUISandbox, dark and light, three densities, reduced motion. Judged by the user. |
-| X1 | GUI gaps the editor needs (1.1's list): dialog buttons with roles and verbs, icons in tree rows, dialogs leaving through `:leaving`, a menu's activation as a binding and type-ahead in menus, a binding replaced on rebind, keyboard capture for a game in a panel, vector fields in a narrow inspector, an access key on a field's label. Each in its library with tests, in the GUISandbox. |
+| X1 | GUI gaps the editor needs (1.1's list): dialog buttons with roles and verbs, icons in tree rows, dialogs leaving through `:leaving`, a menu's activation as a binding and type-ahead in menus, a binding replaced on rebind, keyboard capture for a game in a panel, an access key on a field's label. Each in its library with tests, in the GUISandbox. |
 | X2 | The editor parked: every UI library out of the build (the ledger), Editor.Core off foundation.ui, the editor's resource provider with sheet and markup reload, the icon registry asking types. |
 | X3 | The shell: GuiHost window, menu bar from actions, DockSpace and layout persistence, status bar, toasts, command palette, Preferences (theme, accent, density, motion, scale), the project home. MCP host, actions and layout tools. |
 | X4 | Shared editor parts: the asset picker slot, asset drag data, the reflected inspector on the GUI's property grid (the editor's editors registered by hint), the dialogs, the assets browser, console. |
@@ -302,3 +302,5 @@ Rulings (the user, 2026-10-23):
     Entity and Scene tabs.
 13. The accent is azure (#2f6fdf); the default density is compact (0.85).
 14. Menus, combo lists and tooltips close at once; only dialogs (and toasts) fade out (2026-10-24).
+15. Vector fields in a narrow inspector stay as they are for now: each part hides its arrows below
+    32 px of number room and then shrinks (2026-10-24; stacking or dropping the letters later).

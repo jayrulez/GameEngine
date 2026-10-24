@@ -284,9 +284,10 @@ TEST_CASE("screens: content that is not a screen is pushed in one; a popped scre
     auto first = bed.MakeScreen(u8"first");
     (void)bed.stack->Push(*first);
     auto label = core::MakeRef<Label>(core::DefaultAllocator());
-    Screen* wrapped = bed.stack->Push(*label);
-    REQUIRE(wrapped != nullptr);
-    CHECK(label->GetParent() == wrapped);
+    // Held: the stack owns its screens, and the popped one is freed as it goes.
+    core::RefPtr<Screen> wrapped(bed.stack->Push(*label));
+    REQUIRE(wrapped.Get() != nullptr);
+    CHECK(label->GetParent() == wrapped.Get());
     styles.ApplyTree(*bed.root);
     CHECK(bed.stack->Pop());
     CHECK(bed.stack->Count() == 1u);

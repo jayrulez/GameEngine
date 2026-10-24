@@ -3,7 +3,8 @@
 
 // GUI - MenuBar tests: a horizontal strip of buttons, each opening a Menu below it.
 // Clicking a button toggles its menu; while one is open, hovering another button switches to
-// it; an outside click dismisses and clears the bar's state. No font is set, so each button is
+// it; an outside click dismisses and clears the bar's state; its menus cleared (an open one closed)
+// and a menu told as it opens, its submenus too. No font is set, so each button is
 // 2*padding (24px) wide and the bar is `barHeight` tall - giving a deterministic layout.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -151,4 +152,68 @@ TEST_CASE("menubar: the built-in theme rings no menu bar: a click opening a menu
     REQUIRE(fx.bar->IsFocusWithin()); // what the old ring keyed on
     styles.ApplyTree(*fx.root.Get());
     CHECK(fx.bar->GetBox().Shadows.IsEmpty());
+}
+
+TEST_CASE("menubar: a menu is told each time just before it opens, its items as they are then; a submenu too")
+{
+    BarFixture fx;
+    EventDispatcher* d = fx.d();
+    int opening = 0;
+    MenuItem* open = nullptr;
+    for (core::usize i = 0; i < fx.fileMenu->ChildCount(); ++i)
+        if (auto* item = core::Cast<MenuItem>(fx.fileMenu->GetChildAt(i)))
+            open = item;
+    REQUIRE(open != nullptr);
+    fx.fileMenu->SetOnOpening([&](Menu& menu)
+    {
+        CHECK(&menu == fx.fileMenu);
+        CHECK_FALSE(menu.IsOpen()); // before, not after
+        ++opening;
+        open->SetEnabled(opening % 2 == 0); // what the owner knows now
+    });
+    d->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    CHECK(opening == 1);
+    CHECK(fx.fileMenu->IsOpen());
+    CHECK_FALSE(open->IsEnabled());
+    fx.fileMenu->Close();
+    d->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    CHECK(opening == 2);
+    CHECK(open->IsEnabled());
+
+    Menu* recent = fx.fileMenu->AddSubMenu(core::StringView(u8"Recent"));
+    int subOpening = 0;
+    recent->SetOnOpening([&](Menu&) { ++subOpening; });
+    recent->AddItem(core::StringView(u8"a.scene"), [] {});
+    fx.fileMenu->Close();
+    d->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    MenuSubItem* recentItem = nullptr;
+    for (core::usize i = 0; i < fx.fileMenu->ChildCount(); ++i)
+        if (auto* item = core::Cast<MenuSubItem>(fx.fileMenu->GetChildAt(i)))
+            recentItem = item;
+    REQUIRE(recentItem != nullptr);
+    CHECK(recentItem->HandleActivate()); // as Return or a click on it opens its submenu
+    CHECK(recent->IsOpen());
+    CHECK(subOpening == 1);
+}
+
+TEST_CASE("menubar: its menus cleared, an open one closed first; menus added after are its only ones")
+{
+    BarFixture fx;
+    EventDispatcher* d = fx.d();
+    d->InjectMouseDown(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{12.0f, 14.0f}, MouseButton::Left);
+    REQUIRE(fx.fileMenu->IsOpen());
+    core::RefPtr<Menu> held(fx.fileMenu); // the test looks at it after the bar lets it go
+    fx.bar->ClearMenus();
+    CHECK_FALSE(held->IsOpen());
+    CHECK(fx.bar->MenuCount() == 0u);
+    CHECK(fx.bar->CurrentMenu() == nullptr);
+    CHECK(fx.bar->ChildCount() == 0u);
+
+    Menu* view = fx.bar->AddMenu(core::StringView(u8"View"));
+    CHECK(fx.bar->MenuCount() == 1u);
+    CHECK(fx.bar->MenuAt(0) == view);
 }

@@ -728,6 +728,9 @@ export namespace foundation::gui
 
         // Notified when this menu closes, and why. A MenuBar uses it to clear its "open menu" state.
         void SetOnClosed(core::Function<void(PopupCloseReason)> callback) { m_onClosed = core::Move(callback); }
+        /// Told each time just before it opens (a submenu too): an owner refreshes its items then,
+        /// so what they show (enabled, checked) is true as the user sees them.
+        void SetOnOpening(core::Function<void(Menu&)> callback) { m_onOpening = core::Move(callback); }
 
         // Close this menu (and the submenus it holds) if it is open.
         void Close()
@@ -1032,6 +1035,8 @@ export namespace foundation::gui
             EventDispatcher* dispatcher = owner.GetEventDispatcher();
             if (dispatcher == nullptr || IsOpen())
                 return;
+            if (m_onOpening)
+                m_onOpening(*this);
             SetDisplayed(true);
             Relayout();
             options.FitContent = true; // sized as it measures, again when a font arrives
@@ -1196,6 +1201,7 @@ export namespace foundation::gui
         core::RefPtr<MenuScrollArrow> m_scrollUp, m_scrollDown;
         Color m_panelColor{0.16f, 0.17f, 0.21f, 1.0f};
         core::Function<void(PopupCloseReason)> m_onClosed;
+        core::Function<void(Menu&)> m_onOpening;
     };
 
     inline Node* Menu::GetChildHost()

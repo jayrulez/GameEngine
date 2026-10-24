@@ -131,6 +131,20 @@ export namespace foundation::gui
             return m_markupHost.Get();
         }
 
+        /// Its menus, none (an owner that builds the bar from a registry builds it again): an open
+        /// one closes first.
+        void ClearMenus()
+        {
+            if (m_current != nullptr)
+                m_current->Close();
+            for (BarEntry& e : m_entries)
+                e.button->RemoveFromParent();
+            m_entries.Clear();
+            m_current = nullptr;
+            m_currentButton = nullptr;
+            Relayout();
+        }
+
         [[nodiscard]] usize MenuCount() const noexcept { return m_entries.Size(); }
         [[nodiscard]] Menu* CurrentMenu() const noexcept { return m_current; }
         [[nodiscard]] Button* ButtonAt(usize index) const

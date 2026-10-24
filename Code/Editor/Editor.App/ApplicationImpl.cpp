@@ -210,6 +210,7 @@ namespace editor::app
             m_config.registerEditors(*this, *m_embeddedHost);
         // The user's shortcut overrides, once every domain has declared its actions.
         (void)editor::ApplyShortcutOverrides(m_editorSettings.Section<editor::EditorShortcutSettings>(), m_context.Actions());
+        BuildMenus();
 
         if (m_config.startInProjectManager)
             // The project manager comes back with its port (X3, layer 13).
@@ -311,6 +312,50 @@ namespace editor::app
             instance = project.SourceDb().GetInstance(project.Settings().defaultScene.AsView());
         if (instance != nullptr)
             (void)m_pages->Open(*instance);
+    }
+
+    // The frame's menu bar from the action registry, File > New <creator> leading the File menu
+    // (a creator with a category in a submenu of that name).
+    void EditorApplication::BuildMenus()
+    {
+        auto* bar = Cast<gui::MenuBar>(m_window.FindById(u8"menubar"));
+        if (bar == nullptr || m_window.Root() == nullptr)
+            return; // no interface
+        m_menus = MakeUnique<ActionMenuBar>(m_editorAllocator, m_editorAllocator, *bar, m_context.Actions());
+        // The application's menus in their places; a domain's menu (Scene) or an extension's takes
+        // the "*" slot, so Help stays last however late they register.
+        const StringView order[] = {u8"File", u8"Edit", u8"Project", u8"Build", u8"Game", u8"View", u8"*", u8"Help"};
+        m_menus->SetMenuOrder(Span<const StringView>(order, sizeof(order) / sizeof(order[0])));
+        EditorApplication* self = this;
+        m_menus->AddLeadingItems(u8"File", [self](gui::Menu& file)
+        {
+            Array<StringView> categories;
+            for (const pipeline::AssetCreator& creator : self->m_context.Creators().All())
+            {
+                const pipeline::AssetCreator* entry = &creator;
+                if (creator.category.IsEmpty())
+                {
+                    (void)file.AddItem(Format(u8"New {}", creator.label).AsView(), [self, entry]() { self->m_creation.CreateAndOpen(*entry); });
+                    continue;
+                }
+                bool seen = false;
+                for (StringView category : categories)
+                    seen = seen || category == creator.category.AsView();
+                if (!seen)
+                    categories.PushBack(creator.category.AsView());
+            }
+            categories.Sort([](StringView a, StringView b) { return a.Compare(b) < 0; });
+            for (StringView category : categories)
+            {
+                gui::Menu* submenu = file.AddSubMenu(category);
+                for (const pipeline::AssetCreator& creator : self->m_context.Creators().All())
+                    if (creator.category.AsView() == category)
+                    {
+                        const pipeline::AssetCreator* entry = &creator;
+                        (void)submenu->AddItem(creator.label.AsView(), [self, entry]() { self->m_creation.CreateAndOpen(*entry); });
+                    }
+            }
+        });
     }
 
     void EditorApplication::RegisterActions()
@@ -585,6 +630,7 @@ namespace editor::app
             m_embeddedApp->OnShutdown(*m_embeddedHost);
             m_runtimeContext.Shutdown();
         }
+        m_menus.Reset();
         m_dock.Close(); // its floats' windows, then the GUI before the device goes
         m_window.Close();
     }

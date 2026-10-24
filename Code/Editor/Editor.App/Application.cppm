@@ -32,6 +32,7 @@ import :window_capture;   // EditorWindowCapture (View > Screenshot, --screensho
 import :editor_window;
 import :editor_dock;
 import :pages;
+import :action_menus;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -136,6 +137,7 @@ export namespace editor::app
         void ShowAbout();
         void OpenDock();
         void OpenPages();
+        void BuildMenus();
         void OpenDefaultScene(editor::EditorProject& project);
         [[nodiscard]] EditorAssetCreation::Services CreationServices();
         [[nodiscard]] EditorSession::Services SessionServices();
@@ -164,6 +166,7 @@ export namespace editor::app
         EditorWindow m_window{m_editorAllocator};
         EditorDock m_dock{m_editorAllocator};
         UniquePtr<EditorPages> m_pages; // made with the dock, in OnStartup
+        UniquePtr<ActionMenuBar> m_menus; // the frame's menu bar, from the actions
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

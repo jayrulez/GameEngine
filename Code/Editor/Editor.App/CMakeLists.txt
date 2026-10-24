@@ -33,6 +33,7 @@ target_sources(Editor.App
             EditorWindow.cppm
             EditorDock.cppm
             EditorPages.cppm
+            ActionMenus.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

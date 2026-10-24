@@ -511,3 +511,28 @@ TEST_CASE("keyboard: a focus that captures every key takes Tab, Escape and bound
     bed.Tab();
     CHECK(bed.Focused() == SV(u8"next"));
 }
+
+TEST_CASE("keyboard: a field's label (for) marks an access key, and Alt with it focuses the field")
+{
+    Bed bed;
+    auto label = Make<Label>();
+    label->SetText(SV(u8"&Name"));
+    CHECK(label->GetText() == SV(u8"&Name")); // a label for nothing shows its text as written
+    label->SetFor(core::String(u8"name"));
+    CHECK(label->GetText() == SV(u8"Name"));
+    CHECK(label->GetMnemonic() == U'n');
+    bed.root->AddChild(label.Get());
+    auto field = Make<TextField>();
+    field->SetId(SV(u8"name"));
+    field->SetSize(core::Float2{120.0f, 20.0f});
+    bed.root->AddChild(field.Get());
+    bed.Add(u8"other").RequestFocus();
+
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::N), KeyModAlt);
+    CHECK(bed.D().GetFocusNode() == field.Get());
+
+    // Its text set again keeps its key; && is an ampersand.
+    label->SetText(SV(u8"Size && &Weight"));
+    CHECK(label->GetText() == SV(u8"Size & Weight"));
+    CHECK(label->GetMnemonic() == U'w');
+}

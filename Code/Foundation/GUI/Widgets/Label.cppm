@@ -78,6 +78,22 @@ export namespace foundation::gui
         }
         void SetText(core::StringView text)
         {
+            if (m_for.Size() != 0 && !m_rich)
+            {
+                // A field's label (`for`): its `&` marks its access key, taken out of what shows.
+                m_written = core::String(text);
+                const Mnemonic mnemonic = ParseMnemonic(text);
+                m_mnemonic = mnemonic.Key;
+                SetMnemonicRange(mnemonic.Start, mnemonic.End);
+                if (mnemonic.Shown.AsView() == m_text.GetString())
+                    return;
+                m_text.SetString(mnemonic.Shown.AsView());
+                RequestLayout();
+                Invalidate();
+                m_textChanged.Notify();
+                return;
+            }
+            m_written = core::String(text);
             if (text == m_text.GetString())
                 return;
             if (m_rich)
@@ -113,6 +129,23 @@ export namespace foundation::gui
         }
         [[nodiscard]] bool IsRich() const noexcept { return m_rich; }
 
+        /// The field it labels, by id (HTML's `for`): its text's `&` marks an access key, and Alt
+        /// with it (or the key alone in an open menu's scope) focuses that field. Empty: none, its
+        /// text shown as written.
+        void SetFor(const core::String& id)
+        {
+            if (id == m_for)
+                return;
+            m_for = id;
+            m_mnemonic = 0;
+            SetMnemonicRange(0, 0);
+            const core::String written = m_written;
+            m_text.SetString(core::StringView{}); // shown again from what was written
+            SetText(written.AsView());
+        }
+        [[nodiscard]] core::String GetFor() const { return m_for; }
+        [[nodiscard]] char32_t GetMnemonic() const override { return m_for.Size() != 0 ? m_mnemonic : 0; }
+
         // Markup: <Label text="Hello" rich="true">.
         bool SetMarkupAttribute(core::StringView name, core::StringView value) override
         {
@@ -124,6 +157,11 @@ export namespace foundation::gui
             if (name == core::StringView(u8"rich"))
             {
                 SetRich(value == core::StringView(u8"true"));
+                return true;
+            }
+            if (name == core::StringView(u8"for"))
+            {
+                SetFor(core::String(value));
                 return true;
             }
             return UIWidget::SetMarkupAttribute(name, value);
@@ -249,7 +287,34 @@ export namespace foundation::gui
             m_text.SetResourceProvider(GetResourceProvider());
         }
 
+        // Its access key focuses the field it labels (a label is not a stop of its own).
+        bool OnActivate() override
+        {
+            if (m_for.Size() == 0)
+                return false;
+            Node* top = this;
+            while (top->GetParent() != nullptr)
+                top = top->GetParent();
+            const auto find = [this](auto& self, Node& node) -> Node*
+            {
+                if (const UIWidget* w = core::Cast<UIWidget>(&node); w != nullptr && w != this && w->GetId() == m_for.AsView())
+                    return &node;
+                for (usize i = 0; i < node.ChildCount(); ++i)
+                    if (Node* found = self(self, *node.GetChildAt(i)))
+                        return found;
+                return nullptr;
+            };
+            Node* field = find(find, *top);
+            if (field == nullptr || !field->IsTreeEnabled() || !field->IsTabFocusable())
+                return false;
+            field->RequestFocus();
+            return true;
+        }
+
         Text m_text;
+        core::String m_written; // its text as written (a field's label shows it without its `&`)
+        core::String m_for;     // the field it labels, by id
+        char32_t m_mnemonic = 0;
         bool m_rich = false;
         bool m_overLink = false; // the pointer is over one of its links
         usize m_mnemonicStart = 0; // the access key's bytes, underlined while access keys show

@@ -206,3 +206,30 @@ TEST_CASE("box-style: a repeating gradient repeats the span of its stops")
         maxU = core::Max(maxU, v.texCoord.x);
     CHECK(maxU == doctest::Approx(4.0f).epsilon(0.05));
 }
+
+TEST_CASE("box-style: a sharp outer ring paints only outside the box, so a box with no background shows what is behind it")
+{
+    // A focus ring on a field with no background (a search field inside its frame).
+    auto w = Styled(u8"box { box-shadow: 0 0 0 2px #ff00ff; }");
+    vg::VGContext canvas;
+    DrawContext dc{canvas};
+    w->Draw(dc);
+    const vg::VGBatch& batch = canvas.GetBatch();
+    core::usize ringTriangles = 0;
+    core::usize inside = 0;
+    for (core::usize i = 0; i + 2 < batch.indices.Size(); i += 3)
+    {
+        const vg::VGVertex& a = batch.vertices[batch.indices[i]];
+        const vg::VGVertex& b = batch.vertices[batch.indices[i + 1]];
+        const vg::VGVertex& c = batch.vertices[batch.indices[i + 2]];
+        if (a.color.r != 1.0f || a.color.g != 0.0f || a.color.b != 1.0f)
+            continue;
+        ++ringTriangles;
+        const core::Float2 centre{(a.position.x + b.position.x + c.position.x) / 3.0f, (a.position.y + b.position.y + c.position.y) / 3.0f};
+        // Inside the 100 x 50 box by more than the anti-aliasing fringe.
+        if (centre.x > 1.0f && centre.x < 99.0f && centre.y > 1.0f && centre.y < 49.0f)
+            ++inside;
+    }
+    CHECK(ringTriangles > 0u);
+    CHECK(inside == 0u);
+}

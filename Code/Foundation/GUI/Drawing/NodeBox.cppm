@@ -241,6 +241,20 @@ export namespace foundation::gui
             {
                 if (shadow.Inset)
                     continue;
+                // A sharp ring round the box (a focus ring: spread, no blur, no offset) is only
+                // the band outside the box, as CSS clips an outer shadow to it: a box with no
+                // background (a field inside a frame) shows what is behind it, not the ring's
+                // colour. Stroked along the band's middle, so nothing is painted inside.
+                if (shadow.Blur <= 0.0f && shadow.Offset.x == 0.0f && shadow.Offset.y == 0.0f && shadow.Spread > 0.0f)
+                {
+                    const f32 half = shadow.Spread * 0.5f;
+                    const Rectangle middle{rect.x - half, rect.y - half, rect.width + shadow.Spread, rect.height + shadow.Spread};
+                    vg::PathBuilder band;
+                    vg::ShapeBuilder::BuildRoundedRect(middle, Grown(Radii, half), band);
+                    canvas.StrokePath(band.ToPath(), shadow.ShadowColor,
+                                      vg::StrokeStyle(shadow.Spread, vg::VGLineCap::Butt, vg::VGLineJoin::Round));
+                    continue;
+                }
                 const Rectangle grown{rect.x + shadow.Offset.x - shadow.Spread, rect.y + shadow.Offset.y - shadow.Spread,
                                       rect.width + 2.0f * shadow.Spread, rect.height + 2.0f * shadow.Spread};
                 canvas.FillBoxShadow(grown, Grown(Radii, shadow.Spread), shadow.Blur, shadow.ShadowColor, false);

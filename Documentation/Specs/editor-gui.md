@@ -36,9 +36,18 @@ What the editor needs from a UI, and where the GUI has it:
 | Dialog, ContextMenu, ToastHost | Window (modal), MessageBox, Menu, ToastHost, popups |
 | UIContext tests with synthetic events | GUI.Testing: Finder (selectors, text), Tester (clock, clicks, drags, keys) |
 
-Not in the GUI yet, and needed: rebindable menu keys (a menu's keys are written in widget code
-today), Alt mnemonics, type-ahead, keyboard capture for a game in a panel, docking leftovers (a
-float's whole surface docked back by drag). Not needed: the press-drag-release menu bar (menus
+Not in the GUI yet, and needed (checked against the code and its tests, 2026-10-24; what was
+listed here before is mostly there: a menu item shows its command's keys and follows a
+rebinding, a menu's arrows and Escape are bindings in the `menu` context, lists, trees and
+combo boxes type ahead, and Alt access keys work in buttons, menu bars and menus): a menu's
+Return and Space as a binding, and type-ahead in an open menu; a binding replaced rather than
+added to (a rebinding leaves the old key working); keyboard capture for a game in a panel
+(GUI.Viewport takes no keys of its own: Tab and Escape still act); dialog buttons with a role
+(primary, destructive, cancel) and verbs in markup; an icon in a tree row; dialogs that leave
+through `:leaving` (popups are removed at once; menus, lists and tooltips stay so, ruling 14); a
+rule for vector fields in a narrow inspector;
+an access key on a field's label. A float docks back whole by its title within the window;
+one in its own OS window does not. Not needed: the press-drag-release menu bar (menus
 keep opening on release, ruling); popups as OS windows (foundation.ui has none either: its popups
 are placed in their root and clamped to the window, `ContextMenu.cppm`, `PopupPositioner`).
 Platform accessibility adapters stay out of scope.
@@ -136,8 +145,9 @@ The token list is written out in the systems doc, with each colour pair's contra
 ### 3.3 Motion
 
 What moves, and nothing else: hover and press colours (`--motion-fast`); popups, menus and
-tooltips enter with a 4 px slide and fade (`--motion-fast`, ease-out) and leave with a fade;
-dialogs scale from 98% and fade (`--motion-slow`); toasts slide in and out; a docking preview
+tooltips enter with a 4 px slide and fade (`--motion-fast`, ease-out) and close at once, as a
+desktop editor's do (ruling 14); dialogs scale from 98% and fade in and out (`--motion-slow`);
+toasts slide in and out; a docking preview
 fades; tab reorder and tree expand animate their positions (`--motion-fast`); scrollbars show in
 50 ms and hide in 400 ms after idle; a page's busy state pulses. Nothing animates layout on
 resize, and the viewport never waits on motion.
@@ -236,7 +246,7 @@ to follow the same order.
 | Phase | What lands |
 |---|---|
 | X0 | Designed over the catalog ([editor-gui-catalog.md](editor-gui-catalog.md)): every surface built from its design set. The design language: `tokens.css`, `editor.css`, the icon set (drawn by us), Inter and JetBrains Mono, the new accent, and a static mock of the shell in the GUISandbox, dark and light, three densities, reduced motion. Judged by the user. |
-| X1 | GUI gaps the editor needs: rebindable menu keys through the keymap, type-ahead, Alt mnemonics, the docking leftovers. Each in its library with tests, in the GUISandbox. |
+| X1 | GUI gaps the editor needs (1.1's list): dialog buttons with roles and verbs, icons in tree rows, dialogs leaving through `:leaving`, a menu's activation as a binding and type-ahead in menus, a binding replaced on rebind, keyboard capture for a game in a panel, vector fields in a narrow inspector, an access key on a field's label. Each in its library with tests, in the GUISandbox. |
 | X2 | The editor parked: every UI library out of the build (the ledger), Editor.Core off foundation.ui, the editor's resource provider with sheet and markup reload, the icon registry asking types. |
 | X3 | The shell: GuiHost window, menu bar from actions, DockSpace and layout persistence, status bar, toasts, command palette, Preferences (theme, accent, density, motion, scale), the project home. MCP host, actions and layout tools. |
 | X4 | Shared editor parts: the asset picker slot, asset drag data, the reflected inspector on the GUI's property grid (the editor's editors registered by hint), the dialogs, the assets browser, console. |
@@ -291,3 +301,4 @@ Rulings (the user, 2026-10-23):
     selecting it (or selecting nothing) shows the scene's settings in the same inspector. No
     Entity and Scene tabs.
 13. The accent is azure (#2f6fdf); the default density is compact (0.85).
+14. Menus, combo lists and tooltips close at once; only dialogs (and toasts) fade out (2026-10-24).

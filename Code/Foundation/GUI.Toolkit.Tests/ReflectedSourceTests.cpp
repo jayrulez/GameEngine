@@ -334,6 +334,10 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     bed.source.GetProperties(SV(u8"rotation"), parts);
     REQUIRE(parts.Size() == 3u);
     CHECK(parts[0].Name == core::String(u8"pitch"));
+    // Shown as their axes, as a position's parts are.
+    CHECK(parts[0].DisplayName == core::String(u8"X"));
+    CHECK(parts[1].DisplayName == core::String(u8"Y"));
+    CHECK(parts[2].DisplayName == core::String(u8"Z"));
     parts.Clear();
     bed.source.GetProperties(SV(u8"shape"), parts);
     REQUIRE(parts.Size() == 2u);

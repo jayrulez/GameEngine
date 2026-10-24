@@ -823,7 +823,9 @@ export namespace foundation::gui
             const char8_t* const floats[] = {u8"x", u8"y", u8"z", u8"w"};
             const char8_t* const shownFloats[] = {u8"X", u8"Y", u8"Z", u8"W"};
             const char8_t* const angles[] = {u8"pitch", u8"yaw", u8"roll"};
-            const char8_t* const shownAngles[] = {u8"Pitch", u8"Yaw", u8"Roll"};
+            // Shown as the axes they turn about (pitch about X, yaw about Y, roll about Z), so a
+            // rotation reads like the position and scale beside it.
+            const char8_t* const shownAngles[] = {u8"X", u8"Y", u8"Z"};
             const usize count = shape == Shape::Float2 ? 2 : (shape == Shape::Float4 ? 4 : 3);
             for (usize i = 0; i < count; ++i)
             {

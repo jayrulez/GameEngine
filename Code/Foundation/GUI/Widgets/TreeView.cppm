@@ -165,11 +165,20 @@ export namespace foundation::gui
         // Its own model goes before the view's base would let go of it: let go first.
         ~TreeView() override { SetModel(nullptr); }
 
+        /// A level's indent (`indent-width`) and the column a row keeps for its arrow (`arrow-size`),
+        /// the arrow drawn to fit it: a sheet sets them (an editor's density).
         void SetIndentWidth(f32 width)
         {
             m_indentWidth = core::Max(0.0f, width);
             ItemsChanged();
         }
+        [[nodiscard]] f32 GetIndentWidth() const noexcept { return m_indentWidth; }
+        void SetArrowSize(f32 size)
+        {
+            m_arrowSize = core::Max(0.0f, size);
+            ItemsChanged();
+        }
+        [[nodiscard]] f32 GetArrowSize() const noexcept { return m_arrowSize; }
 
         // Expansion by item (a visible row).
         void ExpandItem(i32 item) { SetExpanded(item, true); }

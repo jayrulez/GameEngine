@@ -158,3 +158,24 @@ TEST_CASE("tree-view: in right to left Left expands and Right collapses, toward 
     CHECK_FALSE(tree->IsItemExpanded(0));
 }
 
+
+TEST_CASE("tree-view: a sheet sets its arrow's column and its indent")
+{
+    Tree t;
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &t.model);
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8"treeview { arrow-size: calc(5px * 2); indent-width: 8px; }")));
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout();
+    CHECK(tree->GetArrowSize() == doctest::Approx(10.0f));
+    CHECK(tree->GetIndentWidth() == doctest::Approx(8.0f));
+    EventDispatcher* d = root->GetEventDispatcher();
+    // Past the 10 px arrow (inside the default 16): the row, not its arrow.
+    d->InjectMouseDown(core::Float2{13.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{13.0f, 10.0f}, MouseButton::Left);
+    CHECK_FALSE(tree->IsItemExpanded(0));
+    d->InjectMouseDown(core::Float2{5.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{5.0f, 10.0f}, MouseButton::Left);
+    CHECK(tree->IsItemExpanded(0));
+}

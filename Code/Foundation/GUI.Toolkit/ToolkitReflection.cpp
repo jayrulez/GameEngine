@@ -56,6 +56,7 @@ namespace foundation::gui
     {
         builder.AccessorProperty<&PropertyGrid::GetLabelRatio, &PropertyGrid::SetLabelRatio>("labelRatio").PropAttribute("css", core::String(u8"label-ratio"));
         builder.AccessorProperty<&PropertyGrid::GetIndentWidth, &PropertyGrid::SetIndentWidth>("indentWidth").PropAttribute("css", core::String(u8"indent-width"));
+        builder.AccessorProperty<&PropertyGrid::GetArrowSize, &PropertyGrid::SetArrowSize>("arrowSize").PropAttribute("css", core::String(u8"arrow-size"));
         builder.Creator();
     }
 

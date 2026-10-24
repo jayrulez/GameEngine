@@ -629,3 +629,25 @@ TEST_CASE("property grid: a name longer than its column ends in an ellipsis, ins
     // Its box ends before the editor starts.
     CHECK(name->GetScreenBounds().x + name->GetScreenBounds().width <= editor->GetScreenBounds().x);
 }
+
+TEST_CASE("property grid: a sheet sets the column a row keeps for a group's arrow")
+{
+    Bed bed;
+    bed.Add(u8"speed", PropertyKind::Float, Variant(1.0));
+    bed.Show();
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(SV(u8"propertygrid { arrow-size: 10px; }")));
+    styles.ApplyTree(*bed.root.Get());
+    bed.Frame();
+    CHECK(bed.grid->GetArrowSize() == doctest::Approx(10.0f));
+    PropertyEditor* editor = bed.grid->FindEditor(SV(u8"speed"));
+    REQUIRE(editor != nullptr);
+    Node* content = editor->GetParent();
+    Label* name = nullptr;
+    for (usize i = 0; i < content->ChildCount(); ++i)
+        if (auto* label = core::Cast<Label>(content->GetChildAt(i)); label != nullptr && label->GetTag() == SV(u8"propertyname"))
+            name = label;
+    REQUIRE(name != nullptr);
+    // The name after the 10 px column and its 2 px gap.
+    CHECK(name->GetScreenBounds().x - content->GetScreenBounds().x - content->GetPadding().Left == doctest::Approx(12.0f));
+}

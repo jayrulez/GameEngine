@@ -174,17 +174,10 @@ export namespace foundation::gui
 
     protected:
         void OnMouseClick(const MouseEvent& event) override;
-        void OnLayout() override
-        {
-            const Rect box = GetContentBounds();
-            const bool rtl = IsRightToLeft();
-            m_arrow->Arrange(MirroredIn(Rect{box.x, box.y, kArrow, box.height}, box, rtl));
-            m_label->Arrange(MirroredIn(Rect{box.x + kArrow + 2.0f, box.y, core::Max(0.0f, box.width - kArrow - 2.0f), box.height}, box, rtl));
-        }
+        void OnLayout() override;
         void OnTextStyleChange() override { ShareTextStyle(*m_label); }
 
     private:
-        static constexpr f32 kArrow = 16.0f;
         PropertyGrid& m_grid;
         core::RefPtr<TreeArrow> m_arrow;
         core::RefPtr<Label> m_label;
@@ -242,7 +235,6 @@ export namespace foundation::gui
         }
 
     private:
-        static constexpr f32 kArrow = 16.0f;
         static constexpr f32 kGrip = 12.0f;
         PropertyGrid& m_grid;
         core::RefPtr<TreeArrow> m_arrow;
@@ -359,6 +351,13 @@ export namespace foundation::gui
             ItemsChanged();
         }
         [[nodiscard]] f32 GetIndentWidth() const noexcept { return m_indentWidth; }
+        /// The column a row keeps for a group's arrow (`arrow-size`), the arrow drawn to fit it.
+        void SetArrowSize(f32 size)
+        {
+            m_arrowSize = core::Max(0.0f, size);
+            ItemsChanged();
+        }
+        [[nodiscard]] f32 GetArrowSize() const noexcept { return m_arrowSize; }
 
         // === Lists ===
         /// Changes the list `path` through the source (an open edit ends first); an insert opens it.
@@ -603,6 +602,7 @@ export namespace foundation::gui
         bool m_reorderAfter = false;
         f32 m_labelRatio = 0.4f;
         f32 m_indentWidth = 12.0f;
+        f32 m_arrowSize = 16.0f;
     };
 }
 
@@ -642,6 +642,14 @@ namespace foundation::gui
         m_label->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
         m_label->SetHitTestVisible(false);
         AddChild(m_label.Get());
+    }
+    inline void PropertyCategoryContent::OnLayout()
+    {
+        const Rect box = GetContentBounds();
+        const bool rtl = IsRightToLeft();
+        const f32 arrow = m_grid.GetArrowSize();
+        m_arrow->Arrange(MirroredIn(Rect{box.x, box.y, arrow, box.height}, box, rtl));
+        m_label->Arrange(MirroredIn(Rect{box.x + arrow + 2.0f, box.y, core::Max(0.0f, box.width - arrow - 2.0f), box.height}, box, rtl));
     }
     inline void PropertyCategoryContent::OnMouseClick(const MouseEvent& event)
     {
@@ -696,10 +704,11 @@ namespace foundation::gui
         const bool rtl = IsRightToLeft();
         const f32 split = core::Floor(box.width * m_grid.GetLabelRatio());
         const f32 indent = static_cast<f32>(m_depth) * m_grid.GetIndentWidth();
-        m_arrow->Arrange(MirroredIn(Rect{box.x + indent, box.y, kArrow, box.height}, box, rtl));
+        const f32 arrow = m_grid.GetArrowSize();
+        m_arrow->Arrange(MirroredIn(Rect{box.x + indent, box.y, arrow, box.height}, box, rtl));
         if (m_movable) // in the indent before the element
             m_grip->Arrange(MirroredIn(Rect{box.x + core::Max(0.0f, indent - kGrip), box.y, kGrip, box.height}, box, rtl));
-        const f32 textX = indent + kArrow + 2.0f;
+        const f32 textX = indent + arrow + 2.0f;
         m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), box.height}, box, rtl));
         if (m_editor)
             m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, core::Max(0.0f, box.width - split - 2.0f), core::Max(0.0f, box.height - 2.0f)}, box, rtl));

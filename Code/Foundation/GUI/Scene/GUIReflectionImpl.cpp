@@ -1419,6 +1419,8 @@ namespace foundation::gui
     REFLECT_MEMBERS(TreeView, "rtti::gui")
     {
         builder.Attribute("accessRole", core::String(u8"tree")); // what a screen reader takes it for (E9d)
+        builder.AccessorProperty<&TreeView::GetIndentWidth, &TreeView::SetIndentWidth>("indentWidth").PropAttribute("css", core::String(u8"indent-width"));
+        builder.AccessorProperty<&TreeView::GetArrowSize, &TreeView::SetArrowSize>("arrowSize").PropAttribute("css", core::String(u8"arrow-size"));
         builder.Method<&TreeView::ExpandItem>("expandItem");
         builder.Method<&TreeView::CollapseItem>("collapseItem");
         builder.Method<&ElementOf<TreeView>, TreeView, Node>("of");

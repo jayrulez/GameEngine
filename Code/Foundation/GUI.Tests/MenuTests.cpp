@@ -703,3 +703,99 @@ TEST_CASE("menu: the built-in theme dims an item that cannot run")
     CHECK(undo->GetAlpha() == doctest::Approx(1.0f));
     CHECK(redo->GetAlpha() == doctest::Approx(0.45f));
 }
+
+TEST_CASE("menu: a padded menu's submenu opens just outside it, its first row level with its item")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 600.0f});
+    auto anchor = Make<UIWidget>();
+    root->AddChild(anchor.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+
+    auto menu = Make<Menu>();
+    menu->SetWidth(160.0f);
+    menu->SetItemHeight(26.0f);
+    menu->SetPadding(Thickness{5.0f});
+    menu->AddItem(core::StringView(u8"Top"), [] {});
+    Menu* sub = menu->AddSubMenu(core::StringView(u8"More"));
+    sub->SetPadding(Thickness{5.0f});
+    sub->AddItem(core::StringView(u8"Deep"), [] {});
+    menu->Open(*anchor, core::Float2{50.0f, 50.0f});
+    // The "More" row: inside the padding, at y 50 + 5 + 26.
+    d->InjectMouseMove(core::Float2{60.0f, 50.0f + 5.0f + 26.0f + 13.0f});
+    REQUIRE(sub->IsOpen());
+    const core::Float2 at = sub->ConvertToRootSpace(core::Float2{0.0f, 0.0f});
+    CHECK(at.x == doctest::Approx(50.0f + 170.0f));          // the menu's outer edge (160 + 5 + 5), not inside it
+    CHECK(at.y == doctest::Approx(50.0f + 5.0f + 26.0f - 5.0f)); // up by its own padding
+    // So its first row is level with the row that opened it.
+    REQUIRE(sub->ChildCount() > 0u);
+    CHECK(at.y + 5.0f == doctest::Approx(50.0f + 5.0f + 26.0f));
+    // Its padding styled only after it opened (a sheet's first pass): placed by it then.
+    sub->SetPadding(Thickness{8.0f});
+    (void)root->UpdateLayout();
+    CHECK(sub->ConvertToRootSpace(core::Float2{0.0f, 0.0f}).y == doctest::Approx(50.0f + 5.0f + 26.0f - 8.0f));
+    CHECK_FALSE(sub->Scrolls()); // its rows all show: placed at its whole height
+    CHECK(sub->GetSize().y == doctest::Approx(26.0f + 16.0f));
+}
+
+TEST_CASE("menu: a submenu styled by a sheet after it opens shows all its rows")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 600.0f});
+    auto anchor = Make<UIWidget>();
+    root->AddChild(anchor.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    StyleManager styles;
+    styles.SetStyleSheet(CSSParser::Parse(core::StringView(u8"menu { padding: 4px; border: 1px solid #808080; }")));
+
+    auto menu = Make<Menu>();
+    menu->SetWidth(160.0f);
+    menu->SetItemHeight(26.0f);
+    menu->AddItem(core::StringView(u8"Top"), [] {});
+    Menu* sub = menu->AddSubMenu(core::StringView(u8"More"));
+    sub->AddItem(core::StringView(u8"One"), [] {});
+    sub->AddItem(core::StringView(u8"Two"), [] {});
+    sub->AddItem(core::StringView(u8"Three"), [] {});
+    menu->Open(*anchor, core::Float2{50.0f, 50.0f});
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout();
+    d->InjectMouseMove(core::Float2{60.0f, 50.0f + 5.0f + 26.0f + 13.0f});
+    REQUIRE(sub->IsOpen());
+    for (int pass = 0; pass < 3; ++pass)
+    {
+        styles.ApplyTree(*root.Get());
+        (void)root->UpdateLayout();
+    }
+    CHECK(sub->GetPadding().Top == doctest::Approx(4.0f));
+    CHECK_FALSE(sub->Scrolls());
+    CHECK(sub->GetSize().y == doctest::Approx(3.0f * 26.0f + 10.0f));
+}
+
+TEST_CASE("menu: a submenu with a fractional padding, lined up by its content, still shows all its rows")
+{
+    // A compact density's padding (3.4 + a 1 px border) moves it a fraction up; the device grid
+    // must not take that fraction off its height.
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{600.0f, 600.0f});
+    auto anchor = Make<UIWidget>();
+    root->AddChild(anchor.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    auto menu = Make<Menu>();
+    menu->SetWidth(160.0f);
+    menu->SetItemHeight(26.0f);
+    menu->SetPadding(Thickness{4.4f});
+    menu->AddItem(core::StringView(u8"Top"), [] {});
+    Menu* sub = menu->AddSubMenu(core::StringView(u8"More"));
+    sub->SetPadding(Thickness{4.4f});
+    const char8_t* const names[] = {u8"One", u8"Two", u8"Three", u8"Four"};
+    for (const char8_t* name : names)
+        sub->AddItem(core::StringView(name), [] {});
+    menu->Open(*anchor, core::Float2{50.0f, 50.0f});
+    (void)root->UpdateLayout();
+    d->InjectMouseMove(core::Float2{60.0f, 50.0f + 4.4f + 26.0f + 13.0f});
+    REQUIRE(sub->IsOpen());
+    for (int pass = 0; pass < 3; ++pass)
+        (void)root->UpdateLayout();
+    CHECK_FALSE(sub->Scrolls());
+    CHECK(sub->GetSize().y >= 4.0f * 26.0f + 8.8f - 0.001f);
+}

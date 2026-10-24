@@ -1005,9 +1005,13 @@ export namespace foundation::gui
                     sub->FocusFirstItem();
                 return;
             }
+            // Just outside this menu (past its padding and border on that side, which hold the row
+            // in), its first row level with the row (lined up by its content).
+            const Thickness inset = Inset();
             PopupOptions options;
             options.Anchor = item;
-            options.Placement = PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, 0.0f, true};
+            options.Placement = PopupPlacement{PopupSide::InlineEnd, PopupAlign::Start, item->IsRightToLeft() ? inset.Left : inset.Right, true};
+            options.Placement.AlignContent = true;
             options.TakesFocus = true;
             sub->OpenAs(*item, core::Move(options));
             if (fromKeys)

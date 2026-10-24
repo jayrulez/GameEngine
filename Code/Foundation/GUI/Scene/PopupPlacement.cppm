@@ -52,6 +52,13 @@ export namespace foundation::gui
         PopupAlign Align = PopupAlign::Start;
         f32 Gap = 0.0f;      ///< between the anchor and the popup
         bool Shrink = true;  ///< made smaller to fit the room on its side, rather than covering the anchor
+        /// Along its side's line, from where its alignment puts it, toward the line's end (down
+        /// beside a side, toward the inline end below or above).
+        f32 Shift = 0.0f;
+        /// Lined up by its content's edge rather than its box's: moved back along the line by its
+        /// own padding and border as they are when it is placed (a submenu's first row level with
+        /// the row that opened it).
+        bool AlignContent = false;
     };
 
     /// Where it went, and on which side (after a flip, the other one).
@@ -170,10 +177,10 @@ export namespace foundation::gui
             PopupAlign align = placement.Align;
             if (rightToLeft && align != PopupAlign::Center)
                 align = align == PopupAlign::Start ? PopupAlign::End : PopupAlign::Start;
-            out.Position.x = detail::Aligned(align, anchor.x, anchor.width, size.x);
+            out.Position.x = detail::Aligned(align, anchor.x, anchor.width, size.x) + (rightToLeft ? -placement.Shift : placement.Shift);
         }
         else
-            out.Position.y = detail::Aligned(placement.Align, anchor.y, anchor.height, size.y);
+            out.Position.y = detail::Aligned(placement.Align, anchor.y, anchor.height, size.y) + placement.Shift;
         out.Position.x = detail::Clamped(out.Position.x, size.x, bounds.x, bounds.width);
         out.Position.y = detail::Clamped(out.Position.y, size.y, bounds.y, bounds.height);
         return out;

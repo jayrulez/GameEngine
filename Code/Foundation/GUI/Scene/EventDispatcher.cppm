@@ -1126,13 +1126,25 @@ export namespace foundation::gui
                 // Its sides and alignment in the anchor's direction, else its own (its owner's).
                 const bool rightToLeft = e.Options.Anchor != nullptr ? e.Options.Anchor->IsRightToLeft()
                                                                      : popup.IsRightToLeft();
-                PlacedPopup placed = PlacePopup(anchor, e.Size, bounds, e.Options.Placement, rightToLeft);
-                // On the device grid, as its arrange puts it, so the two agree.
+                PopupPlacement placement = e.Options.Placement;
+                if (placement.AlignContent)
+                {
+                    // By its content's edge, its padding and border as styled now (not when it opened).
+                    const Thickness p = popup.GetPadding();
+                    const Thickness b = popup.GetBorderThickness();
+                    const bool along = placement.Side == PopupSide::Below || placement.Side == PopupSide::Above;
+                    placement.Shift -= along ? (rightToLeft ? p.Right + b.Right : p.Left + b.Left) : p.Top + b.Top;
+                }
+                PlacedPopup placed = PlacePopup(anchor, e.Size, bounds, placement, rightToLeft);
+                // On the device grid, as its arrange puts it, so the two agree: its near edge down
+                // and its far edge up, so the grid never makes it smaller than it measured (a menu
+                // a fraction short of its rows would scroll).
                 const f32 scale = core::Max(popup.GetPixelScale(), 0.01f);
-                const auto snap = [scale](f32 v) { return core::Round(v * scale) / scale; };
-                placed.Size = core::Float2{snap(placed.Position.x + placed.Size.x) - snap(placed.Position.x),
-                                           snap(placed.Position.y + placed.Size.y) - snap(placed.Position.y)};
-                placed.Position = core::Float2{snap(placed.Position.x), snap(placed.Position.y)};
+                const auto near = [scale](f32 v) { return core::Floor(v * scale + 0.001f) / scale; };
+                const auto far = [scale](f32 v) { return core::Ceil(v * scale - 0.001f) / scale; };
+                placed.Size = core::Float2{far(placed.Position.x + placed.Size.x) - near(placed.Position.x),
+                                           far(placed.Position.y + placed.Size.y) - near(placed.Position.y)};
+                placed.Position = core::Float2{near(placed.Position.x), near(placed.Position.y)};
                 if (e.Options.FitContent)
                 {
                     // Sized by what it holds: arranged, its style left auto, so the next measure

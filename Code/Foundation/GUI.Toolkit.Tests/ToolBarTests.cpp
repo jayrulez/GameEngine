@@ -378,3 +378,31 @@ TEST_CASE("tool bar: markup's vertical bar stays a column through a restyle, its
     CHECK_FALSE(lines[0]->IsVertical()); // it lies across a column
 }
 
+
+TEST_CASE("tool bar: an item's box sits inside its margins; a separator a sheet makes shorter is centred, not stretched")
+{
+    Bed bed(400.0f);
+    auto a = bed.Button();
+    auto line = bed.Line();
+    auto b = bed.Button();
+    line->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Margin = Thickness{4.0f, 0.0f, 4.0f, 0.0f};
+        s.Width = LayoutLength::Px(1.0f);
+        s.Height = LayoutLength::Px(12.0f);
+    });
+    bed.Lay();
+    REQUIRE(line->IsVisible());
+    const core::f32 aEnd = a->GetPosition().x + a->GetSize().x;
+    CHECK(line->GetSize().x == doctest::Approx(1.0f)); // its own width, not its slot with its margins
+    CHECK(line->GetPosition().x == doctest::Approx(aEnd + 2.0f + 4.0f)); // past the gap and its margin
+    CHECK(b->GetPosition().x == doctest::Approx(aEnd + 2.0f + 9.0f + 2.0f)); // its slot: 4 + 1 + 4
+    CHECK(line->GetSize().y == doctest::Approx(12.0f)); // its height, not the bar's
+    const core::f32 content = 28.0f - bed.bar->GetPadding().TotalVertical();
+    CHECK(line->GetPosition().y == doctest::Approx(bed.bar->GetPadding().Top + (content - 12.0f) * 0.5f));
+
+    // With no height of its own it stands across the whole bar, inside its margins.
+    line->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength{}; });
+    bed.Lay();
+    CHECK(line->GetSize().y == doctest::Approx(content));
+}

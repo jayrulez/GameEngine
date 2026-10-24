@@ -500,20 +500,26 @@ export namespace foundation::gui
 
             const bool reverse = !column && IsRightToLeft();
             f32 at = 0.0f;
+            // An item's slot takes its margins (its natural size has them); its box sits inside them.
+            // Across, it stretches only when it has no size of its own there (a separator a sheet
+            // makes shorter than the bar), and is centred otherwise.
             const auto place = [&](Node& node, core::Float2 size, f32 extent)
             {
                 const LayoutStyle& s = node.GetLayoutStyle();
-                const f32 crossRoom = column ? content.width : content.height;
-                const bool stretch = s.AlignSelf == Align::Stretch;
-                f32 cross = stretch ? crossRoom : core::Min(column ? size.x : size.y, crossRoom);
-                const f32 crossAt = (crossRoom - cross) * 0.5f;
+                const Thickness m = s.Margin;
+                const f32 crossBefore = column ? m.Left : m.Top;
+                const f32 crossMargins = column ? m.TotalHorizontal() : m.TotalVertical();
+                const f32 crossRoom = core::Max(0.0f, (column ? content.width : content.height) - crossMargins);
+                const bool stretch = s.AlignSelf == Align::Stretch && (column ? s.Width : s.Height).IsAuto();
+                const f32 cross = stretch ? crossRoom : core::Min(core::Max(0.0f, (column ? size.x : size.y) - crossMargins), crossRoom);
+                const f32 crossAt = crossBefore + (crossRoom - cross) * 0.5f;
                 Rect r;
                 if (column)
-                    r = Rect{content.x + crossAt, content.y + at, cross, extent};
+                    r = Rect{content.x + crossAt, content.y + at + m.Top, cross, core::Max(0.0f, extent - m.TotalVertical())};
                 else
                 {
-                    const f32 x = reverse ? content.x + content.width - at - extent : content.x + at;
-                    r = Rect{x, content.y + crossAt, extent, cross};
+                    const f32 slot = reverse ? content.x + content.width - at - extent : content.x + at;
+                    r = Rect{slot + m.Left, content.y + crossAt, core::Max(0.0f, extent - m.TotalHorizontal()), cross};
                 }
                 node.Arrange(r);
                 at += extent + gap;

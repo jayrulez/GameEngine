@@ -79,7 +79,11 @@ namespace engine
 
     void AddAllSceneManagers(scene::Scene& scene) { FullComposition().Scene().Instantiate(scene); }
 
-    void RegisterAllSceneComponentReflection() { FullComposition().RegisterReflection(); }
+    void RegisterAllSceneComponentReflection()
+    {
+        scene::RegisterEntityRefReflection(); // what components' entity references are, by their id
+        FullComposition().RegisterReflection();
+    }
 
     void RegisterAllResourceTypes() { FullComposition().RegisterResourceTypes(); }
 

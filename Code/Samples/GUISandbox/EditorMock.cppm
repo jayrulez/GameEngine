@@ -173,6 +173,7 @@ export namespace sandbox
             Define(u8"mock.toast", u8"Show a Toast");
             Define(u8"mock.dialog", u8"Show a Dialog");
             Define(u8"mock.asset-picker", u8"Show the Asset Picker");
+            Define(u8"mock.entity-picker", u8"Show the Entity Picker");
             m_context.DefineCommand(u8"mock.grid").SetChecked(true);
             m_context.DefineCommand(u8"mock.space").SetChecked(true);
             gui::Command& pause = m_context.DefineCommand(u8"mock.pause");
@@ -190,6 +191,7 @@ export namespace sandbox
             (void)m_root.OnCommand(u8"mock.dialog", [self](gui::CommandEvent&) { self->ShowDialog(); });
             (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowPicker(self->m_textures, u8"Editor/Mock/textures.gml"); });
             (void)m_root.OnCommand(u8"mock.asset-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_assetPicker, u8"Editor/Mock/asset-picker.gml"); });
+            (void)m_root.OnCommand(u8"mock.entity-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_entityPicker, u8"Editor/Mock/entity-picker.gml"); });
             (void)m_root.OnCommand(u8"mock.side-by-side", [self](gui::CommandEvent&) { self->SetSideBySide(!self->m_sideBySide); });
             Define(u8"look.dark", u8"Dark");
             Define(u8"look.light", u8"Light");
@@ -245,6 +247,10 @@ export namespace sandbox
                 if (picker)
                     if (auto* groups = Cast<gui::TreeView>(FindById(*picker, u8"asset-picker-groups")))
                         groups->SetSelectedItem(4);
+                // The entity picker's current value: Camera (Level 1, Sun, Sky, Player, Camera).
+                if (picker)
+                    if (auto* tree = Cast<gui::TreeView>(FindById(*picker, u8"entity-picker-tree")))
+                        tree->SetSelectedItem(4);
                 // Its two views, the buttons switching them (the editor keeps the last one).
                 if (picker)
                 {
@@ -481,6 +487,7 @@ export namespace sandbox
         RefPtr<gui::MessageBox> m_dialog;
         RefPtr<gui::Node> m_textures;    // the render textures picker, once opened
         RefPtr<gui::Node> m_assetPicker; // the asset picker, once opened
+        RefPtr<gui::Node> m_entityPicker; // the entity picker, once opened
         usize m_toastsShown = 0;
         Array<RefPtr<Object>> m_shown; // what each page's inspector shows
         Array<UniquePtr<gui::ReflectedPropertySource>> m_sources;

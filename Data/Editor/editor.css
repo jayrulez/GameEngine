@@ -638,6 +638,8 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
 .asset-picker-bar { flex-direction: row; align-items: center; column-gap: var(--space-s); }
 .asset-picker-grid { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-s); row-gap: var(--space-s); padding: var(--space-xs) var(--space-s); }
 .asset-picker-grid > .asset-tile { width: 88px; }
+/* The entity picker: the scene's tree as the hierarchy draws it, in a picker's frame. */
+.entity-picker-tree { height: 340px; background-color: transparent; padding: 0 var(--space-s); }
 /* The render textures picker: its passes a tree, wide enough for a texture's size and format. */
 .texture-picker { width: 460px; }
 .texture-tree { height: 360px; }

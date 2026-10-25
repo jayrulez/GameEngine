@@ -558,3 +558,8 @@ Rulings (the user, 2026-10-23):
     or a list (the picker keeping the last one chosen), the current value checked, the search over
     every group while it has text (each match saying where it lives) (2026-10-25; the mock's
     asset-picker.gml).
+25. The entity picker shows the scene as its hierarchy does: the hierarchy's tree model in a
+    picker's frame, the scene its top row (not a pick), each entity by its type's icon in its
+    category's colour, prefab members and inactive entities marked, levels opened and closed by
+    their arrows, the current entity lit, the search keeping each match with what holds it
+    (2026-10-25; the mock's entity-picker.gml).

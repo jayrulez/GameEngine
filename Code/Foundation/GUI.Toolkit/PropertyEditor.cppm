@@ -125,6 +125,8 @@ export namespace foundation::gui
             return core::StringView(u8"curve");
         case PropertyKind::Gradient:
             return core::StringView(u8"gradient");
+        case PropertyKind::Reference:
+            return core::StringView(u8"reference");
         }
         return core::StringView(u8"value");
     }

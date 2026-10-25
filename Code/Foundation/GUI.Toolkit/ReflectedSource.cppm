@@ -17,9 +17,13 @@
 //   - Array<T> and a BoundedArray are lists (reflection's emplaceDefault, removeAt, moveElement),
 //     their elements by index; an Array<RefPtr<Base>> adds by type, the types that derive from
 //     its base and its factory can make, by their displayName.
+//   - A reference-shaped type (Core's TypeInfo::reference: a Ref<T>) is one value of kind
+//     Reference, its Guid as text (empty: none), naming the type it points at; a write drops its
+//     binding, so the next resolve binds the new id. The toolkit has no slot: the application
+//     registers one for the kind.
 //   - A struct's group carries its type's name as its hint, and so does any other type, for an
-//     application's editor (a Color until T4, a Ref, an EntityRef); a struct no editor takes shows
-//     its own rows, anything else the grid's row saying no editor fits.
+//     application's editor (a Color until T4, an EntityRef); a struct no editor takes shows its own
+//     rows, anything else the grid's row saying no editor fits.
 //   - A type the application registers as a curve (its keys property, a list of Core's CurveKey)
 //     is one value of kind Curve, its keys whole; one registered as a gradient (its colour stops,
 //     alpha stops and blend properties) is one value of kind Gradient (T5): the toolkit names no
@@ -405,6 +409,7 @@ export namespace foundation::gui
             Color,
             Curve,    // a type registered as a curve
             Gradient, // a type registered as a gradient
+            Reference, // a reference-shaped type (core::TypeInfo::reference): its Guid
             Group, // a nested or value struct, an object
             List,
             Other,
@@ -474,6 +479,8 @@ export namespace foundation::gui
                 return Shape::Color;
             if (core::IsEnum(type))
                 return Shape::Enum;
+            if (type.reference != nullptr)
+                return Shape::Reference;
             if (type.container != nullptr)
                 return Shape::List;
             for (const core::TypeInfo* t = &type; t != nullptr; t = t->base)
@@ -696,6 +703,12 @@ export namespace foundation::gui
                 const u32 colors = PartCapacity(type, parts.Colors.AsView());
                 const u32 alphas = PartCapacity(type, parts.Alphas.AsView());
                 info.MaxCount = colors == 0 ? alphas : (alphas == 0 ? colors : core::Min(colors, alphas)); // one most for both kinds
+                break;
+            }
+            case Shape::Reference:
+            {
+                info.Kind = PropertyKind::Reference;
+                info.ReferenceType = type.reference->Target != nullptr ? type.reference->Target() : nullptr;
                 break;
             }
             case Shape::Group: // its type's name, for an editor of its own (a Color in T4); else its rows
@@ -941,6 +954,15 @@ export namespace foundation::gui
                 return Variant(core::ReadEnumValue(address, type));
             case Shape::Color:
                 return Variant(*static_cast<const core::Color*>(address));
+            case Shape::Reference:
+            {
+                const Guid* id = type.reference->Id(address);
+                if (id == nullptr || id->IsNil())
+                    return Variant(core::StringView{});
+                utf8char text[37];
+                id->ToChars(text);
+                return Variant(core::StringView(text, 36));
+            }
             default:
                 return Variant{};
             }
@@ -989,6 +1011,17 @@ export namespace foundation::gui
             case Shape::Color:
                 *static_cast<core::Color*>(address) = value.AsColor();
                 return true;
+            case Shape::Reference:
+            {
+                // Its Guid's text; empty clears it (a nil Guid).
+                const core::StringView text = core::Trim(value.AsString());
+                Guid id;
+                if (!text.IsEmpty() && !Guid::TryParse(text, id))
+                    return false;
+                type.reference->SetId(address, id);
+                type.reference->ClearBinding(address); // the next resolve binds the new id
+                return true;
+            }
             default:
                 return false;
             }
@@ -1193,6 +1226,7 @@ export namespace foundation::gui
                 return;
             }
             case Shape::String:
+            case Shape::Reference: // its Guid's text
             {
                 core::String value(Read(target).AsString());
                 core::Serialize(ar, key, value);
@@ -1439,6 +1473,11 @@ export namespace foundation::gui
                 return core::String(u8"Float4");
             case Shape::Color:
                 return core::String(u8"Color");
+            case Shape::Reference: // only a reference to its like
+            {
+                const core::TypeInfo* to = target.Type->reference->Target != nullptr ? target.Type->reference->Target() : nullptr;
+                return core::Format(u8"reference to {}", to != nullptr ? core::StringView(reinterpret_cast<const char8_t*>(to->name)) : core::StringView(u8"?"));
+            }
             case Shape::Curve:
             case Shape::Gradient:
             case Shape::Group:

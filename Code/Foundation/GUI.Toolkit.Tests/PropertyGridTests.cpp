@@ -700,3 +700,18 @@ TEST_CASE("property grid: the row whose editor takes the focus is the current on
     CHECK(bed.grid->IsItemSelected(rowOf(u8"speed")));
     CHECK_FALSE(bed.grid->IsItemSelected(rowOf(u8"name")));
 }
+
+TEST_CASE("property grid: a reference is its Guid's text by default; a paste takes a Guid or nothing")
+{
+    Bed bed;
+    bed.Add(u8"mesh", PropertyKind::Reference, Variant(SV(u8"")));
+    bed.Show();
+    CHECK(core::Cast<StringPropertyEditor>(bed.grid->FindEditor(SV(u8"mesh"))) != nullptr); // an application registers its slot
+    core::String reason;
+    CHECK(bed.bag.PasteValue(SV(u8"mesh"), SV(u8" 00001234-0000-0000-0000-000000005678 "), reason));
+    CHECK(bed.bag.GetValue(SV(u8"mesh"), 0).AsString() == SV(u8"00001234-0000-0000-0000-000000005678"));
+    CHECK_FALSE(bed.bag.PasteValue(SV(u8"mesh"), SV(u8"wood"), reason));
+    CHECK(reason == core::String(u8"\"wood\" is no guid"));
+    CHECK(bed.bag.PasteValue(SV(u8"mesh"), SV(u8""), reason)); // nothing: cleared
+    CHECK(bed.bag.GetValue(SV(u8"mesh"), 0).AsString().IsEmpty());
+}

@@ -3,9 +3,9 @@
 
 // GUI.Toolkit - the reflected property source (T3 of Specs/gui-lab-evolution-3.md): a reflected type's
 // properties as rows (values, enums and flags, Float2/3/4, a Quaternion as Euler degrees, value
-// structs as groups, other types hinted with their names), the attributes the editor's inspector
-// reads, writes through addresses and setters, and each commit told as one change the text format
-// writes and Restore reads back.
+// structs as groups, references as their Guids naming what they point at, other types hinted with
+// their names), the attributes the editor's inspector reads, writes through addresses and setters,
+// and each commit told as one change the text format writes and Restore reads back.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -258,6 +258,63 @@ namespace reflected
             return ar.IsOk();
         }
     };
+}
+
+// A reference of the tests' own (as Ref<T> is): a Guid naming a TestTarget or a TestOther, and
+// a binding a write drops.
+namespace reflected
+{
+    struct TestTarget
+    {
+        i32 payload = 0;
+    };
+    struct TestOther
+    {
+        i32 payload = 0;
+    };
+    template <typename T>
+    struct TestRef
+    {
+        core::Guid id;
+        i32 bound = 0;
+    };
+}
+namespace foundation::core
+{
+    template <typename T>
+    struct ReferenceTraits<reflected::TestRef<T>>
+    {
+        static constexpr bool isReference = true;
+        [[nodiscard]] static const ReferenceOps& Ops() noexcept
+        {
+            static constexpr ReferenceOps ops{
+                [](const void* value) -> const Guid* { return &static_cast<const reflected::TestRef<T>*>(value)->id; },
+                [](void* value, const Guid& id) { static_cast<reflected::TestRef<T>*>(value)->id = id; },
+                [](void* value) { static_cast<reflected::TestRef<T>*>(value)->bound = 0; },
+                []() -> const TypeInfo* { return &TypeOf<T>(); }};
+            return ops;
+        }
+    };
+}
+namespace reflected
+{
+    class TestSocket : public core::Object
+    {
+        RTTI_OBJECT(TestSocket, core::Object)
+    public:
+        TestRef<TestTarget> plug;
+        TestRef<TestTarget> spare;
+        TestRef<TestOther> other;
+    };
+    REFLECT_MEMBERS(TestSocket, "rtti::tests::reflected")
+    {
+        builder.Property<&TestSocket::plug>("plug");
+        builder.Property<&TestSocket::spare>("spare");
+        builder.Property<&TestSocket::other>("other");
+    }
+    // Named, as the resource types a Ref points at are.
+    REFLECT_VALUE(TestTarget, "rtti::tests::reflected") {}
+    REFLECT_VALUE(TestOther, "rtti::tests::reflected") {}
 }
 
 namespace
@@ -835,4 +892,53 @@ TEST_CASE("reflected source: a gradient written whole, its blend too; mixed, rev
     CHECK(bed.b->size.keys[1].value == doctest::Approx(2.5f));
     CHECK_FALSE(bed.source.PasteValue(SV(u8"color"), copied.AsView(), reason));
     CHECK(reason == core::String(u8"A TestCurve does not paste onto a TestGradient"));
+}
+
+TEST_CASE("reflected source: a reference is its Guid as text, naming what it points at; a write drops its binding, empty clears it")
+{
+    reflected::Register();
+    reflected::RttiRegisterValue_TestTarget();
+    reflected::RttiRegisterValue_TestOther();
+    core::RefPtr<reflected::TestSocket> socket = core::MakeRef<reflected::TestSocket>(core::DefaultAllocator());
+    ReflectedPropertySource source{core::DefaultAllocator()};
+    const core::Instance object(socket.Get(), socket->GetType());
+    source.SetObjects(core::Span<const core::Instance>(&object, 1u));
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    source.GetProperties(SV(u8""), rows);
+    REQUIRE(rows.Size() == 3u);
+    CHECK(rows[0].Kind == PropertyKind::Reference);
+    CHECK(rows[0].ReferenceType == &core::TypeOf<reflected::TestTarget>());
+    CHECK(rows[2].ReferenceType == &core::TypeOf<reflected::TestOther>());
+    CHECK(source.GetValue(SV(u8"plug"), 0).AsString().IsEmpty()); // nothing referenced
+
+    const core::Guid wood{0x1234u, 0x5678u};
+    core::utf8char text[37];
+    wood.ToChars(text);
+    const core::StringView woodText(text, 36);
+    socket->plug.bound = 1;
+    source.BeginEdit(SV(u8"plug"));
+    source.CommitEdit(SV(u8"plug"), PropertyWrite{Variant(woodText)});
+    CHECK(socket->plug.id == wood);
+    CHECK(socket->plug.bound == 0); // the next resolve binds the new id
+    CHECK(source.GetValue(SV(u8"plug"), 0).AsString() == woodText);
+
+    // Not a Guid: refused, the reference kept.
+    source.BeginEdit(SV(u8"plug"));
+    source.CommitEdit(SV(u8"plug"), PropertyWrite{Variant(SV(u8"wood"))});
+    CHECK(socket->plug.id == wood);
+
+    // Copied onto a reference to its like, refused onto another's.
+    reflected::BlobFormat format;
+    source.SetTextFormat(&format);
+    const core::String copied = source.CopyValue(SV(u8"plug"));
+    core::String reason;
+    REQUIRE(source.PasteValue(SV(u8"spare"), copied.AsView(), reason));
+    CHECK(socket->spare.id == wood);
+    CHECK_FALSE(source.PasteValue(SV(u8"other"), copied.AsView(), reason));
+    CHECK(socket->other.id.IsNil());
+
+    // Empty clears it.
+    source.BeginEdit(SV(u8"plug"));
+    source.CommitEdit(SV(u8"plug"), PropertyWrite{Variant(core::StringView{})});
+    CHECK(socket->plug.id.IsNil());
 }

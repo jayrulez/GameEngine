@@ -443,7 +443,8 @@ export namespace foundation::gui
 
     /// Registers the default editors with `registry`: bool, integer, float, string, enum and flags
     /// by kind (T1); lists by kind, Float2, Float3 and Float4 by hint (T2); colours by kind, stops
-    /// and HDR colours by hint (T4); curves and gradients by kind (T5).
+    /// and HDR colours by hint (T4); curves and gradients by kind (T5); a reference as its Guid's
+    /// text.
     inline void RegisterDefaultPropertyEditors(PropertyEditorRegistry& registry)
     {
         const core::StringView floats[] = {core::StringView(u8"Float2"), core::StringView(u8"Float3"), core::StringView(u8"Float4")};
@@ -462,5 +463,7 @@ export namespace foundation::gui
         registry.RegisterKind(PropertyKind::Flags, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<FlagsPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Curve, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<CurvePropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Gradient, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<GradientPropertyEditor>(a); });
+        // A reference as its Guid's text: an application registers its own (a slot that picks).
+        registry.RegisterKind(PropertyKind::Reference, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
     }
 }

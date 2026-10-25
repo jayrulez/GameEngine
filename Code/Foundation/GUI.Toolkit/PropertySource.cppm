@@ -50,6 +50,7 @@ export namespace foundation::gui
         Color,   ///< a colour, its sRGB values (T4)
         Curve,   ///< Core's curve keys, one value (T5); MaxCount its most keys, a range its values'
         Gradient, ///< a ColorGradient, one value (T5); MaxCount its most stops of each kind
+        Reference, ///< what something kept elsewhere is known by (an asset, an entity): its Guid as text; ReferenceType is what it points at
     };
 
     /// What a list allows (PropertyInfo::ListOps).
@@ -88,6 +89,7 @@ export namespace foundation::gui
         u8 ListOps = 0;           ///< a list's: PropertyListOps
         u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's), a curve's most keys, a gradient's most stops; 0: no limit
         core::Array<core::String> ElementTypes; ///< a list's types an add chooses from; empty: its one
+        const core::TypeInfo* ReferenceType = nullptr; ///< a reference's: the type it points at (an application finds what may fill it)
 
         [[nodiscard]] core::StringView ShownName() const noexcept { return DisplayName.Size() != 0 ? DisplayName.AsView() : Name.AsView(); }
     };
@@ -500,6 +502,13 @@ export namespace foundation::gui
             case PropertyKind::String:
                 value = Variant(text);
                 break;
+            case PropertyKind::Reference:
+            {
+                Guid id;
+                if (core::Trim(text).IsEmpty() || Guid::TryParse(core::Trim(text), id))
+                    value = Variant(core::Trim(text));
+                break;
+            }
             case PropertyKind::Color:
                 if (const Optional<Color> color = ParseColor(core::Trim(text)); color.HasValue())
                     value = Variant(color.Value());
@@ -635,6 +644,8 @@ export namespace foundation::gui
                 return core::StringView(u8"text");
             case PropertyKind::Color:
                 return core::StringView(u8"colour");
+            case PropertyKind::Reference:
+                return core::StringView(u8"guid");
             default:
                 return core::StringView(u8"value it can take");
             }

@@ -6,7 +6,7 @@
 // pure logic, so they exercise headlessly: fake tools drive a ViewportToolManager, fake providers
 // build throwaway views, and mount/clear callbacks record what the host asked the page to dock.
 // Covers the H1 acceptance list: panel appears/disappears with the tool, an unknown/panel-less tool
-// docks nothing and never crashes, and gesture-safe switching between two paneled tools clears the
+// shows nothing and never crashes, and gesture-safe switching between two paneled tools clears the
 // old panel before mounting the new one.
 
 #include <doctest/doctest.h>
@@ -14,16 +14,15 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
-import pipeline.importer; // the import framework (a consumer imports it itself)
 import editor.app;
 import editor.viewporttools;
 
 using namespace foundation::core;
 using namespace editor;
 
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace
 {
@@ -47,17 +46,14 @@ namespace
     public:
         FakeProvider(StringView toolId, bool yieldNull = false) : m_id(toolId), m_null(yieldNull) {}
         [[nodiscard]] StringView ToolId() const override { return m_id.AsView(); }
-        [[nodiscard]] ToolPanelPlacement Placement() const override { return placement; }
-        ToolPanelPlacement placement = ToolPanelPlacement::Dock; // the host must forward this to mount
-        [[nodiscard]] RefPtr<ui::View> CreatePanel(IViewportTool&,
-                                                   const ViewportToolHostContext&) override
+        [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool&, const ViewportToolHostContext&) override
         {
             ++CreateCount;
             if (m_null)
             {
                 return {};
             }
-            return MakeRef<ui::FlexLayout>(DefaultAllocator());
+            return MakeRef<gui::Panel>(DefaultAllocator());
         }
         int CreateCount = 0;
 
@@ -107,15 +103,17 @@ TEST_CASE("tool-panel host: panel appears and disappears with its tool")
 
     int mounts = 0;
     int clears = 0;
-    ui::View* lastMounted = nullptr;
+    gui::Node* lastMounted = nullptr;
+    StringView mountedFor;
     ViewportToolHostContext ctx;
     ViewportToolPanelHost host(tools, registry, Move(ctx),
-                               [&](ui::View* v, ToolPanelPlacement)
+                               [&](gui::Node* v, IViewportTool& tool)
                                {
                                    ++mounts;
                                    lastMounted = v;
+                                   mountedFor = tool.Id();
                                },
-                               [&](ToolPanelPlacement)
+                               [&]()
                                {
                                    ++clears;
                                    lastMounted = nullptr;
@@ -134,6 +132,7 @@ TEST_CASE("tool-panel host: panel appears and disappears with its tool")
     CHECK(clears == 0); // nothing to clear - the tool we left had no panel
     CHECK(host.CurrentPanel() != nullptr);
     CHECK(lastMounted == host.CurrentPanel());
+    CHECK(mountedFor == StringView(u8"anim")); // the tool it is for, for its chrome
     CHECK(animPanel.CreateCount == 1);
 
     // A Sync with no active-tool change is a no-op (the view is not rebuilt every frame).
@@ -160,8 +159,8 @@ TEST_CASE("tool-panel host: unknown / panel-less tool docks nothing")
     int mounts = 0;
     int clears = 0;
     ViewportToolHostContext ctx;
-    ViewportToolPanelHost host(tools, registry, Move(ctx), [&](ui::View*, ToolPanelPlacement) { ++mounts; },
-                               [&](ToolPanelPlacement) { ++clears; });
+    ViewportToolPanelHost host(tools, registry, Move(ctx), [&](gui::Node*, IViewportTool&) { ++mounts; },
+                               [&]() { ++clears; });
 
     CHECK(tools.ActivateById(u8"anim"));
     host.Sync(); // no provider for "anim" -> no panel, no crash
@@ -184,8 +183,8 @@ TEST_CASE("tool-panel host: provider yielding no view mounts nothing")
     int mounts = 0;
     int clears = 0;
     ViewportToolHostContext ctx;
-    ViewportToolPanelHost host(tools, registry, Move(ctx), [&](ui::View*, ToolPanelPlacement) { ++mounts; },
-                               [&](ToolPanelPlacement) { ++clears; });
+    ViewportToolPanelHost host(tools, registry, Move(ctx), [&](gui::Node*, IViewportTool&) { ++mounts; },
+                               [&]() { ++clears; });
 
     CHECK(tools.ActivateById(u8"anim"));
     host.Sync();
@@ -214,8 +213,8 @@ TEST_CASE("tool-panel host: switching between two paneled tools clears then moun
     int mounts = 0;
     int clears = 0;
     ViewportToolHostContext ctx;
-    ViewportToolPanelHost host(tools, registry, Move(ctx), [&](ui::View*, ToolPanelPlacement) { ++mounts; },
-                               [&](ToolPanelPlacement) { ++clears; });
+    ViewportToolPanelHost host(tools, registry, Move(ctx), [&](gui::Node*, IViewportTool&) { ++mounts; },
+                               [&]() { ++clears; });
 
     CHECK(tools.ActivateById(u8"a"));
     host.Sync();
@@ -229,104 +228,4 @@ TEST_CASE("tool-panel host: switching between two paneled tools clears then moun
     CHECK(host.CurrentToolId() == StringView(u8"b"));
     CHECK(panelA.CreateCount == 1);
     CHECK(panelB.CreateCount == 1);
-}
-
-TEST_CASE("tool-panel host: forwards the provider's placement hint to mount + clear")
-{
-    ViewportToolManager tools;
-    AddTool(tools, u8"select");
-    AddTool(tools, u8"anim");
-
-    ViewportToolPanelRegistry registry;
-    FakeProvider animPanel(u8"anim");
-    animPanel.placement = ToolPanelPlacement::ViewportOverlay; // provider wants an overlay
-    registry.Register(&animPanel);
-
-    ToolPanelPlacement mountedAt = ToolPanelPlacement::Dock;
-    ToolPanelPlacement clearedAt = ToolPanelPlacement::Dock;
-    int mounts = 0, clears = 0;
-    ViewportToolHostContext ctx;
-    ViewportToolPanelHost host(tools, registry, Move(ctx),
-                               [&](ui::View*, ToolPanelPlacement p) { ++mounts; mountedAt = p; },
-                               [&](ToolPanelPlacement p) { ++clears; clearedAt = p; });
-
-    CHECK(tools.ActivateById(u8"anim"));
-    host.Sync();
-    CHECK(mounts == 1);
-    CHECK(mountedAt == ToolPanelPlacement::ViewportOverlay); // the hint reached the host's mount
-
-    // Leaving the tool tears down at the SAME placement the panel was mounted to.
-    tools.ActivateDefault();
-    host.Sync();
-    CHECK(clears == 1);
-    CHECK(clearedAt == ToolPanelPlacement::ViewportOverlay);
-}
-
-TEST_CASE("import-plan view: edits the external plan in place - checks live, names on sync")
-{
-    pipeline::ImportPlan plan;
-    const auto add = [&plan](pipeline::ImportResourceKind kind, StringView name)
-    {
-        pipeline::ImportPlanEntry e;
-        e.kind = kind;
-        e.sourceName = String(name);
-        e.targetName = String(name);
-        plan.entries.PushBack(Move(e));
-    };
-    add(pipeline::ImportResourceKind::Mesh, u8"body");
-    add(pipeline::ImportResourceKind::AnimationClip, u8"walk");
-    add(pipeline::ImportResourceKind::AnimationClip, u8"run");
-
-    auto view = MakeRef<editor::app::ImportPlanView>(DefaultAllocator(), &plan);
-
-    // Rows: per-entry enable checkboxes write straight into the plan; the section
-    // check-all drives every row of its kind. Walk the tree for the checkboxes:
-    // [Meshes header][mesh row][Clips header][clip row][clip row].
-    Array<ui::CheckBox*> checks;
-    const auto collect = [&](ui::View* v, auto&& recurse) -> void
-    {
-        if (auto* c = Cast<ui::CheckBox>(v))
-        {
-            checks.PushBack(c);
-        }
-        if (auto* g = Cast<ui::ViewGroup>(v))
-        {
-            for (usize i = 0; i < g->ChildCount(); ++i)
-            {
-                recurse(g->GetChildAt(i), recurse);
-            }
-        }
-    };
-    collect(view.Get(), collect);
-    REQUIRE(checks.Size() == 5u); // 2 section headers + 3 entry rows
-
-    // The clips section header is the 3rd checkbox; unchecking it disables BOTH clips
-    // but not the mesh.
-    checks[2]->IsChecked.SetValue(false);
-    CHECK(plan.entries[0].enabled);
-    CHECK(!plan.entries[1].enabled);
-    CHECK(!plan.entries[2].enabled);
-
-    // Rename through the row editor; SyncNames writes it back into the plan.
-    Array<ui::EditText*> editors;
-    const auto collectEdits = [&](ui::View* v, auto&& recurse) -> void
-    {
-        if (auto* e = Cast<ui::EditText>(v))
-        {
-            editors.PushBack(e);
-        }
-        if (auto* g = Cast<ui::ViewGroup>(v))
-        {
-            for (usize i = 0; i < g->ChildCount(); ++i)
-            {
-                recurse(g->GetChildAt(i), recurse);
-            }
-        }
-    };
-    collectEdits(view.Get(), collectEdits);
-    REQUIRE(editors.Size() == 3u);
-    editors[0]->SetText(u8"hero_body");
-    view->SyncNames();
-    CHECK(plan.entries[0].targetName == u8"hero_body");
-    CHECK(plan.entries[1].targetName == u8"walk"); // untouched rows keep their names
 }

@@ -16,11 +16,13 @@ target_link_libraries(Editor.App
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
         Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::UI Engine::GUI Foundation::UI.Resource # the game UI's defaults (the runtime's)
         Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
+        Editor::ViewportTools # the viewport tools' panel seam
         Editor::Mcp Foundation::Mcp Foundation::Mcp.Http) # the MCP host: the shared engine surface over HTTP
 
 target_sources(Editor.App
     PRIVATE
         ApplicationImpl.cpp
+        ToolPanelImpl.cpp
         EditorSplashImpl.cpp
         EditorWindowToolsImpl.cpp
         EditorProfilerToolsImpl.cpp
@@ -84,4 +86,5 @@ target_sources(Editor.App
             EditorLayoutTools.cppm
             EditorActionTools.cppm
             FontAtlasDiskCache.cppm
+            ToolPanel.cppm
             EditorAppModule.cppm)

@@ -34,6 +34,7 @@ import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import editor.scene;
+import editor.viewporttools;
 
 using namespace foundation::core;
 using namespace editor;
@@ -1088,5 +1089,140 @@ TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the vie
     page->Gizmos()->SetHandlesShown(false);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(hud->StatusText() == String(u8"Select | Crate"));
+    page->OnClose();
+}
+
+namespace
+{
+    // Two brushes of one category, one with a panel; the second available only when told.
+    struct FakeBrush final : IViewportTool
+    {
+        FakeBrush(StringView id, StringView name, bool* available) : m_id(id), m_name(name), m_available(available) {}
+        [[nodiscard]] StringView Id() const override { return m_id.AsView(); }
+        [[nodiscard]] StringView DisplayName() const override { return m_name.AsView(); }
+        [[nodiscard]] StringView Category() const override { return u8"Brushes"; }
+        [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/cube.svg"; }
+        [[nodiscard]] bool IsAvailable() const override { return m_available == nullptr || *m_available; }
+        [[nodiscard]] StringView UnavailableReason() const override { return u8"Paint needs something to paint."; }
+        bool Update(const ViewportToolInput&) override { return false; }
+        String m_id;
+        String m_name;
+        bool* m_available;
+    };
+    bool g_paintAvailable = false;
+    struct FakeBrushes final : IViewportToolProvider
+    {
+        void CreateTools(ViewportToolManager& manager, const ViewportToolHostContext&) override
+        {
+            manager.Add(MakeUnique<FakeBrush>(DefaultAllocator(), u8"test.sculpt", u8"Sculpt", nullptr));
+            manager.Add(MakeUnique<FakeBrush>(DefaultAllocator(), u8"test.paint", u8"Paint", &g_paintAvailable));
+        }
+    };
+    struct FakeSculptPanel final : IViewportToolPanelProvider
+    {
+        [[nodiscard]] StringView ToolId() const override { return u8"test.sculpt"; }
+        [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool&, const ViewportToolHostContext&) override
+        {
+            auto body = MakeRef<gui::Panel>(DefaultAllocator());
+            auto radius = MakeRef<gui::Label>(DefaultAllocator());
+            radius->SetText(u8"Radius");
+            body->AddChild(radius.Get());
+            return body;
+        }
+    };
+}
+
+TEST_CASE("scene tools: each tool an action and on the bar by category; its panel under the chips, moved, kept, put back")
+{
+    static FakeBrushes brushes;
+    static FakeSculptPanel panel;
+    ViewportToolProviderRegistry::Get().Register(&brushes);
+    ViewportToolPanelRegistry::Get().Register(&panel);
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    Shown shown(*page);
+    SceneTools* tools = page->ToolsView();
+    REQUIRE(tools != nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+
+    // The actions: Paint disabled, saying why.
+    EditorActionRegistry& actions = bed.context.Actions();
+    const String sculpt = SceneTools::ActionOf(u8"test.sculpt");
+    const String paint = SceneTools::ActionOf(u8"test.paint");
+    REQUIRE(actions.Find(sculpt.AsView()) != nullptr);
+    CHECK(actions.Find(sculpt.AsView())->menuPath == String(u8"Scene/Tools/Brushes/Sculpt"));
+    CHECK(actions.IsEnabled(sculpt.AsView(), page.Get()));
+    CHECK_FALSE(actions.IsEnabled(paint.AsView(), page.Get()));
+    CHECK(actions.DisabledReason(paint.AsView(), page.Get()) == String(u8"Paint needs something to paint."));
+
+    // On the bar: the category one menu, its items as the actions are.
+    gui::ToolMenuButton* category = tools->CategoryButton(u8"Brushes");
+    REQUIRE(category != nullptr);
+    CHECK(category->GetIconSource() == String(u8"Editor/Icons/cube.svg"));
+    CHECK_FALSE(category->IsChecked());
+
+    // Sculpt on: the category lit, its panel under the chips in the tool's chrome.
+    CHECK(actions.Execute(sculpt.AsView(), page.Get()).IsOk());
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(category->IsChecked());
+    CHECK(actions.IsChecked(sculpt.AsView(), page.Get()));
+    REQUIRE(tools->Panel() != nullptr);
+    CHECK(tools->PanelTitle() == StringView(u8"Sculpt"));
+    CHECK(tools->Place() == nullptr);
+
+    // Under the chips until moved; dragged by its head anywhere in the view, kept inside it.
+    shown.styles.ApplyTree(*shown.root); // the panel came after the sheet was applied
+    (void)shown.root->UpdateLayout();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    const gui::Rect chips = FindId<gui::Node>(*page->Content(), u8"hud-top-start")->GetScreenBounds();
+    const gui::Rect viewport = FindId<gui::Node>(*page->Content(), u8"scene-viewport")->GetScreenBounds();
+    const Float2 under{tools->Panel()->GetScreenBounds().x - viewport.x, tools->Panel()->GetScreenBounds().y - viewport.y};
+    CHECK(tools->Panel()->GetScreenBounds().y == doctest::Approx(chips.y + chips.height)); // under the chips
+    ToolPanelHead* head = tools->Head();
+    REQUIRE(head != nullptr);
+    const gui::Rect box = head->GetScreenBounds();
+    const Float2 grab{box.x + 10.0f, box.y + box.height * 0.5f};
+    gui::EventDispatcher& d = *shown.root->GetEventDispatcher();
+    d.InjectMouseDown(grab, gui::MouseButton::Left);
+    d.InjectMouseMove(grab + Float2{120.0f, 80.0f});
+    d.InjectMouseUp(grab + Float2{120.0f, 80.0f}, gui::MouseButton::Left);
+    REQUIRE(tools->Place() != nullptr);
+    const Float2 place = *tools->Place();
+    CHECK(place.x == doctest::Approx(under.x + 120.0f));
+    CHECK(place.y == doctest::Approx(under.y + 80.0f));
+    d.InjectMouseDown(grab + Float2{120.0f, 80.0f}, gui::MouseButton::Left);
+    d.InjectMouseMove(grab + Float2{-5000.0f, 9000.0f}); // far outside: kept inside the view
+    d.InjectMouseUp(grab + Float2{-5000.0f, 9000.0f}, gui::MouseButton::Left);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    REQUIRE(tools->Place() != nullptr);
+    CHECK(tools->Place()->x == doctest::Approx(0.0f));
+    const Float2 pane = FindId<gui::Node>(*page->Content(), u8"scene-viewport")->GetSize();
+    CHECK(tools->Place()->y <= pane.y - tools->Panel()->GetSize().y + 0.5f);
+
+    // Folded to its head, and back.
+    tools->SetFolded(true);
+    CHECK(tools->Folded());
+    tools->SetFolded(false);
+
+    // Put back under the chips: no place.
+    tools->SetPlace(nullptr);
+    CHECK(tools->Place() == nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    CHECK(tools->Panel()->GetScreenBounds().x - viewport.x == doctest::Approx(under.x));
+
+    // Sculpt again: back to Select, no panel. Paint refused while unavailable, then taken.
+    CHECK(actions.Execute(sculpt.AsView(), page.Get()).IsOk());
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tools->Panel() == nullptr);
+    CHECK_FALSE(category->IsChecked());
+    g_paintAvailable = true;
+    CHECK(actions.Execute(paint.AsView(), page.Get()).IsOk());
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(actions.IsChecked(paint.AsView(), page.Get()));
+    CHECK(tools->Panel() == nullptr); // Paint has no panel
+    g_paintAvailable = false;
     page->OnClose();
 }

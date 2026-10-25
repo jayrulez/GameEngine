@@ -53,6 +53,7 @@ import :hierarchy;
 import :inspector;
 import :scene_bar;
 import :scene_hud;
+import :scene_tools;
 
 using namespace foundation::core;
 
@@ -105,6 +106,7 @@ export namespace editor
         void PauseSimulation(bool paused) override;
         [[nodiscard]] bool IsSimulating() const noexcept override { return m_simulation.IsRunning(); }
         [[nodiscard]] bool IsPaused() const noexcept override { return m_simulation.IsPaused(); }
+        [[nodiscard]] ViewportToolManager* ViewportTools() noexcept override { return &m_viewportTools; }
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return m_selectTool != nullptr ? &m_selectTool->Gizmos() : nullptr; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return m_viewport->CameraOwnsInput(); }
         [[nodiscard]] bool MarkersShown() const noexcept override { return m_overlays.settings.showMarkers; }
@@ -130,6 +132,7 @@ export namespace editor
         [[nodiscard]] SceneOverlaySettings& Overlays() noexcept { return m_overlays.settings; }
         [[nodiscard]] SceneBar* Bar() const noexcept { return m_bar.Get(); }
         [[nodiscard]] SceneHud* Hud() const noexcept { return m_hud.Get(); }
+        [[nodiscard]] SceneTools* ToolsView() const noexcept { return m_tools.Get(); }
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
         [[nodiscard]] SceneInspectorView* Inspector() noexcept { return m_inspector.Get(); }
@@ -167,6 +170,7 @@ export namespace editor
         UniquePtr<PrefabFlows> m_prefabs;
         UniquePtr<SceneHierarchyView> m_hierarchy;
         UniquePtr<SceneInspectorView> m_inspector;
+        ViewportToolHostContext m_toolHost; // what the tools and their panels were made with
         ViewportToolManager m_viewportTools;         // after m_editContext (the tools borrow it)
         SelectTransformTool* m_selectTool = nullptr; // the manager's default tool
         GizmoRendererRegistry m_componentGizmos;
@@ -175,6 +179,7 @@ export namespace editor
         RefPtr<foundation::gui::Node> m_content;
         UniquePtr<SceneBar> m_bar;
         UniquePtr<SceneHud> m_hud; // over the viewport
+        UniquePtr<SceneTools> m_tools; // the viewport tools on the bar, the active one's panel
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once it settled
         // when there is none yet, and on every save of it.

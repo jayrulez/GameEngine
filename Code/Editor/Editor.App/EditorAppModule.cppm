@@ -16,6 +16,7 @@ export import :ui_page;
 export import :page_action_bar;
 export import :property_sections;
 export import :property_extras;
+export import :tool_panel;
 export import :status_bar;
 export import :editor_window;
 export import :editor_dock;

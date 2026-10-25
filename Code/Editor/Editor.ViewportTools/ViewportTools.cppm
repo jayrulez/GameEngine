@@ -126,6 +126,11 @@ export namespace editor
         /// domain's brushes take one slot however many it registers. Never localized here.
         [[nodiscard]] virtual StringView Category() const { return {}; }
 
+        /// Its icon, by its path under the data folder ("Editor/Icons/Types/SplineComponent.svg"):
+        /// the palette's picture of it. Data the host draws, so the framework stays UI-free; empty
+        /// = the host shows its name.
+        [[nodiscard]] virtual StringView Icon() const { return {}; }
+
         /// Availability predicate: registration is unconditional, RELEVANCE is contextual (a
         /// terrain brush needs a terrain in the scene). Checked every frame for the active
         /// tool - the manager falls back to the default tool when this turns false.

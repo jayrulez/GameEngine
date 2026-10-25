@@ -81,9 +81,10 @@ export namespace editor
             return OverlaysFrom(LoadSceneViewPref(store, scene, fallback));
         }
 
-        /// The whole pref as the page has it now.
+        /// The whole pref as the page has it now (`toolPanelPlace` where the tool panel was moved;
+        /// null while it sits in its zone).
         [[nodiscard]] static SceneViewPref Capture(const Guid& scene, const SceneOverlaySettings& overlays, const EditorCamera& camera,
-                                                   const ScenePaneWeights* panes, Span<const Guid> selection)
+                                                   const ScenePaneWeights* panes, Span<const Guid> selection, const Float2* toolPanelPlace = nullptr)
         {
             SceneViewPref pref{scene, overlays.showGrid, overlays.showLodOverlay, overlays.showColliders, overlays.showMarkers, overlays.showFps};
             pref.gridPlane = static_cast<u8>(overlays.gridPlane);
@@ -101,6 +102,11 @@ export namespace editor
             }
             for (const Guid& id : selection)
                 pref.selection.PushBack(id);
+            if (toolPanelPlace != nullptr)
+            {
+                pref.hasToolPanelPlace = true;
+                pref.toolPanelPlace = *toolPanelPlace;
+            }
             return pref;
         }
 

@@ -22,7 +22,9 @@ tab's PIE id, `welcome` for Project, `assets`, `console`, `profiler`, with the `
 along the window's edge or floating, as dragging its tab does, `share` setting its part of the
 room it splits), the action bridge (`action_list`
 / `action_state` / `action_execute`: everything a user can do by menu, chord, toolbar or
-palette, over the active page, executed unattended - a dialog an action would open is
+palette, over the active page (a disabled one gives its `disabledReason` where it has one, and
+an execute refused says it: a scene tool with nothing to work on names what is missing; the
+scene view's tools are actions too, `scene.tool.<id>`), executed unattended - a dialog an action would open is
 closed as cancelled and named under `suppressedDialogs`, so the action most likely did
 nothing; use a dedicated tool or ask the user) and the scene page's live tools
 (`selection_get` / `selection_set` / `simulate_start` / `simulate_stop` / `entity_inspect`,

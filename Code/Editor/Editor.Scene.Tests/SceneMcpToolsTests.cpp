@@ -21,6 +21,7 @@ import foundation.script;
 import foundation.script.resource;
 import editor.core;
 import editor.scene;
+import editor.viewporttools;
 import editor.camera;
 import engine.navigation;     // NavMeshZoneComponent (navigation_bake)
 import foundation.content;    // Instance (the zone asset)
@@ -58,6 +59,7 @@ namespace
         void PauseSimulation(bool) override {}
         [[nodiscard]] bool IsSimulating() const noexcept override { return m_simulating; }
         [[nodiscard]] bool IsPaused() const noexcept override { return false; }
+        [[nodiscard]] ViewportToolManager* ViewportTools() noexcept override { return nullptr; }
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return nullptr; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return false; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return true; }

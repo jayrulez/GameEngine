@@ -15,6 +15,7 @@ import engine.render;
 import engine.script;
 import editor.core;
 import editor.scene;
+import editor.viewporttools;
 import editor.camera;
 
 using namespace foundation::core;
@@ -70,6 +71,7 @@ namespace
         void PauseSimulation(bool) override {}
         [[nodiscard]] bool IsSimulating() const noexcept override { return simulating; }
         [[nodiscard]] bool IsPaused() const noexcept override { return false; }
+        [[nodiscard]] ViewportToolManager* ViewportTools() noexcept override { return nullptr; }
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return nullptr; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return false; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return true; }

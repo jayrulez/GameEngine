@@ -10,7 +10,7 @@ module;
 module editor.app;
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import editor.viewporttools;
 
 using namespace foundation::core;
@@ -55,13 +55,9 @@ namespace editor
         return nullptr;
     }
 
-    ViewportToolPanelHost::ViewportToolPanelHost(ViewportToolManager& tools,
-                                                 ViewportToolPanelRegistry& registry,
-                                                 ViewportToolHostContext context,
-                                                 Function<void(foundation::ui::View*, ToolPanelPlacement)> mount,
-                                                 Function<void(ToolPanelPlacement)> clear)
-        : m_tools(&tools), m_registry(&registry), m_context(Move(context)), m_mount(Move(mount)),
-          m_clear(Move(clear))
+    ViewportToolPanelHost::ViewportToolPanelHost(ViewportToolManager& tools, ViewportToolPanelRegistry& registry, ViewportToolHostContext context,
+                                                 Function<void(foundation::gui::Node*, IViewportTool&)> mount, Function<void()> clear)
+        : m_tools(&tools), m_registry(&registry), m_context(Move(context)), m_mount(Move(mount)), m_clear(Move(clear))
     {
     }
 
@@ -75,11 +71,10 @@ namespace editor
         }
 
         // Tear down the panel from the tool we are leaving (if any), then build the one for the
-        // tool we are entering. The teardown/build order is fixed so the host never has two panels
-        // in its slot at once.
+        // tool we are entering, so the host never shows two panels at once.
         if (m_current.Get() != nullptr)
         {
-            m_clear(m_currentPlacement); // tear down at the placement the old panel was mounted to
+            m_clear();
             m_current = {};
         }
         m_currentId = String(activeId);
@@ -88,12 +83,11 @@ namespace editor
         {
             if (IViewportToolPanelProvider* provider = m_registry->FindByToolId(activeId))
             {
-                RefPtr<foundation::ui::View> panel = provider->CreatePanel(*active, m_context);
+                RefPtr<foundation::gui::Node> panel = provider->CreatePanel(*active, m_context);
                 if (panel.Get() != nullptr)
                 {
                     m_current = panel;
-                    m_currentPlacement = provider->Placement();
-                    m_mount(panel.Get(), m_currentPlacement);
+                    m_mount(panel.Get(), *active);
                 }
             }
         }

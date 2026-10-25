@@ -171,6 +171,21 @@ namespace editor
             hud.overlaysChanged = [self]() { self->SaveViewState(); };
             m_hud = MakeUnique<SceneHud>(Allocator(), Allocator(), Move(hud), [self](StringView id) { return self->Find<gui::Node>(id); });
         }
+        if (m_editContext)
+        {
+            // The viewport tools on the bar, and the active one's panel over the view.
+            SceneTools::Services tools;
+            tools.context = &context;
+            tools.page = this;
+            tools.tools = &m_viewportTools;
+            tools.hostContext = m_toolHost;
+            tools.barEnd = Find<gui::Node>(u8"scene-tools-end");
+            tools.pane = Find<gui::Node>(u8"scene-viewport");
+            tools.zone = Find<gui::Node>(u8"hud-top-start");
+            SceneEditorPage* self = this;
+            tools.placeChanged = [self]() { self->SaveViewState(); };
+            m_tools = MakeUnique<SceneTools>(Allocator(), Allocator(), Move(tools));
+        }
         {
             SceneEditorPage* self = this;
             m_bar = MakeUnique<SceneBar>(Allocator(), Allocator(), context.Actions(), *this,
@@ -230,15 +245,15 @@ namespace editor
         m_selectTool = selectTool.Get();
         m_selectTool->SetPicker(&m_viewport->Picker()); // the GPU pick over this page's viewport
         m_viewportTools.Add(Move(selectTool));        // the first added is the default tool
-        ViewportToolHostContext toolHost;
-        toolHost.scene = &m_editContext->Scene();
-        toolHost.commands = &m_editContext->Commands();
-        toolHost.entitySelection = &m_editContext->EntitySelection();
-        toolHost.picker = &m_viewport->Picker();
+        m_toolHost.scene = &m_editContext->Scene();
+        m_toolHost.commands = &m_editContext->Commands();
+        m_toolHost.entitySelection = &m_editContext->EntitySelection();
+        m_toolHost.picker = &m_viewport->Picker();
         // A tool that edits a cooked product live (terrain sculpt) registers its write-back to the
         // source on the context; the save flow drains it.
-        toolHost.assetEdits = &context;
-        ViewportToolProviderRegistry::Get().CreateAll(m_viewportTools, toolHost);
+        m_toolHost.assetEdits = &context;
+        m_toolHost.editorContext = &context; // a panel's asset-backed choices (thumbnails, names)
+        ViewportToolProviderRegistry::Get().CreateAll(m_viewportTools, m_toolHost);
     }
 
     void SceneEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
@@ -287,6 +302,8 @@ namespace editor
             frame.componentGizmos = &m_componentGizmos;
             m_overlays.Draw(*dd, frame);
         }
+        if (m_tools)
+            m_tools->Sync();
         if (m_hud)
             m_hud->Update(dt, m_viewport->View().RenderHeight());
         if (m_hierarchy)
@@ -520,7 +537,8 @@ namespace editor
             for (const Guid& id : m_editContext->EntitySelection().Items())
                 selection.PushBack(id);
         const SceneViewPref pref =
-            SceneViewState::Capture(InstanceId(), m_overlays.settings, m_viewport->Camera(), shown, Span<const Guid>(selection.Data(), selection.Size()));
+            SceneViewState::Capture(InstanceId(), m_overlays.settings, m_viewport->Camera(), shown, Span<const Guid>(selection.Data(), selection.Size()),
+                                    m_tools ? m_tools->Place() : nullptr);
         if (SaveSceneViewPref(m_context->ProjectEditorSettings(), pref))
             m_context->RequestProjectEditorSettingsSave();
     }
@@ -535,6 +553,8 @@ namespace editor
                 const f32 weights[3] = {panes.hierarchy, panes.viewport, panes.inspector};
                 body->SetWeights(Span<const f32>(weights, 3u));
             }
+        if (m_tools)
+            m_tools->SetPlace(pref.hasToolPanelPlace ? &pref.toolPanelPlace : nullptr);
         if (!SceneViewState::RestoreCamera(pref, m_viewport->Camera()))
             return; // never saved by a page: the origin's framing stands
         if (m_editContext && m_scene != nullptr)

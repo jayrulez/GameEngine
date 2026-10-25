@@ -23,6 +23,7 @@ import foundation.core;
 import foundation.scene;
 import editor.core;
 import editor.camera;
+import editor.viewporttools;
 import :edit;
 import :gizmo;
 
@@ -90,6 +91,9 @@ export namespace editor
         [[nodiscard]] virtual bool IsSimulating() const noexcept = 0;
         [[nodiscard]] virtual bool IsPaused() const noexcept = 0;
 
+        /// The page's viewport tools (the select tool and the domains'); null on a page without a
+        /// viewport. The tool actions toggle through it.
+        [[nodiscard]] virtual ViewportToolManager* ViewportTools() noexcept = 0;
         /// The select tool's gizmo (mode, space); null on a page without a viewport.
         [[nodiscard]] virtual GizmoController* Gizmos() noexcept = 0;
         /// True while the viewport camera has the input (Alt orbit, right-button or captured

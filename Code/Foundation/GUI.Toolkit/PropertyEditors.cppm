@@ -101,6 +101,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(NumberPropertyEditor, SingleControlEditor)
     public:
+        [[nodiscard]] bool IsTyping() const override { return m_field->IsEditing(); }
         NumberPropertyEditor()
         {
             AddClass(core::StringView(u8"number"));
@@ -169,6 +170,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(StringPropertyEditor, SingleControlEditor)
     public:
+        [[nodiscard]] bool IsTyping() const override { return m_field->IsFocused(); }
         StringPropertyEditor()
         {
             AddClass(core::StringView(u8"string"));
@@ -397,6 +399,13 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(FloatsPropertyEditor, PropertyEditor)
     public:
+        [[nodiscard]] bool IsTyping() const override
+        {
+            for (usize i = 0; i < m_shown && i < m_fields.Size(); ++i)
+                if (m_fields[i]->IsTyping())
+                    return true;
+            return false;
+        }
         FloatsPropertyEditor() : m_labels(MemoryAllocator()), m_fields(MemoryAllocator())
         {
             AddClass(core::StringView(u8"floats"));
@@ -506,6 +515,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(ColorPropertyEditor, PropertyEditor)
     public:
+        [[nodiscard]] bool IsTyping() const override { return m_hex->IsFocused(); }
         ColorPropertyEditor()
         {
             AddClass(core::StringView(u8"color"));
@@ -644,6 +654,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(StopsPropertyEditor, SingleControlEditor)
     public:
+        [[nodiscard]] bool IsTyping() const override { return m_field->IsEditing(); }
         StopsPropertyEditor()
         {
             AddClass(core::StringView(u8"stops"));
@@ -705,6 +716,7 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(HdrColorPropertyEditor, PropertyEditor)
     public:
+        [[nodiscard]] bool IsTyping() const override { return m_color->IsTyping() || m_stops->IsTyping(); }
         HdrColorPropertyEditor()
         {
             AddClass(core::StringView(u8"colorhdr"));

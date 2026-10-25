@@ -781,3 +781,36 @@ TEST_CASE("property grid: the application adds to a row's menu after the grid's 
     Activate(menu, SV(u8"Inspect"));
     CHECK(asked == core::String(u8"intensity"));
 }
+
+TEST_CASE("property grid: a value being typed is kept as the source's values refresh, and Return commits it")
+{
+    Bed bed;
+    bed.Add(u8"speed", PropertyKind::Float, Variant(1.0));
+    bed.Show();
+    ItemRow* row = bed.grid->RowForItem(0);
+    REQUIRE(row != nullptr);
+    NumberField* field = nullptr;
+    core::Array<Node*> stack(core::DefaultAllocator());
+    stack.PushBack(row);
+    while (!stack.IsEmpty() && field == nullptr)
+    {
+        Node* node = stack.Back();
+        stack.PopBack();
+        field = core::Cast<NumberField>(node);
+        for (usize i = 0; node != nullptr && i < node->ChildCount(); ++i)
+            stack.PushBack(node->GetChildAt(i));
+    }
+    REQUIRE(field != nullptr);
+    bed.D().InjectMouseDown(Centre(*field), MouseButton::Left);
+    bed.D().InjectMouseUp(Centre(*field), MouseButton::Left);
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::A), KeyModCtrl);
+    bed.D().InjectText(SV(u8"7.5"));
+    CHECK(field->IsEditing());
+    // A refresh mid-typing (an inspector re-reads its values each frame): the text stays.
+    bed.bag.SetValue(SV(u8"speed"), 0, Variant(1.0)); // the stored value, told again
+    bed.Frame();
+    CHECK(field->GetText() == SV(u8"7.5"));
+    bed.D().InjectKeyDown(static_cast<core::u32>(KeyCode::Return));
+    bed.Frame();
+    CHECK(bed.bag.GetValue(SV(u8"speed"), 0).AsFloat() == doctest::Approx(7.5));
+}

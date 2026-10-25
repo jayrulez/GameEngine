@@ -57,6 +57,9 @@ export namespace foundation::gui
         }
         [[nodiscard]] core::StringView GetPath() const noexcept { return m_path.AsView(); }
         [[nodiscard]] bool IsReadOnly() const noexcept { return m_readOnly; }
+        /// Being typed into: the grid then leaves what it shows alone as the values refresh (a
+        /// value typed is the edit's until Return or the focus leaving commits it).
+        [[nodiscard]] virtual bool IsTyping() const { return false; }
 
     protected:
         [[nodiscard]] IPropertyEditHost* GetHost() const noexcept { return m_host; }

@@ -815,8 +815,10 @@ namespace foundation::gui
         if (property == nullptr)
             return;
         // The row an edit is open on keeps what its editor shows: the source's values are its
-        // previews, and the editor is mid-gesture.
-        const bool editing = IsUnderEdit(row->Path.AsView()) && property->GetPath() == row->Path.AsView();
+        // previews, and the editor is mid-gesture. So does one being typed into: the text is the
+        // edit's until it commits (the values refresh each frame; typed text went back at once).
+        const bool same = property->GetPath() == row->Path.AsView();
+        const bool editing = same && (IsUnderEdit(row->Path.AsView()) || (property->GetEditor() != nullptr && property->GetEditor()->IsTyping()));
         property->Show(*row);
         property->SetChanged(row->Node < m_nodes.Size() && IsChanged(row->Node));
         if (PropertyEditor* editor = property->GetEditor(); editor != nullptr && !editing && m_source != nullptr)

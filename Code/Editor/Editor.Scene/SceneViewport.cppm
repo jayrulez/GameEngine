@@ -281,14 +281,19 @@ export namespace editor
         }
 
         /// Before the page goes: the camera never closes captured, the picks keyed by it are
-        /// cancelled, the readback buffer goes while the device lives.
+        /// cancelled, a picture recorded and not yet written is written (it waits for the GPU: a
+        /// save's launcher picture, the editor closing that same frame, was freed while the copy
+        /// was still running), then the readback buffer goes while the device lives.
         void Close(foundation::runtime::IApplicationHost& host)
         {
             m_camera.ReleaseCapture(Mouse());
             if (m_services.render != nullptr)
                 m_services.render->CancelPicks(Key());
             if (host.Graphics() != nullptr && host.Graphics()->Raw() != nullptr)
+            {
+                CompleteCapture(host);
                 m_capture.Release(host.Graphics()->Raw());
+            }
         }
 
     private:

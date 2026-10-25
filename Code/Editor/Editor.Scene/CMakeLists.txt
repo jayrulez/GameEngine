@@ -42,6 +42,7 @@ target_sources(Editor.Scene
         ScenePageImpl.cpp
         HierarchyViewImpl.cpp
         InspectorViewImpl.cpp
+        EntityRefEditorImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
@@ -72,6 +73,7 @@ target_sources(Editor.Scene
             SceneSimulation.cppm
             PrefabFlows.cppm
             HierarchyView.cppm
+            EntityRefEditor.cppm
             InspectorView.cppm
             SceneViewport.cppm
             ScenePage.cppm

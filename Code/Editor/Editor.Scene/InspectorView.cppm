@@ -8,7 +8,8 @@
 // type icon, the name, the kind; several selected say how many), and one grid of sections (the
 // editor's PropertySections): the entity's Active, its Transform (a reflected Transform, its
 // rotation in Euler degrees), then each component every selected entity has, its reflected rows
-// with the editors by hint (an asset reference a slot taking what the builders make). Several
+// with the editors by hint (an asset reference a slot taking what the builders make, an entity
+// reference a slot over the scene's entities: EntityRef taken as a reference by its id). Several
 // entities are edited at once, a row differing among them shown mixed.
 //   - Every edit is one undo step on the page's stack: a component's as the reflected source's
 //     change (each entity's value before and after as text, restored on undo, the components found
@@ -33,6 +34,7 @@ import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import :edit;
+import :entity_ref_editor;
 
 using namespace foundation::core;
 
@@ -127,6 +129,7 @@ export namespace editor
         foundation::gui::Node* m_pane = nullptr;
         foundation::gui::PropertyGrid* m_grid = nullptr;
         app::PropertySections m_sections;
+        EntityRefEditor::Services m_entityRefs; // what the entity slots ask (the grid's registry holds it)
         XmlPropertyTextFormat m_format;
         // The selection it shows, in order.
         Array<Guid> m_entities;

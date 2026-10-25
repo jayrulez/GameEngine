@@ -21,6 +21,7 @@ import editor.core;
 import editor.app;
 import :edit;
 import :inspector;
+import :entity_ref_editor;
 
 using namespace foundation::core;
 namespace gui = foundation::gui;
@@ -49,6 +50,14 @@ namespace editor
     namespace
     {
         constexpr StringView kActiveKey = u8"e";
+
+        // A component's source as the inspector reads it, and an undo writes it back: its text
+        // format, EntityRef a reference by its id.
+        void ConfigureComponentSource(gui::ReflectedPropertySource& source, gui::IPropertyTextFormat& format)
+        {
+            source.SetTextFormat(&format);
+            source.RegisterReferenceType(EntityRefEditor::kHint, gui::ReflectedReferenceParts{String(u8"id")});
+        }
         constexpr StringView kTransformKey = u8"t";
 
         // A component edit as the reflected source told it: each entity's value before and after as
@@ -79,7 +88,7 @@ namespace editor
                     objects.PushBack(manager->GetComponentInstance(e));
                 }
                 gui::ReflectedPropertySource source(EditorRootAllocator());
-                source.SetTextFormat(m_format);
+                ConfigureComponentSource(source, *m_format);
                 source.SetObjects(Span<const Instance>(objects.Data(), objects.Size()));
                 return source.Restore(m_change, before);
             }
@@ -104,6 +113,13 @@ namespace editor
         {
             if (m_services.refs != nullptr)
                 app::ResourceRefEditor::Register(m_grid->GetEditors(), *m_services.refs);
+            // An entity reference: a slot over this scene's entities, chosen before the asset slot.
+            scene::RegisterEntityRefReflection();
+            m_entityRefs.edit = m_edit;
+            m_entityRefs.icons = m_services.icons;
+            if (m_services.pick)
+                m_entityRefs.pick = [self](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); };
+            EntityRefEditor::Register(m_grid->GetEditors(), m_entityRefs);
             m_grid->SetSource(&m_sections);
             m_grid->SetOnRowMenu([self](gui::Menu& menu, const gui::PropertyRow& row) { self->HeaderMenu(menu, row); });
         }
@@ -315,7 +331,7 @@ namespace editor
                                  section->title = TitleOf(*type);
                                  section->type = type;
                                  section->source = MakeUnique<gui::ReflectedPropertySource>(m_allocator, m_allocator);
-                                 section->source->SetTextFormat(&m_format);
+                                 ConfigureComponentSource(*section->source, m_format);
                                  const Array<Instance> objects = InstancesOf(*type);
                                  section->source->SetObjects(Span<const Instance>(objects.Data(), objects.Size()));
                                  SceneInspectorView* self = this;

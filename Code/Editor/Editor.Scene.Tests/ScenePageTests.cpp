@@ -620,3 +620,50 @@ TEST_CASE("inspector: several entities edited at once; a component's header has 
     CHECK_FALSE(inspector->Sections().IsReadOnly());
     page->OnClose();
 }
+
+TEST_CASE("inspector: an entity reference is a slot over the scene's entities: its name, a pick from the tree, a dragged entity, one undo each")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    const Guid lamp = page->EditContext().CreateEntity(u8"Lamp");
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    REQUIRE(inspector->AddComponent(u8"InstanceMemberComponent"));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    Shown shown(*page);
+    const String path = inspector->PathOf(u8"Instance Member", u8"instancedMesh");
+    REQUIRE_FALSE(path.IsEmpty());
+    auto* slot = Cast<EntityRefEditor>(inspector->Grid()->FindEditor(path.AsView()));
+    REQUIRE(slot != nullptr); // the entity slot, not the asset one
+    CHECK(slot->Slot()->ShownName() == StringView(u8"None"));
+
+    // The pick: the scene's entities as a tree, None allowed.
+    const i64 before = page->Commands().UndoIndex();
+    app::PickerRequest request = slot->Request();
+    CHECK(request.Tree);
+    CHECK(request.AllowNone);
+    REQUIRE(request.Items.Size() == 2u);
+    CHECK(request.Items[1].Name == String(u8"Lamp"));
+    request.OnPicked(request.Items[1].Key.AsView());
+    CHECK(page->Commands().UndoIndex() == before + 1);
+    CHECK(page->Commands().CanUndo());
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    scene::Scene& scene = *page->ScenePtr();
+    auto* manager = page->EditContext().FindManager(&TypeOf<engine::render::InstanceMemberComponent>());
+    REQUIRE(manager != nullptr);
+    const auto member = [&]() { return static_cast<engine::render::InstanceMemberComponent*>(manager->GetComponentInstance(scene.FindEntity(bed.crate)).Pointer()); };
+    CHECK(member()->instancedMesh.id == lamp);
+    slot = Cast<EntityRefEditor>(inspector->Grid()->FindEditor(path.AsView()));
+    REQUIRE(slot != nullptr);
+    CHECK(slot->Slot()->ShownName() == StringView(u8"Lamp"));
+    page->Commands().Undo(); // one step
+    CHECK(member()->instancedMesh.id.IsNil());
+
+    // A dragged entity, as from the hierarchy.
+    const gui::DragPayload dragged = EntityDrag::Payload(Span<const Guid>(&bed.crate, 1u), u8"Crate");
+    CHECK(slot->Take(dragged));
+    CHECK(member()->instancedMesh.id == bed.crate);
+    page->OnClose();
+}

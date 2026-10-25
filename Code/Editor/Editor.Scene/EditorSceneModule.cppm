@@ -35,6 +35,7 @@ export import :scene_view_state;
 export import :scene_simulation;
 export import :prefab_flows;
 export import :hierarchy;
+export import :entity_ref_editor;
 export import :inspector;
 export import :scene_viewport;
 export import :page;

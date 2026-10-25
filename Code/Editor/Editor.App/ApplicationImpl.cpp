@@ -41,6 +41,8 @@ namespace editor::app
     {
         editor::SetEditorRootAllocator(m_editorAllocator);
         m_context.SetThumbnails(&m_thumbnailService);
+        // A thumbnail ready is told to the views showing thumbnails (the assets browser).
+        m_thumbnailService.OnThumbnailReady = [self = this](const Guid& id) { self->m_context.NotifyThumbnailReady(id); };
     }
 
     EditorApplication::~EditorApplication() = default;
@@ -316,6 +318,7 @@ namespace editor::app
             (void)RefServices(); // the type icons
             assets.icons = m_typeIcons.Get();
             assets.open = [self](foundation::content::Instance& instance) { (void)self->m_pages->Open(instance.Id()); };
+            assets.picture = [self](const Guid& id) { return self->m_thumbnailService.Get(id); };
             assets.operations = m_assetOps.Get();
             assets.create = [self](const pipeline::AssetCreator& creator, foundation::content::Group* group) { self->m_creation.CreateAndOpen(creator, group); };
             m_assets = MakeUnique<AssetsView>(m_editorAllocator, m_editorAllocator, Move(assets), m_window.LoadMarkup(AssetsView::kPath));

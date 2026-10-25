@@ -67,6 +67,8 @@ namespace
         UniquePtr<editor::app::AssetOperations> ops;
         UniquePtr<AssetsView> view;
         Array<String> created; // what New ran, by its label
+        Guid pictured;                     // the asset whose thumbnail is ready (none: nil)
+        RefPtr<gui::Drawable> picture;     // what it shows
         content::Group* top = nullptr;
         content::Group* models = nullptr;
         content::Group* town = nullptr;
@@ -104,6 +106,7 @@ namespace
             ops = MakeUnique<editor::app::AssetOperations>(DefaultAllocator(), Move(operations));
             services.operations = ops.Get();
             services.create = [self](const pipeline::AssetCreator& creator, content::Group*) { self->created.PushBack(creator.label); };
+            services.picture = [self](const Guid& id) { return id == self->pictured ? self->picture : RefPtr<gui::Drawable>{}; };
             view = MakeUnique<AssetsView>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadAssets());
             RefPtr<gui::Node> panel = view->Content();
             REQUIRE(panel);
@@ -530,4 +533,20 @@ TEST_CASE("assets: assets dropped on a group's row or a group in the tree move i
     onto.Index = tree.GetItemIndex(modelsItem);
     CHECK(groups.CanDrop(onto, why) == gui::DropEffect::None);
     CHECK(why == String(u8"Barrel is already in Models"));
+}
+
+TEST_CASE("assets: a tile shows its type's glyph until its thumbnail is ready, then the thumbnail")
+{
+    Bed bed;
+    CHECK(bed.view->ShowsTiles());
+    AssetCell* crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK_FALSE(crate->ShowsPicture());
+    bed.picture = RefPtr<gui::Drawable>(gui::SvgDrawable::FromText(DefaultAllocator(), u8"<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8'/></svg>").Get());
+    REQUIRE(bed.picture);
+    bed.pictured = bed.crate->Id();
+    bed.context.NotifyThumbnailReady(bed.crate->Id()); // as the thumbnail service tells it
+    crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK(crate->ShowsPicture());
 }

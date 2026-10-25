@@ -54,6 +54,7 @@ export namespace editor::app
             String BadgeClass; ///< success, warning, danger
             bool Favourite = false;
             bool Group = false;
+            RefPtr<gui::Drawable> Picture; ///< its thumbnail, a tile's in place of its glyph; null: none yet
         };
 
         explicit AssetCell(bool tile) : m_tile(tile)
@@ -66,6 +67,11 @@ export namespace editor::app
                 glyphHolder = m_thumb.Get();
             }
             m_glyph = Part<gui::Image>(*glyphHolder, tile ? StringView(u8"asset-glyph") : StringView(u8"row-icon"));
+            if (tile)
+            {
+                m_picture = Part<gui::Image>(*m_thumb, u8"asset-picture");
+                m_picture->SetDisplayed(false);
+            }
             // A row's name and kind share a baseline, the kind at the end, right-aligned (each
             // row's ends in the same place, its badge and star in columns after it).
             gui::Node* textHolder = this;
@@ -91,6 +97,14 @@ export namespace editor::app
             if (!m_glyphClass.IsEmpty())
                 m_glyph->AddClass(m_glyphClass.AsView());
             m_glyph->SetSource(shown.Glyph);
+            // A tile shows the asset's picture once there is one, its type's glyph till then.
+            const bool pictured = m_picture && shown.Picture;
+            if (m_picture)
+            {
+                m_picture->SetDrawable(shown.Picture);
+                m_picture->SetDisplayed(pictured);
+            }
+            m_glyph->SetDisplayed(!pictured);
             m_name->SetText(shown.Name.AsView());
             m_kind->SetText(shown.Kind.AsView());
             if (!m_badgeClass.IsEmpty())
@@ -122,6 +136,7 @@ export namespace editor::app
         [[nodiscard]] StringView Badge() const { return m_badge->GetText(); }
         [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed() && m_star->IsVisible(); }
         [[nodiscard]] bool IsTile() const noexcept { return m_tile; }
+        [[nodiscard]] bool ShowsPicture() const { return m_picture && m_picture->IsDisplayed() && m_picture->GetDrawable() != nullptr; }
         [[nodiscard]] gui::Label* NameLabel() const noexcept { return m_name.Get(); }
         [[nodiscard]] gui::Label* KindLabel() const noexcept { return m_kind.Get(); }
 
@@ -138,6 +153,7 @@ export namespace editor::app
 
         bool m_tile;
         RefPtr<gui::Panel> m_thumb;
+        RefPtr<gui::Image> m_picture; // a tile's thumbnail
         RefPtr<gui::Panel> m_text; // a row's name and kind
         RefPtr<gui::Image> m_glyph;
         RefPtr<gui::Label> m_name;
@@ -163,6 +179,9 @@ export namespace editor::app
             editor::EditorIcons* icons = nullptr;       // a type's glyph; null: generic ones
             Function<void(content::Instance&)> open;    // an asset opened (its page)
             AssetOperations* operations = nullptr;      // rename, duplicate, delete, cook; null: no menus
+            /// An asset's picture (the thumbnails'), null while there is none; unset: glyphs only.
+            /// A picture that arrives later is told through the context's thumbnail listeners.
+            Function<RefPtr<gui::Drawable>(const Guid&)> picture;
             /// Runs a creator into a group (File > New's create-and-open); unset: no New menu.
             Function<void(const pipeline::AssetCreator&, content::Group*)> create;
         };
@@ -270,11 +289,16 @@ export namespace editor::app
             if (auto* verb = Find<gui::Button>(u8"assets-state-verb"))
                 verb->SetOnClick([self]() { self->StateVerb(); });
             ShowLayout();
+            // A picture that arrives redraws the cells (the one showing it among them).
+            if (m_services.context != nullptr && m_services.picture)
+                m_pictureListener = m_services.context->AddThumbnailListener([self](const Guid&) { self->m_model.Changed(); });
         }
         AssetsView(const AssetsView&) = delete;
         AssetsView& operator=(const AssetsView&) = delete;
         ~AssetsView()
         {
+            if (m_pictureListener != 0)
+                m_services.context->RemoveThumbnailListener(m_pictureListener);
             if (m_list != nullptr)
                 m_list->SetModel(nullptr);
             if (m_tree != nullptr)
@@ -831,6 +855,8 @@ export namespace editor::app
                 if (shown.Glyph.IsEmpty())
                     shown.Glyph = String(u8"Editor/Icons/file.svg");
                 shown.Favourite = m_services.context != nullptr && m_services.context->IsFavorite(instance.Id());
+                if (m_services.picture)
+                    shown.Picture = m_services.picture(instance.Id());
                 if (m_services.cook != nullptr)
                     switch (m_services.cook->BadgeFor(const_cast<content::Instance&>(instance)))
                     {
@@ -1264,7 +1290,8 @@ export namespace editor::app
         gui::ListView* m_list = nullptr;
         gui::BreadcrumbBar* m_crumbs = nullptr;
         RefPtr<gui::Menu> m_menu;
-        RefPtr<gui::MessageBox> m_confirm; // the last confirmation asked (a test answers it)
+        RefPtr<gui::MessageBox> m_confirm;
+        u64 m_pictureListener = 0; // the context's thumbnail listener // the last confirmation asked (a test answers it)
         content::ContentDatabase* m_db = nullptr; // the database it shows (the project's)
         content::Group* m_current = nullptr;      // the group it shows
         u64 m_dbRevision = 0;

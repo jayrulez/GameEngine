@@ -1,0 +1,319 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// Editor App - :asset_import partition
+//
+// Importing files into the project (Documentation/Specs/editor-gui.md, 5.2, layer 7): one import
+// of one file or many (a drop, Import...), into one group. Each file gets the importers that take
+// its extension (one no importer takes is said and left out), the first chosen; its options; and
+// its review plan, what the import would create, each resource kept or not and named (described
+// at once by a light importer, after reading the file on a worker by a heavy one, its previous
+// import's choices in that group laid over it). The import waits until every file kept is read
+// and described, saying why; then each is imported (its bulk writes flushed on a worker), the
+// editor is told, and the group's assets are cooked. Nothing changes the databases while a cook
+// reads them: an import waits for it, saying so. The import window is its view.
+module;
+#include "Core/Prelude.h"
+#include "Core/Log/Log.h"
+
+export module editor.app:asset_import;
+
+import foundation.core;
+import foundation.content;
+import editor.core;
+import pipeline.importer;
+import :group_picker_dialog; // GroupPicker::ShownName
+
+using namespace foundation::core;
+
+export namespace editor::app
+{
+    namespace content = foundation::content;
+
+    class AssetImport
+    {
+    public:
+        struct Services
+        {
+            editor::EditorContext* context = nullptr;
+            editor::EditorCookService* cook = nullptr; // null: nothing waits (a test)
+            editor::EditorJobService* jobs = nullptr;  // null: everything on this thread (a test)
+        };
+
+        /// One file of an import.
+        struct File
+        {
+            enum class State : u8
+            {
+                Reading, ///< a heavy importer reads it on a worker
+                Ready,   ///< described: its plan is what the import would create
+                Failed,  ///< it could not be read
+            };
+            String path;
+            Array<pipeline::IFileImporter*> importers; ///< those that take its extension
+            usize importer = 0;                        ///< the one chosen
+            RefPtr<pipeline::ImportOptions> options;   ///< its options (a bare one when it has none)
+            RefPtr<Object> prepared;                   ///< what a worker read, for the import
+            pipeline::ImportPlan plan;                 ///< what it would create, kept and named
+            bool kept = true;                          ///< in the import
+            State state = State::Reading;
+            u64 generation = 0;                        ///< a read for an importer since replaced is let go
+
+            [[nodiscard]] pipeline::IFileImporter* Importer() const { return importer < importers.Size() ? importers[importer] : nullptr; }
+            [[nodiscard]] StringView Name() const { return pipeline::FileNameOf(path.AsView()); }
+        };
+
+        /// One import: its files and the group they go in. The window holds it while it shows.
+        class Session : public RefCounted
+        {
+        public:
+            Array<File> files;
+            content::Group* group = nullptr;
+            /// A file's state or plan changed (a worker's read arrived): its view shows it again.
+            Function<void(usize)> onChanged;
+            bool closed = false; // the window went: a read that arrives after is let go
+        };
+
+        explicit AssetImport(Services services) : m_services(Move(services)) {}
+
+        /// An import of `paths` into `into`: each file with the importers that take it (one none
+        /// takes is said and left out), each described or being read. Null when none is left.
+        RefPtr<Session> Begin(Span<const String> paths, content::Group& into)
+        {
+            RefPtr<Session> session = MakeRef<Session>(Context().Importers().Allocator());
+            session->group = &into;
+            for (const String& path : paths)
+            {
+                Array<pipeline::IFileImporter*> importers = Context().Importers().FindAllFor(pipeline::FileExtensionLower(path.AsView()).AsView());
+                if (importers.IsEmpty())
+                {
+                    Context().Notify(editor::NoticeKind::Warning, Format(u8"Nothing imports {}.", pipeline::FileNameOf(path.AsView())).AsView());
+                    continue;
+                }
+                File file;
+                file.path = path;
+                file.importers = Move(importers);
+                session->files.PushBack(Move(file));
+            }
+            if (session->files.IsEmpty())
+                return {};
+            for (usize i = 0; i < session->files.Size(); ++i)
+                Describe(*session, i);
+            return session;
+        }
+
+        /// Whether `session` needs no review: one file whose importer has no options and plans
+        /// nothing (a script, a UI document), imported at once.
+        [[nodiscard]] static bool NeedsNoReview(const Session& session)
+        {
+            if (session.files.Size() != 1)
+                return false;
+            const File& file = session.files[0];
+            return file.state == File::State::Ready && file.plan.IsEmpty() && file.options && file.options->Toggles().IsEmpty() &&
+                   file.importers.Size() == 1;
+        }
+
+        /// Chooses another importer for a file: its options anew, described again.
+        void SetImporter(Session& session, usize file, usize importer)
+        {
+            if (file >= session.files.Size() || importer >= session.files[file].importers.Size() || session.files[file].importer == importer)
+                return;
+            session.files[file].importer = importer;
+            Describe(session, file);
+        }
+        /// Moves the import to another group: a previous import's choices there laid over each plan.
+        void SetGroup(Session& session, content::Group& group)
+        {
+            session.group = &group;
+            for (File& file : session.files)
+                if (file.state == File::State::Ready && file.Importer() != nullptr)
+                    pipeline::MergeStoredSelection(file.plan, file.Importer()->StoredSelection(group, file.path.AsView()));
+        }
+
+        /// Whether the import can run now; when not, why (nothing kept, a file still being read).
+        [[nodiscard]] static bool CanImport(const Session& session, String& why)
+        {
+            usize kept = 0;
+            for (const File& file : session.files)
+            {
+                if (!file.kept)
+                    continue;
+                ++kept;
+                if (file.state == File::State::Reading)
+                {
+                    why = Format(u8"Reading {}...", file.Name());
+                    return false;
+                }
+                if (file.state == File::State::Failed)
+                {
+                    why = Format(u8"{} could not be read: leave it out.", file.Name());
+                    return false;
+                }
+            }
+            if (kept == 0)
+            {
+                why = String(u8"No file is kept.");
+                return false;
+            }
+            why = session.files.Size() == 1 ? Format(u8"Into {}.", GroupPicker::ShownName(*session.group))
+                                            : Format(u8"{} of {} files into {}.", kept, session.files.Size(), GroupPicker::ShownName(*session.group));
+            return true;
+        }
+
+        /// Imports every file kept, each with its plan as chosen; false (said) when it cannot yet.
+        bool Commit(Session& session)
+        {
+            String why;
+            if (!CanImport(session, why))
+                return false;
+            for (File& file : session.files)
+            {
+                if (!file.kept)
+                    continue;
+                file.options->selection = file.plan;
+                ImportOne(file.path, file.Importer(), file.options, file.prepared, *session.group);
+            }
+            return true;
+        }
+
+    private:
+        [[nodiscard]] editor::EditorContext& Context() const { return *m_services.context; }
+        [[nodiscard]] editor::EditorProject* Project() const { return m_services.context->Project(); }
+
+        // A file described at once (a light importer), or read on a worker first (a heavy one).
+        void Describe(Session& session, usize index)
+        {
+            File& file = session.files[index];
+            pipeline::IFileImporter* importer = file.Importer();
+            file.options = importer->CreateOptions(Context().Importers().Allocator());
+            if (!file.options)
+                file.options = MakeRef<pipeline::ImportOptions>(Context().Importers().Allocator()); // a bare one carries the plan's choices
+            file.prepared = {};
+            file.plan = {};
+            const u64 generation = ++file.generation;
+            if (!importer->WantsWorkerPrepare() || m_services.jobs == nullptr)
+            {
+                file.plan = importer->DescribeImport(file.path.AsView(), file.options.Get(), nullptr);
+                pipeline::MergeStoredSelection(file.plan, importer->StoredSelection(*session.group, file.path.AsView()));
+                file.state = File::State::Ready;
+                return;
+            }
+            file.state = File::State::Reading;
+            RefPtr<Session> keep(&session);
+            auto* holder = Context().Importers().Allocator().New<RefPtr<Object>>();
+            IAllocator* allocator = &Context().Importers().Allocator();
+            m_services.jobs->Submit(Format(u8"Reading {}", file.Name()).AsView(),
+                                    [importer, path = file.path, holder, allocator](editor::JobContext& job) -> Status
+                                    {
+                                        job.SetStep(u8"loading and decoding", 1, 2);
+                                        *holder = importer->PrepareOnWorker(path.AsView(), *allocator);
+                                        return holder->Get() != nullptr ? Status{} : Status{ErrorCode::InvalidArgument};
+                                    },
+                                    [this, keep, index, generation, holder, allocator](Status result)
+                                    {
+                                        RefPtr<Object> prepared = *holder;
+                                        allocator->Delete(holder);
+                                        if (keep->closed || index >= keep->files.Size() || keep->files[index].generation != generation)
+                                            return; // the window went, or another importer was chosen meanwhile
+                                        File& read = keep->files[index];
+                                        if (!result.IsOk())
+                                        {
+                                            read.state = File::State::Failed;
+                                            read.kept = false;
+                                            Context().Notify(editor::NoticeKind::Error, Format(u8"{} could not be read (see the Console).", read.Name()).AsView());
+                                        }
+                                        else
+                                        {
+                                            read.prepared = prepared;
+                                            read.plan = read.Importer()->DescribeImport(read.path.AsView(), read.options.Get(), prepared.Get());
+                                            pipeline::MergeStoredSelection(read.plan, read.Importer()->StoredSelection(*keep->group, read.path.AsView()));
+                                            read.state = File::State::Ready;
+                                        }
+                                        if (keep->onChanged)
+                                            keep->onChanged(index);
+                                    });
+        }
+
+        // One file into the group: waiting for a cook; its bulk writes flushed on a worker.
+        void ImportOne(String path, pipeline::IFileImporter* importer, RefPtr<pipeline::ImportOptions> options, RefPtr<Object> prepared, content::Group& group)
+        {
+            if (Project() == nullptr)
+                return;
+            content::Group* into = &group;
+            if (m_services.cook != nullptr && m_services.cook->MutationLocked())
+            {
+                m_services.cook->RunWhenIdle([this, path, importer, options, prepared, into]() { ImportOne(path, importer, options, prepared, *into); });
+                Context().Notify(editor::NoticeKind::Info, u8"The import waits for the cook to finish.");
+                return;
+            }
+            IAllocator& allocator = Context().Importers().Allocator();
+            IAllocator* owner = &allocator;
+            auto deferred = MakeUnique<Array<pipeline::DeferredImportWrite>>(allocator);
+            const Stopwatch clock = Stopwatch::StartNew();
+            Result<content::Instance*> imported =
+                importer->Import(path.AsView(), pipeline::ImportContext{allocator, Project()->SourcesRoot()}, group, options.Get(), prepared.Get(),
+                                 m_services.jobs != nullptr ? deferred.Get() : nullptr);
+            LOG_INFO(u8"Import", u8"'{}': {} ms on the main thread, {} deferred write(s)", pipeline::FileNameOf(path.AsView()),
+                     static_cast<i64>(clock.Elapsed().AsMilliseconds()), deferred->Size());
+            if (!imported.HasValue() || imported.Value() == nullptr)
+            {
+                Context().Notify(editor::NoticeKind::Error, Format(u8"{} could not be imported (see the Console).", pipeline::FileNameOf(path.AsView())).AsView());
+                return;
+            }
+            content::Instance* primary = imported.Value();
+            if (deferred->IsEmpty() || m_services.jobs == nullptr)
+            {
+                Finish(*primary, *importer, options);
+                return;
+            }
+            // The bulk writes on a worker (pure file IO; the job keeps cooks out), the prepared
+            // payload kept alive for the writes that borrow from it.
+            auto* writes = deferred.Release();
+            const Guid primaryId = primary->Id();
+            m_services.jobs->Submit(Format(u8"Writing {}", pipeline::FileNameOf(path.AsView())).AsView(),
+                                    [writes, prepared](editor::JobContext& job) -> Status
+                                    {
+                                        Status result{};
+                                        for (usize i = 0; i < writes->Size(); ++i)
+                                        {
+                                            pipeline::DeferredImportWrite& write = (*writes)[i];
+                                            job.SetStep(write.Label(), i + 1, writes->Size());
+                                            job.SetFraction(static_cast<f32>(i) / static_cast<f32>(writes->Size()));
+                                            if (const Status s = write.Execute(); !s.IsOk())
+                                            {
+                                                LOG_ERROR(u8"Import", u8"a deferred write failed: '{}'", write.Label());
+                                                result = s;
+                                            }
+                                        }
+                                        (void)prepared;
+                                        return result;
+                                    },
+                                    [this, writes, importer, options, primaryId, owner](Status result)
+                                    {
+                                        owner->Delete(writes);
+                                        content::Instance* written = Project() != nullptr ? Project()->SourceDb().GetInstance(primaryId) : nullptr;
+                                        if (!result.IsOk() || written == nullptr)
+                                        {
+                                            Context().Notify(editor::NoticeKind::Error, u8"The import's data could not be written (see the Console).");
+                                            return;
+                                        }
+                                        Finish(*written, *importer, options);
+                                    });
+        }
+        // Said, told to the editor (its pages, an agent), and the group's assets cooked: a
+        // re-import of the same bytes copies nothing a watcher would notice.
+        void Finish(content::Instance& primary, pipeline::IFileImporter& importer, const RefPtr<pipeline::ImportOptions>& options)
+        {
+            Context().Notify(editor::NoticeKind::Success, Format(u8"Imported {} ({}).", primary.Name(), importer.Label()).AsView());
+            Context().NotifyImported(primary, options.Get());
+            if (m_services.cook == nullptr)
+                return;
+            Array<Guid> ids;
+            for (const content::Instance* instance : primary.OwningGroup().Instances())
+                ids.PushBack(instance->Id());
+            m_services.cook->RequestCookFor(Move(ids), false);
+        }
+
+        Services m_services;
+    };
+}

@@ -25,7 +25,7 @@ target_link_libraries(Tools.Editor PRIVATE
     Engine::Composition # RegisterAllScriptFacades: the COMPLETE engine facade surface the cook
                           # AND live validation compile against (run/ui/physics/audio/... facades)
     Editor::Core Editor::App Editor::Navigation
-    Editor::Scene # its services so far (the export's scene seams, a model import's prefab); its pages come with their port
+    Editor::Scene # the scene page (its hierarchy and inspector come with their layers)
     Pipeline::Core Pipeline::Cook
     Pipeline::Registration # the composition root: every builder/importer/type registration
     Foundation::Resource Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Texture.Resource

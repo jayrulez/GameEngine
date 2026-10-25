@@ -7,8 +7,7 @@
 // ViewportView through the real renderer + EditorCamera), its page factory, and the
 // RegisterSceneEditor entry point the editor EXECUTABLE calls - the editor core/app never link
 // this module. On the GUI in parts (Documentation/Specs/editor-gui.md, 5.3): the partitions still
-// on foundation.ui (the page, the hierarchy, the inspector, the picker dialogs) come back with
-// their layers.
+// on foundation.ui (the hierarchy, the inspector, the picker dialogs) come back with their layers.
 
 export module editor.scene;
 
@@ -31,3 +30,10 @@ export import :tools;
 export import :component_gizmos;
 export import :asset_thumbnails;
 export import :services;
+export import :scene_overlays;
+export import :scene_view_state;
+export import :scene_simulation;
+export import :prefab_flows;
+export import :scene_viewport;
+export import :page;
+export import :registration;

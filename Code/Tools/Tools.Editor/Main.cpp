@@ -57,7 +57,7 @@ import pipeline.importer; // the import framework (a consumer imports it itself)
 import engine.composition; // RegisterAllScriptFacades - the COMPLETE engine facade surface
 import editor.core;
 import editor.app;
-import editor.scene; // RegisterSceneEditorServices (its pages come back with their port)
+import editor.scene; // RegisterSceneEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -277,9 +277,9 @@ int main(int argc, char** argv)
     {
         app.SetSceneRenderer(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
         editor::navigation::RegisterNavigationEditorSettings(app.Context());
-        // The scene editor's services: its document types, the export's scene seams (the text
-        // transcoded, the references scanned) and a model import's prefab and scene.
-        editor::RegisterSceneEditorServices(app.Context(), host);
+        // The scene editor: its pages, its actions, its MCP live tools, and its services (the
+        // document types, the export's scene seams, a model import's prefab and scene).
+        editor::RegisterSceneEditor(app.Context(), host, app);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too). The script page and its "New Asset > <Lang> Script" creators come
         // back with the Script page's port.

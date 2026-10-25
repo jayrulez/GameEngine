@@ -147,11 +147,28 @@ export namespace sandbox
             Define(u8"mock.stop", u8"Stop", u8"shift-f5", u8"Editor/Icons/stop.svg");
             Define(u8"mock.frame", u8"Frame Selection", u8"f", u8"Editor/Icons/frame-selection.svg");
             Define(u8"mock.grid", u8"Grid", {}, u8"Editor/Icons/grid.svg");
-            Define(u8"mock.snap", u8"Snap", {}, u8"Editor/Icons/magnet.svg");
-            Define(u8"mock.space", u8"World Space", {}, u8"Editor/Icons/world.svg");
-            Define(u8"mock.view-lit", u8"Lit");
-            Define(u8"mock.view-unlit", u8"Unlit");
-            Define(u8"mock.view-wire", u8"Wireframe");
+            // The bar's editing controls (layer 5, part 1), each with its key.
+            Define(u8"mock.tool-select", u8"Select", u8"q", u8"Editor/Icons/select.svg");
+            Define(u8"mock.tool-move", u8"Move", u8"w", u8"Editor/Icons/move.svg");
+            Define(u8"mock.tool-rotate", u8"Rotate", u8"e", u8"Editor/Icons/rotate.svg");
+            Define(u8"mock.tool-scale", u8"Scale", u8"r", u8"Editor/Icons/scale.svg");
+            Define(u8"mock.snap", u8"Snap Every Drag (Ctrl for one)", {}, u8"Editor/Icons/magnet.svg");
+            Define(u8"mock.space", u8"World Space", u8"x", u8"Editor/Icons/world.svg");
+            Define(u8"mock.vertex-snap", u8"Vertex Snap (V for one drag)", {}, u8"Editor/Icons/target.svg");
+            Define(u8"mock.terrain-sculpt", u8"Sculpt", {}, u8"Editor/Icons/Types/TerrainComponent.svg");
+            Define(u8"mock.terrain-paint", u8"Paint Layers", {}, u8"Editor/Icons/texture.svg");
+            Define(u8"mock.terrain-holes", u8"Cut Holes", {}, u8"Editor/Icons/minus.svg");
+            Define(u8"mock.vegetation-paint", u8"Paint Vegetation", {}, u8"Editor/Icons/Types/TerrainVegetationComponent.svg");
+            Define(u8"mock.vegetation-props", u8"Paint Props", {}, u8"Editor/Icons/Types/VegetationMaskAsset.svg");
+            Define(u8"mock.spline", u8"Edit Spline", {}, u8"Editor/Icons/Types/SplineComponent.svg");
+            Define(u8"mock.textures", u8"Render Textures...", {}, u8"Editor/Icons/texture.svg");
+            m_context.DefineCommand(u8"mock.terrain-sculpt").SetChecked(true);
+            gui::Command& props = m_context.DefineCommand(u8"mock.vegetation-props");
+            props.SetEnabled(false);
+            props.SetDisabledReason(u8"No Terrain Vegetation component has a prop layer");
+            gui::Command& spline = m_context.DefineCommand(u8"mock.spline");
+            spline.SetEnabled(false);
+            spline.SetDisabledReason(u8"Select an entity with a Spline component");
             Define(u8"mock.about", u8"About AssiduousEngine");
             Define(u8"mock.toast", u8"Show a Toast");
             Define(u8"mock.dialog", u8"Show a Dialog");
@@ -170,6 +187,7 @@ export namespace sandbox
             // turn, and a dialog.
             (void)m_root.OnCommand(u8"mock.toast", [self](gui::CommandEvent&) { self->ShowToast(); });
             (void)m_root.OnCommand(u8"mock.dialog", [self](gui::CommandEvent&) { self->ShowDialog(); });
+            (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowTextures(); });
             (void)m_root.OnCommand(u8"mock.side-by-side", [self](gui::CommandEvent&) { self->SetSideBySide(!self->m_sideBySide); });
             Define(u8"look.dark", u8"Dark");
             Define(u8"look.light", u8"Light");
@@ -212,6 +230,27 @@ export namespace sandbox
             if (sample.Action != nullptr)
                 request.AddAction(String(u8"action"), String(sample.Action), String{});
             (void)m_toasts->Post(Move(request));
+        }
+
+        // The render textures picker (ruling 21), as the editor's picker opens: modal, under the
+        // window's top.
+        void ShowTextures()
+        {
+            if (!m_textures)
+                m_textures = m_host.Load(u8"Editor/Mock/textures.gml");
+            gui::EventDispatcher* dispatcher = m_root.GetEventDispatcher();
+            if (!m_textures || dispatcher == nullptr || dispatcher->IsPopupOpen(*m_textures))
+                return;
+            gui::PopupOptions options;
+            options.Kind = gui::PopupKind::Auto;
+            options.Modal = true;
+            options.TakesFocus = true;
+            options.FitContent = true;
+            options.HasAnchorRect = true;
+            options.AnchorRect = gui::Rect{0.0f, 0.0f, m_root.GetSize().x, m_root.GetSize().y * 0.2f};
+            options.Placement.Side = gui::PopupSide::Below;
+            options.Placement.Align = gui::PopupAlign::Center;
+            dispatcher->OpenPopup(m_root, *m_textures, Move(options));
         }
 
         void ShowDialog()
@@ -345,6 +384,18 @@ export namespace sandbox
                 // A scene has settings, not components: nothing to add.
                 if (auto* add = Cast<gui::Button>(FindById(content, u8"add-component")))
                     add->SetDisplayed(false);
+                // A render texture shown: the shading chip names it and stands out, so a debug
+                // view left on is seen.
+                if (auto* shading = Cast<gui::Button>(FindById(content, u8"chip-shading")))
+                {
+                    shading->SetText(u8"ssgi.filtered");
+                    shading->AddClass(u8"on");
+                }
+                if (auto* projection = Cast<gui::Button>(FindById(content, u8"chip-projection")))
+                {
+                    projection->SetText(u8"Top");
+                    projection->AddClass(u8"on");
+                }
             }
             else
             {
@@ -391,6 +442,7 @@ export namespace sandbox
         RefPtr<gui::Node> m_kit; // the kit page's content, once the dock has made it
         RefPtr<gui::ToastHost> m_toasts;
         RefPtr<gui::MessageBox> m_dialog;
+        RefPtr<gui::Node> m_textures; // the render textures picker, once opened
         usize m_toastsShown = 0;
         Array<RefPtr<Object>> m_shown; // what each page's inspector shows
         Array<UniquePtr<gui::ReflectedPropertySource>> m_sources;

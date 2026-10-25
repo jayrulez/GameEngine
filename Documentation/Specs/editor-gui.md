@@ -234,7 +234,7 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape); the rest out, unedited, until their layers | X3 (layers 1 to 14) |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the rest out, unedited, until their layers | X3 (layers 1 to 15) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
@@ -274,8 +274,9 @@ GUI library additions X3 needs (GUI.Docking and the core):
   ActivePanel and SetOnActiveChanged;
 - a panel's title and classes changed while it is docked (a dirty marker, the active mark): done,
   the controller's SetTitle and SetTabClasses over a TabPage's tab classes;
-- a modal-open interceptor on the GUI context (MCP's unattended actions close the dialogs they
-  open as cancelled; foundation.ui's DialogInterceptor).
+- a modal-open interceptor (MCP's unattended actions close the dialogs they open as cancelled;
+  foundation.ui's DialogInterceptor): done, on the event dispatcher (Window reaches it, not the
+  context), SetModalInterceptor, a refused window answering as its cancel.
 
 The layers:
 1. Editor.App back in the build with its UI-free files only (font atlas cache, window capture,

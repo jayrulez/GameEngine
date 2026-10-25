@@ -208,7 +208,14 @@ namespace editor::app
         mcp.templatesRoot = [self]() { return self->m_export->TemplatesRoot(); };
         mcp.created = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         { self->m_creation.AfterCreate(creator, instance); };
-        mcp.addTools = [self](foundation::mcp::McpServer& server) { RegisterLayoutTools(server, self->m_dock.Controller()); };
+        mcp.addTools = [self](foundation::mcp::McpServer& server)
+        {
+            RegisterLayoutTools(server, self->m_dock.Controller());
+            ActionToolSeams actions;
+            actions.context = &self->m_context;
+            actions.dialogs = self->m_window.Root() != nullptr ? self->m_window.Root()->GetEventDispatcher() : nullptr;
+            RegisterActionTools(server, Move(actions));
+        };
         mcp.openPage = [self](const Guid& id) -> editor::EditorPage* { return self->m_pages->Open(id); };
         mcp.closePage = [self](editor::EditorPage* page) { self->m_pages->Close(page); };
         mcp.windows.windows = [self]() { return self->CapturableWindows(); };

@@ -7,7 +7,6 @@ module;
 module editor.app;
 
 import foundation.core;
-import foundation.ui;
 import foundation.json;
 import foundation.mcp;
 import editor.core;
@@ -154,7 +153,7 @@ namespace editor::app
                 }
                 Array<String> suppressed;
                 {
-                    UnattendedDialogs unattended(seams.ui);
+                    UnattendedDialogs unattended(seams.dialogs);
                     const Status ran = actions.Execute(action.id.AsView());
                     if (!ran.IsOk())
                     {

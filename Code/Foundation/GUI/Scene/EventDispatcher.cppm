@@ -470,9 +470,12 @@ export namespace foundation::gui
         {
             Node* hit = HitTest(position);
             // Up from the node under the pointer: a scroller takes it, one at its end leaves it to
-            // the one around it.
+            // the one around it. A disabled control takes no wheel but does not stop it: it starts
+            // at the nearest enabled node up from it (a list of cards, some disabled, scrolls).
+            while (hit != nullptr && !hit->IsTreeEnabled())
+                hit = hit->GetParent();
             bool used = false;
-            if (hit != nullptr && hit->IsTreeEnabled())
+            if (hit != nullptr)
             {
                 WheelEvent event(hit, position, delta, modifiers);
                 used = hit->RouteEvent(event);

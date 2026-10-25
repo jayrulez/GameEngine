@@ -182,6 +182,17 @@ TEST_CASE("scroll: the wheel scrolls it from the content; keys scroll it only wh
     CHECK(s.view->GetScrollOffset().y == doctest::Approx(200.0f)); // already at the end
 }
 
+TEST_CASE("scroll: the wheel over a disabled control inside scrolls its scroller, step after step")
+{
+    Scroller s;
+    for (const core::RefPtr<Panel>& row : s.rows)
+        row->SetEnabled(false); // a list of cards, these disabled
+    CHECK(s.D().InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f}));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(s.view->GetScrollStep()));
+    CHECK(s.D().InjectMouseWheel(core::Float2{20.0f, 20.0f}, core::Float2{0.0f, -1.0f}));
+    CHECK(s.view->GetScrollOffset().y == doctest::Approx(2.0f * s.view->GetScrollStep()));
+}
+
 TEST_CASE("scroll: one whose keys are its own does not scroll by them; the wheel still does")
 {
     Scroller s;

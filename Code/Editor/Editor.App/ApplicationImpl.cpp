@@ -443,6 +443,81 @@ namespace editor::app
         (void)m_projectSettings->Open(*root);
     }
 
+    // Export Templates over the main window (made the first time), the templates read again.
+    void EditorApplication::OpenTemplates(Function<void()> closed)
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr || !m_export)
+            return;
+        if (!m_templates)
+        {
+            TemplatesDialogSeams seams;
+            EditorApplication* self = this;
+            seams.templatesRoot = [self]() { return self->m_export->TemplatesRoot(); };
+            seams.refresh = [self](editor::TemplateRegistry& registry) { self->m_export->BuildTemplateRegistry(registry); };
+            seams.pickFolder = [self](Function<void(String)> chosen)
+            {
+                foundation::shell::IDialogService* dialogs = self->ShellDialogs();
+                if (dialogs == nullptr)
+                    return;
+                dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{[chosen = Move(chosen)](Span<const String> paths)
+                                                                                 {
+                                                                                     if (paths.Size() > 0)
+                                                                                         chosen(paths[0]);
+                                                                                 }});
+            };
+            seams.revealFolder = [](StringView folder) { (void)OpenPathInFileManager(folder); };
+            m_templates = MakeUnique<TemplatesDialog>(m_editorAllocator, m_editorAllocator, m_context, Move(seams), m_window.LoadMarkup(TemplatesDialog::kPath));
+        }
+        (void)m_templates->Open(*root, Move(closed));
+    }
+
+    foundation::shell::IDialogService* EditorApplication::ShellDialogs() const
+    {
+        return m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
+    }
+
+    // Export over the main window, for the open project (made again for each project: it edits
+    // that project's presets).
+    void EditorApplication::OpenExport()
+    {
+        gui::SceneRoot* root = m_window.Root();
+        editor::EditorProject* project = m_session.Project();
+        if (root == nullptr || !m_export || project == nullptr)
+            return;
+        if (!m_exportDialog || m_exportProject != project)
+        {
+            m_exportProject = project;
+            ExportDialogSeams seams;
+            EditorApplication* self = this;
+            seams.refresh = [self](editor::TemplateRegistry& registry) { self->m_export->BuildTemplateRegistry(registry); };
+            seams.save = [self]() { self->m_export->SavePresets(); };
+            seams.runExport = [self](StringView preset, bool all) { self->m_export->Run(preset, all); };
+            seams.openTemplates = [self](Function<void()> closed) { self->OpenTemplates(Move(closed)); };
+            seams.pickFiles = [self](Function<void(Array<String>)> chosen)
+            {
+                foundation::shell::IDialogService* dialogs = self->ShellDialogs();
+                if (dialogs == nullptr)
+                    return;
+                dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[chosen = Move(chosen)](Span<const String> paths)
+                                                                               {
+                                                                                   if (paths.IsEmpty())
+                                                                                       return;
+                                                                                   Array<String> picked;
+                                                                                   for (const String& path : paths)
+                                                                                       picked.PushBack(path);
+                                                                                   chosen(Move(picked));
+                                                                               }},
+                                      {}, {}, true);
+            };
+            seams.hostPlatform = String(GetHostPlatformName());
+            seams.outputRoot = PathJoin(project->Directory(), u8"Dist");
+            m_exportDialog = MakeUnique<ExportDialog>(m_editorAllocator, m_editorAllocator, m_export->Presets(), Move(seams),
+                                                      m_window.LoadMarkup(ExportDialog::kPath));
+        }
+        (void)m_exportDialog->Open(*root);
+    }
+
     void EditorApplication::ShowPicker(PickerRequest request, gui::Node* anchor)
     {
         gui::SceneRoot* root = m_window.Root();
@@ -661,11 +736,13 @@ namespace editor::app
         RegisterFileActions(actions, Move(file));
         EditActions edit;
         edit.preferences = [self]() { self->OpenPreferences(); };
+        edit.exportTemplates = [self]() { self->OpenTemplates(); };
         RegisterEditActions(actions, Move(edit));
 
         ProjectActions project;
         project.context = &m_context;
         project.settings = [self]() { self->OpenProjectSettings(); };
+        project.exportPresets = [self]() { self->OpenExport(); };
         project.addNativeCode = [self]() { self->AddNativeCode(); };
         project.buildNativeModule = [self]() { self->BuildNativeModule(); };
         project.reloadNativeModule = [self]()

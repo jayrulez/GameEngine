@@ -39,6 +39,8 @@ import :preferences_dialog;
 import :picker;
 import :resource_ref_editor;
 import :settings_dialog;
+import :templates_dialog;
+import :export_dialog;
 import :project_home;
 import :project_manager_view;
 import :log_view;
@@ -151,6 +153,10 @@ export namespace editor::app
         bool ConfirmExit();
         void OpenPreferences();
         void OpenProjectSettings();
+        /// Export Templates over the main window; `closed` hears when it closes.
+        void OpenTemplates(Function<void()> closed = {});
+        void OpenExport();
+        [[nodiscard]] foundation::shell::IDialogService* ShellDialogs() const;
         /// Shows a picker's request below `anchor` (else near the top), over the main window.
         void ShowPicker(PickerRequest request, gui::Node* anchor);
         [[nodiscard]] const ResourceRefServices& RefServices();
@@ -197,6 +203,9 @@ export namespace editor::app
         UniquePtr<Picker> m_picker;                 // the one picker (assets, paths, groups), made the first time
         ResourceRefServices m_refs;                 // what an asset slot asks of the editor
         UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
+        UniquePtr<TemplatesDialog> m_templates;             // Edit > Export Templates
+        UniquePtr<ExportDialog> m_exportDialog;             // Project > Export (its project's presets)
+        editor::EditorProject* m_exportProject = nullptr;   // the project m_exportDialog edits
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content

@@ -466,7 +466,7 @@ export namespace editor::app
                 tile->AddClass(u8"newer");
             // The picture opens it: a flat button holding it.
             RefPtr<gui::Button> picture = MakeRef<gui::Button>(m_allocator);
-            picture->AddClass(u8"link");
+            picture->AddClass(u8"manager-tile-open"); // its hover rings the picture evenly
             picture->AddChild(ProjectPicture::Make(m_allocator, card.missing ? StringView{} : card.path.AsView(), card.name.AsView(), u8"manager-tile-picture",
                                                    m_pictures)
                                   .Get());

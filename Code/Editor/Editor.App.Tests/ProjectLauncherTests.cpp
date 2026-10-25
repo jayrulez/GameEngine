@@ -6,6 +6,8 @@
 // project's menu and what it runs, and New Project's dialog.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include <initializer_list>
+#include <string>
 
 import foundation.core;
 import foundation.settings;
@@ -66,13 +68,21 @@ namespace
         Array<String> opened;
         Array<String> created;
 
-        Launcher()
+        /// `more` older projects after the three, there (`real`) or no longer there.
+        explicit Launcher(int more = 0, bool real = false)
         {
             RegisterProjectRegistryTypes();
             (void)RemoveDirectoryRecursive(root.AsView());
             REQUIRE(CreateDirectories(root.AsView()));
             REQUIRE(EditorProject::Create(DefaultAllocator(), first.AsView(), u8"First").IsOk());
             REQUIRE(EditorProject::Create(DefaultAllocator(), second.AsView(), u8"Second").IsOk());
+            for (int i = 0; i < more; ++i) // older projects: enough to scroll, after the three
+            {
+                const String dir = PathJoin(root.AsView(), Format(u8"More{}", i).AsView());
+                if (real)
+                    REQUIRE(EditorProject::Create(DefaultAllocator(), dir.AsView(), Format(u8"More{}", i).AsView()).IsOk());
+                TouchRecentProject(store, dir.AsView(), Format(u8"More{}", i).AsView(), u8"0.1.0");
+            }
             TouchRecentProject(store, gone.AsView(), u8"Gone", u8"0.1.0"); // no project there
             TouchRecentProject(store, second.AsView(), u8"Second", u8"0.1.0");
             TouchRecentProject(store, first.AsView(), u8"First", u8"0.1.0");
@@ -213,4 +223,104 @@ TEST_CASE("launcher: New Project waits for a name and a folder, then makes it in
     CHECK(l.view->CreateDialog() == nullptr);
     REQUIRE(l.created.Size() == 1u);
     CHECK(l.created[0] == PathJoin(l.root.AsView(), u8"Harbour"));
+}
+
+namespace
+{
+    // Over the first card, held still, frames passing between the notches (a tooltip's time): each
+    // notch scrolls the grid on, over whatever card comes under the pointer.
+    void WheelOverCards(Launcher& l)
+    {
+        // The editor's own sheet, as the window has it: the grid wraps and scrolls as it shows.
+        String sheet;
+        for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+        {
+            Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+            REQUIRE(bytes.HasValue());
+            sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+            sheet += u8"\n";
+        }
+        gui::StyleManager styles;
+        styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+        l.view->SetGridView(true);
+        l.Drain();
+        styles.ApplyTree(*l.scene);
+        (void)l.scene->UpdateLayout();
+        gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
+        REQUIRE(list != nullptr);
+        gui::Node* scroller = list->GetParent();
+        while (scroller != nullptr && Cast<gui::ScrollView>(scroller) == nullptr)
+            scroller = scroller->GetParent();
+        REQUIRE(scroller != nullptr);
+        const gui::Rect card = list->GetChildAt(0)->GetScreenBounds();
+        const Float2 at{card.x + card.width * 0.5f, card.y + card.height * 0.4f};
+        gui::EventDispatcher& d = *l.scene->GetEventDispatcher();
+        d.InjectMouseMove(at);
+        f32 last = scroller->GetScrollOffset().y;
+        for (int step = 0; step < 8 && last < scroller->GetScrollRange().y; ++step)
+        {
+            CAPTURE(step);
+            (void)d.InjectMouseWheel(at, Float2{0.0f, -1.0f});
+            for (int frame = 0; frame < 30; ++frame)
+            {
+                l.Drain();
+                (void)l.scene->UpdateLayout();
+            }
+            const f32 now = scroller->GetScrollOffset().y;
+            CHECK(now > last);
+            last = now;
+        }
+    }
+}
+
+TEST_CASE("launcher: the wheel over the grid's cards scrolls notch after notch, the pointer held still, over a missing project's card too")
+{
+    Launcher l(18);
+    WheelOverCards(l);
+}
+
+TEST_CASE("launcher: the wheel over the grid's cards scrolls notch after notch, over projects that are there")
+{
+    Launcher l(18, true);
+    WheelOverCards(l);
+}
+
+TEST_CASE("launcher: under the editor's sheet a card's picture button rings it evenly, inside the card")
+{
+    Launcher l;
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    l.view->SetGridView(true);
+    l.Drain();
+    styles.ApplyTree(*l.scene);
+    (void)l.scene->UpdateLayout();
+    gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
+    REQUIRE(list != nullptr);
+    gui::Node& card = *list->GetChildAt(0);
+    gui::Node* button = card.GetChildAt(0);
+    REQUIRE(Cast<gui::Button>(button) != nullptr);
+    REQUIRE(button->ChildCount() > 0);
+    gui::Node* picture = nullptr;
+    for (usize i = 0; i < button->ChildCount() && picture == nullptr; ++i)
+        if (auto* widget = Cast<gui::UIWidget>(button->GetChildAt(i)); widget != nullptr && widget->HasClass(u8"manager-tile-picture"))
+            picture = button->GetChildAt(i);
+    REQUIRE(picture != nullptr);
+    const gui::Rect b = button->GetScreenBounds();
+    const gui::Rect p = picture->GetScreenBounds();
+    const gui::Rect c = card.GetScreenBounds();
+    const f32 left = p.x - b.x, right = b.x + b.width - (p.x + p.width);
+    const f32 top = p.y - b.y, bottom = b.y + b.height - (p.y + p.height);
+    CHECK(left == doctest::Approx(top));
+    CHECK(right == doctest::Approx(bottom));
+    CHECK(left == doctest::Approx(right));
+    CHECK(b.x >= c.x); // inside the card
+    CHECK(b.x + b.width <= c.x + c.width + 0.5f);
 }

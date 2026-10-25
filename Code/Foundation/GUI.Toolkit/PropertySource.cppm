@@ -301,6 +301,13 @@ export namespace foundation::gui
             Entry* entry = Find(path);
             return entry != nullptr ? &entry->Info : nullptr;
         }
+        /// What every element of the list `path` says beyond its name, kind and read-only state (a
+        /// range, a reference's type), to fill in; null when `path` is no list.
+        [[nodiscard]] PropertyInfo* FindElementInfo(core::StringView path)
+        {
+            Entry* entry = Find(path);
+            return entry != nullptr && entry->Info.Kind == PropertyKind::List ? &entry->ElementInfo : nullptr;
+        }
         /// Tells the grid what FindInfo's changes were.
         void PropertiesChanged() { NotifyPropertiesChanged(); }
 
@@ -373,7 +380,7 @@ export namespace foundation::gui
                     count = core::Min(count, elements.Size());
                 for (usize i = 0; i < count && i != ~usize{0}; ++i)
                 {
-                    PropertyInfo info;
+                    PropertyInfo info = list->ElementInfo;
                     info.Name = core::Format(u8"{}", i);
                     info.Kind = list->ElementKind;
                     info.ReadOnly = list->Info.ReadOnly;
@@ -580,6 +587,7 @@ export namespace foundation::gui
             core::Array<core::Array<Variant>> Elements;  // a list's: each object's elements
             PropertyKind ElementKind = PropertyKind::Float;
             Variant ElementDefault;
+            PropertyInfo ElementInfo; // a list's: what each element says beyond its name and kind
         };
         struct Original
         {

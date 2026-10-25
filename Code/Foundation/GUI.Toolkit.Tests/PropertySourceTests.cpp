@@ -121,7 +121,7 @@ TEST_CASE("property source: an edit previews on every object, commits once from 
     CHECK(bag.OpenEdits() == 0u);
 }
 
-TEST_CASE("property source: a list's elements are its children by index, changed in each object by one call")
+TEST_CASE("property source: a list's elements are its children by index, saying what the list gives them, changed in each object by one call")
 {
     PropertyBag bag(core::DefaultAllocator(), 2);
     PropertyInfo& info = bag.AddList(SV(u8"tags"), PropertyKind::String, Variant(SV(u8"new")), 2);
@@ -134,6 +134,15 @@ TEST_CASE("property source: a list's elements are its children by index, changed
     REQUIRE(elements.Size() == 2u);
     CHECK(elements[1].Name == core::String(u8"1"));
     CHECK(elements[1].Kind == PropertyKind::String);
+    // What each element says beyond its name and kind is the list's to give.
+    REQUIRE(bag.FindElementInfo(SV(u8"tags")) != nullptr);
+    bag.FindElementInfo(SV(u8"tags"))->Description = core::String(u8"A tag");
+    bag.FindElementInfo(SV(u8"tags"))->Name = core::String(u8"ignored"); // an element is named by its index
+    elements.Clear();
+    bag.GetProperties(SV(u8"tags"), elements);
+    CHECK(elements[0].Description == core::String(u8"A tag"));
+    CHECK(elements[0].Name == core::String(u8"0"));
+    CHECK(bag.FindElementInfo(SV(u8"tags.0")) == nullptr); // no list
 
     // An element edits as any property does.
     bag.BeginEdit(SV(u8"tags.1"));

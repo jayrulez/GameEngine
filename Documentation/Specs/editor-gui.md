@@ -373,6 +373,65 @@ additions go first and are grouped with the other GUI commits.
       importers, the worker reads, the commit with its deferred writes) and the window shows it;
       a file needing no review imports at once.
 
+### 5.3 X5, the scene page, in layers
+
+Mapped from the parked libraries on 2026-10-25. Editor.Scene is about 20k lines (9.3k on
+foundation.ui: the page, the hierarchy, the inspector, the scene actions' keys, the two picker
+dialogs; the rest UI-free: the edit context and its undo commands, the gizmos and the select tool,
+the component gizmos, the grid, the view gizmo, the zoom readout, the view settings, the camera
+preview's sizing, the capture recorder, entity JSON, loading, settings profiles, the thumbnail
+generators and the scene MCP tools), with 6.8k lines of headless tests. Editor.Play is about 4k
+(2.2k on foundation.ui: the Game tab and its registration), Editor.Preview 0.9k. The design is the
+mock's scene page (Data/Editor/Mock/scene.gml): the page's tool bar over its own hierarchy,
+viewport and inspector (ruling 11), the scene the hierarchy's top row (ruling 12), the viewport's
+HUD in fixed zones. As before, each layer is one commit with its tests; GUI library additions go
+first and are grouped with the other GUI commits. The catalog's problems for these pieces
+(editor-gui-catalog/scene.md, 1 to 13) are each answered where its piece is built.
+
+GUI library additions X5 needs (GUI.Viewport, checked against the GUI first):
+- the colour target's state readable and settable, so a renderer that owns its transitions (the
+  render graph's TargetState) can draw into the viewport's target;
+- an sRGB view of the colour target, for the game's screen UI blending in encoded space;
+- no recording while the viewport is not shown (a hidden tab renders nothing).
+
+The layers:
+1. Editor.Scene's UI-free half back in the build, with its headless tests: the files above, the
+   scene actions' keys as the keymap's keystrokes, the UI files out of the source list, unedited.
+   Tools.Editor registers the scene thumbnail generators again (the assets browser's pictures of
+   meshes, materials, prefabs, scenes and effects).
+2. The scene page and its viewport: SceneEditorPage and PrefabEditorPage on the GUI from markup,
+   the viewport a GUI.Viewport rendering through the renderer with the editor camera, picking, the
+   grid, the gizmos and the overlays; the view settings kept per scene; Save, Undo and Redo on the
+   page's bar; a failed load shown on the page, not only logged; a prefab page marked as one. The
+   scene MCP live tools contributed again (selection, simulate, entity_inspect, component_set, the
+   viewport camera and screenshot, the entity edit tools).
+3. The hierarchy: a TreeView over the scene, the scene its top row, each entity by its type's icon,
+   prefab members and inactive entities marked; multi-selection shared with the viewport; rename
+   in place (F2); reparent and reorder by drag; the row and background menus through the actions
+   only (one path for create and delete, refused visibly while simulating); a search with its clear
+   and a guid; an entity's drag data for entity slots; assets dropped in (a prefab spawned, under a
+   row when dropped on it).
+4. The inspector: its head (icon, name, kind), a search over the properties, the selection's
+   components on the property grid with the editors by hint (X4); a component's verbs (copy,
+   remove, reset, revert to prefab); Add Component on the picker (by category, with icons and each
+   one's description); an entity reference through the entity picker (the picker's tree request);
+   the bespoke sections (a rigid body's shape notice kept current, a zone's bake as a job, a
+   script's behaviours); the scene's settings when the scene is selected (profiles, the collision
+   matrix); read-only while simulating, and shown so.
+5. The bar and the HUD: select, move, rotate and scale; space, grid and snap with their increments;
+   the view menu (lit, unlit, wire, the debug views, marked while one is on); overlays; frame. The
+   HUD chips, the stats, the view gizmo and the tool status, each in its zone. The tool panels in
+   one place (the HUD's top start, kept per scene), from the tool registry; Terrain's and
+   Vegetation's brushes and panels back with it.
+6. The camera preview in the HUD's bottom end: titled with its camera, at the camera's aspect,
+   pinned or following the selection.
+7. Simulate and play in editor: Simulate on the page's bar (named so: Play is the Game tab's), the
+   edits locked and shown so; Editor.Play's UI-free half back, the Game tab on GUI.Viewport (its
+   resolution and phone frame, the keyboard captured with Shift+F1 to leave, X1), several
+   instances, the PIE MCP tools.
+
+The property animation panel under the viewport comes back with Editor.PropertyAnimation (X6).
+
 ## 6. Tests
 
 Editor tests move from UIContext with synthetic events to GUI.Testing (Finder by selector or id,

@@ -1307,3 +1307,63 @@ TEST_CASE("inspector: Add Component's picker lists each component by its display
     page->OnClose();
 }
 
+namespace
+{
+    template <typename T>
+    T* FirstOf(gui::Node& node)
+    {
+        if (auto* found = Cast<T>(&node))
+            return found;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (T* found = FirstOf<T>(*node.GetChildAt(i)))
+                return found;
+        return nullptr;
+    }
+}
+
+TEST_CASE("inspector: a value typed into the grid, or scrubbed, stays (frames on, not put back)")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    Shown shown(*page);
+    page->EditContext().AddComponent(bed.crate, &TypeOf<engine::render::LightComponent>());
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    shown.styles.ApplyTree(*shown.root);
+    (void)shown.root->UpdateLayout();
+    auto* lights = page->ScenePtr()->GetSystem<engine::render::LightComponentManager>();
+    REQUIRE(lights != nullptr);
+    const auto intensity = [&]() { return lights->Get(page->ScenePtr()->FindEntity(bed.crate))->intensity; };
+
+    gui::PropertyGrid* grid = inspector->Grid();
+    REQUIRE(grid != nullptr);
+    const String path = inspector->PathOf(u8"Light", u8"intensity");
+    const i32 item = grid->FindRow(path.AsView());
+    REQUIRE(item >= 0);
+    grid->ScrollToItem(item);
+    (void)shown.root->UpdateLayout();
+    gui::ItemRow* row = grid->RowForItem(item);
+    REQUIRE(row != nullptr);
+    gui::NumberField* field = FirstOf<gui::NumberField>(*row);
+    REQUIRE(field != nullptr);
+
+    // Typed: click into it, select all, type, Return; then frames go by.
+    gui::EventDispatcher& d = *shown.root->GetEventDispatcher();
+    const gui::Rect box = field->GetScreenBounds();
+    const Float2 at{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+    d.InjectMouseDown(at, gui::MouseButton::Left);
+    d.InjectMouseUp(at, gui::MouseButton::Left);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::A), gui::KeyModCtrl);
+    d.InjectText(u8"7.5");
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Return));
+    for (i32 i = 0; i < 5; ++i)
+    {
+        page->OnUpdate(bed.host, 1.0f / 60.0f);
+        (void)shown.root->UpdateLayout();
+    }
+    CHECK(intensity() == doctest::Approx(7.5f));
+    page->OnClose();
+}

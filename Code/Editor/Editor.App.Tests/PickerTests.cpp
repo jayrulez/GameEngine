@@ -224,3 +224,27 @@ TEST_CASE("path picker: the files under a folder with the extensions asked, igno
     CHECK(empty.Items.IsEmpty());
     CHECK(empty.EmptyTitle == String(u8"No .aeprofile files here"));
 }
+
+TEST_CASE("picker: under the editor's sheet its list fits its frame (a list wider than the dialog ran its rows past the edge)")
+{
+    Bed bed;
+    String sheet;
+    const char8_t* const files[] = {u8"Editor/editor.css", u8"Editor/density-default.css"};
+    for (const char8_t* file : files)
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    bed.Open(bed.Materials());
+    styles.ApplyTree(*bed.root);
+    (void)bed.root->UpdateLayout();
+    const gui::Rect frame = bed.picker.Content()->GetScreenBounds();
+    const gui::Rect list = bed.picker.List()->GetScreenBounds();
+    CHECK(list.x >= frame.x);
+    CHECK(list.x + list.width <= frame.x + frame.width + 0.5f);
+    bed.picker.Close();
+}

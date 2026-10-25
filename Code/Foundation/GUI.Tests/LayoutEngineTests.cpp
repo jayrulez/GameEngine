@@ -1021,3 +1021,32 @@ TEST_CASE("layout: a row whose items grow is as wide as its items when measured,
     CHECK(button->GetSize().x == doctest::Approx(300.0f));
     CHECK(text->GetSize().x == doctest::Approx(284.0f));
 }
+
+TEST_CASE("layout: a scroller in a column has no automatic minimum on the axis it scrolls: its content scrolls inside it")
+{
+    Bed bed;
+    auto column = Box(*bed.root, [](LayoutStyle& s)
+                      {
+                          s.Direction = FlexDirection::Column;
+                          s.Width = LayoutLength::Px(200.0f);
+                          s.Height = LayoutLength::Px(200.0f);
+                      });
+    // A virtualised list whose rows are all one height: it realises the rows its height shows.
+    core::Array<core::String> items;
+    for (int i = 0; i < 200; ++i)
+        items.PushBack(core::String(SV(u8"row")));
+    StringListModel model(core::Move(items));
+    auto list = core::MakeRef<ListView>(core::DefaultAllocator());
+    list->EditLayoutStyle([](LayoutStyle& s) { s.Grow = 1.0f; });
+    list->SetRowHeight(20.0f);
+    column->AddChild(list.Get());
+    list->SetModel(&model);
+    for (int pass = 0; pass < 5; ++pass)
+    {
+        bed.Layout();
+        list->RequestLayout(); // again, as a frame's new line does
+    }
+    bed.Layout();
+    CHECK(list->GetSize().y == doctest::Approx(200.0f)); // not the rows it realised, nor all of them
+    CHECK(list->GetScrollRange().y == doctest::Approx(200.0f * 20.0f - 200.0f));
+}

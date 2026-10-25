@@ -318,6 +318,11 @@ namespace foundation::gui
                                                                                       : core::Float2{Less(crossAvail, item.marginCross + chrome.TotalHorizontal()), 0.0f});
                                     f32 minContent = row ? content.x + chrome.TotalHorizontal() : content.y + chrome.TotalVertical();
                                     const LayoutStyle& ns = n.GetLayoutStyle();
+                                    // A scroll container's on an axis it scrolls is none (as CSS's):
+                                    // its content scrolls inside it rather than sizing it, or a
+                                    // virtualised list grows with the rows it realises.
+                                    if (Scrolls(row ? ns.OverflowX : ns.OverflowY))
+                                        minContent = row ? chrome.TotalHorizontal() : chrome.TotalVertical();
                                     if (const Optional<f32> specified = (row ? ns.Width : ns.Height).Resolve(BaseOf(mainAvail)); specified.HasValue())
                                         minContent = core::Min(minContent, specified.Value());
                                     item.minMain = minContent;

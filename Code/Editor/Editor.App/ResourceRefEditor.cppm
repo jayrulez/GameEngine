@@ -7,8 +7,9 @@
 // grid's editor for GUI.Toolkit's Reference kind, an asset slot. What may fill it is asked of the
 // builders, never listed here (ruling 19): the source asset types whose builder makes the type the
 // reference points at, or one derived from it. Pick, drop and clear are one write, the grid's, so
-// one undo step; open and reveal show the asset. What it asks of the editor is a table of its own
-// (ResourceRefServices), so a test gives its own and the application fills it from its context.
+// one undo step; a pick opens the asset picker below the slot. Open and reveal show the asset.
+// What it asks of the editor is a table of its own (ResourceRefServices), so a test gives its own
+// and the application fills it from its context.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -21,6 +22,8 @@ import foundation.gui;
 import foundation.gui.toolkit;
 import editor.core;
 import :asset_picker_slot;
+import :picker;
+import :asset_picker_dialog;
 
 using namespace foundation::core;
 
@@ -43,19 +46,36 @@ export namespace editor::app
         Function<Array<String>(const TypeInfo& target)> AcceptedTypes;
         /// What `id` names; false when the project has no such asset (a dangling reference).
         Function<bool(const Guid& id, ResourceRefShown& out)> Describe;
-        /// Opens a picker over `types` (empty: any); `chosen` assigns what it picks.
-        Function<void(Span<const String> types, Function<void(const Guid&)> chosen)> Pick;
+        /// Opens a picker over `types` (empty: any) below `anchor`, `current` checked; `chosen`
+        /// assigns what it picks (nil: None).
+        Function<void(Span<const String> types, const Guid& current, gui::Node* anchor, Function<void(const Guid&)> chosen)> Pick;
         Function<void(const Guid&)> Open;
         Function<void(const Guid&)> Reveal;
 
         /// Filled from the editor's context: the builders' types (SourceAssetTypesOf), the
-        /// project's names, the type icons, the context's open and reveal. The picker comes with
-        /// the small dialogs (layer 5). `context` and `icons` outlive what it is given to.
-        [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons)
+        /// project's names, the type icons, the asset picker over the project's assets (`open`
+        /// shows a picker's request below its anchor), the context's open and reveal. `context`
+        /// and `icons` outlive what it is given to.
+        [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons,
+                                                      Function<void(PickerRequest request, gui::Node* anchor)> open)
         {
             ResourceRefServices services;
             editor::EditorContext* ctx = &context;
             editor::EditorIcons* typeIcons = &icons;
+            if (open)
+                services.Pick = [ctx, typeIcons, open = Move(open)](Span<const String> types, const Guid& current, gui::Node* anchor, Function<void(const Guid&)> chosen)
+                {
+                    if (ctx->Project() == nullptr)
+                        return;
+                    PickerRequest request = AssetPicker::Request(ctx->Project()->SourceDb(), *typeIcons, ctx->Favorites(), types, current);
+                    request.OnPicked = [chosen = Move(chosen)](StringView key)
+                    {
+                        Guid id;
+                        if (key.IsEmpty() || Guid::TryParse(key, id))
+                            chosen(id);
+                    };
+                    open(Move(request), anchor);
+                };
             services.AcceptedTypes = [ctx](const TypeInfo& target)
             {
                 Array<String> names;
@@ -178,7 +198,7 @@ export namespace editor::app
         {
             RefPtr<ResourceRefEditor> self(this);
             const String path(GetPath());
-            m_services->Pick(m_types.AsSpan(), [self, path](const Guid& id)
+            m_services->Pick(m_types.AsSpan(), m_current, m_slot.Get(), [self, path](const Guid& id)
                              {
                                  if (self->GetPath() == path.AsView())
                                      self->Assign(id);

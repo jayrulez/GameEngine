@@ -49,6 +49,7 @@ target_sources(Editor.App
             AssetPickerSlot.cppm
             Picker.cppm
             PathPickerDialog.cppm
+            AssetPickerDialog.cppm
             ResourceRefEditor.cppm
             EditorNativeModule.cppm
             EditorExport.cppm

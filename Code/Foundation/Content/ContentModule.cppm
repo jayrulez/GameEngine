@@ -263,6 +263,12 @@ export namespace foundation::content
         // AlreadyExists when the name is taken; NotSupported on read-only mounts.
         Status RenameInstance(const Guid& id, StringView newName);
 
+        // Move an instance to another group, keeping its name and guid: its envelope and every
+        // data-stream sidecar move to the group's folder (made when it has none yet). Guid-based
+        // references are untouched. AlreadyExists when the group has one of that name;
+        // InvalidArgument when it is already there; NotSupported on read-only mounts.
+        Status MoveInstance(const Guid& id, Group& to);
+
         // Rename a group (directory move; child paths derive dynamically, so descendants
         // need no fixup). NotSupported for the root or read-only mounts.
         Status RenameGroup(Group& group, StringView newName);

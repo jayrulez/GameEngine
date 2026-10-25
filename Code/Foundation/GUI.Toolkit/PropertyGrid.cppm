@@ -381,6 +381,10 @@ export namespace foundation::gui
         [[nodiscard]] i32 GetReorderTarget() const noexcept { return m_reorderTo; }
         /// The row's menu, while it is open.
         [[nodiscard]] Menu* GetRowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
+        /// What the application adds to a row's menu, after the grid's own items: a header's menu is
+        /// the application's alone (a component's verbs on its section), and shows only when it adds
+        /// something. `row` is the row the menu is for (a header's path is `#` and its name).
+        void SetOnRowMenu(core::Function<void(Menu& menu, const PropertyRow& row)> extend) { m_onRowMenu = core::Move(extend); }
         /// Opens the menu of the row `item` at `position` (in the root's space); false when it has none.
         bool OpenRowMenu(i32 item, core::Float2 position);
 
@@ -607,6 +611,7 @@ export namespace foundation::gui
         core::String m_editPath;
         core::RefPtr<Menu> m_menu;
         core::Function<void(core::StringView)> m_onMessage;
+        core::Function<void(Menu&, const PropertyRow&)> m_onRowMenu;
         // A grip's drag: the list, the element's index, where it would go, and the line's row.
         core::String m_reorderList;
         i32 m_reorderFrom = -1;
@@ -1056,13 +1061,21 @@ namespace foundation::gui
     inline bool PropertyGrid::OpenRowMenu(i32 item, core::Float2 position)
     {
         const PropertyRow* found = GetRow(item);
-        if (found == nullptr || found->Category)
+        if (found == nullptr || (found->Category && !m_onRowMenu))
             return false;
         const PropertyRow row = *found; // the rows change under the menu's actions
         m_menu = core::MakeRef<Menu>(MemoryAllocator());
         ShareTextStyle(*m_menu, false);
         m_menu->SetAutoWidth(true);
         bool any = false;
+        if (row.Category)
+        {
+            m_onRowMenu(*m_menu, row);
+            if (m_menu->ChildCount() == 0)
+                return false;
+            m_menu->Open(*this, position);
+            return true;
+        }
         if (row.Element)
         {
             PropertyGrid* self = this;
@@ -1103,6 +1116,12 @@ namespace foundation::gui
             MenuItem* revert = m_menu->AddItem(m_source->GetRevertText(path.AsView()).AsView(), [self, path]() { (void)self->RevertProperty(path.AsView()); });
             revert->SetEnabled(row.Node < m_nodes.Size() && IsChanged(row.Node));
             any = true;
+        }
+        if (m_onRowMenu)
+        {
+            const usize before = m_menu->ChildCount();
+            m_onRowMenu(*m_menu, row);
+            any = any || m_menu->ChildCount() != before;
         }
         if (!any)
             return false;

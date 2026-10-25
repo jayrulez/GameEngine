@@ -715,3 +715,37 @@ TEST_CASE("property grid: a reference is its Guid's text by default; a paste tak
     CHECK(bed.bag.PasteValue(SV(u8"mesh"), SV(u8""), reason)); // nothing: cleared
     CHECK(bed.bag.GetValue(SV(u8"mesh"), 0).AsString().IsEmpty());
 }
+
+TEST_CASE("property grid: the application adds to a row's menu after the grid's items; a header's menu is its alone")
+{
+    Bed bed;
+    bed.Add(u8"intensity", PropertyKind::Float, Variant(1.0), u8"Light");
+    bed.Show();
+    const i32 header = bed.grid->FindRow(SV(u8"#Light"));
+    REQUIRE(header >= 0);
+    CHECK_FALSE(bed.grid->OpenRowMenu(header, core::Float2{20.0f, 20.0f})); // a header has no menu of its own
+
+    core::String asked;
+    bed.grid->SetOnRowMenu([&asked](Menu& menu, const PropertyRow& row)
+    {
+        const core::String path = row.Path;
+        if (row.Category)
+            (void)menu.AddItem(SV(u8"Remove Component"), [&asked, path]() { asked = path; });
+        else
+            (void)menu.AddItem(SV(u8"Inspect"), [&asked, path]() { asked = path; });
+    });
+    REQUIRE(bed.grid->OpenRowMenu(header, core::Float2{20.0f, 20.0f}));
+    Activate(*bed.grid->GetRowMenu(), SV(u8"Remove Component"));
+    CHECK(asked == core::String(u8"#Light"));
+
+    REQUIRE(bed.grid->OpenRowMenu(bed.grid->FindRow(SV(u8"intensity")), core::Float2{20.0f, 20.0f}));
+    Menu& menu = *bed.grid->GetRowMenu();
+    MenuItem* last = nullptr;
+    for (usize i = 0; i < menu.ChildCount(); ++i)
+        if (auto* item = core::Cast<MenuItem>(menu.GetChildAt(i)))
+            last = item;
+    REQUIRE(last != nullptr);
+    CHECK(last->GetText() == SV(u8"Inspect")); // after Copy, Paste and Revert
+    Activate(menu, SV(u8"Inspect"));
+    CHECK(asked == core::String(u8"intensity"));
+}

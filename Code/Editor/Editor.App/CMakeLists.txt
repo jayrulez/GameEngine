@@ -55,6 +55,7 @@ target_sources(Editor.App
             SettingsDialog.cppm
             TemplatesDialog.cppm
             ExportDialog.cppm
+            AssetOperations.cppm
             AssetsView.cppm
             ResourceRefEditor.cppm
             EditorNativeModule.cppm

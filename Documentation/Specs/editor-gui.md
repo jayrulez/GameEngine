@@ -353,7 +353,7 @@ additions go first and are grouped with the other GUI commits.
    preset settings are the grid the same way (extra files a list, an override's rows shown while it
    overrides; a preset removed after asking).
 7. The assets browser as the mock draws it: a toolbar (the breadcrumb, a search, a filter by type,
-   tiles or a list) over the group tree and the content. In four commits:
+   tiles or a list) over the group tree and the content. In five commits:
    1. Browsing: the group tree (folder icons, Content at the top), the breadcrumb, subgroups then
       assets, each by its type's glyph, name, kind, cook badge and favourite star; tiles or a
       list, kept per project; a search over every group, cleared by its x; the type filter; empty
@@ -361,10 +361,12 @@ additions go first and are grouped with the other GUI commits.
       drag source for the slots (several assets at once). The Assets panel shows it.
    2. The verbs: the row, background and tree menus (multi-selection throughout); New from the
       creators, rename in place (F2), duplicate, delete (asking, naming what goes), cook and
-      rebuild, the export flag, favourites, copy guid and path; assets moved by dropping them on
-      a group.
-   3. Pictures: thumbnails in tiles and rows as they arrive.
-   4. Import: files dropped on a group or Import..., through the import dialog (single and
+      rebuild, the export flag, favourites, copy guid and path. One AssetOperations does each, for
+      the browser and for an agent's delete over MCP.
+   3. Moving: assets dropped on a group (in the tree, a group's row, the breadcrumb) move there,
+      the content database moving their files (a move it did not have).
+   4. Pictures: thumbnails in tiles and rows as they arrive.
+   5. Import: files dropped on a group or Import..., through the import dialog (single and
       batch), which only the browser opens.
 
 ## 6. Tests

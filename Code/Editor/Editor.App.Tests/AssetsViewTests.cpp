@@ -21,6 +21,7 @@ import foundation.gui;
 import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
+import pipeline.core; // AssetCreator
 
 using namespace foundation::core;
 using editor::app::AssetCell;
@@ -63,7 +64,9 @@ namespace
         editor::EditorContext context{DefaultAllocator()};
         foundation::settings::Settings store{DefaultAllocator()};
         RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+        UniquePtr<editor::app::AssetOperations> ops;
         UniquePtr<AssetsView> view;
+        Array<String> created; // what New ran, by its label
         content::Group* top = nullptr;
         content::Group* models = nullptr;
         content::Group* town = nullptr;
@@ -96,6 +99,11 @@ namespace
             services.context = &context;
             Bed* self = this;
             services.open = [self](content::Instance& instance) { self->opened.PushBack(instance.Id()); };
+            editor::app::AssetOperations::Services operations;
+            operations.context = &context; // no cook, no later: at once
+            ops = MakeUnique<editor::app::AssetOperations>(DefaultAllocator(), Move(operations));
+            services.operations = ops.Get();
+            services.create = [self](const pipeline::AssetCreator& creator, content::Group*) { self->created.PushBack(creator.label); };
             view = MakeUnique<AssetsView>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadAssets());
             RefPtr<gui::Node> panel = view->Content();
             REQUIRE(panel);
@@ -117,6 +125,7 @@ namespace
         ~Bed()
         {
             view.Reset();
+            ops.Reset();
             context.SetProjectEditorSettings(nullptr);
             context.SetProject(nullptr);
             project.Reset();
@@ -378,4 +387,96 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
     // On one baseline: the name's and the kind's text baselines at the same height.
     const auto baseline = [](const gui::Node& label) { return label.GetScreenBounds().y + label.GetBaseline(); };
     CHECK(baseline(*barrel->NameLabel()) == doctest::Approx(baseline(*barrel->KindLabel())).epsilon(0.02));
+}
+
+namespace
+{
+    // The menu's item by its text, in it or its submenus' rows.
+    gui::MenuItem* ItemNamed(gui::Node& menu, StringView text)
+    {
+        for (usize i = 0; i < menu.ChildCount(); ++i)
+        {
+            if (auto* item = Cast<gui::MenuItem>(menu.GetChildAt(i)); item != nullptr && item->GetText() == text)
+                return item;
+            if (gui::MenuItem* found = ItemNamed(*menu.GetChildAt(i), text))
+                return found;
+        }
+        return nullptr;
+    }
+}
+
+TEST_CASE("assets: an asset's menu, a group's, and the shown group's with New; Delete asks naming what goes, then deletes")
+{
+    Bed bed;
+    gui::ListView& list = *bed.view->List();
+
+    // An asset's row.
+    const i32 crate = bed.RowOf(u8"Crate");
+    list.SetSelectedItem(crate);
+    bed.view->ShowMenuFor(crate);
+    gui::Menu* menu = bed.view->OpenMenu();
+    REQUIRE(menu != nullptr);
+    for (const char8_t* verb : {u8"Open", u8"Rename", u8"Duplicate", u8"Copy GUID", u8"Copy Path", u8"Pin as Favourite", u8"Always Export", u8"Cook", u8"Rebuild", u8"Delete..."})
+    {
+        CAPTURE(reinterpret_cast<const char*>(verb));
+        CHECK(ItemNamed(*menu, verb) != nullptr);
+    }
+    menu->Close();
+
+    // A group's row, and the group shown (the empty space): New and New Group there.
+    bed.view->ShowMenuFor(bed.RowOf(u8"Models"));
+    menu = bed.view->OpenMenu();
+    REQUIRE(menu != nullptr);
+    CHECK(ItemNamed(*menu, u8"Delete Group...") != nullptr);
+    CHECK(ItemNamed(*menu, u8"Always Export Its Contents") != nullptr);
+    menu->Close();
+    bed.view->ShowMenuFor(-1);
+    menu = bed.view->OpenMenu();
+    REQUIRE(menu != nullptr);
+    CHECK(ItemNamed(*menu, u8"New") != nullptr);
+    gui::MenuItem* newGroup = ItemNamed(*menu, u8"New Group");
+    REQUIRE(newGroup != nullptr);
+    CHECK(ItemNamed(*menu, u8"Cook All") != nullptr); // the top group's: all
+    CHECK(ItemNamed(*menu, u8"Delete Group...") == nullptr); // Content is not deleted
+    CHECK(newGroup->HandleActivate());
+    CHECK(bed.view->CurrentGroup() != nullptr);
+    CHECK(bed.view->CurrentGroup()->Name() == StringView(u8"Group")); // made and shown
+    bed.view->Navigate(*bed.top);
+
+    // Delete on the selection: asked, naming it; Delete deletes.
+    list.SetSelectedItem(bed.RowOf(u8"Crate"));
+    list.RequestFocus();
+    bed.root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(gui::KeyCode::Delete));
+    gui::MessageBox* confirm = bed.view->OpenConfirm();
+    REQUIRE(confirm != nullptr);
+    CHECK(confirm->GetMessage().ContainsIgnoreCase(u8"Delete Crate?"));
+    const Guid id = bed.crate->Id();
+    REQUIRE(confirm->ButtonAt(1) != nullptr);
+    CHECK(confirm->ButtonAt(1)->HandleActivate()); // Delete
+    CHECK(bed.project->SourceDb().GetInstance(id) == nullptr);
+    bed.view->Refresh();
+    CHECK(bed.RowOf(u8"Crate") < 0);
+}
+
+TEST_CASE("assets: a row's name and a tree group's edited in place rename them, a refused name saying why and kept")
+{
+    Bed bed;
+    gui::IModel& rows = *bed.view->List()->GetModel();
+    const i32 crate = bed.RowOf(u8"Crate");
+    CHECK(rows.IsEditable(gui::ModelIndex{crate, 0}));
+    CHECK(rows.SetData(gui::ModelIndex{crate, 0}, gui::Variant(StringView(u8"Box"))));
+    CHECK(bed.crate->Name() == StringView(u8"Box"));
+    CHECK_FALSE(rows.SetData(gui::ModelIndex{crate, 0}, gui::Variant(StringView(u8"a:b")))); // refused: the editor stays
+    CHECK(bed.crate->Name() == StringView(u8"Box"));
+
+    gui::TreeView& tree = *bed.view->Tree();
+    gui::IModel& groups = *tree.GetModel();
+    i32 townItem = -1;
+    for (i32 item = 0; item < static_cast<i32>(tree.GetItemCount()); ++item)
+        if (tree.GetItemText(item) == String(u8"Town"))
+            townItem = item;
+    REQUIRE(townItem >= 0);
+    CHECK_FALSE(groups.IsEditable(tree.GetItemIndex(0))); // Content
+    CHECK(groups.SetData(tree.GetItemIndex(townItem), gui::Variant(StringView(u8"Village"))));
+    CHECK(bed.town->Name() == StringView(u8"Village"));
 }

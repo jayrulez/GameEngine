@@ -147,6 +147,25 @@ export namespace editor::app
             if (Find(page) != nullptr && !IsClosing(page))
                 m_closing.PushBack(page);
         }
+        /// Closes every page editing `asset` now, without asking: what deletes the asset calls it
+        /// before the instance goes, outside an event's dispatch.
+        void CloseAssetNow(const Guid& asset)
+        {
+            Array<editor::EditorPage*> pages(m_allocator);
+            for (const OpenPage& open : m_open)
+                if (open.page->InstanceId() == asset)
+                    pages.PushBack(open.page);
+            for (editor::EditorPage* page : pages)
+            {
+                for (usize i = 0; i < m_closing.Size(); ++i)
+                    if (m_closing[i] == page)
+                    {
+                        m_closing.RemoveAt(i);
+                        break;
+                    }
+                CloseNow(page);
+            }
+        }
         /// Closes every page now (the project closing): their resources go while the device lives.
         void CloseAll()
         {

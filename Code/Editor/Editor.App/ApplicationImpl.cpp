@@ -195,6 +195,18 @@ namespace editor::app
         { self->ShowToast(editor::NoticeKind::Success, Format(u8"Exported to {}", folder).AsView()); };
         m_export = MakeUnique<EditorExport>(m_editorAllocator, m_editorAllocator, Move(exportServices));
 
+        {
+            AssetOperations::Services ops;
+            ops.context = &m_context;
+            ops.cook = &m_cookService;
+            ops.closePages = [self](const Guid& id)
+            {
+                if (self->m_pages)
+                    self->m_pages->CloseAssetNow(id);
+            };
+            ops.later = [self](Function<void()> work) { self->Later(Move(work)); };
+            m_assetOps = MakeUnique<AssetOperations>(m_editorAllocator, Move(ops));
+        }
         EditorMcpService::Services mcp;
         mcp.context = &m_context;
         mcp.cook = &m_cookService;
@@ -206,6 +218,7 @@ namespace editor::app
         mcp.forceEnabled = m_config.mcpEnabled;
         mcp.port = m_config.mcpPort;
         mcp.templatesRoot = [self]() { return self->m_export->TemplatesRoot(); };
+        mcp.deleteAsset = [self](const Guid& id) { return self->m_assetOps->DeleteOne(id); }; // the browser's own delete
         mcp.created = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         { self->m_creation.AfterCreate(creator, instance); };
         mcp.addTools = [self](foundation::mcp::McpServer& server)
@@ -303,6 +316,8 @@ namespace editor::app
             (void)RefServices(); // the type icons
             assets.icons = m_typeIcons.Get();
             assets.open = [self](foundation::content::Instance& instance) { (void)self->m_pages->Open(instance.Id()); };
+            assets.operations = m_assetOps.Get();
+            assets.create = [self](const pipeline::AssetCreator& creator, foundation::content::Group* group) { self->m_creation.CreateAndOpen(creator, group); };
             m_assets = MakeUnique<AssetsView>(m_editorAllocator, m_editorAllocator, Move(assets), m_window.LoadMarkup(AssetsView::kPath));
             // A slot's reveal (and any other) shows the asset where it lives, the panel to the front.
             m_context.RevealAsset = [self](const Guid& id)

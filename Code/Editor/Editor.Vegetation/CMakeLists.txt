@@ -6,7 +6,7 @@ util_add_engine_library(Editor.Vegetation ALIAS Editor::Vegetation)
 target_link_libraries(Editor.Vegetation PUBLIC
     Foundation::Core Foundation::Content
     Foundation::Scene Engine::Scene Foundation::Render
-    Foundation::UI Foundation::UI.Toolkit
+    Foundation::GUI
     Editor::Core Editor::App Editor::ViewportTools
     Pipeline::Vegetation Foundation::Vegetation.Resource Foundation::Vegetation Engine::Vegetation
     Foundation::Terrain.Resource Engine::Terrain

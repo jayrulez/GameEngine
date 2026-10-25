@@ -41,6 +41,7 @@ export namespace editor
 
         [[nodiscard]] StringView Id() const override { return u8"vegetation.scatter"; }
         [[nodiscard]] StringView DisplayName() const override { return u8"Paint Props"; }
+        [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/VegetationMaskAsset.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Vegetation"; }
         /// Relevant only when the scene has a vegetation component over a terrain with at least
         /// one prop layer.
@@ -74,10 +75,6 @@ export namespace editor
         void SetRadius(f32 r)
         {
             m_radius = Clamp(r, kMinRadius, kMaxRadius);
-            if (OnRadiusChanged)
-            {
-                OnRadiusChanged(m_radius);
-            }
         }
         [[nodiscard]] f32 Radius() const noexcept { return m_radius; }
         /// Props per square metre a full-strength stamp tries to place.
@@ -94,8 +91,6 @@ export namespace editor
         [[nodiscard]] f32 StampSpacing() const noexcept { return m_stampSpacing; }
         /// Replace the collision query (tests; a host with its own occupancy).
         void SetBlockedQuery(BlockedQuery query) { m_blockedOverride = Move(query); }
-
-        Function<void(f32)> OnRadiusChanged;
 
     private:
         static constexpr f32 kMinRadius = 0.5f;

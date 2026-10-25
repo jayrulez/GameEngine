@@ -4,7 +4,7 @@ target_link_libraries(Editor.Vegetation.Tests PRIVATE
     Pipeline::Vegetation Pipeline::Core
     Foundation::Vegetation.Resource Foundation::Vegetation Engine::Vegetation
     Foundation::Terrain.Resource Engine::Terrain Foundation::Geometry Foundation::Physics Engine::Physics
-    Foundation::Heightfield Foundation::UI Foundation::Render
+    Foundation::Heightfield Foundation::GUI Foundation::Render
     Foundation::Scene Foundation::Content Foundation::Resource Foundation::VFS doctest::doctest)
 target_compile_definitions(Editor.Vegetation.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 target_compile_options(Editor.Vegetation.Tests PRIVATE

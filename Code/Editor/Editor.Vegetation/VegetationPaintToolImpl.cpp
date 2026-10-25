@@ -371,7 +371,6 @@ namespace editor
             EndStroke(); // never leave a half-open stroke on a tool switch
         }
         m_hasHover = false;
-        OnRadiusChanged = {}; // the panel is activation-scoped; drop the dead field's callback
     }
 
     void VegetationPaintTool::Draw(render::debug::DebugDraw& drawList)
@@ -401,7 +400,7 @@ namespace editor
         const i32 radius = static_cast<i32>(m_radius + 0.5f);
         const StringView mode = m_smooth ? StringView(u8"SMOOTH") : m_erase ? StringView(u8"ERASE") : StringView(u8"paint");
         m_status = Format(u8"Paint Vegetation [{} plane {}]  radius {}  (1-9 plane, 0 erase, - smooth, Shift+wheel size)",
-                          mode, static_cast<i32>(m_plane), radius);
+                          mode, static_cast<i32>(m_plane) + 1, radius); // from 1, as its key and the panel
     }
 
     void VegetationViewportToolProvider::CreateTools(ViewportToolManager& manager,

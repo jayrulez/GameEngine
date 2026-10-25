@@ -45,6 +45,7 @@ export namespace editor
 
         [[nodiscard]] StringView Id() const override { return u8"vegetation.paint"; }
         [[nodiscard]] StringView DisplayName() const override { return u8"Paint Vegetation"; }
+        [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/TerrainVegetationComponent.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Vegetation"; }
         /// Relevant only when the scene has a vegetation component whose mask (and its terrain's
         /// heightfield, for the pick) resolves.
@@ -94,10 +95,6 @@ export namespace editor
         void SetRadius(f32 r)
         {
             m_radius = Clamp(r, kMinRadius, kMaxRadius);
-            if (OnRadiusChanged)
-            {
-                OnRadiusChanged(m_radius);
-            }
         }
         [[nodiscard]] f32 Radius() const noexcept { return m_radius; }
         void SetStrength(f32 s) noexcept { m_strength = Clamp(s, 0.0f, 1.0f); }
@@ -108,9 +105,6 @@ export namespace editor
         /// Airbrush: while held, also deposit stamps on a time cadence at the cursor.
         void SetAirbrush(bool on) noexcept { m_airbrush = on; }
         [[nodiscard]] bool IsAirbrush() const noexcept { return m_airbrush; }
-
-        // Fired whenever the radius changes (wheel resize / SetRadius) for a bound panel field.
-        Function<void(f32)> OnRadiusChanged;
 
     private:
         static constexpr f32 kMinRadius = 0.5f;

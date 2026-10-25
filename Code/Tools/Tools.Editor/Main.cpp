@@ -60,6 +60,7 @@ import editor.app;
 import editor.scene; // RegisterSceneEditor
 import editor.spline; // RegisterSplineViewportTools
 import editor.terrain; // RegisterTerrainSceneTools
+import editor.vegetation; // RegisterVegetationViewportTools, RegisterVegetationToolPanels
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -284,6 +285,8 @@ int main(int argc, char** argv)
         editor::RegisterSceneEditor(app.Context(), host, app);
         // The scene view's tools by domain; the bar shows them in this order (layer 5, part 3).
         editor::RegisterTerrainSceneTools(app.Context()); // sculpt, paint layers, cut holes; their panels; splatmap thumbnails
+        editor::RegisterVegetationViewportTools(); // paint vegetation, paint props
+        editor::RegisterVegetationToolPanels();
         editor::RegisterSplineViewportTools(); // the spline control-point editor
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too). The script page and its "New Asset > <Lang> Script" creators come

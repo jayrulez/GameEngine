@@ -28,6 +28,7 @@ target_link_libraries(Tools.Editor PRIVATE
     Editor::Scene # the scene page (its hierarchy and inspector come with their layers)
     Editor::Spline # the scene view's spline tool
     Editor::Terrain # the scene view's terrain brushes
+    Editor::Vegetation # and the vegetation's
     Pipeline::Core Pipeline::Cook
     Pipeline::Registration # the composition root: every builder/importer/type registration
     Foundation::Resource Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Texture.Resource

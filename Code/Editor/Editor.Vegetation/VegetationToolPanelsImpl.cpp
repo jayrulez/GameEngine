@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Vegetation - the Paint Vegetation brush's settings panel (the viewport-tool-panel seam,
-// editor.app:tool_panel), composed from the shared panel widget kit: a plane toggle row (planes
-// 0..N-1 of the scene's first vegetation mask, then E = eraser, S = smooth), radius, strength,
-// spacing and airbrush - the splat panel's layout, so the two footprint brushes read the same.
+// Editor::Vegetation - the vegetation brushes' panels (Documentation/Specs/editor-gui.md, 5.3, layer
+// 5, part 3), made of the editor's tool panel kit, as the terrain's are, so the footprint brushes
+// read the same: Paint Vegetation's plane (numbered from 1 as its keys are, each naming in its
+// tooltip what grows on it; the chosen plane's growth said under the row, where one long "Grows:"
+// line ran on) and its mode (Paint, Erase, Smooth); Paint Props' layer (by name) and its mode
+// (Paint, Erase); each with its radius and the rest, and a line of help for its keys.
 
 module;
 #include "Core/Prelude.h"
@@ -12,304 +14,190 @@ module;
 module editor.vegetation;
 
 import foundation.core;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
 import foundation.scene;               // Scene, ComponentManagerBase, EntityHandle
 import foundation.vegetation.resource; // VegetationMask (the plane count)
-import foundation.vegetation;          // VegetationPlacement (which layers are Scattered)
+import foundation.vegetation;          // VegetationPlacement (which layers read a plane)
 import engine.vegetation;              // TerrainVegetationComponent(Manager)
 import editor.core;
-import editor.app;                     // IViewportToolPanelProvider, ViewportToolPanelRegistry, the widget kit
-import editor.viewporttools;           // IViewportTool + ViewportToolHostContext
+import editor.app;                     // the panel seam and its kit
+import editor.viewporttools;           // IViewportTool, ViewportToolHostContext
 
 using namespace foundation::core;
 
 namespace editor
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
     namespace scene = foundation::scene;
 
     namespace
     {
-        // The plane count of the scene's first resolved vegetation mask (0 = none resolved).
-        [[nodiscard]] u32 ResolvePlaneCount(scene::Scene& sc)
+        engine::vegetation::TerrainVegetationComponentManager* ManagerOf(scene::Scene& sc)
         {
-            scene::ComponentManagerBase* base = sc.FindManagerByComponentType(
-                TypeOf<engine::vegetation::TerrainVegetationComponent>());
-            auto* mgr = static_cast<engine::vegetation::TerrainVegetationComponentManager*>(base);
-            if (mgr == nullptr)
-            {
-                return 0;
-            }
+            return static_cast<engine::vegetation::TerrainVegetationComponentManager*>(
+                sc.FindManagerByComponentType(TypeOf<engine::vegetation::TerrainVegetationComponent>()));
+        }
+
+        // The plane count of the scene's first resolved vegetation mask (0 = none resolved).
+        u32 ResolvePlaneCount(scene::Scene& sc)
+        {
             u32 planes = 0;
-            mgr->ForEach(
-                [&](engine::vegetation::TerrainVegetationComponent& c, scene::EntityHandle)
-                {
-                    if (planes == 0 && c.mask.Get() != nullptr && !c.mask.Get()->IsEmpty())
-                    {
-                        planes = c.mask.Get()->PlaneCount();
-                    }
-                });
+            if (auto* mgr = ManagerOf(sc))
+                mgr->ForEach([&](engine::vegetation::TerrainVegetationComponent& c, scene::EntityHandle)
+                             {
+                                 if (planes == 0 && c.mask.Get() != nullptr && !c.mask.Get()->IsEmpty())
+                                     planes = c.mask.Get()->PlaneCount();
+                             });
             return planes;
         }
 
-        // The procedural layers that read each mask plane, "Grass, Flowers" per plane ("-" for
-        // none): the mask brush paints a PLANE, and a layer is what gives the plane meaning, so
-        // the panel says which layers a stroke will grow (user, 2026-09-23).
-        [[nodiscard]] Array<String> ResolvePlaneReaders(scene::Scene& sc, u32 planeCount)
+        // The procedural layers that read each mask plane ("Grass, Flowers"; empty for none): the
+        // brush paints a plane, and a layer is what gives the plane meaning (user, 2026-09-23).
+        Array<String> ResolvePlaneReaders(scene::Scene& sc, u32 planeCount)
         {
             Array<String> readers;
             for (u32 plane = 0; plane < planeCount; ++plane)
-            {
-                readers.PushBack(String(u8"-"));
-            }
-            scene::ComponentManagerBase* base = sc.FindManagerByComponentType(
-                TypeOf<engine::vegetation::TerrainVegetationComponent>());
-            auto* mgr = static_cast<engine::vegetation::TerrainVegetationComponentManager*>(base);
-            if (mgr == nullptr)
-            {
-                return readers;
-            }
-            mgr->ForEach(
-                [&](engine::vegetation::TerrainVegetationComponent& c, scene::EntityHandle)
-                {
-                    for (usize i = 0; i < c.proceduralLayers.Size(); ++i)
-                    {
-                        const engine::vegetation::ProceduralVegetationLayer& layer =
-                            c.proceduralLayers[i];
-                        using foundation::vegetation::VegetationPlacement;
-                        const bool reads = layer.placement == VegetationPlacement::Mask ||
-                                           layer.placement == VegetationPlacement::SplatTimesMask;
-                        if (!reads || layer.maskPlane >= planeCount)
-                        {
-                            continue;
-                        }
-                        String& line = readers[layer.maskPlane];
-                        const String name =
-                            layer.name.IsEmpty() ? Format(u8"Procedural layer {}", i + 1) : layer.name;
-                        line = (line == String(u8"-")) ? name
-                                                       : Format(u8"{}, {}", line.AsView(), name.AsView());
-                    }
-                });
+                readers.PushBack(String{});
+            if (auto* mgr = ManagerOf(sc))
+                mgr->ForEach([&](engine::vegetation::TerrainVegetationComponent& c, scene::EntityHandle)
+                             {
+                                 for (usize i = 0; i < c.proceduralLayers.Size(); ++i)
+                                 {
+                                     const engine::vegetation::ProceduralVegetationLayer& layer = c.proceduralLayers[i];
+                                     using foundation::vegetation::VegetationPlacement;
+                                     const bool reads = layer.placement == VegetationPlacement::Mask ||
+                                                        layer.placement == VegetationPlacement::SplatTimesMask;
+                                     if (!reads || layer.maskPlane >= planeCount)
+                                         continue;
+                                     String& line = readers[layer.maskPlane];
+                                     const String name = layer.name.IsEmpty() ? Format(u8"Procedural layer {}", i + 1) : layer.name;
+                                     line = line.IsEmpty() ? name : Format(u8"{}, {}", line.AsView(), name.AsView());
+                                 }
+                             });
             return readers;
+        }
+
+        // The prop layers of the scene's first vegetation component that has any, and whether
+        // each one's mesh resolves (props of one without place, but nothing draws).
+        struct LayerNames
+        {
+            Array<String> names;
+            Array<bool> hasMesh;
+        };
+        LayerNames ResolveLayerNames(scene::Scene& sc)
+        {
+            LayerNames out;
+            bool taken = false;
+            if (auto* mgr = ManagerOf(sc))
+                mgr->ForEach([&](engine::vegetation::TerrainVegetationComponent& c, scene::EntityHandle)
+                             {
+                                 if (taken || c.propLayers.IsEmpty())
+                                     return;
+                                 taken = true;
+                                 for (usize i = 0; i < c.propLayers.Size(); ++i)
+                                 {
+                                     out.names.PushBack(c.propLayers[i].name.IsEmpty() ? Format(u8"Prop layer {}", i + 1) : c.propLayers[i].name);
+                                     out.hasMesh.PushBack(c.propLayers[i].mesh.Get() != nullptr);
+                                 }
+                             });
+            return out;
+        }
+
+        app::ToolPanelBody::Choice Word(StringView label, StringView tooltip)
+        {
+            app::ToolPanelBody::Choice choice;
+            choice.label = String(label);
+            choice.tooltip = String(tooltip);
+            return choice;
         }
 
         class VegetationPaintPanelProvider final : public IViewportToolPanelProvider
         {
         public:
             [[nodiscard]] StringView ToolId() const override { return u8"vegetation.paint"; }
-            [[nodiscard]] ToolPanelPlacement Placement() const override
-            {
-                return ToolPanelPlacement::Float;
-            }
-            [[nodiscard]] RefPtr<ui::View> CreatePanel(IViewportTool& tool,
-                                                       const ViewportToolHostContext& ctx) override
+            [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool& tool, const ViewportToolHostContext& ctx) override
             {
                 VegetationPaintTool* t = static_cast<VegetationPaintTool*>(&tool);
-                const u32 resolved = (ctx.scene != nullptr) ? ResolvePlaneCount(*ctx.scene) : 0u;
-                const i32 planeCount = resolved > 0 ? static_cast<i32>(resolved) : 4;
+                const u32 resolved = ctx.scene != nullptr ? ResolvePlaneCount(*ctx.scene) : 0u;
+                const u32 count = resolved > 0 ? resolved : 4u;
+                const Array<String> readers = ctx.scene != nullptr ? ResolvePlaneReaders(*ctx.scene, count) : Array<String>{};
+                auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
 
-                auto root = app::MakeToolPanelRoot();
-                // Two rows: the PLANE the brush works on (always lit, erase included - erase is
-                // per plane) and the MODE.
-                root->AddView(app::MakeToolPanelRow(u8"Mask plane", 12.0f).Get());
-                auto planes = MakeRef<app::SegmentedToggle>(editor::EditorRootAllocator());
-                planes->Build(
-                    planeCount,
-                    [](i32 i) -> RefPtr<ui::View>
-                    {
-                        const String text = Format(u8"{}", i);
-                        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text.AsView());
-                        label->FontSize.SetValue(Optional<f32>{12.0f});
-                        return RefPtr<ui::View>(label.Get());
-                    },
-                    [t](i32 i) { t->SetPlane(static_cast<u32>(i)); },
-                    [t]() -> i32 { return static_cast<i32>(t->Plane()); },
-                    [](i32) -> StringView
-                    { return u8"The plane the brush works on (a procedural layer with Mask placement names it)"; });
-                root->AddView(planes.Get());
-                // Which layers each plane grows: the stroke's meaning, on the panel.
+                // The plane, from 1 as its keys are, each saying what grows on it.
+                Array<app::ToolPanelBody::Choice> planes;
+                for (u32 i = 0; i < count; ++i)
                 {
-                    const Array<String> readers =
-                        (ctx.scene != nullptr)
-                            ? ResolvePlaneReaders(*ctx.scene, static_cast<u32>(planeCount))
-                            : Array<String>{};
-                    String line(u8"Grows:");
-                    for (usize i = 0; i < readers.Size(); ++i)
-                    {
-                        line = Format(u8"{}  {}: {}", line.AsView(), i, readers[i].AsView());
-                    }
-                    if (readers.IsEmpty())
-                    {
-                        line = String(u8"Grows: no procedural layer reads a plane yet");
-                    }
-                    root->AddView(app::MakeToolPanelRow(line.AsView(), 11.0f).Get());
+                    const String grows = i < readers.Size() && !readers[i].IsEmpty() ? Format(u8"grows {}", readers[i]) : String(u8"nothing reads it yet");
+                    planes.PushBack(Word(Format(u8"{}", i + 1).AsView(), Format(u8"Plane {}: {}{}", i + 1, grows, i < 9 ? Format(u8" ({})", i + 1) : String{}).AsView()));
                 }
-                root->AddView(app::MakeToolPanelRow(u8"Mode", 12.0f).Get());
-                auto modes = MakeRef<app::SegmentedToggle>(editor::EditorRootAllocator());
-                modes->Build(
-                    3,
-                    [](i32 i) -> RefPtr<ui::View>
-                    {
-                        const StringView text = i == 0 ? StringView(u8"Paint")
-                                                : i == 1 ? StringView(u8"Erase")
-                                                         : StringView(u8"Smooth");
-                        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text);
-                        label->FontSize.SetValue(Optional<f32>{12.0f});
-                        return RefPtr<ui::View>(label.Get());
-                    },
-                    [t](i32 i)
-                    {
-                        t->SetEraser(i == 1);
-                        t->SetSmooth(i == 2);
-                    },
-                    [t]() -> i32 { return t->IsSmooth() ? 2 : t->IsEraser() ? 1 : 0; },
-                    [](i32 i) -> StringView
-                    {
-                        return i == 0   ? StringView(u8"Paint the plane (density up)")
-                               : i == 1 ? StringView(u8"Erase the plane under the brush (nothing grows)")
-                                        : StringView(u8"Smooth (feathers a painted edge)");
-                    });
-                root->AddView(modes.Get());
-
-                auto grid = MakeRef<ui::toolkit::PropertyGrid>(editor::EditorRootAllocator());
-                RefPtr<ui::toolkit::FloatEditor> radiusField = app::AddToolPanelFloat(
-                    *grid, u8"Radius", static_cast<f64>(t->Radius()), 0.5, 128.0, 1.0, 1,
-                    [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
-                app::AddToolPanelFloat(*grid, u8"Strength", static_cast<f64>(t->Strength()), 0.0, 1.0,
-                                       0.05, 2, [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
-                app::AddToolPanelFloat(*grid, u8"Stamp spacing", static_cast<f64>(t->Spacing()), 0.05, 1.0,
-                                       0.05, 2, [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
-                app::AddToolPanelBool(*grid, u8"Airbrush", t->IsAirbrush(),
-                                      [t](bool v) { t->SetAirbrush(v); });
-                t->OnRadiusChanged = [radiusField](f32 r)
-                { radiusField->SetValue(static_cast<f64>(r)); };
-                app::AddToolPanelGrid(*root, grid);
-                return root;
+                body->AddChoices(u8"Plane", Move(planes), [t]() { return static_cast<i32>(t->Plane()); },
+                                 [t](i32 i) { t->SetPlane(static_cast<u32>(i)); });
+                // What a stroke grows: the chosen plane's layers.
+                body->AddNote([t, readers]() -> String
+                              {
+                                  const u32 plane = t->Plane();
+                                  if (plane < readers.Size() && !readers[plane].IsEmpty())
+                                      return Format(u8"Grows {}.", readers[plane]);
+                                  return String(u8"No procedural layer reads this plane: a layer with Mask placement names it.");
+                              });
+                Array<app::ToolPanelBody::Choice> modes;
+                modes.PushBack(Word(u8"Paint", u8"Paint the plane"));
+                modes.PushBack(Word(u8"Erase", u8"Clear the plane under the brush (0)"));
+                modes.PushBack(Word(u8"Smooth", u8"Feather its edges without repainting (-)"));
+                body->AddChoices(u8"Mode", Move(modes), [t]() { return t->IsSmooth() ? 2 : t->IsEraser() ? 1 : 0; },
+                                 [t](i32 i)
+                                 {
+                                     t->SetEraser(i == 1);
+                                     t->SetSmooth(i == 2);
+                                 });
+                body->AddSlider(u8"Radius", 0.5, 128.0, 0.5, [t]() { return static_cast<f64>(t->Radius()); },
+                                [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
+                body->AddSlider(u8"Strength", 0.0, 1.0, 0.05, [t]() { return static_cast<f64>(t->Strength()); },
+                                [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
+                body->AddSlider(u8"Spacing", 0.05, 1.0, 0.05, [t]() { return static_cast<f64>(t->Spacing()); },
+                                [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
+                body->AddCheck(u8"Airbrush", [t]() { return t->IsAirbrush(); }, [t](bool on) { t->SetAirbrush(on); });
+                body->AddHelp(u8"Drag to paint. 1 to 9 pick a plane, 0 erases, - smooths, Shift+wheel sizes the brush.");
+                body->Sync();
+                return body;
             }
         };
-    }
 
-    namespace
-    {
-        // The names of the scene's first vegetation component's layers, with which are Scattered.
-        struct LayerNames
-        {
-            Array<String> names;
-            Array<bool> hasMesh; // the mesh reference resolves (a stale asset does not)
-        };
-
-        [[nodiscard]] LayerNames ResolveLayerNames(scene::Scene& sc)
-        {
-            LayerNames out;
-            scene::ComponentManagerBase* base = sc.FindManagerByComponentType(
-                TypeOf<engine::vegetation::TerrainVegetationComponent>());
-            auto* mgr = static_cast<engine::vegetation::TerrainVegetationComponentManager*>(base);
-            if (mgr == nullptr)
-            {
-                return out;
-            }
-            bool taken = false;
-            mgr->ForEach(
-                [&](engine::vegetation::TerrainVegetationComponent& c, scene::EntityHandle)
-                {
-                    if (taken || c.propLayers.IsEmpty())
-                    {
-                        return;
-                    }
-                    taken = true;
-                    for (usize i = 0; i < c.propLayers.Size(); ++i)
-                    {
-                        out.names.PushBack(c.propLayers[i].name.IsEmpty()
-                                               ? Format(u8"Prop layer {}", i + 1)
-                                               : c.propLayers[i].name);
-                        out.hasMesh.PushBack(c.propLayers[i].mesh.Get() != nullptr);
-                    }
-                });
-            return out;
-        }
-
-        // ---- Paint Props panel: the Scattered layer choices + E, then radius / density /
-        // strength / spacing ---------------------------------------------------------------
         class VegetationScatterPanelProvider final : public IViewportToolPanelProvider
         {
         public:
             [[nodiscard]] StringView ToolId() const override { return u8"vegetation.scatter"; }
-            [[nodiscard]] ToolPanelPlacement Placement() const override
-            {
-                return ToolPanelPlacement::Float;
-            }
-            [[nodiscard]] RefPtr<ui::View> CreatePanel(IViewportTool& tool,
-                                                       const ViewportToolHostContext& ctx) override
+            [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool& tool, const ViewportToolHostContext& ctx) override
             {
                 VegetationScatterTool* t = static_cast<VegetationScatterTool*>(&tool);
-                const LayerNames layers =
-                    (ctx.scene != nullptr) ? ResolveLayerNames(*ctx.scene) : LayerNames{};
-                const i32 count = static_cast<i32>(layers.names.Size());
-
-                auto root = app::MakeToolPanelRoot();
-                // Two rows: the LAYER the brush works on (always lit, erase included - erase is
-                // per layer) and the MODE.
-                root->AddView(app::MakeToolPanelRow(u8"Prop layer", 12.0f).Get());
-                if (count == 0)
-                {
-                    root->AddView(app::MakeToolPanelRow(u8"No prop layers here - add one to the "
-                                                        u8"Terrain Vegetation component",
-                                                        11.0f)
-                                      .Get());
-                }
-                auto choices = MakeRef<app::SegmentedToggle>(editor::EditorRootAllocator());
-                choices->Build(
-                    count,
-                    [names = layers.names, hasMesh = layers.hasMesh](i32 i) -> RefPtr<ui::View>
-                    {
-                        String text = names[static_cast<usize>(i)];
-                        if (!hasMesh[static_cast<usize>(i)])
-                        {
-                            text = Format(u8"{} (no mesh)", text.AsView()); // nothing would draw
-                        }
-                        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text.AsView());
-                        label->FontSize.SetValue(Optional<f32>{12.0f});
-                        return RefPtr<ui::View>(label.Get());
-                    },
-                    [t](i32 i) { t->SetLayer(static_cast<u32>(i)); },
-                    [t]() -> i32 { return static_cast<i32>(t->Layer()); },
-                    [](i32) -> StringView { return u8"The layer the brush works on"; });
-                root->AddView(choices.Get());
-                root->AddView(app::MakeToolPanelRow(u8"Mode", 12.0f).Get());
-                auto modes = MakeRef<app::SegmentedToggle>(editor::EditorRootAllocator());
-                modes->Build(
-                    2,
-                    [](i32 i) -> RefPtr<ui::View>
-                    {
-                        const StringView text = i == 0 ? StringView(u8"Paint") : StringView(u8"Erase");
-                        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text);
-                        label->FontSize.SetValue(Optional<f32>{12.0f});
-                        return RefPtr<ui::View>(label.Get());
-                    },
-                    [t](i32 i) { t->SetEraser(i == 1); },
-                    [t]() -> i32 { return t->IsEraser() ? 1 : 0; },
-                    [](i32 i) -> StringView
-                    {
-                        return i == 0 ? StringView(u8"Place props into the layer")
-                                      : StringView(u8"Remove the layer's props under the brush");
-                    });
-                root->AddView(modes.Get());
-
-                auto grid = MakeRef<ui::toolkit::PropertyGrid>(editor::EditorRootAllocator());
-                RefPtr<ui::toolkit::FloatEditor> radiusField = app::AddToolPanelFloat(
-                    *grid, u8"Radius", static_cast<f64>(t->Radius()), 0.5, 128.0, 1.0, 1,
-                    [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
-                app::AddToolPanelFloat(*grid, u8"Density /m2", static_cast<f64>(t->Density()), 0.0,
-                                       64.0, 0.05, 2, [t](f64 v) { t->SetDensity(static_cast<f32>(v)); });
-                app::AddToolPanelFloat(*grid, u8"Strength", static_cast<f64>(t->Strength()), 0.0, 1.0,
-                                       0.05, 2, [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
-                app::AddToolPanelFloat(*grid, u8"Spacing (x radius)", static_cast<f64>(t->Spacing()),
-                                       0.0, 8.0, 0.1, 1, [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
-                t->OnRadiusChanged = [radiusField](f32 r)
-                { radiusField->SetValue(static_cast<f64>(r)); };
-                app::AddToolPanelGrid(*root, grid);
-                return root;
+                const LayerNames layers = ctx.scene != nullptr ? ResolveLayerNames(*ctx.scene) : LayerNames{};
+                auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
+                Array<app::ToolPanelBody::Choice> choices;
+                for (usize i = 0; i < layers.names.Size(); ++i)
+                    choices.PushBack(Word(layers.names[i].AsView(),
+                                          layers.hasMesh[i] ? Format(u8"Layer {}{}", i + 1, i < 9 ? Format(u8" ({})", i + 1) : String{}).AsView()
+                                                            : StringView(u8"Its mesh does not resolve: props place, but nothing draws")));
+                if (!choices.IsEmpty())
+                    body->AddChoices(u8"Layer", Move(choices), [t]() { return static_cast<i32>(t->Layer()); },
+                                     [t](i32 i) { t->SetLayer(static_cast<u32>(i)); });
+                else
+                    body->AddHelp(u8"No prop layers here: add one to the Terrain Vegetation component.");
+                Array<app::ToolPanelBody::Choice> modes;
+                modes.PushBack(Word(u8"Paint", u8"Place props"));
+                modes.PushBack(Word(u8"Erase", u8"Remove the layer's props under the brush (0)"));
+                body->AddChoices(u8"Mode", Move(modes), [t]() { return t->IsEraser() ? 1 : 0; }, [t](i32 i) { t->SetEraser(i == 1); });
+                body->AddSlider(u8"Radius", 0.5, 128.0, 0.5, [t]() { return static_cast<f64>(t->Radius()); },
+                                [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
+                body->AddSlider(u8"Density", 0.0, 64.0, 0.05, [t]() { return static_cast<f64>(t->Density()); },
+                                [t](f64 v) { t->SetDensity(static_cast<f32>(v)); });
+                body->AddSlider(u8"Strength", 0.0, 1.0, 0.05, [t]() { return static_cast<f64>(t->Strength()); },
+                                [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
+                body->AddSlider(u8"Prop Spacing", 0.0, 8.0, 0.1, [t]() { return static_cast<f64>(t->Spacing()); },
+                                [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
+                body->AddHelp(u8"Drag to place. Density is props per square metre; prop spacing keeps props apart, in their mesh's radii. "
+                              u8"1 to 9 pick a layer, 0 erases, Shift+wheel sizes the brush.");
+                body->Sync();
+                return body;
             }
         };
     }

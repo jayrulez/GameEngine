@@ -93,7 +93,11 @@ namespace editor
                 gui::ReflectedPropertySource source(EditorRootAllocator());
                 ConfigureComponentSource(source, *m_format);
                 source.SetObjects(Span<const Instance>(objects.Data(), objects.Size()));
-                return source.Restore(m_change, before);
+                const bool ok = source.Restore(m_change, before);
+                // A reference's id is written; what it names is bound now (the mesh shows at once).
+                for (const Guid& entity : m_entities)
+                    m_edit->ResolveComponentResources(entity, m_type);
+                return ok;
             }
 
             SceneEditContext* m_edit;

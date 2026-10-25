@@ -14,6 +14,8 @@
 
 import foundation.core;
 import foundation.content;
+import foundation.resource;
+import foundation.geometry;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.shell;
@@ -1225,4 +1227,56 @@ TEST_CASE("scene tools: each tool an action and on the bar by category; its pane
     CHECK(tools->Panel() == nullptr); // Paint has no panel
     g_paintAvailable = false;
     page->OnClose();
+}
+
+namespace
+{
+    // A mesh for any instance: what the inspector's mesh slot binds to.
+    struct AnyMesh final : foundation::resource::IResourceFactory
+    {
+        [[nodiscard]] const TypeInfo* ProductType() const override { return &foundation::geometry::StaticMesh::StaticType(); }
+        [[nodiscard]] const TypeInfo* CookedType() const override { return ProductType(); }
+        [[nodiscard]] RefPtr<Object> Create(foundation::resource::ResourceManager&, foundation::content::Instance&) override
+        {
+            return MakeRef<foundation::geometry::StaticMesh>(DefaultAllocator());
+        }
+    };
+}
+
+TEST_CASE("inspector: a reference set in the grid binds at once (a mesh shows without reopening); its undo lets it go")
+{
+    Bed bed;
+    AnyMesh factory;
+    foundation::resource::ResourceManager resources(DefaultAllocator(), bed.project->SourceDb());
+    resources.AddFactory(&factory);
+    bed.context.SetResources(&resources);
+    foundation::content::Instance* rock = bed.project->SourceDb().RootGroup()->CreateInstance(u8"Rock", scene::SceneDocument::StaticType());
+    REQUIRE(rock != nullptr);
+    {
+        UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+        SceneInspectorView* inspector = page->Inspector();
+        page->EditContext().AddComponent(bed.crate, &TypeOf<engine::render::MeshComponent>());
+        page->EditContext().EntitySelection().Set(bed.crate);
+        page->OnUpdate(bed.host, 1.0f / 60.0f);
+        auto* meshes = page->ScenePtr()->GetSystem<engine::render::MeshComponentManager>();
+        REQUIRE(meshes != nullptr);
+        const auto mesh = [&]() { return meshes->Get(page->ScenePtr()->FindEntity(bed.crate)); };
+        CHECK(mesh()->mesh.Get() == nullptr);
+
+        const String path = inspector->PathOf(u8"Mesh", u8"mesh");
+        REQUIRE_FALSE(path.IsEmpty());
+        utf8char chars[37];
+        rock->Id().ToChars(chars);
+        gui::PropertyWrite write;
+        write.Value = gui::Variant(StringView(chars, 36));
+        inspector->Sections().BeginEdit(path.AsView());
+        inspector->Sections().CommitEdit(path.AsView(), write);
+        CHECK(mesh()->mesh.id == rock->Id());
+        CHECK(mesh()->mesh.Get() != nullptr); // bound now: it draws without a reopen
+        page->Commands().Undo();
+        CHECK(mesh()->mesh.id.IsNil());
+        CHECK(mesh()->mesh.Get() == nullptr); // and let go on undo
+        page->OnClose();
+    }
+    bed.context.SetResources(nullptr);
 }

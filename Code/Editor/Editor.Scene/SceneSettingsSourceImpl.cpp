@@ -57,6 +57,7 @@ namespace editor
                 const Instance object(values, m_type);
                 source.SetObjects(Span<const Instance>(&object, 1u));
                 const bool ok = source.Restore(m_change, before);
+                m_edit->ResolveSettingsResources(m_type); // a reference's id written: bound to what it names
                 m_edit->NoteSettingsProfileEdited(m_type, m_profile); // nil: nothing to note
                 return ok;
             }

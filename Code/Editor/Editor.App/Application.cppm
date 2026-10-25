@@ -44,6 +44,7 @@ import :export_dialog;
 import :project_home;
 import :project_manager_view;
 import :log_view;
+import :assets_view;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -209,6 +210,7 @@ export namespace editor::app
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content
+        UniquePtr<AssetsView> m_assets;          // the Assets panel's content
         u64 m_logSequence = 0;                   // the last log entry the Console took
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;

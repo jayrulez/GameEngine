@@ -294,19 +294,26 @@ namespace editor::app
             return;
         }
         EditorApplication* self = this;
-        const auto placeholder = [self](StringView text)
-        {
-            return [self, line = String(text)]()
-            {
-                RefPtr<gui::Label> label = MakeRef<gui::Label>(self->m_editorAllocator);
-                label->AddClass(u8"panel-placeholder");
-                label->SetText(line.AsView());
-                return RefPtr<gui::Node>(label);
-            };
-        };
         EditorDock::Contents contents;
         contents.welcome = [self]() { return self->m_window.LoadMarkup(u8"Editor/Welcome.gml"); };
-        contents.assets = placeholder(u8"The asset browser is not on the new interface yet.");
+        {
+            AssetsView::Services assets;
+            assets.context = &m_context;
+            assets.cook = &m_cookService;
+            (void)RefServices(); // the type icons
+            assets.icons = m_typeIcons.Get();
+            assets.open = [self](foundation::content::Instance& instance) { (void)self->m_pages->Open(instance.Id()); };
+            m_assets = MakeUnique<AssetsView>(m_editorAllocator, m_editorAllocator, Move(assets), m_window.LoadMarkup(AssetsView::kPath));
+            // A slot's reveal (and any other) shows the asset where it lives, the panel to the front.
+            m_context.RevealAsset = [self](const Guid& id)
+            {
+                if (self->m_assets && self->m_assets->Reveal(id))
+                    (void)self->m_dock.Controller().Show(kPanelAssets);
+            };
+            if (!m_context.OpenAsset)
+                m_context.OpenAsset = [self](const Guid& id) { (void)self->m_pages->Open(id); };
+        }
+        contents.assets = [self]() { return self->m_assets->Content(); };
         m_console = MakeUnique<LogView>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(LogView::kPath));
         m_console->SetOnCopied([self](usize lines)
                                {
@@ -857,6 +864,8 @@ namespace editor::app
             resources->CollectGarbage(); // products a hot reload replaced go
         }
         DrainLog();
+        if (m_assets)
+            m_assets->Refresh();
         m_window.Update(dt);
         m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
         if (m_home)

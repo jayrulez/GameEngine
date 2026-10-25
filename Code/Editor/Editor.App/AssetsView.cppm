@@ -1,814 +1,848 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - :assets_view partition.
+// Editor App - :assets_view partition
 //
-// AssetsView: the Assets panel - source-DB-backed, the typed DB is
-// the truth (a database-view model, not a directory scan). Left = group tree; right =
-// [breadcrumb | list/grid toggle] over [filter] over the selected group's content. The content
-// area shows SUBGROUPS first (double-click descends; the breadcrumb climbs back up), then
-// instances; a non-empty filter searches instances across ALL groups. Rows show the name
-// (gold when favorited) with a trailing "Type [badge]" meta label - the badge is the cook
-// state (cooked/missing/FAILED; builder-less types like scenes show none). Interactions:
-//   - double-click: descend into a group / open the instance's editor page
-//   - INLINE RENAME everywhere, same mechanics as the scene hierarchy (Sedulous browser
-//     parity): slow-click the name / F2 / menu Rename edit in place - instances, subgroup
-//     rows, and the group tree alike; double-click stays navigation (never starts an edit)
-//   - right-click row: Open / Rename / Duplicate / Cook / Rebuild / Delete (multi-select
-//     aware: Ctrl/Shift extend the selection; Delete acts on every selected instance);
-//     group rows and tree groups get Open / Rename / Delete Group (recursive, confirmed)
-//   - right-click background (list, grid, or the group TREE): New <creator>... / Cook All /
-//     Rebuild All
-//   - Delete always confirms through a dialog, closes any open page editing the instance
-//     first (via OnCloseInstancePage), and logs what was removed.
-// The view refreshes off three revisions: source-DB shape (tracked locally via Rebuild calls),
-// the cook service's revision (badges after a cook), and the filter text.
-
+// The Assets panel (Documentation/Specs/editor-gui.md, 5.2, layer 7), over its markup
+// (Data/Editor/Assets.gml) as the mock draws it: the project's source content, the content database
+// the truth. The group tree on the left (folders, Content at the top); the toolbar's breadcrumb
+// where it is; the group's subgroups then its assets on the right, as tiles or a list (kept per
+// project), each by its type's glyph (its category's tint), its name, what it is, its cook badge
+// and a star when a favourite. The search looks in every group, by name or a guid's start, each
+// match saying where it is; the type filter keeps one type. With nothing to show it says what is
+// so and offers the way on (clear the search, show every type). Enter or a double click opens an
+// asset or enters a group; Reveal shows an asset where it lives. A drag of the selection carries
+// its assets (AssetDrag) to a slot. It builds again when the database's shape moves, however the
+// change came, and when a cook moves the badges.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include "Core/Log/Log.h"
 
 export module editor.app:assets_view;
 
 import foundation.core;
 import foundation.content;
-import foundation.fonts;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.settings;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
-import pipeline.core; // AssetCreator (the New menus)
-import :editor_icons;
-import :view_mode_toggles;
-import :asset_filter;
 import :asset_drag_data;
-import :import_dialog;
+import :layout; // EditorAssetBrowserSettings
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
     namespace content = foundation::content;
 
-    class AssetsView final : public ui::ViewGroup
+    /// One asset or group as the browser draws it: a tile's picture over its name, or a list row's
+    /// glyph, name, what it is, badge and star. Its class (`tile` or `row`) says which.
+    class AssetCell final : public gui::UIWidget
     {
-        RTTI_OBJECT(AssetsView, ui::ViewGroup)
+        RTTI_OBJECT(AssetCell, gui::UIWidget)
     public:
-        /// Open an instance's editor page (wired by the application).
-        Function<void(content::Instance&)> OnOpenInstance;
-        // "Import..." in the background menu: the app (which owns the shell) browses for a file and
-        // feeds it back through ImportFile. Injected because the view has no shell/dialog access.
-        Function<void()> OnBrowseImport;
-        /// Create an asset via a registry creator (wired by the application - it also opens it).
-        /// `group` = the group the menu was invoked for (creations land there).
-        Function<void(const pipeline::AssetCreator&, content::Group*)>
-            OnCreate;
-        /// Close any open editor page for this instance BEFORE it is deleted (wired by the
-        /// application; called from a mutation-queue action, so synchronous teardown is safe).
-        Function<void(const Guid&)> OnCloseInstancePage;
-
-        AssetsView(editor::EditorContext& context,
-                   editor::EditorCookService& cook,
-                   editor::EditorJobService* jobs = nullptr)
-            : m_context(&context), m_cook(&cook), m_jobs(jobs)
+        struct Shown
         {
-            auto split = MakeRef<ui::toolkit::SplitView>(MemoryAllocator());
-            split->SetSplitRatio(0.3f);
+            String Glyph;
+            String GlyphClass;
+            String Name;
+            String Kind;
+            String Badge;      ///< "Cooked", "Stale", "Failed"; empty: none
+            String BadgeClass; ///< success, warning, danger
+            bool Favourite = false;
+            bool Group = false;
+        };
 
-            // Left: the group tree.
-            m_treeAdapter = MakeUnique<TreeAdapter>(MemoryAllocator(), *this);
-            m_tree = MakeRef<ui::TreeView>(MemoryAllocator());
-            m_tree->SetItemHeight(22.0f);
-            m_tree->SetAdapter(m_treeAdapter.Get());
-            {
-                AssetsView* self = this;
-                m_tree->OnItemClick.Add(
-                    [self](ui::TreeView::ItemClickInfo info)
-                    {
-                        if (info.NodeId >= 0 &&
-                            info.NodeId < static_cast<i32>(self->m_groups.Size()))
-                        {
-                            self->SelectGroup(
-                                self->m_groups[static_cast<usize>(info.NodeId)].group);
-                        }
-                    });
-                m_tree->OnItemRightClick.Add(
-                    [self](i32 nodeId, f32 x, f32 y)
-                    {
-                        if (nodeId >= 0 && nodeId < static_cast<i32>(self->m_groups.Size()))
-                        {
-                            self->SelectGroup(self->m_groups[static_cast<usize>(nodeId)].group);
-                        }
-                        self->ShowBackgroundMenu(self->m_tree.Get(), x, y);
-                    });
-                m_tree->OnItemKeyDown.Add(
-                    [self](i32 nodeId, ui::KeyEventArgs& e)
-                    {
-                        if (nodeId < 0 || nodeId >= static_cast<i32>(self->m_groups.Size()))
-                        {
-                            return;
-                        }
-                        content::Group* group = self->m_groups[static_cast<usize>(nodeId)].group;
-                        if (group->Parent() == nullptr)
-                        {
-                            return;
-                        } // the root: no rename/delete
-                        if (e.Key == ui::KeyCode::F2)
-                        {
-                            self->StartRenameGroupInTree(group);
-                            e.Handled = true;
-                        }
-                        else if (e.Key == ui::KeyCode::Delete)
-                        {
-                            self->ConfirmDeleteGroup(group);
-                            e.Handled = true;
-                        }
-                    });
-            }
-
-            // Right: [breadcrumb | view toggle] over [filter] over [list | grid].
-            auto right = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            right->Direction = ui::Orientation::Vertical;
-            right->Padding =
-                ui::Thickness{6, 4}; // inset the content off the edge (like the group tree)
-            right->Spacing = 4;      // separate the header row, filter, and content
-            {
-                AssetsView* self = this;
-
-                auto header = MakeRef<ui::FlexLayout>(MemoryAllocator());
-                header->Direction = ui::Orientation::Horizontal;
-                header->Spacing = 4;
-                m_breadcrumb = MakeRef<ui::toolkit::BreadcrumbBar>(MemoryAllocator());
-                m_breadcrumb->OnSegmentClicked.Add(
-                    ui::Event<void(ui::toolkit::BreadcrumbBar*, i32)>::Handler{
-                        [self](ui::toolkit::BreadcrumbBar*, i32 segment)
-                        { self->NavigateToBreadcrumb(segment); }});
-                {
-                    ui::LayoutStyle grow;
-                    grow.FlexGrow = 1.0f;
-                    grow.Height = ui::SizeSpec::Match();
-                    header->AddView(m_breadcrumb.Get(), grow);
-                }
-                m_viewToggles = MakeRef<ViewModeToggles>(MemoryAllocator());
-                m_viewToggles->OnModeChanged = [self](bool grid) { self->SetGridMode(grid); };
-                {
-                    ui::LayoutStyle center;
-                    center.AlignSelf = ui::Align::Center;
-                    header->AddView(m_viewToggles.Get(), center);
-                }
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(26));
-                    right->AddView(header.Get(), lp);
-                }
-            }
-            m_filterEdit = MakeRef<ui::EditText>(MemoryAllocator());
-            m_filterEdit->SetPlaceholder(u8"Filter all assets...");
-            {
-                AssetsView* self = this;
-                m_filterEdit->OnTextChanged.Add(
-                    [self](ui::EditText* edit)
-                    {
-                        self->m_filter = String(edit->Text());
-                        self->RebuildList();
-                    });
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                right->AddView(m_filterEdit.Get(), lp);
-            }
-            m_listAdapter = MakeUnique<ListAdapter>(MemoryAllocator(), *this);
-            m_gridAdapter = MakeUnique<GridAdapter>(MemoryAllocator(), *this);
-            m_list = MakeRef<ui::ListView>(MemoryAllocator());
-            m_list->ItemHeight.SetValue(22.0f);
-            m_list->Selection.Mode = ui::SelectionMode::Multiple;
-            m_list->SetAdapter(m_listAdapter.Get());
-            m_grid = MakeRef<ui::GridView>(MemoryAllocator());
-            m_grid->CellWidth.SetValue(96.0f);
-            m_grid->CellHeight.SetValue(84.0f);
-            m_grid->Selection.Mode = ui::SelectionMode::Multiple;
-            m_grid->Visibility = ui::VisibilityValue::Gone;
-            m_grid->SetAdapter(m_gridAdapter.Get());
-            {
-                AssetsView* self = this;
-                m_list->OnItemClicked.Add([self](i32 position, i32 clickCount, f32, f32)
-                                          { self->ActivateRow(position, clickCount); });
-                m_list->OnItemRightClicked.Add(
-                    [self](i32 position, f32 x, f32 y)
-                    {
-                        self->ShowRowMenu(self->m_list.Get(), &self->m_list->Selection, position, x,
-                                          y);
-                    });
-                m_list->OnBackgroundRightClicked.Add(
-                    [self](f32 x, f32 y) { self->ShowBackgroundMenu(self->m_list.Get(), x, y); });
-                m_grid->OnItemClicked.Add([self](i32 position, i32 clickCount, f32, f32)
-                                          { self->ActivateRow(position, clickCount); });
-                m_grid->OnItemRightClicked.Add(
-                    [self](i32 position, f32 x, f32 y)
-                    {
-                        self->ShowRowMenu(self->m_grid.Get(), &self->m_grid->Selection, position, x,
-                                          y);
-                    });
-                m_grid->OnBackgroundRightClicked.Add(
-                    [self](f32 x, f32 y) { self->ShowBackgroundMenu(self->m_grid.Get(), x, y); });
-                m_list->OnItemKeyDown.Add(
-                    [self](i32 position, ui::KeyEventArgs& e)
-                    { self->OnRowKeyDown(&self->m_list->Selection, position, e); });
-                m_grid->OnItemKeyDown.Add(
-                    [self](i32 position, ui::KeyEventArgs& e)
-                    { self->OnRowKeyDown(&self->m_grid->Selection, position, e); });
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                grow.Width = ui::SizeSpec::Match();
-                right->AddView(m_list.Get(), grow);
-                ui::LayoutStyle grow2;
-                grow2.FlexGrow = 1.0f;
-                grow2.Width = ui::SizeSpec::Match();
-                right->AddView(m_grid.Get(), grow2);
-            }
-
-            split->SetPanes(m_tree.Get(), right.Get());
-            AddView(split.Get());
-            Rebuild();
-            ApplySavedViewMode(); // restore the last-used list/grid view for this project
-        }
-
-        ~AssetsView() override
+        explicit AssetCell(bool tile) : m_tile(tile)
         {
-            m_tree->SetAdapter(nullptr);
-            m_list->SetAdapter(nullptr);
-            m_grid->SetAdapter(nullptr);
+            AddClass(tile ? StringView(u8"asset-tile") : StringView(u8"asset-row"));
+            gui::Node* glyphHolder = this;
+            if (tile)
+            {
+                m_thumb = Part<gui::Panel>(*this, u8"asset-thumb");
+                glyphHolder = m_thumb.Get();
+            }
+            m_glyph = Part<gui::Image>(*glyphHolder, tile ? StringView(u8"asset-glyph") : StringView(u8"row-icon"));
+            m_name = Part<gui::Label>(*this, tile ? StringView(u8"asset-name") : StringView(u8"row-name"));
+            m_kind = Part<gui::Label>(*this, u8"row-kind");
+            m_kind->SetDisplayed(!tile);
+            m_badge = Part<gui::Label>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge");
+            m_star = Part<gui::Image>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge-icon");
+            m_star->AddClass(u8"star");
+            m_star->SetSource(String(u8"Editor/Icons/star.svg"));
+            m_star->SetTooltip(u8"Favourite");
         }
-
-        /// Per-frame: refresh badges after a cook finishes (DB shape changes call Rebuild()).
-        void Refresh();
-
-        /// Import ONE OS file (forwards to ImportFiles - one review session per drop).
-        void ImportFile(StringView path);
-        /// Import a DROP of OS files into the selected group: one review session for the
-        /// whole batch. A single unambiguous file keeps the focused single-file review;
-        /// several files, or any importer ambiguity, open the batch dialog (its per-row
-        /// importer dropdown replaced the old modal-per-file chooser).
-        void ImportFiles(Span<const String> paths);
-        void ShowBatchImport(Array<app::BatchImportDialog::FileEntry> files);
-        // Run the import for ONE resolved importer (the single match, or the chooser pick): shows its
-        // options dialog if it has options, else imports immediately.
-        void ImportWith(StringView path, pipeline::IFileImporter* importer);
-        // The "Change..." destination chooser: a menu of every project group; picking one retargets
-        // m_importTargetGroup and updates the dialog's shown destination path.
-        void ShowImportDestinationMenu(ImportOptionsDialog& dialog);
-        /// Review-capable importers: shown AFTER the worker prepare - lists every resource
-        /// the import would create (DescribeImport); commit reuses the prepared payload.
-        void ShowImportReview(const String& path, pipeline::IFileImporter* importer,
-                              RefPtr<pipeline::ImportOptions> options, RefPtr<Object> prepared);
-
-        /// Runs the import (post-dialog). Slow importers (models) split: the parse/decode
-        /// runs on the JOB worker so the UI stays live (with the status-bar progress), and
-        /// only the fast DB fan-out lands back on the main thread in CommitImport.
-        void ExecuteImport(String path, pipeline::IFileImporter* importer,
-                           RefPtr<pipeline::ImportOptions> options);
-
-        /// The main-thread tail: DB fan-out (+ the build-lock re-check, so a cook that
-        /// started while the dialog/worker was busy still queues instead of racing).
-        void CommitImport(String path, pipeline::IFileImporter* importer,
-                          RefPtr<pipeline::ImportOptions> options, RefPtr<Object> prepared);
-
-        void FinishImport(content::Instance& primary, pipeline::IFileImporter* importer,
-                          const RefPtr<pipeline::ImportOptions>& options);
-
-        /// What follows any finished import, from the browser or from an agent's asset_import:
-        /// the listeners (a model's prefab), the cook of what it made, the browser. Null
-        /// `options` is the importer's defaults.
-        void AfterImport(content::Instance& primary, const pipeline::ImportOptions* options);
-        /// An agent's delete (asset_delete), the browser's own: the page closed, the asset deleted
-        /// and logged, the default scene and the browser kept honest. The CALLER has waited out
-        /// any cook. False when there was no such asset or the delete failed.
-        bool DeleteForAgent(const Guid& id);
-
-        /// Full rebuild: group tree + list (project open/close, create/delete/import).
-        void Rebuild();
-        /// A thumbnail finished for `id`: rebind just that row/tile in place (no tree or list
-        /// reconstruction - a generation burst would otherwise flicker the whole browser).
-        /// Rows outside the current folder/filter no-op.
-        void RefreshThumbnail(const Guid& id);
-        /// Reveal an instance in the browser: navigate to its owning
-        /// group, select its row, and scroll it into view. Unknown Guids no-op.
-        void Reveal(const Guid& id);
-        /// The group tree (the left pane).
-        [[nodiscard]] ui::TreeView* GroupTree() const noexcept { return m_tree.Get(); }
-        /// The List / Grid toggles over the content area.
-        [[nodiscard]] ViewModeToggles* ViewToggles() const noexcept { return m_viewToggles.Get(); }
-        [[nodiscard]] bool IsGridMode() const noexcept { return m_gridMode; }
-        /// Filter as if `text` were typed into the filter field (names, or a guid or its start).
-        void SetFilter(StringView text);
-        /// The assets the content area lists now, in order (subgroup rows left out).
-        [[nodiscard]] Array<Guid> ListedAssets() const;
-        /// The selected row in whichever view shows, or -1.
-        [[nodiscard]] i32 SelectedPosition() const;
-
-        // Fill the available space.
-        void OnMeasure(ui::BoxConstraints constraints) override;
-        void OnLayout(f32, f32, f32 width, f32 height) override;
+        void Show(const Shown& shown)
+        {
+            if (!m_glyphClass.IsEmpty())
+                m_glyph->RemoveClass(m_glyphClass.AsView());
+            m_glyphClass = shown.GlyphClass;
+            if (!m_glyphClass.IsEmpty())
+                m_glyph->AddClass(m_glyphClass.AsView());
+            m_glyph->SetSource(shown.Glyph);
+            m_name->SetText(shown.Name.AsView());
+            m_kind->SetText(shown.Kind.AsView());
+            if (!m_badgeClass.IsEmpty())
+                m_badge->RemoveClass(m_badgeClass.AsView());
+            m_badgeClass = shown.BadgeClass;
+            if (!m_badgeClass.IsEmpty())
+                m_badge->AddClass(m_badgeClass.AsView());
+            m_badge->SetText(shown.Badge.AsView());
+            // A tile marks only what needs a look (stale, failed); a row says each state.
+            m_badge->SetDisplayed(!shown.Badge.IsEmpty() && (!m_tile || shown.BadgeClass != StringView(u8"success")));
+            m_star->SetDisplayed(shown.Favourite);
+            if (shown.Group)
+                AddClass(u8"group");
+            else
+                RemoveClass(u8"group");
+            SetTooltip(m_tile ? Format(u8"{} ({})", shown.Name, shown.Kind).AsView() : StringView{});
+        }
+        [[nodiscard]] StringView Name() const { return m_name->GetText(); }
+        [[nodiscard]] StringView Kind() const { return m_kind->GetText(); }
+        [[nodiscard]] StringView Badge() const { return m_badge->GetText(); }
+        [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed(); }
+        [[nodiscard]] bool IsTile() const noexcept { return m_tile; }
 
     private:
-        struct GroupNode
+        template <typename T>
+        RefPtr<T> Part(gui::Node& into, StringView cls)
         {
-            content::Group* group = nullptr;
-            i32 depth = 0;
-            Array<i32> children;
-        };
+            RefPtr<T> part = MakeRef<T>(MemoryAllocator());
+            part->AddClass(cls);
+            part->SetHitTestVisible(false);
+            into.AddChild(part.Get());
+            return part;
+        }
 
-        // One content-area row: a SUBGROUP of the selected group (group != null) or an instance.
-        struct Row
-        {
-            Guid id;                         // instance identity (safe across deletes)
-            content::Group* group = nullptr; // non-null => a navigable subgroup row
-        };
-
-        // The name element of every row/tile/tree-node: an EditableLabel that knows WHAT it
-        // names, so one commit handler routes to the instance or group rename. Slow-click /
-        // F2 / menu Rename edit in place; double-click is deliberately NOT an edit trigger
-        // (it navigates); single clicks pass through to the list's selection.
-        // A list-row / grid-tile container that overlays small status dots in its top-right corner
-        // (the Sedulous registry-badge idiom: proper visual badges, not name-color tints). Dots draw
-        // in local space after the children, so they sit on top of the icon in both list and grid.
-        // Multiple dots stack right-to-left in a fixed priority order (export outermost). Set per-bind.
-        class AssetCell final : public ui::FlexLayout, public ui::IDragSource
-        {
-        public:
-            bool ShowExportBadge = false;   // green: an "Always Export" root
-            bool ShowFavoriteBadge = false; // gold: a pinned favorite
-
-            /// Drag identity, bound per row by the adapters (instances only; groups do not
-            /// drag). The input layer walks ancestors for AsDragSource on left-press, so a
-            /// bound cell starts a potential drag automatically.
-            void BindDragPayload(const Guid& id, StringView typeName, StringView displayName)
-            {
-                m_dragId = id;
-                m_dragTypeName = String(typeName);
-                m_dragName = String(displayName);
-            }
-            void ClearDragPayload() { m_dragId = Guid{}; }
-
-            [[nodiscard]] ui::IDragSource* AsDragSource() override
-            {
-                return m_dragId.IsNil() ? nullptr : this;
-            }
-            [[nodiscard]] RefPtr<ui::DragData> CreateDragData() override
-            {
-                if (m_dragId.IsNil())
-                {
-                    return {};
-                }
-                return RefPtr<ui::DragData>(MakeRef<AssetDragData>(MemoryAllocator(), m_dragId,
-                                                                   m_dragTypeName.AsView(),
-                                                                   m_dragName.AsView())
-                                                .Get());
-            }
-            [[nodiscard]] RefPtr<ui::View> CreateDragVisual(ui::DragData*) override
-            {
-                return {}; // the default themed ghost
-            }
-            void OnDragStarted(ui::DragData*) override {}
-            void OnDragCompleted(ui::DragData*, ui::DragDropEffects, bool) override {}
-
-        private:
-            Guid m_dragId{};        // nil = not draggable (group rows)
-            String m_dragTypeName;
-            String m_dragName;
-
-        public:
-            void OnDraw(ui::UIDrawContext& ctx) override
-            {
-                ui::FlexLayout::OnDraw(ctx); // draw children (icon + name [+ meta])
-                f32 x = Width() - 7.0f;
-                const auto dot = [&](Color color)
-                {
-                    ctx.VG().FillCircle(Float2{x, 7.0f}, 3.0f, color);
-                    x -= 8.0f;
-                };
-                if (ShowExportBadge)
-                {
-                    dot(Color{80.0f / 255.0f, 180.0f / 255.0f, 80.0f / 255.0f, 1.0f});
-                }
-                if (ShowFavoriteBadge)
-                {
-                    dot(Color{242.0f / 255.0f, 204.0f / 255.0f, 89.0f / 255.0f, 1.0f});
-                }
-            }
-        };
-
-        class NameLabel final : public ui::EditableLabel
-        {
-        public:
-            void BindTarget(const Guid& id, content::Group* group)
-            {
-                m_id = id;
-                m_group = group;
-            }
-            [[nodiscard]] const Guid& TargetId() const noexcept { return m_id; }
-            [[nodiscard]] content::Group* TargetGroup() const noexcept { return m_group; }
-
-        private:
-            Guid m_id;
-            content::Group* m_group = nullptr;
-        };
-
-        // Shared setup: names are filenames/directory names, so filesystem-hostile
-        // characters never commit; double-click stays navigation.
-        static void ConfigureNameLabel(NameLabel& label, AssetsView& owner);
-
-        // === adapters ===
-
-        class TreeAdapter final : public ui::ITreeAdapter
-        {
-        public:
-            explicit TreeAdapter(AssetsView& owner) : m_owner(&owner) {}
-            [[nodiscard]] i32 RootCount() const override
-            {
-                return m_owner->m_groups.IsEmpty() ? 0 : 1;
-            }
-            [[nodiscard]] i32 GetChildCount(i32 nodeId) const override
-            {
-                if (nodeId == -1)
-                {
-                    return RootCount();
-                }
-                return InRange(nodeId) ? static_cast<i32>(Node(nodeId).children.Size()) : 0;
-            }
-            [[nodiscard]] i32 GetChildId(i32 parentId, i32 childIndex) const override
-            {
-                if (parentId == -1)
-                {
-                    return childIndex == 0 && !m_owner->m_groups.IsEmpty() ? 0 : -1;
-                }
-                if (!InRange(parentId))
-                {
-                    return -1;
-                }
-                const Array<i32>& kids = Node(parentId).children;
-                return (childIndex >= 0 && childIndex < static_cast<i32>(kids.Size()))
-                           ? kids[static_cast<usize>(childIndex)]
-                           : -1;
-            }
-            [[nodiscard]] i32 GetDepth(i32 nodeId) const override
-            {
-                return InRange(nodeId) ? Node(nodeId).depth : 0;
-            }
-            [[nodiscard]] bool HasChildren(i32 nodeId) const override
-            {
-                return GetChildCount(nodeId) > 0;
-            }
-            [[nodiscard]] RefPtr<ui::View> CreateView(i32) override
-            {
-                auto row = MakeRef<NameLabel>(m_owner->MemoryAllocator());
-                row->FontSize.SetValue(13.0f);
-                ConfigureNameLabel(*row, *m_owner);
-                return RefPtr<ui::View>(row.Get());
-            }
-            void BindView(ui::View* view, i32 nodeId, i32 depth, bool) override
-            {
-                if (!InRange(nodeId))
-                {
-                    return;
-                }
-                auto* row = static_cast<NameLabel*>(view);
-                const GroupNode& node = Node(nodeId);
-                const bool isRoot = node.group->Parent() == nullptr;
-                row->BindTarget(Guid{}, node.group);
-                row->SetText(isRoot ? StringView(u8"Content") : node.group->Name());
-                row->SlowClickToEdit.SetValue(!isRoot); // the root is not renamable
-                // Past the chevron column, from the tree's own IndentWidth: a literal that differs
-                // from it steps each level by a different amount than the chevrons do.
-                row->TextOffsetX.SetValue(m_owner->m_tree->ContentInset(depth));
-            }
-
-        private:
-            [[nodiscard]] bool InRange(i32 nodeId) const
-            {
-                return nodeId >= 0 && nodeId < static_cast<i32>(m_owner->m_groups.Size());
-            }
-            [[nodiscard]] const GroupNode& Node(i32 nodeId) const
-            {
-                return m_owner->m_groups[static_cast<usize>(nodeId)];
-            }
-            AssetsView* m_owner;
-        };
-
-        class ListAdapter final : public ui::ListAdapterBase
-        {
-        public:
-            explicit ListAdapter(AssetsView& owner) : m_owner(&owner) {}
-            [[nodiscard]] i32 ItemCount() const override
-            {
-                return static_cast<i32>(m_owner->m_rows.Size());
-            }
-            [[nodiscard]] RefPtr<ui::View> CreateView(i32) override
-            {
-                auto row = MakeRef<AssetCell>(m_owner->MemoryAllocator());
-                row->Direction = ui::Orientation::Horizontal;
-                row->Spacing = 6;
-                row->Padding = ui::Thickness{4, 3};
-                auto iconView = MakeRef<ui::DrawableView>(m_owner->MemoryAllocator());
-                iconView->DesiredWidth.SetValue(Optional<f32>(16.0f));
-                iconView->DesiredHeight.SetValue(Optional<f32>(16.0f));
-                row->AddView(iconView.Get());
-                auto name = MakeRef<NameLabel>(m_owner->MemoryAllocator());
-                name->FontSize.SetValue(13.0f);
-                ConfigureNameLabel(*name, *m_owner);
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                row->AddView(name.Get(), grow);
-                auto meta = MakeRef<ui::Label>(m_owner->MemoryAllocator());
-                meta->FontSize.SetValue(13.0f);
-                row->AddView(meta.Get());
-                return RefPtr<ui::View>(row.Get());
-            }
-            void BindView(ui::View* view, i32 position) override
-            {
-                auto* row = Cast<AssetCell>(view);
-                if (row == nullptr || row->ChildCount() < 3)
-                {
-                    return;
-                }
-                row->ShowExportBadge = m_owner->IsRowExportRoot(position);
-                row->ShowFavoriteBadge = m_owner->IsRowFavorite(position);
-                auto* iconView = Cast<ui::DrawableView>(row->GetChildAt(0));
-                auto* name = static_cast<NameLabel*>(row->GetChildAt(1));
-                auto* meta = Cast<ui::Label>(row->GetChildAt(2));
-                if (iconView == nullptr || name == nullptr || meta == nullptr)
-                {
-                    return;
-                }
-                iconView->Drawable = ui::DrawablePtr(m_owner->RowIcon(position));
-                const Row* target = m_owner->RowAt(position);
-                name->BindTarget(target != nullptr ? target->id : Guid{},
-                                 target != nullptr ? target->group : nullptr);
-                if (content::Instance* instance = m_owner->InstanceAt(position))
-                {
-                    row->BindDragPayload(instance->Id(), instance->TypeName(), instance->Name());
-                }
-                else
-                {
-                    row->ClearDragPayload();
-                }
-                String text;
-                Color color{0.85f, 0.85f, 0.85f, 1.0f};
-                m_owner->RowName(position, text, color);
-                name->SetText(text.AsView());
-                name->TextColor.SetValue(Optional<Color>(color));
-                String metaText;
-                Color metaColor{0.55f, 0.58f, 0.65f, 1.0f};
-                m_owner->RowMeta(position, metaText, metaColor);
-                meta->SetText(metaText.AsView());
-                meta->TextColor.SetValue(Optional<Color>(metaColor));
-            }
-
-        private:
-            AssetsView* m_owner;
-        };
-
-        // Grid tiles: the same rows as the list, name under a (future-thumbnail) type block.
-        class GridAdapter final : public ui::ListAdapterBase
-        {
-        public:
-            explicit GridAdapter(AssetsView& owner) : m_owner(&owner) {}
-            [[nodiscard]] i32 ItemCount() const override
-            {
-                return static_cast<i32>(m_owner->m_rows.Size());
-            }
-            [[nodiscard]] RefPtr<ui::View> CreateView(i32) override
-            {
-                auto tile = MakeRef<AssetCell>(m_owner->MemoryAllocator());
-                tile->Direction = ui::Orientation::Vertical;
-                tile->Padding = ui::Thickness{4, 4};
-                auto iconRow = MakeRef<ui::FlexLayout>(m_owner->MemoryAllocator());
-                iconRow->Direction = ui::Orientation::Horizontal;
-                iconRow->JustifyContent = ui::Justify::Center;
-                // Cross-axis default is Stretch - without Center the icon fills the row's
-                // height (taller than 40) and the glyph draws vertically stretched.
-                iconRow->AlignItems = ui::Align::Center;
-                auto iconView = MakeRef<ui::DrawableView>(m_owner->MemoryAllocator());
-                iconView->DesiredWidth.SetValue(Optional<f32>(40.0f));
-                iconView->DesiredHeight.SetValue(Optional<f32>(40.0f));
-                iconRow->AddView(iconView.Get());
-                auto name = MakeRef<NameLabel>(m_owner->MemoryAllocator());
-                name->FontSize.SetValue(12.0f);
-                name->HAlign.SetValue(foundation::fonts::TextAlignment::Center);
-                name->Ellipsis.SetValue(
-                    true); // long asset names truncate with "..." instead of overflowing the tile
-                ConfigureNameLabel(*name, *m_owner);
-                {
-                    ui::LayoutStyle grow;
-                    grow.FlexGrow = 1.0f;
-                    grow.Width = ui::SizeSpec::Match();
-                    tile->AddView(iconRow.Get(), grow);
-                }
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(18));
-                    tile->AddView(name.Get(), lp);
-                }
-                return RefPtr<ui::View>(tile.Get());
-            }
-            void BindView(ui::View* view, i32 position) override
-            {
-                auto* tile = Cast<AssetCell>(view);
-                if (tile == nullptr || tile->ChildCount() < 2)
-                {
-                    return;
-                }
-                tile->ShowExportBadge = m_owner->IsRowExportRoot(position);
-                tile->ShowFavoriteBadge = m_owner->IsRowFavorite(position);
-                auto* iconRow = Cast<ui::FlexLayout>(tile->GetChildAt(0));
-                auto* name = static_cast<NameLabel*>(tile->GetChildAt(1));
-                if (iconRow == nullptr || iconRow->ChildCount() < 1 || name == nullptr)
-                {
-                    return;
-                }
-                auto* iconView = Cast<ui::DrawableView>(iconRow->GetChildAt(0));
-                const Row* row = m_owner->RowAt(position);
-                if (iconView == nullptr || row == nullptr)
-                {
-                    return;
-                }
-                // Thumbnail wins; the type icon shows until one exists.
-                RefPtr<ui::Drawable> thumbnail;
-                if (row->group == nullptr && m_owner->m_context->Thumbnails() != nullptr)
-                {
-                    thumbnail = m_owner->m_context->Thumbnails()->Get(row->id);
-                }
-                iconView->Drawable = thumbnail ? ui::DrawablePtr(thumbnail.Get())
-                                               : ui::DrawablePtr(m_owner->RowIcon(position));
-                name->BindTarget(row->id, row->group);
-                if (content::Instance* instance = m_owner->InstanceAt(position))
-                {
-                    tile->BindDragPayload(instance->Id(), instance->TypeName(), instance->Name());
-                }
-                else
-                {
-                    tile->ClearDragPayload();
-                }
-                // The tile has no meta label: the name color carries the COOK status (favorite +
-                // export show as corner dots) and stays PURE (it is the inline-rename edit text).
-                String text;
-                Color color{0.85f, 0.85f, 0.85f, 1.0f};
-                m_owner->RowName(position, text, color);
-                name->SetText(text.AsView());
-                name->TextColor.SetValue(Optional<Color>(color));
-            }
-
-        private:
-            AssetsView* m_owner;
-        };
-
-        // === model ===
-
-        i32 AddGroupNode(content::Group* group, i32 depth);
-
-        void SelectGroup(content::Group* group);
-
-        void RebuildList();
-
-        void CollectFiltered(content::Group* group);
-
-        [[nodiscard]] const Row* RowAt(i32 position) const;
-
-        [[nodiscard]] content::Instance* InstanceAt(i32 position);
-
-        [[nodiscard]] ui::Drawable* RowIcon(i32 position);
-
-        // The name text stays PURE (it doubles as the inline-rename edit text). Favorite +
-        // export status are shown by the AssetCell corner dots (gold / green), so the name color
-        // is free to always carry the COOK status - even for favorited items.
-        void RowName(i32 position, String& text, Color& color);
-
-        // The trailing meta label (list mode only): type + cook badge, badge-colored.
-        void RowMeta(i32 position, String& text, Color& color);
-
-        // === navigation ===
-
-        void ActivateRow(i32 position, i32 clickCount);
-
-        void UpdateBreadcrumb();
-
-        void NavigateToBreadcrumb(i32 segment);
-
-        // `persist` writes the choice to the per-project editor settings (a user toggle); the initial
-        // apply from saved settings passes false so loading does not immediately re-save.
-        void SetGridMode(bool grid, bool persist = true);
-        void ApplySavedViewMode(); // read the saved list/grid mode from the project settings + apply
-
-        // === menus ===
-
-        // Selected INSTANCE ids in the active view (group rows never join the selection set for
-        // destructive actions; `clicked` is always included).
-        [[nodiscard]] Array<Guid> SelectedInstanceIds(ui::SelectionModel* selection, i32 clicked);
-
-        void ShowRowMenu(ui::View* anchor, ui::SelectionModel* selection, i32 position, f32 x,
-                         f32 y);
-
-        void ShowBackgroundMenu(ui::View* anchor, f32 x, f32 y);
-
-        // === "Always Export" roots ===
-        // A user flags an asset (or a whole group subtree) as an export root; its dependency
-        // closure then ships even with reachability pruning on. Stored centrally on the project
-        // (export_roots.xml, committed) and saved immediately on toggle - deliberate, rare, and
-        // auditable in one place.
-
-        [[nodiscard]] bool IsInstanceExportRoot(const Guid& id) const;
-        // Row-level: a directly-flagged instance OR a flagged group row (the corner-dot badge).
-        [[nodiscard]] bool IsRowExportRoot(i32 position);
-        // Row-level favorite (instances only; groups are never favorites) - the gold corner dot.
-        [[nodiscard]] bool IsRowFavorite(i32 position);
-        [[nodiscard]] bool IsGroupExportRoot(content::Group* group) const;
-
-        void ToggleInstanceExportRoot(const Guid& id);
-        void ToggleGroupExportRoot(content::Group* group);
-
-        // Persist + surface + refresh after a flag toggle. A failed save reverts the in-memory
-        // change so the badge never claims a state that isn't on disk.
-        void AfterExportRootChange(bool nowRoot, StringView name, bool isGroup);
-
-        void CreateGroupIn(content::Group* parent);
-
-        // === actions ===
-
-        void DuplicateInstance(const Guid& id);
-
-        // === inline rename ===
-
-        // NameLabel commit handler: route to the instance or group apply.
-        void ApplyRename(NameLabel* label, StringView newName);
-
-        void ApplyRenameInstance(const Guid& id, StringView name);
-
-        void ApplyRenameGroup(content::Group* group, StringView name);
-
-        // Begin the in-place edit of a content-area row (menu Rename path is DOUBLE-deferred
-        // through the mutation queue - BeginEdit's SetFocus must land AFTER
-        // the menu's ClosePopup/PopFocus restored focus, one queue drain is not enough).
-        void StartRename(i32 position);
-
-        void StartRenameDeferred(i32 position);
-
-        // In-place edit of a group's TREE row (the background/tree menu path).
-        void StartRenameGroupInTree(content::Group* group);
-
-        void StartRenameGroupInTreeDeferred(content::Group* group);
-
-        void ConfirmDelete(Array<Guid> ids);
-
-        // Runs from the mutation queue: close pages, delete, log, refresh.
-        void DeleteInstances(const Array<Guid>& ids);
-        // One asset: its page closed first, then the instance deleted and logged.
-        bool DeleteOne(const Guid& id);
-
-        // F2 = inline rename, Delete = confirmed delete - dispatched by ListView/GridView
-        // before their own navigation keys.
-        void OnRowKeyDown(ui::SelectionModel* selection, i32 position, ui::KeyEventArgs& e);
-
-        void ConfirmDeleteGroup(content::Group* group);
-
-        // Runs from the mutation queue: close every page under the group, delete the whole
-        // subtree, navigate the selection out of the dead branch.
-        void DeleteGroupNow(content::Group* group);
-
-        static void CountInstances(content::Group* group, usize& count);
-
-        static void CollectInstanceIds(content::Group* group, Array<Guid>& out);
-
-        // A delete may have taken the default scene with it - clear the manifest reference
-        // instead of leaving a dangling guid (the player would fail with "unresolved").
-        void ClearDefaultSceneIfGone();
-
-        static void AppendCount(String& out, usize value);
-
-        [[nodiscard]] content::Instance* Resolve(const Guid& id);
-
-        editor::EditorContext* m_context;  // borrowed
-        editor::EditorCookService* m_cook; // borrowed (app-owned)
-        editor::EditorJobService* m_jobs = nullptr;
-        RefPtr<ui::TreeView> m_tree;
-        RefPtr<ui::ListView> m_list;
-        RefPtr<ui::GridView> m_grid;
-        RefPtr<ui::EditText> m_filterEdit;
-        RefPtr<ui::toolkit::BreadcrumbBar> m_breadcrumb;
-        RefPtr<ViewModeToggles> m_viewToggles;
-        UniquePtr<TreeAdapter> m_treeAdapter;
-        UniquePtr<ListAdapter> m_listAdapter;
-        UniquePtr<GridAdapter> m_gridAdapter;
-        Array<GroupNode> m_groups;                 // pre-order snapshot (nodeId = index)
-        Array<Row> m_rows;                         // content area: subgroups then instances
-        Array<content::Group*> m_breadcrumbGroups; // segment index -> group
-        content::Group* m_selectedGroup = nullptr;
-        content::Group* m_importTargetGroup = nullptr; // the chosen import destination (Change... picker)
-        String m_filter;
-        bool m_gridMode = false;
-        u64 m_cookRevision = ~0ull;
+        bool m_tile;
+        RefPtr<gui::Panel> m_thumb;
+        RefPtr<gui::Image> m_glyph;
+        RefPtr<gui::Label> m_name;
+        RefPtr<gui::Label> m_kind;
+        RefPtr<gui::Label> m_badge;
+        RefPtr<gui::Image> m_star;
+        String m_glyphClass;
+        String m_badgeClass;
     };
 
-    RTTI_DEFINE_OBJECT(AssetsView, "rtti::editor::editor::app")
+    class AssetsView
+    {
+    public:
+        /// Its markup, under the data root.
+        static constexpr const char8_t* kPath = u8"Editor/Assets.gml";
+        static constexpr StringView kTopGroup = u8"Content";
+
+        /// What it works over.
+        struct Services
+        {
+            editor::EditorContext* context = nullptr;   // the project, favourites, the project's editor store
+            editor::EditorCookService* cook = nullptr;  // the badges; null: none
+            editor::EditorIcons* icons = nullptr;       // a type's glyph; null: generic ones
+            Function<void(content::Instance&)> open;    // an asset opened (its page)
+        };
+
+        AssetsView(IAllocator& allocator, Services services, RefPtr<gui::Node> content)
+            : m_allocator(allocator), m_services(Move(services)), m_content(Move(content)), m_rows(allocator), m_treeGroups(allocator), m_model(*this)
+        {
+            if (!m_content)
+                return;
+            AssetsView* self = this;
+            m_tree = Find<gui::TreeView>(u8"assets-groups");
+            if (m_tree != nullptr)
+            {
+                m_tree->SetModel(&m_groupModel);
+                m_tree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                              {
+                                                  if (self->m_building || !index.IsValid())
+                                                      return;
+                                                  const i64 node = index.InternalId;
+                                                  if (node >= 0 && static_cast<usize>(node) < self->m_treeGroups.Size())
+                                                      self->Navigate(*self->m_treeGroups[static_cast<usize>(node)]);
+                                              });
+            }
+            m_list = Find<gui::ListView>(u8"assets-content");
+            if (m_list != nullptr)
+            {
+                gui::RowFactory rows;
+                rows.TypeOf = [self](const gui::ModelIndex&) { return self->m_tiles ? 0u : 1u; };
+                rows.Create = [self](u32 type) -> RefPtr<gui::Node> { return MakeRef<AssetCell>(self->m_allocator, type == 0u); };
+                rows.Bind = [self](gui::Node& cell, const gui::ModelIndex& index) { self->BindCell(cell, index.Row); };
+                m_list->SetRowFactory(Move(rows));
+                m_list->SetModel(&m_model);
+                m_list->SetOnActivated([self](gui::ModelIndex index) { self->OpenRow(index.Row); });
+                m_list->SetDragType(String(AssetDrag::kType));
+                m_list->SetOnDragPayload([self](gui::DragPayload& payload, Span<const gui::ItemId> ids) { self->DragPayloadFor(payload, ids); });
+            }
+            m_crumbs = Find<gui::BreadcrumbBar>(u8"assets-crumbs");
+            if (m_crumbs != nullptr)
+                m_crumbs->SetOnNavigate([self](const gui::BreadcrumbItem& item)
+                                        {
+                                            if (content::Group* group = self->GroupAt(item.Id.AsView()))
+                                                self->Navigate(*group);
+                                        });
+            if (auto* search = Find<gui::TextField>(u8"assets-search"))
+                search->SetOnTextChanging([self](StringView text) { self->Search(text); });
+            if (auto* clear = Find<gui::Button>(u8"assets-clear-search"))
+                clear->SetOnClick([self]() { self->SetSearch(StringView{}); });
+            if (auto* types = Find<gui::Button>(u8"assets-types"))
+                types->SetOnClick([self]() { self->ShowTypeMenu(); });
+            if (auto* tiles = Find<gui::Button>(u8"assets-tiles"))
+                tiles->SetOnClick([self]() { self->SetTiles(true); });
+            if (auto* list = Find<gui::Button>(u8"assets-list"))
+                list->SetOnClick([self]() { self->SetTiles(false); });
+            if (auto* verb = Find<gui::Button>(u8"assets-state-verb"))
+                verb->SetOnClick([self]() { self->StateVerb(); });
+            ShowLayout();
+        }
+        AssetsView(const AssetsView&) = delete;
+        AssetsView& operator=(const AssetsView&) = delete;
+        ~AssetsView()
+        {
+            if (m_list != nullptr)
+                m_list->SetModel(nullptr);
+            if (m_tree != nullptr)
+                m_tree->SetModel(nullptr);
+        }
+
+        [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
+
+        /// Once a frame: builds again when the project, its database's shape or the badges moved.
+        void Refresh()
+        {
+            content::ContentDatabase* db = Sources();
+            const u64 revision = db != nullptr ? db->Revision() : 0;
+            const u64 cooked = m_services.cook != nullptr ? m_services.cook->Revision() : 0;
+            if (db != m_db || revision != m_dbRevision)
+                Rebuild();
+            else if (cooked != m_cookRevision)
+            {
+                m_cookRevision = cooked;
+                m_model.Changed(); // the badges
+            }
+        }
+        /// Builds the tree and the content again from the database, keeping where it is, the
+        /// selection and the scroll where they still are.
+        void Rebuild()
+        {
+            content::ContentDatabase* db = Sources();
+            if (db != m_db)
+            {
+                // Another project (or none): back to its top, as it opens, in its own view.
+                m_db = db;
+                m_current = nullptr;
+                m_search = String{};
+                m_type = String{};
+                if (auto* search = Find<gui::TextField>(u8"assets-search"))
+                    search->SetText(StringView{});
+                LoadTiles();
+            }
+            m_dbRevision = db != nullptr ? db->Revision() : 0;
+            m_cookRevision = m_services.cook != nullptr ? m_services.cook->Revision() : 0;
+            if (m_current == nullptr || !Contains(m_current))
+                m_current = db != nullptr ? db->RootGroup() : nullptr;
+            BuildTree();
+            BuildRows();
+        }
+
+        // === Where it is ===
+        [[nodiscard]] content::Group* CurrentGroup() const noexcept { return m_current; }
+        /// Shows `group`'s content (the search cleared), its tree row selected, the breadcrumb
+        /// following.
+        void Navigate(content::Group& group)
+        {
+            if (!Contains(&group))
+                return;
+            m_current = &group;
+            if (!m_search.IsEmpty())
+            {
+                m_search = String{};
+                if (auto* search = Find<gui::TextField>(u8"assets-search"))
+                    search->SetText(StringView{});
+            }
+            SelectTreeGroup(group);
+            BuildRows();
+        }
+        /// Shows the asset `id` where it lives: its group, it selected and in view. False when
+        /// the project has no such asset.
+        bool Reveal(const Guid& id)
+        {
+            content::ContentDatabase* db = Sources();
+            content::Instance* instance = db != nullptr ? db->GetInstance(id) : nullptr;
+            if (instance == nullptr)
+                return false;
+            m_type = String{};
+            Navigate(instance->OwningGroup());
+            for (usize row = 0; row < m_rows.Size(); ++row)
+                if (m_rows[row].instance == instance && m_list != nullptr)
+                    m_list->SetSelectedItem(static_cast<i32>(row));
+            return true;
+        }
+
+        // === What it shows ===
+        /// Looks in every group for assets whose name holds `text` (case folded) or whose guid
+        /// starts with it; empty shows the group again.
+        void SetSearch(StringView text)
+        {
+            if (auto* search = Find<gui::TextField>(u8"assets-search"))
+                search->SetText(text);
+            Search(text);
+        }
+        [[nodiscard]] StringView SearchText() const noexcept { return m_search.AsView(); }
+        /// Keeps only assets of the type named `typeName`; empty: every type.
+        void SetTypeFilter(StringView typeName)
+        {
+            m_type = String(typeName);
+            if (auto* types = Find<gui::Button>(u8"assets-types"))
+            {
+                if (m_type.IsEmpty())
+                    types->RemoveClass(u8"checked");
+                else
+                    types->AddClass(u8"checked");
+                types->SetTooltip(m_type.IsEmpty() ? StringView(u8"Filter by type") : Format(u8"Showing {} only", KindOf(m_type.AsView())).AsView());
+            }
+            BuildRows();
+        }
+        [[nodiscard]] StringView TypeFilter() const noexcept { return m_type.AsView(); }
+        /// Tiles or a list, kept with the project.
+        void SetTiles(bool tiles)
+        {
+            if (m_tiles == tiles)
+                return;
+            m_tiles = tiles;
+            if (foundation::settings::Settings* store = m_services.context != nullptr ? m_services.context->ProjectEditorSettings() : nullptr)
+            {
+                store->Section<EditorAssetBrowserSettings>().gridMode = tiles;
+                store->MarkChanged<EditorAssetBrowserSettings>();
+                m_services.context->RequestProjectEditorSettingsSave();
+            }
+            ShowLayout();
+        }
+        [[nodiscard]] bool ShowsTiles() const noexcept { return m_tiles; }
+
+        /// The rows shown: a group's or an asset's, by their place.
+        [[nodiscard]] usize RowCount() const noexcept { return m_rows.Size(); }
+        [[nodiscard]] StringView RowName(usize row) const
+        {
+            if (row >= m_rows.Size())
+                return {};
+            return m_rows[row].group != nullptr ? m_rows[row].group->Name() : m_rows[row].instance->Name();
+        }
+        [[nodiscard]] content::Group* RowGroup(usize row) const { return row < m_rows.Size() ? m_rows[row].group : nullptr; }
+        [[nodiscard]] content::Instance* RowAsset(usize row) const { return row < m_rows.Size() ? m_rows[row].instance : nullptr; }
+        /// Opens an asset's page, or enters a group (Enter, a double click).
+        void OpenRow(i32 row)
+        {
+            if (row < 0 || static_cast<usize>(row) >= m_rows.Size())
+                return;
+            if (content::Group* group = m_rows[static_cast<usize>(row)].group)
+                Navigate(*group);
+            else if (content::Instance* instance = m_rows[static_cast<usize>(row)].instance; instance != nullptr && m_services.open)
+                m_services.open(*instance);
+        }
+        /// The selected assets, in their order (groups left out).
+        [[nodiscard]] Array<content::Instance*> SelectedAssets() const
+        {
+            Array<content::Instance*> out;
+            if (m_list != nullptr)
+                for (usize row = 0; row < m_rows.Size(); ++row)
+                    if (m_rows[row].instance != nullptr && m_list->IsItemSelected(static_cast<i32>(row)))
+                        out.PushBack(m_rows[row].instance);
+            return out;
+        }
+
+        [[nodiscard]] bool ShowsState() const
+        {
+            const auto* state = Find<gui::UIWidget>(u8"assets-state");
+            return state != nullptr && state->IsDisplayed();
+        }
+        [[nodiscard]] StringView StateTitle() const
+        {
+            const auto* title = Find<gui::Label>(u8"assets-state-title");
+            return title != nullptr ? title->GetText() : StringView{};
+        }
+        [[nodiscard]] gui::ListView* List() const noexcept { return m_list; }
+        [[nodiscard]] gui::TreeView* Tree() const noexcept { return m_tree; }
+        [[nodiscard]] gui::BreadcrumbBar* Crumbs() const noexcept { return m_crumbs; }
+        /// The type filter's menu while it is open, for a test.
+        [[nodiscard]] gui::Menu* TypeMenu() const noexcept { return m_menu.Get(); }
+
+    private:
+        struct Row
+        {
+            content::Group* group = nullptr;       // a subgroup's row
+            content::Instance* instance = nullptr; // an asset's
+        };
+        static constexpr u64 kGroupBit = 1ull << 62;
+
+        // The rows as the list's model: an asset's id its guid's, a group's its path's.
+        class Model final : public gui::IModel
+        {
+        public:
+            explicit Model(AssetsView& view) : m_view(view) {}
+            [[nodiscard]] usize RowCount(const gui::ModelIndex& parent = {}) const override { return parent.IsValid() ? 0 : m_view.m_rows.Size(); }
+            [[nodiscard]] usize ColumnCount() const override { return 1; }
+            [[nodiscard]] gui::Variant Data(const gui::ModelIndex& index, gui::ModelRole role = gui::ModelRole::Display) const override
+            {
+                return role == gui::ModelRole::Display && index.Row >= 0 ? gui::Variant(m_view.RowName(static_cast<usize>(index.Row))) : gui::Variant{};
+            }
+            [[nodiscard]] gui::ItemId IdOf(const gui::ModelIndex& index) const override
+            {
+                if (index.Row < 0 || static_cast<usize>(index.Row) >= m_view.m_rows.Size())
+                    return gui::kNoItem;
+                return IdOfRow(m_view.m_rows[static_cast<usize>(index.Row)]);
+            }
+            [[nodiscard]] gui::ModelIndex IndexOfId(gui::ItemId id) const override
+            {
+                for (usize row = 0; row < m_view.m_rows.Size(); ++row)
+                    if (IdOfRow(m_view.m_rows[row]) == id)
+                        return gui::ModelIndex{static_cast<i32>(row), 0};
+                return {};
+            }
+            [[nodiscard]] static gui::ItemId IdOfRow(const Row& row)
+            {
+                if (row.group != nullptr)
+                    return (Hash<StringView>{}(row.group->Path().AsView()) & ~(kGroupBit | (kGroupBit << 1))) | kGroupBit;
+                const Guid& id = row.instance->Id();
+                return (id.high ^ (id.low * 31u)) & ~(kGroupBit | (kGroupBit << 1));
+            }
+            void Reset() { NotifyReset(); }
+            void Changed()
+            {
+                if (!m_view.m_rows.IsEmpty())
+                    NotifyRowsChanged(gui::ModelIndex{}, 0, static_cast<i32>(m_view.m_rows.Size()));
+            }
+
+        private:
+            AssetsView& m_view;
+        };
+
+        [[nodiscard]] content::ContentDatabase* Sources() const
+        {
+            editor::EditorProject* project = m_services.context != nullptr ? m_services.context->Project() : nullptr;
+            return project != nullptr ? &project->SourceDb() : nullptr;
+        }
+        [[nodiscard]] bool Contains(const content::Group* group) const
+        {
+            content::ContentDatabase* db = Sources();
+            if (db == nullptr || group == nullptr)
+                return false;
+            Array<content::Group*> pending;
+            pending.PushBack(db->RootGroup());
+            while (!pending.IsEmpty())
+            {
+                content::Group* at = pending.Back();
+                pending.PopBack();
+                if (at == group)
+                    return true;
+                for (content::Group* child : at->Groups())
+                    pending.PushBack(child);
+            }
+            return false;
+        }
+        // A group by its breadcrumb id (its path; empty: the top).
+        [[nodiscard]] content::Group* GroupAt(StringView path) const
+        {
+            content::ContentDatabase* db = Sources();
+            content::Group* group = db != nullptr ? db->RootGroup() : nullptr;
+            usize at = 0;
+            while (group != nullptr && at < path.Size())
+            {
+                usize end = at;
+                while (end < path.Size() && path[end] != u8'/')
+                    ++end;
+                group = group->GetGroup(path.SubStr(at, end - at));
+                at = end + 1;
+            }
+            return group;
+        }
+        [[nodiscard]] static String ShownPath(const content::Group& group)
+        {
+            return group.Parent() == nullptr ? String(kTopGroup) : Format(u8"{}/{}", kTopGroup, group.Path());
+        }
+
+        // The type an asset's instance names, for its glyph and kind.
+        [[nodiscard]] static const TypeInfo* TypeOfAsset(const content::Instance& instance)
+        {
+            return GlobalTypeRegistry().FindByName(reinterpret_cast<const char*>(String(instance.TypeNamespace()).CStr()),
+                                                   reinterpret_cast<const char*>(String(instance.TypeName()).CStr()));
+        }
+        // What a type is called to the user: its displayName, else its name.
+        [[nodiscard]] static String KindOf(StringView typeName)
+        {
+            for (const TypeInfo* type : GlobalTypeRegistry().All())
+                if (type != nullptr && type->name != nullptr && StringView(reinterpret_cast<const utf8char*>(type->name)) == typeName)
+                    return String(TypeAttrString(*type, "displayName", typeName));
+            return String(typeName);
+        }
+
+        void Search(StringView text)
+        {
+            if (m_search.AsView() == text)
+                return;
+            m_search = String(text);
+            if (auto* clear = Find<gui::Button>(u8"assets-clear-search"))
+                clear->SetVisible(!m_search.IsEmpty());
+            BuildRows();
+        }
+        [[nodiscard]] bool Matches(const content::Instance& instance) const
+        {
+            if (!m_type.IsEmpty() && instance.TypeName() != m_type.AsView())
+                return false;
+            if (m_search.IsEmpty())
+                return true;
+            if (instance.Name().ContainsIgnoreCase(m_search.AsView()))
+                return true;
+            // A guid's start (four characters or more: a guid pasted or typed).
+            if (m_search.Size() < 4)
+                return false;
+            utf8char chars[37];
+            instance.Id().ToChars(chars);
+            const StringView guid(chars, 36);
+            return guid.SubStr(0, Min(m_search.Size(), guid.Size())).ContainsIgnoreCase(m_search.AsView()) && m_search.Size() <= guid.Size();
+        }
+
+        // The group tree: a node per group, the top one Content, all open.
+        void BuildTree()
+        {
+            if (m_tree == nullptr)
+                return;
+            m_building = true;
+            m_groupModel.Clear();
+            m_treeGroups.Clear();
+            if (content::ContentDatabase* db = Sources())
+                AddTreeGroup(*db->RootGroup(), gui::TreeModel::kRoot);
+            for (usize node = 0; node < m_treeGroups.Size(); ++node)
+                m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
+            if (m_current != nullptr)
+                SelectTreeGroup(*m_current);
+            m_building = false;
+        }
+        void AddTreeGroup(content::Group& group, i32 parent)
+        {
+            const i32 node = m_groupModel.AddNode(parent, group.Parent() == nullptr ? kTopGroup : group.Name());
+            m_groupModel.SetIcon(node, u8"Editor/Icons/folder.svg");
+            while (m_treeGroups.Size() <= static_cast<usize>(node))
+                m_treeGroups.PushBack(nullptr);
+            m_treeGroups[static_cast<usize>(node)] = &group;
+            for (content::Group* child : group.Groups())
+                AddTreeGroup(*child, node);
+        }
+        void SelectTreeGroup(const content::Group& group)
+        {
+            if (m_tree == nullptr)
+                return;
+            for (usize node = 0; node < m_treeGroups.Size(); ++node)
+                if (m_treeGroups[node] == &group)
+                {
+                    const bool building = m_building;
+                    m_building = true; // a selection from code is no navigation
+                    for (i32 item = 0; item < static_cast<i32>(m_tree->GetItemCount()); ++item)
+                        if (m_tree->GetItemIndex(item).InternalId == static_cast<i64>(node))
+                            m_tree->SetSelectedItem(item); // every group is open: each is an item
+                    m_building = building;
+                }
+        }
+
+        // The content: the group's subgroups, then its assets; a search's matches from every
+        // group; then the breadcrumb and the state.
+        void BuildRows()
+        {
+            m_rows.Clear();
+            content::ContentDatabase* db = Sources();
+            if (db != nullptr && m_current != nullptr)
+            {
+                if (!m_search.IsEmpty())
+                    CollectMatches(*db->RootGroup());
+                else
+                {
+                    if (m_type.IsEmpty())
+                        for (content::Group* child : m_current->Groups())
+                            m_rows.PushBack(Row{child, nullptr});
+                    for (content::Instance* instance : m_current->Instances())
+                        if (Matches(*instance))
+                            m_rows.PushBack(Row{nullptr, instance});
+                }
+            }
+            m_model.Reset();
+            ShowCrumbs();
+            ShowState();
+        }
+        void CollectMatches(content::Group& group)
+        {
+            for (content::Instance* instance : group.Instances())
+                if (Matches(*instance))
+                    m_rows.PushBack(Row{nullptr, instance});
+            for (content::Group* child : group.Groups())
+                CollectMatches(*child);
+        }
+        void ShowCrumbs()
+        {
+            if (m_crumbs == nullptr)
+                return;
+            Array<gui::BreadcrumbItem> items;
+            Array<content::Group*> chain;
+            for (content::Group* at = m_current; at != nullptr; at = at->Parent())
+                chain.PushBack(at);
+            for (usize i = chain.Size(); i > 0; --i)
+            {
+                content::Group& group = *chain[i - 1];
+                gui::BreadcrumbItem item;
+                item.Id = group.Path();
+                item.Text = group.Parent() == nullptr ? String(kTopGroup) : String(group.Name());
+                item.Tooltip = ShownPath(group);
+                items.PushBack(Move(item));
+            }
+            m_crumbs->SetItems(items.AsSpan());
+        }
+        void ShowState()
+        {
+            const bool none = m_rows.IsEmpty();
+            if (m_list != nullptr)
+                m_list->SetDisplayed(!none);
+            if (auto* state = Find<gui::UIWidget>(u8"assets-state"))
+                state->SetDisplayed(none);
+            if (!none)
+                return;
+            StringView icon = u8"Editor/Icons/folder-open.svg";
+            String title;
+            String text;
+            String verb;
+            if (Sources() == nullptr)
+                title = String(u8"No project is open");
+            else if (!m_search.IsEmpty())
+            {
+                icon = u8"Editor/Icons/search.svg";
+                title = Format(u8"Nothing matches {}", m_search);
+                verb = String(u8"Clear the search");
+            }
+            else if (!m_type.IsEmpty())
+            {
+                icon = u8"Editor/Icons/filter.svg";
+                title = Format(u8"No {} here", KindOf(m_type.AsView()));
+                verb = String(u8"Show every type");
+            }
+            else
+            {
+                title = Format(u8"Nothing in {} yet", m_current != nullptr ? ShownPath(*m_current) : String(kTopGroup));
+                text = String(u8"Create an asset or import files into it.");
+            }
+            if (auto* image = Find<gui::Image>(u8"assets-state-icon"))
+                image->SetSource(String(icon));
+            if (auto* label = Find<gui::Label>(u8"assets-state-title"))
+                label->SetText(title.AsView());
+            if (auto* label = Find<gui::Label>(u8"assets-state-text"))
+            {
+                label->SetText(text.AsView());
+                label->SetDisplayed(!text.IsEmpty());
+            }
+            if (auto* button = Find<gui::Button>(u8"assets-state-verb"))
+            {
+                button->SetText(verb.AsView());
+                button->SetDisplayed(!verb.IsEmpty());
+            }
+        }
+        void StateVerb()
+        {
+            if (!m_search.IsEmpty())
+                SetSearch(StringView{});
+            else if (!m_type.IsEmpty())
+                SetTypeFilter(StringView{});
+        }
+
+        // The cell for a row, as it shows now.
+        void BindCell(gui::Node& node, i32 index)
+        {
+            auto* cell = Cast<AssetCell>(&node);
+            if (cell == nullptr || index < 0 || static_cast<usize>(index) >= m_rows.Size())
+                return;
+            const Row& row = m_rows[static_cast<usize>(index)];
+            AssetCell::Shown shown;
+            if (row.group != nullptr)
+            {
+                shown.Group = true;
+                shown.Glyph = String(u8"Editor/Icons/folder.svg");
+                shown.Name = String(row.group->Name());
+                const usize count = row.group->Groups().Size() + row.group->Instances().Size();
+                shown.Kind = count == 1 ? String(u8"Group, 1 item") : Format(u8"Group, {} items", count);
+            }
+            else
+            {
+                const content::Instance& instance = *row.instance;
+                shown.Name = String(instance.Name());
+                shown.Kind = KindOf(instance.TypeName());
+                if (!m_search.IsEmpty())
+                    shown.Kind = Format(u8"{} in {}", shown.Kind, ShownPath(instance.OwningGroup()));
+                if (const TypeInfo* type = TypeOfAsset(instance); type != nullptr && m_services.icons != nullptr)
+                {
+                    const editor::TypeIcon icon = m_services.icons->For(*type, u8"Asset");
+                    shown.Glyph = icon.Source;
+                    shown.GlyphClass = icon.Class;
+                }
+                if (shown.Glyph.IsEmpty())
+                    shown.Glyph = String(u8"Editor/Icons/file.svg");
+                shown.Favourite = m_services.context != nullptr && m_services.context->IsFavorite(instance.Id());
+                if (m_services.cook != nullptr)
+                    switch (m_services.cook->BadgeFor(const_cast<content::Instance&>(instance)))
+                    {
+                    case editor::CookBadge::Cooked:
+                        shown.Badge = String(u8"Cooked");
+                        shown.BadgeClass = String(u8"success");
+                        break;
+                    case editor::CookBadge::Missing:
+                        shown.Badge = String(u8"Stale");
+                        shown.BadgeClass = String(u8"warning");
+                        break;
+                    case editor::CookBadge::Failed:
+                        shown.Badge = String(u8"Failed");
+                        shown.BadgeClass = String(u8"danger");
+                        break;
+                    case editor::CookBadge::NoBuilder:
+                        break;
+                    }
+            }
+            cell->Show(shown);
+        }
+
+        // Tiles or a list, the toggles saying which.
+        void ShowLayout()
+        {
+            if (m_list != nullptr)
+            {
+                m_list->SetLayoutMode(m_tiles ? gui::ItemLayout::Grid : gui::ItemLayout::List);
+                if (m_tiles)
+                {
+                    m_list->SetCellWidth(kTileWidth);
+                    m_list->SetCellHeight(kTileHeight);
+                    m_list->RemoveClass(u8"asset-list");
+                    m_list->AddClass(u8"asset-tiles");
+                }
+                else
+                {
+                    m_list->RemoveClass(u8"asset-tiles");
+                    m_list->AddClass(u8"asset-list");
+                }
+                m_model.Reset(); // the rows' kind follows
+            }
+            if (auto* tiles = Find<gui::Button>(u8"assets-tiles"))
+            {
+                if (m_tiles)
+                    tiles->AddClass(u8"checked");
+                else
+                    tiles->RemoveClass(u8"checked");
+            }
+            if (auto* list = Find<gui::Button>(u8"assets-list"))
+            {
+                if (m_tiles)
+                    list->RemoveClass(u8"checked");
+                else
+                    list->AddClass(u8"checked");
+            }
+            if (auto* clear = Find<gui::Button>(u8"assets-clear-search"))
+                clear->SetVisible(!m_search.IsEmpty());
+        }
+        // The project's saved choice (tiles when it saved none).
+        void LoadTiles()
+        {
+            bool tiles = true;
+            if (foundation::settings::Settings* store = m_services.context != nullptr ? m_services.context->ProjectEditorSettings() : nullptr)
+                if (const EditorAssetBrowserSettings* section = store->Find<EditorAssetBrowserSettings>())
+                    tiles = section->gridMode;
+            m_tiles = tiles;
+            ShowLayout();
+        }
+
+        // The type filter: every type the project's assets have, by what each is called.
+        void ShowTypeMenu()
+        {
+            auto* anchor = Find<gui::Button>(u8"assets-types");
+            content::ContentDatabase* db = Sources();
+            if (anchor == nullptr || db == nullptr)
+                return;
+            Array<String> types;
+            Array<content::Group*> pending;
+            pending.PushBack(db->RootGroup());
+            while (!pending.IsEmpty())
+            {
+                content::Group* group = pending.Back();
+                pending.PopBack();
+                for (content::Instance* instance : group->Instances())
+                {
+                    bool known = false;
+                    for (const String& type : types)
+                        known = known || type.AsView() == instance->TypeName();
+                    if (!known)
+                        types.PushBack(String(instance->TypeName()));
+                }
+                for (content::Group* child : group->Groups())
+                    pending.PushBack(child);
+            }
+            types.Sort([](const String& a, const String& b) { return KindOf(a.AsView()).AsView().Compare(KindOf(b.AsView()).AsView()) < 0; });
+            m_menu = MakeRef<gui::Menu>(m_allocator);
+            AssetsView* self = this;
+            gui::MenuItem* every = m_menu->AddItem(u8"Every type", [self]() { self->SetTypeFilter(StringView{}); });
+            every->SetCheckable(true);
+            every->SetCheckedSilently(m_type.IsEmpty());
+            m_menu->AddSeparator();
+            for (const String& type : types)
+            {
+                gui::MenuItem* item = m_menu->AddItem(KindOf(type.AsView()).AsView(), [self, type]() { self->SetTypeFilter(type.AsView()); });
+                item->SetCheckable(true);
+                item->SetCheckedSilently(m_type == type);
+            }
+            m_menu->Open(*anchor, Float2{0.0f, anchor->GetSize().y});
+        }
+
+        // A drag of the selection carries its assets (a group's row carries none).
+        void DragPayloadFor(gui::DragPayload& payload, Span<const gui::ItemId> ids)
+        {
+            Array<AssetDrag> assets;
+            for (const gui::ItemId id : ids)
+                for (const Row& row : m_rows)
+                    if (row.instance != nullptr && Model::IdOfRow(row) == id)
+                        assets.PushBack(AssetDrag{row.instance->Id(), String(row.instance->TypeName()), String(row.instance->Name())});
+            if (!assets.IsEmpty())
+                payload = AssetDrag::Payload(assets.AsSpan());
+        }
+
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const
+        {
+            return m_content ? Cast<T>(FindIn(*m_content, id)) : nullptr;
+        }
+        static gui::Node* FindIn(gui::Node& node, StringView id)
+        {
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
+
+        static constexpr f32 kTileWidth = 96.0f;
+        static constexpr f32 kTileHeight = 92.0f;
+
+        IAllocator& m_allocator;
+        Services m_services;
+        RefPtr<gui::Node> m_content;
+        gui::TreeView* m_tree = nullptr;
+        gui::ListView* m_list = nullptr;
+        gui::BreadcrumbBar* m_crumbs = nullptr;
+        RefPtr<gui::Menu> m_menu;
+        content::ContentDatabase* m_db = nullptr; // the database it shows (the project's)
+        content::Group* m_current = nullptr;      // the group it shows
+        u64 m_dbRevision = 0;
+        u64 m_cookRevision = 0;
+        String m_search;
+        String m_type;
+        bool m_tiles = true;
+        bool m_building = false; // the tree is being filled: its selection is no navigation
+        Array<Row> m_rows;
+        Array<content::Group*> m_treeGroups; // by the tree's node id
+        gui::TreeModel m_groupModel;
+        Model m_model;
+    };
+
+    RTTI_DEFINE_OBJECT(AssetCell, "rtti::editor::editor::app")
 }

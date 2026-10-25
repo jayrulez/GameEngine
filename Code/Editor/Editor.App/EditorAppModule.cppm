@@ -37,6 +37,7 @@ export import :asset_create_dialog;
 export import :settings_dialog;
 export import :templates_dialog;
 export import :export_dialog;
+export import :assets_view;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

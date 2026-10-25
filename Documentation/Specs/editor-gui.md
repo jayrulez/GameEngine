@@ -234,7 +234,7 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the Console, asset drag data, the asset slot and the inspector's asset reference, the picker, the path picker and the asset picker (the slot's pick), the group picker and Create Asset, Project Settings, Export Templates and Export; the rest out, unedited, until their layers | X3 (layers 1 to 15), X4 (layers 1 to 6) |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the Console, asset drag data, the asset slot and the inspector's asset reference, the picker, the path picker and the asset picker (the slot's pick), the group picker and Create Asset, Project Settings, Export Templates and Export, the assets browser's browsing; the rest out, unedited, until their layers | X3 (layers 1 to 15), X4 (layers 1 to 6) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
@@ -351,10 +351,20 @@ additions go first and are grouped with the other GUI commits.
 6. Project Settings on the property grid (ruling 20), then Export Templates and Export, whose
    preset settings are the grid the same way (extra files a list, an override's rows shown while it
    overrides; a preset removed after asking).
-7. The assets browser: the group tree, the breadcrumb, the filter, list and grid with pictures and
-   cook state; create, import, rename, duplicate, delete, cook, the export flag, favorites; a drag
-   source for the slots; dropped files imported, through the import dialog (single and batch), which
-   only the browser opens.
+7. The assets browser as the mock draws it: a toolbar (the breadcrumb, a search, a filter by type,
+   tiles or a list) over the group tree and the content. In four commits:
+   1. Browsing: the group tree (folder icons, Content at the top), the breadcrumb, subgroups then
+      assets, each by its type's glyph, name, kind, cook badge and favourite star; tiles or a
+      list, kept per project; a search over every group, cleared by its x; the type filter; empty
+      and no-match states; Enter or a double click opens an asset or enters a group; Reveal; a
+      drag source for the slots (several assets at once). The Assets panel shows it.
+   2. The verbs: the row, background and tree menus (multi-selection throughout); New from the
+      creators, rename in place (F2), duplicate, delete (asking, naming what goes), cook and
+      rebuild, the export flag, favourites, copy guid and path; assets moved by dropping them on
+      a group.
+   3. Pictures: thumbnails in tiles and rows as they arrive.
+   4. Import: files dropped on a group or Import..., through the import dialog (single and
+      batch), which only the browser opens.
 
 ## 6. Tests
 

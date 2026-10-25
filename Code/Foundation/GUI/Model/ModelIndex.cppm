@@ -26,6 +26,7 @@ export namespace foundation::gui
         Icon,      ///< an image's source (a path), or nothing
         Custom,
         IconClass, ///< a class on that image, which a sheet styles (a type's category tint)
+        RowClass,  ///< classes on the row's content, space separated, which a sheet styles (a state)
     };
 
     struct ModelIndex

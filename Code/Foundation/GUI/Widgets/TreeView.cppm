@@ -136,6 +136,32 @@ export namespace foundation::gui
             }
             RequestLayout();
         }
+        template <typename Fn>
+        static void ForEachClass(core::StringView classes, Fn&& fn)
+        {
+            usize at = 0;
+            while (at < classes.Size())
+            {
+                while (at < classes.Size() && classes[at] == u8' ')
+                    ++at;
+                usize end = at;
+                while (end < classes.Size() && classes[end] != u8' ')
+                    ++end;
+                if (end > at)
+                    fn(classes.SubStr(at, end - at));
+                at = end;
+            }
+        }
+        /// Classes the model gives the row (space separated; empty: none), in place of those it gave
+        /// before: a state a sheet styles (dimmed, a member of something).
+        void SetRowClasses(core::StringView classes)
+        {
+            if (m_rowClasses.AsView() == classes)
+                return;
+            ForEachClass(m_rowClasses.AsView(), [this](core::StringView cls) { RemoveClass(cls); });
+            m_rowClasses = core::String(classes);
+            ForEachClass(m_rowClasses.AsView(), [this](core::StringView cls) { AddClass(cls); });
+        }
         [[nodiscard]] core::Float2 MeasureContent(core::Float2 available) override
         {
             const f32 textX = TextStart();
@@ -173,6 +199,7 @@ export namespace foundation::gui
         core::RefPtr<Image> m_icon;
         core::RefPtr<Label> m_label;
         core::String m_iconClass;
+        core::String m_rowClasses; // the model's (RowClass)
         f32 m_indent = 0.0f;
         f32 m_arrowSize = 16.0f;
         f32 m_iconSize = 0.0f; // none shown
@@ -330,6 +357,7 @@ export namespace foundation::gui
             row.GetLabel()->SetText(GetModel()->Data(index).ToString().AsView());
             const core::String icon = GetModel()->Data(index, ModelRole::Icon).ToString();
             row.SetIcon(icon.AsView(), GetModel()->Data(index, ModelRole::IconClass).ToString().AsView(), m_iconSize);
+            row.SetRowClasses(GetModel()->Data(index, ModelRole::RowClass).ToString().AsView());
             row.Configure(static_cast<f32>(entry.Depth) * m_indentWidth, m_arrowSize, entry.HasChildren, m_expanded.Contains(entry.Id));
         }
 

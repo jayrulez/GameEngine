@@ -210,6 +210,47 @@ TEST_CASE("tree-view: a row shows the model's icon, with its class, between the 
     CHECK(cleared->GetLabel()->GetPosition().x == doctest::Approx(without->GetLabel()->GetPosition().x));
 }
 
+namespace
+{
+    // A tree whose rows' classes come from the model: what each node is now.
+    class StatedTree final : public TreeModel
+    {
+    public:
+        core::String aClasses;
+        [[nodiscard]] Variant Data(const ModelIndex& index, ModelRole role = ModelRole::Display) const override
+        {
+            if (role == ModelRole::RowClass)
+                return index.InternalId == 0 ? Variant(aClasses.AsView()) : Variant{};
+            return TreeModel::Data(index, role);
+        }
+        void Changed() { NotifyReset(); }
+    };
+}
+
+TEST_CASE("tree-view: a row takes the classes the model gives it, in place of those it gave before")
+{
+    StatedTree model;
+    (void)model.AddNode(TreeModel::kRoot, SV(u8"A")); // node 0
+    (void)model.AddNode(TreeModel::kRoot, SV(u8"B"));
+    model.aClasses = core::String(u8"member  inactive"); // spaced as written
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &model);
+    const auto* a = core::Cast<TreeRowContent>(tree->RowForItem(0)->GetContent());
+    const auto* b = core::Cast<TreeRowContent>(tree->RowForItem(1)->GetContent());
+    REQUIRE(a != nullptr);
+    REQUIRE(b != nullptr);
+    CHECK(a->HasClass(SV(u8"member")));
+    CHECK(a->HasClass(SV(u8"inactive")));
+    CHECK_FALSE(b->HasClass(SV(u8"member")));
+
+    model.aClasses = core::String(u8"inactive");
+    model.Changed();
+    (void)root->UpdateLayout();
+    a = core::Cast<TreeRowContent>(tree->RowForItem(0)->GetContent());
+    CHECK_FALSE(a->HasClass(SV(u8"member")));
+    CHECK(a->HasClass(SV(u8"inactive")));
+}
+
 TEST_CASE("tree-view: markup's items take an icon and its class")
 {
     RegisterGuiElements();

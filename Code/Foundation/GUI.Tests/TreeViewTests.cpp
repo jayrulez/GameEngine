@@ -231,3 +231,20 @@ TEST_CASE("tree-view: markup's items take an icon and its class")
     CHECK(sun->GetIcon()->HasClass(SV(u8"cat-rendering")));
     CHECK(core::Cast<TreeRowContent>(tree->RowForItem(1)->GetContent())->GetIcon() == nullptr);
 }
+
+TEST_CASE("tree-view: its model taken away, scrolled or not, it shows nothing and binds nothing stale")
+{
+    Tree t;
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &t.model);
+    tree->ExpandItem(0);
+    tree->ExpandItem(1);
+    tree->SetSize(core::Float2{260.0f, 40.0f}); // two rows of five: it scrolls
+    (void)root->UpdateLayout();
+    tree->SetScrollOffset(core::Float2{0.0f, 40.0f});
+    (void)root->UpdateLayout();
+    tree->SetModel(nullptr);
+    (void)root->UpdateLayout();
+    CHECK(tree->GetItemCount() == 0u);
+    CHECK(tree->VisibleRowCount() == 0);
+}

@@ -329,8 +329,8 @@ export namespace foundation::gui
             m_current = kNoItem;
             m_anchorSelection = kNoItem;
             ResetScrollAnchor();
+            OnModelReset(); // its items from the new model first: the scroll's realising binds them
             SetScrollOffset(core::Float2{0.0f, 0.0f});
-            OnModelReset();
         }
         [[nodiscard]] IModel* GetModel() const noexcept { return m_model; }
 

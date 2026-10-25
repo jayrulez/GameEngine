@@ -190,3 +190,45 @@ TEST_CASE("console: under the editor's sheet every line is one fixed height, so 
     (void)bed.root->UpdateLayout();
     CHECK(list.GetScrollRange().y == doctest::Approx(range)); // the content's height holds at the top
 }
+
+TEST_CASE("console: under the editor's sheet it keeps its panel's height and the wheel scrolls it up notch by notch, lines arriving meanwhile")
+{
+    Bed bed;
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    styles.ApplyTree(*bed.root);
+    for (usize i = 0; i < 100; ++i)
+        bed.view->AddEntry(LogLevel::Info, u8"N", Format(u8"line {}", i).AsView());
+    styles.ApplyTree(*bed.root);
+    (void)bed.root->UpdateLayout();
+    gui::ListView& list = *bed.view->List();
+    const gui::Rect box = list.GetScreenBounds();
+    const Float2 at{box.x + 100.0f, box.y + box.height * 0.5f};
+    gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
+    d.InjectMouseMove(at);
+    list.ScrollToItem(static_cast<i32>(bed.view->ShownCount()) - 1); // at the newest, following it
+    (void)bed.root->UpdateLayout();
+    CHECK(list.GetScrollOffset().y == doctest::Approx(list.GetScrollRange().y));
+    f32 last = list.GetScrollOffset().y;
+    for (int notch = 0; notch < 6; ++notch)
+    {
+        (void)d.InjectMouseWheel(at, Float2{0.0f, 1.0f}); // up
+        bed.view->AddEntry(LogLevel::Info, u8"N", Format(u8"more {}", notch).AsView());
+        styles.ApplyTree(*bed.root);
+        (void)bed.root->UpdateLayout();
+        bed.root->GetContext().Update(Duration::FromSeconds(0.1));
+        (void)bed.root->UpdateLayout();
+        CHECK(list.GetSize().y < 400.0f); // its panel's, not its rows'
+        CHECK(list.GetScrollRange().y > 0.0f);
+        CHECK(list.GetScrollOffset().y < last); // up a notch, not pulled back down by the new line
+        last = list.GetScrollOffset().y;
+    }
+}

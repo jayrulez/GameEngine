@@ -45,6 +45,7 @@ target_sources(Editor.App
             ProjectHome.cppm
             ProjectManagerView.cppm
             LogView.cppm
+            AssetDragData.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

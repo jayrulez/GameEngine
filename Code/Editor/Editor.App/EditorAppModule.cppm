@@ -26,6 +26,7 @@ export import :project_picture;
 export import :project_home;
 export import :project_manager_view;
 export import :log_view;
+export import :asset_drag_data;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

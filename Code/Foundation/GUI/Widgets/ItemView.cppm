@@ -654,6 +654,28 @@ export namespace foundation::gui
             SelectOnly(item);
             ScrollToItem(item);
         }
+        /// Selects the items with `ids` from code (one alone without multi-selection), the first the
+        /// current one and scrolled into view; no events. An id not shown now (under a closed node)
+        /// stays selected for when it is. None clears.
+        void SetSelectedIds(core::Span<const ItemId> ids)
+        {
+            m_selected.Clear();
+            m_anchorSelection = kNoItem;
+            for (const ItemId id : ids)
+            {
+                if (m_selectionMode != SelectionMode::Multi && !m_selected.IsEmpty())
+                    break;
+                (void)m_selected.Insert(id);
+            }
+            if (!ids.IsEmpty())
+            {
+                m_current = ids[0];
+                m_anchorSelection = ids[0];
+            }
+            RefreshSelectionStates();
+            if (const i32 item = ids.IsEmpty() ? -1 : ItemOfId(ids[0]); item >= 0)
+                ScrollToItem(item);
+        }
         void ClearSelection()
         {
             m_selected.Clear();

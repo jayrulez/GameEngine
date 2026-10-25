@@ -251,6 +251,29 @@ TEST_CASE("tree-view: a row takes the classes the model gives it, in place of th
     CHECK(a->HasClass(SV(u8"inactive")));
 }
 
+TEST_CASE("tree-view: several ids selected from code, the first current; without multi-selection only the first")
+{
+    Tree t;
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &t.model);
+    tree->ExpandItem(0); // A, A1, A2, B
+    tree->SetSelectionMode(SelectionMode::Multi);
+    const ItemId ids[] = {static_cast<ItemId>(t.a2), static_cast<ItemId>(t.b), static_cast<ItemId>(t.a1x)}; // A1x under closed A1
+    tree->SetSelectedIds(core::Span<const ItemId>(ids, 3u));
+    CHECK(tree->GetSelectionCount() == 3u);
+    CHECK(tree->IsItemSelected(2)); // A2
+    CHECK(tree->IsItemSelected(3)); // B
+    CHECK(tree->GetCurrentItem() == 2);
+    tree->ExpandItem(1); // A1 opens: A1x shows selected
+    CHECK(tree->IsItemSelected(2));
+
+    tree->SetSelectionMode(SelectionMode::Single);
+    tree->SetSelectedIds(core::Span<const ItemId>(ids, 3u));
+    CHECK(tree->GetSelectionCount() == 1u);
+    tree->SetSelectedIds(core::Span<const ItemId>{});
+    CHECK(tree->GetSelectionCount() == 0u);
+}
+
 TEST_CASE("tree-view: markup's items take an icon and its class")
 {
     RegisterGuiElements();

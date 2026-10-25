@@ -8,6 +8,7 @@
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include <initializer_list>
 
 import foundation.core;
 import foundation.gui;
@@ -162,4 +163,29 @@ TEST_CASE("console: the selected lines copied oldest first, one per line; Ctrl+C
     list.RequestFocus();
     bed.root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(gui::KeyCode::C), gui::KeyModCtrl);
     CHECK(bed.clipboard.held == String(u8"[C] third"));
+}
+
+TEST_CASE("console: under the editor's sheet every line is one fixed height, so scrolling moves the bar rather than resizing it")
+{
+    Bed bed;
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    for (usize i = 0; i < 200; ++i)
+        bed.view->AddEntry(LogLevel::Info, u8"N", Format(u8"line {}", i).AsView());
+    styles.ApplyTree(*bed.root);
+    (void)bed.root->UpdateLayout();
+    gui::ListView& list = *bed.view->List();
+    CHECK(list.GetRowHeight() == doctest::Approx(22.0f));
+    const f32 range = list.GetScrollRange().y;
+    list.ScrollToItem(0);
+    (void)bed.root->UpdateLayout();
+    CHECK(list.GetScrollRange().y == doctest::Approx(range)); // the content's height holds at the top
 }

@@ -1,8 +1,8 @@
 # Editor::Scene - `editor.scene`: the scene editor plugin (SceneEditorPage +
 # factory + RegisterSceneEditor). Linked by the editor EXECUTABLE only (never by editor core/app).
 # On the GUI in parts (Documentation/Specs/editor-gui.md, 5.3): the source lists name the files
-# back so far; the inspector and the two picker dialogs are still on foundation.ui and stay out,
-# unedited, until their layers.
+# back so far; the two picker dialogs are still on foundation.ui and stay out, unedited, until
+# their layers.
 
 util_add_engine_library(Editor.Scene ALIAS Editor::Scene)
 target_link_libraries(Editor.Scene
@@ -29,7 +29,8 @@ target_link_libraries(Editor.Scene
         Foundation::Input Foundation::Input.Resource Engine::Input
         Engine::Composition # the full manager set for the export's scratch scenes
         Editor::Core Editor::Camera Editor::ViewportTools Foundation::Policy
-        Foundation::Mcp Foundation::Json) # the scene editor's MCP tools
+        Foundation::Mcp Foundation::Json # the scene editor's MCP tools
+        Foundation::Xml Foundation::Xml.Serialization) # the inspector's text format (its undo)
 
 target_sources(Editor.Scene
     PRIVATE
@@ -40,6 +41,7 @@ target_sources(Editor.Scene
         AssetThumbnailsImpl.cpp
         ScenePageImpl.cpp
         HierarchyViewImpl.cpp
+        InspectorViewImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
@@ -70,6 +72,7 @@ target_sources(Editor.Scene
             SceneSimulation.cppm
             PrefabFlows.cppm
             HierarchyView.cppm
+            InspectorView.cppm
             SceneViewport.cppm
             ScenePage.cppm
             SceneEditorRegistration.cppm

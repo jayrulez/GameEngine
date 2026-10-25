@@ -131,6 +131,8 @@ export namespace editor::app
         /// What an asset slot or a page's picker asks of the editor: the accepted types, the
         /// project's names, the picker (made the first time).
         [[nodiscard]] const ResourceRefServices& RefServices();
+        /// Opens the picker over the window for `request`, below `anchor` (null: near the top).
+        void ShowPicker(PickerRequest request, gui::Node* anchor);
         /// A type's icon, asked of the type (made the first time, with the slots' table).
         [[nodiscard]] editor::EditorIcons& TypeIcons()
         {
@@ -174,7 +176,6 @@ export namespace editor::app
         void OpenExport();
         [[nodiscard]] foundation::shell::IDialogService* ShellDialogs() const;
         /// Shows a picker's request below `anchor` (else near the top), over the main window.
-        void ShowPicker(PickerRequest request, gui::Node* anchor);
         void EnterManagerMode();
         void OpenFromManager(StringView directory);
         void CreateFromManager(StringView directory, StringView name);

@@ -21,6 +21,8 @@ import foundation.graphics;
 import foundation.settings;
 import foundation.scene;
 import engine.scene;
+import engine.render;      // RegisterRenderComponentReflection, LightComponent
+import engine.composition; // FullSceneComposition
 import foundation.scene.resource;
 import foundation.gui;
 import foundation.gui.toolkit;
@@ -42,7 +44,9 @@ namespace
     public:
         SceneHost()
         {
-            m_context.AddSubsystem<engine::scene::SceneSubsystem>();
+            // The engine's full composition, so a scene's entities take its components.
+            engine::render::RegisterRenderComponentReflection();
+            m_context.AddSubsystem<engine::scene::SceneSubsystem>()->SetComposition(engine::FullSceneComposition());
             m_context.Startup();
         }
         ~SceneHost() override { m_context.Shutdown(); }
@@ -488,5 +492,131 @@ TEST_CASE("hierarchy: a scene opens with its top level shown; what is under an e
     UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(page->Hierarchy()->Rows() == String(u8"Level |   Crate"));
+    page->OnClose();
+}
+
+TEST_CASE("inspector: nothing selected says so; an entity shows its head, Entity, Transform and each component; Add Component and its undo")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    REQUIRE(inspector != nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    RefPtr<gui::Node> content = page->Content();
+    CHECK(FindId<gui::Node>(*content, u8"inspector-state")->IsDisplayed());
+    CHECK_FALSE(inspector->Grid()->IsDisplayed());
+
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(FindId<gui::Node>(*content, u8"inspector-state")->IsDisplayed());
+    CHECK(FindId<gui::TextField>(*content, u8"inspector-name")->GetText() == StringView(u8"Crate"));
+    CHECK(inspector->Kind() == StringView(u8"Entity"));
+    CHECK(inspector->SectionTitles() == String(u8"Entity | Transform"));
+
+    Array<String> addable = inspector->AddableComponents();
+    bool light = false;
+    for (const String& name : addable)
+        light = light || name == String(u8"LightComponent");
+    REQUIRE(light);
+    CHECK(inspector->AddComponent(u8"LightComponent"));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->SectionTitles() == String(u8"Entity | Transform | Light"));
+    page->Commands().Undo(); // one step
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->SectionTitles() == String(u8"Entity | Transform"));
+    page->OnClose();
+}
+
+TEST_CASE("inspector: a transform edit and a component edit are each one undo step; two edits of one row are two")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    REQUIRE(inspector->AddComponent(u8"LightComponent"));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    scene::Scene& scene = *page->ScenePtr();
+    const auto commit = [&](StringView path, f64 value)
+    {
+        gui::PropertyWrite write;
+        write.Value = gui::Variant(value);
+        inspector->Sections().BeginEdit(path);
+        inspector->Sections().CommitEdit(path, write);
+        page->OnUpdate(bed.host, 1.0f / 60.0f);
+    };
+
+    commit(inspector->PathOf(u8"Transform", u8"position.x").AsView(), 4.0);
+    CHECK(scene.GetLocalTransform(scene.FindEntity(bed.crate)).position.x == doctest::Approx(4.0f));
+    const String intensity = inspector->PathOf(u8"Light", u8"intensity");
+    commit(intensity.AsView(), 7.0);
+    commit(intensity.AsView(), 9.0);
+    auto* manager = page->EditContext().FindManager(&TypeOf<engine::render::LightComponent>());
+    REQUIRE(manager != nullptr);
+    const auto lightOf = [&]() { return static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(bed.crate)).Pointer()); };
+    CHECK(lightOf()->intensity == doctest::Approx(9.0f));
+    page->Commands().Undo();
+    CHECK(lightOf()->intensity == doctest::Approx(7.0f)); // the second edit alone
+    page->Commands().Undo();
+    CHECK(lightOf()->intensity != doctest::Approx(7.0f));
+    page->Commands().Redo();
+    CHECK(lightOf()->intensity == doctest::Approx(7.0f));
+    page->Commands().Undo();
+    page->Commands().Undo(); // the transform
+    CHECK(scene.GetLocalTransform(scene.FindEntity(bed.crate)).position.x == doctest::Approx(0.0f));
+    page->OnClose();
+}
+
+TEST_CASE("inspector: several entities edited at once; a component's header has its verbs; read only while the page simulates")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    const Guid lamp = page->EditContext().CreateEntity(u8"Lamp");
+    const Guid both[] = {bed.crate, lamp};
+    page->EditContext().EntitySelection().Set(Span<const Guid>(both, 2u));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->Kind() == StringView(u8"2 entities"));
+    REQUIRE(inspector->AddComponent(u8"LightComponent")); // to both
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->SectionTitles() == String(u8"Entity | Transform | Light"));
+    const String intensity = inspector->PathOf(u8"Light", u8"intensity");
+    gui::PropertyWrite write;
+    write.Value = gui::Variant(3.0);
+    inspector->Sections().BeginEdit(intensity.AsView());
+    inspector->Sections().CommitEdit(intensity.AsView(), write);
+    scene::Scene& scene = *page->ScenePtr();
+    auto* manager = page->EditContext().FindManager(&TypeOf<engine::render::LightComponent>());
+    CHECK(static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(lamp)).Pointer())->intensity == doctest::Approx(3.0f));
+    CHECK(static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(bed.crate)).Pointer())->intensity == doctest::Approx(3.0f));
+
+    // The header's verbs: Remove Component takes it from both, one undo brings it back.
+    Shown shown(*page);
+    REQUIRE(inspector->OpenHeaderMenu(u8"#Light"));
+    REQUIRE(inspector->Grid()->GetRowMenu() != nullptr);
+    gui::MenuItem* remove = nullptr;
+    for (usize i = 0; i < inspector->Grid()->GetRowMenu()->ChildCount(); ++i)
+        if (auto* item = Cast<gui::MenuItem>(inspector->Grid()->GetRowMenu()->GetChildAt(i)); item != nullptr && item->GetText() == StringView(u8"Remove Component"))
+            remove = item;
+    REQUIRE(remove != nullptr);
+    (void)remove->HandleActivate();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->SectionTitles() == String(u8"Entity | Transform"));
+    page->Commands().Undo();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->SectionTitles() == String(u8"Entity | Transform | Light"));
+
+    // Simulating: read only, and said.
+    page->StartSimulation();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->Sections().IsReadOnly());
+    CHECK(FindId<gui::Node>(*page->Content(), u8"inspector-note")->IsDisplayed());
+    write.Value = gui::Variant(5.0);
+    inspector->Sections().BeginEdit(intensity.AsView());
+    inspector->Sections().CommitEdit(intensity.AsView(), write);
+    CHECK(static_cast<engine::render::LightComponent*>(manager->GetComponentInstance(scene.FindEntity(lamp)).Pointer())->intensity == doctest::Approx(3.0f));
+    page->StopSimulation();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(inspector->Sections().IsReadOnly());
     page->OnClose();
 }

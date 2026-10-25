@@ -46,6 +46,7 @@ import :scene_view_state;
 import :scene_simulation;
 import :prefab_flows;
 import :hierarchy;
+import :inspector;
 
 using namespace foundation::core;
 namespace gui = foundation::gui;
@@ -178,6 +179,22 @@ namespace editor
                 m_hierarchy = MakeUnique<SceneHierarchyView>(Allocator(), Allocator(), *m_editContext, Move(tree), *pane);
             }
 
+        // The inspector in its pane: the selection's entities and components.
+        if (m_editContext)
+            if (gui::Node* pane = Find<gui::Node>(u8"scene-inspector"))
+            {
+                SceneInspectorView::Services inspector;
+                inspector.context = &context;
+                inspector.page = this;
+                inspector.icons = m_services.icons;
+                inspector.refs = m_services.refs;
+                inspector.pick = m_services.pick ? [self = this](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); }
+                                                 : Function<void(app::PickerRequest, gui::Node*)>{};
+                SceneEditorPage* self = this;
+                inspector.simulating = [self]() { return self->m_simulation.IsRunning(); };
+                m_inspector = MakeUnique<SceneInspectorView>(Allocator(), Allocator(), *m_editContext, Move(inspector), *pane);
+            }
+
         m_overlays.settings = SceneViewState::LoadOverlays(context.ProjectEditorSettings(), InstanceId(), m_overlays.settings);
         RestoreViewState();
     }
@@ -252,6 +269,8 @@ namespace editor
         }
         if (m_hierarchy)
             m_hierarchy->Refresh(); // the scene changed: built again
+        if (m_inspector)
+            m_inspector->Refresh(); // the selection or its components changed: built again; else its values
         if (m_bar)
             m_bar->Sync();
     }
@@ -353,6 +372,7 @@ namespace editor
 
     void SceneEditorPage::OnClose()
     {
+        m_inspector.Reset(); // the grid lets its sources go before the scene does
         m_hierarchy.Reset(); // it lets the selection and the tree go before the scene does
         // Where the scene was left: the camera, the selection, the panes, for the next open.
         if (m_scene != nullptr)

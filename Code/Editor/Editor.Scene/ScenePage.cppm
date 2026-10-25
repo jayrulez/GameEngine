@@ -11,8 +11,8 @@
 // per scene, each a partition of its own. The page holds them together: it loads the scene, edits
 // it through its edit context and its tools, saves it, follows a change made elsewhere, and says
 // on the page when the scene did not load (and then refuses to save over it). Its bar's Save, Undo
-// and Redo act on this page; its hierarchy (layer 3) is the scene's tree in its left pane. The
-// inspector takes its pane in the next layer.
+// and Redo act on this page; its hierarchy (layer 3) is the scene's tree in its left pane, its
+// inspector (layer 4) the selection's components in its right.
 
 module;
 #include "Core/Prelude.h"
@@ -50,6 +50,7 @@ import :scene_view_state;
 import :scene_simulation;
 import :prefab_flows;
 import :hierarchy;
+import :inspector;
 
 using namespace foundation::core;
 
@@ -69,8 +70,10 @@ export namespace editor
             Function<RefPtr<foundation::gui::Node>(StringView path)> loadMarkup;
             /// The asset picker and the rest an asset slot asks (null: no picking, a test).
             const app::ResourceRefServices* refs = nullptr;
-            /// The type icons the hierarchy shows entities by (null: none).
+            /// The type icons the hierarchy and the inspector show by (null: none).
             EditorIcons* icons = nullptr;
+            /// Opens the picker for a request below an anchor (the inspector's Add Component).
+            Function<void(app::PickerRequest request, foundation::gui::Node* anchor)> pick;
         };
 
         SceneEditorPage(EditorContext& context, Services services, foundation::content::Instance& instance);
@@ -125,6 +128,7 @@ export namespace editor
         [[nodiscard]] SceneOverlaySettings& Overlays() noexcept { return m_overlays.settings; }
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
+        [[nodiscard]] SceneInspectorView* Inspector() noexcept { return m_inspector.Get(); }
         [[nodiscard]] foundation::gui::MessageBox* OpenConfirm() const noexcept { return m_confirm && m_confirm->IsOpen() ? m_confirm.Get() : nullptr; }
 
     private:
@@ -160,6 +164,7 @@ export namespace editor
         SceneSimulation m_simulation;
         UniquePtr<PrefabFlows> m_prefabs;
         UniquePtr<SceneHierarchyView> m_hierarchy;
+        UniquePtr<SceneInspectorView> m_inspector;
         ViewportToolManager m_viewportTools;         // after m_editContext (the tools borrow it)
         SelectTransformTool* m_selectTool = nullptr; // the manager's default tool
         GizmoRendererRegistry m_componentGizmos;

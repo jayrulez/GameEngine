@@ -234,7 +234,7 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the Console, asset drag data, the asset slot and the inspector's asset reference, the picker, the path picker and the asset picker (the slot's pick), the group picker and Create Asset, Project Settings, Export Templates and Export, the assets browser's browsing; the rest out, unedited, until their layers | X3 (layers 1 to 15), X4 (layers 1 to 6) |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the Console, asset drag data, the asset slot and the inspector's asset reference, the picker, the path picker and the asset picker (the slot's pick), the group picker and Create Asset, Project Settings, Export Templates and Export, the assets browser (browsing, its verbs, moving, thumbnails, import); the rest out, unedited, until their layers | X3 (layers 1 to 15), X4 (layers 1 to 7) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
@@ -366,8 +366,12 @@ additions go first and are grouped with the other GUI commits.
    3. Moving: assets dropped on a group (in the tree, a group's row, the breadcrumb) move there,
       the content database moving their files (a move it did not have).
    4. Pictures: thumbnails in tiles and rows as they arrive.
-   5. Import: files dropped on a group or Import..., through the import dialog (single and
-      batch), which only the browser opens.
+   5. Import: files dropped on the window (into the group shown) or Import... (into its group),
+      through one import window for one file or many where the old editor had two (the catalog's
+      inconsistency): where they go, the files with their states, the chosen file's importer,
+      options and plan, Import waiting while it cannot, saying why. AssetImport does the work (the
+      importers, the worker reads, the commit with its deferred writes) and the window shows it;
+      a file needing no review imports at once.
 
 ## 6. Tests
 

@@ -182,6 +182,8 @@ export namespace editor::app
             /// An asset's picture (the thumbnails'), null while there is none; unset: glyphs only.
             /// A picture that arrives later is told through the context's thumbnail listeners.
             Function<RefPtr<gui::Drawable>(const Guid&)> picture;
+            /// Asks for files to import into a group (the OS's picker); unset: no Import....
+            Function<void(content::Group&)> import;
             /// Runs a creator into a group (File > New's create-and-open); unset: no New menu.
             Function<void(const pipeline::AssetCreator&, content::Group*)> create;
         };
@@ -1098,6 +1100,8 @@ export namespace editor::app
                                           if (content::Group* made = ops.CreateGroup(*target))
                                               self->Navigate(*made);
                                       });
+                if (m_services.import)
+                    (void)m_menu->AddItem(u8"Import...", [self, target]() { self->m_services.import(*target); });
                 m_menu->AddSeparator();
             }
             else

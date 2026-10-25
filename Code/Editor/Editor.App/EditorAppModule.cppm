@@ -39,6 +39,7 @@ export import :templates_dialog;
 export import :export_dialog;
 export import :asset_operations;
 export import :asset_import;
+export import :import_dialog;
 export import :assets_view;
 export import :native_module;
 export import :export_service;

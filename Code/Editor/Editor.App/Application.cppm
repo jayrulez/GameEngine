@@ -37,6 +37,7 @@ import :action_shortcuts;
 import :command_palette;
 import :preferences_dialog;
 import :picker;
+import :group_picker_dialog;
 import :resource_ref_editor;
 import :settings_dialog;
 import :templates_dialog;
@@ -46,6 +47,8 @@ import :project_manager_view;
 import :log_view;
 import :assets_view;
 import :asset_operations;
+import :asset_import;
+import :import_dialog;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -155,6 +158,8 @@ export namespace editor::app
         bool ConfirmExit();
         void OpenPreferences();
         void OpenProjectSettings();
+        /// Imports files into a group: at once when nothing needs review, else through the window.
+        void ImportFiles(Span<const String> paths, foundation::content::Group& group);
         /// Export Templates over the main window; `closed` hears when it closes.
         void OpenTemplates(Function<void()> closed = {});
         void OpenExport();
@@ -213,6 +218,8 @@ export namespace editor::app
         UniquePtr<LogView> m_console;            // the Console panel's content
         UniquePtr<AssetOperations> m_assetOps;   // rename, duplicate, delete, cook: the browser's and an agent's
         UniquePtr<AssetsView> m_assets;          // the Assets panel's content
+        UniquePtr<AssetImport> m_assetImport;    // files into the project (a drop, Import...)
+        UniquePtr<ImportWindow> m_importWindow;  // the import's review, made the first time
         u64 m_logSequence = 0;                   // the last log entry the Console took
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;

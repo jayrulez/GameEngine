@@ -209,6 +209,13 @@ namespace editor::app
             ops.later = [self](Function<void()> work) { self->Later(Move(work)); };
             m_assetOps = MakeUnique<AssetOperations>(m_editorAllocator, Move(ops));
         }
+        {
+            AssetImport::Services imports;
+            imports.context = &m_context;
+            imports.cook = &m_cookService;
+            imports.jobs = &m_jobService;
+            m_assetImport = MakeUnique<AssetImport>(m_editorAllocator, Move(imports));
+        }
         EditorMcpService::Services mcp;
         mcp.context = &m_context;
         mcp.cook = &m_cookService;
@@ -320,6 +327,19 @@ namespace editor::app
             assets.open = [self](foundation::content::Instance& instance) { (void)self->m_pages->Open(instance.Id()); };
             assets.picture = [self](const Guid& id) { return self->m_thumbnailService.Get(id); };
             assets.operations = m_assetOps.Get();
+            assets.import = [self](foundation::content::Group& group)
+            {
+                foundation::shell::IDialogService* dialogs = self->ShellDialogs();
+                if (dialogs == nullptr)
+                    return;
+                foundation::content::Group* into = &group;
+                dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[self, into](Span<const String> paths)
+                                                                               {
+                                                                                   if (!paths.IsEmpty())
+                                                                                       self->ImportFiles(paths, *into);
+                                                                               }},
+                                      {}, {}, true);
+            };
             assets.create = [self](const pipeline::AssetCreator& creator, foundation::content::Group* group) { self->m_creation.CreateAndOpen(creator, group); };
             m_assets = MakeUnique<AssetsView>(m_editorAllocator, m_editorAllocator, Move(assets), m_window.LoadMarkup(AssetsView::kPath));
             // A slot's reveal (and any other) shows the asset where it lives, the panel to the front.
@@ -541,6 +561,44 @@ namespace editor::app
                                                       m_window.LoadMarkup(ExportDialog::kPath));
         }
         (void)m_exportDialog->Open(*root);
+    }
+
+    // One import of `paths` into `group`: at once when nothing needs review, else the window.
+    void EditorApplication::ImportFiles(Span<const String> paths, foundation::content::Group& group)
+    {
+        RefPtr<AssetImport::Session> session = m_assetImport->Begin(paths, group);
+        if (!session)
+            return;
+        if (AssetImport::NeedsNoReview(*session))
+        {
+            (void)m_assetImport->Commit(*session);
+            return;
+        }
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        if (!m_importWindow)
+        {
+            ImportWindow::Services services;
+            services.import = m_assetImport.Get();
+            EditorApplication* self = this;
+            services.pickGroup = [self](gui::Node& anchor, foundation::content::Group& current, Function<void(foundation::content::Group&)> picked)
+            {
+                editor::EditorProject* project = self->m_session.Project();
+                if (project == nullptr)
+                    return;
+                PickerRequest request = GroupPicker::Request(project->SourceDb(), &current);
+                request.OnPicked = [project, picked = Move(picked)](StringView key)
+                {
+                    if (foundation::content::Group* group = GroupPicker::Find(project->SourceDb(), key))
+                        picked(*group);
+                };
+                self->ShowPicker(Move(request), &anchor);
+            };
+            m_importWindow = MakeUnique<ImportWindow>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ImportWindow::kPath));
+        }
+        if (!m_importWindow->Open(*root, session))
+            m_context.Notify(editor::NoticeKind::Info, u8"An import is open already: finish it first.");
     }
 
     void EditorApplication::ShowPicker(PickerRequest request, gui::Node* anchor)
@@ -884,6 +942,21 @@ namespace editor::app
         DrainLog();
         if (m_assets)
             m_assets->Refresh();
+        // Files dropped on the window: imported into the group the Assets panel shows.
+        if (host.Shell() != nullptr)
+        {
+            Array<foundation::shell::DroppedFile> dropped(m_editorAllocator);
+            host.Shell()->DrainDroppedFiles(dropped);
+            editor::EditorProject* project = m_session.Project();
+            if (!dropped.IsEmpty() && project != nullptr)
+            {
+                Array<String> paths(m_editorAllocator);
+                for (const foundation::shell::DroppedFile& file : dropped)
+                    paths.PushBack(file.path);
+                foundation::content::Group* into = m_assets && m_assets->CurrentGroup() != nullptr ? m_assets->CurrentGroup() : project->SourceDb().RootGroup();
+                ImportFiles(paths.AsSpan(), *into);
+            }
+        }
         m_window.Update(dt);
         m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
         if (m_home)

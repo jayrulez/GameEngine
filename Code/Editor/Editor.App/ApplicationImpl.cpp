@@ -155,9 +155,7 @@ namespace editor::app
         m_context.SetUserEditorSettings(&m_editorSettings);
 
         ReportStartup(u8"Preparing the interface", 0.30f);
-        EditorLook look;
-        if (const editor::EditorUiSettings* ui = m_editorSettings.Find<editor::EditorUiSettings>())
-            look.uiScale = Clamp(ui->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
+        const EditorLook look = LookFrom(m_editorSettings.Find<editor::EditorUiSettings>());
         if (m_window.Open(host, m_config.dataRoot.AsView(), look))
             OpenDock();
         // The window's close button asks about unsaved pages first, as File > Exit does.
@@ -375,6 +373,25 @@ namespace editor::app
         (void)m_palette->Open(*root);
     }
 
+    // Preferences over the main window (made the first time), the look shown live in the window.
+    void EditorApplication::OpenPreferences()
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        if (!m_preferences)
+        {
+            EditorPreferencesDialog::Services services;
+            services.user = &m_editorSettings;
+            EditorApplication* self = this;
+            services.showLook = [self](const EditorLook& look) { self->m_window.SetLook(look); };
+            services.persist = [self]() { return editor::SaveEditorSettingsToUserData(self->m_editorSettings).IsOk(); };
+            m_preferences = MakeUnique<EditorPreferencesDialog>(m_editorAllocator, m_editorAllocator, Move(services),
+                                                                m_window.LoadMarkup(EditorPreferencesDialog::kPath));
+        }
+        (void)m_preferences->Open(*root);
+    }
+
     // Exits once the unsaved pages are saved or let go; true when nothing needed asking.
     bool EditorApplication::ConfirmExit()
     {
@@ -396,7 +413,9 @@ namespace editor::app
         file.saveAs = [self](editor::EditorPage& page) { self->m_pages->SaveAs(page); };
         file.exit = [self]() { (void)self->ConfirmExit(); };
         RegisterFileActions(actions, Move(file));
-        RegisterEditActions(actions, EditActions{});
+        EditActions edit;
+        edit.preferences = [self]() { self->OpenPreferences(); };
+        RegisterEditActions(actions, Move(edit));
 
         ProjectActions project;
         project.context = &m_context;
@@ -662,6 +681,7 @@ namespace editor::app
             m_embeddedApp->OnShutdown(*m_embeddedHost);
             m_runtimeContext.Shutdown();
         }
+        m_preferences.Reset();
         m_palette.Reset();
         m_menus.Reset();
         m_shortcuts.Reset();

@@ -53,3 +53,47 @@ TEST_CASE("editor window: a look's sheet is the editor's, then its density's, th
     CHECK(Find(comfortable.AsView(), u8"--row: 32px") < comfortable.Size());
     CHECK(Find(comfortable.AsView(), u8"--accent-input: #0f8a7e") < comfortable.Size());
 }
+
+TEST_CASE("editor window: the look from the user's settings, the defaults for what is unset or named wrongly, and back")
+{
+    const editor::app::EditorLook none = editor::app::LookFrom(nullptr);
+    CHECK(none.dark);
+    CHECK(none.accent == String(u8"#2f6fdf"));
+    CHECK(none.density == String(u8"compact"));
+    CHECK_FALSE(none.reduceMotion);
+
+    editor::EditorUiSettings ui;
+    ui.scheme = String(u8"light");
+    ui.accent = String(u8"#0f8a7e");
+    ui.density = String(u8"comfortable");
+    ui.reduceMotion = true;
+    ui.uiScale = 9.0f; // past the range
+    editor::app::EditorLook look = editor::app::LookFrom(&ui);
+    CHECK_FALSE(look.dark);
+    CHECK(look.accent == String(u8"#0f8a7e"));
+    CHECK(look.density == String(u8"comfortable"));
+    CHECK(look.reduceMotion);
+    CHECK(look.uiScale == doctest::Approx(editor::kUiScaleMax));
+
+    ui.accent = String(u8"red"); // no colour
+    ui.density = String(u8"roomy"); // no sheet
+    look = editor::app::LookFrom(&ui);
+    CHECK(look.accent == String(u8"#2f6fdf"));
+    CHECK(look.density == String(u8"compact"));
+
+    editor::EditorUiSettings stored;
+    stored.autoOrthographic = false;
+    editor::app::EditorLook chosen;
+    chosen.dark = false;
+    chosen.accent = String(u8"#6d5bd8");
+    chosen.density = String(u8"default");
+    chosen.reduceMotion = true;
+    chosen.uiScale = 1.25f;
+    editor::app::StoreLook(stored, chosen);
+    CHECK(stored.scheme == String(u8"light"));
+    CHECK(stored.accent == String(u8"#6d5bd8"));
+    CHECK(stored.density == String(u8"default"));
+    CHECK(stored.reduceMotion);
+    CHECK(stored.uiScale == doctest::Approx(1.25f));
+    CHECK_FALSE(stored.autoOrthographic); // kept
+}

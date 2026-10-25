@@ -37,6 +37,7 @@ target_sources(Editor.App
             ActionMenus.cppm
             ActionShortcuts.cppm
             CommandPalette.cppm
+            PreferencesDialog.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

@@ -348,6 +348,10 @@ TEST_CASE("editor.settings: a store with EVERY section round-trips (registry sur
     RegisterProjectRegistryTypes();
     foundation::settings::Settings store(foundation::core::DefaultAllocator());
     store.Section<EditorUiSettings>().uiScale = 1.2f;
+    store.Section<EditorUiSettings>().scheme = String(u8"light");
+    store.Section<EditorUiSettings>().accent = String(u8"#0f8a7e");
+    store.Section<EditorUiSettings>().density = String(u8"comfortable");
+    store.Section<EditorUiSettings>().reduceMotion = true;
     TouchRecentProject(store, u8"/proj/a", u8"A", u8"0.1.0");
 
     MemoryStream buffer;
@@ -363,6 +367,10 @@ TEST_CASE("editor.settings: a store with EVERY section round-trips (registry sur
     const EditorUiSettings* ui = loaded.Find<EditorUiSettings>();
     REQUIRE(ui != nullptr);
     CHECK(ui->uiScale == doctest::Approx(1.2f));
+    CHECK(ui->scheme == String(u8"light")); // the look's inputs (appended 2026-10-24)
+    CHECK(ui->accent == String(u8"#0f8a7e"));
+    CHECK(ui->density == String(u8"comfortable"));
+    CHECK(ui->reduceMotion);
 }
 
 // Sedulous c5100e94: the Game tab's preview resolutions seed the common sizes once, a user's

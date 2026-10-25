@@ -56,7 +56,9 @@ export namespace editor
 
     // Editor-level UI preferences (a Settings section). uiScale multiplies the window's
     // OS content scale for the whole editor UI (layout + fonts + baked icons) - both an
-    // accessibility knob and the way to exercise the DPI path without a scaled monitor.
+    // accessibility knob and the way to exercise the DPI path without a scaled monitor. The look's
+    // inputs (Documentation/Specs/editor-gui.md, 3.1; rulings 6, 7, 13) sit beside it: the scheme,
+    // the accent, the density and less motion.
     class EditorUiSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorUiSettings, ISerializable)
@@ -65,11 +67,19 @@ export namespace editor
         // Snapping a scene view to an axis (the orientation gizmo) turns it orthographic, and
         // orbiting away turns it back (Specs/orthographic-views.md).
         bool autoOrthographic = true;
+        String scheme{u8"dark"};      // "dark" or "light"
+        String accent{u8"#2f6fdf"};   // a fill white text reads on, as #rrggbb (azure)
+        String density{u8"compact"};  // "compact", "default" or "comfortable"
+        bool reduceMotion = false;    // what moves, still
 
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "uiScale", uiScale);
             foundation::core::SerializeAppended(ar, "autoOrthographic", autoOrthographic);
+            foundation::core::SerializeAppended(ar, "scheme", scheme);          // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "accent", accent);          // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "density", density);        // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "reduceMotion", reduceMotion); // added 2026-10-24
         }
     };
 

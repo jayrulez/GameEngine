@@ -35,6 +35,7 @@ import :pages;
 import :action_menus;
 import :action_shortcuts;
 import :command_palette;
+import :preferences_dialog;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -142,6 +143,7 @@ export namespace editor::app
         void BuildMenus();
         void OpenCommandPalette();
         bool ConfirmExit();
+        void OpenPreferences();
         void OpenDefaultScene(editor::EditorProject& project);
         [[nodiscard]] EditorAssetCreation::Services CreationServices();
         [[nodiscard]] EditorSession::Services SessionServices();
@@ -173,6 +175,7 @@ export namespace editor::app
         UniquePtr<ActionMenuBar> m_menus; // the frame's menu bar, from the actions
         UniquePtr<ActionShortcuts> m_shortcuts; // the actions' keys in the GUI's keymap
         UniquePtr<CommandPalette> m_palette;    // every action by name (View > Command Palette)
+        UniquePtr<EditorPreferencesDialog> m_preferences; // Edit > Preferences
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

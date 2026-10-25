@@ -52,6 +52,63 @@ export namespace editor::app
         f32 uiScale = 1.0f;
     };
 
+    /// The densities the editor's sheets give (Editor/density-<name>.css), in their order.
+    inline constexpr StringView kEditorDensities[] = {u8"compact", u8"default", u8"comfortable"};
+    /// The accents Preferences offers, each a fill white text reads on (ruling 7; azure is the
+    /// editor's, ruling 13). Any other #rrggbb is taken too.
+    struct EditorAccent
+    {
+        StringView name;
+        StringView fill;
+    };
+    inline constexpr EditorAccent kEditorAccents[] = {
+        {u8"Azure", u8"#2f6fdf"},
+        {u8"Violet", u8"#6d5bd8"},
+        {u8"Teal", u8"#0f8a7e"},
+        {u8"Magenta", u8"#b03d93"},
+    };
+
+    /// Whether `text` is a colour as #rrggbb.
+    [[nodiscard]] inline bool IsHexColor(StringView text) noexcept
+    {
+        if (text.Size() != 7 || text[0] != u8'#')
+            return false;
+        for (usize i = 1; i < 7; ++i)
+        {
+            const char8_t c = text[i];
+            if (!((c >= u8'0' && c <= u8'9') || (c >= u8'a' && c <= u8'f') || (c >= u8'A' && c <= u8'F')))
+                return false;
+        }
+        return true;
+    }
+
+    /// The look the user's settings ask for; what they leave unset or name wrongly (a density
+    /// with no sheet, an accent that is no colour) is the editor's default.
+    [[nodiscard]] inline EditorLook LookFrom(const editor::EditorUiSettings* ui)
+    {
+        EditorLook look;
+        if (ui == nullptr)
+            return look;
+        look.dark = ui->scheme.AsView() != StringView(u8"light");
+        if (IsHexColor(ui->accent.AsView()))
+            look.accent = ui->accent;
+        for (StringView density : kEditorDensities)
+            if (ui->density.AsView() == density)
+                look.density = String(density);
+        look.reduceMotion = ui->reduceMotion;
+        look.uiScale = Clamp(ui->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
+        return look;
+    }
+    /// `look` into the user's settings (the section's other fields kept).
+    inline void StoreLook(editor::EditorUiSettings& ui, const EditorLook& look)
+    {
+        ui.scheme = String(look.dark ? StringView(u8"dark") : StringView(u8"light"));
+        ui.accent = look.accent;
+        ui.density = look.density;
+        ui.reduceMotion = look.reduceMotion;
+        ui.uiScale = look.uiScale;
+    }
+
     class EditorWindow
     {
     public:

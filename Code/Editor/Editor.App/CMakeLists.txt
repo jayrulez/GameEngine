@@ -14,7 +14,7 @@ target_link_libraries(Editor.App
         Foundation::Profiler Foundation::Profiler.Capture
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
-        Foundation::Shaders.System Engine::DefaultApp Engine::UI Engine::GUI Foundation::UI.Resource # the game UI's defaults (the runtime's)
+        Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::UI Engine::GUI Foundation::UI.Resource # the game UI's defaults (the runtime's)
         Editor::Core Foundation::Settings
         Editor::Mcp Foundation::Mcp Foundation::Mcp.Http) # the MCP host: the shared engine surface over HTTP
 
@@ -39,6 +39,8 @@ target_sources(Editor.App
             CommandPalette.cppm
             ShortcutCapture.cppm
             PreferencesDialog.cppm
+            ProjectPicture.cppm
+            ProjectHome.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

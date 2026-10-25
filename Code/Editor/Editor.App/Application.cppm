@@ -36,6 +36,7 @@ import :action_menus;
 import :action_shortcuts;
 import :command_palette;
 import :preferences_dialog;
+import :project_home;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -176,6 +177,7 @@ export namespace editor::app
         UniquePtr<ActionShortcuts> m_shortcuts; // the actions' keys in the GUI's keymap
         UniquePtr<CommandPalette> m_palette;    // every action by name (View > Command Palette)
         UniquePtr<EditorPreferencesDialog> m_preferences; // Edit > Preferences
+        UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

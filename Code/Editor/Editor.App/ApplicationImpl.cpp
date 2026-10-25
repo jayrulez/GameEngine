@@ -84,6 +84,14 @@ namespace editor::app
             { self->ReportStartup(Format(u8"Opening {}", name).AsView(), 0.72f + 0.26f * done); };
             if (store == nullptr || !self->m_pages->Restore(*store, progress))
                 self->OpenDefaultScene(project);
+            // The Project panel shows the project's page; its links open assets as the pages do.
+            if (self->m_window.IsOpen())
+            {
+                self->m_home = MakeUnique<ProjectHomeView>(self->m_editorAllocator, self->m_editorAllocator, self->m_context, &self->m_cookService,
+                                                           self->m_window.LoadMarkup(ProjectHomeView::kPath));
+                self->m_home->SetOnOpenAsset([self](const Guid& id) { (void)self->m_pages->Open(id); });
+                self->m_dock.SetProjectContent(self->m_home->Content());
+            }
             if (self->m_export)
                 self->m_export->SetProject(&project);
             self->m_creation.SetProject(&project);
@@ -92,6 +100,8 @@ namespace editor::app
         };
         services.closing = [self]()
         {
+            self->m_dock.SetProjectContent({}); // the welcome again
+            self->m_home.Reset();
             self->m_pages->CloseAll(); // their resources while the project's services live
             if (self->m_mcp)
                 self->m_mcp->Stop(); // no agent call may run against services that are going away
@@ -545,6 +555,8 @@ namespace editor::app
         }
         m_window.Update(dt);
         m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
+        if (m_home)
+            m_home->Refresh();
     }
 
     // The status bar's job (a job's title, how far, its step of how many; else a cook, of unknown

@@ -29,6 +29,8 @@ export import :log_view;
 export import :asset_drag_data;
 export import :asset_picker_slot;
 export import :resource_ref_editor;
+export import :picker;
+export import :path_picker_dialog;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

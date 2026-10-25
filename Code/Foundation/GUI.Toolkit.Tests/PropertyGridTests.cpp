@@ -128,6 +128,38 @@ TEST_CASE("property grid: the chevron, a header's click and Left and Right fold 
     bed.grid->SetOpen(SV(u8"#Physics"), true);
     bed.Frame();
 
+    // The chevron: one fold per click (its press folds; the click after it does not reach the
+    // header, which would unfold it again).
+    const auto chevron = [&]() -> Node*
+    {
+        core::Array<Node*> stack(core::DefaultAllocator());
+        stack.PushBack(bed.grid->RowForItem(0));
+        while (!stack.IsEmpty())
+        {
+            Node* node = stack.Back();
+            stack.PopBack();
+            if (node == nullptr)
+                continue;
+            if (core::Cast<TreeArrow>(node) != nullptr)
+                return node;
+            for (usize i = 0; i < node->ChildCount(); ++i)
+                stack.PushBack(node->GetChildAt(i));
+        }
+        return nullptr;
+    };
+    Node* arrow = chevron();
+    REQUIRE(arrow != nullptr);
+    bed.D().InjectMouseDown(Centre(*arrow), MouseButton::Left);
+    bed.D().InjectMouseUp(Centre(*arrow), MouseButton::Left);
+    CHECK_FALSE(bed.grid->IsOpen(SV(u8"#Physics")));
+    bed.Frame();
+    arrow = chevron();
+    REQUIRE(arrow != nullptr);
+    bed.D().InjectMouseDown(Centre(*arrow), MouseButton::Left);
+    bed.D().InjectMouseUp(Centre(*arrow), MouseButton::Left);
+    CHECK(bed.grid->IsOpen(SV(u8"#Physics")));
+    bed.Frame();
+
     // The group's row selected, Right opens it and Left closes it.
     bed.grid->SetSelectedItem(1);
     bed.grid->RequestFocus();

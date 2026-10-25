@@ -67,6 +67,13 @@ export namespace foundation::gui
             if (m_onClicked)
                 m_onClicked();
         }
+        // The click after the press is the chevron's too: a row that folds on a click of its own
+        // (a property grid's header) would fold back what the press folded.
+        void OnMouseClick(const MouseEvent& event) override
+        {
+            if (event.Button == MouseButton::Left)
+                event.Handled = true;
+        }
         void OnDraw(DrawContext& ctx, const Rect&) override { DrawDisclosure(ctx, GetLocalBounds(), m_expanded, m_color, IsRightToLeft()); }
 
     private:

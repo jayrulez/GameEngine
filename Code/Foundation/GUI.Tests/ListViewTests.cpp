@@ -244,3 +244,54 @@ TEST_CASE("itemview: single-selection mode ignores Ctrl (stays single)")
     CHECK(list->GetSelectionCount() == 1);
     CHECK(list->GetSelectedItem() == 2);
 }
+
+TEST_CASE("listview: an item its model says may not be selected (a section header) is passed over by clicks, keys and Select All")
+{
+    // Rows 0 and 5 are headers.
+    class Sections final : public StringListModel
+    {
+    public:
+        using StringListModel::StringListModel;
+        [[nodiscard]] bool IsSelectable(const ModelIndex& index) const override { return index.Row != 0 && index.Row != 5; }
+    };
+    Sections model(MakeItems(10));
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto list = Make<ListView>();
+    list->SetSize(core::Float2{200.0f, 220.0f});
+    list->SetRowHeight(20.0f);
+    root->AddChild(list.Get());
+    list->SetModel(&model);
+    (void)root->UpdateLayout();
+    EventDispatcher* d = root->GetEventDispatcher();
+    int activated = 0;
+    list->SetOnActivated([&activated](ModelIndex) { ++activated; });
+
+    // A click on a header selects nothing, and a second activates nothing.
+    d->InjectMouseDown(core::Float2{50.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{50.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseDown(core::Float2{50.0f, 10.0f}, MouseButton::Left);
+    d->InjectMouseUp(core::Float2{50.0f, 10.0f}, MouseButton::Left);
+    CHECK(list->GetSelectedItem() == -1);
+    CHECK(activated == 0);
+
+    list->RequestFocus();
+    const auto key = [](KeyCode k) { return static_cast<core::u32>(k); };
+    d->InjectKeyDown(key(KeyCode::Down)); // nothing selected: the first that may be, past the header
+    CHECK(list->GetSelectedItem() == 1);
+    list->SetSelectedItem(4);
+    d->InjectKeyDown(key(KeyCode::Down)); // over the header at 5
+    CHECK(list->GetSelectedItem() == 6);
+    d->InjectKeyDown(key(KeyCode::Up));
+    CHECK(list->GetSelectedItem() == 4);
+    d->InjectKeyDown(key(KeyCode::Home)); // the first that may be
+    CHECK(list->GetSelectedItem() == 1);
+    d->InjectKeyDown(key(KeyCode::Up)); // nothing before it: it stays
+    CHECK(list->GetSelectedItem() == 1);
+
+    list->SetSelectionModeName(core::String(u8"multi"));
+    list->SelectAll();
+    CHECK_FALSE(list->IsItemSelected(0));
+    CHECK_FALSE(list->IsItemSelected(5));
+    CHECK(list->IsItemSelected(9));
+}

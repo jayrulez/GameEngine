@@ -662,8 +662,14 @@ export namespace foundation::gui
             if (m_selectionMode != SelectionMode::Multi)
                 return;
             for (i32 i = 0; i < static_cast<i32>(ItemCount()); ++i)
-                (void)m_selected.Insert(ItemIdAt(i));
+                if (IsItemSelectable(i))
+                    (void)m_selected.Insert(ItemIdAt(i));
             RefreshSelectionStates();
+        }
+        /// Whether a user may select the item (its model's say; a section header may not).
+        [[nodiscard]] bool IsItemSelectable(i32 item) const
+        {
+            return item >= 0 && item < static_cast<i32>(ItemCount()) && (m_model == nullptr || m_model->IsSelectable(ItemToModelIndex(item)));
         }
 
         // === Editing ===
@@ -1139,7 +1145,8 @@ export namespace foundation::gui
             const i32 from = anchor >= 0 ? anchor : item;
             m_selected.Clear();
             for (i32 i = core::Min(from, item); i <= core::Max(from, item); ++i)
-                (void)m_selected.Insert(ItemIdAt(i));
+                if (IsItemSelectable(i))
+                    (void)m_selected.Insert(ItemIdAt(i));
             m_current = ItemIdAt(item);
             RefreshSelectionStates();
         }
@@ -1179,6 +1186,8 @@ export namespace foundation::gui
         }
         void ActivateItem(i32 item)
         {
+            if (!IsItemSelectable(item))
+                return;
             const ModelIndex index = ItemToModelIndex(item);
             if (m_onActivated)
                 m_onActivated(index);
@@ -1493,7 +1502,7 @@ export namespace foundation::gui
 
     inline void ItemView::SelectByUser(i32 item, u32 modifiers)
     {
-        if (item < 0 || item >= static_cast<i32>(ItemCount()))
+        if (!IsItemSelectable(item))
             return;
         const bool ctrl = (modifiers & KeyModCtrl) != 0;
         const bool shift = (modifiers & KeyModShift) != 0;
@@ -1581,6 +1590,18 @@ export namespace foundation::gui
         case KeyCode::PageDown: target = core::Min(items - 1, core::Max(0, current) + page); break;
         default: return;
         }
+        // Past what may not be selected (a section header), on in the key's direction; none there
+        // keeps where it is.
+        if (!IsItemSelectable(target))
+        {
+            const bool back = key == KeyCode::Up || key == KeyCode::PageUp || key == KeyCode::End ||
+                              ((key == KeyCode::Left || key == KeyCode::Right) && InlineStep(key) < 0);
+            const i32 step = (key == KeyCode::Up || key == KeyCode::Down) ? across : 1;
+            i32 next = target;
+            while (next >= 0 && next < items && !IsItemSelectable(next))
+                next += back ? -step : step;
+            target = next >= 0 && next < items ? next : current;
+        }
         // An arrow at the view's edge is given back (focus moves on).
         const bool arrow = key == KeyCode::Up || key == KeyCode::Down || key == KeyCode::Left || key == KeyCode::Right;
         if (arrow && target == current && IsItemSelected(current))
@@ -1617,7 +1638,7 @@ export namespace foundation::gui
         const EventDispatcher* d = GetEventDispatcher();
         core::String text; // the item's, alive while it is matched
         const i32 item = m_typeAhead.Find(typed, d != nullptr ? d->GetTime() : 0.0f, static_cast<i32>(ItemCount()), GetCurrentItem(),
-                                          [this, &text](i32 i) { text = TypeAheadText(i); return text.AsView(); });
+                                          [this, &text](i32 i) { text = IsItemSelectable(i) ? TypeAheadText(i) : core::String{}; return text.AsView(); });
         if (item >= 0)
         {
             SelectOnly(item);

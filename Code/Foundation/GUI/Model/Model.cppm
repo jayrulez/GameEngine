@@ -135,6 +135,9 @@ export namespace foundation::gui
 
         // === Capabilities ===
         [[nodiscard]] virtual bool IsEditable(const ModelIndex&) const { return false; }
+        /// Whether a user may select (and activate) the item: false for a list's section header,
+        /// which clicks, the arrows, type-ahead and Select All pass over.
+        [[nodiscard]] virtual bool IsSelectable(const ModelIndex&) const { return true; }
         /// Writes an edited value; false when it is refused (the editor then stays open).
         virtual bool SetData(const ModelIndex&, const Variant&) { return false; }
         /// Sorts by `column` (None: the source's order); false when the model cannot sort.

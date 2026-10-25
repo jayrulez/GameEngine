@@ -612,3 +612,39 @@ TEST_CASE("assets: a right click on a group in the tree opens its menu; a browse
     CHECK(plain.OpenMenu() == nullptr);
     bed.root->RemoveChild(panel.Get());
 }
+
+TEST_CASE("assets: an asset or a group always exported is marked: a tile's corner mark, a row's badge; the menu's toggle redraws it")
+{
+    Bed bed;
+    CHECK(bed.view->ShowsTiles());
+    AssetCell* crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK_FALSE(crate->ShowsAlwaysExport());
+
+    // Through the asset's menu, as a user does: the cell redraws with its mark.
+    bed.view->ShowMenuFor(bed.RowOf(u8"Crate"));
+    REQUIRE(bed.view->OpenMenu() != nullptr);
+    gui::MenuItem* always = ItemNamed(*bed.view->OpenMenu(), u8"Always Export");
+    REQUIRE(always != nullptr);
+    CHECK(always->HandleActivate());
+    crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK(crate->ShowsAlwaysExport());
+
+    // A group's contents, and the list's badge.
+    bed.ops->ToggleAlwaysExport(*bed.models);
+    bed.view->SetTiles(false);
+    AssetCell* models = bed.Cell(bed.RowOf(u8"Models"));
+    REQUIRE(models != nullptr);
+    CHECK_FALSE(models->IsTile());
+    CHECK(models->ShowsAlwaysExport());
+    crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK(crate->ShowsAlwaysExport());
+
+    bed.ops->ToggleAlwaysExport(bed.crate->Id()); // off again
+    bed.view->Rebuild();
+    crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK_FALSE(crate->ShowsAlwaysExport());
+}

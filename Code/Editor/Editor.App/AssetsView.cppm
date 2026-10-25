@@ -53,6 +53,7 @@ export namespace editor::app
             String Badge;      ///< "Cooked", "Stale", "Failed"; empty: none
             String BadgeClass; ///< success, warning, danger
             bool Favourite = false;
+            bool AlwaysExported = false; ///< an export takes it (or all a group holds) whatever reaches it
             bool Group = false;
             RefPtr<gui::Drawable> Picture; ///< its thumbnail, a tile's in place of its glyph; null: none yet
         };
@@ -84,6 +85,19 @@ export namespace editor::app
             m_kind = Part<gui::Label>(*textHolder, u8"row-kind");
             m_kind->SetDisplayed(!tile);
             m_badge = Part<gui::Label>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge");
+            // Always Export: the kit's badge on a row, a mark in a tile's corner.
+            if (tile)
+            {
+                m_exportMark = Part<gui::Panel>(*m_thumb, u8"export-mark");
+                m_exportMark->SetTooltip(u8"Always exported");
+                m_exportMark->SetHitTestVisible(true); // its tooltip
+            }
+            else
+            {
+                m_exportBadge = Part<gui::Label>(*this, u8"badge");
+                m_exportBadge->AddClass(u8"export");
+                m_exportBadge->SetText(u8"Always Export");
+            }
             m_star = Part<gui::Image>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge-icon");
             m_star->AddClass(u8"star");
             m_star->SetSource(String(u8"Editor/Icons/star.svg"));
@@ -119,10 +133,12 @@ export namespace editor::app
             {
                 m_badge->SetDisplayed(!shown.Badge.IsEmpty() && shown.BadgeClass != StringView(u8"success"));
                 m_star->SetDisplayed(shown.Favourite);
+                m_exportMark->SetDisplayed(shown.AlwaysExported);
             }
             else
             {
                 m_badge->SetVisible(!shown.Badge.IsEmpty());
+                m_exportBadge->SetVisible(shown.AlwaysExported);
                 m_star->SetVisible(shown.Favourite);
             }
             if (shown.Group)
@@ -135,6 +151,10 @@ export namespace editor::app
         [[nodiscard]] StringView Kind() const { return m_kind->GetText(); }
         [[nodiscard]] StringView Badge() const { return m_badge->GetText(); }
         [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed() && m_star->IsVisible(); }
+        [[nodiscard]] bool ShowsAlwaysExport() const
+        {
+            return m_tile ? m_exportMark->IsDisplayed() : m_exportBadge->IsVisible();
+        }
         [[nodiscard]] bool IsTile() const noexcept { return m_tile; }
         [[nodiscard]] bool ShowsPicture() const { return m_picture && m_picture->IsDisplayed() && m_picture->GetDrawable() != nullptr; }
         [[nodiscard]] gui::Label* NameLabel() const noexcept { return m_name.Get(); }
@@ -155,6 +175,8 @@ export namespace editor::app
         RefPtr<gui::Panel> m_thumb;
         RefPtr<gui::Image> m_picture; // a tile's thumbnail
         RefPtr<gui::Panel> m_text; // a row's name and kind
+        RefPtr<gui::Label> m_exportBadge; // a row's Always Export
+        RefPtr<gui::Panel> m_exportMark;  // a tile's
         RefPtr<gui::Image> m_glyph;
         RefPtr<gui::Label> m_name;
         RefPtr<gui::Label> m_kind;
@@ -840,6 +862,7 @@ export namespace editor::app
                 shown.Group = true;
                 shown.Glyph = String(u8"Editor/Icons/folder.svg");
                 shown.Name = String(row.group->Name()); // its folder says what it is
+                shown.AlwaysExported = m_services.operations != nullptr && m_services.operations->IsAlwaysExported(*row.group);
             }
             else
             {
@@ -857,6 +880,7 @@ export namespace editor::app
                 if (shown.Glyph.IsEmpty())
                     shown.Glyph = String(u8"Editor/Icons/file.svg");
                 shown.Favourite = m_services.context != nullptr && m_services.context->IsFavorite(instance.Id());
+                shown.AlwaysExported = m_services.operations != nullptr && m_services.operations->IsAlwaysExported(instance.Id());
                 if (m_services.picture)
                     shown.Picture = m_services.picture(instance.Id());
                 if (m_services.cook != nullptr)
@@ -1071,7 +1095,11 @@ export namespace editor::app
                                       self->m_services.context->ToggleFavorite(id);
                                       self->m_model.Changed();
                                   });
-            gui::MenuItem* always = m_menu->AddItem(u8"Always Export", [&ops, id]() { ops.ToggleAlwaysExport(id); });
+            gui::MenuItem* always = m_menu->AddItem(u8"Always Export", [self, &ops, id]()
+                                                    {
+                                                        ops.ToggleAlwaysExport(id);
+                                                        self->m_model.Changed(); // its mark
+                                                    });
             always->SetCheckable(true);
             always->SetCheckedSilently(ops.IsAlwaysExported(id));
             m_menu->AddSeparator();
@@ -1115,7 +1143,11 @@ export namespace editor::app
             if (!top)
             {
                 (void)m_menu->AddItem(u8"Rename", [self, target, row]() { self->BeginRenameGroup(*target, row); })->SetShortcut(u8"F2");
-                gui::MenuItem* always = m_menu->AddItem(u8"Always Export Its Contents", [&ops, target]() { ops.ToggleAlwaysExport(*target); });
+                gui::MenuItem* always = m_menu->AddItem(u8"Always Export Its Contents", [self, &ops, target]()
+                                                        {
+                                                            ops.ToggleAlwaysExport(*target);
+                                                            self->m_model.Changed(); // its mark
+                                                        });
                 always->SetCheckable(true);
                 always->SetCheckedSilently(ops.IsAlwaysExported(group));
                 m_menu->AddSeparator();

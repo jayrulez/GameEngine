@@ -120,8 +120,8 @@ export namespace editor
             Function<GizmoController*()> gizmos;
             /// The graph's textures of the last frame (empty: none to offer).
             Function<void(Array<foundation::render::DebugResourceInfo>&)> debugResources;
-            /// Opens the picker for `request` below `anchor`.
-            Function<void(app::PickerRequest request, foundation::gui::Node* anchor)> pick;
+            /// Opens the picker for `request`.
+            Function<void(app::PickerRequest request)> pick;
             /// An overlay changed: the page keeps its view state.
             Function<void()> overlaysChanged;
         };
@@ -150,7 +150,7 @@ export namespace editor
         /// Lit (no debug term), Unlit, or a debug term.
         void SetShading(foundation::render::ViewDebugSemantic semantic);
         void ShowTexture(StringView name);
-        void OpenTextures(foundation::gui::Node* anchor);
+        void OpenTextures();
 
         // === For tests ===
         [[nodiscard]] StringView ChipText(StringView id) const;

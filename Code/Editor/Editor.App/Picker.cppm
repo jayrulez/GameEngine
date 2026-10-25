@@ -33,7 +33,8 @@ export namespace editor::app
     {
         String Key;        ///< what a pick answers (a guid's text, a path); unique in a request
         String Name;
-        String Detail;     ///< what it is, dim after the name (a type, a folder)
+        String Detail;     ///< what it is, dim after the name (a type, a folder): a few words
+        String Description; ///< a sentence about it, the foot's while its row is lit (a component's)
         String Section;    ///< the heading it is listed under
         String Glyph;      ///< its icon's source
         String GlyphClass; ///< the class tinting it (a category's)
@@ -158,6 +159,7 @@ export namespace editor::app
                 m_list->SetEstimatedRowHeight(kRowEstimate);
                 m_list->SetModel(&m_model);
                 m_list->SetOnActivated([self](gui::ModelIndex index) { self->PickRow(index.Row); });
+                m_list->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowHint(); });
             }
             if (m_none != nullptr)
                 m_none->SetOnClick([self]() { self->Pick(String{}); });
@@ -192,10 +194,10 @@ export namespace editor::app
                 m_list->SetModel(nullptr);
         }
 
-        /// Opens it over `root` for `request`: below `anchor` (what it picks for), else near the
-        /// top of the window; the search empty and focused, the current value lit. False with no
-        /// frame, a root in no GUI, or one open already.
-        bool Open(gui::SceneRoot& root, PickerRequest request, gui::Node* anchor = nullptr)
+        /// Opens it over `root` for `request`, in the window's middle whatever asked (every picker
+        /// the same: the user, 2026-10-25); the search empty and focused, the current value lit.
+        /// False with no frame, a root in no GUI, or one open already.
+        bool Open(gui::SceneRoot& root, PickerRequest request)
         {
             gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
             if (!m_content || dispatcher == nullptr || IsOpen())
@@ -215,19 +217,7 @@ export namespace editor::app
             options.Modal = true;
             options.TakesFocus = true;
             options.FitContent = true;
-            if (anchor != nullptr)
-            {
-                options.Anchor = anchor;
-                options.Placement.Side = gui::PopupSide::Below;
-                options.Placement.Align = gui::PopupAlign::Start;
-            }
-            else
-            {
-                options.HasAnchorRect = true;
-                options.AnchorRect = gui::Rect{0.0f, 0.0f, root.GetSize().x, root.GetSize().y * kTopShare};
-                options.Placement.Side = gui::PopupSide::Below;
-                options.Placement.Align = gui::PopupAlign::Center;
-            }
+            options.Centered = true;
             dispatcher->OpenPopup(root, *m_content, Move(options));
             if (m_search != nullptr)
                 m_search->RequestFocus();
@@ -307,7 +297,6 @@ export namespace editor::app
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
     private:
-        static constexpr f32 kTopShare = 0.12f; // how far down the window it opens with no anchor
         static constexpr f32 kRowEstimate = 26.0f;
         static constexpr u64 kHeaderBit = 1ull << 63;
 
@@ -357,7 +346,10 @@ export namespace editor::app
         void Light(i32 row)
         {
             if (m_list != nullptr && IsItemRow(row))
+            {
                 m_list->SetSelectedItem(row);
+                ShowHint(); // lit from code: the list's own callback does not hear it
+            }
         }
 
         // The rows for `query` (case folded; a name that starts with it before one that holds it,
@@ -480,7 +472,27 @@ export namespace editor::app
                 for (const PickerItem& item : m_request.Items)
                     if (!m_request.Current.IsEmpty() && item.Key == m_request.Current)
                         current = item.Name.AsView();
-                m_hint->SetText(current.IsEmpty() ? String(u8"Enter picks, Esc closes").AsView() : Format(u8"Enter picks, Esc keeps {}", current).AsView());
+                m_keysHint = current.IsEmpty() ? String(u8"Enter picks, Esc closes") : Format(u8"Enter picks, Esc keeps {}", current);
+                ShowHint();
+            }
+        }
+        // The foot: the lit item's description where it has one (read as the arrows move), else
+        // what the keys do.
+        void ShowHint()
+        {
+            if (m_hint == nullptr)
+                return;
+            const i32 lit = m_list != nullptr ? m_list->GetSelectedItem() : -1;
+            const StringView description = IsItemRow(lit) ? m_request.Items[m_rows[static_cast<usize>(lit)].Item].Description.AsView() : StringView{};
+            if (!description.IsEmpty())
+            {
+                m_hint->SetText(description);
+                m_hint->AddClass(u8"described");
+            }
+            else
+            {
+                m_hint->SetText(m_keysHint.AsView());
+                m_hint->RemoveClass(u8"described");
             }
         }
         void StateVerb()
@@ -560,6 +572,7 @@ export namespace editor::app
         gui::ListView* m_list = nullptr;
         gui::UIWidget* m_state = nullptr;
         gui::Label* m_hint = nullptr;
+        String m_keysHint; // what the keys do, the foot's when the lit item says nothing
         gui::Button* m_none = nullptr;
         gui::SceneRoot* m_root = nullptr; // what it opened over
         PickerRequest m_request;

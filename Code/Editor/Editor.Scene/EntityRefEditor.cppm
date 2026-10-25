@@ -41,8 +41,8 @@ export namespace editor
         {
             SceneEditContext* edit = nullptr;
             EditorIcons* icons = nullptr;
-            /// Opens the picker for `request` below `anchor`.
-            Function<void(app::PickerRequest request, foundation::gui::Node* anchor)> pick;
+            /// Opens the picker for `request`.
+            Function<void(app::PickerRequest request)> pick;
         };
 
         /// `services` outlives the editor (the registrar's).

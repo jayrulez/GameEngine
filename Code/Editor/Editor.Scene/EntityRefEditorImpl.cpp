@@ -139,7 +139,7 @@ namespace editor
     void EntityRefEditor::Pick()
     {
         if (m_services->pick)
-            m_services->pick(Request(), m_slot.Get());
+            m_services->pick(Request());
     }
 
     void EntityRefEditor::Assign(const Guid& id)

@@ -68,8 +68,8 @@ export namespace editor
             EditorPage* page = nullptr; // the page whose selection it shows (its actions, its simulation)
             EditorIcons* icons = nullptr;
             const app::ResourceRefServices* refs = nullptr; // the asset slots' (null: none)
-            /// Opens the picker for `request` below `anchor` (Add Component).
-            Function<void(app::PickerRequest request, foundation::gui::Node* anchor)> pick;
+            /// Opens the picker for `request` (Add Component).
+            Function<void(app::PickerRequest request)> pick;
             /// Whether the page simulates (the grid read only meanwhile).
             Function<bool()> simulating;
             /// Whether the scene's own row is selected (ruling 12: then the scene's settings show).
@@ -91,8 +91,8 @@ export namespace editor
         void Refresh();
         /// The search over the rows, as typing it does.
         void Search(StringView text);
-        /// Add Component's picker, below `anchor`.
-        void OpenAddComponent(foundation::gui::Node* anchor);
+        /// Add Component's picker.
+        void OpenAddComponent();
         /// What Add Component offers the selection now, by type name.
         [[nodiscard]] Array<String> AddableComponents() const;
         /// The same, the types (the picker's display names and categories).

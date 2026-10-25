@@ -68,7 +68,6 @@ namespace
         Function<void(const Guid&)> chosen; // the picker's answer, held until the test gives it
         Array<String> pickedFrom;
         Guid pickedOver;
-        gui::Node* pickedBelow = nullptr;
         int commits = 0;
 
         explicit Bed(usize objects = 1) : bag(DefaultAllocator(), objects)
@@ -100,10 +99,9 @@ namespace
                 out.GlyphClass = String(u8"cat-rendering");
                 return true;
             };
-            services.Pick = [this](Span<const String> types, const Guid& current, gui::Node* anchor, Function<void(const Guid&)> answer)
+            services.Pick = [this](Span<const String> types, const Guid& current, Function<void(const Guid&)> answer)
             {
                 pickedOver = current;
-                pickedBelow = anchor;
                 pickedFrom.Clear();
                 for (const String& type : types)
                     pickedFrom.PushBack(type);
@@ -159,7 +157,6 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     REQUIRE(bed.chosen);
     CHECK(bed.pickedFrom.Size() == 2u);
     CHECK(bed.pickedOver.IsNil());
-    CHECK(bed.pickedBelow == &slot); // below what it picks for
     bed.chosen(bed.wood);
     (void)bed.root->UpdateLayout();
     CHECK(bed.commits == 1);
@@ -276,18 +273,11 @@ TEST_CASE("resource-ref: the context's pick opens the asset picker over the proj
     context.ToggleFavorite(barrel->Id());
     editor::EditorIcons icons(DefaultAllocator(), [](StringView) { return false; });
     PickerRequest opened;
-    gui::Node* below = nullptr;
-    const ResourceRefServices services = ResourceRefServices::From(context, icons, [&opened, &below](PickerRequest request, gui::Node* anchor)
-                                                                   {
-                                                                       opened = Move(request);
-                                                                       below = anchor;
-                                                                   });
+    const ResourceRefServices services = ResourceRefServices::From(context, icons, [&opened](PickerRequest request) { opened = Move(request); });
     REQUIRE(static_cast<bool>(services.Pick));
     Array<Guid> chosen;
-    RefPtr<gui::Panel> anchor = MakeRef<gui::Panel>(DefaultAllocator());
     const String meshes[] = {String(reinterpret_cast<const utf8char*>(RefMeshAsset::StaticType().name))};
-    services.Pick(Span<const String>(meshes, 1u), crate->Id(), anchor.Get(), [&chosen](const Guid& id) { chosen.PushBack(id); });
-    CHECK(below == anchor.Get());
+    services.Pick(Span<const String>(meshes, 1u), crate->Id(), [&chosen](const Guid& id) { chosen.PushBack(id); });
     REQUIRE(opened.Items.Size() == 2u); // the sound is not one it takes
     CHECK(opened.Items[0].Name == String(u8"Crate"));
     CHECK(opened.Items[0].Section == String(u8"Content"));

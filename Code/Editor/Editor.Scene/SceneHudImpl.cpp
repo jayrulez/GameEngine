@@ -317,7 +317,7 @@ namespace editor
             AddCheck(*terms, StringView(term.label), showing(semantic), [self, semantic]() { self->SetShading(semantic); });
         }
         gui::MenuItem* textures = AddCheck(menu, u8"Render Textures...", [debug]() { return !debug->resource.IsEmpty(); },
-                                           [self]() { self->OpenTextures(self->m_shading.button); });
+                                           [self]() { self->OpenTextures(); });
         textures->SetEnabled(static_cast<bool>(m_services.debugResources) && static_cast<bool>(m_services.pick));
         menu.AddSeparator();
         gui::Menu* effects = menu.AddSubMenu(u8"Effects");
@@ -423,7 +423,7 @@ namespace editor
         }
     }
 
-    void SceneHud::OpenTextures(gui::Node* anchor)
+    void SceneHud::OpenTextures()
     {
         if (!m_services.debugResources || !m_services.pick)
             return;
@@ -468,7 +468,7 @@ namespace editor
             if (!key.IsEmpty())
                 self->ShowTexture(key);
         };
-        m_services.pick(Move(request), anchor);
+        m_services.pick(Move(request));
     }
 
     String SceneHud::AxisViewName() const

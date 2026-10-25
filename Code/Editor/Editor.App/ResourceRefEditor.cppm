@@ -46,25 +46,25 @@ export namespace editor::app
         Function<Array<String>(const TypeInfo& target)> AcceptedTypes;
         /// What `id` names; false when the project has no such asset (a dangling reference).
         Function<bool(const Guid& id, ResourceRefShown& out)> Describe;
-        /// Opens a picker over `types` (empty: any) below `anchor`, `current` checked; `chosen`
+        /// Opens a picker over `types` (empty: any), `current` checked; `chosen`
         /// assigns what it picks (nil: None).
-        Function<void(Span<const String> types, const Guid& current, gui::Node* anchor, Function<void(const Guid&)> chosen)> Pick;
+        Function<void(Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)> Pick;
         Function<void(const Guid&)> Open;
         Function<void(const Guid&)> Reveal;
 
         /// Filled from the editor's context: the builders' types (SourceAssetTypesOf; none, the
         /// type itself, a reference naming a source asset type), the
         /// project's names, the type icons, the asset picker over the project's assets (`open`
-        /// shows a picker's request below its anchor), the context's open and reveal. `context`
+        /// shows a picker's request), the context's open and reveal. `context`
         /// and `icons` outlive what it is given to.
         [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons,
-                                                      Function<void(PickerRequest request, gui::Node* anchor)> open)
+                                                      Function<void(PickerRequest request)> open)
         {
             ResourceRefServices services;
             editor::EditorContext* ctx = &context;
             editor::EditorIcons* typeIcons = &icons;
             if (open)
-                services.Pick = [ctx, typeIcons, open = Move(open)](Span<const String> types, const Guid& current, gui::Node* anchor, Function<void(const Guid&)> chosen)
+                services.Pick = [ctx, typeIcons, open = Move(open)](Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)
                 {
                     if (ctx->Project() == nullptr)
                         return;
@@ -75,7 +75,7 @@ export namespace editor::app
                         if (key.IsEmpty() || Guid::TryParse(key, id))
                             chosen(id);
                     };
-                    open(Move(request), anchor);
+                    open(Move(request));
                 };
             // What the builders make it from; none: the type itself, a reference naming a source
             // asset type (Project Settings', ruling 20).
@@ -203,7 +203,7 @@ export namespace editor::app
         {
             RefPtr<ResourceRefEditor> self(this);
             const String path(GetPath());
-            m_services->Pick(m_types.AsSpan(), m_current, m_slot.Get(), [self, path](const Guid& id)
+            m_services->Pick(m_types.AsSpan(), m_current, [self, path](const Guid& id)
                              {
                                  if (self->GetPath() == path.AsView())
                                      self->Assign(id);

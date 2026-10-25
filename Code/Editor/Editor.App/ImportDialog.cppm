@@ -40,8 +40,8 @@ export namespace editor::app
         struct Services
         {
             AssetImport* import = nullptr;
-            /// Opens the group picker below `anchor`, `current` checked; `picked` hears the choice.
-            Function<void(gui::Node& anchor, content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
+            /// Opens the group picker, `current` checked; `picked` hears the choice.
+            Function<void(content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
         };
 
         ImportWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> body)
@@ -56,11 +56,11 @@ export namespace editor::app
             m_window->GetContent()->AddChild(m_body.Get());
             ImportWindow* self = this;
             if (auto* group = Find<gui::Button>(u8"import-group"))
-                group->SetOnClick([self, group]()
+                group->SetOnClick([self]()
                                   {
                                       if (!self->m_session || !self->m_services.pickGroup)
                                           return;
-                                      self->m_services.pickGroup(*group, *self->m_session->group, [self](content::Group& picked)
+                                      self->m_services.pickGroup(*self->m_session->group, [self](content::Group& picked)
                                                                  {
                                                                      if (!self->m_session)
                                                                          return;

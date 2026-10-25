@@ -139,7 +139,7 @@ namespace editor
             flows.later = [self](Function<void()> work) { self->Later(Move(work)); };
             if (m_services.refs != nullptr && m_services.refs->Pick)
                 flows.pickAsset = [self](Span<const String> types, Function<void(const Guid&)> chosen)
-                { self->m_services.refs->Pick(types, Guid{}, nullptr, Move(chosen)); };
+                { self->m_services.refs->Pick(types, Guid{}, Move(chosen)); };
             m_prefabs = MakeUnique<PrefabFlows>(Allocator(), Move(flows));
         }
 
@@ -167,7 +167,7 @@ namespace editor
             if (engine::render::RenderSubsystem* renderer = m_viewport->Renderer())
                 hud.debugResources = [renderer](Array<foundation::render::DebugResourceInfo>& out) { renderer->GetDebugResources(out); };
             if (m_services.pick)
-                hud.pick = [self](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); };
+                hud.pick = [self](app::PickerRequest request) { self->m_services.pick(Move(request)); };
             hud.overlaysChanged = [self]() { self->SaveViewState(); };
             m_hud = MakeUnique<SceneHud>(Allocator(), Allocator(), Move(hud), [self](StringView id) { return self->Find<gui::Node>(id); });
         }
@@ -225,8 +225,8 @@ namespace editor
                 inspector.page = this;
                 inspector.icons = m_services.icons;
                 inspector.refs = m_services.refs;
-                inspector.pick = m_services.pick ? [self = this](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); }
-                                                 : Function<void(app::PickerRequest, gui::Node*)>{};
+                inspector.pick = m_services.pick ? [self = this](app::PickerRequest request) { self->m_services.pick(Move(request)); }
+                                                 : Function<void(app::PickerRequest)>{};
                 SceneEditorPage* self = this;
                 inspector.simulating = [self]() { return self->m_simulation.IsRunning(); };
                 inspector.sceneSelected = [self]() { return self->m_hierarchy && self->m_hierarchy->SceneSelected(); };

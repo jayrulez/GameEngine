@@ -585,7 +585,7 @@ namespace editor::app
             ImportWindow::Services services;
             services.import = m_assetImport.Get();
             EditorApplication* self = this;
-            services.pickGroup = [self](gui::Node& anchor, foundation::content::Group& current, Function<void(foundation::content::Group&)> picked)
+            services.pickGroup = [self](foundation::content::Group& current, Function<void(foundation::content::Group&)> picked)
             {
                 editor::EditorProject* project = self->m_session.Project();
                 if (project == nullptr)
@@ -596,7 +596,7 @@ namespace editor::app
                     if (foundation::content::Group* group = GroupPicker::Find(project->SourceDb(), key))
                         picked(*group);
                 };
-                self->ShowPicker(Move(request), &anchor);
+                self->ShowPicker(Move(request));
             };
             m_importWindow = MakeUnique<ImportWindow>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ImportWindow::kPath));
         }
@@ -604,14 +604,14 @@ namespace editor::app
             m_context.Notify(editor::NoticeKind::Info, u8"An import is open already: finish it first.");
     }
 
-    void EditorApplication::ShowPicker(PickerRequest request, gui::Node* anchor)
+    void EditorApplication::ShowPicker(PickerRequest request)
     {
         gui::SceneRoot* root = m_window.Root();
         if (root == nullptr)
             return;
         if (!m_picker)
             m_picker = MakeUnique<Picker>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(Picker::kPath));
-        (void)m_picker->Open(*root, Move(request), anchor);
+        (void)m_picker->Open(*root, Move(request));
     }
 
     // The slots' table, from the context, the type icons and the picker (made the first time).
@@ -623,7 +623,7 @@ namespace editor::app
             m_typeIcons = MakeUnique<editor::EditorIcons>(m_editorAllocator, m_editorAllocator, [window](StringView path)
                                                           { return window->Resources() != nullptr && window->Resources()->Exists(path); });
             EditorApplication* self = this;
-            m_refs = ResourceRefServices::From(m_context, *m_typeIcons, [self](PickerRequest request, gui::Node* anchor) { self->ShowPicker(Move(request), anchor); });
+            m_refs = ResourceRefServices::From(m_context, *m_typeIcons, [self](PickerRequest request) { self->ShowPicker(Move(request)); });
         }
         return m_refs;
     }

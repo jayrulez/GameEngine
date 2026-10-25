@@ -69,7 +69,7 @@ export namespace editor
             services.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
             services.refs = &editor->RefServices();
             services.icons = &editor->TypeIcons();
-            services.pick = [editor](app::PickerRequest request, foundation::gui::Node* anchor) { editor->ShowPicker(Move(request), anchor); };
+            services.pick = [editor](app::PickerRequest request) { editor->ShowPicker(Move(request)); };
             return services;
         };
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

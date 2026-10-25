@@ -118,7 +118,7 @@ export namespace editor::app
             foundation::content::ContentDatabase* db = &sources;
             Picker* groups = &picker;
             gui::SceneRoot* over = &root;
-            groupField->SetOnClick([state, db, groups, over, groupField, check]()
+            groupField->SetOnClick([state, db, groups, over, check]()
                                    {
                                        PickerRequest request = GroupPicker::Request(*db, state->group);
                                        request.OnPicked = [state, db, check](StringView key)
@@ -129,7 +129,7 @@ export namespace editor::app
                                                check();
                                            }
                                        };
-                                       (void)groups->Open(*over, Move(request), groupField);
+                                       (void)groups->Open(*over, Move(request));
                                    });
             name->SetOnTextChanging([check](StringView) { check(); });
             (void)name->AddEventListener(gui::EventType::Submit, [commit](const gui::Event&) { commit(); });

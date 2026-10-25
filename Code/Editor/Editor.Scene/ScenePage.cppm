@@ -75,8 +75,8 @@ export namespace editor
             const app::ResourceRefServices* refs = nullptr;
             /// The type icons the hierarchy and the inspector show by (null: none).
             EditorIcons* icons = nullptr;
-            /// Opens the picker for a request below an anchor (the inspector's Add Component).
-            Function<void(app::PickerRequest request, foundation::gui::Node* anchor)> pick;
+            /// Opens the picker for a request (the inspector's Add Component).
+            Function<void(app::PickerRequest request)> pick;
         };
 
         SceneEditorPage(EditorContext& context, Services services, foundation::content::Instance& instance);

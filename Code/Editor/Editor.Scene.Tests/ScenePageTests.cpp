@@ -156,7 +156,7 @@ namespace
             SceneEditorPage::Services services;
             services.host = &host;
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
-            services.pick = [this](app::PickerRequest request, gui::Node*) { picked = Move(request); };
+            services.pick = [this](app::PickerRequest request) { picked = Move(request); };
             return MakeUnique<SceneEditorPage>(DefaultAllocator(), context, Move(services), instance);
         }
     };
@@ -1289,7 +1289,7 @@ TEST_CASE("inspector: Add Component's picker lists each component by its display
     UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
     page->EditContext().EntitySelection().Set(bed.crate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
-    page->Inspector()->OpenAddComponent(nullptr);
+    page->Inspector()->OpenAddComponent();
     REQUIRE_FALSE(bed.picked.Items.IsEmpty());
     const app::PickerItem* light = nullptr;
     for (const app::PickerItem& item : bed.picked.Items)
@@ -1298,7 +1298,8 @@ TEST_CASE("inspector: Add Component's picker lists each component by its display
     REQUIRE(light != nullptr);
     CHECK(light->Name == String(u8"Light"));         // its displayName, not its type's name
     CHECK(light->Section == String(u8"Rendering"));  // its category
-    CHECK_FALSE(light->Detail.IsEmpty());             // its description
+    CHECK_FALSE(light->Description.IsEmpty());        // its description, for the foot while lit
+    CHECK(light->Detail.IsEmpty());                   // not on its row, where a sentence overran the name
     // Each category's rows together, so a section shows once.
     for (usize i = 2; i < bed.picked.Items.Size(); ++i)
         if (bed.picked.Items[i].Section != bed.picked.Items[i - 1].Section)

@@ -627,6 +627,9 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
 .picker-foot { flex-direction: row; align-items: center; padding: var(--space-s) var(--space-m) 0; margin-top: var(--space-s);
                border-top-width: 1px; border-top-style: solid; border-top-color: var(--separator); }
 .picker-hint { font-size: var(--font-small); color: var(--text-placeholder); }
+.picker-hint.described { color: var(--text-dim); white-space: normal; flex-shrink: 1; min-width: 0; } /* the lit item's sentence */
+/* A row's name keeps its room; its detail gives way first, in an ellipsis, never over the name. */
+.picker-list .row-kind { flex-shrink: 1000; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
 .picker-empty { padding: var(--space-xl) var(--space-l); }
 /* The asset picker: its groups a tree beside what the chosen one holds, as the assets browser. */
 .dialog.asset-picker { width: 640px; }

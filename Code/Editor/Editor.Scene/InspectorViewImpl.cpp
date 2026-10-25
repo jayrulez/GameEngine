@@ -264,7 +264,7 @@ namespace editor
             m_entityRefs.edit = m_edit;
             m_entityRefs.icons = m_services.icons;
             if (m_services.pick)
-                m_entityRefs.pick = [self](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); };
+                m_entityRefs.pick = [self](app::PickerRequest request) { self->m_services.pick(Move(request)); };
             EntityRefEditor::Register(m_grid->GetEditors(), m_entityRefs);
             app::PropertyExtras::Register(m_grid->GetEditors()); // a component's notices and actions
             m_grid->SetSource(&m_sections);
@@ -273,7 +273,7 @@ namespace editor
         if (auto* search = Find<gui::TextField>(u8"inspector-search"))
             search->SetOnTextChanging([self](StringView text) { self->Search(text); });
         if (auto* add = Find<gui::Button>(u8"inspector-add"))
-            add->SetOnClick([self, add]() { self->OpenAddComponent(add); });
+            add->SetOnClick([self]() { self->OpenAddComponent(); });
         if (auto* name = Find<gui::TextField>(u8"inspector-name"))
             // Enter, or the focus leaving with a new name: one entity's rename (several name no one).
             name->SetOnTextChanged([self](StringView text)
@@ -801,7 +801,7 @@ namespace editor
         return true;
     }
 
-    void SceneInspectorView::OpenAddComponent(gui::Node* anchor)
+    void SceneInspectorView::OpenAddComponent()
     {
         if (!m_services.pick || m_entities.IsEmpty())
             return;
@@ -816,7 +816,7 @@ namespace editor
             item.Key = String(StringView(reinterpret_cast<const utf8char*>(type->name)));
             item.Name = TitleOf(*type);
             item.Section = String(TypeAttrString(*type, "category", u8"Other"));
-            item.Detail = String(TypeAttrString(*type, "description", StringView{}));
+            item.Description = String(TypeAttrString(*type, "description", StringView{})); // a sentence: the foot's, not the row's
             if (m_services.icons != nullptr)
             {
                 const TypeIcon icon = m_services.icons->For(*type, u8"Component");
@@ -845,7 +845,7 @@ namespace editor
         request.EmptyText = String(u8"Every component the scene knows is on the selection.");
         SceneInspectorView* self = this;
         request.OnPicked = [self](StringView key) { (void)self->AddComponent(key); };
-        m_services.pick(Move(request), anchor);
+        m_services.pick(Move(request));
     }
 
     void SceneInspectorView::Search(StringView text)

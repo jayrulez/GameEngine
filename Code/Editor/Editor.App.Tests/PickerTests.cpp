@@ -248,3 +248,21 @@ TEST_CASE("picker: under the editor's sheet its list fits its frame (a list wide
     CHECK(list.x + list.width <= frame.x + frame.width + 0.5f);
     bed.picker.Close();
 }
+
+TEST_CASE("picker: it opens in the window's middle; a lit item's description is the foot's, else what the keys do")
+{
+    Bed bed;
+    PickerRequest request = bed.Materials();
+    request.Items[1].Description = String(u8"Warm and soft."); // Wool's
+    bed.Open(Move(request));
+    const gui::Rect frame = bed.picker.Content()->GetScreenBounds();
+    CHECK(frame.x + frame.width * 0.5f == doctest::Approx(400.0f).epsilon(0.01));
+    CHECK(frame.y + frame.height * 0.5f == doctest::Approx(300.0f).epsilon(0.01));
+    CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc keeps Wood")); // Wood lit: it says nothing
+    bed.Key(gui::KeyCode::Down);                                              // Wool
+    CHECK(bed.picker.LitKey() == StringView(u8"wool"));
+    CHECK(bed.picker.Hint() == StringView(u8"Warm and soft."));
+    bed.Key(gui::KeyCode::Up);
+    CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc keeps Wood"));
+    bed.picker.Close();
+}

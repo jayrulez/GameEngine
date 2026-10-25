@@ -66,6 +66,7 @@ export namespace editor
 
         [[nodiscard]] foundation::gui::Viewport& View() noexcept { return *m_view; }
         [[nodiscard]] RefPtr<foundation::gui::Viewport> ViewNode() const noexcept { return m_view; }
+        [[nodiscard]] engine::render::RenderSubsystem* Renderer() const noexcept { return m_services.render; }
         [[nodiscard]] EditorCamera& Camera() noexcept { return m_camera; }
         [[nodiscard]] const EditorCamera& Camera() const noexcept { return m_camera; }
         [[nodiscard]] IViewportPicker& Picker() noexcept { return m_picker; }

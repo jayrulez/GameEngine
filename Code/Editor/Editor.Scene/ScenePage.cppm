@@ -52,6 +52,7 @@ import :prefab_flows;
 import :hierarchy;
 import :inspector;
 import :scene_bar;
+import :scene_hud;
 
 using namespace foundation::core;
 
@@ -128,6 +129,7 @@ export namespace editor
         [[nodiscard]] bool IsPrefab() const noexcept { return m_isPrefab; }
         [[nodiscard]] SceneOverlaySettings& Overlays() noexcept { return m_overlays.settings; }
         [[nodiscard]] SceneBar* Bar() const noexcept { return m_bar.Get(); }
+        [[nodiscard]] SceneHud* Hud() const noexcept { return m_hud.Get(); }
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
         [[nodiscard]] SceneInspectorView* Inspector() noexcept { return m_inspector.Get(); }
@@ -141,8 +143,6 @@ export namespace editor
         // flagged invalid). The page keeps the camera's policy: no buttons and no keyboard for the
         // tools while the camera has the mouse; Simulate is editing locked.
         void UpdateTools(bool viewportActive, f32 deltaSeconds);
-        // The orientation gizmo takes a press on a knob (or its centre) before any tool sees it.
-        [[nodiscard]] bool PressViewGizmo(f32 x, f32 y, u32 width);
         void SaveViewState();
         void RestoreViewState();
         [[nodiscard]] bool IsProjectDefaultScene() const;
@@ -170,11 +170,11 @@ export namespace editor
         ViewportToolManager m_viewportTools;         // after m_editContext (the tools borrow it)
         SelectTransformTool* m_selectTool = nullptr; // the manager's default tool
         GizmoRendererRegistry m_componentGizmos;
-        bool m_viewGizmoPressed = false; // a press that began on the orientation gizmo, until release
         foundation::render::ViewPostOverride m_postOverride; // the viewport's post show flags (not saved)
         foundation::render::ViewDebugView m_debugView;       // the viewport's debug view (not saved)
         RefPtr<foundation::gui::Node> m_content;
         UniquePtr<SceneBar> m_bar;
+        UniquePtr<SceneHud> m_hud; // over the viewport
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once it settled
         // when there is none yet, and on every save of it.

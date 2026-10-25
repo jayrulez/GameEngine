@@ -150,6 +150,27 @@ namespace editor
         gui::Node* pane = Find<gui::Node>(u8"scene-viewport");
         (void)(pane != nullptr ? pane : m_content.Get())->AddChildAt(m_viewport->ViewNode().Get(), 0);
         m_viewport->HostIn(m_services.gui);
+        if (m_editContext)
+        {
+            // The HUD over the viewport: the chips, the stats and the view gizmo, the tool's status.
+            SceneHud::Services hud;
+            hud.context = &context;
+            hud.edit = m_editContext.Get();
+            hud.camera = &m_viewport->Camera();
+            hud.overlays = &m_overlays;
+            hud.post = &m_postOverride;
+            hud.debugView = &m_debugView;
+            hud.tools = &m_viewportTools;
+            hud.selectTool = m_selectTool;
+            SceneEditorPage* self = this;
+            hud.gizmos = [self]() { return self->Gizmos(); };
+            if (engine::render::RenderSubsystem* renderer = m_viewport->Renderer())
+                hud.debugResources = [renderer](Array<foundation::render::DebugResourceInfo>& out) { renderer->GetDebugResources(out); };
+            if (m_services.pick)
+                hud.pick = [self](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); };
+            hud.overlaysChanged = [self]() { self->SaveViewState(); };
+            m_hud = MakeUnique<SceneHud>(Allocator(), Allocator(), Move(hud), [self](StringView id) { return self->Find<gui::Node>(id); });
+        }
         {
             SceneEditorPage* self = this;
             m_bar = MakeUnique<SceneBar>(Allocator(), Allocator(), context.Actions(), *this,
@@ -244,8 +265,8 @@ namespace editor
         const bool shift = keyboard != nullptr &&
                            (keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift));
         const bool active = m_viewport->UpdateCamera(dt, !(modalTool && shift));
-        if (active && m_viewport->ZoomedThisFrame())
-            m_overlays.Zoomed();
+        if (active && m_viewport->ZoomedThisFrame() && m_hud)
+            m_hud->Zoomed();
         if (m_editContext)
             UpdateTools(active, dt);
         // The page is this scene's run scope: its bus drains once a frame (events a Simulate tick
@@ -262,15 +283,12 @@ namespace editor
             frame.camera = &m_viewport->Camera();
             frame.width = m_viewport->View().RenderWidth();
             frame.height = m_viewport->View().RenderHeight();
-            foundation::shell::IMouse* mouse = m_viewport->Mouse();
-            frame.pointerOver = m_viewport->IsHovered() && mouse != nullptr;
-            frame.pointerX = mouse != nullptr ? mouse->X() : 0.0f;
-            frame.pointerY = mouse != nullptr ? mouse->Y() : 0.0f;
             frame.tools = &m_viewportTools;
             frame.componentGizmos = &m_componentGizmos;
-            frame.deltaSeconds = dt;
             m_overlays.Draw(*dd, frame);
         }
+        if (m_hud)
+            m_hud->Update(dt, m_viewport->View().RenderHeight());
         if (m_hierarchy)
             m_hierarchy->Refresh(); // the scene changed: built again
         if (m_inspector)
@@ -327,43 +345,9 @@ namespace editor
             in.shift = keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift);
         }
         in.wheelDelta = mouse->ScrollY();
-        // A press on the orientation gizmo is its, and the rest of that press: the select tool
-        // neither picks nor box-selects under it (Alt+drag still orbits: the camera owns that press).
-        if (in.leftPressed && m_viewport->IsHovered() && PressViewGizmo(static_cast<f32>(in.pointerX), static_cast<f32>(in.pointerY), in.viewportWidth))
-            m_viewGizmoPressed = true;
-        if (m_viewGizmoPressed)
-        {
-            const bool released = in.leftReleased;
-            in.leftPressed = false;
-            in.leftDown = false;
-            in.leftReleased = false;
-            m_viewGizmoPressed = !released;
-        }
         // The tools' keys (the select tool's W/E/R/X) belong to the camera while it owns the input.
         in.keyboard = cameraOwnsMouse ? nullptr : keyboard;
         (void)m_viewportTools.Update(in);
-    }
-
-    bool SceneEditorPage::PressViewGizmo(f32 x, f32 y, u32 width)
-    {
-        EditorCamera& camera = m_viewport->Camera();
-        const ViewGizmoLayout gizmo = ViewGizmo::LayoutFor(camera.Right(), camera.Up(), camera.Forward(), static_cast<f32>(width));
-        const i32 hit = ViewGizmo::Hit(gizmo, x, y);
-        if (hit >= 0)
-        {
-            f32 yaw = camera.yaw;
-            f32 pitch = camera.pitch;
-            ViewGizmo::SnapAngles(gizmo.poles[hit].axis, camera.yaw, yaw, pitch);
-            camera.autoOrthographic = AutoOrthographicViews(m_context->UserEditorSettings());
-            camera.SnapToAxis(yaw, pitch);
-            return true;
-        }
-        if (ViewGizmo::HitCentre(gizmo, x, y))
-        {
-            camera.SetOrthographic(!camera.orthographic);
-            return true;
-        }
-        return false;
     }
 
     void SceneEditorPage::OnRenderWindow(runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)

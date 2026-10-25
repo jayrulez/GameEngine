@@ -1003,3 +1003,90 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     CHECK(gizmos->Gizmo().translateSnap > 0.0f);
     page->OnClose();
 }
+
+TEST_CASE("scene HUD: the chips say what is on and change it; the stats, the view gizmo, the zoom readout and the tool's status")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    Shown shown(*page);
+    SceneHud* hud = page->Hud();
+    REQUIRE(hud != nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    EditorCamera& camera = *page->ViewportCamera();
+
+    // Projection: the chip names it, an axis view by its name, in the accent off perspective.
+    CHECK(hud->ChipText(u8"chip-projection") == StringView(u8"Perspective"));
+    CHECK_FALSE(hud->ChipOn(u8"chip-projection"));
+    hud->SetProjection(SceneHud::Projection::Orthographic);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(camera.orthographic);
+    CHECK(hud->ChipText(u8"chip-projection") == StringView(u8"Orthographic"));
+    CHECK(hud->ChipOn(u8"chip-projection"));
+    hud->LookAlong(Float3{0, 1, 0});
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->ChipText(u8"chip-projection") == StringView(u8"Top"));
+
+    // Shading: Unlit is the albedo term; a texture names itself; Lit is the default, not marked.
+    CHECK(hud->ChipText(u8"chip-shading") == StringView(u8"Lit"));
+    hud->SetShading(foundation::render::ViewDebugSemantic::Albedo);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->ChipText(u8"chip-shading") == StringView(u8"Unlit"));
+    CHECK(hud->ChipOn(u8"chip-shading"));
+    hud->ShowTexture(u8"ssgi.filtered");
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->ChipText(u8"chip-shading") == StringView(u8"ssgi.filtered"));
+    hud->SetShading(foundation::render::ViewDebugSemantic::Off);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->ChipText(u8"chip-shading") == StringView(u8"Lit"));
+    CHECK_FALSE(hud->ChipOn(u8"chip-shading"));
+
+    // The menus are built, their checks following the state.
+    gui::Menu* overlays = hud->ChipMenu(u8"chip-overlays");
+    REQUIRE(overlays != nullptr);
+    CHECK_FALSE(hud->StatsShown());
+    page->Overlays().showFps = true;
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->StatsShown());
+
+    // The view gizmo's centre switches the projection; a knob looks along its axis.
+    ViewGizmoView* gizmo = hud->Gizmo();
+    REQUIRE(gizmo != nullptr);
+    (void)shown.root->UpdateLayout();
+    hud->SetProjection(SceneHud::Projection::Perspective);
+    camera.yaw = 0.3f;
+    camera.pitch = -0.3f;
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    CHECK(gizmo->PressAt(gizmo->Layout().center));
+    CHECK(camera.orthographic);
+    const ViewGizmoLayout& layout = gizmo->Layout();
+    i32 plusX = -1;
+    for (i32 i = 0; i < 6; ++i)
+        if (layout.poles[i].positive && layout.poles[i].axis.x > 0.5f)
+            plusX = i;
+    REQUIRE(plusX >= 0);
+    CHECK(gizmo->PressAt(layout.poles[plusX].screen));
+    CHECK(Dot(camera.Forward(), Float3{-1, 0, 0}) > 0.999f); // looking down -X, from +X
+
+    // The zoom readout shows after a wheel zoom, then fades.
+    CHECK_FALSE(hud->ZoomShown());
+    hud->Zoomed();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->ZoomShown());
+    for (i32 i = 0; i < 4; ++i)
+        page->OnUpdate(bed.host, 1.0f);
+    CHECK_FALSE(hud->ZoomShown());
+
+    // The select tool's status in parts: its mode, space, snap and what is selected.
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->StatusText() == String(u8"Move | World | Crate"));
+    page->Gizmos()->SetSnapMode(true);
+    page->Gizmos()->Gizmo().translateSnap = 0.5f;
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->StatusText() == String(u8"Move | World | Snap 0.5 m | Crate"));
+    page->Gizmos()->SetHandlesShown(false);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(hud->StatusText() == String(u8"Select | Crate"));
+    page->OnClose();
+}

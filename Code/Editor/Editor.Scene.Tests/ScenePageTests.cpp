@@ -767,3 +767,173 @@ TEST_CASE("script behaviors: a list of behaviours, each its script, Enabled and 
     CHECK(component()->behaviors.IsEmpty());
     page->OnClose();
 }
+
+TEST_CASE("inspector: the scene selected shows its settings, a block a section; an edit lands in the scene's block, one undo step")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    Shown shown(*page);
+    shown.Click(*page->Hierarchy()->Tree(), 0); // the scene's row
+    CHECK(page->Hierarchy()->SceneSelected());
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->Kind() == StringView(u8"Scene"));
+    CHECK(FindId<gui::TextField>(*page->Content(), u8"inspector-name")->GetText() == StringView(u8"Level"));
+    CHECK_FALSE(FindId<gui::Node>(*page->Content(), u8"inspector-add")->IsDisplayed()); // no components to add
+    SceneSettingsSource* environment = inspector->SettingsOf(u8"Environment");
+    REQUIRE(environment != nullptr);
+
+    auto* system = page->EditContext().FindSystemBySettingsType(&TypeOf<engine::render::EnvironmentSettings>());
+    REQUIRE(system != nullptr);
+    const auto turbidity = [&]() { return static_cast<engine::render::EnvironmentSettings*>(page->EditContext().SettingsEditTarget(&TypeOf<engine::render::EnvironmentSettings>(), Guid{}))->turbidity; };
+    const f32 before = turbidity();
+    gui::PropertyWrite write;
+    write.Value = gui::Variant(7.5);
+    environment->BeginEdit(u8"turbidity");
+    environment->CommitEdit(u8"turbidity", write);
+    CHECK(turbidity() == doctest::Approx(7.5f));
+    page->Commands().Undo();
+    CHECK(turbidity() == doctest::Approx(before));
+    page->Commands().Redo();
+    CHECK(turbidity() == doctest::Approx(7.5f));
+
+    // A block that can use a profile offers to make one while it uses its own values.
+    if (system->SettingsProfileType() != nullptr)
+    {
+        CHECK(inspector->ShowsProfileAction(u8"Environment", u8"Make Profile"));
+        CHECK_FALSE(inspector->ShowsProfileAction(u8"Environment", u8"Open Profile"));
+    }
+
+    // An entity selected again: its inspector, not the scene's.
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->Kind() == StringView(u8"Entity"));
+    page->OnClose();
+}
+
+TEST_CASE("inspector: the physics block's collision groups: Default first, a new group collides with all, a pair both ways, only the last removed")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    Shown shown(*page);
+    shown.Click(*page->Hierarchy()->Tree(), 0); // the scene's row
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    gui::IPropertySource* groups = inspector->ExtraSource(u8"Physics", 0);
+    REQUIRE(groups != nullptr);
+    CHECK_FALSE(inspector->PathOf(u8"Physics", u8"groups").IsEmpty());
+    using engine::physics::PhysicsSceneSettings;
+    const auto settings = [&]()
+    { return static_cast<PhysicsSceneSettings*>(page->EditContext().FindSystemBySettingsType(&TypeOf<PhysicsSceneSettings>())->SettingsInstance()); };
+
+    // None stored: one, Default.
+    CHECK(groups->GetValue(u8"groups", 0).AsInt() == 1);
+    CHECK(groups->GetValue(u8"groups.0.name", 0).AsString() == StringView(u8"Default"));
+    gui::ListEdit add;
+    add.Kind = gui::ListEdit::Op::Insert;
+    add.Index = 0; // at the end whatever the place
+    CHECK(groups->EditList(u8"groups", add));
+    REQUIRE(settings()->groupNames.Size() == 2u);
+    CHECK(settings()->groupNames[0] == String(u8"Default"));
+    CHECK(settings()->groupNames[1] == String(u8"Group 1"));
+    CHECK(groups->GetValue(u8"groups.1.collides", 0).AsInt() == 3);
+    Array<gui::PropertyInfo> rows;
+    groups->GetProperties(u8"groups.1", rows);
+    REQUIRE(rows.Size() == 2u);
+    CHECK(rows[1].Kind == gui::PropertyKind::Flags);
+    REQUIRE(rows[1].Choices.Size() == 2u);
+    CHECK(rows[1].Choices[1].Name == String(u8"Group 1"));
+
+    // Group 1 no longer collides with Default: both rows say so.
+    gui::PropertyWrite off;
+    off.Value = gui::Variant(i64{2});
+    off.Mask = 1u;
+    groups->CommitEdit(u8"groups.1.collides", off);
+    CHECK((settings()->groupCollides[1] & 1u) == 0u);
+    CHECK((settings()->groupCollides[0] & 2u) == 0u);
+    CHECK(groups->GetValue(u8"groups.0.collides", 0).AsInt() == 1);
+    gui::PropertyWrite rename;
+    rename.Value = gui::Variant(StringView(u8"Players"));
+    groups->CommitEdit(u8"groups.1.name", rename);
+    CHECK(settings()->groupNames[1] == String(u8"Players"));
+    page->Commands().Undo(); // the rename alone
+    CHECK(settings()->groupNames[1] == String(u8"Group 1"));
+    CHECK((settings()->groupCollides[0] & 2u) == 0u);
+
+    // Only the last: the others keep their bodies' indices.
+    gui::ListEdit remove;
+    remove.Kind = gui::ListEdit::Op::Remove;
+    remove.Index = 0;
+    CHECK_FALSE(groups->EditList(u8"groups", remove));
+    remove.Index = 1;
+    CHECK(groups->EditList(u8"groups", remove));
+    CHECK(groups->GetValue(u8"groups", 0).AsInt() == 1);
+    remove.Index = 0;
+    CHECK_FALSE(groups->EditList(u8"groups", remove)); // Default stays
+    page->Commands().Undo(); // the remove
+    CHECK(groups->GetValue(u8"groups", 0).AsInt() == 2);
+    page->OnClose();
+}
+
+TEST_CASE("level script: the Level class's properties as rows; an edit an override on the scene's block, one undo step; a revert drops it")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneEditContext& edit = page->EditContext();
+    using engine::script::SceneScriptSettings;
+    const auto settings = [&]()
+    { return static_cast<SceneScriptSettings*>(edit.FindSystemBySettingsType(&TypeOf<SceneScriptSettings>())->SettingsInstance()); };
+    LevelScriptSource source(edit, &bed.context);
+    Array<gui::PropertyInfo> none;
+    source.GetProperties(StringView{}, none);
+    CHECK(none.IsEmpty()); // no Level class: nothing to author
+
+    RefPtr<foundation::script::ScriptClass> level = MakeRef<foundation::script::ScriptClass>(DefaultAllocator());
+    level->className = String(u8"Level");
+    foundation::script::ScriptPropertyDesc speed;
+    speed.name = String(u8"speed");
+    speed.hash = 41;
+    speed.type = foundation::script::ScriptPropertyType::Float;
+    speed.defaultValue.kind = speed.type;
+    speed.defaultValue.number = 2.0;
+    level->properties.PushBack(speed);
+    foundation::script::ScriptPropertyDesc spawn;
+    spawn.name = String(u8"spawn");
+    spawn.hash = 42;
+    spawn.type = foundation::script::ScriptPropertyType::Vec3;
+    spawn.defaultValue.kind = spawn.type;
+    level->properties.PushBack(spawn);
+    settings()->script.SetDirect(level);
+    source.Refresh();
+
+    Array<gui::PropertyInfo> rows;
+    source.GetProperties(StringView{}, rows);
+    REQUIRE(rows.Size() == 2u);
+    CHECK(rows[0].DisplayName == String(u8"speed"));
+    CHECK(rows[0].Kind == gui::PropertyKind::Float);
+    CHECK(rows[1].Kind == gui::PropertyKind::Group);
+    Array<gui::PropertyInfo> parts;
+    source.GetProperties(rows[1].Name.AsView(), parts);
+    CHECK(parts.Size() == 3u);
+    CHECK(source.GetValue(u8"p41", 0).AsFloat() == doctest::Approx(2.0));
+
+    gui::PropertyWrite fast;
+    fast.Value = gui::Variant(5.0);
+    source.CommitEdit(u8"p41", fast);
+    REQUIRE(settings()->FindOverride(41) != nullptr);
+    CHECK(source.GetValue(u8"p41", 0).AsFloat() == doctest::Approx(5.0));
+    gui::PropertyWrite y;
+    y.Value = gui::Variant(3.0);
+    source.CommitEdit(u8"p42.y", y);
+    REQUIRE(settings()->FindOverride(42) != nullptr);
+    CHECK(settings()->FindOverride(42)->value.vector.y == doctest::Approx(3.0f));
+    page->Commands().Undo(); // the part alone
+    CHECK(settings()->FindOverride(42) == nullptr);
+    CHECK(settings()->FindOverride(41) != nullptr);
+    CHECK(source.Revert(u8"p41"));
+    CHECK(settings()->FindOverride(41) == nullptr);
+    CHECK(source.GetValue(u8"p41", 0).AsFloat() == doctest::Approx(2.0));
+    page->Commands().Undo(); // the revert
+    CHECK(settings()->FindOverride(41) != nullptr);
+    page->OnClose();
+}

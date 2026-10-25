@@ -278,6 +278,11 @@ namespace editor
         m_syncing = false;
     }
 
+    bool SceneHierarchyView::SceneSelected() const
+    {
+        return m_tree != nullptr && m_tree->IsIdSelected(kSceneRowId);
+    }
+
     void SceneHierarchyView::OpenWayTo(const Guid& entity)
     {
         if (m_tree == nullptr)

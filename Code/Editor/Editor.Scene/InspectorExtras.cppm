@@ -3,13 +3,14 @@
 
 // Editor::Scene - :inspector_extras partition.
 //
-// What a component's section in the inspector shows besides its reflected rows
-// (Documentation/Specs/editor-gui.md, 5.3, layer 4, part 3): notices that hold while something is
-// so (a rigid body with no collider), actions (a zone's Bake) and sections of their own (a script
-// component's behaviours). The inspector asks the
-// component's type for them, so it names no component: a domain registers its type's extras
-// (RegisterSceneEditor registers the built-in ones), and the inspector adds what a provider gives
-// under the component's header, a notice shown only while its message is not empty.
+// What a section in the inspector shows besides its reflected rows, a component's or, while the
+// scene is selected, a settings block's (Documentation/Specs/editor-gui.md, 5.3, layer 4, parts 3
+// and 4): notices that hold while something is so (a rigid body with no collider), actions (a
+// zone's Bake) and sections of their own (a script component's behaviours, the physics block's
+// collision groups). The inspector asks the section's type for them, so it names no type: a domain
+// registers its type's extras (RegisterSceneEditor registers the built-in ones), and the inspector
+// adds what a provider gives under the section's header, a notice shown only while its message is
+// not empty.
 
 module;
 #include "Core/Prelude.h"
@@ -25,7 +26,8 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// What a provider fills, for the entities the inspector shows (each has the component).
+    /// What a provider fills, for the entities the inspector shows (each has the component; none for
+    /// a settings block's).
     class InspectorExtras
     {
     public:

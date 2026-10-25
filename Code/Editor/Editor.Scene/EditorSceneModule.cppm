@@ -38,6 +38,8 @@ export import :hierarchy;
 export import :entity_ref_editor;
 export import :inspector_extras;
 export import :script_behaviors_source;
+export import :scene_settings_source;
+export import :settings_extra_sources;
 export import :builtin_inspector_extras;
 export import :inspector;
 export import :scene_viewport;

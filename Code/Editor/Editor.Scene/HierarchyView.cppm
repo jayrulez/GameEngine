@@ -103,6 +103,9 @@ export namespace editor
         void Search(StringView text);
         /// The in-place rename of an entity's row (F2, the menu's Rename).
         void BeginRename(const Guid& entity);
+        /// Whether the scene's own row is selected (ruling 12: the scene's settings are the scene
+        /// selected; the inspector shows them).
+        [[nodiscard]] bool SceneSelected() const;
         /// The menu of the row at item `item` (-1: the background's) at `at`, where the press was.
         void ShowMenu(i32 item, Float2 at);
 

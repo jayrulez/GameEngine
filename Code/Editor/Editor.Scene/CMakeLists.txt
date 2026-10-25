@@ -44,6 +44,8 @@ target_sources(Editor.Scene
         InspectorViewImpl.cpp
         EntityRefEditorImpl.cpp
         ScriptBehaviorsSourceImpl.cpp
+        SceneSettingsSourceImpl.cpp
+        SettingsExtraSourcesImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
@@ -77,6 +79,8 @@ target_sources(Editor.Scene
             EntityRefEditor.cppm
             InspectorExtras.cppm
             ScriptBehaviorsSource.cppm
+            SceneSettingsSource.cppm
+            SettingsExtraSources.cppm
             BuiltinInspectorExtras.cppm
             InspectorView.cppm
             SceneViewport.cppm

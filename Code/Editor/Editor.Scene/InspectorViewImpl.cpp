@@ -23,6 +23,8 @@ import :edit;
 import :inspector;
 import :entity_ref_editor;
 import :inspector_extras;
+import :scene_settings_source;
+import :settings_profiles;
 
 using namespace foundation::core;
 namespace gui = foundation::gui;
@@ -107,7 +109,7 @@ namespace editor
     class SceneInspectorView::Extras final : public InspectorExtras
     {
     public:
-        Extras(SceneInspectorView& view, IAllocator& allocator) : bag(allocator, view.m_entities.Size()), m_view(view), m_notices(allocator), m_actions(allocator)
+        Extras(SceneInspectorView& view, IAllocator& allocator, usize objects) : bag(allocator, objects), m_view(view), m_notices(allocator), m_actions(allocator)
         {
             Extras* self = this;
             bag.SetOnCommit([self](const gui::PropertyBag::Commit& commit)
@@ -135,7 +137,20 @@ namespace editor
             info.Description = String(description);
             for (usize i = 0; i < bag.ObjectCount(); ++i)
                 bag.SetValue(name, i, gui::Variant(label));
-            m_actions.PushBack(Action{String(name), Move(run)});
+            m_actions.PushBack(Action{String(name), Move(run), {}});
+        }
+        /// An action shown only while `shown` says so.
+        void AddShownAction(StringView name, StringView label, StringView description, Function<void()> run, Function<bool()> shown)
+        {
+            AddAction(name, label, description, Move(run));
+            m_actions.Back().shown = Move(shown);
+            if (gui::PropertyInfo* info = bag.FindInfo(name))
+                info->Visible = !m_actions.Back().shown || m_actions.Back().shown();
+        }
+        [[nodiscard]] bool IsShown(StringView name)
+        {
+            const gui::PropertyInfo* info = bag.FindInfo(name);
+            return info != nullptr && info->Visible;
         }
         void AddSection(UniquePtr<gui::IPropertySource> source, Function<void()> refresh) override
         {
@@ -165,6 +180,18 @@ namespace editor
                 if (info != nullptr && info->Visible == message.IsEmpty())
                 {
                     info->Visible = !message.IsEmpty();
+                    shown = true;
+                }
+            }
+            for (const Action& action : m_actions)
+            {
+                if (!action.shown)
+                    continue;
+                const bool visible = action.shown();
+                gui::PropertyInfo* info = bag.FindInfo(action.name.AsView());
+                if (info != nullptr && info->Visible != visible)
+                {
+                    info->Visible = visible;
                     shown = true;
                 }
             }
@@ -205,6 +232,7 @@ namespace editor
         {
             String name;
             Function<void()> run;
+            Function<bool()> shown; // empty: always
         };
         struct Section
         {
@@ -265,6 +293,7 @@ namespace editor
     {
         u64 hash = 14695981039346656037ull;
         hash = Mix(hash, m_edit->Scene().Revision());
+        hash = Mix(hash, ShowsScene() ? 1u : 0u);
         scene::Scene& scene = m_edit->Scene();
         for (const Guid& entity : m_edit->EntitySelection().Items())
         {
@@ -312,6 +341,7 @@ namespace editor
     {
         m_sections.Clear();
         m_components.Clear();
+        m_settings.Clear();
         m_transform.Reset();
         m_active.Reset();
         m_transforms.Clear();
@@ -326,13 +356,19 @@ namespace editor
             if (scene.FindEntity(entity).IsAssigned())
                 m_entities.PushBack(entity);
         const bool any = !m_entities.IsEmpty();
+        const bool sceneShown = !any && ShowsScene();
         if (auto* state = Find<gui::Node>(u8"inspector-state"))
-            state->SetDisplayed(!any);
+            state->SetDisplayed(!any && !sceneShown);
         if (m_grid != nullptr)
-            m_grid->SetDisplayed(any);
+            m_grid->SetDisplayed(any || sceneShown);
         if (auto* add = Find<gui::Node>(u8"inspector-add"))
-            add->SetDisplayed(any);
+            add->SetDisplayed(any); // a scene has settings, not components
         BuildHead();
+        if (sceneShown)
+        {
+            BuildScene();
+            return;
+        }
         if (!any)
             return;
 
@@ -365,6 +401,19 @@ namespace editor
         auto* kind = Find<gui::Label>(u8"inspector-kind");
         auto* icon = Find<gui::Image>(u8"inspector-icon");
         const usize count = m_entities.Size();
+        if (count == 0 && ShowsScene())
+        {
+            if (name != nullptr)
+            {
+                name->SetText(m_services.sceneName ? m_services.sceneName() : scene.Name());
+                name->SetEnabled(false); // the asset's name: Save As names another
+            }
+            if (kind != nullptr)
+                kind->SetText(u8"Scene");
+            if (icon != nullptr)
+                icon->SetSource(String(m_services.sceneIcon.IsEmpty() ? StringView(u8"Editor/Icons/Types/SceneDocument.svg") : m_services.sceneIcon));
+            return;
+        }
         if (name != nullptr)
         {
             name->SetText(count == 1 ? scene.GetEntityName(scene.FindEntity(m_entities[0])) : StringView{});
@@ -454,28 +503,36 @@ namespace editor
                                  SceneInspectorView* self = this;
                                  section->source->SetOnChange([self, type](const gui::ReflectedChange& change) { self->ComponentChanged(type, change); });
                                  m_sections.Add(section->key.AsView(), section->title.AsView(), *section->source);
-                                 BuildExtras(*section);
+                                 section->extras = BuildExtras(*section->type, section->key.AsView(), section->title.AsView(), m_entities.Size());
                                  m_components.PushBack(Move(section));
                              });
     }
 
-    void SceneInspectorView::BuildExtras(ComponentSection& section)
+    UniquePtr<SceneInspectorView::Extras> SceneInspectorView::BuildExtras(const TypeInfo& type, StringView key, StringView title, usize objects)
     {
-        auto extras = MakeUnique<Extras>(m_allocator, *this, m_allocator);
-        InspectorExtrasRegistry::Get().ForEach(*section.type, [&](const InspectorExtrasProvider& provider) { provider(*extras); });
+        auto extras = MakeUnique<Extras>(m_allocator, *this, m_allocator, objects);
+        InspectorExtrasRegistry::Get().ForEach(type, [&](const InspectorExtrasProvider& provider) { provider(*extras); });
         if (extras->IsEmpty())
-            return;
+            return nullptr;
         extras->Refresh();
-        // Under the component's header: the grid groups a title's rows together.
+        // Under the section's header: the grid groups a title's rows together.
         if (extras->HasRows())
-            m_sections.Add(Format(u8"x{}", section.key).AsView(), section.title.AsView(), extras->bag);
+            m_sections.Add(Format(u8"x{}", key).AsView(), title, extras->bag);
         for (usize i = 0; i < extras->SourceCount(); ++i)
-            m_sections.Add(Format(u8"y{}{}", section.key, i).AsView(), section.title.AsView(), extras->SourceAt(i));
-        section.extras = Move(extras);
+            m_sections.Add(Format(u8"y{}{}", key, i).AsView(), title, extras->SourceAt(i));
+        return extras;
     }
 
     void SceneInspectorView::RefreshExtras()
     {
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+        {
+            section->source->Refresh();
+            if (section->profile)
+                section->profile->Refresh();
+            if (section->extras)
+                section->extras->Refresh();
+        }
         for (const UniquePtr<ComponentSection>& section : m_components)
             if (section->extras)
                 section->extras->Refresh();
@@ -486,7 +543,22 @@ namespace editor
         for (const UniquePtr<ComponentSection>& section : m_components)
             if (section->title.AsView() == title && section->extras)
                 return section->extras->Text(name);
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+            if (section->title.AsView() == title && section->extras)
+                return section->extras->Text(name);
         return String{};
+    }
+
+    gui::IPropertySource* SceneInspectorView::ExtraSource(StringView title, usize index) const
+    {
+        const Extras* extras = nullptr;
+        for (const UniquePtr<ComponentSection>& section : m_components)
+            if (section->title.AsView() == title)
+                extras = section->extras.Get();
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+            if (section->title.AsView() == title)
+                extras = section->extras.Get();
+        return extras != nullptr && index < extras->SourceCount() ? &extras->SourceAt(index) : nullptr;
     }
 
     bool SceneInspectorView::RunExtra(StringView title, StringView name)
@@ -494,6 +566,95 @@ namespace editor
         for (const UniquePtr<ComponentSection>& section : m_components)
             if (section->title.AsView() == title && section->extras)
                 return section->extras->Run(name);
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+            if (section->title.AsView() == title && section->extras)
+                return section->extras->Run(name);
+        return false;
+    }
+
+    bool SceneInspectorView::ShowsScene() const
+    {
+        return m_services.sceneSelected && m_services.sceneSelected();
+    }
+
+    void SceneInspectorView::BuildScene()
+    {
+        EditorContext* context = m_services.context;
+        SceneEditContext* edit = m_edit;
+        Array<const TypeInfo*> types;
+        m_edit->Scene().ForEachSystem([&](foundation::scene::SceneSystem& system)
+                                      {
+                                          const TypeInfo* type = system.SettingsType();
+                                          if (type != nullptr && type->name != nullptr && type->name[0] != '<')
+                                              types.PushBack(type);
+                                      });
+        for (const TypeInfo* type : types)
+        {
+            auto section = MakeUnique<SettingsSection>(m_allocator);
+            section->title = TitleOf(*type);
+            if (section->title.AsView().EndsWith(u8" Settings"))
+                section->title = String(section->title.AsView().SubStr(0, section->title.Size() - 9));
+            section->source = MakeUnique<SceneSettingsSource>(m_allocator, m_allocator, *m_edit, *type, m_format);
+            const String key = Format(u8"s{}", m_settings.Size());
+            section->key = key;
+            // A block that can use a profile: where its values are, and the profile's verbs.
+            foundation::scene::SceneSystem* system = m_edit->FindSystemBySettingsType(type);
+            if (system != nullptr && system->SettingsProfileType() != nullptr && context != nullptr)
+            {
+                auto profile = MakeUnique<Extras>(m_allocator, *this, m_allocator, 1u);
+                const auto inUse = [edit, type]() -> Guid
+                {
+                    foundation::scene::SceneSystem* s = edit->FindSystemBySettingsType(type);
+                    return s != nullptr ? s->SettingsProfile() : Guid{};
+                };
+                profile->AddShownAction(u8"Open Profile", u8"Open Profile", u8"The values below are this profile's: an edit changes every scene using it (written to the profile on save).",
+                                        [context, inUse]()
+                                        {
+                                            if (context->OpenAsset && !inUse().IsNil())
+                                                context->OpenAsset(inUse());
+                                        },
+                                        [inUse]() { return !inUse().IsNil(); });
+                const String profileName = Format(u8"{} {}", m_edit->Scene().Name(), section->title);
+                profile->AddShownAction(u8"Make Profile", u8"Make Profile", u8"Saves these values as a new profile asset, and this scene uses it.",
+                                        [context, edit, type, profileName]()
+                                        {
+                                            if (foundation::content::Instance* made = MakeSettingsProfile(*context, *edit, type, profileName.AsView()))
+                                                context->Notify(NoticeKind::Success, Format(u8"Made profile '{}'; this scene uses it.", made->Name()).AsView());
+                                        },
+                                        [inUse]() { return inUse().IsNil(); });
+                profile->AddShownAction(u8"Copy Into Scene", u8"Copy Into Scene", u8"Copies the profile's values into this scene, which then uses its own (the profile is unchanged).",
+                                        [edit, type]() { (void)edit->MutateSceneSettings(type, [](foundation::scene::SceneSystem& s) { s.CopySettingsProfileIntoScene(); }); },
+                                        [inUse]() { return !inUse().IsNil(); });
+                m_sections.Add(Format(u8"p{}", key).AsView(), section->title.AsView(), profile->bag);
+                section->profile = Move(profile);
+            }
+            m_sections.Add(key.AsView(), section->title.AsView(), *section->source);
+            section->extras = BuildExtras(*type, key.AsView(), section->title.AsView(), 1u);
+            m_settings.PushBack(Move(section));
+        }
+    }
+
+    SceneSettingsSource* SceneInspectorView::SettingsOf(StringView title) const
+    {
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+            if (section->title.AsView() == title)
+                return section->source.Get();
+        return nullptr;
+    }
+
+    bool SceneInspectorView::ShowsProfileAction(StringView title, StringView name) const
+    {
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+            if (section->title.AsView() == title && section->profile)
+                return section->profile->IsShown(name);
+        return false;
+    }
+
+    bool SceneInspectorView::RunProfileAction(StringView title, StringView name)
+    {
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+            if (section->title.AsView() == title && section->profile)
+                return section->profile->Run(name);
         return false;
     }
 
@@ -595,8 +756,8 @@ namespace editor
         scene.ForEachManager([&](scene::ComponentManagerBase& manager)
                              {
                                  const TypeInfo* type = manager.ComponentType();
-                                 if (type == nullptr || type->name == nullptr)
-                                     return;
+                                 if (type == nullptr || type->name == nullptr || type->name[0] == '<')
+                                     return; // not reflected: nothing to name or show
                                  // What an entity of the selection lacks and the manager can make.
                                  bool lacking = false;
                                  for (const Guid& entity : m_entities)
@@ -677,6 +838,12 @@ namespace editor
             out += u8" | ";
             out += section->title;
         }
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+        {
+            if (!out.IsEmpty())
+                out += u8" | ";
+            out += section->title;
+        }
         return out;
     }
 
@@ -689,6 +856,26 @@ namespace editor
         for (const UniquePtr<ComponentSection>& section : m_components)
             if (section->title.AsView() == title)
                 return m_sections.PathIn(section->key.AsView(), property);
+        // A settings block's: its own rows, else an extra source's (the collision groups).
+        const auto holds = [property](const gui::IPropertySource& source)
+        {
+            Array<gui::PropertyInfo> top;
+            source.GetProperties(StringView{}, top);
+            for (const gui::PropertyInfo& info : top)
+                if (info.Name.AsView() == property)
+                    return true;
+            return false;
+        };
+        for (const UniquePtr<SettingsSection>& section : m_settings)
+        {
+            if (section->title.AsView() != title)
+                continue;
+            if (holds(*section->source))
+                return m_sections.PathIn(section->key.AsView(), property);
+            for (usize i = 0; section->extras && i < section->extras->SourceCount(); ++i)
+                if (holds(section->extras->SourceAt(i)))
+                    return m_sections.PathIn(Format(u8"y{}{}", section->key, i).AsView(), property);
+        }
         return String{};
     }
 

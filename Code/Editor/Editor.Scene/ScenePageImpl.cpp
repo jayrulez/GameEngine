@@ -192,6 +192,9 @@ namespace editor
                                                  : Function<void(app::PickerRequest, gui::Node*)>{};
                 SceneEditorPage* self = this;
                 inspector.simulating = [self]() { return self->m_simulation.IsRunning(); };
+                inspector.sceneSelected = [self]() { return self->m_hierarchy && self->m_hierarchy->SceneSelected(); };
+                inspector.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
+                inspector.sceneName = [self]() { return self->m_title.AsView(); };
                 m_inspector = MakeUnique<SceneInspectorView>(Allocator(), Allocator(), *m_editContext, Move(inspector), *pane);
             }
 

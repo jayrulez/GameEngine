@@ -32,6 +32,26 @@ using namespace foundation::core;
 
 export namespace editor
 {
+    /// A script class's properties as a grid's rows (a behaviour's, a level's): each row named
+    /// `p<hash>`, its kind from the property's, a vector its three parts; values to and from the
+    /// grid's.
+    struct ScriptPropertyRows
+    {
+        /// The rows of `type`'s properties.
+        static void Describe(const foundation::script::ScriptClass& type, Array<foundation::gui::PropertyInfo>& out);
+        /// A vector property's parts (`x`, `y`, `z`), under its row; none for any other.
+        static void Parts(const foundation::script::ScriptPropertyDesc& property, Array<foundation::gui::PropertyInfo>& out);
+        /// The property a row names (`p<hash>`); null when none.
+        [[nodiscard]] static const foundation::script::ScriptPropertyDesc* Find(const foundation::script::ScriptClass& type, StringView row);
+        /// A row's value: `value` as the property's kind (`part` a vector's, else -1).
+        [[nodiscard]] static foundation::gui::Variant ToGrid(const foundation::script::ScriptPropertyValue& value, foundation::script::ScriptPropertyType type, i32 part);
+        /// `write` over `old` as the property's kind.
+        [[nodiscard]] static foundation::script::ScriptPropertyValue FromGrid(foundation::script::ScriptPropertyValue old, foundation::script::ScriptPropertyType type, i32 part,
+                                                                              const foundation::gui::Variant& write);
+        /// A row's name (`p<hash>`) and a part's index (`x`: 0) parsed from what follows a source's own path.
+        static void ParseRow(StringView rest, String& row, i32& part);
+    };
+
     class ScriptBehaviorsSource final : public foundation::gui::IPropertySource
     {
     public:

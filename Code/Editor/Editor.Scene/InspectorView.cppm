@@ -18,6 +18,10 @@
 //     its prefab (while it overrides it), remove; Add Component is the picker over the component
 //     types the selection lacks, by category, each with its icon and its description.
 //   - A search narrows the rows. While the page simulates the grid is read only, and says so.
+//   - The scene selected (its hierarchy row), the scene's settings: a section per system's block,
+//     each property showing and editing where it lands (the block's own values, or its profile's
+//     while it uses one), a block's profile actions under its header (open it, make one from these
+//     values, copy its values into the scene).
 //   - Built again when the selection, the scene's shape or the components change; otherwise only
 //     the values are shown again, so a gizmo's drag or an undo shows as it happens.
 
@@ -36,6 +40,7 @@ import editor.app;
 import :edit;
 import :entity_ref_editor;
 import :inspector_extras;
+import :scene_settings_source;
 
 using namespace foundation::core;
 
@@ -67,6 +72,11 @@ export namespace editor
             Function<void(app::PickerRequest request, foundation::gui::Node* anchor)> pick;
             /// Whether the page simulates (the grid read only meanwhile).
             Function<bool()> simulating;
+            /// Whether the scene's own row is selected (ruling 12: then the scene's settings show).
+            Function<bool()> sceneSelected;
+            /// The scene's icon (a prefab's or a scene's document) and name, for its head.
+            StringView sceneIcon;
+            Function<StringView()> sceneName;
         };
 
         /// The inspector over `edit`'s selection in `pane` (the markup's: `inspector-icon`,
@@ -100,11 +110,20 @@ export namespace editor
         /// A header's menu as the grid builds it, at `headerPath`.
         bool OpenHeaderMenu(StringView headerPath);
         [[nodiscard]] StringView Kind() const;
-        /// A component section's extras' row at `name` (a notice's text, an action's label); empty
-        /// when there is none or it is hidden.
+        /// A settings block's section by its title; null: none.
+        [[nodiscard]] SceneSettingsSource* SettingsOf(StringView title) const;
+        /// A settings block's profile action `name` ("Open Profile", "Make Profile", "Copy Into
+        /// Scene"): whether it shows now; Run runs it.
+        [[nodiscard]] bool ShowsProfileAction(StringView title, StringView name) const;
+        bool RunProfileAction(StringView title, StringView name);
+        /// A section's extras' row at `name` (a notice's text, an action's label); empty when
+        /// there is none or it is hidden.
         [[nodiscard]] String ExtraText(StringView title, StringView name) const;
-        /// Runs a component section's action `name`, as its button does.
+        /// Runs a section's action `name`, as its button does.
         bool RunExtra(StringView title, StringView name);
+        /// A section's extras' source `index` (a script component's behaviours, a block's
+        /// collision groups); null: none.
+        [[nodiscard]] foundation::gui::IPropertySource* ExtraSource(StringView title, usize index) const;
 
     private:
         // A component's extras: a bag under its header, its notices asked again as values show,
@@ -126,7 +145,10 @@ export namespace editor
         void BuildTransform();
         void BuildComponents();
         void PullTransforms();
-        void BuildExtras(ComponentSection& section);
+        // A type's extras (a component's, a settings block's) under its section; null: none.
+        [[nodiscard]] UniquePtr<Extras> BuildExtras(const TypeInfo& type, StringView key, StringView title, usize objects);
+        void BuildScene();
+        [[nodiscard]] bool ShowsScene() const;
         void RefreshExtras();
         void HeaderMenu(foundation::gui::Menu& menu, const foundation::gui::PropertyRow& row);
         void ComponentChanged(const TypeInfo* type, const foundation::gui::ReflectedChange& change);
@@ -151,6 +173,16 @@ export namespace editor
         Array<Transform> m_transforms;
         UniquePtr<foundation::gui::ReflectedPropertySource> m_transform;
         Array<UniquePtr<ComponentSection>> m_components;
+        // The scene's settings while it is selected: a source per block, a block's profile actions.
+        struct SettingsSection
+        {
+            String key;
+            String title;
+            UniquePtr<SceneSettingsSource> source;
+            UniquePtr<Extras> profile; // null: the block has no profile
+            UniquePtr<Extras> extras;  // null: none
+        };
+        Array<UniquePtr<SettingsSection>> m_settings;
         RefPtr<foundation::gui::Menu> m_menu;
         String m_filter;
         u64 m_signature = ~0ull;

@@ -443,7 +443,14 @@ The layers:
    their own) the inspector asks, so it names no component: the rigid body's notice, the zone's
    Bake (at once on the main thread: a bake as a job waits for the navigation bake's one call to be
    split into a collect here and a bake on a worker), the script component's behaviours (a source
-   of their own); (3) the bespoke sections; (4) the scene's settings. In full: its head (icon, name, kind), a search over the properties, the selection's
+   of their own); (4) the scene's settings while its row is selected (ruling 12): a section per
+   settings block, each property where the edit context says it lands (a profile's values while
+   the block uses one, else the block's own), a block's profile verbs (open, make, copy into the
+   scene), and the rows reflection does not show as a settings type's extras through the same
+   registry: the physics block's collision groups (a list, each its name and the groups it
+   collides with, a pair both ways; only the last removed, as a body keeps its group by index)
+   and the scene script block's Level properties (a behaviour's rows, shared). In full: its head
+   (icon, name, kind), a search over the properties, the selection's
    components on the property grid with the editors by hint (X4); a component's verbs (copy,
    remove, reset, revert to prefab); Add Component on the picker (by category, with icons and each
    one's description); an entity reference through the entity picker (the picker's tree request);

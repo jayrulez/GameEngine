@@ -238,7 +238,7 @@ TEST_CASE("assets: the type filter keeps one type, from the types the project ha
     CHECK(bed.view->StateTitle() == StringView(u8"Nothing in Content/Sounds yet"));
 }
 
-TEST_CASE("assets: tiles or a list, kept with the project; a favourite starred")
+TEST_CASE("assets: tiles or a list, kept with the project; a favourite starred; a group by its name alone")
 {
     Bed bed;
     CHECK(bed.view->ShowsTiles()); // tiles until the project says otherwise
@@ -252,6 +252,9 @@ TEST_CASE("assets: tiles or a list, kept with the project; a favourite starred")
     REQUIRE(cell != nullptr);
     CHECK_FALSE(cell->IsTile());
     CHECK(cell->ShowsStar());
+    AssetCell* group = bed.Cell(bed.RowOf(u8"Models"));
+    REQUIRE(group != nullptr);
+    CHECK(group->Kind().IsEmpty()); // its folder says it is a group: no words for it
 }
 
 TEST_CASE("assets: it builds again when the database's shape moves, however it moved; Reveal shows an asset where it lives")

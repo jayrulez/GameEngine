@@ -96,7 +96,7 @@ export namespace editor::app
                 AddClass(u8"group");
             else
                 RemoveClass(u8"group");
-            SetTooltip(m_tile ? Format(u8"{} ({})", shown.Name, shown.Kind).AsView() : StringView{});
+            SetTooltip(!m_tile ? StringView{} : shown.Kind.IsEmpty() ? shown.Name.AsView() : Format(u8"{} ({})", shown.Name, shown.Kind).AsView());
         }
         [[nodiscard]] StringView Name() const { return m_name->GetText(); }
         [[nodiscard]] StringView Kind() const { return m_kind->GetText(); }
@@ -662,9 +662,7 @@ export namespace editor::app
             {
                 shown.Group = true;
                 shown.Glyph = String(u8"Editor/Icons/folder.svg");
-                shown.Name = String(row.group->Name());
-                const usize count = row.group->Groups().Size() + row.group->Instances().Size();
-                shown.Kind = count == 1 ? String(u8"Group, 1 item") : Format(u8"Group, {} items", count);
+                shown.Name = String(row.group->Name()); // its folder says what it is
             }
             else
             {

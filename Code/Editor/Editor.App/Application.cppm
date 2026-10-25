@@ -37,6 +37,7 @@ import :action_shortcuts;
 import :command_palette;
 import :preferences_dialog;
 import :project_home;
+import :project_manager_view;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -145,6 +146,12 @@ export namespace editor::app
         void OpenCommandPalette();
         bool ConfirmExit();
         void OpenPreferences();
+        void EnterManagerMode();
+        void OpenFromManager(StringView directory);
+        void CreateFromManager(StringView directory, StringView name);
+        bool OpenProject(StringView directory, bool seed);
+        void CloseProjectToManager();
+        void Later(Function<void()> work);
         void OpenDefaultScene(editor::EditorProject& project);
         [[nodiscard]] EditorAssetCreation::Services CreationServices();
         [[nodiscard]] EditorSession::Services SessionServices();
@@ -178,6 +185,7 @@ export namespace editor::app
         UniquePtr<CommandPalette> m_palette;    // every action by name (View > Command Palette)
         UniquePtr<EditorPreferencesDialog> m_preferences; // Edit > Preferences
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
+        UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

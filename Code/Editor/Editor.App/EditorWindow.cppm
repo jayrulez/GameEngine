@@ -247,6 +247,21 @@ export namespace editor::app
         /// The status bar: its message, the job running, the agent; null with no interface.
         [[nodiscard]] EditorStatusBar* StatusBar() const noexcept { return m_status.Get(); }
 
+        /// A screen over the whole window in place of the frame (the project manager); null puts
+        /// the frame back.
+        void ShowScreen(RefPtr<gui::Node> screen)
+        {
+            if (!m_root || !m_frame)
+                return;
+            if (m_screen)
+                m_screen->RemoveFromParent();
+            m_screen = Move(screen);
+            m_frame->SetDisplayed(!m_screen);
+            if (m_screen)
+                m_root->AddChild(m_screen.Get());
+        }
+        [[nodiscard]] bool ShowsScreen() const noexcept { return m_screen.Get() != nullptr; }
+
         /// A frame's node by its id (the dock's host, the status bar's items).
         [[nodiscard]] gui::Node* FindById(StringView id) const { return m_frame ? FindIn(*m_frame, id) : nullptr; }
 
@@ -276,6 +291,7 @@ export namespace editor::app
             m_reload.Reset();
             if (m_host && m_window != nullptr)
                 m_host->DetachWindow(*m_window);
+            m_screen = {};
             m_toasts = {};
             m_status.Reset();
             m_frame = {};
@@ -353,6 +369,7 @@ export namespace editor::app
         RefPtr<gui::SceneRoot> m_root;
         RefPtr<gui::Node> m_frame;
         RefPtr<gui::ToastHost> m_toasts;
+        RefPtr<gui::Node> m_screen; // over the window in place of the frame, while shown
         UniquePtr<EditorStatusBar> m_status;
         UniquePtr<gui::Effect> m_reload; // the sheet again when the editor's files change
         f32 m_sinceSweep = 0.0f;

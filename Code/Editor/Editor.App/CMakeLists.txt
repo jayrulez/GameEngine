@@ -41,6 +41,7 @@ target_sources(Editor.App
             PreferencesDialog.cppm
             ProjectPicture.cppm
             ProjectHome.cppm
+            ProjectManagerView.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

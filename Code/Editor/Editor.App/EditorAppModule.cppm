@@ -24,6 +24,7 @@ export import :shortcut_capture;
 export import :preferences_dialog;
 export import :project_picture;
 export import :project_home;
+export import :project_manager_view;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

@@ -26,6 +26,7 @@ import engine.input; // the embedded runtime's scene-input policy
 import engine.ui;
 import engine.gui;
 import editor.core;
+import engine.project; // ProjectSettings (a folder probed for a project)
 
 using namespace foundation::core;
 
@@ -224,8 +225,10 @@ namespace editor::app
         BuildMenus();
 
         if (m_config.startInProjectManager)
-            // The project manager comes back with its port (X3, layer 13).
-            m_context.SetStatus(u8"No project: pass one on the command line (the project manager is not on the GUI yet).");
+        {
+            ReportStartup(u8"Opening the project manager", 0.80f);
+            EnterManagerMode();
+        }
         else
         {
             ReportStartup(Format(u8"Opening {}", PathFilename(m_config.projectDirectory.AsView())).AsView(), 0.70f);
@@ -413,6 +416,162 @@ namespace editor::app
         (void)m_preferences->Open(*root);
     }
 
+    // `work` at the GUI's next drain: never inside the click that asked (a screen swap takes away
+    // the button that was clicked); at once with no GUI.
+    void EditorApplication::Later(Function<void()> work)
+    {
+        gui::MutationQueue* queue = m_window.Root() != nullptr ? m_window.Root()->GetMutationQueue() : nullptr;
+        if (queue == nullptr)
+            work();
+        else
+            queue->Enqueue(Move(work));
+    }
+
+    // The project manager over the whole window (made the first time, its list probed again after).
+    void EditorApplication::EnterManagerMode()
+    {
+        if (!m_window.IsOpen())
+            return;
+        if (!m_manager)
+        {
+            ProjectManagerView::Services services;
+            services.controller = &m_projectManager;
+            services.dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
+            EditorApplication* self = this;
+            services.open = [self](StringView directory)
+            {
+                const String path(directory);
+                self->Later([self, path]() { self->OpenFromManager(path.AsView()); });
+            };
+            services.create = [self](StringView directory, StringView name)
+            {
+                const String path(directory);
+                const String projectName(name);
+                self->Later([self, path, projectName]() { self->CreateFromManager(path.AsView(), projectName.AsView()); });
+            };
+            services.storeChanged = [self]() { (void)editor::SaveEditorSettingsToUserData(self->m_editorSettings); };
+            services.loadMarkup = [self](StringView path) { return self->m_window.LoadMarkup(path); };
+            m_manager = MakeUnique<ProjectManagerView>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(ProjectManagerView::kPath));
+        }
+        else
+            m_manager->Rebuild(); // back from a project: probed again
+        m_manager->SetStatus({});
+        m_window.ShowScreen(m_manager->Content());
+    }
+
+    // Opens a project from the manager: one saved by another engine version asks first (the
+    // controller decides and words it; a backup of its manifest is offered for an older one).
+    void EditorApplication::OpenFromManager(StringView directory)
+    {
+        editor::ProjectManagerController::OpenDecision decision;
+        m_projectManager.DecideOpen(directory, decision);
+        if (decision.gate == editor::ProjectOpenGate::NotAProject)
+        {
+            if (m_manager)
+                m_manager->SetStatus(u8"Not a project (no Project.xml there).");
+            return;
+        }
+        if (decision.gate == editor::ProjectOpenGate::OpenDirectly)
+        {
+            (void)OpenProject(directory, false);
+            return;
+        }
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        auto box = MakeRef<gui::MessageBox>(m_editorAllocator);
+        box->Configure(decision.promptTitle.AsView(), decision.promptBody.AsView(), gui::MessageBox::Buttons::Ok);
+        box->ClearButtons();
+        if (decision.gate == editor::ProjectOpenGate::PromptNewerEngine)
+        {
+            (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+            (void)box->AddButton(u8"Open Anyway", u8"open", gui::DialogRole::Normal);
+        }
+        else // an older engine's: back its manifest up first, or not
+        {
+            (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+            (void)box->AddButton(u8"Open Without Backup", u8"open", gui::DialogRole::Normal);
+            (void)box->AddButton(u8"Back Up and Open", u8"backup", gui::DialogRole::Primary);
+        }
+        EditorApplication* self = this;
+        gui::MessageBox* raw = box.Get();
+        const String path(directory);
+        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, path](const gui::Event&)
+                                    {
+                                        const String answer(raw->GetResultName());
+                                        if (answer.AsView() == StringView(u8"cancel"))
+                                            return;
+                                        self->Later([self, path, answer]()
+                                                    {
+                                                        if (answer.AsView() == StringView(u8"backup") &&
+                                                            !self->m_projectManager.BackupManifest(path.AsView()).HasValue())
+                                                        {
+                                                            if (self->m_manager)
+                                                                self->m_manager->SetStatus(u8"The backup FAILED: not opening.");
+                                                            return;
+                                                        }
+                                                        if (self->OpenProject(path.AsView(), false) && self->m_session.Project() != nullptr)
+                                                            (void)self->m_session.Project()->SaveSettings(); // stamped with this engine at once
+                                                    });
+                                    });
+        box->OpenModal(*root);
+    }
+
+    // New Project from the manager: a folder that holds a project already is refused; else the
+    // project is made there with the starter content and opened.
+    void EditorApplication::CreateFromManager(StringView directory, StringView name)
+    {
+        engine::project::ProjectSettings probed;
+        if (editor::ProbeProject(directory, probed).IsOk())
+        {
+            if (m_manager)
+                m_manager->SetStatus(u8"That folder is a project already: Open Folder opens it.");
+            return;
+        }
+        EditorSession::OpenOptions options;
+        options.scaffold = true;
+        options.scaffoldName = String(name);
+        options.seed = true;
+        m_window.ShowScreen({});
+        if (!m_session.Open(directory, options))
+        {
+            EnterManagerMode();
+            if (m_manager)
+                m_manager->SetStatus(u8"The project could not be made there (is the folder writable?).");
+        }
+    }
+
+    // The frame back and the project open; on failure the manager again, saying so.
+    bool EditorApplication::OpenProject(StringView directory, bool seed)
+    {
+        EditorSession::OpenOptions options;
+        options.seed = seed;
+        m_window.ShowScreen({});
+        if (m_session.Open(directory, options))
+            return true;
+        EnterManagerMode();
+        if (m_manager)
+            m_manager->SetStatus(Format(u8"The project in {} did not open (see the log).", directory).AsView());
+        return false;
+    }
+
+    // File > Close Project: the unsaved pages asked about, then the project closed and the
+    // manager shown.
+    void EditorApplication::CloseProjectToManager()
+    {
+        if (m_session.Project() == nullptr)
+            return;
+        EditorApplication* self = this;
+        (void)m_pages->ConfirmUnsavedThen(u8"Save All and Close", u8"Close Without Saving", [self]()
+                                          {
+                                              self->Later([self]()
+                                                          {
+                                                              self->m_session.Close();
+                                                              self->EnterManagerMode();
+                                                          });
+                                          });
+    }
+
     // Exits once the unsaved pages are saved or let go; true when nothing needed asking.
     bool EditorApplication::ConfirmExit()
     {
@@ -433,6 +592,10 @@ namespace editor::app
         file.save = [self](editor::EditorPage& page) { self->m_pages->Save(page); };
         file.saveAs = [self](editor::EditorPage& page) { self->m_pages->SaveAs(page); };
         file.exit = [self]() { (void)self->ConfirmExit(); };
+        // Back to the project manager: only when it launched the editor (a project given on the
+        // command line keeps its one project; Exit is the way out).
+        if (m_config.startInProjectManager)
+            file.closeProject = [self]() { self->CloseProjectToManager(); };
         RegisterFileActions(actions, Move(file));
         EditActions edit;
         edit.preferences = [self]() { self->OpenPreferences(); };
@@ -705,6 +868,7 @@ namespace editor::app
             m_runtimeContext.Shutdown();
         }
         m_preferences.Reset();
+        m_manager.Reset();
         m_palette.Reset();
         m_menus.Reset();
         m_shortcuts.Reset();

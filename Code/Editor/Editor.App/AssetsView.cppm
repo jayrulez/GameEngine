@@ -790,7 +790,7 @@ export namespace editor::app
                 item->SetCheckable(true);
                 item->SetCheckedSilently(m_type == type);
             }
-            m_menu->Open(*anchor, Float2{0.0f, anchor->GetSize().y});
+            m_menu->OpenBelow(*anchor, *anchor);
         }
 
         // A drag of the selection carries its assets (a group's row carries none).

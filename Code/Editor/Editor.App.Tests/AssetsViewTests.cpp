@@ -12,6 +12,7 @@
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 #include <filesystem>
+#include <initializer_list>
 
 import foundation.core;
 import foundation.content;
@@ -291,4 +292,48 @@ TEST_CASE("assets: a drag of the selection carries its assets")
     CHECK(carried[1].Name == String(u8"Bell"));
     CHECK(d.GetDragPayload().Label == String(u8"2 assets"));
     d.InjectMouseUp(Float2{press.x + 40.0f, press.y + 80.0f}, gui::MouseButton::Left);
+}
+
+TEST_CASE("assets: under the editor's sheet the toolbar keeps its height however full the body; the type menu opens below its button")
+{
+    Bed bed;
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    // A short panel: the body wants more room than it has.
+    Cast<gui::UIWidget>(bed.view->Content().Get())->EditLayoutStyle([](gui::LayoutStyle& s) { s.Height = gui::LayoutLength::Px(120.0f); });
+    styles.ApplyTree(*bed.root);
+    (void)bed.root->UpdateLayout();
+    gui::Node* bar = bed.view->Crumbs()->GetParent();
+    REQUIRE(bar != nullptr);
+    CHECK(bar->GetSize().y == doctest::Approx(34.0f)); // the density's --bar, its search inside it with room above and below
+
+    gui::Node& panel = *bed.view->Content();
+    gui::Button* types = nullptr;
+    Array<gui::Node*> pending;
+    pending.PushBack(&panel);
+    while (!pending.IsEmpty() && types == nullptr)
+    {
+        gui::Node* node = pending.Back();
+        pending.PopBack();
+        if (auto* widget = Cast<gui::UIWidget>(node); widget != nullptr && widget->GetId() == StringView(u8"assets-types"))
+            types = Cast<gui::Button>(node);
+        for (usize i = 0; i < node->ChildCount(); ++i)
+            pending.PushBack(node->GetChildAt(i));
+    }
+    REQUIRE(types != nullptr);
+    CHECK(types->HandleActivate());
+    (void)bed.root->UpdateLayout();
+    REQUIRE(bed.view->TypeMenu() != nullptr);
+    const gui::Rect button = types->GetScreenBounds();
+    const gui::Rect menu = bed.view->TypeMenu()->GetScreenBounds();
+    CHECK(menu.y >= button.y + button.height - 1.0f); // below the button, not at the window's corner
+    CHECK(menu.x >= button.x - menu.width);
 }

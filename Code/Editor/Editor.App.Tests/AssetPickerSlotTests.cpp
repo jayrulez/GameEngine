@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The asset slot: a verb shows once wired (open and clear only with something referenced), an
+// The asset slot: a verb shows once wired (open, reveal and clear only with something referenced), an
 // empty slot says None, each verb runs once per click, a click on the slot picks, and a dragged
 // asset of a type it takes is dropped on it while one it does not take is refused, saying why.
 
@@ -17,7 +17,7 @@ using editor::app::AssetDrag;
 using editor::app::AssetPickerSlot;
 namespace gui = foundation::gui;
 
-TEST_CASE("asset-slot: the verbs show once wired; open and clear only with something referenced; empty says None")
+TEST_CASE("asset-slot: the verbs show once wired; open, reveal and clear only with something referenced; empty says None")
 {
     RefPtr<AssetPickerSlot> slot = MakeRef<AssetPickerSlot>(DefaultAllocator());
     CHECK(slot->ShownName() == StringView(u8"None"));
@@ -25,25 +25,31 @@ TEST_CASE("asset-slot: the verbs show once wired; open and clear only with somet
     CHECK_FALSE(slot->PickButton()->IsDisplayed());
     int picks = 0;
     int opens = 0;
+    int reveals = 0;
     int clears = 0;
     slot->SetOnPick([&picks]() { ++picks; });
     slot->SetOnOpen([&opens]() { ++opens; });
+    slot->SetOnReveal([&reveals]() { ++reveals; });
     slot->SetOnClear([&clears]() { ++clears; });
     CHECK(slot->PickButton()->IsDisplayed());
     CHECK_FALSE(slot->OpenButton()->IsDisplayed()); // nothing to open yet
+    CHECK_FALSE(slot->RevealButton()->IsDisplayed());
     CHECK_FALSE(slot->ClearButton()->IsDisplayed());
 
     slot->SetValue(u8"Wood");
     CHECK_FALSE(slot->HasClass(u8"empty"));
     CHECK(slot->ShownName() == StringView(u8"Wood"));
     CHECK(slot->OpenButton()->IsDisplayed());
+    CHECK(slot->RevealButton()->IsDisplayed());
     CHECK(slot->ClearButton()->IsDisplayed());
 
     CHECK(slot->PickButton()->HandleActivate());
     CHECK(slot->OpenButton()->HandleActivate());
+    CHECK(slot->RevealButton()->HandleActivate());
     CHECK(slot->ClearButton()->HandleActivate());
     CHECK(picks == 1);
     CHECK(opens == 1);
+    CHECK(reveals == 1);
     CHECK(clears == 1);
 }
 

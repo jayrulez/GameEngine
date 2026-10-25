@@ -47,6 +47,7 @@ target_sources(Editor.App
             LogView.cppm
             AssetDragData.cppm
             AssetPickerSlot.cppm
+            ResourceRefEditor.cppm
             EditorNativeModule.cppm
             EditorExport.cppm
             EditorAssetCreation.cppm

@@ -5,10 +5,10 @@
 //
 // The asset slot (Documentation/Specs/editor-gui.md, 5.2, layer 3), as the kit draws it: the
 // referenced asset's type glyph (its category's tint), its name, and its verbs: pick (the target;
-// a click on the name picks too), open, clear. An empty slot says "None" and keeps only pick. A
-// verb shows only when its owner wired it; open and clear need something referenced. It is a drop
-// target for an asset of a type it takes, naming why not over one it does not: a drop and a pick
-// are the same assignment.
+// a click on the name picks too), open, reveal (in the assets browser), clear. An empty slot says
+// "None" and keeps only pick. A verb shows only when its owner wired it; open, reveal and clear
+// need something referenced. It is a drop target for an asset of a type it takes, naming why not
+// over one it does not: a drop and a pick are the same assignment.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -48,6 +48,11 @@ export namespace editor::app
                               if (self->m_onOpen)
                                   self->m_onOpen();
                           });
+            m_reveal = Verb(u8"Editor/Icons/folder-open.svg", u8"Show in Assets", [self]()
+                            {
+                                if (self->m_onReveal)
+                                    self->m_onReveal();
+                            });
             m_clear = Verb(u8"Editor/Icons/close.svg", u8"Clear", [self]()
                            {
                                if (self->m_onClear)
@@ -59,6 +64,7 @@ export namespace editor::app
         // The verbs, each shown once wired.
         void SetOnPick(Function<void()> pick) { m_onPick = foundation::core::Move(pick); Show(); }
         void SetOnOpen(Function<void()> open) { m_onOpen = foundation::core::Move(open); Show(); }
+        void SetOnReveal(Function<void()> reveal) { m_onReveal = foundation::core::Move(reveal); Show(); }
         void SetOnClear(Function<void()> clear) { m_onClear = foundation::core::Move(clear); Show(); }
         /// An asset of a type it takes was dropped on it: assign it (the pick's write).
         void SetOnDropped(Function<void(const Guid&)> dropped) { m_onDropped = foundation::core::Move(dropped); }
@@ -97,6 +103,7 @@ export namespace editor::app
         }
         [[nodiscard]] gui::Button* PickButton() const noexcept { return m_pick.Get(); }
         [[nodiscard]] gui::Button* OpenButton() const noexcept { return m_open.Get(); }
+        [[nodiscard]] gui::Button* RevealButton() const noexcept { return m_reveal.Get(); }
         [[nodiscard]] gui::Button* ClearButton() const noexcept { return m_clear.Get(); }
 
     protected:
@@ -150,6 +157,7 @@ export namespace editor::app
             m_glyph->SetDisplayed(m_hasValue && m_hasGlyph);
             m_pick->SetDisplayed(static_cast<bool>(m_onPick));
             m_open->SetDisplayed(static_cast<bool>(m_onOpen) && m_hasValue);
+            m_reveal->SetDisplayed(static_cast<bool>(m_onReveal) && m_hasValue);
             m_clear->SetDisplayed(static_cast<bool>(m_onClear) && m_hasValue);
         }
 
@@ -157,9 +165,11 @@ export namespace editor::app
         RefPtr<gui::Label> m_name;
         RefPtr<gui::Button> m_pick;
         RefPtr<gui::Button> m_open;
+        RefPtr<gui::Button> m_reveal;
         RefPtr<gui::Button> m_clear;
         Function<void()> m_onPick;
         Function<void()> m_onOpen;
+        Function<void()> m_onReveal;
         Function<void()> m_onClear;
         Function<void(const Guid&)> m_onDropped;
         Array<String> m_types;

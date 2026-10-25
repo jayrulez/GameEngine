@@ -234,7 +234,7 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the rest out, unedited, until their layers | X3 (layers 1 to 15) |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the Console, asset drag data, the asset slot and the inspector's asset reference; the rest out, unedited, until their layers | X3 (layers 1 to 15), X4 (layers 1 to 4) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
@@ -332,9 +332,12 @@ additions go first and are grouped with the other GUI commits.
    frame from the log buffer, which stamps each entry's time.
 2. Asset drag data and the type-filtered drop: what an assets row carries, what a slot takes.
 3. The asset slot (name, picture, pick, reveal, edit, clear, a drop target), the compact slot.
-4. The inspector's editors by hint on the GUI's property grid: asset references (a slot), entity
-   references, the editor's own groups. An asset reference takes the source asset types whose
-   builder's product is its runtime type or derives from it (ruling 19): no list in the editor.
+4. The inspector's asset reference on the GUI's property grid: GUI.Toolkit's Reference kind (a
+   reflected type with Core's reference capability, its Guid as text, naming what it points at),
+   and the editor's slot registered for it. It takes the source asset types whose builder's product
+   is its runtime type or derives from it (ruling 19): no list in the editor. Entity references
+   and the editor's own groups go with the scene page's inspector (X5): an EntityRef is no
+   reference to Core, and only a scene names its entities.
 5. The small dialogs: confirm, path picker, group picker, asset picker, asset create.
 6. The import dialog; Project Settings; the templates and export dialogs.
 7. The assets browser: the group tree, the breadcrumb, the filter, list and grid with pictures and

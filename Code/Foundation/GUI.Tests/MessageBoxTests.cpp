@@ -3,7 +3,8 @@
 
 // GUI - modal Window + MessageBox tests: OpenModal adds a scrim and confines input to
 // the dialog (background clicks are swallowed by the dispatcher's modal root); MessageBox shows
-// the right buttons and reports the pressed result, then closes.
+// the right buttons and reports the pressed result, then closes; one a dispatcher's modal
+// interceptor refuses never shows and answers as its cancel (a window as its close).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -376,4 +377,56 @@ TEST_CASE("message box: verbs from markup; with no primary a destructive button 
     CHECK(box->GetDefaultButton() == box->ButtonAt(1));
     CHECK(box->ButtonAt(0)->HandleActivate());
     CHECK(box->GetResultName() == core::String(u8"keep"));
+}
+
+TEST_CASE("message box: refused by its dispatcher's modal interceptor it never shows, answering as its cancel; a window as its close")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{500.0f, 500.0f});
+    EventDispatcher& d = *root->GetEventDispatcher();
+    core::Array<core::String> asked;
+    d.SetModalInterceptor([&asked](Node& window)
+    {
+        if (auto* w = core::Cast<Window>(&window))
+            asked.PushBack(core::String(w->GetTitle()));
+        return false;
+    });
+
+    auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
+    box->Configure(core::StringView(u8"Unsaved changes"), core::StringView(u8"Save?"), MessageBox::Buttons::OkCancel);
+    box->AddButton(core::StringView(u8"Discard"), core::StringView(u8"discard"), DialogRole::Destructive);
+    MessageBox::Result got = MessageBox::Result::Ok;
+    int answers = 0;
+    box->SetOnResult([&got, &answers](MessageBox::Result r)
+    {
+        got = r;
+        ++answers;
+    });
+    int changed = 0;
+    (void)box->AddEventListener(EventType::Changed, [&changed](const Event&) { ++changed; });
+    box->OpenModal(*root.Get());
+    CHECK_FALSE(box->IsOpen());
+    CHECK(d.PopupCount() == 0u);
+    REQUIRE(asked.Size() == 1u);
+    CHECK(asked[0] == core::String(u8"Unsaved changes"));
+    CHECK(box->GetResultName() == core::String(u8"cancel"));
+    CHECK(answers == 1);
+    CHECK(got == MessageBox::Result::Cancel);
+    CHECK(changed == 1);
+
+    // A plain window answers as its close.
+    auto window = core::MakeRef<Window>(core::DefaultAllocator());
+    window->SetTitle(core::StringView(u8"Preferences"));
+    int closes = 0;
+    window->SetOnClose([&closes]() { ++closes; });
+    window->OpenModal(*root.Get());
+    CHECK_FALSE(window->IsOpen());
+    CHECK(closes == 1);
+    CHECK(asked.Size() == 2u);
+
+    // The interceptor taken back: windows open again.
+    (void)d.TakeModalInterceptor();
+    window->OpenModal(*root.Get());
+    CHECK(window->IsOpen());
+    window->Close();
 }

@@ -151,6 +151,16 @@ export namespace foundation::gui
         void SetClipboard(IClipboard* clipboard) noexcept { m_clipboard = clipboard; }
         [[nodiscard]] IClipboard* GetClipboard() const noexcept { return m_clipboard; }
 
+        // === Modal windows refused (an unattended run) ===
+        /// Asked before a modal window opens here (Window::OpenModal): false keeps it from opening
+        /// and it answers as cancelled, so nothing waits for a person no one is there to be (an
+        /// agent running an action). Unset: every one opens. Take the one there to restore it
+        /// after (scopes nest).
+        void SetModalInterceptor(core::Function<bool(Node& window)> interceptor) { m_modalInterceptor = core::Move(interceptor); }
+        [[nodiscard]] core::Function<bool(Node& window)> TakeModalInterceptor() { return core::Move(m_modalInterceptor); }
+        /// Whether a modal window may open here now.
+        [[nodiscard]] bool AllowsModal(Node& window) { return !m_modalInterceptor || m_modalInterceptor(window); }
+
 
         [[nodiscard]] Node* GetOverNode() const noexcept { return m_overNode; }
         /// Whether the keyboard or the pad drives it now (the last input was a key, a pad button or
@@ -2810,6 +2820,7 @@ export namespace foundation::gui
         f32 m_gestureRotation = 0.0f;
         core::Float2 m_gestureTranslation{0.0f, 0.0f};
         IClipboard* m_clipboard = nullptr; // non-owning system-clipboard adapter (optional)
+        core::Function<bool(Node&)> m_modalInterceptor; // SetModalInterceptor
         Node* m_overNode = nullptr;        // non-owning: the deepest node of the hover path
         NavTrace m_lastNavigation;         // what the last directional move weighed
         Array<Node*> m_hoverPath;          // non-owning, root first: every node under the pointer

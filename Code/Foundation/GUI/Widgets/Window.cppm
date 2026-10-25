@@ -350,6 +350,14 @@ export namespace foundation::gui
     protected:
         /// It closed: IsOpen is false, though a modal one may still be playing its exit.
         virtual void OnWindowClosed() {}
+        /// It was to open modal and its dispatcher refused it (SetModalInterceptor): it answers as
+        /// closing it would, without having shown. A dialog answers as its cancel.
+        virtual void OnModalRefused()
+        {
+            if (m_onClose)
+                m_onClose();
+            SendEvent(Event(EventType::Close, this));
+        }
         /// It has gone: out of the top layer, after its exit (a dialog written in a page goes back
         /// there now). Not when it opens again before its exit ends.
         virtual void OnWindowGone() {}
@@ -384,6 +392,11 @@ export namespace foundation::gui
             EventDispatcher* dispatcher = owner.GetEventDispatcher();
             if (modal && dispatcher != nullptr)
             {
+                if (!dispatcher->AllowsModal(*this))
+                {
+                    OnModalRefused(); // never shown: answered as its cancel would answer
+                    return;
+                }
                 m_modal = true;
                 m_open = true;
                 CenterIn(owner.GetRootNode() != nullptr ? *owner.GetRootNode() : owner); // in the root's space

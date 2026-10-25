@@ -389,6 +389,20 @@ export namespace foundation::gui
             Close();
             SendEvent(Event(EventType::Changed, this));
         }
+        // Refused as it opened (an unattended run): its cancel's answer, as if it was pressed.
+        void OnModalRefused() override
+        {
+            if (m_results.IsEmpty())
+            {
+                Window::OnModalRefused();
+                return;
+            }
+            m_resultName = m_results[CancelIndex()];
+            for (usize i = 0; i < 4; ++i) // a standard one also answers as its Result
+                if (kNames[i] == m_resultName.AsView() && m_onResult)
+                    m_onResult(static_cast<Result>(i));
+            SendEvent(Event(EventType::Changed, this));
+        }
         // Shown from a page: back there, unseen, once its exit has played.
         void OnWindowGone() override
         {

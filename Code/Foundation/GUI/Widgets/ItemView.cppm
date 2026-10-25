@@ -1496,6 +1496,10 @@ export namespace foundation::gui
         core::Array<core::RefPtr<ItemRow>> next;
         for (i32 i = first; i < last; ++i)
             (void)TakeRow(i, next);
+        // A row kept for its item but not taken (the item's row type changed) goes back too.
+        for (const core::RefPtr<ItemRow>& row : m_live)
+            if (!row->m_taken)
+                ReleaseRow(*row);
         m_live = core::Move(next);
         for (const core::RefPtr<ItemRow>& row : m_live)
         {

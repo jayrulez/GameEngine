@@ -504,6 +504,38 @@ TEST_CASE("itemview: a grid lays cells across then down, stretched to fill; the 
     CHECK(m.list->GetLayoutModeName() == SV(u8"grid"));
 }
 
+TEST_CASE("itemview: a grid whose items take another row type shows only the new rows (a tiles and list switch)")
+{
+    StringListModel model(Numbered(6));
+    Mounted m = MountList(model, 20.0f, 200.0f);
+    core::u32 kind = 0;
+    RowFactory rows;
+    rows.TypeOf = [&kind](const ModelIndex&) { return kind; };
+    rows.Create = [](core::u32) -> core::RefPtr<Node> { return core::MakeRef<Panel>(core::DefaultAllocator()); };
+    rows.Bind = [](Node&, const ModelIndex&) {};
+    m.list->SetRowFactory(core::Move(rows));
+    m.list->SetLayoutMode(ItemLayout::Grid);
+    m.list->SetCellWidth(60.0f);
+    m.list->SetCellHeight(40.0f);
+    m.Layout();
+    const auto shown = [&m]()
+    {
+        int count = 0;
+        for (core::usize i = 0; i < m.list->ChildCount(); ++i)
+            if (auto* row = core::Cast<ItemRow>(m.list->GetChildAt(i)); row != nullptr && row->IsDisplayed())
+                ++count;
+        return count;
+    };
+    CHECK(shown() == 6);
+    kind = 1; // the other kind of row, for every item
+    model.SetItems(Numbered(6));
+    m.Layout();
+    CHECK(shown() == 6); // not twelve: the old rows went back to their pool
+    for (core::usize i = 0; i < m.list->ChildCount(); ++i)
+        if (auto* row = core::Cast<ItemRow>(m.list->GetChildAt(i)); row != nullptr && row->IsDisplayed())
+            CHECK(row->GetRowType() == 1u);
+}
+
 TEST_CASE("itemview: in right to left a grid lays its cells from the right")
 {
     StringListModel model(Numbered(50));

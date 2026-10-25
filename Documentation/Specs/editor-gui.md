@@ -553,3 +553,8 @@ Rulings (the user, 2026-10-23):
     place kept per scene, a double click on its head putting it back in its zone, its chevron
     folding it to its head. The editor's own piece, as the GUI has no floating panel
     (2026-10-25).
+24. The asset picker is shaped as the assets browser: the project's groups a tree at its side
+    (Favourites and All first), what the chosen group holds of the slot's types beside it as tiles
+    or a list (the picker keeping the last one chosen), the current value checked, the search over
+    every group while it has text (each match saying where it lives) (2026-10-25; the mock's
+    asset-picker.gml).

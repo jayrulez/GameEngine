@@ -172,6 +172,7 @@ export namespace sandbox
             Define(u8"mock.about", u8"About AssiduousEngine");
             Define(u8"mock.toast", u8"Show a Toast");
             Define(u8"mock.dialog", u8"Show a Dialog");
+            Define(u8"mock.asset-picker", u8"Show the Asset Picker");
             m_context.DefineCommand(u8"mock.grid").SetChecked(true);
             m_context.DefineCommand(u8"mock.space").SetChecked(true);
             gui::Command& pause = m_context.DefineCommand(u8"mock.pause");
@@ -187,7 +188,8 @@ export namespace sandbox
             // turn, and a dialog.
             (void)m_root.OnCommand(u8"mock.toast", [self](gui::CommandEvent&) { self->ShowToast(); });
             (void)m_root.OnCommand(u8"mock.dialog", [self](gui::CommandEvent&) { self->ShowDialog(); });
-            (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowTextures(); });
+            (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowPicker(self->m_textures, u8"Editor/Mock/textures.gml"); });
+            (void)m_root.OnCommand(u8"mock.asset-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_assetPicker, u8"Editor/Mock/asset-picker.gml"); });
             (void)m_root.OnCommand(u8"mock.side-by-side", [self](gui::CommandEvent&) { self->SetSideBySide(!self->m_sideBySide); });
             Define(u8"look.dark", u8"Dark");
             Define(u8"look.light", u8"Light");
@@ -232,14 +234,49 @@ export namespace sandbox
             (void)m_toasts->Post(Move(request));
         }
 
-        // The render textures picker (ruling 21), as the editor's picker opens: modal, under the
-        // window's top.
-        void ShowTextures()
+        // A picker as the editor's opens: modal, under the window's top (the render textures
+        // picker of ruling 21; the asset picker with its groups beside it).
+        void ShowPicker(RefPtr<gui::Node>& picker, StringView path)
         {
-            if (!m_textures)
-                m_textures = m_host.Load(u8"Editor/Mock/textures.gml");
+            if (!picker)
+            {
+                picker = m_host.Load(path);
+                // The asset picker's chosen group: Props (Favourites, All, Content, Materials, Props).
+                if (picker)
+                    if (auto* groups = Cast<gui::TreeView>(FindById(*picker, u8"asset-picker-groups")))
+                        groups->SetSelectedItem(4);
+                // Its two views, the buttons switching them (the editor keeps the last one).
+                if (picker)
+                {
+                    gui::Node* rows = FindById(*picker, u8"asset-picker-rows");
+                    gui::Node* tiles = FindById(*picker, u8"asset-picker-tiles-view");
+                    auto* tilesButton = Cast<gui::Button>(FindById(*picker, u8"asset-picker-tiles"));
+                    auto* listButton = Cast<gui::Button>(FindById(*picker, u8"asset-picker-list"));
+                    if (rows != nullptr && tiles != nullptr && tilesButton != nullptr && listButton != nullptr)
+                    {
+                        const auto show = [rows, tiles, tilesButton, listButton](bool asTiles)
+                        {
+                            rows->SetDisplayed(!asTiles);
+                            tiles->SetDisplayed(asTiles);
+                            if (asTiles)
+                            {
+                                tilesButton->AddClass(u8"checked");
+                                listButton->RemoveClass(u8"checked");
+                            }
+                            else
+                            {
+                                listButton->AddClass(u8"checked");
+                                tilesButton->RemoveClass(u8"checked");
+                            }
+                        };
+                        show(false);
+                        tilesButton->SetOnClick([show]() { show(true); });
+                        listButton->SetOnClick([show]() { show(false); });
+                    }
+                }
+            }
             gui::EventDispatcher* dispatcher = m_root.GetEventDispatcher();
-            if (!m_textures || dispatcher == nullptr || dispatcher->IsPopupOpen(*m_textures))
+            if (!picker || dispatcher == nullptr || dispatcher->IsPopupOpen(*picker))
                 return;
             gui::PopupOptions options;
             options.Kind = gui::PopupKind::Auto;
@@ -250,7 +287,7 @@ export namespace sandbox
             options.AnchorRect = gui::Rect{0.0f, 0.0f, m_root.GetSize().x, m_root.GetSize().y * 0.2f};
             options.Placement.Side = gui::PopupSide::Below;
             options.Placement.Align = gui::PopupAlign::Center;
-            dispatcher->OpenPopup(m_root, *m_textures, Move(options));
+            dispatcher->OpenPopup(m_root, *picker, Move(options));
         }
 
         void ShowDialog()
@@ -442,7 +479,8 @@ export namespace sandbox
         RefPtr<gui::Node> m_kit; // the kit page's content, once the dock has made it
         RefPtr<gui::ToastHost> m_toasts;
         RefPtr<gui::MessageBox> m_dialog;
-        RefPtr<gui::Node> m_textures; // the render textures picker, once opened
+        RefPtr<gui::Node> m_textures;    // the render textures picker, once opened
+        RefPtr<gui::Node> m_assetPicker; // the asset picker, once opened
         usize m_toastsShown = 0;
         Array<RefPtr<Object>> m_shown; // what each page's inspector shows
         Array<UniquePtr<gui::ReflectedPropertySource>> m_sources;

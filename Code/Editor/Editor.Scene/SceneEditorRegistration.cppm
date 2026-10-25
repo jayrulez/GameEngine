@@ -28,6 +28,8 @@ import :services;
 import :asset_thumbnails;
 import :actions;
 import :mcp_tools;
+import :inspector_extras;
+import :builtin_inspector_extras;
 
 using namespace foundation::core;
 
@@ -75,6 +77,13 @@ export namespace editor
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             EditorRootAllocator().New<SceneEditorPageFactory>(foundation::scene::PrefabDocument::StaticType(), services), EditorRootAllocator()));
 
+        // What the inspector shows under the engine's own components besides their rows.
+        static const bool extras = []()
+        {
+            BuiltinInspectorExtras::Register(InspectorExtrasRegistry::Get());
+            return true;
+        }();
+        (void)extras;
         // The scene editor's actions: the Scene menu, the keys and the page's bar are served from
         // them; the palette and the MCP bridge read them.
         RegisterSceneEditorActions(context);

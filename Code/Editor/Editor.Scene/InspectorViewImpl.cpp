@@ -22,6 +22,7 @@ import editor.app;
 import :edit;
 import :inspector;
 import :entity_ref_editor;
+import :inspector_extras;
 
 using namespace foundation::core;
 namespace gui = foundation::gui;
@@ -103,6 +104,119 @@ namespace editor
         u64 Mix(u64 hash, u64 value) { return (hash ^ value) * 1099511628211ull; }
     }
 
+    class SceneInspectorView::Extras final : public InspectorExtras
+    {
+    public:
+        Extras(SceneInspectorView& view, IAllocator& allocator) : bag(allocator, view.m_entities.Size()), m_view(view), m_notices(allocator), m_actions(allocator)
+        {
+            Extras* self = this;
+            bag.SetOnCommit([self](const gui::PropertyBag::Commit& commit)
+                            {
+                                for (const Action& action : self->m_actions)
+                                    if (action.name == commit.Path && action.run)
+                                        action.run();
+                            });
+        }
+        [[nodiscard]] SceneEditContext& Edit() override { return *m_view.m_edit; }
+        [[nodiscard]] EditorContext* Context() override { return m_view.m_services.context; }
+        [[nodiscard]] Span<const Guid> Entities() const override { return m_view.m_entities.AsSpan(); }
+        void AddNotice(StringView name, Function<String()> message) override
+        {
+            gui::PropertyInfo& info = bag.Add(name, gui::PropertyKind::String, gui::Variant(StringView{}));
+            info.Hint = String(app::NoticePropertyEditor::kHint);
+            info.ReadOnly = true;
+            info.Visible = false; // until it says something
+            m_notices.PushBack(Notice{String(name), Move(message), String{}});
+        }
+        void AddAction(StringView name, StringView label, StringView description, Function<void()> run) override
+        {
+            gui::PropertyInfo& info = bag.Add(name, gui::PropertyKind::String, gui::Variant(label));
+            info.Hint = String(app::ActionPropertyEditor::kHint);
+            info.Description = String(description);
+            for (usize i = 0; i < bag.ObjectCount(); ++i)
+                bag.SetValue(name, i, gui::Variant(label));
+            m_actions.PushBack(Action{String(name), Move(run)});
+        }
+        void AddSection(UniquePtr<gui::IPropertySource> source, Function<void()> refresh) override
+        {
+            m_sources.PushBack(Section{Move(source), Move(refresh)});
+        }
+        [[nodiscard]] bool HasRows() const noexcept { return !m_notices.IsEmpty() || !m_actions.IsEmpty(); }
+        [[nodiscard]] bool IsEmpty() const noexcept { return !HasRows() && m_sources.IsEmpty(); }
+        [[nodiscard]] usize SourceCount() const noexcept { return m_sources.Size(); }
+        [[nodiscard]] gui::IPropertySource& SourceAt(usize i) const { return *m_sources[i].source; }
+        /// Each notice as it says now; shown while it says something.
+        void Refresh()
+        {
+            for (const Section& section : m_sources)
+                if (section.refresh)
+                    section.refresh();
+            bool shown = false;
+            for (Notice& notice : m_notices)
+            {
+                const String message = notice.message ? notice.message() : String{};
+                if (message != notice.said)
+                {
+                    notice.said = message;
+                    for (usize i = 0; i < bag.ObjectCount(); ++i)
+                        bag.SetValue(notice.name.AsView(), i, gui::Variant(message.AsView()));
+                }
+                gui::PropertyInfo* info = bag.FindInfo(notice.name.AsView());
+                if (info != nullptr && info->Visible == message.IsEmpty())
+                {
+                    info->Visible = !message.IsEmpty();
+                    shown = true;
+                }
+            }
+            if (shown)
+                bag.PropertiesChanged();
+        }
+        [[nodiscard]] String Text(StringView name) const
+        {
+            for (const Notice& notice : m_notices)
+                if (notice.name.AsView() == name)
+                    return notice.said;
+            for (const Action& action : m_actions)
+                if (action.name.AsView() == name)
+                    return String(const_cast<gui::PropertyBag&>(bag).GetValue(name, 0).AsString());
+            return String{};
+        }
+        bool Run(StringView name)
+        {
+            for (const Action& action : m_actions)
+                if (action.name.AsView() == name && action.run)
+                {
+                    action.run();
+                    return true;
+                }
+            return false;
+        }
+
+        gui::PropertyBag bag;
+
+    private:
+        struct Notice
+        {
+            String name;
+            Function<String()> message;
+            String said;
+        };
+        struct Action
+        {
+            String name;
+            Function<void()> run;
+        };
+        struct Section
+        {
+            UniquePtr<gui::IPropertySource> source;
+            Function<void()> refresh;
+        };
+        SceneInspectorView& m_view;
+        Array<Section> m_sources;
+        Array<Notice> m_notices;
+        Array<Action> m_actions;
+    };
+
     SceneInspectorView::SceneInspectorView(IAllocator& allocator, SceneEditContext& edit, Services services, gui::Node& pane)
         : m_allocator(allocator), m_edit(&edit), m_services(Move(services)), m_pane(&pane), m_sections(allocator), m_format(allocator),
           m_entities(allocator), m_transforms(allocator), m_components(allocator)
@@ -120,6 +234,7 @@ namespace editor
             if (m_services.pick)
                 m_entityRefs.pick = [self](app::PickerRequest request, gui::Node* anchor) { self->m_services.pick(Move(request), anchor); };
             EntityRefEditor::Register(m_grid->GetEditors(), m_entityRefs);
+            app::PropertyExtras::Register(m_grid->GetEditors()); // a component's notices and actions
             m_grid->SetSource(&m_sections);
             m_grid->SetOnRowMenu([self](gui::Menu& menu, const gui::PropertyRow& row) { self->HeaderMenu(menu, row); });
         }
@@ -184,8 +299,10 @@ namespace editor
             return;
         }
         // The values as they are now (a gizmo's drag, an undo): the transforms read again, the
-        // grid told, except while it is editing one (its row is the gesture's).
+        // notices asked again, the grid told, except while it is editing one (its row is the
+        // gesture's).
         PullTransforms();
+        RefreshExtras();
         if (m_grid != nullptr && !m_grid->IsEditing())
             for (const UniquePtr<ComponentSection>& section : m_components)
                 section->source->Refresh();
@@ -337,8 +454,47 @@ namespace editor
                                  SceneInspectorView* self = this;
                                  section->source->SetOnChange([self, type](const gui::ReflectedChange& change) { self->ComponentChanged(type, change); });
                                  m_sections.Add(section->key.AsView(), section->title.AsView(), *section->source);
+                                 BuildExtras(*section);
                                  m_components.PushBack(Move(section));
                              });
+    }
+
+    void SceneInspectorView::BuildExtras(ComponentSection& section)
+    {
+        auto extras = MakeUnique<Extras>(m_allocator, *this, m_allocator);
+        InspectorExtrasRegistry::Get().ForEach(*section.type, [&](const InspectorExtrasProvider& provider) { provider(*extras); });
+        if (extras->IsEmpty())
+            return;
+        extras->Refresh();
+        // Under the component's header: the grid groups a title's rows together.
+        if (extras->HasRows())
+            m_sections.Add(Format(u8"x{}", section.key).AsView(), section.title.AsView(), extras->bag);
+        for (usize i = 0; i < extras->SourceCount(); ++i)
+            m_sections.Add(Format(u8"y{}{}", section.key, i).AsView(), section.title.AsView(), extras->SourceAt(i));
+        section.extras = Move(extras);
+    }
+
+    void SceneInspectorView::RefreshExtras()
+    {
+        for (const UniquePtr<ComponentSection>& section : m_components)
+            if (section->extras)
+                section->extras->Refresh();
+    }
+
+    String SceneInspectorView::ExtraText(StringView title, StringView name) const
+    {
+        for (const UniquePtr<ComponentSection>& section : m_components)
+            if (section->title.AsView() == title && section->extras)
+                return section->extras->Text(name);
+        return String{};
+    }
+
+    bool SceneInspectorView::RunExtra(StringView title, StringView name)
+    {
+        for (const UniquePtr<ComponentSection>& section : m_components)
+            if (section->title.AsView() == title && section->extras)
+                return section->extras->Run(name);
+        return false;
     }
 
     Array<Instance> SceneInspectorView::InstancesOf(const TypeInfo& type) const

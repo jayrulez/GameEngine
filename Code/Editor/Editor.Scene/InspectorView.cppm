@@ -35,6 +35,7 @@ import editor.core;
 import editor.app;
 import :edit;
 import :entity_ref_editor;
+import :inspector_extras;
 
 using namespace foundation::core;
 
@@ -99,14 +100,23 @@ export namespace editor
         /// A header's menu as the grid builds it, at `headerPath`.
         bool OpenHeaderMenu(StringView headerPath);
         [[nodiscard]] StringView Kind() const;
+        /// A component section's extras' row at `name` (a notice's text, an action's label); empty
+        /// when there is none or it is hidden.
+        [[nodiscard]] String ExtraText(StringView title, StringView name) const;
+        /// Runs a component section's action `name`, as its button does.
+        bool RunExtra(StringView title, StringView name);
 
     private:
+        // A component's extras: a bag under its header, its notices asked again as values show,
+        // its actions run on their rows' commits.
+        class Extras;
         struct ComponentSection
         {
             String key;
             String title;
             const TypeInfo* type = nullptr;
             UniquePtr<foundation::gui::ReflectedPropertySource> source;
+            UniquePtr<Extras> extras; // null: none
         };
 
         void Build();
@@ -116,6 +126,8 @@ export namespace editor
         void BuildTransform();
         void BuildComponents();
         void PullTransforms();
+        void BuildExtras(ComponentSection& section);
+        void RefreshExtras();
         void HeaderMenu(foundation::gui::Menu& menu, const foundation::gui::PropertyRow& row);
         void ComponentChanged(const TypeInfo* type, const foundation::gui::ReflectedChange& change);
         [[nodiscard]] Array<foundation::core::Instance> InstancesOf(const TypeInfo& type) const;

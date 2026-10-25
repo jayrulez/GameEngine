@@ -43,6 +43,7 @@ target_sources(Editor.Scene
         HierarchyViewImpl.cpp
         InspectorViewImpl.cpp
         EntityRefEditorImpl.cpp
+        ScriptBehaviorsSourceImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
@@ -74,6 +75,9 @@ target_sources(Editor.Scene
             PrefabFlows.cppm
             HierarchyView.cppm
             EntityRefEditor.cppm
+            InspectorExtras.cppm
+            ScriptBehaviorsSource.cppm
+            BuiltinInspectorExtras.cppm
             InspectorView.cppm
             SceneViewport.cppm
             ScenePage.cppm

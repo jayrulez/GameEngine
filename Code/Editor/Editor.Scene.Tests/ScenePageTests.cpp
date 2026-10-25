@@ -23,6 +23,11 @@ import foundation.scene;
 import engine.scene;
 import engine.render;      // RegisterRenderComponentReflection, LightComponent
 import engine.composition; // FullSceneComposition
+import engine.physics;
+import engine.navigation;
+import foundation.physics;
+import engine.script;
+import foundation.script.resource;
 import foundation.scene.resource;
 import foundation.gui;
 import foundation.gui.toolkit;
@@ -45,7 +50,7 @@ namespace
         SceneHost()
         {
             // The engine's full composition, so a scene's entities take its components.
-            engine::render::RegisterRenderComponentReflection();
+            engine::RegisterAllSceneComponentReflection(); // every component named, as the editor has them
             m_context.AddSubsystem<engine::scene::SceneSubsystem>()->SetComposition(engine::FullSceneComposition());
             m_context.Startup();
         }
@@ -665,5 +670,100 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     const gui::DragPayload dragged = EntityDrag::Payload(Span<const Guid>(&bed.crate, 1u), u8"Crate");
     CHECK(slot->Take(dragged));
     CHECK(member()->instancedMesh.id == bed.crate);
+    page->OnClose();
+}
+
+TEST_CASE("inspector: a component's extras under its header: a rigid body's notice while it has no collider, a zone's Bake")
+{
+    Bed bed;
+    {
+        static const bool once = []()
+        {
+            BuiltinInspectorExtras::Register(InspectorExtrasRegistry::Get());
+            return true;
+        }();
+        (void)once;
+    }
+    String said;
+    bed.context.OnNotice = [&said](NoticeKind, StringView message) { said = String(message); };
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    REQUIRE(inspector->AddComponent(u8"RigidBodyComponent"));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const String title = String(TypeAttrString(TypeOf<engine::physics::RigidBodyComponent>(), "displayName", u8"Rigid Body"));
+    CHECK(inspector->ExtraText(title.AsView(), u8"Collision").IsEmpty()); // a box: it has its collider
+
+    // Cooked with no shape: said, and gone again once it is a box (a value edit, not a rebuild).
+    auto* bodies = page->ScenePtr()->GetSystem<engine::physics::RigidBodyComponentManager>();
+    REQUIRE(bodies != nullptr);
+    bodies->Get(page->ScenePtr()->FindEntity(bed.crate))->shape = foundation::physics::ShapeKind::Cooked;
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->ExtraText(title.AsView(), u8"Collision") == String(BuiltinInspectorExtras::kNoColliderText));
+    bodies->Get(page->ScenePtr()->FindEntity(bed.crate))->shape = foundation::physics::ShapeKind::Box;
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->ExtraText(title.AsView(), u8"Collision").IsEmpty());
+
+    // A zone's Bake: its button, and with no asset assigned it says what to do.
+    REQUIRE(inspector->AddComponent(u8"NavMeshZoneComponent"));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const String zone = String(TypeAttrString(TypeOf<engine::navigation::NavMeshZoneComponent>(), "displayName", u8"Nav Mesh Zone"));
+    CHECK(inspector->ExtraText(zone.AsView(), u8"Navigation") == String(u8"Bake Navigation"));
+    CHECK(inspector->RunExtra(zone.AsView(), u8"Navigation"));
+    CHECK(said == String(u8"Assign a Navigation Zone asset to this zone before baking."));
+    page->OnClose();
+}
+
+TEST_CASE("script behaviors: a list of behaviours, each its script, Enabled and interval; every edit one undo step; a revert its default")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneEditContext& edit = page->EditContext();
+    edit.AddComponent(bed.crate, &TypeOf<engine::script::ScriptComponent>());
+    ScriptBehaviorsSource source(edit, &bed.context, Span<const Guid>(&bed.crate, 1u));
+    auto* manager = page->ScenePtr()->GetSystem<engine::script::ScriptComponentManager>();
+    REQUIRE(manager != nullptr);
+    const auto component = [&]() { return manager->Get(page->ScenePtr()->FindEntity(bed.crate)); };
+
+    Array<gui::PropertyInfo> top;
+    source.GetProperties(StringView{}, top);
+    REQUIRE(top.Size() == 1u);
+    CHECK(top[0].Kind == gui::PropertyKind::List);
+    CHECK(source.GetValue(u8"behaviors", 0).AsInt() == 0);
+
+    gui::ListEdit insert;
+    insert.Kind = gui::ListEdit::Op::Insert;
+    insert.Index = 0;
+    CHECK(source.EditList(u8"behaviors", insert));
+    REQUIRE(component()->behaviors.Size() == 1u);
+    Array<gui::PropertyInfo> elements;
+    source.GetProperties(u8"behaviors", elements);
+    REQUIRE(elements.Size() == 1u);
+    CHECK(elements[0].DisplayName == String(u8"Behavior 1"));
+    Array<gui::PropertyInfo> rows;
+    source.GetProperties(u8"behaviors.0", rows);
+    REQUIRE(rows.Size() == 3u); // no script yet: its own rows only
+    CHECK(rows[0].Kind == gui::PropertyKind::Reference);
+    CHECK(rows[0].ReferenceType == &TypeOf<foundation::script::ScriptClass>());
+
+    gui::PropertyWrite off;
+    off.Value = gui::Variant(false);
+    source.CommitEdit(u8"behaviors.0.enabled", off);
+    CHECK_FALSE(component()->behaviors[0].enabled);
+    gui::PropertyWrite every;
+    every.Value = gui::Variant(0.5);
+    source.CommitEdit(u8"behaviors.0.interval", every);
+    CHECK(component()->behaviors[0].updateInterval == doctest::Approx(0.5f));
+    page->Commands().Undo(); // the interval alone
+    CHECK(component()->behaviors[0].updateInterval == doctest::Approx(0.0f));
+    CHECK_FALSE(component()->behaviors[0].enabled);
+    CHECK(source.Revert(u8"behaviors.0.enabled"));
+    CHECK(component()->behaviors[0].enabled);
+    page->Commands().Undo(); // the revert
+    page->Commands().Undo(); // the edit
+    CHECK(component()->behaviors[0].enabled);
+    page->Commands().Undo(); // the insert
+    CHECK(component()->behaviors.IsEmpty());
     page->OnClose();
 }

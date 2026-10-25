@@ -234,7 +234,7 @@ to follow the same order.
 |---|---|---|
 | Editor.Project, Editor.Mcp, Editor.Camera, Editor.Navigation, Editor.Spline, Editor.ViewportTools | No UI: stay in the build | |
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
-| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences' Appearance (scheme, accent, density, motion, UI scale, saved in EditorUiSettings); the rest out, unedited, until their layers | X3 (layers 1 to 12, Appearance; its other tabs to come) |
+| Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences' Appearance (scheme, accent, density, motion, UI scale, saved in EditorUiSettings) and Shortcuts (a capture per action, applied on Save); the rest out, unedited, until their layers | X3 (layers 1 to 12, Appearance and Shortcuts; its other tabs to come) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene, Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
@@ -367,3 +367,6 @@ Rulings (the user, 2026-10-23):
     number of children (2026-10-24); the guide changes with it, panel_dock's arguments do not.
 17. Preferences' theme is Dark or Light for now; System (following the platform's preference, which
     the shell cannot report yet) comes later (2026-10-24).
+18. Preferences has no font paths: the editor's fonts are its sheet's, and EditorFontSettings is gone
+    (2026-10-24; no outside users, so no migration: a file that still has the section keeps it as
+    an unknown one).

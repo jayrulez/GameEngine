@@ -383,7 +383,9 @@ namespace editor::app
         {
             EditorPreferencesDialog::Services services;
             services.user = &m_editorSettings;
+            services.actions = &m_context.Actions();
             EditorApplication* self = this;
+            services.warn = [self](StringView text) { self->m_context.Notify(editor::NoticeKind::Warning, text); };
             services.showLook = [self](const EditorLook& look) { self->m_window.SetLook(look); };
             services.persist = [self]() { return editor::SaveEditorSettingsToUserData(self->m_editorSettings).IsOk(); };
             m_preferences = MakeUnique<EditorPreferencesDialog>(m_editorAllocator, m_editorAllocator, Move(services),

@@ -33,23 +33,6 @@ export namespace editor
     namespace settings = foundation::settings;
     namespace vfs = foundation::vfs;
 
-    // Editor-level FONT preferences (a Settings section): explicit .ttf paths for the UI
-    // and mono families. Empty (the default) = the built-in resolution chain (the dev-tree
-    // compile define, then the exe-embedded fallback face).
-    class EditorFontSettings final : public ISerializable
-    {
-        RTTI_OBJECT(EditorFontSettings, ISerializable)
-    public:
-        String fontPath;     // UI family override ("" = built-in chain)
-        String monoFontPath; // mono family override ("" = built-in chain)
-
-        void Serialize(ISerializer& ar) override
-        {
-            foundation::core::Serialize(ar, "fontPath", fontPath);
-            foundation::core::Serialize(ar, "monoFontPath", monoFontPath);
-        }
-    };
-
     // The UI scale preference's range: 50% (a dense layout on a large monitor) to 200%.
     inline constexpr f32 kUiScaleMin = 0.5f;
     inline constexpr f32 kUiScaleMax = 2.0f;
@@ -551,8 +534,6 @@ export namespace editor
         // silently dropping the sections after it - the empty-project-list incident.
         GlobalTypeRegistry().Register(EditorExportSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<EditorExportSettings>();
-        GlobalTypeRegistry().Register(EditorFontSettings::StaticType(), TypeDomain(u8"Editor"));
-        RegisterSerializable<EditorFontSettings>();
         GlobalTypeRegistry().Register(EditorUiSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<EditorUiSettings>();
         GlobalTypeRegistry().Register(EditorMcpSettings::StaticType(), TypeDomain(u8"Editor"));
@@ -606,7 +587,6 @@ export namespace editor
         return SaveEditorSettings(*fs.AsWritable(), in);
     }
 
-    RTTI_DEFINE_OBJECT_VERSIONED(EditorFontSettings, "rtti::editor::editor", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorUiSettings, "rtti::editor::editor", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorMcpSettings, "rtti::editor::editor", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorShortcutSettings, "rtti::editor::editor", 1)

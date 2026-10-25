@@ -8,8 +8,10 @@
 // (Documentation/Specs/editor-gui.md, 5.1, layer 12). A modal window of the editor's markup
 // (Data/Editor/Preferences.gml), a tab per category. Appearance holds the look's inputs: the
 // scheme, the accent (one of the editor's or any #rrggbb), the density, less motion and the UI
-// scale; each change shows at once. Save writes them into the store and persists it; Cancel, or
-// closing the window, puts the look back as it was.
+// scale; each change shows at once. Shortcuts lists every action with its chord: a click captures
+// the next keys, Reset goes back to the declaration's. Save writes everything into the store
+// (a chord another action holds refused, named in a warning) and persists it; Cancel, or closing
+// the window, puts the look back as it was and forgets the shortcuts' edits.
 module;
 #include "Core/Prelude.h"
 
@@ -20,6 +22,7 @@ import foundation.gui;
 import foundation.settings;
 import editor.core;
 import :editor_window; // EditorLook, LookFrom, StoreLook, the accents and densities
+import :shortcut_capture;
 
 using namespace foundation::core;
 
@@ -37,6 +40,9 @@ export namespace editor::app
         struct Services
         {
             foundation::settings::Settings* user = nullptr; // the user's store
+            editor::EditorActionRegistry* actions = nullptr; // the Shortcuts tab's
+            /// Says a warning to the user (a chord another action holds).
+            Function<void(StringView)> warn;
             /// Shows a look (the window's SetLook).
             Function<void(const EditorLook&)> showLook;
             /// Persists the user's store; false when it could not be written.
@@ -67,7 +73,9 @@ export namespace editor::app
             m_original = LookFrom(m_services.user != nullptr ? m_services.user->Find<editor::EditorUiSettings>() : nullptr);
             m_look = m_original;
             m_saved = false;
+            m_shortcutEdits = editor::ShortcutEdits{};
             ShowControls();
+            ShowShortcuts();
             m_window->OpenModal(root);
             return true;
         }
@@ -80,6 +88,15 @@ export namespace editor::app
             {
                 StoreLook(m_services.user->Section<editor::EditorUiSettings>(), m_look);
                 m_services.user->MarkChanged<editor::EditorUiSettings>();
+                if (!m_shortcutEdits.IsEmpty() && m_services.actions != nullptr)
+                {
+                    Array<String> collisions;
+                    (void)m_shortcutEdits.Apply(*m_services.actions, m_services.user->Section<editor::EditorShortcutSettings>(), &collisions);
+                    m_services.user->MarkChanged<editor::EditorShortcutSettings>();
+                    for (const String& collision : collisions)
+                        if (m_services.warn)
+                            m_services.warn(Format(u8"Shortcut kept: {}", collision).AsView());
+                }
             }
             const bool persisted = !m_services.persist || m_services.persist();
             m_saved = true;
@@ -196,6 +213,55 @@ export namespace editor::app
                 m_services.showLook(m_look);
         }
 
+        // The Shortcuts tab: a row per action, its chord as the registry has it now.
+        void ShowShortcuts()
+        {
+            gui::Node* list = Find<gui::Node>(u8"pref-shortcuts");
+            if (list == nullptr || m_services.actions == nullptr)
+                return;
+            while (list->ChildCount() > 0)
+                list->RemoveChild(list->GetChildAt(list->ChildCount() - 1));
+            editor::EditorActionRegistry& actions = *m_services.actions;
+            EditorPreferencesDialog* self = this;
+            for (const editor::EditorActionDeclaration& action : actions.Actions())
+            {
+                RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+                row->AddClass(u8"pref-shortcut");
+                RefPtr<gui::Label> name = MakeRef<gui::Label>(m_allocator);
+                name->AddClass(u8"row-name");
+                name->SetText(action.label.AsView());
+                RefPtr<gui::Label> where = MakeRef<gui::Label>(m_allocator);
+                where->AddClass(u8"pref-where");
+                where->SetText(action.menuPath.AsView());
+                RefPtr<ShortcutCaptureButton> capture = MakeRef<ShortcutCaptureButton>(m_allocator);
+                capture->SetChord(actions.Shortcut(action.id.AsView()));
+                RefPtr<gui::Button> reset = MakeRef<gui::Button>(m_allocator);
+                reset->AddClass(u8"ghost");
+                reset->SetText(u8"Reset");
+                reset->SetEnabled(actions.HasOverride(action.id.AsView()));
+                const String id = action.id;
+                const EditorShortcut declared = action.shortcut;
+                gui::Button* resetRaw = reset.Get();
+                ShortcutCaptureButton* captureRaw = capture.Get();
+                capture->SetOnChordChosen([self, id, resetRaw](EditorShortcut chord)
+                                          {
+                                              self->m_shortcutEdits.Set(id.AsView(), chord);
+                                              resetRaw->SetEnabled(true);
+                                          });
+                reset->SetOnClick([self, id, captureRaw, resetRaw, declared]()
+                                  {
+                                      self->m_shortcutEdits.Reset(id.AsView());
+                                      captureRaw->SetChord(declared); // the default, shown at once
+                                      resetRaw->SetEnabled(false);
+                                  });
+                row->AddChild(name.Get());
+                row->AddChild(where.Get());
+                row->AddChild(capture.Get());
+                row->AddChild(reset.Get());
+                list->AddChild(row.Get());
+            }
+        }
+
         // The controls as m_look has it (quietly: no change of theirs comes back).
         void ShowControls()
         {
@@ -228,6 +294,7 @@ export namespace editor::app
         Array<RefPtr<gui::Button>> m_accents;
         EditorLook m_original; // as it was when it opened
         EditorLook m_look;     // as the controls have it
+        editor::ShortcutEdits m_shortcutEdits; // staged; applied and persisted on Save
         bool m_saved = false;
         bool m_showing = false; // the controls being set from code
     };

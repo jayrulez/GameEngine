@@ -30,6 +30,7 @@ import editor.core;
 import :ui_page;
 import :editor_dock;
 import :layout;
+import :asset_create_dialog; // AssetNames: the rule a new name keeps
 
 using namespace foundation::core;
 
@@ -264,13 +265,11 @@ export namespace editor::app
             const auto commit = [self, raw, name, error, pageId, group]()
             {
                 const StringView newName = name->GetText();
-                const StringView refused = newName.IsEmpty()                           ? StringView(u8"Enter a name.")
-                                           : group->GetInstance(newName) != nullptr ? StringView(u8"That name is taken in this group.")
-                                                                                    : StringView{};
+                const String refused = AssetNames::Refusal(*group, newName); // the rule Create Asset keeps
                 if (!refused.IsEmpty())
                 {
                     if (error != nullptr)
-                        error->SetText(refused);
+                        error->SetText(refused.AsView());
                     return; // the dialog stays for the retry
                 }
                 self->SaveAsNamed(pageId, *group, newName);

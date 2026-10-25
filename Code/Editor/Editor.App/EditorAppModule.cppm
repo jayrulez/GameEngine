@@ -32,6 +32,8 @@ export import :resource_ref_editor;
 export import :picker;
 export import :path_picker_dialog;
 export import :asset_picker_dialog;
+export import :group_picker_dialog;
+export import :asset_create_dialog;
 export import :native_module;
 export import :export_service;
 export import :asset_creation;

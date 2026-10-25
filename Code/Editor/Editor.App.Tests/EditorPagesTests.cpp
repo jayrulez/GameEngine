@@ -393,7 +393,7 @@ TEST_CASE("editor pages: Save As names a new asset beside the page's; an empty o
     name->SetText(u8"Two"); // taken
     CHECK(save->HandleActivate());
     CHECK(window->IsOpen());
-    CHECK(error->GetText() == StringView(u8"That name is taken in this group."));
+    CHECK(error->GetText() == StringView(u8"Two is already in Content."));
 
     name->SetText(u8"One Again");
     CHECK(save->HandleActivate());

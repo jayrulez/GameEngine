@@ -50,6 +50,8 @@ target_sources(Editor.App
             Picker.cppm
             PathPickerDialog.cppm
             AssetPickerDialog.cppm
+            GroupPickerDialog.cppm
+            AssetCreateDialog.cppm
             ResourceRefEditor.cppm
             EditorNativeModule.cppm
             EditorExport.cppm

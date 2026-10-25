@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// What an asset carries when dragged: the payload it makes, read back whole; a target that takes
-// some types taking it or naming why not; anything else not an asset.
+// What assets carry when dragged: the payload they make, read back whole; a target that takes
+// some types taking one or naming why not (several, a type it does not take); anything else not an asset.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -42,4 +42,23 @@ TEST_CASE("asset drag: the payload carries the asset's guid, type and name, and 
     CHECK_FALSE(AssetDrag::Read(text, read));
     CHECK_FALSE(AssetDrag::Takes(text, Span<const String>{}, read, why));
     CHECK(why == String(u8"Not an asset"));
+}
+
+TEST_CASE("asset drag: several assets travel in order, labelled by their count; a target of one refuses them, saying why")
+{
+    const AssetDrag assets[] = {AssetDrag{Guid{1u, 1u}, String(u8"MaterialAsset"), String(u8"Wood")},
+                                AssetDrag{Guid{2u, 2u}, String(u8"TextureAsset"), String(u8"Brick")}};
+    const gui::DragPayload payload = AssetDrag::Payload(Span<const AssetDrag>(assets, 2u));
+    CHECK(payload.Label == String(u8"2 assets"));
+    Array<AssetDrag> all;
+    REQUIRE(AssetDrag::ReadAll(payload, all));
+    REQUIRE(all.Size() == 2u);
+    CHECK(all[1].Id == Guid{2u, 2u});
+    CHECK(all[1].Name == String(u8"Brick"));
+
+    AssetDrag first;
+    String why;
+    CHECK_FALSE(AssetDrag::Takes(payload, Span<const String>{}, first, why));
+    CHECK(why == String(u8"This takes one asset"));
+    CHECK(first.Id == Guid{1u, 1u}); // still an asset: a slot refuses rather than ignores it
 }

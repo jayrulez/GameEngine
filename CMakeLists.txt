@@ -595,6 +595,7 @@ if(OPTION_BUILD_TOOLS)
         add_subdirectory(Code/Pipeline/Script.Luau.Pipeline)  # Luau cook service
     endif()
     add_subdirectory(Code/Editor/Editor.Spline) # interactive spline viewport tool (editor exe only)
+    add_subdirectory(Code/Editor/Editor.Terrain) # the terrain's scene-view brushes and their panels (its asset page later)
     add_subdirectory(Code/Editor/Editor.ViewportTools) # viewport tool-mode framework (IViewportTool + manager + provider registry)
     add_subdirectory(Code/Editor/Editor.Camera) # shared free-fly viewport camera (lean, foundation-only) for all editor pages
     add_subdirectory(Code/Editor/Editor.Navigation) # navmesh bake tooling (collect + Recast bake -> zone asset)

@@ -49,7 +49,8 @@ export namespace editor
         }
 
         [[nodiscard]] StringView Id() const override { return u8"terrain.sculpt"; }
-        [[nodiscard]] StringView DisplayName() const override { return u8"Sculpt Terrain"; }
+        [[nodiscard]] StringView DisplayName() const override { return u8"Sculpt"; }
+        [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/TerrainComponent.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Terrain"; }
 
         /// Relevant only when the scene actually has a terrain whose heightfield resolves.
@@ -70,18 +71,10 @@ export namespace editor
         void SetRadius(f32 r)
         {
             m_radius = Clamp(r, kMinRadius, kMaxRadius);
-            if (OnRadiusChanged)
-            {
-                OnRadiusChanged(m_radius);
-            }
         }
         [[nodiscard]] f32 Radius() const noexcept { return m_radius; }
         void SetStrength(f32 s) noexcept { m_strength = Clamp(s, 0.0f, kMaxStrength); }
         [[nodiscard]] f32 Strength() const noexcept { return m_strength; }
-
-        // Fired whenever the radius changes (wheel resize / SetRadius), so a bound panel field can
-        // track it live. The FloatEditor's SetValue is edit-guarded, so this won't loop back.
-        Function<void(f32)> OnRadiusChanged;
 
     private:
         static constexpr f32 kMinRadius = 0.5f;

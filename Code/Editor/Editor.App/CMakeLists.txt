@@ -87,4 +87,5 @@ target_sources(Editor.App
             EditorActionTools.cppm
             FontAtlasDiskCache.cppm
             ToolPanel.cppm
+            ToolPanelWidgets.cppm
             EditorAppModule.cppm)

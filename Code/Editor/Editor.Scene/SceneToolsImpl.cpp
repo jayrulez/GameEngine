@@ -410,6 +410,9 @@ namespace editor
         }
         if (m_host)
             m_host->Sync();
+        // A panel made of the kit shows what the tool has now (its keys change it too).
+        if (auto* body = m_body ? Cast<app::ToolPanelBody>(m_body.Get()) : nullptr)
+            body->Sync();
         if (m_panelShown)
             Clamp();
     }

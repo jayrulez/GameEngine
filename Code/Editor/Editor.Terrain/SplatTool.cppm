@@ -40,7 +40,8 @@ export namespace editor
         }
 
         [[nodiscard]] StringView Id() const override { return u8"terrain.splat"; }
-        [[nodiscard]] StringView DisplayName() const override { return u8"Paint Splat"; }
+        [[nodiscard]] StringView DisplayName() const override { return u8"Paint Layers"; }
+        [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/texture.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Terrain"; }
 
         /// Relevant only when the scene has a terrain whose splatmap (and heightfield, for the pick)
@@ -48,7 +49,7 @@ export namespace editor
         [[nodiscard]] bool IsAvailable() const override;
         [[nodiscard]] StringView UnavailableReason() const override
         {
-            return u8"Paint Splat needs a terrain whose splatmap and heightfield resolve.";
+            return u8"Paint Layers needs a terrain whose splatmap and heightfield resolve.";
         }
 
         [[nodiscard]] bool Update(const ViewportToolInput& input) override;
@@ -89,10 +90,6 @@ export namespace editor
         void SetRadius(f32 r)
         {
             m_radius = Clamp(r, kMinRadius, kMaxRadius);
-            if (OnRadiusChanged)
-            {
-                OnRadiusChanged(m_radius);
-            }
         }
         [[nodiscard]] f32 Radius() const noexcept { return m_radius; }
         void SetStrength(f32 s) noexcept { m_strength = Clamp(s, 0.0f, 1.0f); }
@@ -106,10 +103,6 @@ export namespace editor
         /// PER SECOND of hover (the soft-blend workflow); off = movement-only stamps.
         void SetAirbrush(bool on) noexcept { m_airbrush = on; }
         [[nodiscard]] bool IsAirbrush() const noexcept { return m_airbrush; }
-
-        // Fired whenever the radius changes (wheel resize / SetRadius), so a bound panel field can
-        // track it live. The FloatEditor's SetValue is edit-guarded, so this won't loop back.
-        Function<void(f32)> OnRadiusChanged;
 
     private:
         static constexpr f32 kMinRadius = 0.5f;

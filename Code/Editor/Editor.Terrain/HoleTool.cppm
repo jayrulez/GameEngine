@@ -43,6 +43,7 @@ export namespace editor
         }
         [[nodiscard]] StringView Id() const override { return u8"terrain.hole"; }
         [[nodiscard]] StringView DisplayName() const override { return u8"Cut Holes"; }
+        [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/minus.svg"; }
         [[nodiscard]] StringView Category() const override { return u8"Terrain"; }
         [[nodiscard]] bool IsAvailable() const override;
         [[nodiscard]] StringView UnavailableReason() const override
@@ -63,14 +64,9 @@ export namespace editor
         void SetRadius(f32 r)
         {
             m_radius = Clamp(r, kMinRadius, kMaxRadius);
-            if (OnRadiusChanged)
-            {
-                OnRadiusChanged(m_radius);
-            }
             UpdateStatus();
         }
         [[nodiscard]] f32 Radius() const noexcept { return m_radius; }
-        Function<void(f32)> OnRadiusChanged;
 
     private:
         static constexpr f32 kMinRadius = 0.5f;

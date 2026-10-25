@@ -128,6 +128,9 @@ export namespace editor::app
         [[nodiscard]] foundation::resource::ResourceManager* Resources() const noexcept { return m_session.Resources(); }
         [[nodiscard]] engine::runtime::DefaultApplication* EmbeddedApplication() const noexcept { return m_embeddedApp.Get(); }
         [[nodiscard]] EditorWindow& Window() noexcept { return m_window; }
+        /// What an asset slot or a page's picker asks of the editor: the accepted types, the
+        /// project's names, the picker (made the first time).
+        [[nodiscard]] const ResourceRefServices& RefServices();
         [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }
         [[nodiscard]] EditorPages& Pages() noexcept { return *m_pages; }
         [[nodiscard]] EditorAssetCreation& AssetCreation() noexcept { return m_creation; }
@@ -166,7 +169,6 @@ export namespace editor::app
         [[nodiscard]] foundation::shell::IDialogService* ShellDialogs() const;
         /// Shows a picker's request below `anchor` (else near the top), over the main window.
         void ShowPicker(PickerRequest request, gui::Node* anchor);
-        [[nodiscard]] const ResourceRefServices& RefServices();
         void EnterManagerMode();
         void OpenFromManager(StringView directory);
         void CreateFromManager(StringView directory, StringView name);

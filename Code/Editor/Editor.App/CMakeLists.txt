@@ -32,6 +32,7 @@ target_sources(Editor.App
     PUBLIC
         FILE_SET editorapp_modules TYPE CXX_MODULES FILES
             UIPage.cppm
+            PageActionBar.cppm
             EditorStatusBar.cppm
             EditorWindow.cppm
             EditorDock.cppm

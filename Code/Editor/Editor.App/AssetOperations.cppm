@@ -20,6 +20,7 @@ import foundation.content;
 import foundation.vfs;
 import editor.core;
 import :asset_create_dialog; // AssetNames
+import :group_picker_dialog; // GroupPicker::ShownName
 
 using namespace foundation::core;
 
@@ -128,6 +129,66 @@ export namespace editor::app
                 (void)writable->CreateDirectory(created->Path().AsView());
             LOG_INFO(u8"Assets", u8"created group '{}'", created->Path());
             return created;
+        }
+
+        // === Moving ===
+        /// Whether `ids` can move into `to`, and when not, why (all there already, a name taken).
+        [[nodiscard]] bool CanMove(Span<const Guid> ids, const content::Group& to, String& why) const
+        {
+            usize moving = 0;
+            for (const Guid& id : ids)
+            {
+                const content::Instance* instance = Find(id);
+                if (instance == nullptr || &instance->OwningGroup() == &to)
+                    continue;
+                if (to.GetInstance(instance->Name()) != nullptr)
+                {
+                    why = Format(u8"{} is already in {}", instance->Name(), GroupPicker::ShownName(to));
+                    return false;
+                }
+                ++moving;
+            }
+            if (moving == 0)
+                why = Format(u8"Already in {}", GroupPicker::ShownName(to));
+            return moving > 0;
+        }
+        /// Moves assets into `to` (their files with them, the cooked mirror following); one
+        /// whose name is taken there stays, said.
+        void MoveTo(Array<Guid> ids, content::Group& to)
+        {
+            content::Group* target = &to;
+            AssetOperations* self = this;
+            if (Project() == nullptr || Waits([self, ids, target]() mutable { self->MoveTo(foundation::core::Move(ids), *target); }, u8"Move"))
+                return;
+            editor::EditorProject& project = *Project();
+            usize moved = 0;
+            for (const Guid& id : ids)
+            {
+                content::Instance* instance = Find(id);
+                if (instance == nullptr || &instance->OwningGroup() == &to)
+                    continue;
+                if (to.GetInstance(instance->Name()) != nullptr)
+                {
+                    Notify(editor::NoticeKind::Warning, Format(u8"{} stays: {} has one of that name.", instance->Name(), GroupPicker::ShownName(to)).AsView());
+                    continue;
+                }
+                const String from = instance->Path();
+                if (!project.SourceDb().MoveInstance(id, to).IsOk())
+                {
+                    Notify(editor::NoticeKind::Error, Format(u8"{} could not be moved (see the Console).", instance->Name()).AsView());
+                    continue;
+                }
+                ++moved;
+                LOG_INFO(u8"Assets", u8"moved '{}' -> '{}'", from, instance->Path());
+                // The cooked product's place in step (all binds by guid; the mirror only reads true).
+                if (project.CookedDb().GetInstance(id) != nullptr)
+                    if (content::Group* cooked = MakeGroupAt(project.CookedDb(), to.Path().AsView()))
+                        (void)project.CookedDb().MoveInstance(id, *cooked);
+            }
+            RefreshDefaultScenePath(project);
+            if (moved > 0)
+                Context().SetStatus(moved == 1 ? Format(u8"Moved 1 asset to {}.", GroupPicker::ShownName(to)).AsView()
+                                               : Format(u8"Moved {} assets to {}.", moved, GroupPicker::ShownName(to)).AsView());
         }
 
         // === Deleting ===
@@ -259,6 +320,19 @@ export namespace editor::app
             if (parent.GetGroup(name) != nullptr)
                 return Format(u8"{} is already there.", name);
             return String{};
+        }
+        [[nodiscard]] static content::Group* MakeGroupAt(content::ContentDatabase& db, StringView path)
+        {
+            content::Group* group = db.RootGroup();
+            usize start = 0;
+            for (usize i = 0; i <= path.Size() && group != nullptr; ++i)
+                if (i == path.Size() || path[i] == u8'/')
+                {
+                    if (i > start)
+                        group = group->CreateGroup(path.SubStr(start, i - start));
+                    start = i + 1;
+                }
+            return group;
         }
         [[nodiscard]] static content::Group* GroupAt(content::ContentDatabase& db, StringView path)
         {

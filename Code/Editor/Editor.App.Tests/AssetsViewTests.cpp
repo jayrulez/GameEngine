@@ -480,3 +480,54 @@ TEST_CASE("assets: a row's name and a tree group's edited in place rename them, 
     CHECK(groups.SetData(tree.GetItemIndex(townItem), gui::Variant(StringView(u8"Village"))));
     CHECK(bed.town->Name() == StringView(u8"Village"));
 }
+
+TEST_CASE("assets: assets dropped on a group's row or a group in the tree move into it; one already there or taken there is refused, saying why")
+{
+    Bed bed;
+    gui::IModel& rows = *bed.view->List()->GetModel();
+    const gui::DragPayload crate = AssetDrag::Payload(bed.crate->Id(), u8"BrowserMesh", u8"Crate");
+
+    // Onto the Models row: moved.
+    gui::ModelDrop drop;
+    drop.Payload = &crate;
+    drop.Index = gui::ModelIndex{bed.RowOf(u8"Models"), 0};
+    drop.Place = gui::DropPlace::On;
+    String why;
+    CHECK(rows.CanDrop(drop, why) == gui::DropEffect::Move);
+    CHECK(why == String(u8"Move into Models"));
+    drop.Place = gui::DropPlace::After; // between rows: not a move
+    CHECK(rows.CanDrop(drop, why) == gui::DropEffect::None);
+    drop.Place = gui::DropPlace::On;
+    CHECK(rows.Drop(drop));
+    CHECK(&bed.crate->OwningGroup() == bed.models);
+    CHECK(bed.crate->Path() == String(u8"Models/Crate"));
+
+    // Into Town through the tree; then back where it is: refused.
+    gui::TreeView& tree = *bed.view->Tree();
+    gui::IModel& groups = *tree.GetModel();
+    i32 townItem = -1, modelsItem = -1;
+    for (i32 item = 0; item < static_cast<i32>(tree.GetItemCount()); ++item)
+    {
+        if (tree.GetItemText(item) == String(u8"Town"))
+            townItem = item;
+        if (tree.GetItemText(item) == String(u8"Models"))
+            modelsItem = item;
+    }
+    REQUIRE(townItem >= 0);
+    gui::ModelDrop onto;
+    onto.Payload = &crate;
+    onto.Index = tree.GetItemIndex(townItem);
+    onto.Place = gui::DropPlace::On;
+    CHECK(groups.Drop(onto));
+    CHECK(&bed.crate->OwningGroup() == bed.town);
+    CHECK(groups.CanDrop(onto, why) == gui::DropEffect::None);
+    CHECK(why == String(u8"Already in Models/Town"));
+
+    // A name taken where it would go: refused, saying so.
+    REQUIRE(bed.models->CreateInstance(u8"Barrel", BrowserMesh::StaticType()) != nullptr);
+    const gui::DragPayload barrel = AssetDrag::Payload(bed.barrel->Id(), u8"BrowserMesh", u8"Barrel");
+    onto.Payload = &barrel;
+    onto.Index = tree.GetItemIndex(modelsItem);
+    CHECK(groups.CanDrop(onto, why) == gui::DropEffect::None);
+    CHECK(why == String(u8"Barrel is already in Models"));
+}

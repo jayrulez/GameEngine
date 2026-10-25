@@ -243,11 +243,20 @@ export namespace editor::app
                                               });
             m_crumbs = Find<gui::BreadcrumbBar>(u8"assets-crumbs");
             if (m_crumbs != nullptr)
+            {
                 m_crumbs->SetOnNavigate([self](const gui::BreadcrumbItem& item)
                                         {
                                             if (content::Group* group = self->GroupAt(item.Id.AsView()))
                                                 self->Navigate(*group);
                                         });
+                // Assets dropped on a segment move up into that group.
+                m_crumbs->SetSegmentDropTypes(AssetDrag::kType);
+                m_crumbs->SetOnSegmentDrop([self](const gui::BreadcrumbItem& item, const gui::DragPayload& payload, gui::DropEffect)
+                                           {
+                                               if (content::Group* group = self->GroupAt(item.Id.AsView()))
+                                                   (void)self->Take(payload, *group);
+                                           });
+            }
             if (auto* search = Find<gui::TextField>(u8"assets-search"))
                 search->SetOnTextChanging([self](StringView text) { self->Search(text); });
             if (auto* clear = Find<gui::Button>(u8"assets-clear-search"))
@@ -507,6 +516,17 @@ export namespace editor::app
             {
                 return index.Row >= 0 && m_view.RenameRow(static_cast<usize>(index.Row), value.AsString());
             }
+            // Assets dropped onto a group's row move into it.
+            [[nodiscard]] gui::DropEffect CanDrop(const gui::ModelDrop& drop, String& reason) const override
+            {
+                content::Group* group = drop.Place == gui::DropPlace::On && drop.Index.Row >= 0 ? m_view.RowGroup(static_cast<usize>(drop.Index.Row)) : nullptr;
+                return group != nullptr && drop.Payload != nullptr && m_view.CanTake(*drop.Payload, *group, reason) ? gui::DropEffect::Move : gui::DropEffect::None;
+            }
+            bool Drop(const gui::ModelDrop& drop) override
+            {
+                content::Group* group = drop.Place == gui::DropPlace::On && drop.Index.Row >= 0 ? m_view.RowGroup(static_cast<usize>(drop.Index.Row)) : nullptr;
+                return group != nullptr && drop.Payload != nullptr && m_view.Take(*drop.Payload, *group);
+            }
             void Reset() { NotifyReset(); }
             void Changed()
             {
@@ -531,6 +551,17 @@ export namespace editor::app
             {
                 content::Group* group = m_view.TreeGroupAt(index);
                 return group != nullptr && m_view.RenameGroup(*group, value.AsString());
+            }
+            // Assets dropped onto a group move into it.
+            [[nodiscard]] gui::DropEffect CanDrop(const gui::ModelDrop& drop, String& reason) const override
+            {
+                content::Group* group = drop.Place == gui::DropPlace::On ? m_view.TreeGroupAt(drop.Index) : nullptr;
+                return group != nullptr && drop.Payload != nullptr && m_view.CanTake(*drop.Payload, *group, reason) ? gui::DropEffect::Move : gui::DropEffect::None;
+            }
+            bool Drop(const gui::ModelDrop& drop) override
+            {
+                content::Group* group = drop.Place == gui::DropPlace::On ? m_view.TreeGroupAt(drop.Index) : nullptr;
+                return group != nullptr && drop.Payload != nullptr && m_view.Take(*drop.Payload, *group);
             }
 
         private:
@@ -931,6 +962,33 @@ export namespace editor::app
             if (!refused.IsEmpty())
                 m_services.context->Notify(editor::NoticeKind::Warning, refused.AsView());
             return refused.IsEmpty();
+        }
+        // Assets a drag carries, moving into `group`: whether they can, and when not why.
+        [[nodiscard]] bool CanTake(const gui::DragPayload& payload, const content::Group& group, String& why) const
+        {
+            Array<AssetDrag> assets;
+            if (m_services.operations == nullptr || !AssetDrag::ReadAll(payload, assets))
+                return false;
+            Array<Guid> ids;
+            for (const AssetDrag& asset : assets)
+                ids.PushBack(asset.Id);
+            const bool can = m_services.operations->CanMove(ids.AsSpan(), group, why);
+            if (can)
+                why = Format(u8"Move into {}", group.Parent() == nullptr ? StringView(kTopGroup) : group.Name());
+            return can;
+        }
+        bool Take(const gui::DragPayload& payload, content::Group& group)
+        {
+            String why;
+            if (!CanTake(payload, group, why))
+                return false;
+            Array<AssetDrag> assets;
+            (void)AssetDrag::ReadAll(payload, assets);
+            Array<Guid> ids;
+            for (const AssetDrag& asset : assets)
+                ids.PushBack(asset.Id);
+            m_services.operations->MoveTo(Move(ids), group);
+            return true;
         }
         [[nodiscard]] content::Group* TreeGroupAt(const gui::ModelIndex& index) const
         {

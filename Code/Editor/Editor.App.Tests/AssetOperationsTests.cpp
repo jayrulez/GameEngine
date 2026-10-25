@@ -169,3 +169,28 @@ TEST_CASE("asset operations: the export flag on an asset and on a group's conten
     bed.ops->ToggleAlwaysExport(bed.crate->Id());
     CHECK_FALSE(bed.ops->IsAlwaysExported(bed.crate->Id()));
 }
+
+TEST_CASE("asset operations: a move takes assets and their files into another group; one whose name is taken there stays")
+{
+    Bed bed;
+    Array<Guid> two;
+    two.PushBack(bed.crate->Id());
+    two.PushBack(bed.barrel->Id());
+    String why;
+    CHECK(bed.ops->CanMove(two.AsSpan(), *bed.town, why));
+    bed.ops->MoveTo(two, *bed.town);
+    CHECK(&bed.crate->OwningGroup() == bed.town);
+    CHECK(&bed.barrel->OwningGroup() == bed.town);
+    CHECK(bed.crate->ReadObject().Get() != nullptr); // its file moved with it: it reads where it is now
+    CHECK_FALSE(bed.ops->CanMove(two.AsSpan(), *bed.town, why));
+    CHECK(why == String(u8"Already in Town"));
+
+    content::Instance* other = bed.top->CreateInstance(u8"Bell", OpsAsset::StaticType()); // Town has a Bell
+    REQUIRE(other != nullptr);
+    Array<Guid> bell;
+    bell.PushBack(other->Id());
+    CHECK_FALSE(bed.ops->CanMove(bell.AsSpan(), *bed.town, why));
+    CHECK(why == String(u8"Bell is already in Town"));
+    bed.ops->MoveTo(bell, *bed.town);
+    CHECK(&other->OwningGroup() == bed.top); // stayed
+}

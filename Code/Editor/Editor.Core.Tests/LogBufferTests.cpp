@@ -31,6 +31,9 @@ TEST_CASE("editor-log: captures dispatches and collects incrementally")
     CHECK(out[0].level == LogLevel::Info);
     CHECK(out[1].message == u8"second");
     CHECK(out[1].sequence > out[0].sequence);
+    // Each stamped with its time since the buffer was made, in order.
+    CHECK(out[0].time.AsNanoseconds() >= 0);
+    CHECK(out[1].time.AsNanoseconds() >= out[0].time.AsNanoseconds());
 
     // Incremental: nothing new since the returned high-water mark.
     Array<EditorLogEntry> more;

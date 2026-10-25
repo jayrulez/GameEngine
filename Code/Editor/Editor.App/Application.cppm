@@ -38,6 +38,7 @@ import :command_palette;
 import :preferences_dialog;
 import :project_home;
 import :project_manager_view;
+import :log_view;
 import :native_module;
 import :export_service;
 import :asset_creation;
@@ -152,6 +153,7 @@ export namespace editor::app
         bool OpenProject(StringView directory, bool seed);
         void CloseProjectToManager();
         void Later(Function<void()> work);
+        void DrainLog();
         void OpenDefaultScene(editor::EditorProject& project);
         [[nodiscard]] EditorAssetCreation::Services CreationServices();
         [[nodiscard]] EditorSession::Services SessionServices();
@@ -186,6 +188,8 @@ export namespace editor::app
         UniquePtr<EditorPreferencesDialog> m_preferences; // Edit > Preferences
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
+        UniquePtr<LogView> m_console;            // the Console panel's content
+        u64 m_logSequence = 0;                   // the last log entry the Console took
         EditorNativeModule m_native{m_editorAllocator};
         UniquePtr<EditorExport> m_export;
         EditorAssetCreation m_creation;

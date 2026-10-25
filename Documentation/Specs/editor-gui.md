@@ -319,6 +319,28 @@ The layers:
 Left for later phases: the Console's and Assets' contents (X4), the page toolbar and tool panels
 (X5), the profiler panel (X7).
 
+### 5.2 X4, the shared parts, in layers
+
+Mapped from Editor.App on 2026-10-24 (about 10k lines across the console, the assets browser, the
+asset slots and the dialogs). As in X3, each layer is one commit with its tests; GUI library
+additions go first and are grouped with the other GUI commits.
+
+1. The Console: the log on a virtualised GUI list, each line its time since the editor started, its
+   level's colour, `[Category] message`; the mock's chips (Info, holding debug and trace lines too,
+   Warnings, Errors) with their counts, a search, Clear; rows selected and copied; the newest line
+   followed until the user scrolls up, and followed again at the bottom; an empty state. Fed each
+   frame from the log buffer, which stamps each entry's time.
+2. Asset drag data and the type-filtered drop: what an assets row carries, what a slot takes.
+3. The asset slot (name, picture, pick, reveal, edit, clear, a drop target), the compact slot.
+4. The inspector's editors by hint on the GUI's property grid: asset references (a slot), entity
+   references, the editor's own groups. An asset reference takes the source asset types whose
+   builder's product is its runtime type or derives from it (ruling 19): no list in the editor.
+5. The small dialogs: confirm, path picker, group picker, asset picker, asset create.
+6. The import dialog; Project Settings; the templates and export dialogs.
+7. The assets browser: the group tree, the breadcrumb, the filter, list and grid with pictures and
+   cook state; create, import, rename, duplicate, delete, cook, the export flag, favorites; a drag
+   source for the slots; dropped files imported.
+
 ## 6. Tests
 
 Editor tests move from UIContext with synthetic events to GUI.Testing (Finder by selector or id,
@@ -371,3 +393,6 @@ Rulings (the user, 2026-10-23):
 18. Preferences has no font paths: the editor's fonts are its sheet's, and EditorFontSettings is gone
     (2026-10-24; no outside users, so no migration: a file that still has the section keeps it as
     an unknown one).
+19. An asset reference (`Ref<T>`) takes the source asset types whose builder's product is `T` or
+    derives from it: asked of the builder registry, never a list of types in the editor
+    (2026-10-24).

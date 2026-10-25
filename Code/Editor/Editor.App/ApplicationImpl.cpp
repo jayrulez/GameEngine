@@ -307,7 +307,13 @@ namespace editor::app
         EditorDock::Contents contents;
         contents.welcome = [self]() { return self->m_window.LoadMarkup(u8"Editor/Welcome.gml"); };
         contents.assets = placeholder(u8"The asset browser is not on the new interface yet.");
-        contents.console = placeholder(u8"The console is not on the new interface yet.");
+        m_console = MakeUnique<LogView>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(LogView::kPath));
+        m_console->SetOnCopied([self](usize lines)
+                               {
+                                   const String text = lines == 1 ? String(u8"Copied 1 log line.") : Format(u8"Copied {} log lines.", lines);
+                                   self->ShowToast(editor::NoticeKind::Info, text.AsView());
+                               });
+        contents.console = [self]() { return self->m_console->Content(); };
         m_dock.Open(*into, m_window.Host(), Move(contents));
     }
 
@@ -423,6 +429,17 @@ namespace editor::app
                                                                 m_window.LoadMarkup(EditorPreferencesDialog::kPath));
         }
         (void)m_preferences->Open(*root);
+    }
+
+    // The log's new lines into the Console.
+    void EditorApplication::DrainLog()
+    {
+        if (!m_console || m_config.logBuffer == nullptr)
+            return;
+        Array<editor::EditorLogEntry> entries(m_editorAllocator);
+        m_logSequence = m_config.logBuffer->CollectSince(m_logSequence, entries);
+        for (const editor::EditorLogEntry& entry : entries)
+            m_console->AddEntry(entry.level, entry.category.AsView(), entry.message.AsView(), entry.time);
     }
 
     // `work` at the GUI's next drain: never inside the click that asked (a screen swap takes away
@@ -725,6 +742,7 @@ namespace editor::app
             resources->Pump();           // async loads finish
             resources->CollectGarbage(); // products a hot reload replaced go
         }
+        DrainLog();
         m_window.Update(dt);
         m_pages->Update(host, dt); // after the GUI laid out: viewport rects are current
         if (m_home)
@@ -882,6 +900,7 @@ namespace editor::app
         m_menus.Reset();
         m_shortcuts.Reset();
         m_dock.Close(); // its floats' windows, then the GUI before the device goes
+        m_console.Reset();
         m_window.Close();
     }
 }

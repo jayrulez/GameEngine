@@ -173,8 +173,13 @@ export namespace editor::app
                 return;
             editor::EditorContext& context = *m_services.context;
             SaveStore(); // the views' state, while they are up
+            // The pages close next, and a page saves its own state as it goes (a scene its view),
+            // which asks for a save: that writes what they add without capturing the views again,
+            // or the open pages would be written as they close, the last leaving none to reopen.
+            m_closingViews = true;
             if (m_services.closing)
                 m_services.closing();
+            m_closingViews = false;
             m_services.cook->Shutdown(); // joins a cook in flight before the databases go
             m_thumbnailStage.Reset(); // unstages and drops its GPU objects while the renderer lives
             m_services.thumbnails->Reset();
@@ -217,12 +222,13 @@ export namespace editor::app
         /// application stages a job each frame and renders it in the scene renderer's bracket.
         [[nodiscard]] editor::ThumbnailStage* Stage() const noexcept { return m_thumbnailStage.Get(); }
 
-        /// Writes the per-project store, the views' state captured into it first.
+        /// Writes the per-project store, the views' state captured into it first (not while they
+        /// close: what they were is already in it).
         void SaveStore()
         {
             if (!m_project || !m_store)
                 return;
-            if (m_services.captureState)
+            if (m_services.captureState && !m_closingViews)
                 m_services.captureState(*m_store);
             (void)SaveProjectEditorSettings(*m_store, m_project->EditorStateRoot().AsView());
         }
@@ -371,6 +377,7 @@ export namespace editor::app
         Services m_services;
         UniquePtr<editor::EditorProject> m_project;
         UniquePtr<foundation::settings::Settings> m_store;
+        bool m_closingViews = false; // Close is closing the views: a save writes, captures nothing
         UniquePtr<foundation::resource::ResourceManager> m_resources;
         UniquePtr<editor::ThumbnailStage> m_thumbnailStage;
     };

@@ -152,6 +152,7 @@ namespace foundation::content
 
     void Group::ResortChildren()
     {
+        m_db->Touch(); // a child renamed
         m_groups.Sort([](Group* a, Group* b) { return NameLess(a->Name(), b->Name()); });
         m_instances.Sort([](Instance* a, Instance* b)
                          { return NameLess(a->Name(), b->Name()); });
@@ -159,6 +160,7 @@ namespace foundation::content
 
     void Group::RemoveInstance(Instance* instance)
     {
+        m_db->Touch();
         for (usize i = 0; i < m_instances.Size(); ++i)
         {
             if (m_instances[i] == instance)
@@ -843,6 +845,7 @@ namespace foundation::content
         }
 
         // Unregister from the parent and the pool, then destroy.
+        Touch();
         Group* parent = group.Parent();
         for (usize i = 0; i < parent->m_groups.Size(); ++i)
         {

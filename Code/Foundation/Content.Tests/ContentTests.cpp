@@ -911,3 +911,38 @@ TEST_CASE("content: an object reads from its file in a few large reads")
     (void)db.DeleteInstance(id);
     RemoveDirectory(dir);
 }
+
+TEST_CASE("content: the revision moves with each change to the tree's shape, and not with an instance's content")
+{
+    GlobalTypeRegistry().Register(MaterialResource::StaticType());
+    RegisterSerializable<MaterialResource>();
+    const StringView dir = u8"scratch_content_revision_db";
+    RemoveTree(dir);
+    NativeFileSystem mount(dir, DefaultAllocator());
+    ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".xasset");
+
+    u64 seen = db.Revision();
+    const auto moved = [&db, &seen]()
+    {
+        const bool changed = db.Revision() != seen;
+        seen = db.Revision();
+        return changed;
+    };
+    Group* materials = db.RootGroup()->CreateGroup(u8"materials");
+    CHECK(moved()); // a group added
+    foundation::content::Instance* steel = materials->CreateInstance(u8"steel", MaterialResource::StaticType());
+    REQUIRE(steel != nullptr);
+    CHECK(moved()); // an instance added
+    MaterialResource res;
+    REQUIRE(steel->WriteObject(res).IsOk());
+    CHECK_FALSE(moved()); // its content: not the shape
+    REQUIRE(db.RenameInstance(steel->Id(), u8"bronze").IsOk());
+    CHECK(moved());
+    REQUIRE(db.RenameGroup(*materials, u8"metals").IsOk());
+    CHECK(moved());
+    REQUIRE(db.DeleteInstance(steel->Id()).IsOk());
+    CHECK(moved());
+    REQUIRE(db.DeleteGroup(*materials).IsOk());
+    CHECK(moved());
+    RemoveTree(dir);
+}

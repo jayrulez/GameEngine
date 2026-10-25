@@ -95,18 +95,20 @@ namespace
 
 RTTI_DEFINE_OBJECT(CreateTestAsset, "rtti::tests::assetcreate")
 
-TEST_CASE("group picker: the groups in the tree's order, each by name and what holds it; a key finds its group again")
+TEST_CASE("group picker: the groups a tree in its order, each by name at its depth; a key finds its group again")
 {
     Project bed;
     const PickerRequest request = GroupPicker::Request(bed.Sources(), bed.town);
+    CHECK(request.Tree);
     REQUIRE(request.Items.Size() == 4u);
     CHECK(request.Items[0].Name == String(u8"Content"));
-    CHECK(request.Items[0].Detail.IsEmpty());
+    CHECK(request.Items[0].Depth == 0u);
     CHECK(request.Items[1].Name == String(u8"Models"));
-    CHECK(request.Items[1].Detail == String(u8"in Content"));
+    CHECK(request.Items[1].Depth == 1u);
     CHECK(request.Items[2].Name == String(u8"Town"));
-    CHECK(request.Items[2].Detail == String(u8"in Models"));
+    CHECK(request.Items[2].Depth == 2u);
     CHECK(request.Items[3].Name == String(u8"Sounds"));
+    CHECK(request.Items[3].Depth == 1u);
     CHECK(request.Current == String(u8"Content/Models/Town"));
     CHECK(GroupPicker::Find(bed.Sources(), request.Items[2].Key.AsView()) == bed.town);
     CHECK(GroupPicker::Find(bed.Sources(), u8"Content") == bed.top);
@@ -162,7 +164,7 @@ TEST_CASE("create asset: Create waits while the name is refused, saying why; the
     CHECK(group->HandleActivate());
     REQUIRE(picker.IsOpen());
     picker.SetQuery(u8"town");
-    picker.PickLit();
+    picker.PickLit(); // Town, not the current Content shown above it
     CHECK(group->GetText() == StringView(u8"Models/Town"));
     CHECK(create->IsEnabled());
     CHECK(why->GetText() == StringView(u8"Makes Crate in Models/Town."));

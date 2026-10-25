@@ -6,7 +6,8 @@
 // from the search, Enter picking and closing; a search narrowing (a name that starts with it
 // first) or saying nothing matches, with a way back; nothing to pick saying what is missing and
 // running the owner's next step; None picking nothing. The path picker: the files under a folder
-// with the extensions asked, ignoring case, sorted, under their folders.
+// with the extensions asked, ignoring case, sorted, under their folders. A tree request: rows
+// indented in its order, a search keeping the groups above each match.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -134,6 +135,44 @@ TEST_CASE("picker: a search narrows, a name starting with it first; nothing matc
     REQUIRE(bed.picked.Size() == 1u);
     CHECK(bed.picked[0].IsEmpty());
     CHECK_FALSE(bed.picker.IsOpen());
+}
+
+TEST_CASE("picker: a tree's rows indented in its order; a search keeps the groups above each match, dimmed, so two of one name read apart")
+{
+    Bed bed;
+    PickerRequest request;
+    const auto add = [&request](const char8_t* key, const char8_t* name, u32 depth)
+    {
+        PickerItem item;
+        item.Key = String(key);
+        item.Name = String(name);
+        item.Depth = depth;
+        request.Items.PushBack(Move(item));
+    };
+    add(u8"c", u8"Content", 0);
+    add(u8"c/m", u8"Models", 1);
+    add(u8"c/m/t", u8"Textures", 2);
+    add(u8"c/u", u8"UI", 1);
+    add(u8"c/u/t", u8"Textures", 2);
+    add(u8"c/s", u8"Sounds", 1);
+    request.Tree = true;
+    request.Current = String(u8"c/u/t");
+    bed.Open(Move(request));
+    CHECK(bed.Rows() == String(u8"Content Models Textures UI Textures Sounds"));
+    CHECK(bed.picker.RowDepth(2) == 2u);
+    CHECK(bed.picker.LitKey() == StringView(u8"c/u/t"));
+    CHECK_FALSE(bed.picker.IsContext(0));
+
+    bed.picker.SetQuery(u8"tex");
+    CHECK(bed.Rows() == String(u8"Content Models Textures UI Textures")); // tree order, Sounds gone
+    CHECK(bed.picker.IsContext(0));
+    CHECK(bed.picker.IsContext(1));
+    CHECK_FALSE(bed.picker.IsContext(2));
+    CHECK(bed.picker.LitKey() == StringView(u8"c/u/t")); // still the current
+
+    bed.picker.SetQuery(u8"sound");
+    CHECK(bed.Rows() == String(u8"Content Sounds"));
+    CHECK(bed.picker.LitKey() == StringView(u8"c/s")); // the match lit, not what holds it
 }
 
 TEST_CASE("picker: nothing to pick says what is missing and runs the owner's next step after it closes")

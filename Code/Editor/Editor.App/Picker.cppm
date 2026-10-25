@@ -38,6 +38,7 @@ export namespace editor::app
         String Glyph;      ///< its icon's source
         String GlyphClass; ///< the class tinting it (a category's)
         bool Favourite = false;
+        u32 Depth = 0;     ///< its level in a tree request, under the item before it one level up
     };
 
     /// What a picker is opened with.
@@ -47,6 +48,7 @@ export namespace editor::app
         Array<PickerItem> Items; ///< in their order; each section where its first item is
         String Current;          ///< the current value's key: checked, and lit when it opens
         bool AllowNone = false;  ///< the foot's None, which picks nothing (an empty key)
+        bool Tree = false;       ///< the items a tree (by Depth, in their order): a search keeps where each match is
         String EmptyTitle;       ///< with nothing to pick ("No materials yet")
         String EmptyText;
         String EmptyVerb;        ///< the next step it offers then ("Import..."), run after it closes
@@ -62,6 +64,7 @@ export namespace editor::app
         PickerRow()
         {
             AddClass(u8"asset-row");
+            m_indent = Part<gui::Panel>(u8"picker-indent");
             m_glyph = Part<gui::Image>(u8"row-icon");
             m_name = Part<gui::Label>(u8"row-name");
             m_detail = Part<gui::Label>(u8"row-kind");
@@ -73,8 +76,16 @@ export namespace editor::app
             m_check->SetSource(String(u8"Editor/Icons/check.svg"));
             m_check->SetTooltip(u8"The current value");
         }
-        void Show(const PickerItem& item, bool current)
+        void Show(const PickerItem& item, bool current, bool context = false)
         {
+            m_indentLevels = item.Depth;
+            m_indent->SetDisplayed(item.Depth > 0);
+            if (item.Depth > 0)
+                m_indent->SetInlineStyle(u8"width", Format(u8"{}px", item.Depth * kIndent).AsView());
+            if (context)
+                AddClass(u8"context");
+            else
+                RemoveClass(u8"context");
             if (!m_glyphClass.IsEmpty())
                 m_glyph->RemoveClass(m_glyphClass.AsView());
             m_glyphClass = item.GlyphClass;
@@ -90,8 +101,13 @@ export namespace editor::app
         [[nodiscard]] StringView Name() const { return m_name->GetText(); }
         [[nodiscard]] bool ShowsCheck() const { return m_check->IsDisplayed(); }
         [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed(); }
+        /// How deep it is indented, in levels; whether it is shown only as where a match is.
+        [[nodiscard]] u32 Indent() const { return m_indentLevels; }
+        [[nodiscard]] bool IsContext() const { return HasClass(u8"context"); }
 
     private:
+        static constexpr u32 kIndent = 16; // a level's indent, in pixels
+
         template <typename T>
         RefPtr<T> Part(StringView cls)
         {
@@ -102,6 +118,8 @@ export namespace editor::app
             return part;
         }
 
+        RefPtr<gui::Panel> m_indent;
+        u32 m_indentLevels = 0;
         RefPtr<gui::Image> m_glyph;
         RefPtr<gui::Label> m_name;
         RefPtr<gui::Label> m_detail;
@@ -242,6 +260,9 @@ export namespace editor::app
             const Row& r = m_rows[static_cast<usize>(row)];
             return r.Header ? r.Section.AsView() : m_request.Items[r.Item].Name.AsView();
         }
+        /// A tree's row: how deep it is, and whether it is shown only as where a match is.
+        [[nodiscard]] u32 RowDepth(i32 row) const { return IsItemRow(row) ? m_request.Items[m_rows[static_cast<usize>(row)].Item].Depth : 0u; }
+        [[nodiscard]] bool IsContext(i32 row) const { return IsItemRow(row) && m_rows[static_cast<usize>(row)].Context; }
         /// The lit item's key (Enter's); empty with none.
         [[nodiscard]] StringView LitKey() const
         {
@@ -295,6 +316,7 @@ export namespace editor::app
             bool Header = false;
             usize Item = 0;  // an item's, in the request
             String Section;  // its section (a heading's text)
+            bool Context = false; // a tree's item shown only as where a match is
         };
 
         // The shown rows as the list's model: a heading cannot be selected; an id follows the row.
@@ -343,6 +365,11 @@ export namespace editor::app
         void Filter(StringView query)
         {
             m_rows.Clear();
+            if (m_request.Tree)
+            {
+                FilterTree(query);
+                return;
+            }
             const auto matches = [query](const PickerItem& item) { return item.Name.AsView().ContainsIgnoreCase(query) || item.Detail.AsView().ContainsIgnoreCase(query); };
             const auto starts = [query](const PickerItem& item)
             {
@@ -377,16 +404,53 @@ export namespace editor::app
             }
             for (const String& section : sections)
                 addSection(section.AsView(), false);
+            Shown(query);
+        }
+        // A tree's rows for `query`: its items in their order, those matching by name and the
+        // groups above each, so a match reads where it is (two of one name under different
+        // parents apart). No sections, no favourites: the tree is the order.
+        void FilterTree(StringView query)
+        {
+            const usize count = m_request.Items.Size();
+            Array<bool> shown(m_allocator);
+            Array<bool> matched(m_allocator);
+            shown.Resize(count, false);
+            matched.Resize(count, false);
+            for (usize i = 0; i < count; ++i)
+            {
+                if (!m_request.Items[i].Name.AsView().ContainsIgnoreCase(query))
+                    continue;
+                matched[i] = shown[i] = true;
+                u32 depth = m_request.Items[i].Depth;
+                for (usize up = i; up-- > 0 && depth > 0;)
+                    if (m_request.Items[up].Depth < depth)
+                    {
+                        shown[up] = true;
+                        depth = m_request.Items[up].Depth;
+                    }
+            }
+            for (usize i = 0; i < count; ++i)
+                if (shown[i])
+                    m_rows.PushBack(Row{false, i, String{}, !query.IsEmpty() && !matched[i]});
+            Shown(query);
+        }
+        // After filtering: the list told, the state shown, the current value lit, else the first
+        // match.
+        void Shown(StringView query)
+        {
             m_model.Reset();
             ShowState(query);
-            // The current value lit, else the first.
             i32 lit = -1;
             for (usize row = 0; row < m_rows.Size() && lit < 0; ++row)
-                if (!m_rows[row].Header && !m_request.Current.IsEmpty() && m_request.Items[m_rows[row].Item].Key == m_request.Current)
+                if (!m_rows[row].Header && !m_rows[row].Context && !m_request.Current.IsEmpty() && m_request.Items[m_rows[row].Item].Key == m_request.Current)
                     lit = static_cast<i32>(row);
             if (m_list != nullptr)
                 m_list->ClearSelection();
-            Light(lit >= 0 ? lit : FirstItemFrom(0, 1));
+            if (lit < 0)
+                for (usize row = 0; row < m_rows.Size() && lit < 0; ++row)
+                    if (!m_rows[row].Header && !m_rows[row].Context)
+                        lit = static_cast<i32>(row);
+            Light(lit);
         }
         void ShowState(StringView query)
         {
@@ -471,7 +535,7 @@ export namespace editor::app
             else if (auto* shown = Cast<PickerRow>(&node))
             {
                 const PickerItem& item = m_request.Items[r.Item];
-                shown->Show(item, !m_request.Current.IsEmpty() && item.Key == m_request.Current);
+                shown->Show(item, !m_request.Current.IsEmpty() && item.Key == m_request.Current, r.Context);
             }
         }
 

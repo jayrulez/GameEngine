@@ -4,10 +4,10 @@
 // Editor App - :group_picker_dialog partition
 //
 // The group picker (Documentation/Specs/editor-gui.md, 5.2, layer 5): the picker over the
-// project's groups, where an import or a new asset goes. Each group is a row by its name, what
-// holds it beside it, in the tree's order (a group, then what is under it, by name), the top one
-// "Content"; the current group is checked and lit, and the search finds a group by its name or
-// where it is. Its key is the group's place: "Content", or "Content/" and its path.
+// project's groups, where an import or a new asset goes. The groups are a tree: each a row by its
+// name, indented under what holds it, in the tree's order (a group, then what is under it), the top
+// one "Content"; the current group is checked and lit, and the search finds a group by its name,
+// keeping the groups above it so two of one name read apart. Its key is the group's place: "Content", or "Content/" and its path.
 module;
 #include "Core/Prelude.h"
 
@@ -32,10 +32,11 @@ export namespace editor::app
         {
             PickerRequest request;
             request.Placeholder = String(u8"Search groups");
+            request.Tree = true;
             if (current != nullptr)
                 request.Current = KeyOf(*current);
             if (foundation::content::Group* top = sources.RootGroup())
-                Collect(*top, request.Items);
+                Collect(*top, 0, request.Items);
             return request;
         }
 
@@ -70,17 +71,16 @@ export namespace editor::app
         }
 
     private:
-        static void Collect(foundation::content::Group& group, Array<PickerItem>& out)
+        static void Collect(foundation::content::Group& group, u32 depth, Array<PickerItem>& out)
         {
             PickerItem item;
             item.Key = KeyOf(group);
             item.Name = group.Parent() == nullptr ? String(kTop) : String(group.Name());
-            if (const foundation::content::Group* holder = group.Parent())
-                item.Detail = Format(u8"in {}", ShownName(*holder));
             item.Glyph = String(u8"Editor/Icons/folder.svg");
+            item.Depth = depth;
             out.PushBack(Move(item));
             for (foundation::content::Group* child : group.Groups())
-                Collect(*child, out);
+                Collect(*child, depth + 1, out);
         }
     };
 }

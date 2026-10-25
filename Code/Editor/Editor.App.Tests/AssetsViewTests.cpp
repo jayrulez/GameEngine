@@ -313,7 +313,7 @@ TEST_CASE("assets: under the editor's sheet the toolbar keeps its height however
 {
     Bed bed;
     String sheet;
-    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    for (const char8_t* file : {u8"Editor/tokens.css", u8"Editor/editor.css", u8"Editor/density-default.css"}) // the tokens first: a parsed string follows no @import
     {
         Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
         REQUIRE(bytes.HasValue());
@@ -357,7 +357,7 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
 {
     Bed bed;
     String sheet;
-    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    for (const char8_t* file : {u8"Editor/tokens.css", u8"Editor/editor.css", u8"Editor/density-default.css"}) // the tokens first: a parsed string follows no @import
     {
         Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
         REQUIRE(bytes.HasValue());
@@ -399,6 +399,14 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
     CHECK(barrel->GetChildAt(barrel->ChildCount() - 2)->GetSize().x == doctest::Approx(14.0f)); // Always Export
     CHECK(barrel->ShowsAlwaysExport());
     CHECK_FALSE(bell->ShowsAlwaysExport());
+    // Lit, a favourite's star is gold (its token defined: an undefined one left it white), and
+    // Always Export green; greyed when not.
+    const auto starOf = [](AssetCell& cell) { return Cast<gui::Image>(cell.GetChildAt(cell.ChildCount() - 1)); };
+    REQUIRE(starOf(*barrel) != nullptr);
+    const Color gold = starOf(*barrel)->GetImageColor();
+    CHECK(gold.r > gold.b + 0.3f); // yellow: red and green well over blue
+    CHECK(gold.g > gold.b + 0.2f);
+    CHECK(starOf(*bell)->GetImageColor().r < gold.r);
     CHECK(kindRight(*barrel) == doctest::Approx(kindRight(*bell))); // the star's and the export badge's columns kept on the row without them
     // On one baseline: the name's and the kind's text baselines at the same height.
     const auto baseline = [](const gui::Node& label) { return label.GetScreenBounds().y + label.GetBaseline(); };

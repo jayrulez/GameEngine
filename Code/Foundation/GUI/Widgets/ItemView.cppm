@@ -547,6 +547,10 @@ export namespace foundation::gui
         void SetOnSelectionChanged(core::Function<void(ModelIndex)> callback) { m_onSelection = core::Move(callback); }
         /// A row was activated: a double-click, Return or the pad's South.
         void SetOnActivated(core::Function<void(ModelIndex)> callback) { m_onActivated = core::Move(callback); }
+        /// What a drag of its items carries, the owner's say: told the payload as the view filled
+        /// it (its own type, the view and its ids, for a drop within it) and the dragged items' ids
+        /// in item order, it may put what it carries instead (an asset browser's assets).
+        void SetOnDragPayload(core::Function<void(DragPayload& payload, core::Span<const ItemId> ids)> callback) { m_onDragPayload = core::Move(callback); }
 
         [[nodiscard]] usize GetSelectionCount() const noexcept { return m_selected.Size(); }
         [[nodiscard]] bool IsIdSelected(ItemId id) const { return m_selected.Contains(id); }
@@ -909,6 +913,8 @@ export namespace foundation::gui
             request.Payload.Value = HandleAs(Node::StaticType()); // the view, weakly: a target reads its ids
             request.Payload.Label = m_dragIds.Size() == 1 ? TypeAheadText(item) : core::Format(u8"{} items", m_dragIds.Size());
             request.Payload.Allowed = DropEffectsCopy | DropEffectsMove;
+            if (m_onDragPayload)
+                m_onDragPayload(request.Payload, m_dragIds.AsSpan());
             return true;
         }
         void OnDragQuery(DropQuery& query) override;
@@ -1253,6 +1259,7 @@ export namespace foundation::gui
         f32 m_rowHeight = 24.0f;
         f32 m_estimate = 24.0f;
         ItemLayout m_layout = ItemLayout::List;
+        core::Function<void(DragPayload&, core::Span<const ItemId>)> m_onDragPayload; // the owner's payload
         core::Float2 m_cellSize{96.0f, 96.0f};
         i32 m_scrollAnchor = 0;
         f32 m_scrollAnchorDelta = 0.0f;

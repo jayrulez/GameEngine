@@ -649,6 +649,33 @@ TEST_CASE("dnd: a multi-selection drags as one, in order; a plain press on it al
     CHECK(l.a->GetSelectedItem() == 3);
 }
 
+TEST_CASE("dnd: a list's owner says what a drag of its rows carries, told their ids in order")
+{
+    Lists l;
+    l.a->SetSelectionMode(SelectionMode::Multi);
+    core::Array<ItemId> told;
+    l.a->SetOnDragPayload([&told](DragPayload& payload, core::Span<const ItemId> ids)
+                          {
+                              for (const ItemId id : ids)
+                                  told.PushBack(id);
+                              payload.Type = core::String(u8"asset/instance");
+                              payload.Value = core::Variant::From<core::String>(core::String(u8"the assets")); // its own, not the view's
+                              payload.Label = core::Format(u8"{} assets", ids.Size());
+                          });
+    l.D().InjectMouseDown(Lists::Row(*l.a, 1), MouseButton::Left);
+    l.D().InjectMouseUp(Lists::Row(*l.a, 1), MouseButton::Left);
+    l.D().InjectMouseDown(Lists::Row(*l.a, 3), MouseButton::Left, KeyModCtrl);
+    l.D().InjectMouseUp(Lists::Row(*l.a, 3), MouseButton::Left, KeyModCtrl);
+    l.Drag(*l.a, 3, Lists::Row(*l.b, 0, 0.9f));
+    CHECK(l.D().GetDragPayload().Type == core::StringView(u8"asset/instance"));
+    CHECK(l.D().GetDragPayload().Label == core::StringView(u8"2 assets"));
+    REQUIRE(told.Size() == 2u);
+    CHECK(told[0] == l.left.IdOf(MakeModelIndex(1)));
+    CHECK(told[1] == l.left.IdOf(MakeModelIndex(3)));
+    l.D().InjectMouseUp(Lists::Row(*l.b, 0, 0.9f), MouseButton::Left); // the other list takes no such payload
+    CHECK(Lists::Items(l.right) == core::StringView(u8"X"));
+}
+
 TEST_CASE("dnd: rows moved to another list leave the source; copied (Ctrl) they stay")
 {
     Lists l;

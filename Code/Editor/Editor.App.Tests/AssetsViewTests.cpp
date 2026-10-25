@@ -550,3 +550,65 @@ TEST_CASE("assets: a tile shows its type's glyph until its thumbnail is ready, t
     REQUIRE(crate != nullptr);
     CHECK(crate->ShowsPicture());
 }
+
+TEST_CASE("assets: a right click on a group in the tree opens its menu; a browser with no verbs opens none (a crash, 2026-10-25)")
+{
+    Bed bed;
+    gui::TreeView& tree = *bed.view->Tree();
+    i32 town = -1;
+    for (i32 item = 0; item < static_cast<i32>(tree.GetItemCount()); ++item)
+        if (tree.GetItemText(item) == String(u8"Town"))
+            town = item;
+    REQUIRE(town >= 0);
+    tree.EditLayoutStyle([](gui::LayoutStyle& s)
+    {
+        s.Width = gui::LayoutLength::Px(200.0f);
+        s.Height = gui::LayoutLength::Px(300.0f);
+    });
+    (void)bed.root->UpdateLayout();
+    const gui::Rect box = tree.GetScreenBounds();
+    const auto rightClick = [&](f32 y)
+    {
+        gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
+        const Float2 at{box.x + 40.0f, y};
+        d.InjectMouseMove(at);
+        d.InjectMouseDown(at, gui::MouseButton::Right);
+        d.InjectMouseUp(at, gui::MouseButton::Right);
+    };
+    // Each row its row height: Town is the third (Content, Models, Town).
+    const f32 rowHeight = tree.GetRowHeight() > 0.0f ? tree.GetRowHeight() : 26.0f;
+    rightClick(box.y + rowHeight * (static_cast<f32>(town) + 0.5f));
+    REQUIRE(bed.view->OpenMenu() != nullptr);
+    CHECK(bed.view->CurrentGroup() == bed.town);
+    CHECK(ItemNamed(*bed.view->OpenMenu(), u8"Delete Group...") != nullptr);
+    bed.view->OpenMenu()->Close();
+
+    // The same browser with no verbs: no menu, and no crash.
+    AssetsView::Services bare;
+    bare.context = &bed.context;
+    AssetsView plain(DefaultAllocator(), Move(bare), LoadAssets());
+    RefPtr<gui::Node> panel = plain.Content();
+    REQUIRE(panel);
+    bed.root->RemoveChild(bed.view->Content().Get());
+    Cast<gui::UIWidget>(panel.Get())->EditLayoutStyle([](gui::LayoutStyle& s)
+    {
+        s.Width = gui::LayoutLength::Px(900.0f);
+        s.Height = gui::LayoutLength::Px(600.0f);
+    });
+    bed.root->AddChild(panel.Get());
+    plain.Rebuild();
+    plain.Tree()->EditLayoutStyle([](gui::LayoutStyle& s)
+    {
+        s.Width = gui::LayoutLength::Px(200.0f);
+        s.Height = gui::LayoutLength::Px(300.0f);
+    });
+    (void)bed.root->UpdateLayout();
+    const gui::Rect plainBox = plain.Tree()->GetScreenBounds();
+    gui::EventDispatcher& d = *bed.root->GetEventDispatcher();
+    const Float2 at{plainBox.x + 40.0f, plainBox.y + rowHeight * 0.5f};
+    d.InjectMouseMove(at);
+    d.InjectMouseDown(at, gui::MouseButton::Right);
+    d.InjectMouseUp(at, gui::MouseButton::Right);
+    CHECK(plain.OpenMenu() == nullptr);
+    bed.root->RemoveChild(panel.Get());
+}

@@ -1088,6 +1088,8 @@ export namespace editor::app
         // A group's (a row's, or the one shown: then also what makes new things in it).
         void ShowGroupMenu(gui::Node& owner, Float2 at, content::Group& group, bool shown, i32 row = -1)
         {
+            if (m_services.operations == nullptr || Sources() == nullptr)
+                return; // no verbs to offer (the tree's menu asks here too)
             AssetsView* self = this;
             AssetOperations& ops = *m_services.operations;
             content::Group* target = &group;

@@ -168,6 +168,28 @@ namespace editor::app
         LoadEditorSettings();
         m_context.SetUserEditorSettings(&m_editorSettings);
 
+        // What the asset browser and an agent do to assets: before the dock, whose browser uses it.
+        EditorApplication* self = this;
+        {
+            AssetOperations::Services ops;
+            ops.context = &m_context;
+            ops.cook = &m_cookService;
+            ops.closePages = [self](const Guid& id)
+            {
+                if (self->m_pages)
+                    self->m_pages->CloseAssetNow(id);
+            };
+            ops.later = [self](Function<void()> work) { self->Later(Move(work)); };
+            m_assetOps = MakeUnique<AssetOperations>(m_editorAllocator, Move(ops));
+        }
+        {
+            AssetImport::Services imports;
+            imports.context = &m_context;
+            imports.cook = &m_cookService;
+            imports.jobs = &m_jobService;
+            m_assetImport = MakeUnique<AssetImport>(m_editorAllocator, Move(imports));
+        }
+
         ReportStartup(u8"Preparing the interface", 0.30f);
         const EditorLook look = LookFrom(m_editorSettings.Find<editor::EditorUiSettings>());
         if (m_window.Open(host, m_config.dataRoot.AsView(), look))
@@ -175,7 +197,6 @@ namespace editor::app
         // The window's close button asks about unsaved pages first, as File > Exit does.
         if (host.Shell() != nullptr)
             host.Shell()->OnMainWindowCloseRequested = [self = this]() { return self->ConfirmExit(); };
-        EditorApplication* self = this;
         m_context.OnNotice = [self](editor::NoticeKind kind, StringView message)
         {
             self->ShowToast(kind, message);
@@ -197,25 +218,6 @@ namespace editor::app
         { self->ShowToast(editor::NoticeKind::Success, Format(u8"Exported to {}", folder).AsView()); };
         m_export = MakeUnique<EditorExport>(m_editorAllocator, m_editorAllocator, Move(exportServices));
 
-        {
-            AssetOperations::Services ops;
-            ops.context = &m_context;
-            ops.cook = &m_cookService;
-            ops.closePages = [self](const Guid& id)
-            {
-                if (self->m_pages)
-                    self->m_pages->CloseAssetNow(id);
-            };
-            ops.later = [self](Function<void()> work) { self->Later(Move(work)); };
-            m_assetOps = MakeUnique<AssetOperations>(m_editorAllocator, Move(ops));
-        }
-        {
-            AssetImport::Services imports;
-            imports.context = &m_context;
-            imports.cook = &m_cookService;
-            imports.jobs = &m_jobService;
-            m_assetImport = MakeUnique<AssetImport>(m_editorAllocator, Move(imports));
-        }
         EditorMcpService::Services mcp;
         mcp.context = &m_context;
         mcp.cook = &m_cookService;

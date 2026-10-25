@@ -6,6 +6,9 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
+import foundation.vfs;
+import foundation.fonts;
+import foundation.fonts.truetype;
 import foundation.gui;
 
 using namespace foundation::gui;
@@ -275,6 +278,7 @@ TEST_CASE(
     menu->SetItemHeight(26.0f);
     menu->AddItem(core::StringView(u8"Top"), [] {});
     Menu* sub = menu->AddSubMenu(core::StringView(u8"More"));
+    sub->SetWidth(160.0f); // a width of its own: with no font here it would measure narrow
     sub->AddItem(core::StringView(u8"Deep"), [&] { ++deep; });
     menu->Open(*anchor, core::Float2{50.0f, 50.0f});
 
@@ -326,8 +330,10 @@ TEST_CASE("menu: a submenu stays open while the pointer heads for it across anot
     root->AddChild(anchor.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     auto menu = Make<Menu>();
+    menu->SetWidth(160.0f); // widths of their own: with no font here they would measure narrow
     menu->SetItemHeight(26.0f);
     Menu* sub = menu->AddSubMenu(core::StringView(u8"More"));
+    sub->SetWidth(160.0f);
     sub->AddItem(core::StringView(u8"A"), [] {});
     sub->AddItem(core::StringView(u8"B"), [] {});
     sub->AddItem(core::StringView(u8"C"), [] {});
@@ -569,6 +575,7 @@ TEST_CASE("menu: taller than the window, it keeps to it and scrolls by wheel, ar
     root->AddChild(anchor.Get());
     EventDispatcher* d = root->GetEventDispatcher();
     auto menu = Make<Menu>();
+    menu->SetWidth(160.0f); // a width of its own: the test points 50 in, and with no font here it measures narrow
     menu->SetItemHeight(25.0f);
     for (int i = 0; i < 40; ++i)
         menu->AddItem(core::StringView(u8"Item"), [] {});
@@ -798,4 +805,25 @@ TEST_CASE("menu: a submenu with a fractional padding, lined up by its content, s
         (void)root->UpdateLayout();
     CHECK_FALSE(sub->Scrolls());
     CHECK(sub->GetSize().y >= 4.0f * 26.0f + 8.8f - 0.001f);
+}
+
+TEST_CASE("menu: a shortcut or text an item takes after the menu measured widens it to fit both")
+{
+    namespace fonts = foundation::fonts;
+    fonts::TrueTypeFonts::Initialize();
+    fonts::TrueTypeFontService service{core::DefaultAllocator()};
+    const core::String root = foundation::vfs::FindDataRoot();
+    REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+            fonts::FontLoadResult::Success);
+    auto menu = Make<Menu>();
+    MenuItem* item = menu->AddItem(core::StringView(u8"Command Palette"), [] {});
+    item->SetFont(service.GetFont(u8"DejaVu", 13.0f));
+    const float narrow = menu->GetSize().x;
+    CHECK(narrow >= item->PreferredWidth() - 0.5f);
+    // An action menu fills in the keys as it opens: the menu takes the room for them.
+    item->SetShortcut(core::StringView(u8"Ctrl+Shift+Alt+P"));
+    CHECK(menu->GetSize().x >= item->PreferredWidth() - 0.5f);
+    CHECK(menu->GetSize().x > narrow);
+    item->SetText(core::StringView(u8"Command Palette and a great deal more"));
+    CHECK(menu->GetSize().x >= item->PreferredWidth() - 0.5f);
 }

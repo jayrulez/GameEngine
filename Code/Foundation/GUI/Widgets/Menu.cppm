@@ -141,6 +141,7 @@ export namespace foundation::gui
             m_mnemonicEnd = mnemonic.End;
             m_text.SetString(mnemonic.Shown.AsView());
             Invalidate();
+            WidthMayHaveChanged();
         }
         /// Its text as it shows (the `&` taken out).
         [[nodiscard]] core::StringView GetText() const { return m_text.GetString(); }
@@ -151,6 +152,7 @@ export namespace foundation::gui
         {
             m_shortcut.SetString(text);
             Invalidate();
+            WidthMayHaveChanged();
         }
         [[nodiscard]] core::StringView GetShortcut() const { return m_shortcut.GetString(); }
         void SetIcon(core::RefPtr<Drawable> icon)
@@ -235,8 +237,9 @@ export namespace foundation::gui
 
         // The user's action (run before the menu closes).
         void SetOnPicked(core::Function<void()> callback) { m_onPicked = core::Move(callback); }
-        // The menu installs this: its text style changed (its width may have).
-        void SetOnTextStyleChanged(core::Function<void()> callback) { m_onTextStyleChanged = core::Move(callback); }
+        // The menu installs this: its text, shortcut or text style changed, so its width may have
+        // (a shortcut an action menu fills in as it opens, a font that arrives).
+        void SetOnWidthChanged(core::Function<void()> callback) { m_onWidthChanged = core::Move(callback); }
         // The menu installs this to close the whole chain after activation.
         void SetOnActivated(core::Function<void()> callback)
         {
@@ -251,7 +254,7 @@ export namespace foundation::gui
         {
             const f32 textW = m_text.Measure().x;
             const f32 shortcutW =
-                m_shortcut.GetString().Size() > 0 ? m_shortcut.Measure().x + 24.0f : 0.0f;
+                m_shortcut.GetString().Size() > 0 ? m_shortcut.Measure().x + kShortcutGap : 0.0f;
             return kGutter + textW + shortcutW + kRightPad;
         }
 
@@ -277,8 +280,7 @@ export namespace foundation::gui
             m_shortcut.SetDirection(TextDirectionFor());
             m_text.SetColor(GetTextColor());
             m_shortcut.SetColor(GetTextColor());
-            if (m_onTextStyleChanged)
-                m_onTextStyleChanged(); // its menu measures again (a font that arrives widens it)
+            WidthMayHaveChanged(); // a font that arrives widens it
         }
 
         void OnMouseClick(const MouseEvent& event) override
@@ -343,7 +345,17 @@ export namespace foundation::gui
                 const bool shown = AreMnemonicsShown();
                 m_text.SetUnderline(shown ? m_mnemonicStart : 0, shown ? m_mnemonicEnd : 0);
             }
-            m_text.Draw(ctx, inner);
+            // The label keeps out of the shortcut's column: squeezed, it ends in an ellipsis
+            // before the shortcut rather than running under it.
+            Rect label = inner;
+            if (m_shortcut.GetString().Size() > 0)
+            {
+                const f32 column = core::Min(inner.width, m_shortcut.Measure().x + kShortcutGap);
+                label.width = core::Max(0.0f, inner.width - column);
+                if (rtl)
+                    label.x = inner.x + column;
+            }
+            m_text.Draw(ctx, label);
             if (m_shortcut.GetString().Size() > 0)
                 m_shortcut.Draw(ctx, inner);
         }
@@ -362,6 +374,12 @@ export namespace foundation::gui
 
         static constexpr f32 kGutter = 22.0f;   // inline-start column (check / icon)
         static constexpr f32 kRightPad = 14.0f; // inline-end column (shortcut end / submenu arrow)
+        static constexpr f32 kShortcutGap = 24.0f; // between a label and its shortcut
+        void WidthMayHaveChanged()
+        {
+            if (m_onWidthChanged)
+                m_onWidthChanged(); // its menu measures again
+        }
 
     private:
         Text m_text;
@@ -378,7 +396,7 @@ export namespace foundation::gui
         core::Function<void()> m_onPicked;
         core::Function<void()> m_onActivated;
         core::Function<void(bool)> m_onToggled;
-        core::Function<void()> m_onTextStyleChanged;
+        core::Function<void()> m_onWidthChanged;
         bool m_textFromCommand = false;     // its text, its shortcut: its command's (OnBoundCommandText)
         bool m_shortcutFromCommand = false;
     };
@@ -606,7 +624,8 @@ export namespace foundation::gui
             Relayout();
         }
 
-        // Auto-size the menu width to its widest item (default off; SetWidth turns it off).
+        // Sizes the menu to its widest item, its label and its shortcut both (the default; SetWidth
+        // gives it a width of its own instead).
         void SetAutoWidth(bool enabled)
         {
             m_autoWidth = enabled;
@@ -895,7 +914,7 @@ export namespace foundation::gui
                 it->SetRowHeight(m_itemHeight);
                 Menu* self = this;
                 it->SetOnActivated([self]() { self->RootMenu()->Close(); });
-                it->SetOnTextStyleChanged([self]() { self->Relayout(); });
+                it->SetOnWidthChanged([self]() { self->Relayout(); });
             }
             Menu* self = this;
             row->SetOnHovered([self, row]() { self->OnRowHovered(row); });
@@ -1182,7 +1201,7 @@ export namespace foundation::gui
         Array<MenuRow*> m_rows;                    // rows, owned as children
         TypeAheadSearch m_typeAhead;               // typed text (E12)
         Array<core::RefPtr<Menu>> m_ownedSubMenus; // keep submenus alive (their items' children only while open)
-        bool m_autoWidth = false;
+        bool m_autoWidth = true; // a fixed default cut long items and ran labels under shortcuts
         // The safe area toward an open submenu: the pointer's last two places, a hover deferred.
         core::Float2 m_pointerAt{0.0f, 0.0f};
         bool m_pointerKnown = false;
@@ -1190,7 +1209,7 @@ export namespace foundation::gui
         f64 m_deferredFor = 0.0;
         bool m_deferring = false;
         static constexpr f64 kSafeAreaGrace = 0.3; // seconds a resting pointer waits before switching
-        f32 m_width = 160.0f;
+        f32 m_width = 160.0f; // SetWidth's
         f32 m_itemHeight = 26.0f;
         // Scrolling, when its items do not fit the window (E16).
         static constexpr f32 kArrowHeight = 16.0f;

@@ -141,6 +141,7 @@ export namespace editor::app
         void OpenPages();
         void BuildMenus();
         void OpenCommandPalette();
+        bool ConfirmExit();
         void OpenDefaultScene(editor::EditorProject& project);
         [[nodiscard]] EditorAssetCreation::Services CreationServices();
         [[nodiscard]] EditorSession::Services SessionServices();

@@ -160,6 +160,9 @@ namespace editor::app
             look.uiScale = Clamp(ui->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
         if (m_window.Open(host, m_config.dataRoot.AsView(), look))
             OpenDock();
+        // The window's close button asks about unsaved pages first, as File > Exit does.
+        if (host.Shell() != nullptr)
+            host.Shell()->OnMainWindowCloseRequested = [self = this]() { return self->ConfirmExit(); };
         EditorApplication* self = this;
         m_context.OnNotice = [self](editor::NoticeKind kind, StringView message)
         {
@@ -299,6 +302,7 @@ namespace editor::app
         services.project = [self]() { return self->m_session.Project(); };
         services.resources = [self]() { return self->m_session.Resources(); };
         services.dialogRoot = [self]() { return self->m_window.Root(); };
+        services.loadMarkup = [self](StringView path) { return self->m_window.LoadMarkup(path); };
         m_pages = MakeUnique<EditorPages>(m_editorAllocator, m_editorAllocator, Move(services));
     }
 
@@ -371,6 +375,17 @@ namespace editor::app
         (void)m_palette->Open(*root);
     }
 
+    // Exits once the unsaved pages are saved or let go; true when nothing needed asking.
+    bool EditorApplication::ConfirmExit()
+    {
+        EditorApplication* self = this;
+        return m_pages->ConfirmUnsavedThen(u8"Save All and Exit", u8"Exit Without Saving", [self]()
+                                           {
+                                               if (self->m_host != nullptr)
+                                                   self->m_host->RequestExit();
+                                           });
+    }
+
     void EditorApplication::RegisterActions()
     {
         EditorActionRegistry& actions = m_context.Actions();
@@ -378,11 +393,8 @@ namespace editor::app
 
         FileActions file;
         file.save = [self](editor::EditorPage& page) { self->m_pages->Save(page); };
-        file.exit = [self]()
-        {
-            if (self->m_host != nullptr)
-                self->m_host->RequestExit();
-        };
+        file.saveAs = [self](editor::EditorPage& page) { self->m_pages->SaveAs(page); };
+        file.exit = [self]() { (void)self->ConfirmExit(); };
         RegisterFileActions(actions, Move(file));
         RegisterEditActions(actions, EditActions{});
 
@@ -640,6 +652,8 @@ namespace editor::app
     {
         if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             m_windowCapture.Release(*gfx->Raw()); // the readback buffers, while the device lives
+        if (host.Shell() != nullptr)
+            host.Shell()->OnMainWindowCloseRequested = {};
         m_session.Close(); // the MCP host, the cook, the native module and the resources, in order
         m_mcp.Reset();
         m_cookService.Shutdown(); // joins a cook in flight

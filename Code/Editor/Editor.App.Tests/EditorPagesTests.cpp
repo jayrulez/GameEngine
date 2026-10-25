@@ -5,7 +5,7 @@
 // page docked by its asset's guid in the central stack (and brought forward when opened again),
 // its tab's name, unsaved mark and active mark; a close run at the next frame, a page with unsaved
 // changes asking first (Save, Discard, Cancel); the active page following the dock; the Game tabs;
-// and the open pages through the store and back.
+// the open pages through the store and back; the unsaved-pages gate before an exit; Save As.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -97,6 +97,37 @@ namespace
         return nullptr;
     }
 
+    RefPtr<gui::Node> LoadMarkup(StringView path)
+    {
+        const String full = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), path);
+        Result<Array<byte>> bytes = ReadFile(full.AsView());
+        if (!bytes.HasValue())
+            return {};
+        gui::RegisterGuiElements();
+        static const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+    template <typename T>
+    T* FindId(gui::Node& node, StringView id)
+    {
+        if (auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+            return Cast<T>(&node);
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (T* found = FindId<T>(*node.GetChildAt(i), id))
+                return found;
+        return nullptr;
+    }
+    gui::Window* FindWindow(gui::Node& node)
+    {
+        if (auto* window = Cast<gui::Window>(&node); window != nullptr && window->IsOpen() && Cast<gui::MessageBox>(&node) == nullptr)
+            return window;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (gui::Window* found = FindWindow(*node.GetChildAt(i)))
+                return found;
+        return nullptr;
+    }
+
     struct Bed
     {
         UniquePtr<editor::EditorProject> project;
@@ -132,6 +163,7 @@ namespace
             Bed* self = this;
             services.project = [self]() { return self->project.Get(); };
             services.dialogRoot = [self]() { return self->root.Get(); };
+            services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
             pages = MakeUnique<EditorPages>(DefaultAllocator(), DefaultAllocator(), Move(services));
         }
         ~Bed()
@@ -296,4 +328,81 @@ TEST_CASE("editor pages: the open pages and the active one through the store and
     CHECK(bed.pages->Count() == 2u);
     REQUIRE(bed.context.ActivePage() != nullptr);
     CHECK(bed.context.ActivePage()->InstanceId() == bed.one->Id());
+}
+
+TEST_CASE("editor pages: the unsaved-pages gate goes on at once with none; with some it asks: Cancel stays, the other two go on, saving first")
+{
+    Bed bed;
+    int proceeded = 0;
+    const auto proceed = [&proceeded]() { ++proceeded; };
+    CHECK(bed.pages->ConfirmUnsavedThen(u8"Save All and Exit", u8"Exit Without Saving", proceed));
+    CHECK(proceeded == 1);
+
+    auto* one = static_cast<TestPage*>(bed.pages->Open(*bed.one));
+    auto* two = static_cast<TestPage*>(bed.pages->Open(*bed.two));
+    REQUIRE(one != nullptr);
+    REQUIRE(two != nullptr);
+    one->MarkDirty();
+    two->MarkDirty();
+    const auto ask = [&]() -> gui::MessageBox&
+    {
+        CHECK_FALSE(bed.pages->ConfirmUnsavedThen(u8"Save All and Exit", u8"Exit Without Saving", proceed));
+        (void)bed.root->UpdateLayout();
+        gui::MessageBox* box = FindBox(*bed.root);
+        REQUIRE(box != nullptr);
+        return *box;
+    };
+    gui::MessageBox* box = &ask();
+    REQUIRE(ButtonNamed(*box, u8"Exit Without Saving") != nullptr);
+    CHECK(ButtonNamed(*box, u8"Cancel")->HandleActivate());
+    CHECK(proceeded == 1);
+    box = &ask();
+    CHECK(ButtonNamed(*box, u8"Save All and Exit")->HandleActivate());
+    CHECK(one->saves == 1);
+    CHECK(two->saves == 1);
+    CHECK(proceeded == 2);
+    one->MarkDirty();
+    box = &ask();
+    CHECK(ButtonNamed(*box, u8"Exit Without Saving")->HandleActivate());
+    CHECK(one->saves == 1); // not saved
+    CHECK(proceeded == 3);
+}
+
+TEST_CASE("editor pages: Save As names a new asset beside the page's; an empty or taken name keeps the dialog open; the page and its panel follow the new asset")
+{
+    Bed bed;
+    auto* page = static_cast<TestPage*>(bed.pages->Open(*bed.one));
+    REQUIRE(page != nullptr);
+    const Guid original = bed.one->Id();
+    bed.pages->SaveAs(*page);
+    (void)bed.root->UpdateLayout();
+    gui::Window* window = FindWindow(*bed.root);
+    REQUIRE(window != nullptr);
+    auto* name = FindId<gui::TextField>(*window, u8"save-as-name");
+    auto* error = FindId<gui::Label>(*window, u8"save-as-error");
+    auto* save = FindId<gui::Button>(*window, u8"save-as-save");
+    REQUIRE(name != nullptr);
+    REQUIRE(error != nullptr);
+    REQUIRE(save != nullptr);
+    CHECK(name->GetText() == StringView(u8"One Copy"));
+
+    name->SetText(StringView{});
+    CHECK(save->HandleActivate());
+    CHECK(window->IsOpen());
+    CHECK(error->GetText() == StringView(u8"Enter a name."));
+    name->SetText(u8"Two"); // taken
+    CHECK(save->HandleActivate());
+    CHECK(window->IsOpen());
+    CHECK(error->GetText() == StringView(u8"That name is taken in this group."));
+
+    name->SetText(u8"One Again");
+    CHECK(save->HandleActivate());
+    CHECK_FALSE(window->IsOpen());
+    content::Instance* made = bed.project->SourceDb().RootGroup()->GetInstance(u8"One Again");
+    REQUIRE(made != nullptr);
+    CHECK(page->InstanceId() == made->Id());
+    CHECK(page->saves == 1);
+    CHECK(bed.Layout().StackOf(EditorPages::PanelIdOf(made->Id()).AsView()) != gui::kNoDock);
+    CHECK(bed.Layout().StackOf(EditorPages::PanelIdOf(original).AsView()) == gui::kNoDock);
+    CHECK(bed.pages->PanelOf(page) != nullptr);
 }

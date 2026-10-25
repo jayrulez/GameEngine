@@ -40,6 +40,9 @@ export namespace editor::app
     class EditorPages
     {
     public:
+        /// Save As's dialog, under the data root.
+        static constexpr const char8_t* kSaveAsPath = u8"Editor/SaveAs.gml";
+
         /// What it works over.
         struct Services
         {
@@ -52,6 +55,8 @@ export namespace editor::app
             Function<foundation::resource::ResourceManager*()> resources;
             /// Where its dialogs show; null: none shows (a dirty page then stays open).
             Function<gui::SceneRoot*()> dialogRoot;
+            /// A dialog's markup by its path under the data root (Save As's); null: none.
+            Function<RefPtr<gui::Node>(StringView)> loadMarkup;
         };
 
         EditorPages(IAllocator& allocator, Services services) : m_allocator(allocator), m_services(Move(services)), m_open(allocator), m_closing(allocator)
@@ -165,6 +170,119 @@ export namespace editor::app
                 else
                     context.Notify(editor::NoticeKind::Error, u8"Asset-edit persist FAILED (see Console).");
             }
+        }
+
+        /// The unsaved pages, before `proceed` (an exit, a project's close): with none it runs now;
+        /// else the user is asked to save them all, keep working or go on without saving
+        /// (`discardVerb`: "Exit Without Saving"), and it runs only when they chose to go on or
+        /// every page saved. Answers whether it ran now.
+        bool ConfirmUnsavedThen(StringView saveVerb, StringView discardVerb, Function<void()> proceed)
+        {
+            const usize dirty = DirtyCount();
+            if (dirty == 0)
+            {
+                proceed();
+                return true;
+            }
+            gui::SceneRoot* root = m_services.dialogRoot ? m_services.dialogRoot() : nullptr;
+            if (root == nullptr)
+                return false; // nothing to ask over: the unsaved work stays
+            const String message = dirty == 1 ? String(u8"1 page has unsaved changes.") : Format(u8"{} pages have unsaved changes.", dirty);
+            auto box = MakeRef<gui::MessageBox>(m_allocator);
+            box->Configure(u8"Unsaved changes", message.AsView(), gui::MessageBox::Buttons::Ok);
+            box->ClearButtons();
+            (void)box->AddButton(discardVerb, u8"discard", gui::DialogRole::Destructive);
+            (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+            (void)box->AddButton(saveVerb, u8"save", gui::DialogRole::Primary);
+            EditorPages* self = this;
+            gui::MessageBox* raw = box.Get();
+            auto then = MakeRef<Pending>(m_allocator, foundation::core::Move(proceed));
+            (void)box->AddEventListener(gui::EventType::Changed, [self, raw, then](const gui::Event&)
+                                        {
+                                            const StringView answer = raw->GetResultName().AsView();
+                                            if (answer == StringView(u8"discard"))
+                                                then->proceed();
+                                            else if (answer == StringView(u8"save"))
+                                            {
+                                                if (self->SaveAll())
+                                                    then->proceed();
+                                                else
+                                                    self->m_services.context->Notify(editor::NoticeKind::Error, u8"Save FAILED (see Console) - nothing closed.");
+                                            }
+                                        });
+            box->OpenModal(*root);
+            return false;
+        }
+        /// Saves every page with unsaved changes; false when one failed (the rest still tried).
+        bool SaveAll()
+        {
+            bool all = true;
+            for (const OpenPage& open : m_open)
+                if (open.page->IsDirty() && !open.page->Save().IsOk())
+                    all = false;
+            return all;
+        }
+
+        /// Save As: the page's content into a new asset beside its own, named in a dialog (a name
+        /// empty or taken keeps the dialog open, saying why); the page edits the new asset after.
+        void SaveAs(editor::EditorPage& page)
+        {
+            editor::EditorContext& context = *m_services.context;
+            foundation::content::ContentDatabase* sources = Sources();
+            foundation::content::Instance* original = sources != nullptr ? sources->GetInstance(page.InstanceId()) : nullptr;
+            if (original == nullptr)
+            {
+                context.Notify(editor::NoticeKind::Warning, u8"This page has no source asset to copy.");
+                return;
+            }
+            gui::SceneRoot* root = m_services.dialogRoot ? m_services.dialogRoot() : nullptr;
+            RefPtr<gui::Node> body = m_services.loadMarkup ? m_services.loadMarkup(kSaveAsPath) : RefPtr<gui::Node>();
+            if (root == nullptr || !body)
+                return;
+            foundation::content::Group* group = &original->OwningGroup();
+            String suggested = Format(u8"{} Copy", original->Name());
+            while (group->GetInstance(suggested.AsView()) != nullptr)
+                suggested += u8" Copy";
+            auto window = MakeRef<gui::Window>(m_allocator);
+            window->SetTitle(u8"Save As");
+            window->AddClass(u8"save-as-window");
+            window->SetSize(Float2{kSaveAsWidth, kSaveAsHeight});
+            window->GetContent()->AddChild(body.Get());
+            auto* prompt = Cast<gui::Label>(FindIn(*body, u8"save-as-prompt"));
+            auto* name = Cast<gui::TextField>(FindIn(*body, u8"save-as-name"));
+            auto* error = Cast<gui::Label>(FindIn(*body, u8"save-as-error"));
+            auto* save = Cast<gui::Button>(FindIn(*body, u8"save-as-save"));
+            auto* cancel = Cast<gui::Button>(FindIn(*body, u8"save-as-cancel"));
+            if (name == nullptr || save == nullptr)
+                return;
+            if (prompt != nullptr)
+                prompt->SetText(Format(u8"A new asset beside '{}', named:", original->Name()).AsView());
+            name->SetText(suggested.AsView());
+            const Guid pageId = page.InstanceId();
+            EditorPages* self = this;
+            gui::Window* raw = window.Get();
+            const auto commit = [self, raw, name, error, pageId, group]()
+            {
+                const StringView newName = name->GetText();
+                const StringView refused = newName.IsEmpty()                           ? StringView(u8"Enter a name.")
+                                           : group->GetInstance(newName) != nullptr ? StringView(u8"That name is taken in this group.")
+                                                                                    : StringView{};
+                if (!refused.IsEmpty())
+                {
+                    if (error != nullptr)
+                        error->SetText(refused);
+                    return; // the dialog stays for the retry
+                }
+                self->SaveAsNamed(pageId, *group, newName);
+                raw->Close();
+            };
+            save->SetOnClick(commit);
+            (void)name->AddEventListener(gui::EventType::Submit, [commit](const gui::Event&) { commit(); });
+            if (cancel != nullptr)
+                cancel->SetOnClick([raw]() { raw->Close(); });
+            window->OpenModal(*root);
+            name->RequestFocus();
+            name->SelectAll();
         }
 
         /// One frame, after the GUI laid out: Tick, then each page's frame hook.
@@ -398,6 +516,59 @@ export namespace editor::app
                 }
         }
 
+        // What a confirmation goes on to, kept alive by the dialog's listener.
+        struct Pending final : RefCounted
+        {
+            explicit Pending(Function<void()> run) : proceed(foundation::core::Move(run)) {}
+            Function<void()> proceed;
+        };
+
+        // The page `pageId` (if still open) saved into a new asset `newName` in `group`.
+        void SaveAsNamed(const Guid& pageId, foundation::content::Group& group, StringView newName)
+        {
+            editor::EditorContext& context = *m_services.context;
+            editor::EditorPage* target = nullptr;
+            for (const OpenPage& open : m_open)
+                if (open.page->InstanceId() == pageId)
+                    target = open.page;
+            foundation::content::ContentDatabase* sources = Sources();
+            foundation::content::Instance* original = sources != nullptr ? sources->GetInstance(pageId) : nullptr;
+            if (target == nullptr || original == nullptr)
+                return; // closed meanwhile
+            const TypeInfo* type = GlobalTypeRegistry().FindByName(reinterpret_cast<const char*>(String(original->TypeNamespace()).CStr()),
+                                                                   reinterpret_cast<const char*>(String(original->TypeName()).CStr()));
+            foundation::content::Instance* fresh = type != nullptr ? group.CreateInstance(newName, *type) : nullptr;
+            if (fresh == nullptr)
+            {
+                context.Notify(editor::NoticeKind::Error, u8"Not saved: the new asset could not be made.");
+                return;
+            }
+            target->OnSavedAs(*fresh);
+            // The page's panel follows its new asset.
+            for (OpenPage& open : m_open)
+                if (open.page == target)
+                {
+                    const String panel = PanelIdOf(fresh->Id());
+                    (void)m_services.dock->Controller().Unregister(open.panel.AsView());
+                    m_open.RemoveAt(static_cast<usize>(&open - m_open.Data()));
+                    Dock(*static_cast<UIEditorPage*>(target), panel);
+                    break;
+                }
+            if (target->Save().IsOk())
+                context.Notify(editor::NoticeKind::Success, Format(u8"Saved as '{}'.", fresh->Name()).AsView());
+            else
+                context.Notify(editor::NoticeKind::Error, u8"Save As FAILED (see Console).");
+        }
+        static gui::Node* FindIn(gui::Node& node, StringView id)
+        {
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
+
         // Its uncooked dependencies cook without a step of the user's.
         void CookMissing(foundation::content::Instance& instance)
         {
@@ -440,6 +611,9 @@ export namespace editor::app
                     return true;
             return false;
         }
+
+        static constexpr f32 kSaveAsWidth = 420.0f;
+        static constexpr f32 kSaveAsHeight = 200.0f;
 
         IAllocator& m_allocator;
         Services m_services;

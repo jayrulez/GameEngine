@@ -384,10 +384,32 @@ TEST_CASE("EditorCamera asks for the pointer locked while its mouse drags it, an
     mouse.rmb = true;
     cam.Update(&kb, &mouse, 0.016f);
     CHECK_FALSE(cam.WantsPointerLock());
-    // No input this frame (the keyboard gone): no ask left over.
+    // The drag let go with no keyboard (the view never had the focus): no ask left over.
     cam.mouseCaptured = false;
     cam.Update(&kb, &mouse, 0.016f);
     REQUIRE(cam.WantsPointerLock());
+    mouse.rmb = false;
     cam.Update(nullptr, &mouse, 0.016f);
     CHECK_FALSE(cam.WantsPointerLock());
+}
+
+TEST_CASE("EditorCamera: the mouse works it with no keyboard (a view not clicked into): the wheel zooms; the keys wait")
+{
+    editor::EditorCamera cam;
+    StubMouse mouse;
+    const f32 before = cam.focusDistance;
+    mouse.scroll = 1.0f;
+    cam.Update(nullptr, &mouse, 0.016f);
+    CHECK(cam.focusDistance < before);
+    CHECK(cam.zoomedThisUpdate);
+    mouse.scroll = 0.0f;
+    // A right-button look turns it; with no keyboard there is no fly.
+    const Float3 at = cam.position;
+    const f32 yaw = cam.yaw;
+    mouse.rmb = true;
+    mouse.dx = 10.0f;
+    cam.Update(nullptr, &mouse, 0.5f);
+    CHECK(cam.yaw != yaw);
+    CHECK(cam.position.x == doctest::Approx(at.x));
+    CHECK(cam.position.z == doctest::Approx(at.z));
 }

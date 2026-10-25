@@ -457,11 +457,21 @@ The layers:
    the bespoke sections (a rigid body's shape notice kept current, a zone's bake as a job, a
    script's behaviours); the scene's settings when the scene is selected (profiles, the collision
    matrix); read-only while simulating, and shown so.
-5. The bar and the HUD: select, move, rotate and scale; space, grid and snap with their increments;
-   the view menu (lit, unlit, wire, the debug views, marked while one is on); overlays; frame. The
-   HUD chips, the stats, the view gizmo and the tool status, each in its zone. The tool panels in
-   one place (the HUD's top start, kept per scene), from the tool registry; Terrain's and
-   Vegetation's brushes and panels back with it.
+5. The bar and the HUD, in three parts: (1) the bar's editing controls, each an action with its
+   shortcut in its tooltip: Select (Q, new: picks with no handles), Move, Rotate and Scale as one
+   choice; the space (its icon the space it is in); Snap (every drag snaps while it is on, Ctrl
+   for one drag as before) with its increments (move, rotate, scale) in its menu, where they had
+   no UI; Vertex Snap; Frame. Disabled while the camera owns the input. The grid is an overlay, so
+   it is the overlays chip's (ruling 22). (2) The HUD in its zones over the viewport, on the GUI
+   rather than the debug font: at the top start the chips (projection: perspective or
+   orthographic and the axis views; shading: Lit or Unlit (ruling 21), the debug terms in a
+   submenu, the graph's textures through the picker (by pass, searched), the effects as what is on rather than "No X"; overlays: the grid and its
+   plane, markers, the LOD tint, colliders, stats), each saying what is on; at the top end the
+   stats and the view gizmo; at the bottom start the active tool's status and the zoom readout.
+   (3) The tools on the bar from the tool registry (a category with several tools one menu, with
+   their icons; an unavailable one disabled, its reason its tooltip), the active tool's panel
+   (ruling 23), the panel host and its widgets on the GUI, and Terrain's and Vegetation's brushes
+   and panels back with it.
 6. The camera preview in the HUD's bottom end: titled with its camera, at the camera's aspect,
    pinned or following the selection.
 7. Simulate and play in editor: Simulate on the page's bar (named so: Play is the Game tab's), the
@@ -531,3 +541,15 @@ Rulings (the user, 2026-10-23):
     are bare Guids naming their source asset type (`assetType`), so they are Reference rows to that
     type, and a reference takes the source types whose builder makes what it points at, else the
     type itself when it names a source asset type (2026-10-25).
+21. The scene view's shading is Lit or Unlit (the albedo term, named for what it shows); a
+    wireframe waits for the renderer (WebGPU has no line fill, so it needs a pass of its own:
+    backlog). The other debug terms stay under the shading's menu, a submenu; the graph's textures
+    (dozens a frame, the passes' own: AO, bloom, SSGI, shadows...) are the picker's, grouped by
+    their pass and searched, where they had been one long menu (2026-10-25).
+22. The view's controls (projection, shading, overlays) are the HUD's chips over the view they
+    change, each saying what is on; the page's bar keeps the editing controls (2026-10-25).
+23. A tool's panel opens in the HUD's top start, under the chips, and moves as the old floating
+    panel did: dragged by its head anywhere in the viewport (kept inside it as it shrinks), its
+    place kept per scene, a double click on its head putting it back in its zone, its chevron
+    folding it to its head. The editor's own piece, as the GUI has no floating panel
+    (2026-10-25).

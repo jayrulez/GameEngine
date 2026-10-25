@@ -1,5 +1,8 @@
 # Editor::Scene - `editor.scene`: the scene editor plugin (SceneEditorPage +
 # factory + RegisterSceneEditor). Linked by the editor EXECUTABLE only (never by editor core/app).
+# On the GUI in parts (Documentation/Specs/editor-gui.md, 5.3): the source lists name the files
+# back so far; the page, the hierarchy, the inspector and the two picker dialogs are still on
+# foundation.ui and stay out, unedited, until their layers.
 
 util_add_engine_library(Editor.Scene ALIAS Editor::Scene)
 target_link_libraries(Editor.Scene
@@ -15,15 +18,14 @@ target_link_libraries(Editor.Scene
         Foundation::Physics Foundation::Physics.Resource Engine::Physics Foundation::Heightfield Foundation::Terrain.Resource Foundation::Vegetation.Resource
         Engine::Navigation Foundation::Navigation.Resource Editor::Navigation
         Engine::Spline Foundation::Spline
-        Foundation::UI.Resource Engine::UI Foundation::Audio Foundation::Audio.Resource Engine::Audio
+        Foundation::Audio Foundation::Audio.Resource Engine::Audio
         Foundation::Geometry Foundation::Geometry.Resource Pipeline::Geometry
         Foundation::Materials Foundation::Materials.Resource Pipeline::Materials
         Foundation::Shaders Foundation::Shaders.Resource
         Pipeline::Render # the render profile assets (SettingsProfileAsset)
-        Foundation::UI Foundation::UI.Runtime Foundation::UI.Viewport Foundation::VG.Renderer
         Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Engine::Script
         Foundation::Input Foundation::Input.Resource Engine::Input
-        Editor::Core Editor::App Editor::Camera Editor::Preview Editor::ViewportTools Editor::PropertyAnimation Foundation::Policy
+        Editor::Core Editor::Camera Editor::ViewportTools Foundation::Policy
         Foundation::Mcp Foundation::Json) # the scene editor's MCP tools
 
 target_sources(Editor.Scene
@@ -33,9 +35,6 @@ target_sources(Editor.Scene
         ToolsImpl.cpp
         ComponentGizmosImpl.cpp
         AssetThumbnailsImpl.cpp
-        HierarchyViewImpl.cpp
-        InspectorViewImpl.cpp
-        ScenePageImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
@@ -60,12 +59,4 @@ target_sources(Editor.Scene
             Tools.cppm
             ComponentGizmos.cppm
             AssetThumbnails.cppm
-            HierarchyView.cppm
-            InspectorView.cppm
-            EntityPickerDialog.cppm
-            ComponentPickerDialog.cppm
-            ScenePage.cppm
             EditorSceneModule.cppm)
-
-
-target_link_libraries(Editor.Scene PUBLIC Engine::GUI) # the engine GUI beside the UI (gui-lab-evolution-3.md, E9)

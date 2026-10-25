@@ -16,7 +16,6 @@ module;
 export module editor.scene:actions;
 
 import foundation.core;
-import foundation.ui;
 import foundation.scene;
 import foundation.scene.resource;
 import editor.core;
@@ -169,11 +168,11 @@ export namespace editor
         // --- Gizmo: the transform mode as three toggles, the space as one ---
         const auto gizmoMode = [&](StringView id, StringView label, StringView description,
                                    StringView menuPath, i32 order, GizmoMode mode,
-                                   foundation::ui::KeyCode key)
+                                   StringView key)
         {
             EditorActionDeclaration d = Declare(id, label, description, menuPath, order);
             d.kind = EditorActionKind::Toggle;
-            d.shortcut = EditorShortcut{key, foundation::ui::KeyModifiers::None};
+            d.shortcut = EditorShortcut::Of(key);
             // Not while the camera flies: W, E and R are its movement keys then.
             d.enabled = [scenePage](EditorPage* page)
             {
@@ -191,11 +190,11 @@ export namespace editor
             (void)actions.Register(Move(d));
         };
         gizmoMode(kGizmoTranslate, u8"Translate", u8"Move the selection with the gizmo",
-                  u8"Scene/Gizmo/Translate", 100, GizmoMode::Translate, foundation::ui::KeyCode::W);
+                  u8"Scene/Gizmo/Translate", 100, GizmoMode::Translate, u8"w");
         gizmoMode(kGizmoRotate, u8"Rotate", u8"Rotate the selection with the gizmo",
-                  u8"Scene/Gizmo/Rotate", 101, GizmoMode::Rotate, foundation::ui::KeyCode::E);
+                  u8"Scene/Gizmo/Rotate", 101, GizmoMode::Rotate, u8"e");
         gizmoMode(kGizmoScale, u8"Scale", u8"Scale the selection with the gizmo",
-                  u8"Scene/Gizmo/Scale", 102, GizmoMode::Scale, foundation::ui::KeyCode::R);
+                  u8"Scene/Gizmo/Scale", 102, GizmoMode::Scale, u8"r");
         {
             EditorActionDeclaration d = Declare(kGizmoWorldSpace, u8"World Space",
                                                 u8"The gizmo's axes in world space (off: the "
@@ -254,7 +253,7 @@ export namespace editor
                                                 u8"Move the viewport camera so the selected "
                                                 u8"entities fill the view, orbiting about them",
                                                 u8"Scene/Frame Selection", 290);
-            d.shortcut = EditorShortcut{foundation::ui::KeyCode::F, foundation::ui::KeyModifiers::None};
+            d.shortcut = EditorShortcut::Of(u8"f");
             d.readOnly = true; // the camera is the page's view, not the scene
             d.enabled = [scenePage](EditorPage* page)
             {
@@ -275,8 +274,8 @@ export namespace editor
                                                 u8"ray parallel: what is in view stays",
                                                 u8"Scene/Orthographic", 291);
             d.kind = EditorActionKind::Toggle;
-            d.shortcut = EditorShortcut{foundation::ui::KeyCode::Keypad5, foundation::ui::KeyModifiers::None};
-            d.alternateShortcut = EditorShortcut{foundation::ui::KeyCode::O, foundation::ui::KeyModifiers::None};
+            d.shortcut = EditorShortcut::Of(u8"numpad5");
+            d.alternateShortcut = EditorShortcut::Of(u8"o");
             d.readOnly = true; // the camera is the page's view, not the scene
             d.enabled = [scenePage](EditorPage* page)
             {
@@ -382,7 +381,7 @@ export namespace editor
                                                 u8"Duplicate the selected entity's subtree "
                                                 u8"beside it",
                                                 u8"Scene/Entity/Duplicate", 200);
-            d.shortcut = EditorShortcut{foundation::ui::KeyCode::D, foundation::ui::KeyModifiers::Ctrl};
+            d.shortcut = EditorShortcut::Of(u8"ctrl-d");
             d.enabled = [](EditorPage* page) { return !detail::PrimaryOf(page).IsNil(); };
             d.execute = [](EditorPage* page)
             {
@@ -395,7 +394,7 @@ export namespace editor
             EditorActionDeclaration d = Declare(kEntityDelete, u8"Delete",
                                                 u8"Delete the selected entity and its subtree",
                                                 u8"Scene/Entity/Delete", 201);
-            d.shortcut = EditorShortcut{foundation::ui::KeyCode::Delete, foundation::ui::KeyModifiers::None};
+            d.shortcut = EditorShortcut::Of(u8"delete");
             d.enabled = [](EditorPage* page) { return !detail::PrimaryOf(page).IsNil(); };
             d.execute = [](EditorPage* page)
             { detail::EditablePage(page)->EditContext().DestroyEntity(detail::PrimaryOf(page)); };

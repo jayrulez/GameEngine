@@ -5,7 +5,8 @@
 // the types its services name for what the reference points at, showing the asset's name and
 // glyph (None for nothing, "(missing)" for a dangling id, Mixed over objects that differ); a pick,
 // a drop and a clear are one write each; open and reveal name the asset; a read-only one only
-// opens; and the context's table asks the builders' join and routes open and reveal.
+// opens; and the context's table asks the builders' join (else takes the type itself) and routes
+// open and reveal.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -238,7 +239,9 @@ TEST_CASE("resource-ref: the context's table asks the builders' join for the typ
     const Array<String> types = services.AcceptedTypes(TypeOf<TestMesh>());
     REQUIRE(types.Size() == 1u);
     CHECK(types[0] == String(StringView(reinterpret_cast<const utf8char*>(TypeOf<int>().name))));
-    CHECK(services.AcceptedTypes(TypeOf<float>()).IsEmpty());
+    const Array<String> itself = services.AcceptedTypes(TypeOf<float>()); // no builder makes it: a source type named itself
+    REQUIRE(itself.Size() == 1u);
+    CHECK(itself[0] == String(StringView(reinterpret_cast<const utf8char*>(TypeOf<float>().name))));
     ResourceRefShown shown;
     CHECK_FALSE(services.Describe(Guid{1u, 2u}, shown)); // no project: nothing is there
     CHECK_FALSE(static_cast<bool>(services.Pick));       // no picker to open: no pick

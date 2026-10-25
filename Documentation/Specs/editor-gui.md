@@ -348,10 +348,13 @@ additions go first and are grouped with the other GUI commits.
    favourites; what the slot's pick opens); the group picker and Create Asset (the group tree, a
    name checked live beside the field, Create refusing with why). The confirm dialog is the GUI's
    MessageBox (verbs, roles, Escape its cancel), so ConfirmDialog goes.
-6. The import dialog; Project Settings; the templates and export dialogs.
+6. Project Settings on the property grid (ruling 20), then Export Templates and Export, whose
+   preset settings are the grid the same way (extra files a list, an override's rows shown while it
+   overrides; a preset removed after asking).
 7. The assets browser: the group tree, the breadcrumb, the filter, list and grid with pictures and
    cook state; create, import, rename, duplicate, delete, cook, the export flag, favorites; a drag
-   source for the slots; dropped files imported.
+   source for the slots; dropped files imported, through the import dialog (single and batch), which
+   only the browser opens.
 
 ## 6. Tests
 
@@ -408,3 +411,8 @@ Rulings (the user, 2026-10-23):
 19. An asset reference (`Ref<T>`) takes the source asset types whose builder's product is `T` or
     derives from it: asked of the builder registry, never a list of types in the editor
     (2026-10-24).
+20. Project Settings is the property grid over a bag the dialog builds from the settings'
+    reflection (labels, categories, ranges, enums), staged with Save and Cancel. Its asset settings
+    are bare Guids naming their source asset type (`assetType`), so they are Reference rows to that
+    type, and a reference takes the source types whose builder makes what it points at, else the
+    type itself when it names a source asset type (2026-10-25).

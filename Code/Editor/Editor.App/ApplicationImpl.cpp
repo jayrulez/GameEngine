@@ -431,6 +431,42 @@ namespace editor::app
         (void)m_preferences->Open(*root);
     }
 
+    // Project Settings over the main window (made the first time), the manifest as it is now.
+    void EditorApplication::OpenProjectSettings()
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        if (!m_projectSettings)
+            m_projectSettings = MakeUnique<ProjectSettingsDialog>(m_editorAllocator, m_editorAllocator, m_context, RefServices(),
+                                                                  m_window.LoadMarkup(ProjectSettingsDialog::kPath));
+        (void)m_projectSettings->Open(*root);
+    }
+
+    void EditorApplication::ShowPicker(PickerRequest request, gui::Node* anchor)
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        if (!m_picker)
+            m_picker = MakeUnique<Picker>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(Picker::kPath));
+        (void)m_picker->Open(*root, Move(request), anchor);
+    }
+
+    // The slots' table, from the context, the type icons and the picker (made the first time).
+    const ResourceRefServices& EditorApplication::RefServices()
+    {
+        if (!m_typeIcons)
+        {
+            EditorWindow* window = &m_window;
+            m_typeIcons = MakeUnique<editor::EditorIcons>(m_editorAllocator, m_editorAllocator, [window](StringView path)
+                                                          { return window->Resources() != nullptr && window->Resources()->Exists(path); });
+            EditorApplication* self = this;
+            m_refs = ResourceRefServices::From(m_context, *m_typeIcons, [self](PickerRequest request, gui::Node* anchor) { self->ShowPicker(Move(request), anchor); });
+        }
+        return m_refs;
+    }
+
     // The log's new lines into the Console.
     void EditorApplication::DrainLog()
     {
@@ -629,6 +665,7 @@ namespace editor::app
 
         ProjectActions project;
         project.context = &m_context;
+        project.settings = [self]() { self->OpenProjectSettings(); };
         project.addNativeCode = [self]() { self->AddNativeCode(); };
         project.buildNativeModule = [self]() { self->BuildNativeModule(); };
         project.reloadNativeModule = [self]()

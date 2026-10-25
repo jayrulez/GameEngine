@@ -52,7 +52,8 @@ export namespace editor::app
         Function<void(const Guid&)> Open;
         Function<void(const Guid&)> Reveal;
 
-        /// Filled from the editor's context: the builders' types (SourceAssetTypesOf), the
+        /// Filled from the editor's context: the builders' types (SourceAssetTypesOf; none, the
+        /// type itself, a reference naming a source asset type), the
         /// project's names, the type icons, the asset picker over the project's assets (`open`
         /// shows a picker's request below its anchor), the context's open and reveal. `context`
         /// and `icons` outlive what it is given to.
@@ -76,12 +77,16 @@ export namespace editor::app
                     };
                     open(Move(request), anchor);
                 };
+            // What the builders make it from; none: the type itself, a reference naming a source
+            // asset type (Project Settings', ruling 20).
             services.AcceptedTypes = [ctx](const TypeInfo& target)
             {
                 Array<String> names;
                 if (ctx->SourceAssetTypesOf)
                     for (const TypeInfo* asset : ctx->SourceAssetTypesOf(target))
                         names.PushBack(String(StringView(reinterpret_cast<const utf8char*>(asset->name))));
+                if (names.IsEmpty() && target.name != nullptr)
+                    names.PushBack(String(StringView(reinterpret_cast<const utf8char*>(target.name))));
                 return names;
             };
             services.Describe = [ctx, typeIcons](const Guid& id, ResourceRefShown& out)

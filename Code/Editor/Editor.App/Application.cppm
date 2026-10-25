@@ -36,6 +36,9 @@ import :action_menus;
 import :action_shortcuts;
 import :command_palette;
 import :preferences_dialog;
+import :picker;
+import :resource_ref_editor;
+import :settings_dialog;
 import :project_home;
 import :project_manager_view;
 import :log_view;
@@ -147,6 +150,10 @@ export namespace editor::app
         void OpenCommandPalette();
         bool ConfirmExit();
         void OpenPreferences();
+        void OpenProjectSettings();
+        /// Shows a picker's request below `anchor` (else near the top), over the main window.
+        void ShowPicker(PickerRequest request, gui::Node* anchor);
+        [[nodiscard]] const ResourceRefServices& RefServices();
         void EnterManagerMode();
         void OpenFromManager(StringView directory);
         void CreateFromManager(StringView directory, StringView name);
@@ -186,6 +193,10 @@ export namespace editor::app
         UniquePtr<ActionShortcuts> m_shortcuts; // the actions' keys in the GUI's keymap
         UniquePtr<CommandPalette> m_palette;    // every action by name (View > Command Palette)
         UniquePtr<EditorPreferencesDialog> m_preferences; // Edit > Preferences
+        UniquePtr<editor::EditorIcons> m_typeIcons; // a type's icon, asked of the type
+        UniquePtr<Picker> m_picker;                 // the one picker (assets, paths, groups), made the first time
+        ResourceRefServices m_refs;                 // what an asset slot asks of the editor
+        UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content

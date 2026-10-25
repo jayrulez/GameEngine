@@ -52,6 +52,7 @@ target_sources(Editor.App
             AssetPickerDialog.cppm
             GroupPickerDialog.cppm
             AssetCreateDialog.cppm
+            SettingsDialog.cppm
             ResourceRefEditor.cppm
             EditorNativeModule.cppm
             EditorExport.cppm

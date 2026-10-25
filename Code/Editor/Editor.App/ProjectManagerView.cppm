@@ -439,6 +439,9 @@ export namespace editor::app
             text->AddChild(path.Get());
             row->AddChild(text.Get());
             row->AddChild(Text(card.engineVersion.AsView(), u8"manager-version").Get());
+            // Open in a slot of its own, empty for a missing project: every row's columns line up.
+            RefPtr<gui::Panel> slot = MakeRef<gui::Panel>(m_allocator);
+            slot->AddClass(u8"manager-open-slot");
             if (!card.missing)
             {
                 RefPtr<gui::Button> open = MakeRef<gui::Button>(m_allocator);
@@ -446,8 +449,9 @@ export namespace editor::app
                 ProjectManagerView* self = this;
                 const String where = card.path;
                 open->SetOnClick([self, where]() { self->Open(where.AsView()); });
-                row->AddChild(open.Get());
+                slot->AddChild(open.Get());
             }
+            row->AddChild(slot.Get());
             row->AddChild(MoreButton(card.path).Get());
             return RefPtr<gui::Node>(row);
         }

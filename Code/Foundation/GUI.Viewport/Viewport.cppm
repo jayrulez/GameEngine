@@ -13,9 +13,15 @@
 // content's keyboard and mouse (Mouse(), Keyboard(), Touch()) are gated to it: a camera reads them
 // while the node is hovered or focused (IsActive), and a drag begun in it keeps them past its edge.
 //
+// Content can also be drawn outside OnRender, by a renderer with a frame of its own that runs
+// before the GUI's (an editor's scene renderer, one bracket for every page): it imports the colour
+// target in ColorState(), leaves it ready to sample and says so with SetColorState(ShaderRead);
+// the widget then keeps what it drew.
+//
 // From foundation.ui's ViewportView (UI.Viewport): its fit (core::ContentFit, for the picture and
 // the pointer alike), its formats (RGBA16Float and Depth32Float by default), a fixed resolution, a
-// clear when there is nothing to draw. A game in a panel takes every key while focused through the
+// clear while there is nothing defined to show, the colour target's state for a renderer that owns
+// its transitions. A game in a panel takes every key while focused through the
 // node's SetCapturesAllKeys (its release chord, Shift+F1 by default, frees it). Not carried: hosted
 // text input, which waits for an embedded GUI to need it.
 
@@ -117,6 +123,12 @@ export namespace foundation::gui
         [[nodiscard]] rhi::TextureView* ColorView() const noexcept { return m_colorView; }
         [[nodiscard]] rhi::TextureView* DepthView() const noexcept { return m_depthView; }
         [[nodiscard]] rhi::Texture* ColorTexture() const noexcept { return m_colorTexture; }
+        /// The colour target's state: what a renderer drawing it outside OnRender imports it from
+        /// (Undefined once it is made again), and tells the widget it left it in.
+        [[nodiscard]] rhi::ResourceState ColorState() const noexcept { return m_colorState; }
+        void SetColorState(rhi::ResourceState state) noexcept { m_colorState = state; }
+        /// How many frames it cleared for want of anything to show.
+        [[nodiscard]] u32 ClearCount() const noexcept { return m_clears; }
         [[nodiscard]] u32 RenderWidth() const noexcept { return m_width; }
         [[nodiscard]] u32 RenderHeight() const noexcept { return m_height; }
         /// The window it is bound to (0: none).
@@ -175,10 +187,14 @@ export namespace foundation::gui
         {
             if (!IsReady())
                 return;
+            // No content of its own: drawn outside (or cleared before), it is ready to sample.
+            if (!OnRender && m_colorState == rhi::ResourceState::ShaderRead)
+                return;
             encoder.TransitionTexture(m_colorTexture, m_colorState, rhi::ResourceState::RenderTarget);
             if (!OnRender)
             {
                 // Nothing to draw: the colour target still holds something defined to sample.
+                ++m_clears;
                 rhi::RenderPassDesc pass;
                 rhi::ColorAttachment color;
                 color.view = m_colorView;
@@ -320,6 +336,7 @@ export namespace foundation::gui
         u32 m_fixedWidth = 0;
         u32 m_fixedHeight = 0;
         u32 m_windowId = 0;
+        u32 m_clears = 0;
         bool m_registered = false;
     };
 

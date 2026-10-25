@@ -130,6 +130,29 @@ TEST_CASE("gui.viewport: with nothing to draw it clears; hidden it records nothi
     CHECK(renders == 0);
 }
 
+TEST_CASE("gui.viewport: drawn outside OnRender, its picture is kept; made again, it clears until it is drawn")
+{
+    Bed bed;
+    bed.Frame(bed.main.Get());
+    REQUIRE(bed.viewport->IsReady());
+    CHECK(bed.viewport->ClearCount() == 1u); // nothing defined yet: cleared, ready to sample
+    CHECK(bed.viewport->ColorState() == rhi::ResourceState::ShaderRead);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->ClearCount() == 1u); // what it holds is kept
+
+    // A renderer with its own frame draws it, from the state it was in, and leaves it to sample.
+    bed.viewport->SetColorState(rhi::ResourceState::RenderTarget);
+    bed.viewport->SetColorState(rhi::ResourceState::ShaderRead);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->ClearCount() == 1u); // not cleared over
+
+    // Made again at another size: undefined until something draws it.
+    bed.viewport->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(400.0f); });
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->RenderWidth() == 400u);
+    CHECK(bed.viewport->ClearCount() == 2u);
+}
+
 TEST_CASE("gui.viewport: moved to another window it is bound there; taken out of every window it lets go")
 {
     Bed bed;

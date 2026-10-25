@@ -204,6 +204,8 @@ export namespace foundation::gui
             ShowEverywhere();
             return true;
         }
+        /// The registered panels, in the order they registered.
+        [[nodiscard]] Span<const DockPanelDescription> Panels() const noexcept { return Span<const DockPanelDescription>(m_panels.Data(), m_panels.Size()); }
         [[nodiscard]] const DockPanelDescription* Describe(core::StringView panel) const noexcept
         {
             for (const DockPanelDescription& description : m_panels)

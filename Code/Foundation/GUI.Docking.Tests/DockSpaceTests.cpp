@@ -374,7 +374,10 @@ TEST_CASE("dock space: a panel unregistered leaves the layout without asking, it
         ++asked;
         return false;
     };
+    const usize before = bed.controller.Panels().Size();
     REQUIRE(bed.controller.Register(core::Move(document)));
+    REQUIRE(bed.controller.Panels().Size() == before + 1u);
+    CHECK(bed.controller.Panels()[before].Id == core::String(u8"document")); // in the order they came
     REQUIRE(bed.controller.Edit([&](DockLayout& l) { return l.InsertTab(SV(u8"document"), bed.Central()); }).Ok());
     bed.Lay();
     core::RefPtr<Node> content = bed.controller.Content(SV(u8"document"));
@@ -386,6 +389,7 @@ TEST_CASE("dock space: a panel unregistered leaves the layout without asking, it
     CHECK(bed.StackOf(u8"document") == kNoDock);
     CHECK(bed.controller.GetLayout().FindHidden(SV(u8"document")) == nullptr); // no place kept
     CHECK(bed.controller.Describe(SV(u8"document")) == nullptr);
+    CHECK(bed.controller.Panels().Size() == before);
     CHECK_FALSE(bed.controller.HasContent(SV(u8"document")));
     CHECK(content->GetParent() == nullptr);
     CHECK_FALSE(bed.controller.Show(SV(u8"document")).Ok());

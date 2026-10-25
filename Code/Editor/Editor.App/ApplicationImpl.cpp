@@ -26,6 +26,7 @@ import engine.input; // the embedded runtime's scene-input policy
 import engine.ui;
 import engine.gui;
 import editor.core;
+import editor.preview; // ThumbnailStage: staged each frame, rendered in the scene bracket
 import foundation.mcp; // McpServer (the layout tools added to the host)
 import engine.project; // ProjectSettings (a folder probed for a project)
 
@@ -929,6 +930,8 @@ namespace editor::app
             m_embeddedApp->OnUpdate(*m_embeddedHost, dt);
         }
         UpdateCaptures(host, dt);
+        if (editor::ThumbnailStage* stage = m_session.Stage())
+            stage->Update(); // take and stage the next queued GPU thumbnail
         // The cook's and the jobs' progress to the status line; an export waiting on its cook starts.
         EditorApplication* self = this;
         m_cookService.Update(Function<void(StringView)>{[self](StringView line) { self->m_context.SetStatus(line); }});
@@ -1048,6 +1051,8 @@ namespace editor::app
             if (m_sceneRenderer != nullptr)
                 m_sceneRenderer->BeginRendering(*frame.encoder, frame.frameIndex);
             m_pages->Render(host, frame);
+            if (editor::ThumbnailStage* stage = m_session.Stage())
+                stage->Render(frame); // a thumbnail in the same bracket
             if (m_sceneRenderer != nullptr)
                 m_sceneRenderer->EndRendering();
             m_pages->AfterSceneRender(host, frame); // overlays on the composed targets (the Game tab's UI)

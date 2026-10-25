@@ -571,12 +571,13 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Mcp) # MCP project tools (project_create/open/info); headless
     # The editor moves onto the GUI on this branch (Documentation/Specs/editor-gui.md, 4): a library
     # still on foundation.ui is PARKED, out of the build with its tests, its source untouched, and
-    # comes back with its port commit (the spec's ledger, 4.1, keeps the list): Preview,
+    # comes back with its port commit (the spec's ledger, 4.1, keeps the list):
     # Play, Animation, Particles, PropertyAnimation, Generic, Texture, Fonts, Image, Heightfield,
     # Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain, Script (and its
     # AngelScript and Luau lexers), Shaders, GUI, GameUI.
     # Editor.App, the shell, comes back in parts (the spec's 5.1): its source list names the files
     # on the GUI so far.
+    add_subdirectory(Code/Editor/Editor.Preview) # the thumbnail stage so far (the spec's 5.3); its preview viewport with the asset pages
     add_subdirectory(Code/Editor/Editor.App)
     add_subdirectory(Code/Pipeline/Physics.Pipeline)    # collision/material assets + builders (tooling)
     add_subdirectory(Code/Pipeline/Render.Pipeline)     # render profile assets + builders (tooling)

@@ -15,7 +15,7 @@ target_link_libraries(Editor.App
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
         Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::UI Engine::GUI Foundation::UI.Resource # the game UI's defaults (the runtime's)
-        Editor::Core Foundation::Settings
+        Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
         Editor::Mcp Foundation::Mcp Foundation::Mcp.Http) # the MCP host: the shared engine surface over HTTP
 
 target_sources(Editor.App

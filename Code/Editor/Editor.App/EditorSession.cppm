@@ -34,6 +34,7 @@ import engine.ui;         // UISubsystem (the game UI's defaults)
 import engine.gui;        // GuiSubsystem (the engine GUI's fonts and sheets)
 import editor.core;
 import editor.mcp;        // SourceAssetTypesFor
+import editor.preview;    // ThumbnailStage (the GPU half of the thumbnails)
 import :native_module;
 import :layout; // the per-project store's sections and files
 
@@ -124,6 +125,11 @@ export namespace editor::app
             }
             OpenProjectStore();
             AttachResources();
+            // The GPU half of the thumbnails, once the resources exist (the stage keeps them: a null
+            // one stalls every queued job), on the embedded host whose context holds the scene and
+            // render subsystems. It goes before the service resets, so a job in flight unstages.
+            if (m_services.embeddedHost != nullptr && m_services.thumbnails != nullptr)
+                m_thumbnailStage = MakeUnique<editor::ThumbnailStage>(m_allocator, *m_services.embeddedHost, *m_services.thumbnails, m_resources.Get());
             if (m_services.native != nullptr)
                 m_services.native->Load(project, context, *m_services.runtime);
             if (m_services.embeddedApp != nullptr)
@@ -170,6 +176,7 @@ export namespace editor::app
             if (m_services.closing)
                 m_services.closing();
             m_services.cook->Shutdown(); // joins a cook in flight before the databases go
+            m_thumbnailStage.Reset(); // unstages and drops its GPU objects while the renderer lives
             m_services.thumbnails->Reset();
             context.OnCookRequested = {};
             context.CookBusy = {};
@@ -206,6 +213,9 @@ export namespace editor::app
         /// The per-project editor store (dock layout, favorites, open pages); null with no project.
         [[nodiscard]] foundation::settings::Settings* Store() const noexcept { return m_store.Get(); }
         [[nodiscard]] foundation::resource::ResourceManager* Resources() const noexcept { return m_resources.Get(); }
+        /// The thumbnails' GPU stage while a project is open with a renderer's runtime: the
+        /// application stages a job each frame and renders it in the scene renderer's bracket.
+        [[nodiscard]] editor::ThumbnailStage* Stage() const noexcept { return m_thumbnailStage.Get(); }
 
         /// Writes the per-project store, the views' state captured into it first.
         void SaveStore()
@@ -362,5 +372,6 @@ export namespace editor::app
         UniquePtr<editor::EditorProject> m_project;
         UniquePtr<foundation::settings::Settings> m_store;
         UniquePtr<foundation::resource::ResourceManager> m_resources;
+        UniquePtr<editor::ThumbnailStage> m_thumbnailStage;
     };
 }

@@ -5,7 +5,7 @@
 //
 // RegisterSceneEditor, the module's entry point the executable calls (the editor's core and app
 // never link this module): the scene editor's services (the document types, the export's seams, a
-// model import's prefab), a page factory for scenes and one for prefabs (a prefab's payload is a
+// model import's prefab), its thumbnail generators, a page factory for scenes and one for prefabs (a prefab's payload is a
 // scene stream, so the same page edits it), the scene editor's actions and its MCP live tools. A
 // page gets from the editor what draws its viewport, its markup and the asset picker, asked when it
 // is made (the window's GUI host exists once the window is open). Out of the page's partition
@@ -25,6 +25,7 @@ import editor.core;
 import editor.app;
 import :page;
 import :services;
+import :asset_thumbnails;
 import :actions;
 import :mcp_tools;
 
@@ -50,6 +51,10 @@ export namespace editor
     inline void RegisterSceneEditor(EditorContext& context, foundation::runtime::IApplicationHost& host, app::EditorApplication& app)
     {
         RegisterSceneEditorServices(context, host);
+        // The pictures of meshes, materials, prefabs, scenes and effects: the generators queue,
+        // the application's thumbnail stage renders.
+        if (context.Thumbnails() != nullptr)
+            RegisterSceneThumbnailGenerators(*context.Thumbnails(), context);
 
         foundation::runtime::IApplicationHost* appHost = &host;
         app::EditorApplication* editor = &app;

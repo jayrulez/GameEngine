@@ -39,7 +39,7 @@ export namespace editor::app
     namespace content = foundation::content;
 
     /// One asset or group as the browser draws it: a tile's picture over its name, or a list row's
-    /// glyph, name, what it is, badge and star. Its class (`tile` or `row`) says which.
+    /// glyph, name, what it is, badge, Always Export and star. Its class (`tile` or `row`) says which.
     class AssetCell final : public gui::UIWidget
     {
         RTTI_OBJECT(AssetCell, gui::UIWidget)
@@ -85,7 +85,9 @@ export namespace editor::app
             m_kind = Part<gui::Label>(*textHolder, u8"row-kind");
             m_kind->SetDisplayed(!tile);
             m_badge = Part<gui::Label>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge");
-            // Always Export: the kit's badge on a row, a mark in a tile's corner.
+            // Always Export: a mark in a tile's corner; a row's icon in a column of its own, lit
+            // when it is so, greyed when not, as its star is (every row shows both, so each
+            // column lines up).
             if (tile)
             {
                 m_exportMark = Part<gui::Panel>(*m_thumb, u8"export-mark");
@@ -94,14 +96,17 @@ export namespace editor::app
             }
             else
             {
-                m_exportBadge = Part<gui::Label>(*this, u8"badge");
-                m_exportBadge->AddClass(u8"export");
-                m_exportBadge->SetText(u8"Always Export");
+                m_exportIcon = Part<gui::Image>(*this, u8"badge-icon");
+                m_exportIcon->AddClass(u8"always-export"); // not `export`: the export dialog's class
+                m_exportIcon->SetSource(String(u8"Editor/Icons/export.svg"));
+                m_exportIcon->SetHitTestVisible(true); // its tooltip
             }
             m_star = Part<gui::Image>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge-icon");
             m_star->AddClass(u8"star");
             m_star->SetSource(String(u8"Editor/Icons/star.svg"));
             m_star->SetTooltip(u8"Favourite");
+            if (!tile)
+                m_star->SetHitTestVisible(true); // its tooltip
         }
         void Show(const Shown& shown)
         {
@@ -138,8 +143,10 @@ export namespace editor::app
             else
             {
                 m_badge->SetVisible(!shown.Badge.IsEmpty());
-                m_exportBadge->SetVisible(shown.AlwaysExported);
-                m_star->SetVisible(shown.Favourite);
+                Lit(*m_exportIcon, shown.AlwaysExported);
+                m_exportIcon->SetTooltip(shown.AlwaysExported ? StringView(u8"Always exported") : StringView(u8"Exported when something it ships uses it"));
+                Lit(*m_star, shown.Favourite);
+                m_star->SetTooltip(shown.Favourite ? StringView(u8"Favourite") : StringView(u8"Not a favourite"));
             }
             if (shown.Group)
                 AddClass(u8"group");
@@ -150,10 +157,11 @@ export namespace editor::app
         [[nodiscard]] StringView Name() const { return m_name->GetText(); }
         [[nodiscard]] StringView Kind() const { return m_kind->GetText(); }
         [[nodiscard]] StringView Badge() const { return m_badge->GetText(); }
-        [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed() && m_star->IsVisible(); }
+        /// A tile's star shows; a row's is lit.
+        [[nodiscard]] bool ShowsStar() const { return m_tile ? m_star->IsDisplayed() : m_star->HasClass(u8"on"); }
         [[nodiscard]] bool ShowsAlwaysExport() const
         {
-            return m_tile ? m_exportMark->IsDisplayed() : m_exportBadge->IsVisible();
+            return m_tile ? m_exportMark->IsDisplayed() : m_exportIcon->HasClass(u8"on");
         }
         [[nodiscard]] bool IsTile() const noexcept { return m_tile; }
         [[nodiscard]] bool ShowsPicture() const { return m_picture && m_picture->IsDisplayed() && m_picture->GetDrawable() != nullptr; }
@@ -161,6 +169,13 @@ export namespace editor::app
         [[nodiscard]] gui::Label* KindLabel() const noexcept { return m_kind.Get(); }
 
     private:
+        static void Lit(gui::Image& icon, bool on)
+        {
+            if (on)
+                icon.AddClass(u8"on");
+            else
+                icon.RemoveClass(u8"on");
+        }
         template <typename T>
         RefPtr<T> Part(gui::Node& into, StringView cls)
         {
@@ -175,7 +190,7 @@ export namespace editor::app
         RefPtr<gui::Panel> m_thumb;
         RefPtr<gui::Image> m_picture; // a tile's thumbnail
         RefPtr<gui::Panel> m_text; // a row's name and kind
-        RefPtr<gui::Label> m_exportBadge; // a row's Always Export
+        RefPtr<gui::Image> m_exportIcon;  // a row's Always Export
         RefPtr<gui::Panel> m_exportMark;  // a tile's
         RefPtr<gui::Image> m_glyph;
         RefPtr<gui::Label> m_name;

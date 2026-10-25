@@ -368,6 +368,7 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
     styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
     bed.view->SetTiles(false);
     bed.context.ToggleFavorite(bed.barrel->Id()); // one row starred, one not
+    bed.ops->ToggleAlwaysExport(bed.barrel->Id()); // and always exported, one not
     bed.view->OpenRow(bed.RowOf(u8"Models"));
     bed.view->OpenRow(bed.RowOf(u8"Town"));
     styles.ApplyTree(*bed.root);
@@ -386,7 +387,19 @@ TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's b
         const gui::Rect r = kind->GetScreenBounds();
         return r.x + r.width;
     };
-    CHECK(kindRight(*barrel) == doctest::Approx(kindRight(*bell))); // the star's column kept on the row without one
+    // Every row's Always Export and star in the same columns, each an icon's width (a class of
+    // another dialog's once stretched the row's).
+    for (usize i = 0; i < barrel->ChildCount() && i < bell->ChildCount(); ++i)
+    {
+        const gui::Rect a = barrel->GetChildAt(i)->GetScreenBounds();
+        const gui::Rect b = bell->GetChildAt(i)->GetScreenBounds();
+        CHECK(a.x == doctest::Approx(b.x));
+        CHECK(a.width == doctest::Approx(b.width));
+    }
+    CHECK(barrel->GetChildAt(barrel->ChildCount() - 2)->GetSize().x == doctest::Approx(14.0f)); // Always Export
+    CHECK(barrel->ShowsAlwaysExport());
+    CHECK_FALSE(bell->ShowsAlwaysExport());
+    CHECK(kindRight(*barrel) == doctest::Approx(kindRight(*bell))); // the star's and the export badge's columns kept on the row without them
     // On one baseline: the name's and the kind's text baselines at the same height.
     const auto baseline = [](const gui::Node& label) { return label.GetScreenBounds().y + label.GetBaseline(); };
     CHECK(baseline(*barrel->NameLabel()) == doctest::Approx(baseline(*barrel->KindLabel())).epsilon(0.02));

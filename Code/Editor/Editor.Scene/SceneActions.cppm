@@ -35,11 +35,13 @@ export namespace editor
         inline constexpr StringView kSimulateStart = u8"scene.simulate.start";
         inline constexpr StringView kSimulatePause = u8"scene.simulate.pause";
         inline constexpr StringView kSimulateStop = u8"scene.simulate.stop";
+        inline constexpr StringView kGizmoSelect = u8"scene.gizmo.select";
         inline constexpr StringView kGizmoTranslate = u8"scene.gizmo.translate";
         inline constexpr StringView kGizmoRotate = u8"scene.gizmo.rotate";
         inline constexpr StringView kGizmoScale = u8"scene.gizmo.scale";
         inline constexpr StringView kGizmoWorldSpace = u8"scene.gizmo.worldSpace";
         inline constexpr StringView kGizmoVertexSnap = u8"scene.gizmo.vertexSnap";
+        inline constexpr StringView kGizmoSnap = u8"scene.gizmo.snap";
         inline constexpr StringView kMarkers = u8"scene.view.markers";
         inline constexpr StringView kFrameSelection = u8"scene.view.frameSelection";
         inline constexpr StringView kOrthographic = u8"scene.view.orthographic";
@@ -183,12 +185,33 @@ export namespace editor
             {
                 ISceneEditorPage* scene = scenePage(page);
                 return scene != nullptr && scene->Gizmos() != nullptr &&
-                       scene->Gizmos()->Mode() == mode;
+                       scene->Gizmos()->HandlesShown() && scene->Gizmos()->Mode() == mode;
             };
             d.execute = [scenePage, mode](EditorPage* page)
             { scenePage(page)->Gizmos()->SetMode(mode); };
             (void)actions.Register(Move(d));
         };
+        {
+            // No handles: a click picks, a drag boxes, and nothing moves by accident.
+            EditorActionDeclaration d = Declare(kGizmoSelect, u8"Select",
+                                                u8"Pick and box select with no handles (W, E or R "
+                                                u8"brings them back)",
+                                                u8"Scene/Gizmo/Select", 99);
+            d.kind = EditorActionKind::Toggle;
+            d.shortcut = EditorShortcut::Of(u8"q");
+            d.enabled = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->Gizmos() != nullptr && !scene->CameraOwnsInput();
+            };
+            d.checked = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->Gizmos() != nullptr && !scene->Gizmos()->HandlesShown();
+            };
+            d.execute = [scenePage](EditorPage* page) { scenePage(page)->Gizmos()->SetHandlesShown(false); };
+            (void)actions.Register(Move(d));
+        }
         gizmoMode(kGizmoTranslate, u8"Translate", u8"Move the selection with the gizmo",
                   u8"Scene/Gizmo/Translate", 100, GizmoMode::Translate, u8"w");
         gizmoMode(kGizmoRotate, u8"Rotate", u8"Rotate the selection with the gizmo",
@@ -198,7 +221,7 @@ export namespace editor
         {
             EditorActionDeclaration d = Declare(kGizmoWorldSpace, u8"World Space",
                                                 u8"The gizmo's axes in world space (off: the "
-                                                u8"selection's local space)",
+                                                u8"selection's local space; X over the view)",
                                                 u8"Scene/Gizmo/World Space", 200);
             d.kind = EditorActionKind::Toggle;
             d.enabled = [scenePage](EditorPage* page)
@@ -243,6 +266,31 @@ export namespace editor
             {
                 GizmoController* gizmos = scenePage(page)->Gizmos();
                 gizmos->SetVertexSnapMode(!gizmos->VertexSnapMode());
+            };
+            (void)actions.Register(Move(d));
+        }
+
+        {
+            // Every drag snaps to the increments while on; Ctrl does it for one drag.
+            EditorActionDeclaration d = Declare(kGizmoSnap, u8"Snap",
+                                                u8"Every gizmo drag snaps to the increments (hold "
+                                                u8"Ctrl for one drag)",
+                                                u8"Scene/Gizmo/Snap", 202);
+            d.kind = EditorActionKind::Toggle;
+            d.enabled = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->Gizmos() != nullptr;
+            };
+            d.checked = [scenePage](EditorPage* page)
+            {
+                ISceneEditorPage* scene = scenePage(page);
+                return scene != nullptr && scene->Gizmos() != nullptr && scene->Gizmos()->SnapMode();
+            };
+            d.execute = [scenePage](EditorPage* page)
+            {
+                GizmoController* gizmos = scenePage(page)->Gizmos();
+                gizmos->SetSnapMode(!gizmos->SnapMode());
             };
             (void)actions.Register(Move(d));
         }

@@ -150,10 +150,11 @@ namespace editor
         gui::Node* pane = Find<gui::Node>(u8"scene-viewport");
         (void)(pane != nullptr ? pane : m_content.Get())->AddChildAt(m_viewport->ViewNode().Get(), 0);
         m_viewport->HostIn(m_services.gui);
-        m_bar = MakeUnique<app::PageActionBar>(Allocator(), Allocator(), context.Actions(), *this);
-        m_bar->Bind(Find<gui::ButtonBase>(u8"scene-save"), u8"file.save");
-        m_bar->Bind(Find<gui::ButtonBase>(u8"scene-undo"), u8"edit.undo");
-        m_bar->Bind(Find<gui::ButtonBase>(u8"scene-redo"), u8"edit.redo");
+        {
+            SceneEditorPage* self = this;
+            m_bar = MakeUnique<SceneBar>(Allocator(), Allocator(), context.Actions(), *this,
+                                         [self](StringView id) { return self->Find<gui::ButtonBase>(id); }, [self]() { return self->Gizmos(); });
+        }
         // A prefab is marked as one: the same page edits both.
         if (gui::Node* kind = Find<gui::Node>(u8"scene-kind"))
             kind->SetDisplayed(m_isPrefab);
@@ -274,6 +275,9 @@ namespace editor
             m_hierarchy->Refresh(); // the scene changed: built again
         if (m_inspector)
             m_inspector->Refresh(); // the selection or its components changed: built again; else its values
+        // A move snapping by the grid's cell takes the cell where the camera is now.
+        if (GizmoController* gizmos = Gizmos(); gizmos != nullptr && gizmos->MoveSnapsToGrid())
+            gizmos->Gizmo().translateSnap = m_overlays.CurrentGridSpacing(m_viewport->Camera()).spacing;
         if (m_bar)
             m_bar->Sync();
     }

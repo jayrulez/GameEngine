@@ -39,6 +39,7 @@ namespace editor
         if (foundation::shell::IKeyboard* keyboard = input.keyboard;
             keyboard != nullptr && gizmoInput.pointerValid)
         {
+            gizmoInput.keySelect = keyboard->IsKeyPressed(foundation::shell::KeyCode::Q);
             gizmoInput.keyTranslate = keyboard->IsKeyPressed(foundation::shell::KeyCode::W);
             gizmoInput.keyRotate = keyboard->IsKeyPressed(foundation::shell::KeyCode::E);
             gizmoInput.keyScale = keyboard->IsKeyPressed(foundation::shell::KeyCode::R);

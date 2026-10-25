@@ -42,6 +42,7 @@ export import :scene_settings_source;
 export import :settings_extra_sources;
 export import :builtin_inspector_extras;
 export import :inspector;
+export import :scene_bar;
 export import :scene_viewport;
 export import :page;
 export import :registration;

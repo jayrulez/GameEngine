@@ -317,6 +317,14 @@ namespace
             (void)root->UpdateLayout();
         }
         ~Shown() { root->RemoveAllChildren(); }
+        void Click(gui::Node& node)
+        {
+            (void)root->UpdateLayout();
+            const gui::Rect box = node.GetScreenBounds();
+            const Float2 at{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+            root->GetEventDispatcher()->InjectMouseDown(at, gui::MouseButton::Left);
+            root->GetEventDispatcher()->InjectMouseUp(at, gui::MouseButton::Left);
+        }
         void Click(gui::TreeView& tree, i32 item, u32 modifiers = 0)
         {
             (void)root->UpdateLayout();
@@ -935,5 +943,63 @@ TEST_CASE("level script: the Level class's properties as rows; an edit an overri
     CHECK(source.GetValue(u8"p41", 0).AsFloat() == doctest::Approx(2.0));
     page->Commands().Undo(); // the revert
     CHECK(settings()->FindOverride(41) != nullptr);
+    page->OnClose();
+}
+
+TEST_CASE("scene bar: the editing controls are the page's actions; Select, the space's icon, Snap and its increments")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    Shown shown(*page);
+    SceneBar* bar = page->Bar();
+    REQUIRE(bar != nullptr);
+    CHECK(bar->Bound() == 11u); // save, undo, redo, four transform, space, snap, vertex snap, frame
+    GizmoController* gizmos = page->Gizmos();
+    REQUIRE(gizmos != nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+
+    auto* select = FindId<gui::ButtonBase>(*page->Content(), u8"scene-select");
+    auto* move = FindId<gui::ButtonBase>(*page->Content(), u8"scene-move");
+    REQUIRE(select != nullptr);
+    REQUIRE(move != nullptr);
+    CHECK(move->IsChecked());
+    CHECK_FALSE(select->IsChecked());
+    CHECK(String(select->GetTooltipText()) == String(u8"Select (Q)"));
+    shown.Click(*select);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(gizmos->HandlesShown());
+    CHECK(select->IsChecked());
+    CHECK_FALSE(move->IsChecked());
+    shown.Click(*move);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(gizmos->HandlesShown());
+    CHECK(gizmos->Mode() == GizmoMode::Translate);
+
+    // The space's icon is the space it is in.
+    auto* space = FindId<gui::ButtonBase>(*page->Content(), u8"scene-space");
+    REQUIRE(space != nullptr);
+    CHECK(space->GetIconSource() == String(u8"Editor/Icons/world.svg"));
+    shown.Click(*space);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(gizmos->Space() == GizmoSpace::Local);
+    CHECK(space->GetIconSource() == String(u8"Editor/Icons/local.svg"));
+
+    // Snap, and its increments: a fixed step, then the grid's cell where the camera is.
+    auto* snap = FindId<gui::ToolMenuButton>(*page->Content(), u8"scene-snap");
+    REQUIRE(snap != nullptr);
+    CHECK_FALSE(gizmos->SnapMode());
+    CHECK(bed.context.Actions().Execute(SceneActionIds::kGizmoSnap, page.Get()).IsOk());
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(gizmos->SnapMode());
+    CHECK(snap->IsChecked());
+    bar->PickIncrement(SceneBar::SnapKind::Rotate, 2);
+    CHECK(gizmos->Gizmo().rotateSnapDegrees == doctest::Approx(45.0f));
+    bar->PickIncrement(SceneBar::SnapKind::Move, 1);
+    CHECK(gizmos->Gizmo().translateSnap == doctest::Approx(0.25f));
+    CHECK_FALSE(gizmos->MoveSnapsToGrid());
+    bar->PickIncrement(SceneBar::SnapKind::Move, 5); // the grid's cell
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(gizmos->MoveSnapsToGrid());
+    CHECK(gizmos->Gizmo().translateSnap > 0.0f);
     page->OnClose();
 }

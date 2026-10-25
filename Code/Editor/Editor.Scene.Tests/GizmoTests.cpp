@@ -267,6 +267,46 @@ TEST_CASE("gizmo-controller: a drag session is exactly one undo entry restoring 
     CHECK(scene.GetLocalTransform(edit.Resolve(id)).position.x == doctest::Approx(0.0f));
 }
 
+TEST_CASE("gizmo-controller: Select hides the handles until a mode; Snap snaps every drag as Ctrl does one")
+{
+    foundation::scene::Scene scene{DefaultAllocator()};
+    EditorCommandStack commands;
+    SceneEditContext edit(scene, commands);
+    GizmoController ctl(edit);
+    const Guid id = edit.CreateEntity(u8"Box");
+    edit.EntitySelection().Set(id);
+    const f32 size = TransformGizmo::ScreenScale(kCamPos, kCamFwd, 1.0472f, Float3{});
+    const Float3 grab{size * 0.6f, 0.0f, 0.0f};
+
+    // Q: no handles, so the shaft is not hot and a click goes to picking.
+    GizmoFrameInput in = Frame(grab, false, false, false);
+    in.keySelect = true;
+    CHECK_FALSE(ctl.Update(in));
+    CHECK_FALSE(ctl.HandlesShown());
+    CHECK_FALSE(ctl.IsActive());
+    CHECK(ctl.Mode() == GizmoMode::Translate); // kept for when they show again
+    CHECK_FALSE(ctl.Update(Frame(grab, true, true, false)));
+    CHECK_FALSE(ctl.Gizmo().IsDragging());
+    (void)ctl.Update(Frame(grab, false, false, true));
+
+    // W brings them back.
+    in = Frame(grab, false, false, false);
+    in.keyTranslate = true;
+    CHECK(ctl.Update(in));
+    CHECK(ctl.HandlesShown());
+    ctl.SetHandlesShown(false);
+    ctl.SetMode(GizmoMode::Translate); // the bar's Move does the same
+    CHECK(ctl.HandlesShown());
+
+    // Snap on: a drag of 1.3 lands on the nearest 0.5 step, with no Ctrl.
+    ctl.SetSnapMode(true);
+    ctl.Gizmo().translateSnap = 0.5f;
+    CHECK(ctl.Update(Frame(grab, true, true, false)));
+    CHECK(ctl.Update(Frame(grab + Float3{1.3f, 0, 0}, false, true, false)));
+    CHECK(ctl.Update(Frame(grab + Float3{1.3f, 0, 0}, false, false, true)));
+    CHECK(scene.GetLocalTransform(edit.Resolve(id)).position.x == doctest::Approx(1.5f).epsilon(0.05f));
+}
+
 TEST_CASE("gizmo-controller: world drags convert into a rotated parent's space")
 {
     foundation::scene::Scene scene{DefaultAllocator()};

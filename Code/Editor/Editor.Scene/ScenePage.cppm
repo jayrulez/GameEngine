@@ -51,6 +51,7 @@ import :scene_simulation;
 import :prefab_flows;
 import :hierarchy;
 import :inspector;
+import :scene_bar;
 
 using namespace foundation::core;
 
@@ -126,6 +127,7 @@ export namespace editor
         [[nodiscard]] bool LoadFailed() const noexcept { return m_loadFailed; }
         [[nodiscard]] bool IsPrefab() const noexcept { return m_isPrefab; }
         [[nodiscard]] SceneOverlaySettings& Overlays() noexcept { return m_overlays.settings; }
+        [[nodiscard]] SceneBar* Bar() const noexcept { return m_bar.Get(); }
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
         [[nodiscard]] SceneInspectorView* Inspector() noexcept { return m_inspector.Get(); }
@@ -172,7 +174,7 @@ export namespace editor
         foundation::render::ViewPostOverride m_postOverride; // the viewport's post show flags (not saved)
         foundation::render::ViewDebugView m_debugView;       // the viewport's debug view (not saved)
         RefPtr<foundation::gui::Node> m_content;
-        UniquePtr<app::PageActionBar> m_bar;
+        UniquePtr<SceneBar> m_bar;
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once it settled
         // when there is none yet, and on every save of it.

@@ -83,6 +83,7 @@ target_sources(Editor.Scene
             SettingsExtraSources.cppm
             BuiltinInspectorExtras.cppm
             InspectorView.cppm
+            SceneBar.cppm
             SceneViewport.cppm
             ScenePage.cppm
             SceneEditorRegistration.cppm

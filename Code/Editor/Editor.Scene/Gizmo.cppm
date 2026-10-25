@@ -260,6 +260,7 @@ export namespace editor
         /// the vertex nearest where the cursor meets the scene's drawn surfaces, whichever handle
         /// it holds (an absolute place, where Ctrl's snap steps the drag's distance).
         bool vertexSnap = false;
+        bool keySelect = false;      // Q (edge): no handles, a click only picks
         bool keyTranslate = false;   // W (edge)
         bool keyRotate = false;      // E (edge)
         bool keyScale = false;       // R (edge)
@@ -280,7 +281,19 @@ export namespace editor
         explicit GizmoController(SceneEditContext& edit) : m_edit(&edit) {}
 
         [[nodiscard]] GizmoMode Mode() const noexcept { return m_mode; }
+        /// The mode, its handles shown (a mode is chosen to transform with it).
         void SetMode(GizmoMode mode) noexcept;
+        /// Whether the handles show (off: Select, where a click only picks; the mode stays for
+        /// when they show again).
+        [[nodiscard]] bool HandlesShown() const noexcept { return m_handlesShown; }
+        void SetHandlesShown(bool shown) noexcept;
+        /// Every drag snaps to the increments while on (the bar's Snap), as holding Ctrl does for one.
+        [[nodiscard]] bool SnapMode() const noexcept { return m_snapMode; }
+        void SetSnapMode(bool on) noexcept { m_snapMode = on; }
+        /// A move snaps by the grid's cell where the camera is (the page sets the gizmo's
+        /// translateSnap to it each frame) rather than by its own increment.
+        [[nodiscard]] bool MoveSnapsToGrid() const noexcept { return m_moveSnapsToGrid; }
+        void SetMoveSnapsToGrid(bool on) noexcept { m_moveSnapsToGrid = on; }
         [[nodiscard]] GizmoSpace Space() const noexcept { return m_space; }
         void SetSpace(GizmoSpace space) noexcept;
         /// Vertex snap for every translate drag while on (the toolbar's toggle), as holding V
@@ -324,6 +337,9 @@ export namespace editor
         Float4x4 m_parentInverseWorld = Float4x4::Identity();
         Quaternion m_parentRotation = Quaternion::Identity;
         bool m_vertexSnapMode = false;
+        bool m_handlesShown = true;
+        bool m_snapMode = false;
+        bool m_moveSnapsToGrid = false;
         Optional<Float3> m_snapTarget; // the vertex the pivot is snapped to (vertex snap)
         static constexpr f32 kSnapReach = 10000.0f; // how far along the ray a snap target may be
     };

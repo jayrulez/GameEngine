@@ -150,11 +150,13 @@ namespace
             project.Reset();
             (void)RemoveDirectoryRecursive(dir.AsView());
         }
+        app::PickerRequest picked; // what the page last asked its picker to show
         UniquePtr<SceneEditorPage> Open(foundation::content::Instance& instance)
         {
             SceneEditorPage::Services services;
             services.host = &host;
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
+            services.pick = [this](app::PickerRequest request, gui::Node*) { picked = Move(request); };
             return MakeUnique<SceneEditorPage>(DefaultAllocator(), context, Move(services), instance);
         }
     };
@@ -1280,3 +1282,28 @@ TEST_CASE("inspector: a reference set in the grid binds at once (a mesh shows wi
     }
     bed.context.SetResources(nullptr);
 }
+
+TEST_CASE("inspector: Add Component's picker lists each component by its display name under its category, the categories together")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    page->EditContext().EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    page->Inspector()->OpenAddComponent(nullptr);
+    REQUIRE_FALSE(bed.picked.Items.IsEmpty());
+    const app::PickerItem* light = nullptr;
+    for (const app::PickerItem& item : bed.picked.Items)
+        if (item.Key == String(u8"LightComponent"))
+            light = &item;
+    REQUIRE(light != nullptr);
+    CHECK(light->Name == String(u8"Light"));         // its displayName, not its type's name
+    CHECK(light->Section == String(u8"Rendering"));  // its category
+    CHECK_FALSE(light->Detail.IsEmpty());             // its description
+    // Each category's rows together, so a section shows once.
+    for (usize i = 2; i < bed.picked.Items.Size(); ++i)
+        if (bed.picked.Items[i].Section != bed.picked.Items[i - 1].Section)
+            for (usize j = 0; j + 1 < i; ++j)
+                CHECK(bed.picked.Items[j].Section != bed.picked.Items[i].Section);
+    page->OnClose();
+}
+

@@ -756,6 +756,16 @@ namespace editor
     Array<String> SceneInspectorView::AddableComponents() const
     {
         Array<String> out;
+        for (const TypeInfo* type : AddableTypes())
+            out.PushBack(String(StringView(reinterpret_cast<const utf8char*>(type->name))));
+        return out;
+    }
+
+    // The types themselves, as the scene's managers hold them (a type is registered under its
+    // namespace, so its bare name finds none).
+    Array<const TypeInfo*> SceneInspectorView::AddableTypes() const
+    {
+        Array<const TypeInfo*> out;
         scene::Scene& scene = m_edit->Scene();
         scene.ForEachManager([&](scene::ComponentManagerBase& manager)
                              {
@@ -767,7 +777,7 @@ namespace editor
                                  for (const Guid& entity : m_entities)
                                      lacking = lacking || !manager.HasComponent(scene.FindEntity(entity));
                                  if (lacking)
-                                     out.PushBack(String(StringView(reinterpret_cast<const utf8char*>(type->name))));
+                                     out.PushBack(type);
                              });
         return out;
     }
@@ -797,25 +807,40 @@ namespace editor
             return;
         app::PickerRequest request;
         request.Placeholder = String(u8"Search components");
-        for (const String& name : AddableComponents())
+        // By category (in their names' order), each component by its display name and described
+        // (one with no category is Other's).
+        Array<app::PickerItem> items;
+        for (const TypeInfo* type : AddableTypes())
         {
-            const TypeInfo* type = GlobalTypeRegistry().FindByName(nullptr, reinterpret_cast<const char*>(name.CStr()));
             app::PickerItem item;
-            item.Key = name;
-            item.Name = type != nullptr ? TitleOf(*type) : name;
-            if (type != nullptr)
+            item.Key = String(StringView(reinterpret_cast<const utf8char*>(type->name)));
+            item.Name = TitleOf(*type);
+            item.Section = String(TypeAttrString(*type, "category", u8"Other"));
+            item.Detail = String(TypeAttrString(*type, "description", StringView{}));
+            if (m_services.icons != nullptr)
             {
-                item.Section = String(TypeAttrString(*type, "category", u8"Other"));
-                item.Detail = String(TypeAttrString(*type, "description", StringView{}));
-                if (m_services.icons != nullptr)
-                {
-                    const TypeIcon icon = m_services.icons->For(*type, u8"Component");
-                    item.Glyph = icon.Source;
-                    item.GlyphClass = icon.Class;
-                }
+                const TypeIcon icon = m_services.icons->For(*type, u8"Component");
+                item.Glyph = icon.Source;
+                item.GlyphClass = icon.Class;
             }
-            request.Items.PushBack(Move(item));
+            items.PushBack(Move(item));
         }
+        // Sections show where their first item is: sorted, each category's rows together.
+        for (usize i = 1; i < items.Size(); ++i)
+            for (usize j = i; j > 0; --j)
+            {
+                const app::PickerItem& a = items[j - 1];
+                const app::PickerItem& b = items[j];
+                const i32 section = b.Section.AsView().Compare(a.Section.AsView());
+                const bool before = section < 0 || (section == 0 && b.Name.AsView().Compare(a.Name.AsView()) < 0);
+                if (!before)
+                    break;
+                app::PickerItem swap = Move(items[j - 1]);
+                items[j - 1] = Move(items[j]);
+                items[j] = Move(swap);
+            }
+        for (app::PickerItem& item : items)
+            request.Items.PushBack(Move(item));
         request.EmptyTitle = String(u8"Nothing more to add");
         request.EmptyText = String(u8"Every component the scene knows is on the selection.");
         SceneInspectorView* self = this;

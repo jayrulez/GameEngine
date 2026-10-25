@@ -95,6 +95,8 @@ export namespace editor
         void OpenAddComponent(foundation::gui::Node* anchor);
         /// What Add Component offers the selection now, by type name.
         [[nodiscard]] Array<String> AddableComponents() const;
+        /// The same, the types (the picker's display names and categories).
+        [[nodiscard]] Array<const TypeInfo*> AddableTypes() const;
         /// Adds a component of `type` (a type name) to every selected entity, one undo step each.
         bool AddComponent(StringView type);
 

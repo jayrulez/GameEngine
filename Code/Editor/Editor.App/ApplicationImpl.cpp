@@ -26,6 +26,7 @@ import engine.input; // the embedded runtime's scene-input policy
 import engine.ui;
 import engine.gui;
 import editor.core;
+import foundation.mcp; // McpServer (the layout tools added to the host)
 import engine.project; // ProjectSettings (a folder probed for a project)
 
 using namespace foundation::core;
@@ -207,6 +208,7 @@ namespace editor::app
         mcp.templatesRoot = [self]() { return self->m_export->TemplatesRoot(); };
         mcp.created = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         { self->m_creation.AfterCreate(creator, instance); };
+        mcp.addTools = [self](foundation::mcp::McpServer& server) { RegisterLayoutTools(server, self->m_dock.Controller()); };
         mcp.openPage = [self](const Guid& id) -> editor::EditorPage* { return self->m_pages->Open(id); };
         mcp.closePage = [self](editor::EditorPage* page) { self->m_pages->Close(page); };
         mcp.windows.windows = [self]() { return self->CapturableWindows(); };

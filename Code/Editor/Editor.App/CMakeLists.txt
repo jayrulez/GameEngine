@@ -27,6 +27,7 @@ target_sources(Editor.App
         EditorMcpHostImpl.cpp
         EditorProjectOperationsImpl.cpp
         EditorPageToolsImpl.cpp
+        EditorLayoutToolsImpl.cpp
     PUBLIC
         FILE_SET editorapp_modules TYPE CXX_MODULES FILES
             UIPage.cppm
@@ -60,5 +61,6 @@ target_sources(Editor.App
             EditorMcpHost.cppm
             EditorProjectOperations.cppm
             EditorPageTools.cppm
+            EditorLayoutTools.cppm
             FontAtlasDiskCache.cppm
             EditorAppModule.cppm)

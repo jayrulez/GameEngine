@@ -317,6 +317,32 @@ namespace reflected
     REFLECT_VALUE(TestOther, "rtti::tests::reflected") {}
 }
 
+// A struct an application takes as a reference by its Guid (an editor's entity reference), and
+// something holding two.
+namespace reflected
+{
+    struct TestLink
+    {
+        core::Guid id;
+    };
+    REFLECT_VALUE(TestLink, "rtti::tests::reflected")
+    {
+        builder.Property<&TestLink::id>("id");
+    }
+    class TestLinks : public core::Object
+    {
+        RTTI_OBJECT(TestLinks, core::Object)
+    public:
+        TestLink target;
+        TestLink up;
+    };
+    REFLECT_MEMBERS(TestLinks, "rtti::tests::reflected")
+    {
+        builder.Property<&TestLinks::target>("target");
+        builder.Property<&TestLinks::up>("up");
+    }
+}
+
 namespace
 {
     core::StringView SV(const char8_t* s) { return core::StringView(s); }
@@ -941,4 +967,39 @@ TEST_CASE("reflected source: a reference is its Guid as text, naming what it poi
     source.BeginEdit(SV(u8"plug"));
     source.CommitEdit(SV(u8"plug"), PropertyWrite{Variant(core::StringView{})});
     CHECK(socket->plug.id.IsNil());
+}
+
+TEST_CASE("reflected source: a struct the application registers as a reference is one by its Guid, naming itself")
+{
+    reflected::Register();
+    reflected::RttiRegisterValue_TestLink();
+    core::RefPtr<reflected::TestLinks> links = core::MakeRef<reflected::TestLinks>(core::DefaultAllocator());
+    ReflectedPropertySource source{core::DefaultAllocator()};
+    const core::Instance object(links.Get(), links->GetType());
+    source.SetObjects(core::Span<const core::Instance>(&object, 1u));
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    source.GetProperties(SV(u8""), rows);
+    REQUIRE(rows.Size() == 2u);
+    CHECK(rows[0].Kind == PropertyKind::Group); // not registered: its own rows
+
+    source.RegisterReferenceType(SV(u8"TestLink"), ReflectedReferenceParts{core::String(u8"id")});
+    rows.Clear();
+    source.GetProperties(SV(u8""), rows);
+    REQUIRE(rows.Size() == 2u);
+    CHECK(rows[0].Kind == PropertyKind::Reference);
+    CHECK(rows[0].ReferenceType == &core::TypeOf<reflected::TestLink>());
+    CHECK(rows[0].Hint == core::String(u8"TestLink")); // its own editor, before the asset references'
+    CHECK(source.GetValue(SV(u8"target"), 0).AsString().IsEmpty());
+
+    const core::Guid lamp{0x42u, 0x7u};
+    core::utf8char text[37];
+    lamp.ToChars(text);
+    source.BeginEdit(SV(u8"target"));
+    source.CommitEdit(SV(u8"target"), PropertyWrite{Variant(core::StringView(text, 36))});
+    CHECK(links->target.id == lamp);
+    CHECK(source.GetValue(SV(u8"target"), 0).AsString() == core::StringView(text, 36));
+    CHECK(links->up.id.IsNil());
+    source.BeginEdit(SV(u8"target"));
+    source.CommitEdit(SV(u8"target"), PropertyWrite{Variant(core::StringView{})}); // empty clears it
+    CHECK(links->target.id.IsNil());
 }

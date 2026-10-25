@@ -24,6 +24,10 @@
 //   - A struct's group carries its type's name as its hint, and so does any other type, for an
 //     application's editor (a Color until T4, an EntityRef); a struct no editor takes shows its own
 //     rows, anything else the grid's row saying no editor fits.
+//   - A struct the application registers as a reference (its Guid property, by name) is one value
+//     of kind Reference as Core's reference-shaped types are, naming itself as what it points at
+//     and hinted with its name, so the application's editor for it (an editor's entity reference)
+//     is chosen before the one for asset references.
 //   - A type the application registers as a curve (its keys property, a list of Core's CurveKey)
 //     is one value of kind Curve, its keys whole; one registered as a gradient (its colour stops,
 //     alpha stops and blend properties) is one value of kind Gradient (T5): the toolkit names no
@@ -76,6 +80,12 @@ export namespace foundation::gui
         core::Array<core::String> After;
     };
 
+    /// Where a struct registered as a reference keeps what it is known by: a Guid property, by its
+    /// name.
+    struct ReflectedReferenceParts
+    {
+        core::String Id;
+    };
     /// Where a type registered as a curve keeps its keys: a list (an Array or a BoundedArray) of
     /// Core's CurveKey, by its property's name (the most it holds is the list's capacity).
     struct ReflectedCurveParts
@@ -175,6 +185,13 @@ export namespace foundation::gui
         /// Tells the grid the objects changed from outside it (an undo the application made).
         void Refresh() { NotifyPropertiesChanged(); }
 
+        /// Takes the struct named `typeName` as a reference: one value, its Guid at `parts.Id`, the
+        /// struct itself what it points at.
+        void RegisterReferenceType(core::StringView typeName, ReflectedReferenceParts parts)
+        {
+            m_referenceTypes.PushBack(ReferenceType{core::String(typeName), core::Move(parts)});
+            NotifyPropertiesChanged();
+        }
         /// Takes the type named `typeName` as a curve: one value, its keys at `parts.Keys`.
         void RegisterCurveType(core::StringView typeName, ReflectedCurveParts parts)
         {
@@ -439,6 +456,8 @@ export namespace foundation::gui
                 return Shape::Curve;
             if (FindGradientType(name) != nullptr)
                 return Shape::Gradient;
+            if (FindReferenceType(name) != nullptr)
+                return Shape::Reference;
             return BaseShapeOf(type);
         }
         [[nodiscard]] const ReflectedCurveParts* FindCurveType(core::StringView name) const
@@ -447,6 +466,32 @@ export namespace foundation::gui
                 if (entry.Name.AsView() == name)
                     return &entry.Parts;
             return nullptr;
+        }
+        [[nodiscard]] const ReflectedReferenceParts* FindReferenceType(core::StringView name) const
+        {
+            for (const ReferenceType& entry : m_referenceTypes)
+                if (entry.Name.AsView() == name)
+                    return &entry.Parts;
+            return nullptr;
+        }
+        // A reference's Guid at `address`: through Core's reference ops, or the registered struct's
+        // Guid property. Null when there is none.
+        [[nodiscard]] const Guid* ReferenceIdAt(const core::TypeInfo& type, const void* address) const
+        {
+            if (type.reference != nullptr)
+                return type.reference->Id(address);
+            const ReflectedReferenceParts* parts = FindReferenceType(core::StringView(reinterpret_cast<const char8_t*>(type.name)));
+            const core::PropertyInfo* id = parts != nullptr ? core::FindProperty(type, reinterpret_cast<const char*>(parts->Id.CStr())) : nullptr;
+            if (id == nullptr || id->address == nullptr || id->type != &core::TypeOf<Guid>())
+                return nullptr;
+            return static_cast<const Guid*>(id->address(core::Instance(const_cast<void*>(address), &type)));
+        }
+        // What a reference points at: Core's reference's target, a registered struct itself.
+        [[nodiscard]] const core::TypeInfo* ReferenceTargetOf(const core::TypeInfo& type) const
+        {
+            if (type.reference != nullptr)
+                return type.reference->Target != nullptr ? type.reference->Target() : nullptr;
+            return &type;
         }
         [[nodiscard]] const ReflectedGradientParts* FindGradientType(core::StringView name) const
         {
@@ -708,7 +753,9 @@ export namespace foundation::gui
             case Shape::Reference:
             {
                 info.Kind = PropertyKind::Reference;
-                info.ReferenceType = type.reference->Target != nullptr ? type.reference->Target() : nullptr;
+                info.ReferenceType = ReferenceTargetOf(type);
+                if (type.reference == nullptr) // a registered one: its type's name, for the application's editor
+                    info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
                 break;
             }
             case Shape::Group: // its type's name, for an editor of its own (a Color in T4); else its rows
@@ -923,7 +970,7 @@ export namespace foundation::gui
                 (void)WriteTarget(target, ApplyPropertyWrite(Read(target), write));
         }
 
-        [[nodiscard]] static Variant ReadAt(const void* address, const core::TypeInfo& type, Shape shape)
+        [[nodiscard]] Variant ReadAt(const void* address, const core::TypeInfo& type, Shape shape) const
         {
             const auto is = [&type]<typename T>() { return &type == &core::TypeOf<T>() || type.id == core::TypeOf<T>().id; };
             switch (shape)
@@ -956,7 +1003,7 @@ export namespace foundation::gui
                 return Variant(*static_cast<const core::Color*>(address));
             case Shape::Reference:
             {
-                const Guid* id = type.reference->Id(address);
+                const Guid* id = ReferenceIdAt(type, address);
                 if (id == nullptr || id->IsNil())
                     return Variant(core::StringView{});
                 utf8char text[37];
@@ -967,7 +1014,7 @@ export namespace foundation::gui
                 return Variant{};
             }
         }
-        [[nodiscard]] static bool WriteAt(void* address, const core::TypeInfo& type, Shape shape, const Variant& value)
+        [[nodiscard]] bool WriteAt(void* address, const core::TypeInfo& type, Shape shape, const Variant& value) const
         {
             const auto is = [&type]<typename T>() { return &type == &core::TypeOf<T>() || type.id == core::TypeOf<T>().id; };
             switch (shape)
@@ -1018,8 +1065,16 @@ export namespace foundation::gui
                 Guid id;
                 if (!text.IsEmpty() && !Guid::TryParse(text, id))
                     return false;
-                type.reference->SetId(address, id);
-                type.reference->ClearBinding(address); // the next resolve binds the new id
+                if (type.reference != nullptr)
+                {
+                    type.reference->SetId(address, id);
+                    type.reference->ClearBinding(address); // the next resolve binds the new id
+                    return true;
+                }
+                Guid* own = const_cast<Guid*>(ReferenceIdAt(type, address));
+                if (own == nullptr)
+                    return false;
+                *own = id;
                 return true;
             }
             default:
@@ -1027,7 +1082,7 @@ export namespace foundation::gui
             }
         }
         // A computed property's core value as the grid's, and back.
-        [[nodiscard]] static Variant FromCore(const core::Variant& value, Shape shape, const core::TypeInfo& type)
+        [[nodiscard]] Variant FromCore(const core::Variant& value, Shape shape, const core::TypeInfo& type) const
         {
             if (value.Type() == nullptr || value.ValuePointer() == nullptr)
                 return Variant{};
@@ -1475,7 +1530,7 @@ export namespace foundation::gui
                 return core::String(u8"Color");
             case Shape::Reference: // only a reference to its like
             {
-                const core::TypeInfo* to = target.Type->reference->Target != nullptr ? target.Type->reference->Target() : nullptr;
+                const core::TypeInfo* to = ReferenceTargetOf(*target.Type);
                 return core::Format(u8"reference to {}", to != nullptr ? core::StringView(reinterpret_cast<const char8_t*>(to->name)) : core::StringView(u8"?"));
             }
             case Shape::Curve:
@@ -1673,7 +1728,13 @@ export namespace foundation::gui
             core::String Name;
             ReflectedGradientParts Parts;
         };
+        struct ReferenceType
+        {
+            core::String Name;
+            ReflectedReferenceParts Parts;
+        };
         core::Array<CurveType> m_curveTypes;
+        core::Array<ReferenceType> m_referenceTypes;
         core::Array<GradientType> m_gradientTypes;
         core::Function<void(const ReflectedChange&)> m_onChange;
     };

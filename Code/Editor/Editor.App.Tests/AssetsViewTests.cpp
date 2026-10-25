@@ -340,3 +340,42 @@ TEST_CASE("assets: under the editor's sheet the toolbar keeps its height however
     CHECK(menu.y >= button.y + button.height - 1.0f); // below the button, not at the window's corner
     CHECK(menu.x >= button.x - menu.width);
 }
+
+TEST_CASE("assets: under the editor's sheet a list row's kind is on its name's baseline and ends where every other row's does")
+{
+    Bed bed;
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    bed.view->SetTiles(false);
+    bed.context.ToggleFavorite(bed.barrel->Id()); // one row starred, one not
+    bed.view->OpenRow(bed.RowOf(u8"Models"));
+    bed.view->OpenRow(bed.RowOf(u8"Town"));
+    styles.ApplyTree(*bed.root);
+    (void)bed.root->UpdateLayout();
+    styles.ApplyTree(*bed.root);
+    (void)bed.root->UpdateLayout();
+    AssetCell* barrel = bed.Cell(bed.RowOf(u8"Barrel"));
+    AssetCell* bell = bed.Cell(bed.RowOf(u8"Bell"));
+    REQUIRE(barrel != nullptr);
+    REQUIRE(bell != nullptr);
+    CHECK(barrel->ShowsStar());
+    CHECK_FALSE(bell->ShowsStar());
+    const auto kindRight = [](AssetCell& cell)
+    {
+        const gui::Node* kind = cell.KindLabel();
+        const gui::Rect r = kind->GetScreenBounds();
+        return r.x + r.width;
+    };
+    CHECK(kindRight(*barrel) == doctest::Approx(kindRight(*bell))); // the star's column kept on the row without one
+    // On one baseline: the name's and the kind's text baselines at the same height.
+    const auto baseline = [](const gui::Node& label) { return label.GetScreenBounds().y + label.GetBaseline(); };
+    CHECK(baseline(*barrel->NameLabel()) == doctest::Approx(baseline(*barrel->KindLabel())).epsilon(0.02));
+}

@@ -64,8 +64,16 @@ export namespace editor::app
                 glyphHolder = m_thumb.Get();
             }
             m_glyph = Part<gui::Image>(*glyphHolder, tile ? StringView(u8"asset-glyph") : StringView(u8"row-icon"));
-            m_name = Part<gui::Label>(*this, tile ? StringView(u8"asset-name") : StringView(u8"row-name"));
-            m_kind = Part<gui::Label>(*this, u8"row-kind");
+            // A row's name and kind share a baseline, the kind at the end, right-aligned (each
+            // row's ends in the same place, its badge and star in columns after it).
+            gui::Node* textHolder = this;
+            if (!tile)
+            {
+                m_text = Part<gui::Panel>(*this, u8"asset-row-text");
+                textHolder = m_text.Get();
+            }
+            m_name = Part<gui::Label>(*textHolder, tile ? StringView(u8"asset-name") : StringView(u8"row-name"));
+            m_kind = Part<gui::Label>(*textHolder, u8"row-kind");
             m_kind->SetDisplayed(!tile);
             m_badge = Part<gui::Label>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge");
             m_star = Part<gui::Image>(tile ? *m_thumb : static_cast<gui::Node&>(*this), u8"badge-icon");
@@ -89,9 +97,18 @@ export namespace editor::app
             if (!m_badgeClass.IsEmpty())
                 m_badge->AddClass(m_badgeClass.AsView());
             m_badge->SetText(shown.Badge.AsView());
-            // A tile marks only what needs a look (stale, failed); a row says each state.
-            m_badge->SetDisplayed(!shown.Badge.IsEmpty() && (!m_tile || shown.BadgeClass != StringView(u8"success")));
-            m_star->SetDisplayed(shown.Favourite);
+            // A tile marks only what needs a look (stale, failed); a row says each state, its badge
+            // and star keeping their columns when it has none.
+            if (m_tile)
+            {
+                m_badge->SetDisplayed(!shown.Badge.IsEmpty() && shown.BadgeClass != StringView(u8"success"));
+                m_star->SetDisplayed(shown.Favourite);
+            }
+            else
+            {
+                m_badge->SetVisible(!shown.Badge.IsEmpty());
+                m_star->SetVisible(shown.Favourite);
+            }
             if (shown.Group)
                 AddClass(u8"group");
             else
@@ -101,8 +118,10 @@ export namespace editor::app
         [[nodiscard]] StringView Name() const { return m_name->GetText(); }
         [[nodiscard]] StringView Kind() const { return m_kind->GetText(); }
         [[nodiscard]] StringView Badge() const { return m_badge->GetText(); }
-        [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed(); }
+        [[nodiscard]] bool ShowsStar() const { return m_star->IsDisplayed() && m_star->IsVisible(); }
         [[nodiscard]] bool IsTile() const noexcept { return m_tile; }
+        [[nodiscard]] gui::Label* NameLabel() const noexcept { return m_name.Get(); }
+        [[nodiscard]] gui::Label* KindLabel() const noexcept { return m_kind.Get(); }
 
     private:
         template <typename T>
@@ -117,6 +136,7 @@ export namespace editor::app
 
         bool m_tile;
         RefPtr<gui::Panel> m_thumb;
+        RefPtr<gui::Panel> m_text; // a row's name and kind
         RefPtr<gui::Image> m_glyph;
         RefPtr<gui::Label> m_name;
         RefPtr<gui::Label> m_kind;

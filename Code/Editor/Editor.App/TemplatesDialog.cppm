@@ -234,6 +234,14 @@ export namespace editor::app
                     return detail.value->GetText();
             return {};
         }
+        /// A detail's value label by its caption; null with none.
+        [[nodiscard]] gui::Label* DetailValue(StringView label) const
+        {
+            for (const Detail& detail : m_details)
+                if (detail.label == label)
+                    return detail.value;
+            return nullptr;
+        }
         [[nodiscard]] bool ShowsEmpty() const
         {
             const auto* empty = Find<gui::UIWidget>(u8"templates-empty");

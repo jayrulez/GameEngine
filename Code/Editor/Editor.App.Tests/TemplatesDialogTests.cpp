@@ -10,6 +10,8 @@
 import foundation.core;
 import foundation.vfs;
 import foundation.gui;
+import foundation.fonts;
+import foundation.fonts.truetype;
 import editor.core;
 import editor.app;
 
@@ -174,6 +176,46 @@ TEST_CASE("templates dialog: lists the root's templates and the host build, the 
     CHECK_FALSE(dialog->RemoveButton()->IsEnabled());
     dialog->RemoveSelected(true);
     CHECK(dialog->TemplateCount() == 3u);
+}
+
+TEST_CASE("templates dialog: a long folder wraps inside the details, never past their edge")
+{
+    Fixture f;
+    UniquePtr<app::TemplatesDialog> dialog = f.Open();
+    String sheet;
+    const char8_t* const files[] = {u8"Editor/editor.css", u8"Editor/density-default.css"};
+    for (const char8_t* file : files)
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    dialog->Select(static_cast<usize>(Fixture::IndexOf(*dialog, u8"t-linux")));
+    gui::Label* folder = dialog->DetailValue(u8"Folder");
+    REQUIRE(folder != nullptr);
+    // One path with no spaces to break at, far wider than the window.
+    String path(u8"/home");
+    for (int i = 0; i < 40; ++i)
+        path += u8"/averylongfoldername";
+    folder->SetText(path.AsView());
+    styles.ApplyTree(*f.ui);
+    // A real font after the sheet, so the path has a width (the editor's own face).
+    foundation::fonts::TrueTypeFonts::Initialize();
+    foundation::fonts::TrueTypeFontService fonts{DefaultAllocator()};
+    const String data = foundation::vfs::FindDataRoot();
+    REQUIRE(fonts.LoadFont(u8"Inter", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/inter/Inter-Regular.ttf").AsView()) == foundation::fonts::FontLoadResult::Success);
+    folder->SetFont(fonts.GetFont(u8"Inter", 13.0f));
+    (void)f.ui->UpdateLayout();
+    gui::Node* fields = folder->GetParent();
+    REQUIRE(fields != nullptr);
+    const gui::Rect box = fields->GetScreenBounds();
+    const gui::Rect value = folder->GetScreenBounds();
+    CHECK(value.width > 0.0f);
+    CHECK(value.x + value.width <= box.x + box.width + 0.5f);
+    CHECK(value.height > 30.0f); // wrapped onto several lines
 }
 
 TEST_CASE("templates dialog: installs a bundle from a folder and removes one, the list following")

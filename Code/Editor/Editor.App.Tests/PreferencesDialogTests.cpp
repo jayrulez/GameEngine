@@ -4,7 +4,9 @@
 // Editor::App - Preferences over its own markup (Data/Editor/Preferences.gml): its controls as the
 // user's store has the look; each change shown at once; Save into the store and persisted; Cancel
 // or closing putting the look back as it was; the Shortcuts tab's edits staged, applied on Save
-// (a chord another action holds refused, named), Reset going back to the declaration's.
+// (a chord another action holds refused, named), Reset going back to the declaration's; the
+// orthographic check, the templates' folder, the MCP host's fields, the preview resolutions and
+// a contributed category's tab.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -57,6 +59,9 @@ namespace
         RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
         foundation::settings::Settings store{DefaultAllocator()};
         editor::EditorActionRegistry actions;
+        Array<editor::EditorContext::EditorSettingsContribution> contributions;
+        bool snapping = true; // a contributed setting
+        int mcpChanged = 0;
         Array<String> warnings;
         Array<EditorLook> shown;
         int persisted = 0;
@@ -83,6 +88,16 @@ namespace
             services.actions = &actions;
             Bed* self = this;
             services.warn = [self](StringView text) { self->warnings.PushBack(String(text)); };
+            editor::EditorContext::EditorSettingsContribution navigation;
+            navigation.category = String(u8"Navigation");
+            editor::EditorContext::EditorSettingsBoolField snap;
+            snap.label = String(u8"Snap agents to the mesh");
+            snap.get = [self]() { return self->snapping; };
+            snap.set = [self](bool on) { self->snapping = on; };
+            navigation.bools.PushBack(Move(snap));
+            contributions.PushBack(Move(navigation));
+            services.contributions = &contributions;
+            services.mcpChanged = [self]() { ++self->mcpChanged; };
             services.showLook = [self](const EditorLook& look) { self->shown.PushBack(look); };
             services.persist = [self]()
             {
@@ -168,7 +183,9 @@ TEST_CASE("preferences: Shortcuts lists every action; an edit is staged and appl
     REQUIRE(bed.dialog->Open(*bed.root));
     auto* tabs = FindId<gui::TabView>(bed.Window(), u8"pref-tabs");
     REQUIRE(tabs != nullptr);
-    tabs->SetSelectedIndex(1); // Shortcuts
+    for (i32 i = 0; i < tabs->GetPageCount(); ++i)
+        if (auto* page = Cast<gui::TabPage>(tabs->GetPage(i)); page != nullptr && page->GetTitle() == StringView(u8"Shortcuts"))
+            tabs->SetSelectedIndex(i);
     (void)bed.root->UpdateLayout();
     Array<editor::app::ShortcutCaptureButton*> captures;
     const auto collect = [&captures](auto&& self, gui::Node& node) -> void
@@ -203,4 +220,69 @@ TEST_CASE("preferences: Shortcuts lists every action; an edit is staged and appl
     CHECK(reset->HandleActivate());
     CHECK(bed.dialog->Save());
     CHECK(bed.actions.Shortcut(u8"file.save") == editor::EditorShortcut::Of(u8"ctrl-s"));
+}
+
+TEST_CASE("preferences: the other tabs - axis views, templates, the MCP host (a bad port kept), preview sizes, a contributed category")
+{
+    Bed bed;
+    bed.store.Section<editor::EditorMcpSettings>().port = 7500;
+    REQUIRE(bed.dialog->Open(*bed.root));
+    gui::Window& window = bed.Window();
+    auto* tabs = FindId<gui::TabView>(window, u8"pref-tabs");
+    REQUIRE(tabs != nullptr);
+    CHECK(tabs->GetPageCount() == 6); // Appearance, Export, Agent access, Game preview, Shortcuts, Navigation
+    auto* ortho = FindId<gui::CheckBox>(window, u8"pref-auto-ortho");
+    auto* root = FindId<gui::TextField>(window, u8"pref-templates-root");
+    auto* enabled = FindId<gui::CheckBox>(window, u8"pref-mcp-enabled");
+    auto* port = FindId<gui::TextField>(window, u8"pref-mcp-port");
+    REQUIRE(ortho != nullptr);
+    REQUIRE(root != nullptr);
+    REQUIRE(enabled != nullptr);
+    REQUIRE(port != nullptr);
+    CHECK(ortho->IsChecked());
+    CHECK(port->GetText() == StringView(u8"7500"));
+    CHECK_FALSE(enabled->IsChecked());
+
+    // Six preview sizes seeded; one removed, one added.
+    gui::Node* previews = FindId<gui::Node>(window, u8"pref-previews");
+    REQUIRE(previews != nullptr);
+    CHECK(previews->ChildCount() == 6u);
+    gui::Button* remove = ButtonText(*previews->GetChildAt(0), u8"Remove");
+    REQUIRE(remove != nullptr);
+    CHECK(remove->HandleActivate());
+    CHECK(FindId<gui::Button>(window, u8"pref-preview-add")->HandleActivate());
+    CHECK(previews->ChildCount() == 7u);
+
+    // The contributed check applies as it changes.
+    gui::CheckBox* snap = nullptr;
+    const auto find = [&snap](auto&& self, gui::Node& node) -> void
+    {
+        if (auto* box = Cast<gui::CheckBox>(&node); box != nullptr && box->GetText() == StringView(u8"Snap agents to the mesh"))
+            snap = box;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            self(self, *node.GetChildAt(i));
+    };
+    find(find, window);
+    REQUIRE(snap != nullptr);
+    CHECK(snap->IsChecked());
+    CHECK(snap->HandleActivate());
+    CHECK_FALSE(bed.snapping);
+
+    CHECK(ortho->HandleActivate());
+    root->SetText(u8"/opt/templates");
+    CHECK(enabled->HandleActivate());
+    port->SetText(u8"80"); // below the range
+    CHECK(bed.dialog->Save());
+    CHECK_FALSE(bed.store.Find<editor::EditorUiSettings>()->autoOrthographic);
+    CHECK(bed.store.Find<editor::EditorExportSettings>()->templatesRoot == String(u8"/opt/templates"));
+    const editor::EditorMcpSettings& mcp = *bed.store.Find<editor::EditorMcpSettings>();
+    CHECK(mcp.enabled);
+    CHECK(mcp.port == 7500u); // kept
+    CHECK(bed.warnings.Size() == 1u);
+    CHECK(bed.mcpChanged == 1);
+    const editor::GamePreviewSettings* sizes = bed.store.Find<editor::GamePreviewSettings>();
+    REQUIRE(sizes != nullptr);
+    CHECK(sizes->presets.Size() == 6u); // six, less one, plus the new one
+    CHECK(sizes->presets[0].name != String(u8"HD"));
+    CHECK(sizes->presets.Back().name == String(u8"Custom"));
 }

@@ -386,6 +386,15 @@ namespace editor::app
             services.actions = &m_context.Actions();
             EditorApplication* self = this;
             services.warn = [self](StringView text) { self->m_context.Notify(editor::NoticeKind::Warning, text); };
+            services.contributions = &m_context.EditorSettingsContributions();
+            services.mcpChanged = [self]()
+            {
+                // The host follows the saved section over the open project.
+                if (!self->m_mcp || self->m_session.Project() == nullptr)
+                    return;
+                self->m_mcp->Stop();
+                (void)self->m_mcp->Start(*self->m_session.Project());
+            };
             services.showLook = [self](const EditorLook& look) { self->m_window.SetLook(look); };
             services.persist = [self]() { return editor::SaveEditorSettingsToUserData(self->m_editorSettings).IsOk(); };
             m_preferences = MakeUnique<EditorPreferencesDialog>(m_editorAllocator, m_editorAllocator, Move(services),

@@ -11,7 +11,8 @@
 // per scene, each a partition of its own. The page holds them together: it loads the scene, edits
 // it through its edit context and its tools, saves it, follows a change made elsewhere, and says
 // on the page when the scene did not load (and then refuses to save over it). Its bar's Save, Undo
-// and Redo act on this page. The hierarchy and the inspector take their panes in the next layers.
+// and Redo act on this page; its hierarchy (layer 3) is the scene's tree in its left pane. The
+// inspector takes its pane in the next layer.
 
 module;
 #include "Core/Prelude.h"
@@ -48,6 +49,7 @@ import :scene_overlays;
 import :scene_view_state;
 import :scene_simulation;
 import :prefab_flows;
+import :hierarchy;
 
 using namespace foundation::core;
 
@@ -67,6 +69,8 @@ export namespace editor
             Function<RefPtr<foundation::gui::Node>(StringView path)> loadMarkup;
             /// The asset picker and the rest an asset slot asks (null: no picking, a test).
             const app::ResourceRefServices* refs = nullptr;
+            /// The type icons the hierarchy shows entities by (null: none).
+            EditorIcons* icons = nullptr;
         };
 
         SceneEditorPage(EditorContext& context, Services services, foundation::content::Instance& instance);
@@ -120,6 +124,7 @@ export namespace editor
         [[nodiscard]] bool IsPrefab() const noexcept { return m_isPrefab; }
         [[nodiscard]] SceneOverlaySettings& Overlays() noexcept { return m_overlays.settings; }
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
+        [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
         [[nodiscard]] foundation::gui::MessageBox* OpenConfirm() const noexcept { return m_confirm && m_confirm->IsOpen() ? m_confirm.Get() : nullptr; }
 
     private:
@@ -154,6 +159,7 @@ export namespace editor
         SceneOverlays m_overlays;
         SceneSimulation m_simulation;
         UniquePtr<PrefabFlows> m_prefabs;
+        UniquePtr<SceneHierarchyView> m_hierarchy;
         ViewportToolManager m_viewportTools;         // after m_editContext (the tools borrow it)
         SelectTransformTool* m_selectTool = nullptr; // the manager's default tool
         GizmoRendererRegistry m_componentGizmos;

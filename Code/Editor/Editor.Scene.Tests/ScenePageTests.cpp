@@ -281,3 +281,212 @@ TEST_CASE("prefab flows: a prefab's page refuses an instance of itself, saying s
     CHECK_FALSE(flows.Spawn(Guid{}, Guid{})); // nothing picked
     page->OnClose();
 }
+
+namespace
+{
+    // The page laid out in a GUI of its own under the editor's sheet, for its hierarchy's rows to be
+    // pressed where they show.
+    struct Shown
+    {
+        RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+        gui::StyleManager styles;
+        explicit Shown(SceneEditorPage& page)
+        {
+            String sheet;
+            const char8_t* const files[] = {u8"Editor/editor.css", u8"Editor/density-default.css"};
+            for (const char8_t* file : files)
+            {
+                Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+                REQUIRE(bytes.HasValue());
+                sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+                sheet += u8"\n";
+            }
+            styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+            root->SetSize(Float2{1200.0f, 700.0f});
+            root->AddChild(page.Content().Get());
+            styles.ApplyTree(*root);
+            (void)root->UpdateLayout();
+        }
+        ~Shown() { root->RemoveAllChildren(); }
+        void Click(gui::TreeView& tree, i32 item, u32 modifiers = 0)
+        {
+            (void)root->UpdateLayout();
+            gui::ItemRow* row = tree.RowForItem(item);
+            REQUIRE(row != nullptr);
+            const gui::Rect box = row->GetScreenBounds();
+            const Float2 at{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+            root->GetEventDispatcher()->InjectMouseDown(at, gui::MouseButton::Left, modifiers);
+            root->GetEventDispatcher()->InjectMouseUp(at, gui::MouseButton::Left, modifiers);
+        }
+    };
+}
+
+TEST_CASE("hierarchy: the scene its top row, its entities under it as they nest; a click selects, the page's selection shows in it")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneHierarchyView* tree = page->Hierarchy();
+    REQUIRE(tree != nullptr);
+    const Guid lid = page->EditContext().CreateEntity(u8"Lid", bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid")); // Crate gained a child: it opens
+    const Guid knob = page->EditContext().CreateEntity(u8"Knob", lid);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid |       Knob"));
+    tree->Tree()->CollapseItem(tree->ItemOf(lid)); // closed by the user: it stays closed
+    (void)page->EditContext().CreateEntity(u8"Spring", lid);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid"));
+    (void)knob;
+
+    // The page's selection (a viewport pick) shows in the tree; a click on a row is the page's.
+    page->EditContext().EntitySelection().Set(bed.crate);
+    CHECK(tree->Tree()->IsItemSelected(tree->ItemOf(bed.crate)));
+    Shown shown(*page);
+    shown.Click(*tree->Tree(), tree->ItemOf(lid));
+    CHECK(page->EditContext().EntitySelection().Contains(lid));
+    CHECK_FALSE(page->EditContext().EntitySelection().Contains(bed.crate));
+    shown.Click(*tree->Tree(), tree->ItemOf(bed.crate), gui::KeyModCtrl); // several
+    CHECK(page->EditContext().EntitySelection().Items().Size() == 2u);
+    shown.Click(*tree->Tree(), 0); // the scene's row: no entity
+    CHECK(tree->Tree()->GetSelectionCount() == 1u);
+    CHECK(tree->Tree()->IsItemSelected(0));
+    CHECK(page->EditContext().EntitySelection().IsEmpty());
+
+    // An entity that is not active dims; the model says so for its row.
+    page->EditContext().SetEntityActive(lid, false);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const gui::Variant classes = tree->Tree()->GetModel()->Data(tree->IndexOf(lid), gui::ModelRole::RowClass);
+    CHECK(classes.ToString() == String(u8"inactive"));
+    page->OnClose();
+}
+
+TEST_CASE("hierarchy: a search keeps a match's way; a whole guid selects that entity; a rename is one undo")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneHierarchyView* tree = page->Hierarchy();
+    REQUIRE(tree != nullptr);
+    const Guid lid = page->EditContext().CreateEntity(u8"Lid", bed.crate);
+    (void)page->EditContext().CreateEntity(u8"Barrel");
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    tree->Search(u8"lid");
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid"));
+    page->EditContext().EntitySelection().Clear();
+    tree->Search(Format(u8"{}", lid).AsView());
+    CHECK(page->EditContext().EntitySelection().Contains(lid));
+    tree->Search(StringView{});
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid |   Barrel"));
+
+    CHECK(tree->Tree()->GetModel()->SetData(tree->IndexOf(lid), gui::Variant(StringView(u8"Hatch"))));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Hatch |   Barrel"));
+    page->Commands().Undo();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid |   Barrel"));
+    page->OnClose();
+}
+
+TEST_CASE("hierarchy: a row dropped onto another goes under it, between two moves there, onto the scene's row becomes a root; never inside itself")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneHierarchyView* tree = page->Hierarchy();
+    REQUIRE(tree != nullptr);
+    const Guid barrel = page->EditContext().CreateEntity(u8"Barrel");
+    const Guid lid = page->EditContext().CreateEntity(u8"Lid", bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const gui::IModel* model = tree->Tree()->GetModel();
+    const auto drop = [&](const Guid& moved, const Guid& onto, gui::DropPlace place)
+    {
+        gui::ModelDrop d;
+        d.Source = model;
+        d.Ids.PushBack(model->IdOf(tree->IndexOf(moved)));
+        d.Index = tree->IndexOf(onto);
+        d.Place = place;
+        return d;
+    };
+
+    CHECK(tree->Take(drop(barrel, bed.crate, gui::DropPlace::On)));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Lid |     Barrel"));
+    CHECK(tree->Take(drop(barrel, lid, gui::DropPlace::Before)));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Barrel |     Lid"));
+    CHECK(tree->Take(drop(lid, Guid{}, gui::DropPlace::On))); // onto the scene's row
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Barrel |   Lid"));
+    CHECK_FALSE(tree->CanTake(drop(bed.crate, barrel, gui::DropPlace::On))); // inside itself
+    CHECK_FALSE(tree->CanTake(drop(Guid{}, barrel, gui::DropPlace::On)));    // the scene stays
+
+    // A drag carries its entities, for an entity slot.
+    const gui::DragPayload payload = tree->DragOf(Span<const Guid>(&lid, 1u));
+    Array<Guid> carried;
+    CHECK(EntityDrag::Read(payload, carried));
+    REQUIRE(carried.Size() == 1u);
+    CHECK(carried[0] == lid);
+    page->OnClose();
+}
+
+TEST_CASE("hierarchy: a prefab dropped in is spawned under the row; the menus and the add button are the scene's actions, off while it simulates")
+{
+    Bed bed;
+    {
+        // The prefab needs content: one root.
+        scene::Scene authored(DefaultAllocator(), u8"barrel");
+        (void)authored.CreateEntity(u8"Barrel");
+        REQUIRE(scene::SavePrefab(authored, *bed.barrel).IsOk());
+    }
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneHierarchyView* tree = page->Hierarchy();
+    REQUIRE(tree != nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const gui::DragPayload asset = app::AssetDrag::Payload(bed.barrel->Id(), u8"PrefabDocument", u8"Barrel");
+    gui::ModelDrop drop;
+    drop.Payload = &asset;
+    drop.Index = tree->IndexOf(bed.crate);
+    drop.Place = gui::DropPlace::On;
+    CHECK(tree->Take(drop));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(tree->Rows() == String(u8"Level |   Crate |     Barrel"));
+    const gui::DragPayload level = app::AssetDrag::Payload(bed.level->Id(), u8"SceneDocument", u8"Level");
+    drop.Payload = &level;
+    CHECK_FALSE(tree->CanTake(drop)); // only a prefab goes in
+
+    // A row's menu: its actions over the page.
+    Shown shown(*page);
+    tree->ShowMenu(tree->ItemOf(bed.crate), Float2{10.0f, 10.0f});
+    REQUIRE(tree->OpenMenu() != nullptr);
+    CHECK(page->EditContext().EntitySelection().Contains(bed.crate)); // the row it was asked over
+    bool hasDelete = false;
+    for (usize i = 0; i < tree->OpenMenu()->ChildCount(); ++i)
+        if (auto* item = Cast<gui::MenuItem>(tree->OpenMenu()->GetChildAt(i)))
+            hasDelete = hasDelete || item->GetText() == StringView(u8"Delete");
+    CHECK(hasDelete);
+    tree->OpenMenu()->Close();
+
+    auto* add = FindId<gui::ToolButton>(*page->Content(), u8"hierarchy-add");
+    REQUIRE(add != nullptr);
+    CHECK(add->IsEnabled());
+    CHECK(add->GetTooltipText().StartsWith(u8"Create Entity"));
+    page->StartSimulation();
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(add->IsEnabled()); // refused visibly while it simulates
+    page->StopSimulation();
+    page->OnClose();
+}
+
+TEST_CASE("hierarchy: a scene opens with its top level shown; what is under an entity waits to be opened")
+{
+    Bed bed;
+    {
+        UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+        (void)page->EditContext().CreateEntity(u8"Lid", bed.crate);
+        REQUIRE(page->Save().IsOk());
+        page->OnClose();
+    }
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(page->Hierarchy()->Rows() == String(u8"Level |   Crate"));
+    page->OnClose();
+}

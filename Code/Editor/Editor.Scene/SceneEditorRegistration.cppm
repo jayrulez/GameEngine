@@ -66,6 +66,7 @@ export namespace editor
             app::EditorWindow* window = &editor->Window();
             services.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
             services.refs = &editor->RefServices();
+            services.icons = &editor->TypeIcons();
             return services;
         };
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

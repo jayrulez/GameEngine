@@ -131,6 +131,12 @@ export namespace editor::app
         /// What an asset slot or a page's picker asks of the editor: the accepted types, the
         /// project's names, the picker (made the first time).
         [[nodiscard]] const ResourceRefServices& RefServices();
+        /// A type's icon, asked of the type (made the first time, with the slots' table).
+        [[nodiscard]] editor::EditorIcons& TypeIcons()
+        {
+            (void)RefServices();
+            return *m_typeIcons;
+        }
         [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }
         [[nodiscard]] EditorPages& Pages() noexcept { return *m_pages; }
         [[nodiscard]] EditorAssetCreation& AssetCreation() noexcept { return m_creation; }

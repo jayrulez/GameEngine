@@ -45,6 +45,7 @@ import :scene_overlays;
 import :scene_view_state;
 import :scene_simulation;
 import :prefab_flows;
+import :hierarchy;
 
 using namespace foundation::core;
 namespace gui = foundation::gui;
@@ -161,6 +162,22 @@ namespace editor
         if (auto* text = Find<gui::Label>(u8"scene-state-text"); text != nullptr && m_scene == nullptr)
             text->SetText(u8"The editor has no scenes to show it in.");
 
+        // The hierarchy in its pane: the scene's tree, the page's selection.
+        if (m_editContext)
+            if (gui::Node* pane = Find<gui::Node>(u8"scene-hierarchy"))
+            {
+                SceneHierarchyView::Services tree;
+                tree.context = &context;
+                tree.page = this;
+                tree.icons = m_services.icons;
+                tree.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
+                SceneEditorPage* self = this;
+                tree.sceneName = [self]() { return self->m_title.AsView(); };
+                tree.frame = [self](const Guid& entity) { (void)self->FrameEntities(Span<const Guid>(&entity, 1u), true); };
+                tree.spawnPrefab = [self](const Guid& prefab, const Guid& parent) { return self->m_prefabs && self->m_prefabs->Spawn(prefab, parent); };
+                m_hierarchy = MakeUnique<SceneHierarchyView>(Allocator(), Allocator(), *m_editContext, Move(tree), *pane);
+            }
+
         m_overlays.settings = SceneViewState::LoadOverlays(context.ProjectEditorSettings(), InstanceId(), m_overlays.settings);
         RestoreViewState();
     }
@@ -233,6 +250,8 @@ namespace editor
             frame.deltaSeconds = dt;
             m_overlays.Draw(*dd, frame);
         }
+        if (m_hierarchy)
+            m_hierarchy->Refresh(); // the scene changed: built again
         if (m_bar)
             m_bar->Sync();
     }
@@ -334,6 +353,7 @@ namespace editor
 
     void SceneEditorPage::OnClose()
     {
+        m_hierarchy.Reset(); // it lets the selection and the tree go before the scene does
         // Where the scene was left: the camera, the selection, the panes, for the next open.
         if (m_scene != nullptr)
             SaveViewState();

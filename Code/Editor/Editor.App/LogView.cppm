@@ -4,8 +4,8 @@
 // Editor::App - :log_view partition.
 //
 // LogView: the Console panel (Documentation/Specs/editor-gui.md, 5.2, layer 1). Its frame is
-// markup (Data/Editor/Console.gml): a chip per level (Info, holding the debug and trace lines too,
-// Warnings, Errors) with how many lines it holds, on showing them; a search matching anywhere in a
+// markup (Data/Editor/Console.gml): a chip per level (Debug, holding the trace lines too, Info,
+// Warnings, Errors, holding the fatal ones) with how many lines it holds, on showing them; a search matching anywhere in a
 // line ignoring case, cleared by its x; Clear; then the lines on a virtualised list, each its time
 // since the editor started and `[Category] message` in its level's colour. The newest line is
 // followed until the user scrolls up, and again once they are back at the bottom. Rows select as
@@ -32,20 +32,22 @@ export namespace editor::app
         /// Its frame, under the data root.
         static constexpr const char8_t* kPath = u8"Editor/Console.gml";
 
-        /// The chips' levels: Info holds trace, debug and info lines; Error holds fatal ones.
+        /// The chips' levels: Debug holds trace and debug lines; Error holds fatal ones.
         enum class Bucket : u8
         {
+            Debug,
             Info,
             Warning,
             Error
         };
-        static constexpr usize kBucketCount = 3;
+        static constexpr usize kBucketCount = 4;
         [[nodiscard]] static Bucket BucketOf(LogLevel level) noexcept
         {
             switch (level)
             {
             case LogLevel::Trace:
             case LogLevel::Debug:
+                return Bucket::Debug;
             case LogLevel::Info:
                 return Bucket::Info;
             case LogLevel::Warning:
@@ -89,7 +91,7 @@ export namespace editor::app
                                                    e.Handled = true;
                                                });
             }
-            const char8_t* const chips[kBucketCount] = {u8"console-info", u8"console-warnings", u8"console-errors"};
+            const char8_t* const chips[kBucketCount] = {u8"console-debug", u8"console-info", u8"console-warnings", u8"console-errors"};
             for (usize i = 0; i < kBucketCount; ++i)
             {
                 m_chips[i] = Find<gui::Button>(StringView(chips[i]));
@@ -295,7 +297,7 @@ export namespace editor::app
         // The chips' counts and states, the search's x, the empty line.
         void ShowChrome()
         {
-            static constexpr StringView kNames[kBucketCount] = {u8"Info", u8"Warnings", u8"Errors"};
+            static constexpr StringView kNames[kBucketCount] = {u8"Debug", u8"Info", u8"Warnings", u8"Errors"};
             for (usize i = 0; i < kBucketCount; ++i)
                 if (gui::Button* chip = m_chips[i])
                 {
@@ -343,7 +345,7 @@ export namespace editor::app
             static constexpr StringView kLevels[] = {u8"debug", u8"warning", u8"error"};
             for (StringView level : kLevels)
                 row->RemoveClass(level);
-            if (entry.level == LogLevel::Trace || entry.level == LogLevel::Debug)
+            if (BucketOf(entry.level) == Bucket::Debug)
                 row->AddClass(u8"debug");
             else if (entry.level == LogLevel::Warning)
                 row->AddClass(u8"warning");
@@ -393,7 +395,7 @@ export namespace editor::app
         Array<Entry> m_entries;
         Array<usize> m_shown; // the entries shown, by their place in m_entries
         usize m_counts[kBucketCount] = {};
-        bool m_visible[kBucketCount] = {true, true, true};
+        bool m_visible[kBucketCount] = {true, true, true, true};
         String m_search;
         u64 m_nextId = 1;
         Function<void(usize)> m_onCopied;

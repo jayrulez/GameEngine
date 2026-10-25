@@ -326,8 +326,9 @@ asset slots and the dialogs). As in X3, each layer is one commit with its tests;
 additions go first and are grouped with the other GUI commits.
 
 1. The Console: the log on a virtualised GUI list, each line its time since the editor started, its
-   level's colour, `[Category] message`; the mock's chips (Info, holding debug and trace lines too,
-   Warnings, Errors) with their counts, a search, Clear; rows selected and copied; the newest line
+   level's colour, `[Category] message`; a chip per level as the old Console had (Debug, holding the
+   trace lines too, Info, Warnings, Errors; the user's call over the mock's three, 2026-10-25) with
+   their counts, a search, Clear; rows selected and copied; the newest line
    followed until the user scrolls up, and followed again at the bottom; an empty state. Fed each
    frame from the log buffer, which stamps each entry's time.
 2. Asset drag data and the type-filtered drop: what an assets row carries, what a slot takes.

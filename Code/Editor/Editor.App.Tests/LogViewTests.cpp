@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The Console over its markup (Data/Editor/Console.gml): lines with their category, the levels'
-// chips (Info holding trace and debug, Error holding fatal) with their counts showing and hiding
+// chips (Debug holding trace, Error holding fatal) with their counts showing and hiding
 // their lines, the search, the cap trimming the oldest, Clear, the empty line, a selection kept
 // by entry through a trim and copied oldest first, and each line's time.
 
@@ -73,7 +73,7 @@ namespace
     };
 }
 
-TEST_CASE("console: lines with their category, the levels folded into three chips with their counts")
+TEST_CASE("console: lines with their category, the levels in four chips with their counts")
 {
     Bed bed;
     CHECK(FindId<gui::Label>(*bed.view->Content(), u8"console-empty")->IsDisplayed()); // nothing yet
@@ -87,11 +87,12 @@ TEST_CASE("console: lines with their category, the levels folded into three chip
     CHECK(bed.view->ShownText(3) == StringView(u8"no category"));
     CHECK_FALSE(FindId<gui::Label>(*bed.view->Content(), u8"console-empty")->IsDisplayed());
 
-    CHECK(LogView::BucketOf(LogLevel::Trace) == LogView::Bucket::Info);
-    CHECK(LogView::BucketOf(LogLevel::Debug) == LogView::Bucket::Info);
+    CHECK(LogView::BucketOf(LogLevel::Trace) == LogView::Bucket::Debug);
+    CHECK(LogView::BucketOf(LogLevel::Debug) == LogView::Bucket::Debug);
     CHECK(LogView::BucketOf(LogLevel::Fatal) == LogView::Bucket::Error);
-    CHECK(bed.view->CountOf(LogView::Bucket::Info) == 2u);
-    CHECK(bed.Chip(u8"console-info").GetText() == StringView(u8"Info 2"));
+    CHECK(bed.view->CountOf(LogView::Bucket::Info) == 1u);
+    CHECK(bed.Chip(u8"console-info").GetText() == StringView(u8"Info 1"));
+    CHECK(bed.Chip(u8"console-debug").GetText() == StringView(u8"Debug 1")); // the trace line
     CHECK(bed.Chip(u8"console-errors").GetText() == StringView(u8"Errors 1"));
 }
 

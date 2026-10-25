@@ -94,6 +94,9 @@ export namespace editor
         Function<void(EditorPage*)> execute;
         Function<bool(EditorPage*)> enabled; // unset = always enabled
         Function<bool(EditorPage*)> checked; // Toggle / Window only; unset = never checked
+        /// Why it is disabled over the subject, said where it shows (a tool with nothing to work
+        /// on); unset or empty = nothing to say.
+        Function<String(EditorPage*)> disabledReason;
     };
 
     /// The interface `page` publishes, or null when there is no page or it is not that kind:
@@ -182,6 +185,15 @@ export namespace editor
         [[nodiscard]] static bool IsEnabled(const EditorActionDeclaration& action, EditorPage* subject)
         {
             return !action.enabled || action.enabled(subject);
+        }
+        [[nodiscard]] String DisabledReason(StringView id) const { return DisabledReason(id, Subject()); }
+        /// Why `id` is disabled over `subject`; empty when it is enabled or says nothing.
+        [[nodiscard]] String DisabledReason(StringView id, EditorPage* subject) const
+        {
+            const EditorActionDeclaration* action = Find(id);
+            if (action == nullptr || IsEnabled(*action, subject) || !action->disabledReason)
+                return String{};
+            return action->disabledReason(subject);
         }
         [[nodiscard]] bool IsChecked(StringView id) const { return IsChecked(id, Subject()); }
         [[nodiscard]] bool IsChecked(StringView id, EditorPage* subject) const

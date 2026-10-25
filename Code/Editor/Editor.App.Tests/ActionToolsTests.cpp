@@ -99,6 +99,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
         d.kind = EditorActionKind::Toggle;
         d.shortcut = EditorShortcut::Of(u8"ctrl-f");
         d.enabled = [](EditorPage* page) { return page != nullptr; };
+        d.disabledReason = [](EditorPage*) { return String(u8"Open a page to flip."); };
         d.checked = [](EditorPage* page)
         { return page != nullptr && static_cast<TogglePage*>(page)->on; }; // asked disabled too
         d.execute = [](EditorPage* page)
@@ -142,6 +143,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(found.Get(u8"kind").AsString() == StringView(u8"toggle"));
     CHECK(found.Get(u8"shortcut").AsString() == StringView(u8"Ctrl+F"));
     CHECK_FALSE(found.Get(u8"enabled").AsBool());
+    CHECK(found.Get(u8"disabledReason").AsString() == StringView(u8"Open a page to flip.")); // said where it has one
     CHECK_FALSE(found.Get(u8"checked").AsBool());
     REQUIRE(FindById(listed.payload.Get(u8"actions"), u8"file.exit", found) != nullptr);
     CHECK(found.Get(u8"menuPath").AsString() == StringView(u8"File/Exit"));
@@ -155,7 +157,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(exits == 1u);
     Answer refused = Call(server, u8"action_execute", u8"{\"id\":\"page.flip\"}");
     CHECK_FALSE(refused.ok);
-    CHECK(refused.error.AsView().StartsWith(u8"action 'page.flip' is not enabled over the active page (no page is active)"));
+    CHECK(refused.error == String(u8"action 'page.flip' is not enabled over the active page (no page is active): Open a page to flip."));
     Answer unknown = Call(server, u8"action_execute", u8"{\"id\":\"nobody.home\"}");
     CHECK_FALSE(unknown.ok);
     CHECK(unknown.error.AsView().StartsWith(u8"no action 'nobody.home'"));

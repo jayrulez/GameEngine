@@ -137,13 +137,15 @@ export namespace editor::app
             }
         }
 
-        /// What each action item shows that the registry answers at the moment: enabled, checked.
+        /// What each action item shows that the registry answers at the moment: enabled (and why
+        /// not), checked.
         void Refresh(gui::Menu& menu) const
         {
             for (const Item& item : m_items)
                 if (item.menu == &menu)
                 {
                     item.item->SetEnabled(m_actions->IsEnabled(item.action.AsView()));
+                    item.item->SetTooltip(m_actions->DisabledReason(item.action.AsView()).AsView()); // why it is disabled, when it says
                     if (item.item->IsCheckable())
                         item.item->SetCheckedSilently(m_actions->IsChecked(item.action.AsView()));
                 }

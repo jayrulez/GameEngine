@@ -7,8 +7,8 @@
 // editor-gui.md, 5.3, layer 2). The GUI's commands keep one state each for the whole window, but a
 // page's Save, Undo or Simulate acts on and shows its own page: two pages side by side each have
 // theirs. So each button is bound to an action id; a click executes the action with the page as its
-// subject, and Sync, once a frame, gives the button the action's label and keys (its tooltip) and
-// whether it is enabled and checked over the page, each only when it changed.
+// subject, and Sync, once a frame, gives the button the action's label and keys (its tooltip),
+// whether it is enabled and checked over the page and why it is disabled, each only when it changed.
 module;
 #include "Core/Prelude.h"
 
@@ -65,6 +65,7 @@ export namespace editor::app
             String id;
             String label;
             String keys;
+            String reason; // why it is disabled, its tooltip's last line
             bool enabled = false;
             bool checked = false;
             bool shown = false;
@@ -82,14 +83,17 @@ export namespace editor::app
                 bound.label = label;
                 bound.keys = keys;
             }
-            if (!bound.shown || enabled != bound.enabled || checked != bound.checked)
+            const String reason = enabled ? String{} : m_actions->DisabledReason(bound.id.AsView(), m_page);
+            if (!bound.shown || enabled != bound.enabled || checked != bound.checked || reason != bound.reason)
             {
                 gui::BoundCommandState state;
                 state.Available = enabled;
                 state.Checked = checked;
+                state.Reason = reason.AsView();
                 bound.button->OnBoundCommandState(state);
                 bound.enabled = enabled;
                 bound.checked = checked;
+                bound.reason = reason;
             }
             bound.shown = true;
         }

@@ -25,6 +25,7 @@ target_link_libraries(Editor.Scene
         Pipeline::Render # the render profile assets (SettingsProfileAsset)
         Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Engine::Script
         Foundation::Input Foundation::Input.Resource Engine::Input
+        Engine::Composition # the full manager set for the export's scratch scenes
         Editor::Core Editor::Camera Editor::ViewportTools Foundation::Policy
         Foundation::Mcp Foundation::Json) # the scene editor's MCP tools
 
@@ -59,4 +60,5 @@ target_sources(Editor.Scene
             Tools.cppm
             ComponentGizmos.cppm
             AssetThumbnails.cppm
+            SceneServices.cppm
             EditorSceneModule.cppm)

@@ -30,3 +30,4 @@ export import :gizmo;
 export import :tools;
 export import :component_gizmos;
 export import :asset_thumbnails;
+export import :services;

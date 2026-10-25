@@ -236,7 +236,7 @@ to follow the same order.
 | Editor.Core | In the build, on the GUI: its shortcuts are the keymap's keystrokes (kept as text in the settings, an old key code read once), its action items a GUI menu, its change notice an Observable, its clipboard and thumbnails the GUI's | X2 |
 | Editor.App | In the build in parts: the UI-free files, the page's content a GUI node, the application broken up (window, session, native module, export, asset creation, layout store, MCP host, actions), the dock with the Project, Assets and Console panels (the last two a line each until X4), its layout saved with the project (an old dock's tree read into it), the pages through the dock (opened, closed with the unsaved-changes prompt, the active page, their tabs' marks, the open pages saved), the menu bar and the keys from the actions, the status bar (the message, a job, the agent) and the toasts over the dock, the command palette, Save As and the unsaved-pages gate at exit, Preferences (Appearance: scheme, accent, density, motion, UI scale, axis views; Export; Agent access; Game preview; Shortcuts, a capture per action; a tab per contributed category), the project home in the Project panel and the project manager over the window with no project (New Project, Open Folder, the version check, File > Close Project), the MCP layout tools on the GUI's dock (ruling 16's shape) and the action tools, an unattended run's modal windows refused by the GUI's dispatcher; the Console, asset drag data, the asset slot and the inspector's asset reference, the picker, the path picker and the asset picker (the slot's pick), the group picker and Create Asset, Project Settings, Export Templates and Export, the assets browser (browsing, its verbs, moving, thumbnails, import); the rest out, unedited, until their layers | X3 (layers 1 to 15), X4 (layers 1 to 7) |
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
-| Editor.Scene | In the build in parts: its UI-free half (the edit context and its commands, the gizmos and the select tool, the component gizmos, the grid, the view gizmo, the zoom readout, the view settings, the camera preview's sizing, the capture recorder, entity JSON, loading, settings profiles, the thumbnail generators, the page interface, the scene MCP tools, the actions on the keymap's keystrokes); the page, the hierarchy, the inspector and the picker dialogs out until their layers | X5 (layer 1) |
+| Editor.Scene | In the build in parts: its UI-free half (the edit context and its commands, the gizmos and the select tool, the component gizmos, the grid, the view gizmo, the zoom readout, the view settings, the camera preview's sizing, the capture recorder, entity JSON, loading, settings profiles, the thumbnail generators, the page interface, the scene MCP tools, the actions on the keymap's keystrokes) and its services (the document types, the export's scene seams, a model import's prefab), registered by Tools.Editor; the page, the hierarchy, the inspector and the picker dialogs out until their layers | X5 (layer 1) |
 | Editor.Play, Editor.Preview | Parked | |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
 | Editor.Generic, Texture, Fonts, Image, Heightfield, Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain | Parked | |
@@ -391,16 +391,30 @@ first and are grouped with the other GUI commits. The catalog's problems for the
 
 GUI library additions X5 needs (GUI.Viewport, checked against the GUI first):
 - the colour target's state readable and settable, so a renderer that owns its transitions (the
-  render graph's TargetState) can draw into the viewport's target;
-- an sRGB view of the colour target, for the game's screen UI blending in encoded space;
-- no recording while the viewport is not shown (a hidden tab renders nothing).
+  render graph's TargetState) can draw into the viewport's target: done, ColorState and
+  SetColorState, and with no OnRender a target drawn outside is kept, not cleared;
+- an sRGB view of the colour target, for the game's screen UI blending in encoded space (with
+  layer 7);
+- no recording while the viewport is not shown: there already, GuiHost records only content whose
+  node is shown, and a page asks its viewport's IsTreeVisible before rendering into it.
 
 The layers:
 1. Editor.Scene's UI-free half back in the build, with its headless tests: the files above, the
    scene actions' keys as the keymap's keystrokes, the UI files out of the source list, unedited
    (and the tests that drive them: the page's, the settings rows', the collision matrix's, back
-   with their layers).
-2. The scene page and its viewport: SceneEditorPage and PrefabEditorPage on the GUI from markup,
+   with their layers). Then the scene editor's services, none of them UI, out of the page's
+   registration: the document types, the export's scene seams (the text transcoded to the wire,
+   the references scanned for the closure) and a model import's prefab and scene, registered by
+   Tools.Editor (they had been out of the build with the page since X2).
+2. The scene page and its viewport, the page broken up as the application was in X3 (one class of
+   3.3k lines held all of it): the page itself (its scene, its parts, save, an external change),
+   its viewport (rendering through the renderer, the camera's input, picking, the capture and the
+   project's picture), its overlays (the grid, the markers and selection boxes, the gizmos' draws,
+   the zoom readout, the view gizmo, the frame rate), its view state (each scene's prefs, saved and
+   restored), Simulate's run and snapshot, the prefab flows (create from a selection, apply, revert,
+   spawn), and the factories and registration; each a partition of its own, the later layers' parts
+   (the bar, the HUD, the tool panels, the camera preview) the same. SceneEditorPage and
+   PrefabEditorPage on the GUI from markup,
    the viewport a GUI.Viewport rendering through the renderer with the editor camera, picking, the
    grid, the gizmos and the overlays; the view settings kept per scene; Save, Undo and Redo on the
    page's bar; a failed load shown on the page, not only logged; a prefab page marked as one. The

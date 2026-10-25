@@ -398,3 +398,25 @@ TEST_CASE("dispatcher: a move carries the modifiers held during it")
     d->InjectMouseMove(core::Float2{12.0f, 10.0f});
     CHECK(seen == 0u);
 }
+
+TEST_CASE("dispatch: a centred popup sits in the root's middle by its size, again as the root resizes")
+{
+    auto root = MakeScene(core::Float2{400.0f, 300.0f});
+    auto opener = MakePanel(core::Float2{350.0f, 10.0f}, core::Float2{40.0f, 20.0f}); // at the root's edge
+    auto popup = MakePanel(core::Float2{0.0f, 0.0f}, core::Float2{100.0f, 60.0f});
+    root->AddChild(opener.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    PopupOptions options;
+    options.Centered = true;
+    options.Anchor = opener.Get(); // not asked: centred
+    d->OpenPopup(*opener, *popup, core::Move(options));
+    (void)root->UpdateLayout();
+    const auto at = [&]() { return popup->ConvertToRootSpace(core::Float2{0.0f, 0.0f}); };
+    CHECK(at().x == doctest::Approx(150.0f));
+    CHECK(at().y == doctest::Approx(120.0f));
+    root->SetSize(core::Float2{600.0f, 500.0f});
+    (void)root->UpdateLayout();
+    CHECK(at().x == doctest::Approx(250.0f));
+    CHECK(at().y == doctest::Approx(220.0f));
+    d->ClosePopup(*popup);
+}

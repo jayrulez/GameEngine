@@ -56,6 +56,9 @@ export namespace foundation::gui
         Node* Anchor = nullptr;
         Rect AnchorRect{};
         bool HasAnchorRect = false;
+        /// In the middle of the root, again every layout pass, by its size (a picker over the
+        /// window); its anchor is then not asked.
+        bool Centered = false;
         PopupPlacement Placement{};
         /// Sized by what it holds, measured again every layout pass (a tooltip, whose font a sheet
         /// gives it after it opens); else its own size when it opened.
@@ -1151,8 +1154,8 @@ export namespace foundation::gui
         [[nodiscard]] Node* TopPopup() const { return m_popups.IsEmpty() ? nullptr : m_popups.Back().Popup.Get(); }
 
         /// Places every anchored popup against its anchor within the root: on its side, flipped,
-        /// shrunk and clamped (PlacePopup). Run every layout pass and before drawing, so a popup
-        /// follows its anchor.
+        /// shrunk and clamped (PlacePopup), a centred one in the root's middle. Run every layout
+        /// pass and before drawing, so a popup follows its anchor.
         void PlacePopups() const
         {
             if (m_root == nullptr)
@@ -1161,7 +1164,20 @@ export namespace foundation::gui
             for (const PopupEntry& e : m_popups)
             {
                 Rect anchor{};
-                if (e.Options.Anchor != nullptr)
+                PopupPlacement placement = e.Options.Placement;
+                if (e.Options.Centered)
+                {
+                    // Below a line across the root as far down as half the room it leaves, centred
+                    // along it: in the middle both ways.
+                    if (e.Options.FitContent)
+                        e.Size = e.Popup->Measure(LayoutConstraints{});
+                    anchor = Rect{0.0f, core::Max(0.0f, (bounds.height - e.Size.y) * 0.5f), bounds.width, 0.0f};
+                    placement.Side = PopupSide::Below;
+                    placement.Align = PopupAlign::Center;
+                    placement.Gap = 0.0f;
+                    placement.Shift = 0.0f;
+                }
+                else if (e.Options.Anchor != nullptr)
                 {
                     const Node& a = *e.Options.Anchor;
                     const core::Float2 p0 = a.ConvertToRootSpace(core::Float2{0.0f, 0.0f});
@@ -1173,12 +1189,11 @@ export namespace foundation::gui
                 else
                     continue;
                 Node& popup = *e.Popup;
-                if (e.Options.FitContent)
+                if (e.Options.FitContent && !e.Options.Centered)
                     e.Size = popup.Measure(LayoutConstraints{});
                 // Its sides and alignment in the anchor's direction, else its own (its owner's).
-                const bool rightToLeft = e.Options.Anchor != nullptr ? e.Options.Anchor->IsRightToLeft()
-                                                                     : popup.IsRightToLeft();
-                PopupPlacement placement = e.Options.Placement;
+                const bool rightToLeft = e.Options.Anchor != nullptr && !e.Options.Centered ? e.Options.Anchor->IsRightToLeft()
+                                                                                            : popup.IsRightToLeft();
                 if (placement.AlignContent)
                 {
                     // By its content's edge, its padding and border as styled now (not when it opened).

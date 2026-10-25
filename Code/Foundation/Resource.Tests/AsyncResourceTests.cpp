@@ -646,6 +646,11 @@ TEST_CASE("resource.async: Ref::Bind routes through BindAsync under an AsyncBind
     CHECK(manager.PendingCount() == 0u);
     REQUIRE(ref.Get() != nullptr); // the proxy now resolves to the finalized product
     CHECK(ref.Get()->value == 5);
+
+    // Cleared (an inspector's None): bound again, it lets what it named go.
+    ref.SetId(Guid{});
+    ref.Bind(manager);
+    CHECK(ref.Get() == nullptr);
 }
 
 TEST_CASE("resource.async: AsyncLoadBatch reports progress as loads finalize")

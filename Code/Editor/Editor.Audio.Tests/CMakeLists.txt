@@ -1,6 +1,6 @@
-# Editor::Audio tests: the clip thumbnails and the audio clip page. The bus layout page's tests
+# Editor::Audio tests: the clip thumbnails, the audio clip page and the sound cue page. The bus layout page's tests
 # (BusLayoutPageTests.cpp) come back with its part of X6's layer 5.
-add_executable(Editor.Audio.Tests TestsMain.cpp AudioThumbnailTests.cpp AudioClipPageTests.cpp)
+add_executable(Editor.Audio.Tests TestsMain.cpp AudioThumbnailTests.cpp AudioClipPageTests.cpp SoundCuePageTests.cpp)
 target_link_libraries(Editor.Audio.Tests PRIVATE
     Editor::Audio Editor::App Editor::Core
     Foundation::Audio Pipeline::Audio Foundation::Content Foundation::VFS Foundation::GUI Foundation::GUI.Toolkit doctest::doctest)

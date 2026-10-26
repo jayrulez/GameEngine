@@ -13,8 +13,8 @@
 // turned on loops the next play), and its source's facts read only (channels, rate, length). The
 // old page edited nothing itself; its options were the inspector's.
 //
-// The sound cue and the bus layout pages (its other partitions) come back in their own parts of
-// the layer, out of the build until then.
+// The sound cue page is its :sound_cue_page partition; the bus layout page comes back in its own
+// part of the layer, out of the build until then.
 
 module;
 #include "Core/Prelude.h"
@@ -24,6 +24,7 @@ export module editor.audio;
 
 export import :waveform_view;
 export import :audition;
+export import :sound_cue_page;
 export import :thumbnail_generator;
 
 import foundation.core;
@@ -101,6 +102,8 @@ export namespace editor
     {
     public:
         explicit AudioClipPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        /// What a page is made with (the sound cue's factory asks this one: a Function is not copied).
+        [[nodiscard]] app::AssetPageServices Services() const { return m_services ? m_services() : app::AssetPageServices{}; }
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
@@ -112,8 +115,10 @@ export namespace editor
     /// services when it is made; the clip thumbnails with them.
     inline void RegisterAudioClipEditor(EditorContext& context, Function<app::AssetPageServices()> services)
     {
+        auto* clips = editor::EditorRootAllocator().New<AudioClipPageFactory>(Move(services));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(clips, editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<AudioClipPageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<SoundCuePageFactory>([clips]() { return clips->Services(); }), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
             RegisterAudioThumbnailGenerator(*context.Thumbnails());
     }

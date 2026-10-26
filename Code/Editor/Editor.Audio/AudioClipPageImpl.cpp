@@ -212,7 +212,7 @@ namespace editor
 
     UniquePtr<EditorPage> AudioClipPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<AudioClipEditorPage>(context, m_services ? m_services() : app::AssetPageServices{}, instance);
+        auto* page = editor::EditorRootAllocator().New<AudioClipEditorPage>(context, Services(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 }

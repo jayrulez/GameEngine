@@ -51,6 +51,7 @@ import :scene_simulation;
 import :prefab_flows;
 import :hierarchy;
 import :inspector;
+import :entity_picker_window;
 import :scene_bar;
 import :scene_hud;
 import :scene_tools;
@@ -136,6 +137,10 @@ export namespace editor
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
         [[nodiscard]] SceneInspectorView* Inspector() noexcept { return m_inspector.Get(); }
+        /// Opens the entity picker over the page's GUI for `request` (made the first time); false
+        /// with no markup, no edit context, or the page in no GUI.
+        bool PickEntity(EntityPickRequest request);
+        [[nodiscard]] EntityPickerWindow* EntityPicker() const noexcept { return m_entityPicker.Get(); }
         [[nodiscard]] foundation::gui::MessageBox* OpenConfirm() const noexcept { return m_confirm && m_confirm->IsOpen() ? m_confirm.Get() : nullptr; }
 
     private:
@@ -170,6 +175,7 @@ export namespace editor
         UniquePtr<PrefabFlows> m_prefabs;
         UniquePtr<SceneHierarchyView> m_hierarchy;
         UniquePtr<SceneInspectorView> m_inspector;
+        UniquePtr<EntityPickerWindow> m_entityPicker; // an entity slot's pick, made the first time
         ViewportToolHostContext m_toolHost; // what the tools and their panels were made with
         ViewportToolManager m_viewportTools;         // after m_editContext (the tools borrow it)
         SelectTransformTool* m_selectTool = nullptr; // the manager's default tool

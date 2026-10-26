@@ -228,6 +228,7 @@ namespace editor
                 inspector.pick = m_services.pick ? [self = this](app::PickerRequest request) { self->m_services.pick(Move(request)); }
                                                  : Function<void(app::PickerRequest)>{};
                 SceneEditorPage* self = this;
+                inspector.pickEntity = [self](EntityPickRequest request) { (void)self->PickEntity(Move(request)); };
                 inspector.simulating = [self]() { return self->m_simulation.IsRunning(); };
                 inspector.sceneSelected = [self]() { return self->m_hierarchy && self->m_hierarchy->SceneSelected(); };
                 inspector.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
@@ -378,8 +379,27 @@ namespace editor
         m_viewport->AfterRender(host, frame);
     }
 
+    bool SceneEditorPage::PickEntity(EntityPickRequest request)
+    {
+        gui::SceneRoot* root = m_content ? m_content->GetSceneRoot() : nullptr;
+        if (!m_editContext || root == nullptr || !m_services.loadMarkup)
+            return false;
+        if (!m_entityPicker)
+        {
+            EntityPickerWindow::Services services;
+            services.icons = m_services.icons;
+            services.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
+            SceneEditorPage* self = this;
+            services.sceneName = [self]() { return self->m_title.AsView(); };
+            m_entityPicker = MakeUnique<EntityPickerWindow>(Allocator(), Allocator(), *m_editContext, Move(services),
+                                                            m_services.loadMarkup(StringView(EntityPickerWindow::kPath)));
+        }
+        return m_entityPicker->Open(*root, Move(request));
+    }
+
     void SceneEditorPage::OnClose()
     {
+        m_entityPicker.Reset(); // it lets the scene's tree go before the scene does
         m_inspector.Reset(); // the grid lets its sources go before the scene does
         m_hierarchy.Reset(); // it lets the selection and the tree go before the scene does
         // Where the scene was left: the camera, the selection, the panes, for the next open.

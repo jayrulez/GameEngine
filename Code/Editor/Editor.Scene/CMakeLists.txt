@@ -80,6 +80,7 @@ target_sources(Editor.Scene
             PrefabFlows.cppm
             SceneTree.cppm
             HierarchyView.cppm
+            EntityPickerWindow.cppm
             EntityRefEditor.cppm
             InspectorExtras.cppm
             ScriptBehaviorsSource.cppm

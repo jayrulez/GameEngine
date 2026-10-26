@@ -639,7 +639,7 @@ TEST_CASE("inspector: several entities edited at once; a component's header has 
     page->OnClose();
 }
 
-TEST_CASE("inspector: an entity reference is a slot over the scene's entities: its name, a pick from the tree, a dragged entity, one undo each")
+TEST_CASE("inspector: an entity reference is a slot over the scene's entities: its name, a pick from the entity picker (the hierarchy's tree), a dragged entity, one undo each")
 {
     Bed bed;
     UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
@@ -656,14 +656,27 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     REQUIRE(slot != nullptr); // the entity slot, not the asset one
     CHECK(slot->Slot()->ShownName() == StringView(u8"None"));
 
-    // The pick: the scene's entities as a tree, None allowed.
+    // The pick: the entity picker, the scene as the hierarchy shows it; a search keeps a match.
     const i64 before = page->Commands().UndoIndex();
-    app::PickerRequest request = slot->Request();
-    CHECK(request.Tree);
-    CHECK(request.AllowNone);
-    REQUIRE(request.Items.Size() == 2u);
-    CHECK(request.Items[1].Name == String(u8"Lamp"));
-    request.OnPicked(request.Items[1].Key.AsView());
+    REQUIRE(page->PickEntity(slot->Request()));
+    EntityPickerWindow* picker = page->EntityPicker();
+    REQUIRE(picker != nullptr);
+    CHECK(picker->IsOpen());
+    CHECK(picker->Rows() == page->Hierarchy()->Rows()); // the same tree
+    CHECK(picker->Rows() == String(u8"Level |   Crate |   Lamp"));
+    CHECK(picker->LitName().IsEmpty()); // nothing current
+    CHECK(picker->Hint() == StringView(u8"Enter picks, Esc closes"));
+    picker->Step(-1); // the scene's row: no pick
+    picker->PickLit();
+    CHECK(picker->IsOpen());
+    picker->Search(u8"la");
+    CHECK(picker->Rows() == String(u8"Level |   Lamp"));
+    CHECK(picker->LitName() == String(u8"Lamp")); // the first match
+    picker->Search(u8"nothing like it");
+    CHECK(picker->State() == StringView(u8"No entity matches \"nothing like it\"."));
+    picker->Search(u8"la");
+    picker->PickLit();
+    CHECK_FALSE(picker->IsOpen());
     CHECK(page->Commands().UndoIndex() == before + 1);
     CHECK(page->Commands().CanUndo());
     page->OnUpdate(bed.host, 1.0f / 60.0f);
@@ -676,6 +689,12 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     slot = Cast<EntityRefEditor>(inspector->Grid()->FindEditor(path.AsView()));
     REQUIRE(slot != nullptr);
     CHECK(slot->Slot()->ShownName() == StringView(u8"Lamp"));
+    // Again: the current entity lit, the foot saying Esc keeps it; closing writes nothing.
+    REQUIRE(page->PickEntity(slot->Request()));
+    CHECK(picker->LitName() == String(u8"Lamp"));
+    CHECK(picker->Hint() == StringView(u8"Enter picks, Esc keeps Lamp"));
+    picker->Close();
+    CHECK(page->Commands().UndoIndex() == before + 1);
     page->Commands().Undo(); // one step
     CHECK(member()->instancedMesh.id.IsNil());
 

@@ -645,6 +645,7 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
 .asset-picker-state { flex-grow: 1; color: var(--text-dim); text-align: center; padding: var(--space-xl) var(--space-l); }
 /* The entity picker: the scene's tree as the hierarchy draws it, in a picker's frame. */
 .entity-picker-tree { height: 340px; background-color: transparent; padding: 0 var(--space-s); }
+.entity-picker-state { height: 340px; color: var(--text-dim); text-align: center; padding: var(--space-xl) var(--space-l); } /* in the tree's room */
 /* The render textures picker: its passes a tree, wide enough for a texture's size and format. */
 .texture-picker { width: 460px; }
 .texture-tree { height: 360px; }

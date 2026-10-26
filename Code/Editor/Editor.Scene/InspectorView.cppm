@@ -39,6 +39,7 @@ import editor.core;
 import editor.app;
 import :edit;
 import :entity_ref_editor;
+import :entity_picker_window;
 import :inspector_extras;
 import :scene_settings_source;
 
@@ -70,6 +71,8 @@ export namespace editor
             const app::ResourceRefServices* refs = nullptr; // the asset slots' (null: none)
             /// Opens the picker for `request` (Add Component).
             Function<void(app::PickerRequest request)> pick;
+            /// Opens the entity picker for `request` (an entity slot's pick).
+            Function<void(EntityPickRequest request)> pickEntity;
             /// Whether the page simulates (the grid read only meanwhile).
             Function<bool()> simulating;
             /// Whether the scene's own row is selected (ruling 12: then the scene's settings show).

@@ -7,8 +7,8 @@
 // component's EntityRef as a slot, the grid's row for it (the reflected source takes EntityRef as a
 // reference by its id, hinted with its name, so this editor is chosen before the asset slot). It
 // shows the entity referenced by its type icon and its name, "None", or "(missing)" when no entity
-// of the scene has that id; its pick is the picker over the scene's entities as a tree (the
-// current one checked, None to clear); an entity dragged from the hierarchy drops on it. A pick, a
+// of the scene has that id; its pick is the entity picker, the scene as its hierarchy shows it
+// (the current one lit, None to clear); an entity dragged from the hierarchy drops on it. A pick, a
 // drop and a clear are one write through the grid, so one undo step.
 
 module;
@@ -25,6 +25,7 @@ import editor.core;
 import editor.app;
 import :edit;
 import :hierarchy; // EntityDrag
+import :entity_picker_window; // EntityPickRequest
 
 using namespace foundation::core;
 
@@ -41,8 +42,8 @@ export namespace editor
         {
             SceneEditContext* edit = nullptr;
             EditorIcons* icons = nullptr;
-            /// Opens the picker for `request`.
-            Function<void(app::PickerRequest request)> pick;
+            /// Opens the entity picker for `request`.
+            Function<void(EntityPickRequest request)> pick;
         };
 
         /// `services` outlives the editor (the registrar's).
@@ -65,8 +66,9 @@ export namespace editor
         [[nodiscard]] app::AssetPickerSlot* Slot() const noexcept { return m_slot.Get(); }
         /// What it references: nil for none, or when the objects differ.
         [[nodiscard]] const Guid& Current() const noexcept { return m_current; }
-        /// The picker's request it opens: the scene's entities as a tree.
-        [[nodiscard]] app::PickerRequest Request();
+        /// The entity picker's request it opens: its value, and an answer that writes the pick
+        /// (while the row still shows this property).
+        [[nodiscard]] EntityPickRequest Request();
         /// One write through the grid: a pick, a drop and a clear alike.
         void Assign(const Guid& id);
         /// Takes a dragged entity, as a drop on it does; false when the payload carries none of

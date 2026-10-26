@@ -36,6 +36,7 @@ export import :scene_simulation;
 export import :prefab_flows;
 export import :scene_tree;
 export import :hierarchy;
+export import :entity_picker_window;
 export import :entity_ref_editor;
 export import :inspector_extras;
 export import :script_behaviors_source;

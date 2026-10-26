@@ -263,8 +263,8 @@ namespace editor
             scene::RegisterEntityRefReflection();
             m_entityRefs.edit = m_edit;
             m_entityRefs.icons = m_services.icons;
-            if (m_services.pick)
-                m_entityRefs.pick = [self](app::PickerRequest request) { self->m_services.pick(Move(request)); };
+            if (m_services.pickEntity)
+                m_entityRefs.pick = [self](EntityPickRequest request) { self->m_services.pickEntity(Move(request)); };
             EntityRefEditor::Register(m_grid->GetEditors(), m_entityRefs);
             app::PropertyExtras::Register(m_grid->GetEditors()); // a component's notices and actions
             m_grid->SetSource(&m_sections);

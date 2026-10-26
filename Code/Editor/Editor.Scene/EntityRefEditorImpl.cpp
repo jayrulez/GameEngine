@@ -17,6 +17,7 @@ import editor.core;
 import editor.app;
 import :edit;
 import :hierarchy;
+import :entity_picker_window;
 import :entity_ref_editor;
 
 using namespace foundation::core;
@@ -46,22 +47,6 @@ namespace editor
             if (found.Source.IsEmpty())
                 found.Source = String(u8"Editor/Icons/cube.svg");
             return found;
-        }
-        // The scene's entities in their tree's order, each at its depth.
-        void Collect(scene::Scene& scene, scene::EntityHandle e, u32 depth, EditorIcons* icons, Array<app::PickerItem>& out)
-        {
-            app::PickerItem item;
-            item.Key = GuidText(scene.GetEntityId(e));
-            item.Name = String(scene.GetEntityName(e));
-            if (item.Name.IsEmpty())
-                item.Name = String(u8"(unnamed)");
-            const TypeIcon icon = IconOf(scene, e, icons);
-            item.Glyph = icon.Source;
-            item.GlyphClass = icon.Class;
-            item.Depth = depth;
-            out.PushBack(Move(item));
-            for (scene::EntityHandle c = scene.GetFirstChild(e); c.IsAssigned(); c = scene.GetNextSibling(c))
-                Collect(scene, c, depth + 1, icons, out);
         }
     }
 
@@ -107,31 +92,18 @@ namespace editor
         m_slot->SetGlyph(icon.Source.AsView(), icon.Class.AsView());
     }
 
-    app::PickerRequest EntityRefEditor::Request()
+    EntityPickRequest EntityRefEditor::Request()
     {
-        app::PickerRequest request;
-        request.Placeholder = String(u8"Search the scene");
-        request.Tree = true;
-        request.AllowNone = true;
-        if (!m_current.IsNil() && !m_mixed)
-            request.Current = GuidText(m_current);
-        if (m_services->edit != nullptr)
-        {
-            scene::Scene& scene = m_services->edit->Scene();
-            for (scene::EntityHandle r = scene.GetFirstRoot(); r.IsAssigned(); r = scene.GetNextSibling(r))
-                Collect(scene, r, 0, m_services->icons, request.Items);
-        }
-        request.EmptyTitle = String(u8"No entities yet");
-        request.EmptyText = String(u8"The scene has no entity to point at.");
+        EntityPickRequest request;
+        if (!m_mixed)
+            request.current = m_current;
         RefPtr<EntityRefEditor> keep(this);
         const String path(GetPath());
-        request.OnPicked = [keep, path](StringView key)
+        request.chosen = [keep, path](const Guid& id)
         {
             if (keep->GetPath() != path.AsView())
                 return; // the row shows another property now
-            Guid id;
-            (void)Guid::TryParse(key, id); // None: nil
-            keep->Assign(id);
+            keep->Assign(id); // None: nil
         };
         return request;
     }

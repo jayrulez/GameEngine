@@ -586,12 +586,11 @@ button.add-component { align-self: stretch; justify-content: center; margin: var
 .transport-state.faulted { color: var(--danger); background-color: var(--danger-background); }
 .transport-state.stopped { color: var(--text-dim); }
 /* The Game tab: the game beside the script debugger, the bar's resolution a fixed width. */
-.game-stage { flex-direction: row; }
 .game-view-pane { flex-grow: 1; flex-basis: 0; min-width: 0; min-height: 0; background-color: var(--surface-sunken); }
 .game-view { flex-grow: 1; }
 .game-scene { font-size: var(--font-small); color: var(--text-dim); margin-left: var(--space-s); }
 .game-resolution { width: 200px; flex-shrink: 0; }
-.game-debugger { width: 300px; flex-shrink: 0; flex-direction: column; border-left-width: 1px; border-left-style: solid; border-left-color: var(--separator); }
+.game-debugger { min-width: 200px; flex-direction: column; } /* its share of the split, its handle the edge */
 .game-debugger-bar { flex-direction: row; column-gap: var(--space-xs); }
 .game-debugger-state { font-size: var(--font-small); color: var(--text-dim); padding: var(--space-xs) var(--space-m); }
 .game-debugger-heading { font-size: var(--font-small); font-weight: 600; color: var(--text-dim); padding: var(--space-s) var(--space-m) var(--space-xs); }

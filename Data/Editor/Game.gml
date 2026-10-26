@@ -3,7 +3,7 @@
   as the player runs it. Its bar is the kit's transport (Restart, Play, Pause, Stop, the state named
   beside them and the scene it runs; a Play waiting for the cook says so), then the resolution the
   game draws at, the phone held upright, and the script debugger's toggle. Under it the game (code
-  puts its viewport in the pane) beside the debugger, which opens by its toggle or at a break.
+  puts its viewport in the pane) beside the debugger in a split, which opens by its toggle or at a break.
 -->
 <Panel class="page game-page">
     <ToolBar id="game-bar" class="page-toolbar">
@@ -20,14 +20,16 @@
         <Separator/>
         <ToolButton id="game-debugger-toggle" toggle="true" icon="Editor/Icons/bug.svg" tooltip="Script debugger: the call stack and the locals at a break"/>
     </ToolBar>
-    <Panel class="page-body game-stage">
+    <!-- The game beside the debugger, a handle between them to give either the room; the debugger
+         leaves the split while it is off, the game taking it all. -->
+    <Splitter id="game-stage" class="page-body game-stage" axis="horizontal" weights="0.78 0.22">
         <Panel id="game-view-pane" class="game-view-pane"/>
         <Panel id="game-debugger" class="panel game-debugger">
             <Panel class="panel-toolbar game-debugger-bar">
-                <Button id="game-debugger-continue" class="ghost" text="Continue"/>
-                <Button id="game-debugger-step-into" class="ghost" text="Step Into"/>
-                <Button id="game-debugger-step-over" class="ghost" text="Step Over"/>
-                <Button id="game-debugger-break" class="ghost" text="Break"/>
+                <Button id="game-debugger-continue" class="icon-button" icon="Editor/Icons/resume.svg" tooltip="Continue: run on from the break"/>
+                <Button id="game-debugger-step-into" class="icon-button" icon="Editor/Icons/step-into.svg" tooltip="Step Into: the next line, into a call it makes"/>
+                <Button id="game-debugger-step-over" class="icon-button" icon="Editor/Icons/step-over.svg" tooltip="Step Over: the next line, a call it makes run whole"/>
+                <Button id="game-debugger-break" class="icon-button" icon="Editor/Icons/pause.svg" tooltip="Break: stop the scripts at the next line they run"/>
             </Panel>
             <Label id="game-debugger-state" class="game-debugger-state"/>
             <Label class="game-debugger-heading" text="Call stack"/>
@@ -35,5 +37,5 @@
             <Label class="game-debugger-heading" text="Locals"/>
             <TreeView id="game-debugger-locals" class="tree game-debugger-locals"/>
         </Panel>
-    </Panel>
+    </Splitter>
 </Panel>

@@ -139,7 +139,7 @@ TEST_CASE("game tab: the kit's transport over a stopped run; a Play waiting for 
     CHECK(play->IsEnabled());
 }
 
-TEST_CASE("game tab: the resolutions in the dropdown, a pick and the phone kept with the project; the debugger by its toggle")
+TEST_CASE("game tab: the resolutions in the dropdown, a pick and the phone kept with the project; the debugger beside the game by its toggle, its share kept")
 {
     Bed bed;
     auto* resolution = bed.Find<gui::ComboBox>(u8"game-resolution");
@@ -161,15 +161,26 @@ TEST_CASE("game tab: the resolutions in the dropdown, a pick and the phone kept 
     CHECK(bed.page->PhonePreview());
     CHECK(bed.store.Find<GamePageSettings>()->phonePreview);
 
-    auto* debugger = bed.Find<gui::Node>(u8"game-debugger");
+    // The debugger is out of the split until its toggle puts it beside the game; it comes back at
+    // the share it was given.
+    auto* stage = bed.Find<gui::Splitter>(u8"game-stage");
     auto* toggle = bed.Find<gui::ButtonBase>(u8"game-debugger-toggle");
-    auto* debuggerState = bed.Find<gui::Label>(u8"game-debugger-state");
-    REQUIRE(debugger != nullptr);
+    REQUIRE(stage != nullptr);
     REQUIRE(toggle != nullptr);
-    REQUIRE(debuggerState != nullptr);
-    CHECK_FALSE(debugger->IsDisplayed()); // it takes room the game wants
-    CHECK(debuggerState->GetText() == StringView(u8"Not running"));
+    CHECK_FALSE(bed.page->DebuggerShown()); // it takes room the game wants
+    CHECK(stage->ChildCount() >= 1u);
+    CHECK(bed.Find<gui::Node>(u8"game-debugger") == nullptr);
     (void)toggle->HandleActivate();
     CHECK(toggle->IsChecked());
-    CHECK(debugger->IsDisplayed());
+    CHECK(bed.page->DebuggerShown());
+    auto* debuggerState = bed.Find<gui::Label>(u8"game-debugger-state");
+    REQUIRE(debuggerState != nullptr);
+    CHECK(debuggerState->GetText() == StringView(u8"Not running"));
+    const f32 given[2] = {0.6f, 0.4f};
+    stage->SetWeights(Span<const f32>(given, 2u));
+    (void)toggle->HandleActivate();
+    CHECK_FALSE(bed.page->DebuggerShown());
+    (void)toggle->HandleActivate();
+    REQUIRE(stage->GetWeights().Size() == 2u);
+    CHECK(stage->GetWeights()[1] == doctest::Approx(0.4f));
 }

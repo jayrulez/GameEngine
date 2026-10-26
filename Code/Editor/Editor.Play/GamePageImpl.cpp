@@ -254,11 +254,12 @@ namespace editor
         (void)(stage != nullptr ? stage : m_content.Get())->AddChildAt(m_viewport.Get(), 0);
         if (m_services.gui != nullptr)
             m_viewport->HostIn(*m_services.gui);
-        m_debuggerPane = Find<gui::Node>(u8"game-debugger");
-        if (m_debuggerPane != nullptr)
+        m_stage = Find<gui::Splitter>(u8"game-stage");
+        m_debuggerPane = RefPtr<gui::Node>(Find<gui::Node>(u8"game-debugger"));
+        if (m_debuggerPane)
         {
             m_debuggerPanel.Bind(*m_debuggerPane);
-            m_debuggerPane->SetDisplayed(false); // it takes room the game wants: opened by its toggle or a break
+            ShowDebugger(false); // it takes room the game wants: opened by its toggle or a break
         }
         BindBar();
         RefreshToolbar();
@@ -318,8 +319,36 @@ namespace editor
 
     void GameEditorPage::ShowDebugger(bool shown)
     {
-        if (m_debuggerPane != nullptr)
-            m_debuggerPane->SetDisplayed(shown); // the stage gives the game the room back
+        if (!m_debuggerPane)
+            return;
+        if (m_stage == nullptr)
+        {
+            m_debuggerPane->SetDisplayed(shown); // no split: the stage gives the game the room back
+            return;
+        }
+        // In the split while it is on, at the share it was last given; out of it while it is off,
+        // the game taking the whole stage (a hidden pane would keep its share empty).
+        const bool in = m_debuggerPane->GetParent() == m_stage;
+        if (shown && !in)
+        {
+            m_stage->AddChild(m_debuggerPane.Get());
+            const f32 weights[2] = {1.0f - m_debuggerShare, m_debuggerShare};
+            m_stage->SetWeights(Span<const f32>(weights, 2u));
+        }
+        else if (!shown && in)
+        {
+            const Array<f32> weights = m_stage->GetWeights();
+            if (weights.Size() == 2u && weights[1] > 0.0f)
+                m_debuggerShare = weights[1];
+            m_stage->RemoveChild(m_debuggerPane.Get());
+        }
+    }
+
+    bool GameEditorPage::DebuggerShown() const
+    {
+        if (!m_debuggerPane)
+            return false;
+        return m_stage != nullptr ? m_debuggerPane->GetParent() == m_stage : m_debuggerPane->IsDisplayed();
     }
 
     scene::SceneManager& GameEditorPage::SceneGroup() noexcept

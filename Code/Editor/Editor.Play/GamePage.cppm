@@ -269,6 +269,8 @@ export namespace editor
         [[nodiscard]] StringView ResolutionKey() const noexcept override { return m_resolutionKey.AsView(); }
         bool SelectResolution(StringView key) override;
         [[nodiscard]] bool PhonePreview() const noexcept override { return m_phonePreview; }
+        /// Whether the script debugger is beside the game now.
+        [[nodiscard]] bool DebuggerShown() const;
         void SelectPhonePreview(bool on) override;
 
         void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;
@@ -393,7 +395,9 @@ export namespace editor
         foundation::gui::Label* m_sceneLabel = nullptr; // the scene it runs
         foundation::gui::Label* m_cookBadge = nullptr;  // while a Play waits for the cook
         foundation::gui::ButtonBase* m_debuggerToggle = nullptr; // shows the script debugger
-        foundation::gui::Node* m_debuggerPane = nullptr;
+        RefPtr<foundation::gui::Node> m_debuggerPane; // held while it is out of the split
+        foundation::gui::Splitter* m_stage = nullptr;  // the game beside the debugger (the markup's)
+        f32 m_debuggerShare = 0.22f;                    // its share of the split, kept while it is off
         foundation::gui::ComboBox* m_resolutionCombo = nullptr;
         Array<GameResolutionChoice> m_resolutionChoices;
         String m_resolutionSignature; // what the choices were built from

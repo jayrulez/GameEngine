@@ -111,6 +111,19 @@ TEST_CASE("property grid: what has no category first, then categories as they fi
     CHECK(Join(bed.Paths()) == core::String(u8"name #Light #Transform position position.x position.y scale"));
 }
 
+TEST_CASE("property grid: a category whose rows are all hidden has no header, and has one again when one shows")
+{
+    Bed bed;
+    bed.Add(u8"name", PropertyKind::String, Variant(SV(u8"Lamp")));
+    bed.Add(u8"warning", PropertyKind::String, Variant(SV(u8"")), u8"Check").Visible = false;
+    bed.Add(u8"intensity", PropertyKind::Float, Variant(1.0), u8"Light");
+    bed.Show();
+    CHECK(Join(bed.Paths()) == core::String(u8"name #Light intensity"));
+    bed.bag.FindInfo(SV(u8"warning"))->Visible = true;
+    bed.bag.PropertiesChanged();
+    CHECK(Join(bed.Paths()) == core::String(u8"name #Check warning #Light intensity"));
+}
+
 TEST_CASE("property grid: the chevron, a header's click and Left and Right fold and unfold")
 {
     Bed bed;

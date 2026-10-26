@@ -972,11 +972,11 @@ namespace foundation::gui
             header.Category = true;
             header.Type = kCategoryRow;
             header.Id = core::HashBytes(header.Path.Data(), header.Path.Size());
-            bool any = !filtered;
-            if (filtered)
-                for (const usize top : m_top)
-                    if (m_nodes[top].Info.Category == category && SubtreeMatches(top))
-                        any = true;
+            // A header over nothing shown (each of its rows hidden, or none matching) is left out.
+            bool any = false;
+            for (const usize top : m_top)
+                if (m_nodes[top].Info.Category == category && (filtered ? SubtreeMatches(top) : m_nodes[top].Info.Visible))
+                    any = true;
             if (!any)
                 continue;
             header.Open = IsOpen(header.Path.AsView()) || filtered;

@@ -40,7 +40,8 @@
         <Panel id="scene-viewport" class="viewport">
             <!-- The HUD's zones (layer 5, part 2): the view's chips at the top start; the stats and
                  the view gizmo (code adds it) at the top end; the zoom readout and the tool's status
-                 at the bottom start. Code fills the chips' menus and what each shows. -->
+                 at the bottom start; the camera preview at the bottom end (layer 6; code adds its
+                 picture). Code fills the chips' menus and what each shows. -->
             <Panel id="hud-top-start" class="hud-zone hud-top-start">
                 <Panel class="hud-bar">
                     <ToolMenuButton id="chip-projection" class="hud-chip" text="Perspective" tooltip="Projection and the axis views"/>
@@ -63,6 +64,16 @@
                     <Label id="hud-status-space" class="hud-dim"/>
                     <Label id="hud-status-snap" class="hud-dim"/>
                     <Label id="hud-status-selection" class="hud-dim"/>
+                </Panel>
+            </Panel>
+            <Panel class="hud-zone hud-bottom-end">
+                <Panel id="camera-preview" class="camera-preview">
+                    <Panel id="camera-preview-view" class="camera-preview-frame"/>
+                    <Panel class="camera-preview-foot">
+                        <Image id="camera-preview-icon" class="row-icon"/>
+                        <Label id="camera-preview-name" class="camera-preview-name"/>
+                        <Button id="camera-preview-pin" class="icon-button camera-preview-pin" icon="Editor/Icons/pin.svg" tooltip="Pin: keep showing this camera"/>
+                    </Panel>
                 </Panel>
             </Panel>
             <Panel id="scene-state" class="state-box failed scene-state">

@@ -46,6 +46,7 @@ export import :builtin_inspector_extras;
 export import :inspector;
 export import :scene_bar;
 export import :scene_hud;
+export import :scene_camera_preview;
 export import :scene_tools;
 export import :scene_viewport;
 export import :page;

@@ -48,6 +48,7 @@ target_sources(Editor.Scene
         SceneSettingsSourceImpl.cpp
         SettingsExtraSourcesImpl.cpp
         SceneHudImpl.cpp
+        SceneCameraPreviewImpl.cpp
         SceneToolsImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
@@ -90,6 +91,7 @@ target_sources(Editor.Scene
             InspectorView.cppm
             SceneBar.cppm
             SceneHud.cppm
+            SceneCameraPreview.cppm
             SceneTools.cppm
             SceneViewport.cppm
             ScenePage.cppm

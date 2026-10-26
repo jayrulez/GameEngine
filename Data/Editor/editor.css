@@ -283,6 +283,11 @@ treerowcontent.inactive { opacity: 0.45; }
                        background-size: cover; background-position: center; }
 .camera-preview-foot { flex-direction: row; align-items: center; column-gap: var(--space-s); padding: 3px 3px 1px;
                        font-size: var(--font-small); color: var(--hud-text); }
+.camera-preview-frame { border-radius: var(--radius-small); } /* the picture's holder; code sizes the picture to the camera's aspect */
+.camera-preview-name { flex-grow: 1; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }
+.camera-preview-foot > button.camera-preview-pin { width: 20px; height: 20px; }
+.camera-preview-foot > button.camera-preview-pin > icon { width: 14px; height: 14px; image-color: var(--hud-text-dim); }
+.camera-preview-foot > button.camera-preview-pin.checked > icon { image-color: var(--hud-text); }
 /* A tool's panel: one chrome for every tool (its name, help, close), under the view's menus. */
 .hud-panel { width: 240px; flex-direction: column; row-gap: var(--space-m); padding: var(--space-m);
              background-color: var(--surface-overlay); border: 1px solid var(--border-strong); border-radius: var(--radius);

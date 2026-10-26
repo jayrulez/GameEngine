@@ -172,6 +172,17 @@ namespace editor
             m_hud = MakeUnique<SceneHud>(Allocator(), Allocator(), Move(hud), [self](StringView id) { return self->Find<gui::Node>(id); });
         }
         if (m_editContext)
+            if (gui::Node* pane = Find<gui::Node>(u8"scene-viewport"))
+            {
+                // The camera preview at the HUD's bottom end: the selected or pinned camera's view.
+                SceneCameraPreview::Services preview;
+                preview.edit = m_editContext.Get();
+                preview.icons = m_services.icons;
+                preview.render = m_viewport->Renderer();
+                m_cameraPreview = MakeUnique<SceneCameraPreview>(Allocator(), Allocator(), preview, *pane);
+                m_cameraPreview->HostIn(m_services.gui);
+            }
+        if (m_editContext)
         {
             // The viewport tools on the bar, and the active one's panel over the view.
             SceneTools::Services tools;
@@ -307,6 +318,8 @@ namespace editor
             m_tools->Sync();
         if (m_hud)
             m_hud->Update(dt, m_viewport->View().RenderHeight());
+        if (m_cameraPreview)
+            m_cameraPreview->Update();
         if (m_hierarchy)
             m_hierarchy->Refresh(); // the scene changed: built again
         if (m_inspector)
@@ -370,8 +383,11 @@ namespace editor
 
     void SceneEditorPage::OnRenderWindow(runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        if (m_scene != nullptr)
-            m_viewport->Render(frame, *m_scene, &m_postOverride, m_viewport->CleanCaptureFrame() ? nullptr : &m_debugView);
+        if (m_scene == nullptr)
+            return;
+        m_viewport->Render(frame, *m_scene, &m_postOverride, m_viewport->CleanCaptureFrame() ? nullptr : &m_debugView);
+        if (m_cameraPreview)
+            m_cameraPreview->Render(frame);
     }
 
     void SceneEditorPage::OnAfterSceneRender(runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame)
@@ -400,6 +416,7 @@ namespace editor
     void SceneEditorPage::OnClose()
     {
         m_entityPicker.Reset(); // it lets the scene's tree go before the scene does
+        m_cameraPreview.Reset(); // its picture's targets go with the viewports, before the scene
         m_inspector.Reset(); // the grid lets its sources go before the scene does
         m_hierarchy.Reset(); // it lets the selection and the tree go before the scene does
         // Where the scene was left: the camera, the selection, the panes, for the next open.

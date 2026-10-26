@@ -54,6 +54,7 @@ import :inspector;
 import :entity_picker_window;
 import :scene_bar;
 import :scene_hud;
+import :scene_camera_preview;
 import :scene_tools;
 
 using namespace foundation::core;
@@ -133,6 +134,7 @@ export namespace editor
         [[nodiscard]] SceneOverlaySettings& Overlays() noexcept { return m_overlays.settings; }
         [[nodiscard]] SceneBar* Bar() const noexcept { return m_bar.Get(); }
         [[nodiscard]] SceneHud* Hud() const noexcept { return m_hud.Get(); }
+        [[nodiscard]] SceneCameraPreview* CameraPreview() const noexcept { return m_cameraPreview.Get(); }
         [[nodiscard]] SceneTools* ToolsView() const noexcept { return m_tools.Get(); }
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
@@ -185,6 +187,7 @@ export namespace editor
         RefPtr<foundation::gui::Node> m_content;
         UniquePtr<SceneBar> m_bar;
         UniquePtr<SceneHud> m_hud; // over the viewport
+        UniquePtr<SceneCameraPreview> m_cameraPreview; // the HUD's bottom end: what a camera sees
         UniquePtr<SceneTools> m_tools; // the viewport tools on the bar, the active one's panel
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once it settled

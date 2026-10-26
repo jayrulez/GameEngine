@@ -358,6 +358,8 @@ export namespace sandbox
             // The input map page's two designs, to compare (the user, 2026-10-26).
             Register(u8"input-outline", u8"Input A: Outline", u8"Editor/Mock/input-outline.gml");
             Register(u8"input-split", u8"Input B: Tree and Grid", u8"Editor/Mock/input-split.gml");
+            Register(u8"input-split-set", u8"Input B: Set Chosen", u8"Editor/Mock/input-split-set.gml");
+            Register(u8"input-split-set-open", u8"Input B: Set, Actions Open", u8"Editor/Mock/input-split-set-open.gml");
             Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.gml");
             Register(u8"console", u8"Console", u8"Editor/Mock/console.gml");
             Said(m_dock->Adopt(DefaultLayout(false)));
@@ -386,6 +388,8 @@ export namespace sandbox
             Said(layout.InsertTab(u8"kit", central));
             Said(layout.InsertTab(u8"input-outline", central));
             Said(layout.InsertTab(u8"input-split", central));
+            Said(layout.InsertTab(u8"input-split-set", central));
+            Said(layout.InsertTab(u8"input-split-set-open", central));
             Said(layout.Activate(u8"scene"));
             Said(layout.InsertBeside(u8"assets", central, gui::DockSide::Bottom, 0.28f));
             Said(layout.InsertTab(u8"console", layout.StackOf(u8"assets")));

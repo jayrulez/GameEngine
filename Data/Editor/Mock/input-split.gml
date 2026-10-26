@@ -1,9 +1,11 @@
 <!--
   The input map page, design B: a tree beside the grid (as the bus layout page). The sets and their
-  actions a tree on the left (each action's kind beside its name), its bar adding a set or an action
-  and removing the chosen one; the chosen one's rows on the right: an action's name, kind and
-  interaction, its bindings as the grid's list (each binding a group: its source and the key
-  capture, then its settings), then its processing; a set's name and priority. A binding is
+  actions a tree on the left (each action's kind beside its name), its bar adding a set and removing
+  the chosen one; the chosen one's rows on the right: an action's name, kind and interaction, its
+  bindings as the grid's list (each binding a group: its source and the key capture, then its
+  settings), then its processing; a set's name and priority, then its actions as the grid's list,
+  where an action is added to that set (input-split-set.gml: no add on the tree's bar guessing which
+  set, the user 2026-10-26). A binding is
   captured by pressing the input on its key capture. The same map as design A's
   (input-outline.gml), to compare.
 -->
@@ -23,7 +25,6 @@
         <Panel class="panel page-pane input-pane">
             <Panel class="panel-toolbar">
                 <ToolButton icon="Editor/Icons/plus.svg" text="Set" shows-text="true" tooltip="Add a set"/>
-                <ToolButton icon="Editor/Icons/plus.svg" text="Action" shows-text="true" tooltip="Add an action to the chosen set"/>
                 <ToolButton icon="Editor/Icons/trash.svg" tooltip="Remove the chosen set or action"/>
                 <Spacer/>
             </Panel>

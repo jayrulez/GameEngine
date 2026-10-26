@@ -45,3 +45,11 @@
 .input-source { min-width: 120px; color: var(--text-strong); }
 .input-page .input-search { flex-grow: 0; width: 280px; }
 .input-page .search-row { padding: var(--space-s); }
+/* An expanded action's rows (input-split-set-open.gml): each level's names start past its parent's
+   name (a list element's grip and arrow come before its name), on a faint band, so the block reads
+   as the action's. */
+.input-nested { background-color: var(--ghost-hover); }
+.input-l1 { padding-left: 69px; }
+.input-l2 { padding-left: 93px; }
+.input-l3 { padding-left: 141px; }
+.input-summary { margin-left: var(--space-m); }

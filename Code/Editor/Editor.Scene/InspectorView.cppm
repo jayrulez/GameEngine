@@ -47,19 +47,6 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    /// The engine's XmlSerializer as a reflected source's text format: what an edit's before and
-    /// after are written in, and an undo reads back.
-    class XmlPropertyTextFormat final : public foundation::gui::IPropertyTextFormat
-    {
-    public:
-        explicit XmlPropertyTextFormat(IAllocator& allocator) : m_allocator(allocator) {}
-        String Write(Function<void(ISerializer&)> write) override;
-        bool Read(StringView text, Function<void(ISerializer&)> read) override;
-
-    private:
-        IAllocator& m_allocator;
-    };
-
     class SceneInspectorView
     {
     public:
@@ -169,7 +156,7 @@ export namespace editor
         foundation::gui::PropertyGrid* m_grid = nullptr;
         app::PropertySections m_sections;
         EntityRefEditor::Services m_entityRefs; // what the entity slots ask (the grid's registry holds it)
-        XmlPropertyTextFormat m_format;
+        app::XmlPropertyTextFormat m_format;
         // The selection it shows, in order.
         Array<Guid> m_entities;
         // Active: a value per entity.

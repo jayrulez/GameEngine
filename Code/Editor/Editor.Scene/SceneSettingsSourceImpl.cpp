@@ -14,6 +14,7 @@ import foundation.scene;
 import foundation.gui;
 import foundation.gui.toolkit;
 import editor.core;
+import editor.app; // ReflectedEditCommand
 import :edit;
 import :scene_settings_source;
 
@@ -33,41 +34,6 @@ namespace editor
             return String(path);
         }
 
-        // A settings edit as the reflected source told it, restored by its text on the values it
-        // landed in, found again (nil profile: the scene's block).
-        class SettingsEditCommand final : public IEditorCommand
-        {
-        public:
-            SettingsEditCommand(SceneEditContext& edit, const TypeInfo& type, const Guid& profile, gui::ReflectedChange change, gui::IPropertyTextFormat& format)
-                : m_edit(&edit), m_type(&type), m_profile(profile), m_change(Move(change)), m_format(&format)
-            {
-            }
-            [[nodiscard]] bool Execute() override { return Restore(false); }
-            void Undo() override { (void)Restore(true); }
-            [[nodiscard]] StringView TypeId() const override { return u8"inspector_settings"; }
-
-        private:
-            bool Restore(bool before)
-            {
-                void* values = m_edit->SettingsEditTarget(m_type, m_profile);
-                if (values == nullptr)
-                    return false;
-                gui::ReflectedPropertySource source(EditorRootAllocator());
-                source.SetTextFormat(m_format);
-                const Instance object(values, m_type);
-                source.SetObjects(Span<const Instance>(&object, 1u));
-                const bool ok = source.Restore(m_change, before);
-                m_edit->ResolveSettingsResources(m_type); // a reference's id written: bound to what it names
-                m_edit->NoteSettingsProfileEdited(m_type, m_profile); // nil: nothing to note
-                return ok;
-            }
-
-            SceneEditContext* m_edit;
-            const TypeInfo* m_type;
-            Guid m_profile;
-            gui::ReflectedChange m_change;
-            gui::IPropertyTextFormat* m_format;
-        };
     }
 
     // What either reflected source tells reaches this one's client.
@@ -149,8 +115,17 @@ namespace editor
     void SceneSettingsSource::Changed(const Guid& profile, const gui::ReflectedChange& change)
     {
         // The source wrote it already; the command keeps it and puts it back on undo.
+        SceneEditContext* edit = m_edit;
+        const TypeInfo* type = m_type;
         (void)m_edit->Commands().Execute(UniquePtr<IEditorCommand>(
-            EditorRootAllocator().New<SettingsEditCommand>(*m_edit, *m_type, profile, change, *m_format), EditorRootAllocator()));
+            EditorRootAllocator().New<app::ReflectedEditCommand>(
+                *m_type, [edit, type, profile]() { return edit->SettingsEditTarget(type, profile); }, change, *m_format, u8"inspector_settings",
+                [edit, type, profile]()
+                {
+                    edit->ResolveSettingsResources(type);           // a reference's id written: bound to what it names
+                    edit->NoteSettingsProfileEdited(type, profile); // nil: nothing to note
+                }),
+            EditorRootAllocator()));
     }
 
     void SceneSettingsSource::GetProperties(StringView parent, Array<gui::PropertyInfo>& out) const

@@ -62,6 +62,7 @@ import editor.play; // RegisterPlayInEditor, the game-audio preference
 import editor.spline; // RegisterSplineViewportTools
 import editor.terrain; // RegisterTerrainSceneTools
 import editor.vegetation; // RegisterVegetationViewportTools, RegisterVegetationToolPanels
+import editor.generic; // RegisterGenericAssetEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -293,6 +294,9 @@ int main(int argc, char** argv)
         editor::RegisterVegetationViewportTools(); // paint vegetation, paint props
         editor::RegisterVegetationToolPanels();
         editor::RegisterSplineViewportTools(); // the spline control-point editor
+        // The fallback page for an asset with no page of its own (X6, layer 1); the bespoke ones
+        // win by their type.
+        editor::RegisterGenericAssetEditor(app.Context(), app);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too). The script page and its "New Asset > <Lang> Script" creators come
         // back with the Script page's port.

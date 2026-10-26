@@ -30,6 +30,7 @@ target_link_libraries(Tools.Editor PRIVATE
     Editor::Spline # the scene view's spline tool
     Editor::Terrain # the scene view's terrain brushes
     Editor::Vegetation # and the vegetation's
+    Editor::Generic # the fallback asset page
     Pipeline::Core Pipeline::Cook
     Pipeline::Registration # the composition root: every builder/importer/type registration
     Foundation::Resource Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Texture.Resource

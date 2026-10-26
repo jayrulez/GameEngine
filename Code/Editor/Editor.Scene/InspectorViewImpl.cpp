@@ -11,8 +11,6 @@ module;
 module editor.scene;
 
 import foundation.core;
-import foundation.xml;
-import foundation.xml.serialization;
 import foundation.scene;
 import foundation.scene.resource;
 import foundation.gui;
@@ -32,24 +30,6 @@ namespace scene = foundation::scene;
 
 namespace editor
 {
-    String XmlPropertyTextFormat::Write(Function<void(ISerializer&)> write)
-    {
-        foundation::xml::XmlSerializer ar(m_allocator);
-        write(ar);
-        String text;
-        ar.GetOutput(text);
-        return ar.IsOk() ? text : String{};
-    }
-    bool XmlPropertyTextFormat::Read(StringView text, Function<void(ISerializer&)> read)
-    {
-        foundation::xml::XmlDocument doc(m_allocator);
-        if (doc.Parse(text) != foundation::xml::XmlResult::Ok)
-            return false;
-        foundation::xml::XmlSerializer ar(doc);
-        read(ar);
-        return ar.IsOk();
-    }
-
     namespace
     {
         constexpr StringView kActiveKey = u8"e";

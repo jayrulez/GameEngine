@@ -37,6 +37,7 @@ target_sources(Editor.App
             PageActionBar.cppm
             PropertySections.cppm
             PropertyExtras.cppm
+            AssetPage.cppm
             EditorStatusBar.cppm
             EditorWindow.cppm
             EditorDock.cppm

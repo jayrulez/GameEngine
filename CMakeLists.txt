@@ -626,6 +626,7 @@ if(OPTION_BUILD_TOOLS)
 
     add_subdirectory(Code/Editor/Editor.Scene) # scene editor plugin; on the GUI in parts (the spec's 5.3): its UI-free half so far
     add_subdirectory(Code/Editor/Editor.Play) # play in editor; on the GUI in parts (the spec's 5.3, layer 7): its UI-free half so far
+    add_subdirectory(Code/Editor/Editor.Generic) # the fallback asset page, on the GUI (the spec's 5.4, layer 1)
     add_subdirectory(Code/Tools/Tools.Editor)        # Editor executable: the shell on the GUI, its pages coming back as they port
 
     add_subdirectory(Code/Tools/Tools.Cook)          # Tools.Cook CLI cooker (headless)

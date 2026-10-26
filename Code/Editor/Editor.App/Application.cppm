@@ -39,6 +39,7 @@ import :preferences_dialog;
 import :picker;
 import :group_picker_dialog;
 import :resource_ref_editor;
+import :asset_page;
 import :settings_dialog;
 import :templates_dialog;
 import :export_dialog;
@@ -140,6 +141,17 @@ export namespace editor::app
         {
             (void)RefServices();
             return *m_typeIcons;
+        }
+        /// What an asset page asks of the editor when it is made: its markup, the asset slots'
+        /// table, the type icons.
+        [[nodiscard]] AssetPageServices PageServices()
+        {
+            AssetPageServices services;
+            EditorWindow* window = &m_window;
+            services.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
+            services.refs = &RefServices();
+            services.icons = &TypeIcons();
+            return services;
         }
         [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }
         [[nodiscard]] EditorPages& Pages() noexcept { return *m_pages; }

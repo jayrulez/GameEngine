@@ -240,7 +240,8 @@ to follow the same order.
 | Editor.Preview | In the build in parts: the thumbnail stage (owned by the editor session per project, staged and rendered by the application, the scene editor's generators registered again); the preview viewport out until the asset pages | X5 (layer 2) |
 | Editor.Play | In the build, on the GUI: the resolutions a Game tab offers, the PIE instance seam, the PIE MCP tools; the Game tab from its markup on GUI.Viewport (the kit's transport, the resolution and the phone, the script debugger beside the game), registered by Tools.Editor; several instances side by side (the Game menu's Play and Play New Instance, the layout tools) and the PIE MCP tools on it | X5 (layer 7, parts 2 to 4) |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
-| Editor.Generic, Texture, Fonts, Image, Heightfield, Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain | Parked | |
+| Editor.Generic | In the build, on the GUI: the fallback asset page, its serialize-scanned fields a property bag on the grid (an array's fields a folded group, a guid one asset reference, a blob its size), from its markup; on Editor.App's shared asset page parts (the services a page asks for, the XML text format and the reflected edit's undo step, the scene's inspector on them too) | X6 (layer 1) |
+| Editor.Texture, Fonts, Image, Heightfield, Render, Audio, Materials, Geometry, Physics, Input; the Terrain and Vegetation pages | Parked | |
 | Editor.Script, Editor.Script.AngelScript, Editor.Script.Luau, Editor.Shaders, Editor.GUI | Parked | |
 | Editor.GameUI | Left with the old editor (ruling): never ported, deleted at the swap | |
 

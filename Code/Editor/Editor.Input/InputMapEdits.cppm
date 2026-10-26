@@ -135,6 +135,23 @@ export namespace editor
             return u8"?";
         }
 
+        /// When an action fires, as the page names it (the old page's words).
+        [[nodiscard]] inline StringView InteractionTitle(input::InteractionKind kind)
+        {
+            switch (kind)
+            {
+            case input::InteractionKind::None:
+                return u8"On press";
+            case input::InteractionKind::Hold:
+                return u8"Hold";
+            case input::InteractionKind::Tap:
+                return u8"Tap";
+            case input::InteractionKind::DoubleTap:
+                return u8"Double tap";
+            }
+            return u8"?";
+        }
+
         /// What a listen for an action of `kind` captures: a Button rebind ignores stick
         /// noise, an Axis2D rebind captures sticks only; one Composite2D DIRECTION is always a
         /// single key.

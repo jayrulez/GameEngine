@@ -59,12 +59,13 @@ namespace editor
                                           });
         }
 
-        // The capture's questions, answered by the page.
+        // The capture's questions, answered by the page. The editor asks by the grid's path, the
+        // set's section's ("set/actions.0.bindings.0.code"): the page's are the set's own.
         m_capture.describe = [self](StringView path) -> String
         {
             usize action = 0, binding = 0;
             i32 direction = -1;
-            if (!self->BindingOf(path, action, binding, direction))
+            if (!self->BindingOf(SetPath(path), action, binding, direction))
                 return String{};
             const input::Binding& b = self->Map()->sets[static_cast<usize>(self->m_set)].actions[action].bindings[binding];
             if (direction < 0)
@@ -72,8 +73,8 @@ namespace editor
             const u32 codes[] = {b.negX, b.posX, b.negY, b.posY};
             return codes[direction] != 0 ? String(input::KeyName(codes[direction])) : String(u8"Not set");
         };
-        m_capture.toggle = [self](StringView path) { self->ToggleListen(path); };
-        m_capture.listening = [self](StringView path) { return self->m_listenPath.AsView() == path; };
+        m_capture.toggle = [self](StringView path) { self->ToggleListen(SetPath(path)); };
+        m_capture.listening = [self](StringView path) { return !self->m_listenPath.IsEmpty() && self->m_listenPath.AsView() == SetPath(path); };
         m_capture.cancel = [self]() { self->StopListen(); };
         if (Grid() != nullptr)
             InputCaptureEditor::Register(Grid()->GetEditors(), m_capture);
@@ -108,10 +109,17 @@ namespace editor
                                           }),
                                       EditorRootAllocator()));
                               });
-        AddSection(u8"set", u8"Set", *m_values);
+        AddSection(kSetSection, u8"Set", *m_values);
         const input::InputMap* map = Map();
         ChooseSet(map != nullptr && !map->sets.IsEmpty() ? 0 : -1);
         ShowValidity();
+    }
+
+    StringView InputMapEditorPage::SetPath(StringView gridPath)
+    {
+        const usize skip = kSetSection.Size() + 1; // "set/"
+        return gridPath.StartsWith(kSetSection) && gridPath.Size() >= skip && gridPath[skip - 1] == u8'/' ? gridPath.SubStr(skip, gridPath.Size() - skip)
+                                                                                                         : gridPath;
     }
 
     InputMapEditorPage::~InputMapEditorPage()
@@ -175,8 +183,8 @@ namespace editor
         // Opened in place: its list, then it, brought into view.
         if (gui::PropertyGrid* grid = Grid())
         {
-            grid->SetOpen(u8"actions", true);
-            const String path = Format(u8"actions.{}", action);
+            grid->SetOpen(Sections().PathIn(kSetSection, u8"actions").AsView(), true);
+            const String path = Sections().PathIn(kSetSection, Format(u8"actions.{}", action).AsView());
             grid->SetOpen(path.AsView(), true);
             const i32 row = grid->FindRow(path.AsView());
             if (row >= 0)
@@ -342,7 +350,7 @@ namespace editor
         // What the action's kind takes (one key for a four-key binding's direction).
         m_listenFilter = input_map_edit::FilterFor(Map()->sets[static_cast<usize>(m_set)].actions[action].kind, direction >= 0);
         Context().SetStatus(u8"Listening: press the input to bind (click its button again to stop)");
-        m_values->Refresh(); // the row says it listens
+        // The row's editor shows that it listens itself (a refresh here could take its focus).
     }
 
     void InputMapEditorPage::StopListen()
@@ -350,8 +358,9 @@ namespace editor
         if (m_listenPath.IsEmpty())
             return;
         m_listenPath.Clear();
-        if (m_values)
-            m_values->Refresh();
+        // A values' refresh: the rows stay, their editors shown again (the one that listened too).
+        if (Grid() != nullptr)
+            Grid()->OnValuesChanged();
     }
 
     void InputMapEditorPage::LandCapture(const input::Binding& captured)

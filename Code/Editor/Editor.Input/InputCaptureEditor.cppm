@@ -69,8 +69,18 @@ export namespace editor
     protected:
         void OnBind(const gui::PropertyInfo&, const gui::PropertyValue& value) override
         {
+            m_mixed = value.Mixed;
+            Show();
+        }
+
+    private:
+        // The button as the listen stands: it says so and takes every key while it listens. The
+        // editor shows itself when it starts or stops one, not the grid: a refresh of the rows
+        // could take its focus, and its focus leaving stops the listen.
+        void Show()
+        {
             const bool listening = IsListening();
-            m_button->SetText(listening ? kListening : (value.Mixed ? gui::MixedValueText() : Described().AsView()));
+            m_button->SetText(listening ? kListening : (m_mixed ? gui::MixedValueText() : Described().AsView()));
             if (listening)
                 m_button->AddClass(u8"capturing");
             else
@@ -83,7 +93,6 @@ export namespace editor
             m_button->SetTooltip(listening ? StringView(u8"Press the input to bind (click again to stop)") : StringView(u8"Click, then press the input to bind"));
         }
 
-    private:
         // The button: its focus leaving stops a listen.
         class CaptureButton final : public gui::Button
         {
@@ -91,10 +100,21 @@ export namespace editor
             explicit CaptureButton(InputCaptureEditor& owner) : m_owner(&owner) {}
 
         protected:
+            // The press is the button's: the grid's row would take the focus on it, and the focus
+            // leaving would stop the listen before this click could.
+            void OnMouseDown(const gui::MouseEvent& event) override
+            {
+                if (event.Button == gui::MouseButton::Left)
+                    event.Handled = true;
+                gui::Button::OnMouseDown(event);
+            }
             void OnFocusLost() override
             {
                 if (m_owner->IsListening() && m_owner->m_services->cancel)
+                {
                     m_owner->m_services->cancel();
+                    m_owner->Show();
+                }
                 gui::Button::OnFocusLost();
             }
 
@@ -107,8 +127,10 @@ export namespace editor
         {
             if (m_services->toggle)
                 m_services->toggle(GetPath());
+            Show();
         }
 
+        bool m_mixed = false; // the objects' inputs differ
         InputCaptureServices m_none; // an editor RTTI made has no services: its own, empty
         const InputCaptureServices* m_services;
         RefPtr<CaptureButton> m_button;

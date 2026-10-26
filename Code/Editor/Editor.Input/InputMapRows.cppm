@@ -104,9 +104,15 @@ export namespace editor
                 info.Visible = false; // a chord's modifiers: not authored on this page
             else if (field == u8"device")
             {
+                // A choice, as the old page had it: Any, or a pad by its number from 1 (the device
+                // its index from 0, -1 for any).
                 info.DisplayName = String(u8"Gamepad");
-                info.Description = String(u8"Which connected gamepad: -1 for any, else its number from 0");
-                range(-1.0, 3.0, 1.0);
+                info.Description = String(u8"Which connected gamepad: any, or one by its number");
+                info.Kind = gui::PropertyKind::Enum;
+                info.Choices.Clear();
+                info.Choices.PushBack(gui::PropertyChoice{String(u8"Any"), -1});
+                for (i64 pad = 0; pad < 4; ++pad)
+                    info.Choices.PushBack(gui::PropertyChoice{Format(u8"{}", pad + 1), pad});
                 info.Visible = gamepad;
             }
             else if (field == u8"deadZone")
@@ -145,9 +151,50 @@ export namespace editor
             else if (field == u8"stickRadius")
             {
                 info.DisplayName = String(u8"Radius");
-                info.Description = String(u8"How far the stick reaches, a fraction of the screen");
-                range(0.0, 1.0, 0.01);
+                info.Description = String(u8"How far the stick reaches, in pixels");
+                range(0.0, 1000.0, 1.0);
                 info.Visible = source == Source::TouchStick;
+            }
+        }
+    }
+
+    namespace input_map_rows
+    {
+        // An action's processing, named and bounded as the old page had it.
+        inline void DescribeProcessorField(StringView field, gui::PropertyInfo& info)
+        {
+            const auto range = [&info](f64 min, f64 max, f64 step)
+            {
+                info.HasRange = true;
+                info.Min = min;
+                info.Max = max;
+                info.Step = step;
+            };
+            if (field == u8"sensitivity")
+            {
+                info.Description = String(u8"Above 0, a key-driven axis ramps toward its value at this rate a second");
+                range(0.0, 100.0, 0.05);
+            }
+            else if (field == u8"gravity")
+            {
+                info.Description = String(u8"Above 0, the rate a second it returns to rest once released");
+                range(0.0, 100.0, 0.05);
+            }
+            else if (field == u8"responseExponent")
+            {
+                info.DisplayName = String(u8"Curve");
+                info.Description = String(u8"Shapes an analog input: the value to this power (1 is straight)");
+                range(0.1, 5.0, 0.05);
+            }
+            else if (field == u8"snap")
+            {
+                info.DisplayName = String(u8"Snap on Reverse");
+                info.Description = String(u8"Jump to zero first when the direction flips");
+            }
+            else if (field == u8"timeScale")
+            {
+                info.DisplayName = String(u8"Scale with Time");
+                info.Description = String(u8"Multiply by the game's time scale, once there is one");
             }
         }
     }
@@ -155,6 +202,11 @@ export namespace editor
     /// What the page's grid says of `set`'s row `path` (the reflected source over the set), in `info`.
     inline void DescribeInputRow(const input::ActionSet& set, StringView path, gui::PropertyInfo& info)
     {
+        if (path == u8"priority")
+        {
+            info.Description = String(u8"When two active sets bind the same input, the higher priority takes it");
+            return;
+        }
         if (path == u8"actions")
         {
             info.DisplayName = String(u8"Actions");
@@ -175,6 +227,7 @@ export namespace editor
         }
         if (rest == u8"kind")
         {
+            info.Description = String(u8"What the action reports: pressed or not, one axis, or two");
             for (gui::PropertyChoice& choice : info.Choices)
                 choice.Name = String(input_map_edit::KindTitle(static_cast<input::ActionKind>(choice.Value)));
             return;
@@ -185,14 +238,48 @@ export namespace editor
             info.Summary = Format(u8"Sensitivity {}{}", FormatFixed(action.processors.sensitivity, 2), action.processors.snap ? StringView(u8", snaps on reverse") : StringView{});
             return;
         }
+        // When it fires: as soon as pressed, after a hold, on a quick tap or on two (the old page's
+        // words); closed, the choice and its time in a line.
+        if (rest == u8"interaction")
+        {
+            info.DisplayName = String(u8"When It Fires");
+            info.Description = String(u8"As soon as pressed, after a hold, on a quick tap, or on two");
+            info.Summary = action.interaction.kind == input::InteractionKind::None
+                               ? String(input_map_edit::InteractionTitle(action.interaction.kind))
+                               : Format(u8"{} {} {}s", input_map_edit::InteractionTitle(action.interaction.kind),
+                                        action.interaction.kind == input::InteractionKind::Hold ? StringView(u8"for") : StringView(u8"within"),
+                                        FormatFixed(action.interaction.seconds, 2));
+            return;
+        }
+        if (rest == u8"interaction.kind")
+        {
+            info.DisplayName = String(u8"Fires");
+            for (gui::PropertyChoice& choice : info.Choices)
+                choice.Name = String(input_map_edit::InteractionTitle(static_cast<input::InteractionKind>(choice.Value)));
+            return;
+        }
         if (rest == u8"interaction.seconds")
         {
+            // Hold: held for this long; a tap: released, or pressed again, within it.
+            info.DisplayName = String(action.interaction.kind == input::InteractionKind::Hold ? StringView(u8"Hold For") : StringView(u8"Within"));
+            info.Description = String(u8"Seconds");
+            info.HasRange = true;
+            info.Min = 0.0;
+            info.Max = 10.0;
+            info.Step = 0.05;
             info.Visible = action.interaction.kind != input::InteractionKind::None;
             return;
         }
         if (rest == u8"bindings")
         {
             info.DisplayName = String(u8"Bindings");
+            info.Description = String(u8"The inputs that drive it; Add binds another");
+            return;
+        }
+        const StringView processors = u8"processors.";
+        if (rest.StartsWith(processors))
+        {
+            input_map_rows::DescribeProcessorField(rest.SubStr(processors.Size(), rest.Size() - processors.Size()), info);
             return;
         }
         StringView field;

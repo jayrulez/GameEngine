@@ -155,6 +155,38 @@ TEST_CASE("input map rows: an action by its name and a line, a binding by its so
     CHECK_FALSE(code.Visible);
     CHECK_FALSE(deadZone.Visible);
 
+    // When it fires, in the old page's words: closed, the choice and its time; its seconds only
+    // for a hold or a tap, named by which.
+    gui::PropertyInfo fires, firesKind, seconds;
+    for (i64 v = 0; v < 4; ++v)
+        firesKind.Choices.PushBack(gui::PropertyChoice{String(u8"raw"), v});
+    editor::DescribeInputRow(set, u8"actions.0.interaction", fires);
+    editor::DescribeInputRow(set, u8"actions.0.interaction.kind", firesKind);
+    editor::DescribeInputRow(set, u8"actions.0.interaction.seconds", seconds);
+    CHECK(fires.DisplayName == StringView(u8"When It Fires"));
+    CHECK(fires.Summary == StringView(u8"On press"));
+    CHECK(firesKind.Choices[0].Name == StringView(u8"On press"));
+    CHECK(firesKind.Choices[3].Name == StringView(u8"Double tap"));
+    CHECK_FALSE(seconds.Visible);
+    set.actions[0].interaction.kind = input::InteractionKind::Hold;
+    set.actions[0].interaction.seconds = 0.5f;
+    fires = {};
+    seconds = {};
+    editor::DescribeInputRow(set, u8"actions.0.interaction", fires);
+    editor::DescribeInputRow(set, u8"actions.0.interaction.seconds", seconds);
+    CHECK(fires.Summary == StringView(u8"Hold for 0.50s"));
+    CHECK(seconds.Visible);
+    CHECK(seconds.DisplayName == StringView(u8"Hold For"));
+
+    // Processing in the old page's words and bounds.
+    gui::PropertyInfo curve, snap;
+    editor::DescribeInputRow(set, u8"actions.0.processors.responseExponent", curve);
+    editor::DescribeInputRow(set, u8"actions.0.processors.snap", snap);
+    CHECK(curve.DisplayName == StringView(u8"Curve"));
+    CHECK(curve.Min == doctest::Approx(0.1));
+    CHECK(curve.Max == doctest::Approx(5.0));
+    CHECK(snap.DisplayName == StringView(u8"Snap on Reverse"));
+
     // The sources offered: only what the action's kind takes.
     gui::PropertyInfo source;
     for (i64 v = 0; v < 16; ++v)
@@ -273,9 +305,14 @@ TEST_CASE("input map page: the sets and their actions a tree, the chosen set's r
     f.page->ChooseAction(1, 0);
     CHECK(f.page->ChosenSet() == 1);
     CHECK(f.page->SetRows().GetValue(u8"name", 0).AsString() == StringView(u8"Menu"));
-    REQUIRE(f.page->Grid() != nullptr);
-    CHECK(f.page->Grid()->IsOpen(u8"actions"));
-    CHECK(f.page->Grid()->IsOpen(u8"actions.0"));
+    // The grid's own rows, by its paths (the set's section's: "set/..."): open, the action's
+    // bindings listed under it.
+    gui::PropertyGrid* grid = f.page->Grid();
+    REQUIRE(grid != nullptr);
+    CHECK(grid->IsOpen(u8"set/actions"));
+    CHECK(grid->IsOpen(u8"set/actions.0"));
+    CHECK(grid->FindRow(u8"set/actions.0") >= 0);
+    CHECK(grid->FindRow(u8"set/actions.0.bindings") >= 0);
 
     // The search keeps the actions whose name or input matches, and their sets.
     f.page->Search(u8"jump");
@@ -314,10 +351,19 @@ TEST_CASE("input map page: a binding's input listened for and landed as one undo
 {
     PageFixture f;
     const editor::InputCaptureServices& capture = f.page->CaptureServices();
+    // The editor asks by the grid's paths. What the input's button says: Jump's key, and a four-key
+    // binding's keys one at a time.
+    CHECK(capture.describe(u8"set/actions.1.bindings.0.code") == input::DescribeBinding(f.Map().sets[0].actions[1].bindings[0]));
+    CHECK_FALSE(capture.describe(u8"set/actions.1.bindings.0.code").IsEmpty());
+    f.Map().sets[0].actions[0].bindings[0].posY = 'W';
+    CHECK(capture.describe(u8"set/actions.0.bindings.0.posY") == input::KeyName('W'));
+    CHECK(capture.describe(u8"set/actions.0.bindings.0.negX") == StringView(u8"Not set"));
+    f.Map().sets[0].actions[0].bindings[0].posY = 0;
     // Jump's key.
-    capture.toggle(u8"actions.1.bindings.0.code");
+    capture.toggle(u8"set/actions.1.bindings.0.code");
     CHECK(f.page->IsListening());
-    CHECK(capture.listening(u8"actions.1.bindings.0.code"));
+    CHECK(capture.listening(u8"set/actions.1.bindings.0.code"));
+    CHECK_FALSE(capture.listening(u8"set/actions.0.bindings.0.code"));
     input::Binding captured;
     captured.source = input::BindingSource::MouseButton;
     captured.code = 3;
@@ -327,7 +373,7 @@ TEST_CASE("input map page: a binding's input listened for and landed as one undo
     CHECK(f.Map().sets[0].actions[1].bindings[0].code == 3u);
 
     // Move's four keys: Up only.
-    capture.toggle(u8"actions.0.bindings.0.posY");
+    capture.toggle(u8"set/actions.0.bindings.0.posY");
     input::Binding key;
     key.code = 42;
     f.page->LandCapture(key);
@@ -335,16 +381,45 @@ TEST_CASE("input map page: a binding's input listened for and landed as one undo
     CHECK(f.Map().sets[0].actions[0].bindings[0].source == input::BindingSource::Composite2D);
 
     // Toggled twice: stops; a path naming no binding: never listens.
-    capture.toggle(u8"actions.1.bindings.0.code");
-    capture.toggle(u8"actions.1.bindings.0.code");
+    capture.toggle(u8"set/actions.1.bindings.0.code");
+    capture.toggle(u8"set/actions.1.bindings.0.code");
     CHECK_FALSE(f.page->IsListening());
-    capture.toggle(u8"actions.9.bindings.0.code");
+    capture.toggle(u8"set/actions.9.bindings.0.code");
     CHECK_FALSE(f.page->IsListening());
 
     f.page->Commands().Undo();
     f.page->Commands().Undo();
     CHECK(f.Map().sets[0].actions[1].bindings[0].source == input::BindingSource::Key);
     CHECK(f.Map().sets[0].actions[0].bindings[0].posY == 0u);
+}
+
+TEST_CASE("input map page: a binding's gamepad is a choice, Any or a pad by its number, as the old page had it")
+{
+    input::ActionSet set;
+    input::Action fire;
+    fire.name = String(u8"Fire");
+    input::Binding pad;
+    pad.source = input::BindingSource::GamepadButton;
+    fire.bindings.PushBack(pad);
+    set.actions.PushBack(fire);
+    gui::PropertyInfo device;
+    editor::DescribeInputRow(set, u8"actions.0.bindings.0.device", device);
+    CHECK(device.Visible);
+    CHECK(device.Kind == gui::PropertyKind::Enum);
+    REQUIRE(device.Choices.Size() == 5u);
+    CHECK(device.Choices[0].Name == StringView(u8"Any"));
+    CHECK(device.Choices[0].Value == -1);
+    CHECK(device.Choices[1].Name == StringView(u8"1"));
+    CHECK(device.Choices[1].Value == 0);
+
+    // Chosen through the grid's rows: the binding's device its index.
+    PageFixture f;
+    f.page->ChooseAction(1, 0); // Menu's Back
+    f.Map().sets[1].actions[0].bindings[0].source = input::BindingSource::GamepadButton;
+    f.Edit(u8"actions.0.bindings.0.device", gui::Variant(i64{2}));
+    CHECK(f.Map().sets[1].actions[0].bindings[0].device == 2);
+    f.Edit(u8"actions.0.bindings.0.device", gui::Variant(i64{-1}));
+    CHECK(f.Map().sets[1].actions[0].bindings[0].device == -1);
 }
 
 TEST_CASE("input map page: a map the game cannot read says so, and Save refuses it")

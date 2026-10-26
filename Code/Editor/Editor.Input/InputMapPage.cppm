@@ -45,6 +45,10 @@ export namespace editor
     {
     public:
         static constexpr StringView kPath = u8"Editor/InputMapPage.gml";
+        /// The grid's section the chosen set's rows are in: its paths are "set/" and the set's own.
+        static constexpr StringView kSetSection = u8"set";
+        /// The set's own path of a grid row's ("set/actions.0" is "actions.0").
+        [[nodiscard]] static StringView SetPath(StringView gridPath);
 
         InputMapEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~InputMapEditorPage() override;

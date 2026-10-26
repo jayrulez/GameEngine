@@ -101,6 +101,11 @@
   a custom shader that moves its vertices or cuts out, on any slot but the first, casts and
   occludes as if it did neither. Wanted: per-submesh depth draws where a slot's material has its
   own depth program, wind, or a cutout.
+- **Pausing a run from the Game tab stops its clock too** (user 2026-10-26, playing Sky Hopper in the
+  editor): with the run paused from the Game tab's bar, the level clock on Sky Hopper's HUD keeps
+  counting. Not looked into yet: whether the clock's script reads time that a paused scene still
+  advances, or the HUD's canvas runs apart from the scene it shows. A paused run should hold every
+  clock a game reads.
 
 ### UI framework: gaps and bugs found by the UI survey (2026-10-14)
 

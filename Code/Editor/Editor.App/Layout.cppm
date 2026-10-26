@@ -276,6 +276,31 @@ export namespace editor::app
         return Status{};
     }
 
+    // The panels a restored layout names that nothing provides once the project's pages have
+    // reopened (a Game tab, which no project reopens; a page whose asset is gone) let go, docked or
+    // closed, so the dock shows no placeholder for them: as the old dock did, which skipped a saved
+    // panel it had none for.
+    inline void ForgetUnprovidedPanels(gui::DockController& dock)
+    {
+        gui::DockLayout layout = dock.GetLayout();
+        Array<String> gone;
+        for (const gui::DockNode& node : layout.Nodes())
+            if (node.IsStack())
+                for (const String& panel : node.Panels)
+                    if (dock.Describe(panel.AsView()) == nullptr)
+                        gone.PushBack(panel);
+        for (const String& panel : gone)
+            (void)layout.Close(panel.AsView());
+        for (const gui::DockHidden& hidden : layout.Hidden())
+            if (dock.Describe(hidden.Panel.AsView()) == nullptr)
+                gone.PushBack(hidden.Panel);
+        if (gone.IsEmpty())
+            return;
+        for (const String& panel : gone)
+            (void)layout.Forget(panel.AsView());
+        (void)dock.Adopt(Move(layout));
+    }
+
     inline void CaptureFavorites(editor::EditorContext& context,
                                  settings::Settings& store)
     {

@@ -186,3 +186,30 @@ TEST_CASE("layout store: the old tree's nested splits each split their own regio
     REQUIRE(down->Weights.Size() == 2u);
     CHECK(down->Weights[0] / (down->Weights[0] + down->Weights[1]) == doctest::Approx(0.7f).epsilon(0.01));
 }
+
+TEST_CASE("layout store: what a restored layout names and nothing provides (a Game tab) is let go, docked or closed")
+{
+    gui::DockController dock(DefaultAllocator());
+    Register(dock, u8"assets");
+    Register(dock, u8"game-page");
+    Register(dock, u8"game-page-1");
+    gui::DockLayout layout;
+    REQUIRE(layout.InsertTab(u8"assets", layout.CentralStack()).Ok());
+    REQUIRE(layout.InsertBeside(u8"game-page", layout.StackOf(u8"assets"), gui::DockSide::End, 0.5f).Ok());
+    REQUIRE(layout.InsertTab(u8"game-page-1", layout.StackOf(u8"game-page")).Ok());
+    REQUIRE(layout.Close(u8"game-page-1").Ok()); // a closed one is remembered as hidden
+    const gui::DockLayout saved = layout;
+
+    // The next session: the shared panels registered, no Game tab reopened.
+    gui::DockController restored(DefaultAllocator());
+    Register(restored, u8"assets");
+    REQUIRE(restored.Adopt(saved).Ok());
+    CHECK(restored.GetLayout().StackOf(u8"game-page") != gui::kNoDock); // a placeholder until let go
+    editor::app::ForgetUnprovidedPanels(restored);
+    const gui::DockLayout& kept = restored.GetLayout();
+    CHECK(kept.StackOf(u8"assets") != gui::kNoDock);
+    CHECK(kept.StackOf(u8"game-page") == gui::kNoDock);
+    CHECK(kept.FindHidden(u8"game-page") == nullptr);
+    CHECK(kept.FindHidden(u8"game-page-1") == nullptr);
+    CHECK(kept.CheckInvariants());
+}

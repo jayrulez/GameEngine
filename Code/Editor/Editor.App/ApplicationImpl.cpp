@@ -89,6 +89,9 @@ namespace editor::app
             { self->ReportStartup(Format(u8"Opening {}", name).AsView(), 0.72f + 0.26f * done); };
             if (store == nullptr || !self->m_pages->Restore(*store, progress))
                 self->OpenDefaultScene(project);
+            // What the layout names and nothing reopened (a Game tab, a page whose asset is gone)
+            // goes, rather than staying a placeholder.
+            ForgetUnprovidedPanels(self->m_dock.Controller());
             // The Project panel shows the project's page; its links open assets as the pages do.
             if (self->m_window.IsOpen())
             {

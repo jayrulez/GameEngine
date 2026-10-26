@@ -6,17 +6,18 @@
 // AssetObjectPage: what a page over one reflected asset does whatever its asset is
 // (Documentation/Specs/editor-gui.md, 5.4), so a page adds only what is its own (a picture, a
 // preview). It reads the asset when it opens; its markup (the page's) has the kit's bar, whose
-// `page-save`, `page-undo` and `page-redo` it binds to the actions over the page, a grid
-// (`page-grid`) and the state a page shows when its asset did not read (`page-state`, in place of
-// the grid), and names its asset's kind in `page-kind`. The grid holds the asset's reflected properties under its type's name and, under
-// "Source", what the page says of it as read-only rows (a file, a size), never as fields that do
-// nothing when typed into (the catalog's inconsistency 8). Every edit is one undo step on the
-// page's stack (ReflectedEditCommand), after which, and after its undo and redo, the page is told
+// `page-save`, `page-undo`, `page-redo`, `page-cook` and `page-rebuild` it binds to the actions
+// over the page, a grid (`page-grid`) and the state a page shows when its asset did not read
+// (`page-state`, in place of the grid), and names its asset's kind in `page-kind`. The grid holds
+// the asset's reflected properties under its type's name and, under "Source", what the page says
+// of it as read-only rows (a file, a size), never as fields that do nothing when typed into (the
+// catalog's inconsistency 8). Every edit is one undo step on the page's stack
+// (ReflectedEditCommand), after which, and after its undo and redo, the page is told
 // (OnObjectChanged) so its preview follows; an edit made by code (a preset) is one step too
 // (EditWhole), and so is an edit a page follows with more (FollowEdit: a texture's usage sets its
 // colour space). What a page warns of (a texture's data stored as sRGB) is a notice row over the
-// rest, shown while it has something to say (SetNotice). Save writes the asset and asks for a cook, so what
-// uses it takes the new one.
+// rest, shown while it has something to say (SetNotice). Save writes the asset and asks for a
+// cook, so what uses it takes the new one.
 
 module;
 #include "Core/Prelude.h"
@@ -113,6 +114,8 @@ export namespace editor::app
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-save"), u8"file.save");
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-undo"), u8"edit.undo");
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-redo"), u8"edit.redo");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"page-cook"), u8"build.cookPage");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"page-rebuild"), u8"build.rebuildPage");
             if (auto* kind = Find<gui::Label>(u8"page-kind"); kind != nullptr && m_object.Get() != nullptr)
                 kind->SetText(TypeAttrString(*m_object->GetType(), "displayName", StringView{}));
             if (gui::Node* state = Find<gui::Node>(u8"page-state"))

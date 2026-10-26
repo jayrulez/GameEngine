@@ -51,3 +51,63 @@ TEST_CASE("app actions: a menu registers what can run, with its keys; what needs
     CHECK(actions.Shortcut(u8"view.screenshot") == EditorShortcut::Of(u8"f12"));
     CHECK(actions.Find(u8"view.commandPalette") == nullptr);
 }
+
+namespace
+{
+    // A page that saves into a count, as a page writes its asset.
+    class CookedPage final : public EditorPage
+    {
+    public:
+        CookedPage() : EditorPage(DefaultAllocator()) {}
+        [[nodiscard]] StringView Title() const override { return u8"Crate"; }
+        [[nodiscard]] Status Save() override
+        {
+            ++saves;
+            ClearDirty();
+            return Status{};
+        }
+        void Edit() { MarkDirty(); }
+        void Show(const Guid& id) { SetInstanceId(id); }
+        int saves = 0;
+    };
+}
+
+TEST_CASE("app actions: an asset page's Cook and Rebuild, off with no project or no asset; each runs over the page it is given")
+{
+    EditorActionRegistry actions;
+    EditorContext context{DefaultAllocator()};
+    Array<String> ran;
+    app::BuildActions build;
+    build.context = &context;
+    build.cookAll = []() {};
+    build.rebuildAll = []() {};
+    build.cookPage = [&ran](EditorPage& page) { ran.PushBack(Format(u8"cook {}", page.Title())); };
+    build.rebuildPage = [&ran](EditorPage& page) { ran.PushBack(Format(u8"rebuild {}", page.Title())); };
+    app::RegisterBuildActions(actions, Move(build));
+    REQUIRE(actions.Find(u8"build.cookPage") != nullptr);
+    REQUIRE(actions.Find(u8"build.rebuildPage") != nullptr);
+    CHECK(actions.Find(u8"build.cookPage")->menuPath == StringView(u8"Build/Cook This Asset"));
+
+    CookedPage page;
+    CHECK_FALSE(actions.IsEnabled(u8"build.cookPage", &page));
+    CHECK(actions.DisabledReason(u8"build.cookPage", &page) == StringView(u8"Open a project first"));
+
+    const String dir(u8"scratch_app_actions_cook_project");
+    (void)RemoveDirectoryRecursive(dir.AsView());
+    REQUIRE(EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
+    UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir.AsView());
+    REQUIRE(static_cast<bool>(project));
+    context.SetProject(project.Get());
+    CHECK_FALSE(actions.IsEnabled(u8"build.cookPage", &page)); // a page with no asset (a Game tab)
+    CHECK(actions.DisabledReason(u8"build.cookPage", &page) == StringView(u8"This page shows no asset"));
+    page.Show(Guid{0x5, 0x6});
+    CHECK(actions.IsEnabled(u8"build.cookPage", &page));
+    CHECK(actions.Execute(u8"build.cookPage", &page).IsOk());
+    CHECK(actions.Execute(u8"build.rebuildPage", &page).IsOk());
+    REQUIRE(ran.Size() == 2u);
+    CHECK(ran[0] == StringView(u8"cook Crate"));
+    CHECK(ran[1] == StringView(u8"rebuild Crate"));
+    context.SetProject(nullptr);
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir.AsView());
+}

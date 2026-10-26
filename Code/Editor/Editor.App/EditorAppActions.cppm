@@ -184,6 +184,10 @@ export namespace editor::app
         const EditorContext* context = nullptr;
         Function<void()> cookAll;
         Function<void()> rebuildAll;
+        /// The page's asset and what it needs cooked (rebuild: again, whether changed or not),
+        /// its unsaved changes saved first so the cook reads them.
+        Function<void(EditorPage& page)> cookPage;
+        Function<void(EditorPage& page)> rebuildPage;
     };
     inline void RegisterBuildActions(EditorActionRegistry& actions, BuildActions run)
     {
@@ -195,6 +199,33 @@ export namespace editor::app
                     detail::NeedsProject(run.context, detail::Declare(u8"build.rebuildAll", u8"Rebuild All", u8"Cook every asset again",
                                                                       u8"Build/Rebuild All", 101)),
                     Move(run.rebuildAll));
+        // An asset page's: on its bar, and in Build's menu over the active page. Where the old
+        // collision page had its own Cook now, every asset page has these.
+        const EditorContext* context = run.context;
+        const auto pageAction = [&actions, context](StringView id, StringView label, StringView description, StringView menuPath, i32 order,
+                                                    Function<void(EditorPage&)> cook)
+        {
+            if (!cook)
+                return;
+            EditorActionDeclaration d = detail::Declare(id, label, description, menuPath, order);
+            d.enabled = [context](EditorPage* page) { return context != nullptr && context->Project() != nullptr && page != nullptr && !page->InstanceId().IsNil(); };
+            d.disabledReason = [context](EditorPage* page)
+            {
+                if (context == nullptr || context->Project() == nullptr)
+                    return String(u8"Open a project first");
+                return page == nullptr ? String(u8"No page is active") : String(u8"This page shows no asset");
+            };
+            d.execute = [cook = Move(cook)](EditorPage* page)
+            {
+                if (page != nullptr)
+                    cook(*page);
+            };
+            (void)actions.Register(Move(d));
+        };
+        pageAction(u8"build.cookPage", u8"Cook This Asset", u8"Save the page's changes, then cook its asset and what it needs", u8"Build/Cook This Asset", 200,
+                   Move(run.cookPage));
+        pageAction(u8"build.rebuildPage", u8"Rebuild This Asset", u8"Save the page's changes, then cook its asset and what it needs again, changed or not",
+                   u8"Build/Rebuild This Asset", 201, Move(run.rebuildPage));
     }
 
     /// What Game's actions run; they need a project open in `context`.

@@ -10,8 +10,8 @@
 // what a mesh cooks to, static or skinned), the cook mode and the hull's tolerance. Each edit is
 // one undo step, where the page had changed the asset with no undo at all; a shape with no mesh
 // says so in a notice. Save writes the asset back and requests a re-cook, so a shape=Cooked body
-// picks up the new collider (the separate "Cook now", which was Save, is gone). Never linked by the
-// runtime.
+// picks up the new collider; the old page's Cook now is the bar's Cook, as every asset page has it.
+// Never linked by the runtime.
 
 module;
 #include "Core/Prelude.h"

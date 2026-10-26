@@ -461,6 +461,8 @@ namespace editor
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-save"), u8"file.save");
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-undo"), u8"edit.undo");
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-redo"), u8"edit.redo");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-cook"), u8"build.cookPage");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-rebuild"), u8"build.rebuildPage");
             if (auto* kind = Find<gui::Label>(u8"form-kind"); kind != nullptr && m_object.Get() != nullptr)
                 kind->SetText(StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)));
             if (gui::Node* state = Find<gui::Node>(u8"form-state"))

@@ -860,6 +860,17 @@ namespace editor::app
         build.context = &m_context;
         build.cookAll = [self]() { self->m_cookService.RequestCook(false); };
         build.rebuildAll = [self]() { self->m_cookService.RequestCook(true); };
+        // One page's asset: its changes saved first, so what cooks is what it shows.
+        const auto cookPage = [self](editor::EditorPage& page, bool force)
+        {
+            if (page.IsDirty())
+                self->m_pages->Save(page);
+            Array<Guid> ids;
+            ids.PushBack(page.InstanceId());
+            self->m_cookService.RequestCookFor(Move(ids), force);
+        };
+        build.cookPage = [cookPage](editor::EditorPage& page) { cookPage(page, false); };
+        build.rebuildPage = [cookPage](editor::EditorPage& page) { cookPage(page, true); };
         RegisterBuildActions(actions, Move(build));
 
         GameActions game;

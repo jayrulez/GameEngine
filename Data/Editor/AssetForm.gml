@@ -10,6 +10,9 @@
         <ToolButton id="form-save" icon="Editor/Icons/save.svg"/>
         <ToolButton id="form-undo" icon="Editor/Icons/undo.svg"/>
         <ToolButton id="form-redo" icon="Editor/Icons/redo.svg"/>
+        <Separator/>
+        <ToolButton id="form-cook" icon="Editor/Icons/cook.svg"/>
+        <ToolButton id="form-rebuild" icon="Editor/Icons/rebuild.svg"/>
         <Spacer/>
         <Label id="form-kind" class="badge page-kind" tooltip="This asset has no page of its own: its saved fields are shown as they are"/>
     </ToolBar>

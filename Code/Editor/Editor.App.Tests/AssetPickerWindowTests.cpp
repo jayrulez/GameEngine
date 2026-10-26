@@ -15,6 +15,9 @@
 import foundation.core;
 import foundation.content;
 import foundation.settings;
+import foundation.vfs;
+import foundation.fonts;
+import foundation.fonts.truetype;
 import foundation.gui;
 import foundation.gui.toolkit;
 import editor.core;
@@ -218,4 +221,52 @@ TEST_CASE("asset picker: Down then Enter picks the next row and closes; its clos
     CHECK(bed.picker->CloseButton()->HandleActivate());
     CHECK(bed.chosen.Size() == 1u); // nothing picked: the value stays
     CHECK_FALSE(bed.picker->IsOpen());
+}
+
+TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over it")
+{
+    Bed bed;
+    content::Group* deep = bed.project->SourceDb().RootGroup()->CreateGroup(u8"Models");
+    for (const char8_t* name : {u8"Mechanics", u8"Bridge_Modular_With_A_Long_Name", u8"Bridge_Modular_Pieces_Also_Long"})
+        deep = deep->CreateGroup(StringView(name));
+    REQUIRE(bed.project->SourceDb().RootGroup()->CreateInstance(u8"Cube.051", PickerMesh::StaticType()) != nullptr);
+    REQUIRE(deep->CreateInstance(u8"Cube.051", PickerMesh::StaticType()) != nullptr);
+
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    bed.Open(Guid{});
+    bed.picker->Search(u8"Cube"); // every group's, each row saying where it lives
+    REQUIRE(bed.picker->Rows() == String(u8"Cube.051 | Cube.051"));
+    styles.ApplyTree(*bed.root);
+    AssetCell* near = bed.Cell(0); // the rows made, then styled too
+    AssetCell* far = bed.Cell(1);
+    REQUIRE(near != nullptr);
+    REQUIRE(far != nullptr);
+    styles.ApplyTree(*bed.root);
+    REQUIRE(far->Kind().Size() > near->Kind().Size()); // the deep one's where is the long one
+    // A real font after the sheet, so the texts have widths (the editor's own face).
+    foundation::fonts::TrueTypeFonts::Initialize();
+    foundation::fonts::TrueTypeFontService fonts{DefaultAllocator()};
+    const String data = foundation::vfs::FindDataRoot();
+    REQUIRE(fonts.LoadFont(u8"Inter", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/inter/Inter-Regular.ttf").AsView()) == foundation::fonts::FontLoadResult::Success);
+    far->NameLabel()->SetFont(fonts.GetFont(u8"Inter", 13.0f));
+    far->KindLabel()->SetFont(fonts.GetFont(u8"Inter", 11.0f));
+    (void)bed.root->UpdateLayout();
+
+    const gui::Rect farName = far->NameLabel()->GetScreenBounds();
+    const gui::Rect farKind = far->KindLabel()->GetScreenBounds();
+    const gui::Rect farRow = far->GetScreenBounds();
+    REQUIRE(far->KindLabel()->MeasureText().x > farKind.width); // the where is cut: it did not fit
+    CHECK(farName.width >= far->NameLabel()->MeasureText().x - 0.5f); // the name keeps its room
+    CHECK(farKind.x >= farName.x + farName.width - 0.5f);             // the where after it, not over it
+    CHECK(farKind.x + farKind.width <= farRow.x + farRow.width + 0.5f);
+    bed.picker->Close();
 }

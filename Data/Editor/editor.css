@@ -361,7 +361,9 @@ toast { border: 1px solid var(--border-strong); }
    then its badge, Always Export and star in columns of their own, so every kind ends in line. */
 .asset-row-text { flex-direction: row; align-items: baseline; flex-grow: 1; min-width: 0; column-gap: var(--space-l); }
 .asset-row-text > .row-name { flex-grow: 1; }
-.asset-row-text > .row-kind { flex-grow: 0; flex-shrink: 0; text-align: end; }
+/* The name keeps its room; the kind gives way first, in an ellipsis, never over the name (a picker's
+   kind says where the asset is, a long path). */
+.asset-row-text > .row-kind { flex-grow: 0; flex-shrink: 1000; min-width: 0; text-overflow: ellipsis; white-space: nowrap; text-align: end; }
 .asset-list .asset-row > .badge { width: 52px; flex-shrink: 0; text-align: center; }
 /* A row's Always Export and star: on every row, lit when so, greyed when not. */
 .asset-list .asset-row > .badge-icon { margin-left: var(--space-xs); image-color: var(--icon-dim); opacity: var(--disabled-opacity); }
@@ -683,6 +685,8 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
 .asset-picker-grid { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-s); row-gap: var(--space-s); padding: var(--space-xs) var(--space-s); } /* the mock's */
 .asset-picker-grid > .asset-tile { width: 88px; }
 .asset-picker-items > .asset-picker-list { flex-grow: 1; min-height: 0; background-color: transparent; padding: 0; }
+/* A row's kind says where the asset is: cut in the middle, its start and its own folder kept. */
+.asset-picker-list .asset-row-text > .row-kind { text-overflow: ellipsis-middle; }
 .asset-picker-state { flex-grow: 1; color: var(--text-dim); text-align: center; padding: var(--space-xl) var(--space-l); }
 /* The entity picker: the scene's tree as the hierarchy draws it, in a picker's frame. */
 .entity-picker-tree { height: 340px; background-color: transparent; padding: 0 var(--space-s); }

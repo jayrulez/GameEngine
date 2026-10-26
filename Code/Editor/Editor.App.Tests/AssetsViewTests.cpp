@@ -206,7 +206,7 @@ TEST_CASE("assets: a group's subgroups then its assets; entering a group moves t
     CHECK(bed.view->CurrentGroup() == bed.top);
 }
 
-TEST_CASE("assets: a search looks in every group, saying where each match is; nothing matching says so and clears")
+TEST_CASE("assets: a search looks in the group shown and under it, saying where each match is, kept as the group changes; nothing matching says so and clears")
 {
     Bed bed;
     bed.view->SetTiles(false);
@@ -221,6 +221,22 @@ TEST_CASE("assets: a search looks in every group, saying where each match is; no
     bed.crate->Id().ToChars(chars);
     bed.view->SetSearch(StringView(chars, 8));
     CHECK(bed.Rows() == String(u8"Crate"));
+
+    // Another group chosen keeps the search, looking there and under it.
+    bed.view->SetSearch(u8"e");
+    CHECK(bed.Rows() == String(u8"Crate Barrel Bell"));
+    bed.view->Navigate(*bed.models);
+    CHECK(bed.view->SearchText() == StringView(u8"e"));
+    CHECK(bed.Rows() == String(u8"Barrel Bell"));
+    bed.view->SetSearch(u8"crate");
+    CHECK(bed.view->StateTitle() == StringView(u8"Nothing matches crate in Content/Models"));
+    bed.view->Navigate(*bed.top);
+    CHECK(bed.Rows() == String(u8"Crate"));
+    // Reveal shows an asset where it lives, so it ends the search.
+    REQUIRE(bed.view->Reveal(bed.barrel->Id()));
+    CHECK(bed.view->SearchText().IsEmpty());
+    CHECK(bed.view->CurrentGroup() == bed.town);
+    bed.view->Navigate(*bed.top);
 
     bed.view->SetSearch(u8"crate4");
     CHECK(bed.view->RowCount() == 0u);

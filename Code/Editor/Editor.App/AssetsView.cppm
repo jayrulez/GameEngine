@@ -8,8 +8,9 @@
 // the truth. The group tree on the left (folders, Content at the top); the toolbar's breadcrumb
 // where it is; the group's subgroups then its assets on the right, as tiles or a list (kept per
 // project), each by its type's glyph (its category's tint), its name, what it is, its cook badge
-// and a star when a favourite. The search looks in every group, by name or a guid's start, each
-// match saying where it is; the type filter keeps one type. With nothing to show it says what is
+// and a star when a favourite. The search looks in the group shown and every group under it
+// (Content: the whole project), by name or a guid's start, each match saying where it is, and is
+// kept when another group is chosen, so a search narrows by picking where to look; the type filter keeps one type. With nothing to show it says what is
 // so and offers the way on (clear the search, show every type). Enter or a double click opens an
 // asset or enters a group; Reveal shows an asset where it lives. A drag of the selection carries
 // its assets (AssetDrag) to a slot. It builds again when the database's shape moves, however the
@@ -398,19 +399,13 @@ export namespace editor::app
 
         // === Where it is ===
         [[nodiscard]] content::Group* CurrentGroup() const noexcept { return m_current; }
-        /// Shows `group`'s content (the search cleared), its tree row selected, the breadcrumb
-        /// following.
+        /// Shows `group`'s content (with a search, its matches in it and under it: the search
+        /// is kept), its tree row selected, the breadcrumb following.
         void Navigate(content::Group& group)
         {
             if (!Contains(&group))
                 return;
             m_current = &group;
-            if (!m_search.IsEmpty())
-            {
-                m_search = String{};
-                if (auto* search = Find<gui::TextField>(u8"assets-search"))
-                    search->SetText(StringView{});
-            }
             SelectTreeGroup(group);
             BuildRows();
         }
@@ -423,6 +418,8 @@ export namespace editor::app
             if (instance == nullptr)
                 return false;
             m_type = String{};
+            if (!m_search.IsEmpty())
+                SetSearch(StringView{}); // where it lives, not among a search's matches
             Navigate(instance->OwningGroup());
             for (usize row = 0; row < m_rows.Size(); ++row)
                 if (m_rows[row].instance == instance && m_list != nullptr)
@@ -771,7 +768,7 @@ export namespace editor::app
             if (db != nullptr && m_current != nullptr)
             {
                 if (!m_search.IsEmpty())
-                    CollectMatches(*db->RootGroup());
+                    CollectMatches(*m_current);
                 else
                 {
                     if (m_type.IsEmpty())
@@ -831,7 +828,8 @@ export namespace editor::app
             else if (!m_search.IsEmpty())
             {
                 icon = u8"Editor/Icons/search.svg";
-                title = Format(u8"Nothing matches {}", m_search);
+                title = m_current != nullptr && m_current != Sources()->RootGroup() ? Format(u8"Nothing matches {} in {}", m_search, ShownPath(*m_current))
+                                                                                     : Format(u8"Nothing matches {}", m_search);
                 verb = String(u8"Clear the search");
             }
             else if (!m_type.IsEmpty())

@@ -242,12 +242,12 @@ export namespace editor
     class MaterialEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit MaterialEditorPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit MaterialEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     // Per-asset material-preview prefs: {assetGuid -> (shape, meshGuid)} - a section in the
@@ -289,14 +289,14 @@ export namespace editor
 
     /// The material page (asking for its services when it is made), the asset's types and the
     /// preview prefs' section (registered before the app loads the per-project store).
-    inline void RegisterMaterialEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    inline void RegisterMaterialEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         GlobalTypeRegistry().Register(pipeline::MaterialAsset::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<pipeline::MaterialAsset>();
         GlobalTypeRegistry().Register(MaterialPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<MaterialPreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<MaterialEditorPageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<MaterialEditorPageFactory>(services), editor::EditorRootAllocator()));
     }
 
     RTTI_DEFINE_OBJECT_VERSIONED(MaterialPreviewSettings, "rtti::editor::editor", 1)

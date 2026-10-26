@@ -102,15 +102,13 @@ export namespace editor
     class MeshEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        MeshEditorPageFactory(const TypeInfo& type, Function<app::AssetPageServices()> services) : m_type(&type), m_services(Move(services)) {}
+        MeshEditorPageFactory(const TypeInfo& type, const app::AssetPageServicesSource& services) : m_type(&type), m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override { return m_type; }
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
-        /// What a page it makes is given (none without a table: a test).
-        [[nodiscard]] app::AssetPageServices Services() const { return m_services ? m_services() : app::AssetPageServices{}; }
 
     private:
         const TypeInfo* m_type;
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     // Human-readable stat lines for a cooked mesh (name / counts / bounds / skinning / one line
@@ -121,5 +119,5 @@ export namespace editor
     // Registers the viewer for BOTH mesh asset types (they are sibling pipeline::Asset subclasses,
     // so a factory each - not one via nearest-type dispatch), each page asking for its services
     // when it is made, and the preview prefs' section.
-    void RegisterMeshEditor(EditorContext& context, Function<app::AssetPageServices()> services);
+    void RegisterMeshEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

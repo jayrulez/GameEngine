@@ -103,12 +103,13 @@ namespace
         String dir = String(u8"scratch_material_page_project");
         UniquePtr<editor::EditorProject> project;
         foundation::settings::Settings store{DefaultAllocator()};
+        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
         editor::EditorContext context{DefaultAllocator()};
         foundation::content::Instance* wood = nullptr;
 
         Bed()
         {
-            editor::RegisterMaterialEditor(context, Function<editor::app::AssetPageServices()>{}); // the asset's types and the prefs' section
+            editor::RegisterMaterialEditor(context, none); // the asset's types and the prefs' section
             (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());

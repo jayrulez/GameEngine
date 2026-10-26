@@ -50,6 +50,25 @@ export namespace editor::app
         gui::GuiHost* gui = nullptr;
     };
 
+    /// Where every page factory gets the services a page is made with: one, owned by the editor's
+    /// assembly (or a test) and outliving the factories, each of which keeps a reference and asks it
+    /// when it makes a page (the window, the host and the GUI exist by then). One source shared by
+    /// reference, where each factory once held a copy of the making Function, which is move-only.
+    class AssetPageServicesSource
+    {
+    public:
+        AssetPageServicesSource() {} // none: a page made with no services (a test's registration); user-provided, so a const one needs no initializer
+        explicit AssetPageServicesSource(Function<AssetPageServices()> make) : m_make(Move(make)) {}
+        AssetPageServicesSource(const AssetPageServicesSource&) = delete;
+        AssetPageServicesSource& operator=(const AssetPageServicesSource&) = delete;
+
+        /// The services a page is made with now.
+        [[nodiscard]] AssetPageServices Make() const { return m_make ? m_make() : AssetPageServices{}; }
+
+    private:
+        Function<AssetPageServices()> m_make;
+    };
+
     /// The element under `root` (itself included) whose id is `id`, as a T; null when there is
     /// none or it is not one.
     template <typename T>

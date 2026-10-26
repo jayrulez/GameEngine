@@ -303,10 +303,9 @@ int main(int argc, char** argv)
         editor::RegisterVegetationViewportTools(); // paint vegetation, paint props
         editor::RegisterVegetationToolPanels();
         editor::RegisterSplineViewportTools(); // the spline control-point editor
-        // The asset pages (X6), each asking the application for its services when it is made;
-        // the fallback catches an asset with no page of its own, the bespoke ones win by type.
-        editor::app::EditorApplication* application = &app;
-        const auto pageServices = [application]() { return application->PageServices(); };
+        // The asset pages (X6), each asking the application's one source for its services when it
+        // is made; the fallback catches an asset with no page of its own, the bespoke ones win by type.
+        const editor::app::AssetPageServicesSource& pageServices = app.PageServicesSource();
         editor::RegisterImageEditor(app.Context(), pageServices);
         editor::RegisterHeightfieldEditor(app.Context(), pageServices); // and its thumbnails
         editor::RegisterTextureEditor(app.Context(), pageServices);     // and its thumbnails

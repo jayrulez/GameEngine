@@ -389,7 +389,7 @@ namespace editor
 
     UniquePtr<EditorPage> FontEditorPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<FontEditorPage>(context, m_services ? m_services() : app::AssetPageServices{}, instance);
+        auto* page = editor::EditorRootAllocator().New<FontEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 }

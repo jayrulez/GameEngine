@@ -101,24 +101,22 @@ export namespace editor
     class AudioClipPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit AudioClipPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
-        /// What a page is made with (the sound cue's factory asks this one: a Function is not copied).
-        [[nodiscard]] app::AssetPageServices Services() const { return m_services ? m_services() : app::AssetPageServices{}; }
+        explicit AudioClipPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     /// The audio pages' registration (from the editor's assembly), each page asking for its
     /// services when it is made; the clip thumbnails with them.
-    inline void RegisterAudioClipEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    inline void RegisterAudioClipEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        auto* clips = editor::EditorRootAllocator().New<AudioClipPageFactory>(Move(services));
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(clips, editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<SoundCuePageFactory>([clips]() { return clips->Services(); }), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<AudioClipPageFactory>(services), editor::EditorRootAllocator()));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(
+            editor::EditorRootAllocator().New<SoundCuePageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
             RegisterAudioThumbnailGenerator(*context.Thumbnails());
     }

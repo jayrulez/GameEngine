@@ -155,6 +155,9 @@ export namespace editor::app
             services.gui = m_window.Host();
             return services;
         }
+        /// The one source every page factory asks for PageServices (the registrations take it by
+        /// reference; it lives as long as the editor).
+        [[nodiscard]] const AssetPageServicesSource& PageServicesSource() noexcept { return m_pageServices; }
         [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }
         [[nodiscard]] EditorPages& Pages() noexcept { return *m_pages; }
         [[nodiscard]] EditorAssetCreation& AssetCreation() noexcept { return m_creation; }
@@ -225,6 +228,7 @@ export namespace editor::app
 
         // The parts, in the order they start; they stop in reverse.
         EditorWindow m_window{m_editorAllocator};
+        AssetPageServicesSource m_pageServices{[this]() { return PageServices(); }}; // the page factories', reading the window above
         EditorDock m_dock{m_editorAllocator};
         UniquePtr<EditorPages> m_pages; // made with the dock, in OnStartup
         UniquePtr<ActionMenuBar> m_menus; // the frame's menu bar, from the actions

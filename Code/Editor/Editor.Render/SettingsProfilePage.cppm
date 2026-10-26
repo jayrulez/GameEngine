@@ -144,16 +144,16 @@ export namespace editor
     class SettingsProfilePageFactory final : public IEditorPageFactory
     {
     public:
-        explicit SettingsProfilePageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit SettingsProfilePageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         /// Every profile asset (the registry matches along the asset type's base chain).
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     /// The profile page's registration (from the editor's assembly, beside the material page's),
     /// each page asking for its services when it is made.
-    void RegisterSettingsProfileEditor(EditorContext& context, Function<app::AssetPageServices()> services);
+    void RegisterSettingsProfileEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

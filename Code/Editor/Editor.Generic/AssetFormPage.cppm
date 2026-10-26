@@ -193,21 +193,21 @@ export namespace editor
     class GenericAssetPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit GenericAssetPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit GenericAssetPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage>
         CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     // Registers the fallback factory. Bespoke pages always win (nearest-base dispatch); this
     // catches everything else, replacing the hard "No editor registered" failure. A page asks for
     // its services when it is made (the window exists by then).
-    inline void RegisterGenericAssetEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    inline void RegisterGenericAssetEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<GenericAssetPageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<GenericAssetPageFactory>(services), editor::EditorRootAllocator()));
     }
 }

@@ -486,16 +486,16 @@ namespace editor
 
     UniquePtr<EditorPage> SettingsProfilePageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<SettingsProfilePage>(context, m_services ? m_services() : app::AssetPageServices{}, instance);
+        auto* page = editor::EditorRootAllocator().New<SettingsProfilePage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    void RegisterSettingsProfileEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    void RegisterSettingsProfileEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         // The preview-choice section (registered before the app loads the per-project store).
         GlobalTypeRegistry().Register(ProfilePreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<ProfilePreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<SettingsProfilePageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<SettingsProfilePageFactory>(services), editor::EditorRootAllocator()));
     }
 }

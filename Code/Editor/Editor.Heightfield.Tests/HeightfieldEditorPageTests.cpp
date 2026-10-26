@@ -91,8 +91,9 @@ namespace
 
 TEST_CASE("HeightfieldEditor registers a factory the registry routes for HeightfieldAsset")
 {
+    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     EditorContext context{DefaultAllocator()};
-    RegisterHeightfieldEditor(context, Function<app::AssetPageServices()>{});
+    RegisterHeightfieldEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::HeightfieldAsset::StaticType());
     REQUIRE(found != nullptr);
     CHECK(found->PrimaryType() == &pipeline::HeightfieldAsset::StaticType());

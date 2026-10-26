@@ -87,24 +87,24 @@ export namespace editor
     class CollisionShapeEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit CollisionShapeEditorPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit CollisionShapeEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override { return &pipeline::CollisionShapeAsset::StaticType(); }
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override
         {
             return UniquePtr<EditorPage>(
-                editor::EditorRootAllocator().New<CollisionShapeEditorPage>(context, m_services ? m_services() : app::AssetPageServices{}, instance),
+                editor::EditorRootAllocator().New<CollisionShapeEditorPage>(context, m_services->Make(), instance),
                 editor::EditorRootAllocator());
         }
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     /// The page (asking for its services when it is made) and the collision thumbnails.
-    inline void RegisterCollisionShapeEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    inline void RegisterCollisionShapeEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<CollisionShapeEditorPageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<CollisionShapeEditorPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
         {
             RegisterCollisionThumbnailGenerator(*context.Thumbnails());

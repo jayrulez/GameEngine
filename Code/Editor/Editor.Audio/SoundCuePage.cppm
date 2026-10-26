@@ -97,11 +97,11 @@ export namespace editor
     class SoundCuePageFactory final : public IEditorPageFactory
     {
     public:
-        explicit SoundCuePageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit SoundCuePageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 }

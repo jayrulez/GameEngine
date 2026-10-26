@@ -99,8 +99,9 @@ namespace
 
 TEST_CASE("ImageEditor registers a factory the registry routes for ImageAsset")
 {
+    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     EditorContext context{DefaultAllocator()};
-    RegisterImageEditor(context, Function<app::AssetPageServices()>{});
+    RegisterImageEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::ImageAsset::StaticType());
     REQUIRE(found != nullptr);
     CHECK(found->PrimaryType() == &pipeline::ImageAsset::StaticType());

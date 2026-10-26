@@ -81,20 +81,20 @@ export namespace editor
     class TextureEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit TextureEditorPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit TextureEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     /// The page (asking for its services when it is made) and the texture thumbnails: one
     /// composition entry point per domain, no pipeline links in Editor.App.
-    inline void RegisterTextureEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    inline void RegisterTextureEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<TextureEditorPageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<TextureEditorPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
         {
             RegisterTextureThumbnailGenerator(*context.Thumbnails());

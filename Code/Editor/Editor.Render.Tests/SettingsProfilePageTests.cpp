@@ -46,6 +46,7 @@ namespace
         String dir = String(u8"scratch_profile_page_project");
         UniquePtr<editor::EditorProject> project;
         foundation::settings::Settings store{DefaultAllocator()};
+        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
         editor::EditorContext context{DefaultAllocator()};
         foundation::content::Instance* dusk = nullptr;
 
@@ -53,7 +54,7 @@ namespace
         {
             RegisterRenderComponentReflection();
             pipeline::RegisterRenderProfileAssets();
-            editor::RegisterSettingsProfileEditor(context, Function<editor::app::AssetPageServices()>{}); // the prefs' section
+            editor::RegisterSettingsProfileEditor(context, none); // the prefs' section
             (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());

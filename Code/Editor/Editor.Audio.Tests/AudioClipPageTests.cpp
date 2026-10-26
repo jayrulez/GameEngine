@@ -92,8 +92,9 @@ namespace
 
 TEST_CASE("audio clip page: registered for the clip, with the clip thumbnails")
 {
+    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     EditorContext context{DefaultAllocator()};
-    RegisterAudioClipEditor(context, Function<app::AssetPageServices()>{});
+    RegisterAudioClipEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::AudioClipAsset::StaticType());
     REQUIRE(found != nullptr);
     CHECK(found->PrimaryType() == &pipeline::AudioClipAsset::StaticType());

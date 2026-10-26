@@ -33,8 +33,9 @@ namespace image = foundation::image;
 
 TEST_CASE("TextureEditor registers a factory that the registry routes for TextureAsset")
 {
+    const editor::app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     editor::EditorContext context{DefaultAllocator()};
-    editor::RegisterTextureEditor(context, Function<editor::app::AssetPageServices()>{});
+    editor::RegisterTextureEditor(context, none);
 
     editor::IEditorPageFactory* found =
         context.Pages().FindFactory(pipeline::TextureAsset::StaticType());

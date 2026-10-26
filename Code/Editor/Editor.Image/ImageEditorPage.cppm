@@ -50,18 +50,18 @@ export namespace editor
     class ImageEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit ImageEditorPageFactory(Function<app::AssetPageServices()> services) : m_services(Move(services)) {}
+        explicit ImageEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        Function<app::AssetPageServices()> m_services;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
     /// A page asks for its services when it is made (the window exists by then).
-    inline void RegisterImageEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    inline void RegisterImageEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<ImageEditorPageFactory>(Move(services)), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<ImageEditorPageFactory>(services), editor::EditorRootAllocator()));
     }
 }

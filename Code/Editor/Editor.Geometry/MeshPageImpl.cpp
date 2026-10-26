@@ -400,22 +400,19 @@ namespace editor
 
     UniquePtr<EditorPage> MeshEditorPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<MeshEditorPage>(context, Services(), instance, *m_type);
+        auto* page = editor::EditorRootAllocator().New<MeshEditorPage>(context, m_services->Make(), instance, *m_type);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    void RegisterMeshEditor(EditorContext& context, Function<app::AssetPageServices()> services)
+    void RegisterMeshEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         // The preview-prefs section (registered before the app loads the per-project store).
         GlobalTypeRegistry().Register(MeshPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<MeshPreviewSettings>();
-        // One table of services for both: the skinned factory asks the static one's (the
-        // registry keeps both as long as each other).
-        auto* statics = editor::EditorRootAllocator().New<MeshEditorPageFactory>(pipeline::StaticMeshAsset::StaticType(), Move(services));
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(statics, editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<MeshEditorPageFactory>(pipeline::SkinnedMeshAsset::StaticType(), [statics]() { return statics->Services(); }),
-            editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<MeshEditorPageFactory>(pipeline::StaticMeshAsset::StaticType(), services), editor::EditorRootAllocator()));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(
+            editor::EditorRootAllocator().New<MeshEditorPageFactory>(pipeline::SkinnedMeshAsset::StaticType(), services), editor::EditorRootAllocator()));
     }
 
     RTTI_DEFINE_OBJECT_VERSIONED(MeshPreviewSettings, "rtti::editor::editor.mesh", 1)

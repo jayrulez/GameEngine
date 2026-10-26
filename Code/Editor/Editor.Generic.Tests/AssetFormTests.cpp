@@ -164,8 +164,9 @@ TEST_CASE("asset form: a conditional-branch patch changes the shape (rescan dete
 
 TEST_CASE("asset form: the fallback factory routes ANY serializable; bespoke pages win")
 {
+    const editor::app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     editor::EditorContext context{DefaultAllocator()};
-    RegisterGenericAssetEditor(context, Function<app::AssetPageServices()>{});
+    RegisterGenericAssetEditor(context, none);
     // The probe type routes to the fallback via its ISerializable base.
     editor::IEditorPageFactory* found =
         context.Pages().FindFactory(FormProbeAsset::StaticType());

@@ -157,13 +157,14 @@ namespace
         String dir = String(u8"scratch_mesh_page_project");
         UniquePtr<editor::EditorProject> project;
         foundation::settings::Settings store{DefaultAllocator()};
+        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
         editor::EditorContext context{DefaultAllocator()};
         foundation::content::Instance* crate = nullptr;
 
         Bed()
         {
             pipeline::RegisterMeshAssets(); // read back by its type, as the editor registers it
-            editor::RegisterMeshEditor(context, Function<editor::app::AssetPageServices()>{}); // and the prefs' section
+            editor::RegisterMeshEditor(context, none); // and the prefs' section
             (void)RemoveDirectoryRecursive(dir.AsView());
             REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
             project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());

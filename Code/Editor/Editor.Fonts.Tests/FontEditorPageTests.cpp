@@ -88,8 +88,9 @@ namespace
 
 TEST_CASE("FontEditor registers a factory the registry routes for FontAsset")
 {
+    const app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     EditorContext context{DefaultAllocator()};
-    RegisterFontEditor(context, Function<app::AssetPageServices()>{});
+    RegisterFontEditor(context, none);
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::FontAsset::StaticType());
     REQUIRE(found != nullptr);
     CHECK(found->PrimaryType() == &pipeline::FontAsset::StaticType());

@@ -66,8 +66,8 @@ export namespace editor::app
         void SetImage(image::Image pixels);
         /// Shows nothing (an asset with no picture yet).
         void ClearImage();
-        [[nodiscard]] bool HasImage() const noexcept { return m_pixels.Width() > 0 && m_pixels.Height() > 0; }
-        [[nodiscard]] const image::Image& Pixels() const noexcept { return m_pixels; }
+        [[nodiscard]] bool HasImage() const noexcept { return m_pixels->Width() > 0 && m_pixels->Height() > 0; }
+        [[nodiscard]] const image::Image& Pixels() const noexcept { return *m_pixels; }
 
         void SetChannel(ImageChannel channel);
         [[nodiscard]] ImageChannel Channel() const noexcept { return m_channel; }
@@ -114,8 +114,11 @@ export namespace editor::app
         void Hover(Float2 local);
         void ZoomChanged();
 
-        image::Image m_pixels;
-        image::Image m_channelPixels; // m_pixels as a channel shows it (not All)
+        // Each picture a new object, never assigned over the last: an image keeps its identity
+        // through an assignment, and the renderer's texture cache keys on it, so an assigned
+        // picture (a font rebaked, a channel picked) drew the old texture. Never null.
+        UniquePtr<image::Image> m_pixels;
+        UniquePtr<image::Image> m_channelPixels; // m_pixels as a channel shows it (not All)
         bool m_channelStale = true;
         ImageChannel m_channel = ImageChannel::All;
         f32 m_zoom = 1.0f;

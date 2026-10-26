@@ -27,13 +27,15 @@ namespace editor::app
 
     ImageInspectView::ImageInspectView()
     {
+        m_pixels = MakeUnique<image::Image>(MemoryAllocator());
+        m_channelPixels = MakeUnique<image::Image>(MemoryAllocator());
         AddClass(u8"image-inspect");
     }
 
     void ImageInspectView::SetImage(image::Image pixels)
     {
-        const bool resized = pixels.Width() != m_pixels.Width() || pixels.Height() != m_pixels.Height();
-        m_pixels = foundation::core::Move(pixels); // a widget's own Move would move it
+        const bool resized = pixels.Width() != m_pixels->Width() || pixels.Height() != m_pixels->Height();
+        m_pixels = MakeUnique<image::Image>(MemoryAllocator(), foundation::core::Move(pixels)); // a new identity (a widget's own Move would move it)
         m_channelStale = true;
         if (resized)
             m_fitting = true;
@@ -44,8 +46,8 @@ namespace editor::app
 
     void ImageInspectView::ClearImage()
     {
-        m_pixels = image::Image{};
-        m_channelPixels = image::Image{};
+        m_pixels = MakeUnique<image::Image>(MemoryAllocator());
+        m_channelPixels = MakeUnique<image::Image>(MemoryAllocator());
         m_channelStale = true;
         m_fitting = true;
         Invalidate();
@@ -65,8 +67,8 @@ namespace editor::app
         m_fitting = true;
         if (!HasImage() || m_size.x <= 0.0f || m_size.y <= 0.0f)
             return;
-        const f32 w = static_cast<f32>(m_pixels.Width());
-        const f32 h = static_cast<f32>(m_pixels.Height());
+        const f32 w = static_cast<f32>(m_pixels->Width());
+        const f32 h = static_cast<f32>(m_pixels->Height());
         m_zoom = Clamp(Min(m_size.x / w, m_size.y / h), kMinZoom, kMaxZoom);
         m_origin = Float2{0.5f * (m_size.x - w * m_zoom), 0.5f * (m_size.y - h * m_zoom)};
         ZoomChanged();
@@ -101,7 +103,7 @@ namespace editor::app
             return false;
         const f32 px = (local.x - m_origin.x) / m_zoom;
         const f32 py = (local.y - m_origin.y) / m_zoom;
-        if (px < 0.0f || py < 0.0f || px >= static_cast<f32>(m_pixels.Width()) || py >= static_cast<f32>(m_pixels.Height()))
+        if (px < 0.0f || py < 0.0f || px >= static_cast<f32>(m_pixels->Width()) || py >= static_cast<f32>(m_pixels->Height()))
             return false;
         x = static_cast<i32>(px);
         y = static_cast<i32>(py);
@@ -110,11 +112,11 @@ namespace editor::app
 
     bool ImageInspectView::ValueAt(i32 x, i32 y, ImagePixel& out) const
     {
-        if (!HasImage() || m_pixels.Format() != image::PixelFormat::RGBA8 || x < 0 || y < 0 ||
-            static_cast<u32>(x) >= m_pixels.Width() || static_cast<u32>(y) >= m_pixels.Height())
+        if (!HasImage() || m_pixels->Format() != image::PixelFormat::RGBA8 || x < 0 || y < 0 ||
+            static_cast<u32>(x) >= m_pixels->Width() || static_cast<u32>(y) >= m_pixels->Height())
             return false;
-        const Span<const u8> data = m_pixels.PixelData();
-        const usize at = (static_cast<usize>(y) * m_pixels.Width() + static_cast<usize>(x)) * 4u;
+        const Span<const u8> data = m_pixels->PixelData();
+        const usize at = (static_cast<usize>(y) * m_pixels->Width() + static_cast<usize>(x)) * 4u;
         if (at + 3 >= data.Size())
             return false;
         out = ImagePixel{data[at], data[at + 1], data[at + 2], data[at + 3]};
@@ -125,12 +127,12 @@ namespace editor::app
     {
         if (!HasImage())
             return nullptr;
-        if (m_channel == ImageChannel::All || m_pixels.Format() != image::PixelFormat::RGBA8)
-            return &m_pixels;
+        if (m_channel == ImageChannel::All || m_pixels->Format() != image::PixelFormat::RGBA8)
+            return m_pixels.Get();
         if (m_channelStale)
         {
-            m_channelPixels = image::Image(m_pixels.Width(), m_pixels.Height(), image::PixelFormat::RGBA8, m_pixels.PixelData());
-            const Span<u8> data = m_channelPixels.PixelDataMut();
+            m_channelPixels = MakeUnique<image::Image>(MemoryAllocator(), m_pixels->Width(), m_pixels->Height(), image::PixelFormat::RGBA8, m_pixels->PixelData());
+            const Span<u8> data = m_channelPixels->PixelDataMut();
             for (usize i = 0; i + 3 < data.Size(); i += 4)
             {
                 if (m_channel == ImageChannel::Rgb)
@@ -147,7 +149,7 @@ namespace editor::app
             }
             m_channelStale = false;
         }
-        return &m_channelPixels;
+        return m_channelPixels.Get();
     }
 
     void ImageInspectView::OnLayout()
@@ -172,8 +174,8 @@ namespace editor::app
         if (shown == nullptr)
             return;
         ctx.PushClip(localBounds);
-        const f32 w = static_cast<f32>(m_pixels.Width()) * m_zoom;
-        const f32 h = static_cast<f32>(m_pixels.Height()) * m_zoom;
+        const f32 w = static_cast<f32>(m_pixels->Width()) * m_zoom;
+        const f32 h = static_cast<f32>(m_pixels->Height()) * m_zoom;
         const gui::Rect picture{localBounds.x + m_origin.x, localBounds.y + m_origin.y, w, h};
         // The checkerboard under it, where alpha can show through: the view's own background
         // with every other square in the text's colour, faint, so it follows the theme.

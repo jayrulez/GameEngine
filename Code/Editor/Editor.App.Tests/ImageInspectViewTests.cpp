@@ -121,3 +121,13 @@ TEST_CASE("image inspect: a pixel read and said; a channel shown on its own")
     CHECK(pixel.g == 128);
     CHECK(pixel.r == 255);
 }
+
+TEST_CASE("image inspect: a new picture of the same size is a new image, so the renderer draws it and not the last one's texture")
+{
+    Bed bed;
+    editor::app::ImageInspectView& view = *bed.view;
+    const u64 first = view.Pixels().InstanceId();
+    view.SetImage(Picture()); // a font rebaked at the same size
+    CHECK(view.Pixels().InstanceId() != first);
+    CHECK(view.Fitting()); // the same size: kept as it was
+}

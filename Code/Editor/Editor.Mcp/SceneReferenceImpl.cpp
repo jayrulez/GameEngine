@@ -958,6 +958,21 @@ namespace editor::mcp
                 }
             });
         Array<const TypeInfo*> assets;
+        if (cookedForms.IsEmpty())
+        {
+            // Nothing makes it at run time: it may be a cooked form itself (a collision shape's
+            // mesh names what a mesh cooks to). Every asset whose product is one, or derives from
+            // one (a skinned mesh's source is a static mesh's), makes it.
+            builders.ForEach(
+                [&](const pipeline::IAssetBuilder& builder)
+                {
+                    const TypeInfo* output = builder.ProductType();
+                    const TypeInfo* asset = builder.AssetType();
+                    if (output != nullptr && asset != nullptr && (output->id == product.id || IsDerivedFrom(output, &product)))
+                        assets.PushBack(asset); // each builder its own asset type
+                });
+            return assets;
+        }
         for (const TypeInfo* cooked : cookedForms)
         {
             const TypeInfo* asset = nullptr;

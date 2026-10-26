@@ -1,6 +1,6 @@
 <!--
   The image pages (Documentation/Specs/editor-gui.md, 5.4, layer 2): Texture, Image, Heightfield and
-  Fonts, one shape. The kit's bar (Save, Undo, Redo, Cook and Rebuild this asset, each an action
+  Fonts, one shape. The kit's bar (Save, Undo, Redo, Discard Changes, Cook and Rebuild this asset, each an action
   over the page; the page's own
   after them; its kind at the end) over the picture beside the grid. The picture has its own bar:
   Fit, 1:1 and the zoom, the channel shown, and the pixel under the pointer. A picture that is not
@@ -13,6 +13,7 @@
         <ToolButton id="page-save" icon="Editor/Icons/save.svg"/>
         <ToolButton id="page-undo" icon="Editor/Icons/undo.svg"/>
         <ToolButton id="page-redo" icon="Editor/Icons/redo.svg"/>
+        <ToolButton id="page-discard" icon="Editor/Icons/revert.svg"/>
         <Separator/>
         <ToolButton id="page-cook" icon="Editor/Icons/cook.svg"/>
         <ToolButton id="page-rebuild" icon="Editor/Icons/rebuild.svg"/>

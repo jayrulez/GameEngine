@@ -1,7 +1,7 @@
 <!--
   The preview pages (Documentation/Specs/editor-gui.md, 5.4, layers 3 and 4): the mesh viewer, the
   collision shape, the material and the settings profile, one shape. The kit's bar (Save, Undo,
-  Redo, Cook and Rebuild this asset, each an action over the page; the page's own after them; its kind at the end) over the 3D
+  Redo, Discard Changes, Cook and Rebuild this asset, each an action over the page; the page's own after them; its kind at the end) over the 3D
   preview beside the grid. The preview has its own bar: Frame, then the preview's own choices
   (what it shows the asset on: a material, a level of detail, a shape), and the camera's controls
   named, as no preview said them before. A preview with nothing to show says why; an asset that did
@@ -13,6 +13,7 @@
         <ToolButton id="page-save" icon="Editor/Icons/save.svg"/>
         <ToolButton id="page-undo" icon="Editor/Icons/undo.svg"/>
         <ToolButton id="page-redo" icon="Editor/Icons/redo.svg"/>
+        <ToolButton id="page-discard" icon="Editor/Icons/revert.svg"/>
         <Separator/>
         <ToolButton id="page-cook" icon="Editor/Icons/cook.svg"/>
         <ToolButton id="page-rebuild" icon="Editor/Icons/rebuild.svg"/>

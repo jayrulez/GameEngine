@@ -983,7 +983,7 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     Shown shown(*page);
     SceneBar* bar = page->Bar();
     REQUIRE(bar != nullptr);
-    CHECK(bar->Bound() == 14u); // save, undo, redo, four transform, space, snap, vertex snap, Simulate's three, frame
+    CHECK(bar->Bound() == 15u); // save, undo, redo, discard, four transform, space, snap, vertex snap, Simulate's three, frame
     GizmoController* gizmos = page->Gizmos();
     REQUIRE(gizmos != nullptr);
     page->OnUpdate(bed.host, 1.0f / 60.0f);

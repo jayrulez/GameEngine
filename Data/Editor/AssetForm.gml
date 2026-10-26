@@ -1,7 +1,7 @@
 <!--
   The generic asset page (Documentation/Specs/editor-gui.md, 5.4, layer 1): the fallback for an
   asset with no page of its own, its saved fields on the property grid. Its bar is the kit's (Save,
-  Undo, Redo, each an action over the page), its type named at the end; a search over the rows above
+  Undo, Redo, Discard Changes, each an action over the page), its type named at the end; a search over the rows above
   them. An asset that did not read says so in place of the rows.
   Code binds the bar to the actions and fills the grid from the asset's fields.
 -->
@@ -10,6 +10,7 @@
         <ToolButton id="form-save" icon="Editor/Icons/save.svg"/>
         <ToolButton id="form-undo" icon="Editor/Icons/undo.svg"/>
         <ToolButton id="form-redo" icon="Editor/Icons/redo.svg"/>
+        <ToolButton id="form-discard" icon="Editor/Icons/revert.svg"/>
         <Separator/>
         <ToolButton id="form-cook" icon="Editor/Icons/cook.svg"/>
         <ToolButton id="form-rebuild" icon="Editor/Icons/rebuild.svg"/>

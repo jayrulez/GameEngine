@@ -10,6 +10,7 @@
         <ToolButton id="scene-save" icon="Editor/Icons/save.svg"/>
         <ToolButton id="scene-undo" icon="Editor/Icons/undo.svg"/>
         <ToolButton id="scene-redo" icon="Editor/Icons/redo.svg"/>
+        <ToolButton id="scene-discard" icon="Editor/Icons/revert.svg"/>
         <Separator/>
         <ToolButton id="scene-select" name="scene-transform" toggle="true" icon="Editor/Icons/select.svg"/>
         <ToolButton id="scene-move" name="scene-transform" toggle="true" icon="Editor/Icons/move.svg"/>

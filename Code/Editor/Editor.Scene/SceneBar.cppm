@@ -67,6 +67,7 @@ export namespace editor
             m_bar.Bind(find(u8"scene-save"), u8"file.save");
             m_bar.Bind(find(u8"scene-undo"), u8"edit.undo");
             m_bar.Bind(find(u8"scene-redo"), u8"edit.redo");
+            m_bar.Bind(find(u8"scene-discard"), u8"page.discardChanges");
             m_bar.Bind(find(u8"scene-select"), kGizmoSelect);
             m_bar.Bind(find(u8"scene-move"), kGizmoTranslate);
             m_bar.Bind(find(u8"scene-rotate"), kGizmoRotate);

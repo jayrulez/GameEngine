@@ -6,7 +6,7 @@
 // AssetObjectPage: what a page over one reflected asset does whatever its asset is
 // (Documentation/Specs/editor-gui.md, 5.4), so a page adds only what is its own (a picture, a
 // preview). It reads the asset when it opens; its markup (the page's) has the kit's bar, whose
-// `page-save`, `page-undo`, `page-redo`, `page-cook` and `page-rebuild` it binds to the actions
+// `page-save`, `page-undo`, `page-redo`, `page-discard`, `page-cook` and `page-rebuild` it binds to the actions
 // over the page, a grid (`page-grid`) and the state a page shows when its asset did not read
 // (`page-state`, in place of the grid), and names its asset's kind in `page-kind`. The grid holds
 // the asset's reflected properties under its type's name and, under "Source", what the page says
@@ -114,6 +114,7 @@ export namespace editor::app
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-save"), u8"file.save");
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-undo"), u8"edit.undo");
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-redo"), u8"edit.redo");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"page-discard"), u8"page.discardChanges");
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-cook"), u8"build.cookPage");
             m_bar->Bind(Find<gui::ButtonBase>(u8"page-rebuild"), u8"build.rebuildPage");
             if (auto* kind = Find<gui::Label>(u8"page-kind"); kind != nullptr && m_object.Get() != nullptr)

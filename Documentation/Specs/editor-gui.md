@@ -245,7 +245,7 @@ to follow the same order.
 | Editor.Geometry, Editor.Physics | In the build, on the GUI: the preview pages from one markup, the preview beside the grid, the preview's own choices on its bar (Editor.App's PreviewPane); the mesh viewer (its stats read only, its preview material kept per mesh, a chain's level held); the collision shape (its outline, its source mesh a slot for what a mesh cooks to, each edit one undo step, no mesh a notice, no Cook now) | X6 (layer 3) |
 | Editor.Materials, Editor.Render | In the build, on the GUI, on the preview pages' markup: the material page (its shader's table in three sections: the material's (the shader a reference, the built-in template while there is none, the pipeline state), its properties each by its declared type (a range from the shader, a colour, an HDR colour a colour and an intensity, a vector its parts), its textures each a slot), the preview on a shape or a mesh of the project, kept per material, a stale cook and a missing shader as notices); the settings profile page (the values' rows, the scene's own fields left out, each edit one undo step, previewed on the built-in scene or a project scene picked on the preview's bar, kept per profile) | X6 (layer 4) |
 | Editor.Audio | In the build in parts, on the GUI: the audio clip page from its markup (the clip's waveform, a widget of the editor's coloured by the sheet, under the kit's transport, the playback actions over the page, auditioned through the runtime's audio engine with a playhead and a volume of the page's own; the clip's options on the grid, each edit one undo step the audition follows; its source's facts read only; a missing source said in the waveform's place), the sound cue page (how it picks and its pitch and volume ranges, a variant per clip, a clip slot and its weight, and one more to fill, each edit one undo step; the kit's transport playing the variant the runtime's resolver picks, what it picked said beside it; no clip a notice), the audition shared by the audio pages (a clip read from its source, one voice), the clip thumbnails; the bus layout page out until its part | X6 (layer 5, parts 1 and 2) |
-| Editor.Input; the Terrain and Vegetation pages | Parked | |
+| Editor.Input; the Terrain page; a Vegetation Mask page (new, layer 7) | Parked (Editor.Vegetation's tools are in with the scene page, X5) | |
 | Editor.Script, Editor.Script.AngelScript, Editor.Script.Luau, Editor.Shaders, Editor.GUI | Parked | |
 | Editor.GameUI | Left with the old editor (ruling): never ported, deleted at the swap | |
 
@@ -544,7 +544,10 @@ The layers:
    API browser as a tree beside the code, the problems list), Shaders (the code beside a preview
    and the shader's grid) and the GUI's documents and sheets (the code beside a live preview), each
    with the kit's problems list rather than a status line.
-7. The terrain page (Editor.Terrain's), its layers a list on the grid, beside the preview.
+7. The terrain page (Editor.Terrain's), its layers a list on the grid, beside the preview; and a
+   vegetation mask page, new (user 2026-10-26: no editor had one, a mask opened on the generic page):
+   its density planes as pictures on the image view, its options on the grid, as the heightfield
+   page's; its painting stays the scene view's tool.
 8. The particle effect page (Particles): the systems a tree, the preview, the inspector with its
    curves and gradients on the grid's own editors (a gradient's stop recoloured, which nothing
    handled before).

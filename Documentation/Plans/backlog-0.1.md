@@ -29,6 +29,16 @@
 - **The editor theme gives nothing elevation** (UI survey 2026-10-14): RoundedDark puts no shadow
   on popups, menus or floating panels, though the framework draws a good analytic shadow. Add
   elevation to what floats.
+- **Scene and prefab thumbnails never draw** (user 2026-10-26; the old editor too): the assets
+  browser and the pickers show a scene's and a prefab's icon, never a picture, while meshes and
+  materials draw. The generators exist (Editor.Scene's AssetThumbnailsImpl.cpp: Prefab- and
+  SceneThumbnailGenerator) and are registered with the scene editor; they are the two that stage
+  into a private scene (`NeedsPrivateScene`), which the thumbnail stage creates on its own scene
+  manager (Editor.Preview's ThumbnailStageImpl.cpp), whose installer the scene subsystem does set.
+  Not yet found: whether their jobs are queued at all, whether their Stage fails (the prefab
+  payload read, the spawn, the scene load) or times out waiting on meshes, or whether the private
+  scene renders empty. Their failures log nothing today: a warning on a failed thumbnail would
+  have shown which.
 
 ## Engine
 

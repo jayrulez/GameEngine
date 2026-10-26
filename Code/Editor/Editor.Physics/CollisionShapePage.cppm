@@ -9,7 +9,8 @@
 // shows and when a cook changes it, beside the asset's rows: its source mesh (an asset slot taking
 // what a mesh cooks to, static or skinned), the cook mode and the hull's tolerance. Each edit is
 // one undo step, where the page had changed the asset with no undo at all; a shape with no mesh
-// says so in a notice. Save writes the asset back and requests a re-cook, so a shape=Cooked body
+// says so in a notice, and shows no collider (a collider cooked before its mesh was cleared is not
+// one it can make now). Save writes the asset back and requests a re-cook, so a shape=Cooked body
 // picks up the new collider; the old page's Cook now is the bar's Cook, as every asset page has it.
 // Never linked by the runtime.
 
@@ -55,6 +56,12 @@ export namespace editor
 
         /// What a cook kind is called (headless; a test reads it).
         [[nodiscard]] static StringView CookLabel(pipeline::CollisionCookKind kind);
+        /// Whether the preview shows the cooked collider: there is one, and the asset still names
+        /// a mesh to make it from (cleared, the last cook's collider is one it can no longer make).
+        [[nodiscard]] static bool ShowsCollider(const Guid& sourceMesh, const physics::CollisionShape* shape)
+        {
+            return !sourceMesh.IsNil() && shape != nullptr && shape->outline.Size() >= 3;
+        }
 
         // === For tests ===
         [[nodiscard]] app::PreviewPane* Pane() const noexcept { return m_pane.Get(); }

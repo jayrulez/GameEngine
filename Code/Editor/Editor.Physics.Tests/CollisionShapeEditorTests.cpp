@@ -142,7 +142,7 @@ TEST_CASE("collision page: its source mesh a slot for what a mesh cooks to, each
         REQUIRE(mesh->ReferenceType != nullptr);
         CHECK(StringView(reinterpret_cast<const utf8char*>(mesh->ReferenceType->name)) == StringView(u8"StaticMeshSource"));
         CHECK_FALSE(page.Notice(u8"mesh").IsEmpty());
-        CHECK(page.Fact(u8"Collider") == StringView(u8"Not cooked yet"));
+        CHECK(page.Fact(u8"Collider") == StringView(u8"None: no source mesh"));
         CHECK_FALSE(page.Pane()->Showing());
 
         const Guid crate{0x77, 0x1};
@@ -163,4 +163,16 @@ TEST_CASE("collision page: its source mesh a slot for what a mesh cooks to, each
     context.SetProject(nullptr);
     project.Reset();
     (void)RemoveDirectoryRecursive(dir.AsView());
+}
+
+TEST_CASE("collision page: a collider cooked before its mesh was cleared is not shown")
+{
+    auto cooked = MakeRef<physics::CollisionShape>(DefaultAllocator());
+    cooked->outline.PushBack(Float3{0, 0, 0});
+    cooked->outline.PushBack(Float3{1, 0, 0});
+    cooked->outline.PushBack(Float3{0, 1, 0});
+    const Guid mesh{0x77, 0x1};
+    CHECK(editor::CollisionShapeEditorPage::ShowsCollider(mesh, cooked.Get()));
+    CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(Guid{}, cooked.Get())); // cleared: the last cook's is not its
+    CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(mesh, nullptr));    // named, not cooked yet
 }

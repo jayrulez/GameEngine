@@ -73,9 +73,9 @@ namespace editor
         SetFact(u8"Cooks From", MeshName(asset->sourceMesh).AsView());
         SetFact(u8"Cooks As", CookLabel(asset->cook));
         const physics::CollisionShape* shape = m_shape ? m_shape.Get() : nullptr;
-        if (shape == nullptr || shape->outline.Size() < 3)
+        if (!ShowsCollider(asset->sourceMesh, shape))
         {
-            SetFact(u8"Collider", u8"Not cooked yet");
+            SetFact(u8"Collider", asset->sourceMesh.IsNil() ? StringView(u8"None: no source mesh") : StringView(u8"Not cooked yet"));
             if (m_pane)
                 m_pane->ShowEmpty(u8"No collider yet", asset->sourceMesh.IsNil() ? StringView(u8"Pick a source mesh, then save: its collider cooks and shows here.")
                                                                                  : StringView(u8"Save to cook the collider; it shows here once cooked."));

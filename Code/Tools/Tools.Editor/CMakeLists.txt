@@ -26,6 +26,7 @@ target_link_libraries(Tools.Editor PRIVATE
                           # AND live validation compile against (run/ui/physics/audio/... facades)
     Editor::Core Editor::App Editor::Navigation
     Editor::Scene # the scene page (its hierarchy and inspector come with their layers)
+    Editor::Play # the Game tabs and the PIE tools
     Editor::Spline # the scene view's spline tool
     Editor::Terrain # the scene view's terrain brushes
     Editor::Vegetation # and the vegetation's

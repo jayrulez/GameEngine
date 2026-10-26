@@ -58,6 +58,7 @@ import engine.composition; // RegisterAllScriptFacades - the COMPLETE engine fac
 import editor.core;
 import editor.app;
 import editor.scene; // RegisterSceneEditor
+import editor.play; // RegisterPlayInEditor, the game-audio preference
 import editor.spline; // RegisterSplineViewportTools
 import editor.terrain; // RegisterTerrainSceneTools
 import editor.vegetation; // RegisterVegetationViewportTools, RegisterVegetationToolPanels
@@ -130,6 +131,7 @@ namespace
         // Domain editor-settings SECTIONS register before the app boots (the user settings
         // file loads in the app ctor; see RegisterNavigationEditorSettingsTypes).
         editor::navigation::RegisterNavigationEditorSettingsTypes();
+        editor::RegisterGameAudioEditorSettingsTypes();
         pipeline::RegisterAllBuilders(registry, dataRoot);
         // The COMPLETE engine script surface into the global registry (run/ui/physics/audio/...
         // facades), so BOTH the editor's cook AND its live script validation (ScriptApiSurface
@@ -283,6 +285,9 @@ int main(int argc, char** argv)
         // The scene editor: its pages, its actions, its MCP live tools, and its services (the
         // document types, the export's scene seams, a model import's prefab and scene).
         editor::RegisterSceneEditor(app.Context(), host, app);
+        // Play in editor: the Game tabs (Play, Play New Instance), the game-audio preference, the
+        // PIE tools (layer 7, part 3).
+        editor::RegisterPlayInEditor(app.Context(), host, app);
         // The scene view's tools by domain; the bar shows them in this order (layer 5, part 3).
         editor::RegisterTerrainSceneTools(app.Context()); // sculpt, paint layers, cut holes; their panels; splatmap thumbnails
         editor::RegisterVegetationViewportTools(); // paint vegetation, paint props

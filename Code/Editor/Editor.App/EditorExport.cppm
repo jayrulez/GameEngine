@@ -50,8 +50,17 @@ export namespace editor::app
         EditorExport(const EditorExport&) = delete;
         EditorExport& operator=(const EditorExport&) = delete;
 
-        /// The project it exports (null between projects).
-        void SetProject(editor::EditorProject* project) noexcept { m_project = project; }
+        /// The project it exports (null between projects), its presets read from it (its
+        /// export_presets.xml, else the default one), as the old editor read them when its Export
+        /// dialog opened: they were saved and never read back, so a restart lost them.
+        void SetProject(editor::EditorProject* project)
+        {
+            m_project = project;
+            if (m_project == nullptr)
+                return;
+            foundation::vfs::NativeFileSystem projectFs(m_project->Directory(), m_allocator);
+            m_presetsController.Load(projectFs);
+        }
 
         /// Exports `presetName` (or every preset): a background cook first, then the job.
         void Run(StringView presetName, bool all)

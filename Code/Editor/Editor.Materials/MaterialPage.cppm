@@ -177,6 +177,8 @@ export namespace editor
         [[nodiscard]] pipeline::MaterialAsset* Asset() const { return ObjectAs<pipeline::MaterialAsset>(); }
         // Run one edit as an undoable command: snapshot -> mutate -> snapshot -> push.
         void ApplyEdit(StringView mergeKey, Function<void(materials::MaterialSource&)> mutate);
+        /// A gesture given up: the source as it was before its previews.
+        void CancelGesture();
 
         // The rows from the source: made again when its layout changed, else their values shown.
         void BuildRows();
@@ -215,6 +217,12 @@ export namespace editor
         UniquePtr<foundation::gui::PropertyBag> m_textureRows;
         bool m_rowsDirty = false; // the layout changed: built again on the next Refresh
         bool m_reshow = false;    // the values changed under the rows: shown again on the next Refresh
+        // A gesture under way (a drag, a scrub, a picker open): its previews are written to the
+        // source as they go, so the preview shows them, with no undo step; the source as it was
+        // before them, what the gesture's one step starts from, or what a cancel puts back.
+        bool m_previewing = false;
+        bool m_inGesture = false;
+        Array<byte> m_gestureBefore;
 
         scene::EntityHandle m_shape;
         RefPtr<foundation::geometry::StaticMesh> m_previewMesh;

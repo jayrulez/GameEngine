@@ -14,6 +14,7 @@ import foundation.core;
 import foundation.content;
 import foundation.settings;
 import foundation.materials;
+import foundation.materials.resource; // MaterialSource (what the tests read back)
 import foundation.texture.resource;
 import materials.pipeline;
 import foundation.gui;
@@ -81,6 +82,19 @@ namespace
         static const gui::ElementSet elements = gui::ElementSet::All();
         gui::MarkupLoader loader(elements, DefaultAllocator());
         return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+
+    // A float property's value in the material's source (what the preview material is built from).
+    f32 SourceFloat(const materials::MaterialSource& s, StringView name)
+    {
+        for (usize i = 0; i < s.propertyNames.Size(); ++i)
+            if (s.propertyNames[i].AsView() == name && i < s.propertyOffsets.Size() && s.propertyOffsets[i] + sizeof(f32) <= s.uniformDefaults.Size())
+            {
+                f32 v = 0.0f;
+                MemCopy(&v, s.uniformDefaults.Data() + s.propertyOffsets[i], sizeof(v));
+                return v;
+            }
+        return -1.0f;
     }
 
     // A project with a PBR material ("Wood") and its editor settings.
@@ -206,4 +220,32 @@ TEST_CASE("material page: an edit is one undo step, the row following, Discard t
     third->Refresh(); // the bar shown again
     third.Reset();
     CHECK(bed.Open()->PreviewMesh() == mesh);
+}
+
+TEST_CASE("material page: a gesture's previews reach the source as they go, one undo step at its commit; a cancel takes them back")
+{
+    Bed bed;
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    gui::PropertyBag& properties = page->PropertyRows();
+    const f32 before = SourceFloat(*page->Source(), u8"Roughness");
+    // As a slider's drag: begun, previewed twice, committed.
+    properties.BeginEdit(u8"Roughness");
+    properties.PreviewEdit(u8"Roughness", gui::PropertyWrite{gui::Variant(0.3)});
+    CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.3f)); // live: the preview built from it
+    properties.PreviewEdit(u8"Roughness", gui::PropertyWrite{gui::Variant(0.4)});
+    CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.4f));
+    CHECK_FALSE(page->Commands().CanUndo()); // no step while it goes
+    properties.CommitEdit(u8"Roughness", gui::PropertyWrite{gui::Variant(0.4)});
+    CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.4f));
+    page->Commands().Undo(); // the gesture's one step, back to before it
+    CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(before));
+    CHECK_FALSE(page->Commands().CanUndo());
+
+    // Given up with Escape: the source as it was.
+    properties.BeginEdit(u8"Roughness");
+    properties.PreviewEdit(u8"Roughness", gui::PropertyWrite{gui::Variant(0.9)});
+    CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(0.9f));
+    properties.CancelEdit(u8"Roughness");
+    CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(before));
+    CHECK_FALSE(page->Commands().CanUndo());
 }

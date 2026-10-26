@@ -369,11 +369,24 @@ namespace editor
         }
         gui::PropertyBag* const bags[] = {m_materialRows.Get(), m_propertyRows.Get(), m_textureRows.Get()};
         for (gui::PropertyBag* rows : bags)
+        {
             rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
                               {
                                   if (!commit.After.IsEmpty())
                                       self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
                               });
+            // A gesture's previews shown live, as the old page's were: written to the source, the
+            // preview material built again, no undo step until the commit.
+            rows->SetOnPreview([self, rows](StringView path)
+                               {
+                                   self->m_previewing = true;
+                                   const bool reshow = self->m_reshow;
+                                   self->Committed(*rows, path, rows->GetValue(path, 0));
+                                   self->m_reshow = reshow; // the rows hold the preview already
+                                   self->m_previewing = false;
+                               });
+            rows->SetOnCancel([self](StringView) { self->CancelGesture(); });
+        }
         ShowValues();
         AddSection(u8"material", u8"Material", *m_materialRows);
         AddSection(u8"properties", u8"Properties", *m_propertyRows);
@@ -665,11 +678,34 @@ namespace editor
     {
         if (Asset() == nullptr)
             return;
-        Array<byte> before = SnapshotSource();
+        if (m_previewing)
+        {
+            // A preview: written to the source and shown, the source before the gesture kept.
+            if (!m_inGesture)
+            {
+                m_gestureBefore = SnapshotSource();
+                m_inGesture = true;
+            }
+            mutate(Asset()->source);
+            RebuildPreviewMaterial();
+            return;
+        }
+        // The gesture's one step starts from the source before its previews.
+        Array<byte> before = m_inGesture ? Move(m_gestureBefore) : SnapshotSource();
+        m_inGesture = false;
         mutate(Asset()->source);
         Array<byte> after = SnapshotSource();
         // The mutation already ran; Execute() re-applies `after` (idempotent).
         (void)Commands().Execute(UniquePtr<IEditorCommand>(Allocator().New<EditMaterialCommand>(*this, mergeKey, Move(before), Move(after)), Allocator()));
+    }
+
+    void MaterialEditorPage::CancelGesture()
+    {
+        if (!m_inGesture)
+            return;
+        m_inGesture = false;
+        ApplySourceBlob(m_gestureBefore); // the previews taken back, the preview with them
+        m_gestureBefore.Clear();
     }
 
     // === The preview ===

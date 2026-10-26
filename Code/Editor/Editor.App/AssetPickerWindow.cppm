@@ -526,6 +526,8 @@ export namespace editor::app
             if (m_tiles && m_services.picture)
                 shown.Picture = m_services.picture(instance.Id());
             cell->Show(shown);
+            // Hovered, the whole of where it lives (a row's is cut to fit) and what it is.
+            cell->SetTooltip(Format(u8"{}/{} ({})", ShownPath(instance.OwningGroup()), instance.Name(), AssetsView::KindOf(instance.TypeName())).AsView());
         }
 
         // Tiles or a list, the toggles saying which.

@@ -177,6 +177,7 @@ TEST_CASE("asset picker: a group holds what it holds itself; All every group's; 
     AssetCell* cell = bed.Cell(0);
     REQUIRE(cell != nullptr);
     CHECK(cell->Kind() == StringView(u8"PickerMesh in Content/Models/Town"));
+    CHECK(cell->GetTooltipText() == StringView(u8"Content/Models/Town/Bucket (PickerMesh)")); // hovered: the whole of where it lives
     bed.picker->Search(StringView{});
     CHECK(bed.picker->Rows().IsEmpty()); // the chosen group again
 }

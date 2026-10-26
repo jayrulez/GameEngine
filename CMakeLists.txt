@@ -572,7 +572,7 @@ if(OPTION_BUILD_TOOLS)
     # The editor moves onto the GUI on this branch (Documentation/Specs/editor-gui.md, 4): a library
     # still on foundation.ui is PARKED, out of the build with its tests, its source untouched, and
     # comes back with its port commit (the spec's ledger, 4.1, keeps the list):
-    # Play, Animation, Particles, PropertyAnimation, Generic, Texture, Fonts, Image, Heightfield,
+    # Animation, Particles, PropertyAnimation, Generic, Texture, Fonts, Image, Heightfield,
     # Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain, Script (and its
     # AngelScript and Luau lexers), Shaders, GUI, GameUI.
     # Editor.App, the shell, comes back in parts (the spec's 5.1): its source list names the files
@@ -625,6 +625,7 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Pipeline/Pipeline.Registration)
 
     add_subdirectory(Code/Editor/Editor.Scene) # scene editor plugin; on the GUI in parts (the spec's 5.3): its UI-free half so far
+    add_subdirectory(Code/Editor/Editor.Play) # play in editor; on the GUI in parts (the spec's 5.3, layer 7): its UI-free half so far
     add_subdirectory(Code/Tools/Tools.Editor)        # Editor executable: the shell on the GUI, its pages coming back as they port
 
     add_subdirectory(Code/Tools/Tools.Cook)          # Tools.Cook CLI cooker (headless)

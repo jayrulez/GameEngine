@@ -62,7 +62,10 @@ namespace
             }
         }
     };
-    RTTI_DEFINE_OBJECT_VERSIONED(FormProbeAsset, "rtti::editor::editor::tests", 2)
+    REFLECT_MEMBERS(FormProbeAsset, "rtti::editor::editor::tests")
+    {
+        builder.DataVersion(2).Attribute("displayName", String(u8"Form Probe")); // the kind its page names
+    }
 
     [[nodiscard]] i32 IndexOf(const Array<AssetFormField>& fields, StringView label)
     {
@@ -277,7 +280,7 @@ TEST_CASE("generic page: the fields as rows by their keys, an array's folded und
     CHECK(page->Grid()->GetSource() == page->Bag());
     auto* kind = app::FindById<gui::Label>(*page->Content(), u8"form-kind");
     REQUIRE(kind != nullptr);
-    CHECK(kind->GetText() == StringView(u8"FormProbeAsset"));
+    CHECK(kind->GetText() == StringView(u8"Form Probe")); // its display name, not its type's
     CHECK_FALSE(app::FindById<gui::Node>(*page->Content(), u8"form-state")->IsDisplayed());
 
     gui::PropertyBag& bag = *page->Bag();

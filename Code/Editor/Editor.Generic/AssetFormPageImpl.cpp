@@ -465,7 +465,7 @@ namespace editor
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-cook"), u8"build.cookPage");
             m_bar->Bind(Find<gui::ButtonBase>(u8"form-rebuild"), u8"build.rebuildPage");
             if (auto* kind = Find<gui::Label>(u8"form-kind"); kind != nullptr && m_object.Get() != nullptr)
-                kind->SetText(StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)));
+                kind->SetText(TypeAttrString(*m_object->GetType(), "displayName", StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)))); // its display name, as every page's
             if (gui::Node* state = Find<gui::Node>(u8"form-state"))
                 state->SetDisplayed(m_object.Get() == nullptr);
             m_grid = Find<gui::PropertyGrid>(u8"form-grid");

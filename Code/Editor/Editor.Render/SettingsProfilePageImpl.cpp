@@ -123,6 +123,9 @@ namespace editor
             m_inner.SetObjects(Span<const Instance>(&object, 1u));
         }
         [[nodiscard]] gui::ReflectedPropertySource& Inner() noexcept { return m_inner; }
+        /// Told whenever the values change under it: a gesture's previews (written in place as
+        /// they go), its cancel, a commit, an undo; the page's preview follows them.
+        Function<void()> OnValuesWritten;
         void Refresh() { m_inner.Refresh(); }
 
         [[nodiscard]] usize ObjectCount() const override { return m_inner.ObjectCount(); }
@@ -158,7 +161,12 @@ namespace editor
 
     private:
         void OnPropertiesChanged() override { NotifyPropertiesChanged(); }
-        void OnValuesChanged() override { NotifyValuesChanged(); }
+        void OnValuesChanged() override
+        {
+            NotifyValuesChanged();
+            if (OnValuesWritten)
+                OnValuesWritten();
+        }
 
         mutable gui::ReflectedPropertySource m_inner;
         Array<String> m_skipped;
@@ -192,6 +200,9 @@ namespace editor
                                                   }),
                                               EditorRootAllocator()));
                                       });
+        // The preview scene follows the values as they change, a slider's drag included (the old
+        // page's did; the commit alone left the scene still until the release).
+        m_values->OnValuesWritten = [self]() { self->ApplyPreview(); };
         BindValues();
         if (pipeline::SettingsProfileAsset* asset = AssetOf(Object()))
             AddSection(u8"values", TypeAttrString(*asset->ValuesType(), "displayName", u8"Values"), *m_values);
@@ -336,6 +347,7 @@ namespace editor
 
     void SettingsProfilePage::ApplyPreview()
     {
+        ++m_previewsApplied;
         scene::Scene* preview = Preview() != nullptr ? Preview()->Scene() : nullptr;
         if (preview != nullptr && Object() != nullptr)
             (void)PreviewSettingsProfileInScene(*Object(), *preview, Context().Resources());

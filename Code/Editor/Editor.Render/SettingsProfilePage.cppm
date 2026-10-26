@@ -112,6 +112,8 @@ export namespace editor
         /// An edit of the values' property `path` to `write`, as the grid commits one.
         void EditValue(StringView path, const foundation::gui::PropertyWrite& write);
         [[nodiscard]] app::PreviewPane* Pane() const noexcept { return m_pane.Get(); }
+        /// How often the values were given to the preview scene (a test has no scene to look at).
+        [[nodiscard]] usize PreviewsApplied() const noexcept { return m_previewsApplied; }
 
     protected:
         void OnObjectChanged() override;
@@ -136,6 +138,7 @@ export namespace editor
         app::XmlPropertyTextFormat m_format;
         Guid m_previewSceneId; // the project scene previewed on; nil = the built-in one
         Array<RefPtr<RefCounted>> m_previewContent; // the preview's runtime meshes and materials
+        usize m_previewsApplied = 0;
     };
 
     class SettingsProfilePageFactory final : public IEditorPageFactory

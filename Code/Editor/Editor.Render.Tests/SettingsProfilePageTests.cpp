@@ -201,3 +201,22 @@ TEST_CASE("settings profile page: an edit is one undo step; Discard Changes take
     CHECK_FALSE(page->IsDirty());
     CHECK(rows.GetValue(u8"turbidity", 0).AsFloat() == doctest::Approx(3.0));
 }
+
+TEST_CASE("settings profile page: a gesture's previews reach the preview as they go, and its cancel")
+{
+    Bed bed;
+    UniquePtr<editor::SettingsProfilePage> page = bed.Open();
+    gui::IPropertySource& rows = page->Rows();
+    const usize before = page->PreviewsApplied();
+    // As a slider's drag: written in place as it goes, the preview given each value.
+    rows.BeginEdit(u8"turbidity");
+    rows.PreviewEdit(u8"turbidity", gui::PropertyWrite{gui::Variant(4.0)});
+    CHECK(page->PreviewsApplied() == before + 1u);
+    CHECK(rows.GetValue(u8"turbidity", 0).AsFloat() == doctest::Approx(4.0));
+    rows.PreviewEdit(u8"turbidity", gui::PropertyWrite{gui::Variant(5.0)});
+    CHECK(page->PreviewsApplied() == before + 2u);
+    CHECK_FALSE(page->Commands().CanUndo()); // no step while it goes
+    rows.CancelEdit(u8"turbidity");
+    CHECK(page->PreviewsApplied() == before + 3u); // the value back, the preview with it
+    CHECK(rows.GetValue(u8"turbidity", 0).AsFloat() == doctest::Approx(3.0));
+}

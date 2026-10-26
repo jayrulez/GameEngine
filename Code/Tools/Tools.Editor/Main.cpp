@@ -73,6 +73,7 @@ import editor.materials; // RegisterMaterialEditor
 import editor.render; // RegisterSettingsProfileEditor
 import editor.audio; // RegisterAudioClipEditor
 import editor.input; // RegisterInputMapEditor
+import editor.script; // RegisterScriptEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -317,10 +318,10 @@ int main(int argc, char** argv)
         editor::RegisterSettingsProfileEditor(app.Context(), pageServices);
         editor::RegisterAudioClipEditor(app.Context(), pageServices); // and its thumbnails
         editor::RegisterInputMapEditor(app.Context(), pageServices);
+        editor::RegisterScriptEditor(app.Context(), pageServices);
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
-        // the cook service too). The script page and its "New Asset > <Lang> Script" creators come
-        // back with the Script page's port.
+        // the cook service too): the script page's check compiles through them.
 #ifdef OPTION_HAS_ANGELSCRIPT
         pipeline::RegisterAngelScriptScriptCook();
 #endif

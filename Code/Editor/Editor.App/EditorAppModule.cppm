@@ -35,6 +35,8 @@ export import :asset_drag_data;
 export import :asset_picker_slot;
 export import :resource_ref_editor;
 export import :asset_page;
+export import :image_inspect_view;
+export import :asset_object_page;
 export import :picker;
 export import :path_picker_dialog;
 export import :asset_picker_window;

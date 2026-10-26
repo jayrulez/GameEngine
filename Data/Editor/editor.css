@@ -237,6 +237,15 @@ treerowcontent.inactive { opacity: 0.45; }
 /* The generic asset page (AssetForm.gml): its search over the grid, in one column. */
 .asset-form-body { flex-direction: column; }
 .asset-form-state { flex-grow: 1; }
+/* An asset page's state in place of its grid. */
+.page-state { flex-grow: 1; }
+/* The image pages (ImagePage.gml): the picture's own bar over its stage, which the picture fills. */
+.image-pane { flex-direction: column; }
+.image-stage { flex-grow: 1; min-height: 0; background-color: var(--surface-sunken); }
+.image-inspect { flex-grow: 1; }
+.image-empty { flex-grow: 1; background-color: var(--surface-sunken); }
+.image-zoom { min-width: 48px; color: var(--text-dim); font-size: var(--font-small); }
+.image-readout { color: var(--text-dim); font-size: var(--font-small); }
 /* An editor grid's notice: what it says wraps, in the warning's colour. */
 .notice-text { white-space: normal; color: var(--warning); }
 /* The HUD's zones: each a corner of the viewport, its pieces stacked from that corner, so they

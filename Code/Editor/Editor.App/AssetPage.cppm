@@ -13,6 +13,9 @@
 //     until now).
 //   - ReflectedEditCommand: one reflected source's change, undone and redone by its text on the
 //     object it landed in, found again each time (the object may have been read anew since).
+//   - SnapshotObject and RestoreObject: an object's whole serialized state, under its type's
+//     current data versions, for an edit made by code that moves many values at once (a preset)
+//     and is still one undo step.
 
 module;
 #include "Core/Prelude.h"
@@ -59,6 +62,82 @@ export namespace editor::app
         }
         return nullptr;
     }
+
+    /// Pushes `type`'s CURRENT data-version chain (it and its versioned bases) on `ar` without a
+    /// header, for a scan, a snapshot or a replay of a live object, which is at the current
+    /// version by definition: what a saved envelope's version scope carries. Pop it after.
+    inline void PushCurrentDataVersions(ISerializer& ar, const TypeInfo& type)
+    {
+        SerializedDataVersion chain[16];
+        u32 count = 0;
+        chain[count++] = SerializedDataVersion{type.id, type.dataVersion};
+        for (const TypeInfo* base = type.base; base != nullptr && count < 16; base = base->base)
+            if (base->dataVersion > 0)
+                chain[count++] = SerializedDataVersion{base->id, base->dataVersion};
+        ar.PushVersionScope(chain, count);
+    }
+
+    /// `object`'s whole state as bytes.
+    [[nodiscard]] inline Array<byte> SnapshotObject(ISerializable& object)
+    {
+        MemoryStream stream;
+        BinarySerializer ar(stream, SerializeMode::Write);
+        PushCurrentDataVersions(ar, *object.GetType());
+        object.Serialize(ar);
+        ar.PopVersionScope();
+        Array<byte> bytes;
+        const Span<const byte> written = stream.Bytes();
+        bytes.Reserve(written.Size());
+        for (byte b : written)
+            bytes.PushBack(b);
+        return bytes;
+    }
+
+    /// Puts SnapshotObject's `bytes` back into `object`.
+    inline bool RestoreObject(ISerializable& object, const Array<byte>& bytes)
+    {
+        MemoryStream stream;
+        (void)stream.Write(bytes.Data(), bytes.Size());
+        (void)stream.Seek(0, SeekOrigin::Begin);
+        BinarySerializer ar(stream, SerializeMode::Read);
+        PushCurrentDataVersions(ar, *object.GetType());
+        object.Serialize(ar);
+        ar.PopVersionScope();
+        return ar.IsOk();
+    }
+
+    /// An edit made by code over a whole object: its state before and after, put back by undo and
+    /// redo on the object, found again each time; `applied` runs after each.
+    class ObjectSnapshotCommand final : public editor::IEditorCommand
+    {
+    public:
+        ObjectSnapshotCommand(Function<ISerializable*()> target, Array<byte> before, Array<byte> after, StringView typeId, Function<void()> applied = {})
+            : m_target(Move(target)), m_before(Move(before)), m_after(Move(after)), m_typeId(typeId), m_applied(Move(applied))
+        {
+        }
+
+        [[nodiscard]] bool Execute() override { return Restore(m_after); }
+        void Undo() override { (void)Restore(m_before); }
+        [[nodiscard]] StringView TypeId() const override { return m_typeId.AsView(); }
+
+    private:
+        bool Restore(const Array<byte>& bytes)
+        {
+            ISerializable* object = m_target ? m_target() : nullptr;
+            if (object == nullptr)
+                return false;
+            const bool ok = RestoreObject(*object, bytes);
+            if (m_applied)
+                m_applied();
+            return ok;
+        }
+
+        Function<ISerializable*()> m_target;
+        Array<byte> m_before;
+        Array<byte> m_after;
+        String m_typeId;
+        Function<void()> m_applied;
+    };
 
     class XmlPropertyTextFormat final : public gui::IPropertyTextFormat
     {

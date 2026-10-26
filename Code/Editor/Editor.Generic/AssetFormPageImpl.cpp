@@ -24,25 +24,6 @@ namespace editor
 {
     namespace
     {
-        // Push the type's CURRENT data-version chain (concrete + versioned bases) WITHOUT
-        // serializing header noise - scans/replays run against the live object, which is at
-        // the current version by definition. Mirrors BeginVersionedPayload's chain shape.
-        u32 PushCurrentVersions(ISerializer& ar, const TypeInfo& type)
-        {
-            SerializedDataVersion chain[16];
-            u32 count = 0;
-            chain[count++] = SerializedDataVersion{type.id, type.dataVersion};
-            for (const TypeInfo* base = type.base; base != nullptr && count < 16; base = base->base)
-            {
-                if (base->dataVersion > 0)
-                {
-                    chain[count++] = SerializedDataVersion{base->id, base->dataVersion};
-                }
-            }
-            ar.PushVersionScope(chain, count);
-            return count;
-        }
-
         // Widen a raw scalar into the field's storage / narrow it back out.
         void ReadScalarInto(AssetFormField& field, const void* value, ScalarKind kind)
         {
@@ -353,7 +334,7 @@ namespace editor
     {
         outFields.Clear();
         FormScanSerializer scanner(outFields);
-        PushCurrentVersions(scanner, *object.GetType());
+        app::PushCurrentDataVersions(scanner, *object.GetType());
         object.Serialize(scanner);
         scanner.PopVersionScope();
         return scanner.GetStatus();
@@ -367,7 +348,7 @@ namespace editor
             return Status{ErrorCode::InvalidArgument};
         }
         FormReplaySerializer replayer(fields, index, newValue);
-        PushCurrentVersions(replayer, *object.GetType());
+        app::PushCurrentDataVersions(replayer, *object.GetType());
         object.Serialize(replayer);
         replayer.PopVersionScope();
         return replayer.GetStatus();
@@ -685,7 +666,7 @@ namespace editor
         }
         MemoryStream stream;
         BinarySerializer ar(stream, SerializeMode::Write);
-        PushCurrentVersions(ar, *m_object->GetType()); // include version-gated fields
+        app::PushCurrentDataVersions(ar, *m_object->GetType()); // include version-gated fields
         m_object->Serialize(ar);
         ar.PopVersionScope();
         const Span<const byte> bytes = stream.Bytes();
@@ -724,7 +705,7 @@ namespace editor
         (void)stream.Write(blob.Data(), blob.Size());
         (void)stream.Seek(0, SeekOrigin::Begin);
         BinarySerializer ar(stream, SerializeMode::Read);
-        PushCurrentVersions(ar, *m_object->GetType());
+        app::PushCurrentDataVersions(ar, *m_object->GetType());
         m_object->Serialize(ar);
         ar.PopVersionScope();
         m_undoBaseline = blob;

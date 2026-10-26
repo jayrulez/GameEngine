@@ -63,6 +63,10 @@ import editor.spline; // RegisterSplineViewportTools
 import editor.terrain; // RegisterTerrainSceneTools
 import editor.vegetation; // RegisterVegetationViewportTools, RegisterVegetationToolPanels
 import editor.generic; // RegisterGenericAssetEditor
+import editor.image; // RegisterImageEditor
+import editor.heightfield; // RegisterHeightfieldEditor
+import editor.texture; // RegisterTextureEditor
+import editor.fonts; // RegisterFontEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -294,9 +298,15 @@ int main(int argc, char** argv)
         editor::RegisterVegetationViewportTools(); // paint vegetation, paint props
         editor::RegisterVegetationToolPanels();
         editor::RegisterSplineViewportTools(); // the spline control-point editor
-        // The fallback page for an asset with no page of its own (X6, layer 1); the bespoke ones
-        // win by their type.
-        editor::RegisterGenericAssetEditor(app.Context(), app);
+        // The asset pages (X6), each asking the application for its services when it is made;
+        // the fallback catches an asset with no page of its own, the bespoke ones win by type.
+        editor::app::EditorApplication* application = &app;
+        const auto pageServices = [application]() { return application->PageServices(); };
+        editor::RegisterImageEditor(app.Context(), pageServices);
+        editor::RegisterHeightfieldEditor(app.Context(), pageServices); // and its thumbnails
+        editor::RegisterTextureEditor(app.Context(), pageServices);     // and its thumbnails
+        editor::RegisterFontEditor(app.Context(), pageServices);        // and its thumbnails
+        editor::RegisterGenericAssetEditor(app.Context(), pageServices);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too). The script page and its "New Asset > <Lang> Script" creators come
         // back with the Script page's port.

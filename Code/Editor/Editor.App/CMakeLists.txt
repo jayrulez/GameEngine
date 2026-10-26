@@ -31,6 +31,7 @@ target_sources(Editor.App
         EditorPageToolsImpl.cpp
         EditorLayoutToolsImpl.cpp
         EditorActionToolsImpl.cpp
+        ImageInspectViewImpl.cpp
     PUBLIC
         FILE_SET editorapp_modules TYPE CXX_MODULES FILES
             UIPage.cppm
@@ -38,6 +39,8 @@ target_sources(Editor.App
             PropertySections.cppm
             PropertyExtras.cppm
             AssetPage.cppm
+            ImageInspectView.cppm
+            AssetObjectPage.cppm
             EditorStatusBar.cppm
             EditorWindow.cppm
             EditorDock.cppm

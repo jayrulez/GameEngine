@@ -210,9 +210,4 @@ export namespace editor
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<GenericAssetPageFactory>(Move(services)), editor::EditorRootAllocator()));
     }
-    inline void RegisterGenericAssetEditor(EditorContext& context, app::EditorApplication& app)
-    {
-        app::EditorApplication* editor = &app;
-        RegisterGenericAssetEditor(context, [editor]() { return editor->PageServices(); });
-    }
 }

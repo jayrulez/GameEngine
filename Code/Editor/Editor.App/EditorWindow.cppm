@@ -207,6 +207,8 @@ export namespace editor::app
         }
         [[nodiscard]] const EditorLook& Look() const noexcept { return m_look; }
 
+        /// A file's text by its path under the data root (a code language's); false when it is not there.
+        [[nodiscard]] bool LoadText(StringView path, String& out) const { return m_resources && m_resources->LoadText(path, out); }
         /// A page's or a panel's markup by its path under the data root (Editor/...): a node, or
         /// null (logged) when it does not load.
         [[nodiscard]] RefPtr<gui::Node> LoadMarkup(StringView path)

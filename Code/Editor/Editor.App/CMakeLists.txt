@@ -87,6 +87,7 @@ target_sources(Editor.App
             WindowCapture.cppm
             EditorWindowTools.cppm
             EditorInputTools.cppm
+            CodeLanguages.cppm
             EditorProfilerTools.cppm
             EditorMcpHost.cppm
             EditorProjectOperations.cppm

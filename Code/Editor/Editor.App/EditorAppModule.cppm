@@ -71,4 +71,5 @@ export import :mcp_action_tools;
 export import :window_capture;
 export import :mcp_window_tools;
 export import :mcp_input_tools;
+export import :code_languages;
 export import :mcp_profiler_tools;

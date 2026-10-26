@@ -40,6 +40,7 @@ import :picker;
 import :group_picker_dialog;
 import :resource_ref_editor;
 import :asset_page;
+import :code_languages;
 import :settings_dialog;
 import :templates_dialog;
 import :export_dialog;
@@ -153,6 +154,7 @@ export namespace editor::app
             services.icons = &TypeIcons();
             services.host = m_embeddedHost.Get(); // the runtime's, with its scenes and renderer (the scene page's too)
             services.gui = m_window.Host();
+            services.languages = &m_codeLanguages;
             return services;
         }
         /// The one source every page factory asks for PageServices (the registrations take it by
@@ -229,6 +231,7 @@ export namespace editor::app
         // The parts, in the order they start; they stop in reverse.
         EditorWindow m_window{m_editorAllocator};
         AssetPageServicesSource m_pageServices{[this]() { return PageServices(); }}; // the page factories', reading the window above
+        CodeLanguages m_codeLanguages{m_editorAllocator, [this](StringView path, String& out) { return m_window.LoadText(path, out); }}; // read through the window's resources
         EditorDock m_dock{m_editorAllocator};
         UniquePtr<EditorPages> m_pages; // made with the dock, in OnStartup
         UniquePtr<ActionMenuBar> m_menus; // the frame's menu bar, from the actions

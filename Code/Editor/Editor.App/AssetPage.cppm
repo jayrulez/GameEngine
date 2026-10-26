@@ -31,6 +31,7 @@ import foundation.gui.toolkit;
 import foundation.gui.hosting; // GuiHost
 import editor.core;
 import :resource_ref_editor;
+import :code_languages;
 
 using namespace foundation::core;
 
@@ -48,6 +49,8 @@ export namespace editor::app
         /// preview's viewport (null: none, a test; the preview then draws nothing).
         foundation::runtime::IApplicationHost* host = nullptr;
         gui::GuiHost* gui = nullptr;
+        /// The code editors' languages by id (null: none, a test; code shows uncoloured).
+        CodeLanguages* languages = nullptr;
     };
 
     /// Where every page factory gets the services a page is made with: one, owned by the editor's

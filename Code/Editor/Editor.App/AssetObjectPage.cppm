@@ -209,6 +209,14 @@ export namespace editor::app
         }
         [[nodiscard]] EditorContext& Context() const noexcept { return *m_context; }
         [[nodiscard]] const AssetPageServices& Services() const noexcept { return m_services; }
+        /// A button of the page's own bound to the action `id` over the page, as the kit's bar's
+        /// are (a clip's transport to the playback actions): enabled, checked and its tooltip
+        /// following the action each frame.
+        void BindAction(gui::ButtonBase* button, StringView id)
+        {
+            if (m_bar)
+                m_bar->Bind(button, id);
+        }
         template <typename T>
         [[nodiscard]] T* Find(StringView id) const
         {

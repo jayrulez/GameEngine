@@ -637,6 +637,7 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Geometry) # the mesh viewer (the spec's 5.4, layer 3)
     add_subdirectory(Code/Editor/Editor.Materials) # the material page (the spec's 5.4, layer 4)
     add_subdirectory(Code/Editor/Editor.Render) # the settings profile page (the spec's 5.4, layer 4)
+    add_subdirectory(Code/Editor/Editor.Audio) # the audio pages (the spec's 5.4, layer 5): the clip so far
     add_subdirectory(Code/Tools/Tools.Editor)        # Editor executable: the shell on the GUI, its pages coming back as they port
 
     add_subdirectory(Code/Tools/Tools.Cook)          # Tools.Cook CLI cooker (headless)

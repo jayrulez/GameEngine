@@ -246,6 +246,16 @@ treerowcontent.inactive { opacity: 0.45; }
 .image-stage { flex-grow: 1; min-height: 0; background-color: var(--surface-sunken); }
 .image-inspect { flex-grow: 1; }
 .image-empty { flex-grow: 1; background-color: var(--surface-sunken); }
+/* The audio clip page: the waveform under its transport, in the theme's colours; the audition's
+   volume a short slider at the bar's end. */
+.audio-pane { flex-direction: column; }
+.audio-stage { flex-grow: 1; min-height: 0; flex-direction: column; padding: var(--space-m); background-color: var(--surface-sunken); }
+.audio-stage > .waveform { flex-grow: 1; min-height: 0; }
+.audio-empty { flex-grow: 1; background-color: var(--surface-sunken); }
+.audio-volume { width: 96px; }
+.audio-volume-icon { width: 16px; height: 16px; image-color: var(--icon-dim); }
+waveform::wave { background-color: var(--accent); }
+waveform::playhead { background-color: var(--warning); }
 .image-zoom { min-width: 48px; color: var(--text-dim); font-size: var(--font-small); }
 .image-readout { color: var(--text-dim); font-size: var(--font-small); }
 /* The preview pages (PreviewPage.gml): the preview's own bar over its stage, which the viewport fills. */

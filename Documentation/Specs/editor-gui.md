@@ -493,6 +493,63 @@ The layers:
 
 The property animation panel under the viewport comes back with Editor.PropertyAnimation (X6).
 
+### 5.4 X6, the asset pages, in layers
+
+Mapped from the parked libraries on 2026-10-26 (the catalog's pages.md surveyed them on
+2026-10-23). Twenty libraries, 200 to 4,200 lines each, every page a UIEditorPage on foundation.ui;
+what is not UI in them (the thumbnail generators, the preview settings types, the lexers' language
+tables, the stat lines, the form scan) carries over unedited. Every widget they need is in the GUI
+already: the property grid and its reflected source (with curves, gradients and references),
+CurveView, GradientView, Dopesheet and TimeAxis, GraphView, GUI.Code's CodeEditor with its
+languages, completion and find bar, GUI.Viewport, the Splitter, TreeView and ListView. So X6 adds
+no GUI library work of its own; a gap found on the way is a GUI commit grouped with the others.
+
+What every page shares, from the kit (Mock/kit.gml): one page bar, Save, Undo and Redo first,
+bound to the actions over the page (PageActionBar), the page's own after; one transport for every
+preview (Restart, Play, Pause, Stop, the state named); a page that cannot read its asset says so on
+the page (the kit's failed state), not only in the log; read-only facts as read-only rows, never as
+fields with no setter (the catalog's inconsistency 8); a preview's own choices (its mesh, its shape,
+its scene) in the preview's bar, never among the asset's rows (inconsistency 10); every edit one
+undo step on the page's stack. The catalog's other problems are each answered where their page is
+built. As before, each layer is one commit with its tests, and the editor is run on a project and
+screenshotted over MCP before it is reported.
+
+The layers:
+1. The shared parts and the fallback page: the XML text format a reflected source writes its undo
+   in moves from the scene's inspector to Editor.App, beside an undo command for a reflected
+   source's change over any object (what the scene's settings do, made common); Editor.Generic on
+   the GUI, its serialize-scanned fields a property bag on the grid (an array's fields a group,
+   folded, as before; a blob's size a read-only row; a guid one asset reference, not a slot and a
+   text row), from its markup.
+2. The image pages: Texture, Image, Heightfield and Fonts, each the picture (an image with zoom
+   and pan, its checkerboard under alpha) beside the grid; their facts read-only rows; the
+   texture's presets on its bar.
+3. The preview viewport: Editor.Preview's PreviewViewport on GUI.Viewport (a private scene, the
+   editor camera, a frame button and the camera's controls as a hint, one backdrop for every
+   preview); then the mesh viewer (Geometry, its stats a read-only grid) and the collision shape
+   page (Physics: its edits on the undo stack, which it never had).
+4. The material page (Materials) and the settings profile page (Render), each a preview beside
+   the grid, the preview's shape, mesh or scene on the preview's bar.
+5. The audio pages and the input map: Audio's clip (the waveform a widget of the editor's, its
+   transport the kit's), its sound cue (its slots a list on the grid) and its bus layout (the
+   GUI's tree beside the grid); Input's map (its sets, actions and bindings, the key capture the
+   kit's).
+6. The code pages: the languages (AngelScript, Luau, HLSL) as GUI.Code languages, the markup and
+   the sheet languages for the GUI's own files (XML and CSS highlighting); Script (completion, the
+   API browser as a tree beside the code, the problems list), Shaders (the code beside a preview
+   and the shader's grid) and the GUI's documents and sheets (the code beside a live preview), each
+   with the kit's problems list rather than a status line.
+7. The terrain page (Editor.Terrain's), its layers a list on the grid, beside the preview.
+8. The particle effect page (Particles): the systems a tree, the preview, the inspector with its
+   curves and gradients on the grid's own editors (a gradient's stop recoloured, which nothing
+   handled before).
+9. The property animation panel under the scene page's viewport (PropertyAnimation): its clips'
+   tracks on the Dopesheet, a track's curve on CurveView, its transport the kit's, its undo the
+   scene page's.
+10. The animation pages (Animation): the clip (a preview, its events as markers on the time axis),
+    the skeleton (the bone tree with a search beside the preview) and the graph (GraphView over the
+    preview, its layers and parameters as lists).
+
 ## 6. Tests
 
 Editor tests move from UIContext with synthetic events to GUI.Testing (Finder by selector or id,

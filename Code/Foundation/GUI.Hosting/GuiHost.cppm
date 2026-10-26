@@ -194,6 +194,14 @@ export namespace foundation::gui
                     return;
             m_contents.PushBack(Hosted{&content, nullptr});
         }
+        /// Whether `content`'s input surface is routed now (bound, and its node shown).
+        [[nodiscard]] bool Routes(const IHostedContent& content) const
+        {
+            for (const Hosted& hosted : m_contents)
+                if (hosted.Content == &content)
+                    return hosted.Routed;
+            return false;
+        }
         void RemoveContent(IHostedContent& content)
         {
             for (usize i = 0; i < m_contents.Size(); ++i)
@@ -730,10 +738,14 @@ export namespace foundation::gui
         {
             IHostedContent* Content = nullptr;
             graphics::RenderWindow* Window = nullptr; // the window it is bound to
+            bool Routed = false; // its surface in the router: bound and its node shown
         };
 
         // Each content bound to the window its node is in (again when that changes), and placed
-        // over its node; then their router, so the application reads what it gates this frame.
+        // over its node; then their router, so the application reads what it gates this frame. A
+        // content whose node is not shown (a page behind another tab) leaves the router until it
+        // is: it keeps the place it had, the shown one's, and the router's last match would give
+        // it the pointer meant for what is in front.
         void PlaceContents()
         {
             for (Hosted& hosted : m_contents)
@@ -747,13 +759,15 @@ export namespace foundation::gui
                     if (window != nullptr)
                     {
                         hosted.Content->Bind(*m_device.Raw(), RendererFor(window), m_shell.Input(), window->Window().Id());
-                        if (shell::InputSurface* surface = hosted.Content->HostedSurface())
-                            m_contentRouter->AddSurface(surface);
                         hosted.Window = window;
                     }
                 }
                 if (window == nullptr)
                     continue;
+                const bool shown = node->IsTreeVisible();
+                Route(hosted, shown);
+                if (!shown)
+                    continue; // its targets kept for when it shows again
                 const Rectangle pane = PaneArea(*root);
                 const Rect bounds = node->GetScreenBounds(); // the root's device pixels
                 hosted.Content->Place(Rectangle{pane.x + bounds.x, pane.y + bounds.y, bounds.width, bounds.height},
@@ -761,12 +775,23 @@ export namespace foundation::gui
             }
             m_contentRouter->Update();
         }
+        // Its surface in the content router (`on`) or out of it.
+        void Route(Hosted& hosted, bool on)
+        {
+            shell::InputSurface* surface = hosted.Content->HostedSurface();
+            if (surface == nullptr || hosted.Routed == on)
+                return;
+            if (on)
+                m_contentRouter->AddSurface(surface);
+            else
+                m_contentRouter->RemoveSurface(surface);
+            hosted.Routed = on;
+        }
         void Unbind(Hosted& hosted)
         {
             if (hosted.Window == nullptr)
                 return;
-            if (shell::InputSurface* surface = hosted.Content->HostedSurface())
-                m_contentRouter->RemoveSurface(surface);
+            Route(hosted, false);
             hosted.Content->Bind(*m_device.Raw(), nullptr, m_shell.Input(), 0);
             hosted.Window = nullptr;
         }

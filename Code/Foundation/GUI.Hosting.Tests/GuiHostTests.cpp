@@ -549,3 +549,58 @@ TEST_CASE("gui.hosting: content that invalidates its node as it is placed has it
     CHECK(bed.host->FramesReused() == reused);
     bed.host->RemoveContent(content);
 }
+
+namespace
+{
+    // Hosted content with an input surface of its own, as a viewport has.
+    class SurfaceContent final : public IHostedContent
+    {
+    public:
+        explicit SurfaceContent(Node& node) : m_node(node) {}
+        Node* HostedNode() override { return &m_node; }
+        void Bind(rhi::Device&, foundation::vg::renderer::VGRenderer*, shell::IInputManager* input, u32 windowId) override
+        {
+            m_surface.Reset();
+            if (input != nullptr && windowId != 0)
+                m_surface = MakeUnique<shell::InputSurface>(DefaultAllocator(), input, windowId, ContentFit{});
+        }
+        void Place(Rectangle, Float2) override {}
+        void Record(rhi::CommandEncoder&, i32) override {}
+        shell::InputSurface* HostedSurface() override { return m_surface.Get(); }
+
+    private:
+        Node& m_node;
+        UniquePtr<shell::InputSurface> m_surface;
+    };
+}
+
+TEST_CASE("gui.hosting: content whose node is not shown (a page behind another tab) leaves the input router until it is")
+{
+    // Two pages' viewports in one place: the one behind kept that place, and the router's last
+    // match gave it the pointer meant for the one in front.
+    Bed bed;
+    RefPtr<SceneRoot> root = bed.MakeRoot();
+    RefPtr<Panel> front = MakeRef<Panel>(DefaultAllocator());
+    RefPtr<Panel> behind = MakeRef<Panel>(DefaultAllocator());
+    root->AddChild(front.Get());
+    root->AddChild(behind.Get());
+    SurfaceContent first(*front);
+    SurfaceContent second(*behind);
+    bed.host->AttachWindow(*bed.main, root);
+    bed.host->AddContent(first);
+    bed.host->AddContent(second);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->Routes(first));
+    CHECK(bed.host->Routes(second));
+
+    behind->SetDisplayed(false); // its tab goes behind
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->Routes(first));
+    CHECK_FALSE(bed.host->Routes(second));
+    behind->SetDisplayed(true); // and comes to the front again
+    bed.Frame(bed.main.Get());
+    CHECK(bed.host->Routes(second));
+
+    bed.host->RemoveContent(second);
+    bed.host->RemoveContent(first);
+}

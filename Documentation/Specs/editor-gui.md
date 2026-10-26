@@ -539,6 +539,21 @@ The layers:
    transport the kit's), its sound cue (its slots a list on the grid) and its bus layout (the
    GUI's tree beside the grid); Input's map (its sets, actions and bindings, the key capture the
    kit's).
+   The input map's design (user 2026-10-26, from three mocked in the GUISandbox's editor mock,
+   Data/Editor/Mock/input-*.gml): the sets and their actions a tree beside the grid; the tree's bar
+   adds sets only and removes the chosen row (an add there would guess which set); a set chosen
+   shows its name and priority and its actions as the grid's list, its Add adding to that set, each
+   action a group opening in place (its kind and interaction, its bindings a list of their own, its
+   processing), closed showing its name, kind and bindings in a line; an action chosen in the tree
+   opens it there. In parts:
+   1. The grid: each level's names start past its parent's (a list element's grip and arrow come
+      before its name), and a closed group may say what it holds in a line beside its name.
+   2. The reflected source: a list may name its elements by a field of theirs (an action by its
+      name) and say each in a line; the input types' rows declare when they show (a binding's
+      settings by its source).
+   3. The page (Editor.Input): the tree, the set's rows from the reflected source over the chosen
+      set (each edit one undo step), a binding's input captured by pressing it (an editor of the
+      editor's, listening to the devices the action's kind takes).
 6. The code pages: the languages (AngelScript, Luau, HLSL) as GUI.Code languages, the markup and
    the sheet languages for the GUI's own files (XML and CSS highlighting); Script (completion, the
    API browser as a tree beside the code, the problems list), Shaders (the code beside a preview

@@ -53,7 +53,7 @@ export namespace editor
             m_slot = MakeRef<app::AssetPickerSlot>(MemoryAllocator());
             Hold(*m_slot);
         }
-        EntityRefEditor() : EntityRefEditor(NoServices()) {} // what RTTI makes; the registry's has its services
+        EntityRefEditor() : EntityRefEditor(m_none) {} // what RTTI makes (its own empty services); the registry's has its services
 
         /// The editor for every EntityRef `registry` shows; `services` outlives it.
         static void Register(foundation::gui::PropertyEditorRegistry& registry, const Services& services)
@@ -83,12 +83,7 @@ export namespace editor
     private:
         void Show();
         void Pick();
-        [[nodiscard]] static const Services& NoServices()
-        {
-            static const Services none{};
-            return none;
-        }
-
+        Services m_none; // an editor RTTI made has no services: its own, empty (a process-wide one would be state in an interface)
         const Services* m_services;
         RefPtr<app::AssetPickerSlot> m_slot;
         Guid m_current;

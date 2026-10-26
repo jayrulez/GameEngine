@@ -129,7 +129,7 @@ export namespace editor::app
             m_slot = MakeRef<AssetPickerSlot>(MemoryAllocator());
             Hold(*m_slot);
         }
-        ResourceRefEditor() : ResourceRefEditor(NoServices()) {} // what RTTI makes; the registry's has its services
+        ResourceRefEditor() : ResourceRefEditor(m_none) {} // what RTTI makes (its own empty services); the registry's has its services
 
         /// The editor for every Reference property `registry` shows; `services` outlives it.
         static void Register(gui::PropertyEditorRegistry& registry, const ResourceRefServices& services)
@@ -219,12 +219,7 @@ export namespace editor::app
             }
             ApplyEdit(gui::PropertyWrite{gui::Variant(text.AsView())});
         }
-        [[nodiscard]] static const ResourceRefServices& NoServices()
-        {
-            static const ResourceRefServices none{};
-            return none;
-        }
-
+        ResourceRefServices m_none; // an editor RTTI made has no services: its own, empty (a process-wide one would be state in an interface)
         const ResourceRefServices* m_services;
         RefPtr<AssetPickerSlot> m_slot;
         Array<String> m_types;

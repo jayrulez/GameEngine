@@ -120,10 +120,9 @@ namespace editor
             m_materialSlot = MakeRef<app::AssetPickerSlot>(Allocator());
             m_materialSlot->AddClass(u8"preview-slot");
             m_materialSlot->SetTooltip(u8"The material the preview shows the mesh in (a neutral one when none); kept for this mesh");
-            Array<String> types;
-            types.PushBack(String(u8"MaterialAsset"));
-            m_materialSlot->SetAcceptedTypes(Move(types));
             const app::ResourceRefServices* refs = Services().refs;
+            if (refs != nullptr && refs->AcceptedTypes) // what makes a Material, asked of the builders
+                m_materialSlot->SetAcceptedTypes(refs->AcceptedTypes(materials::Material::StaticType()));
             if (refs != nullptr && refs->Pick)
                 m_materialSlot->SetOnPick([self, refs]()
                                           {

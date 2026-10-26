@@ -240,6 +240,41 @@ export namespace editor::app
                 StackSections();
         }
 
+        /// The asset read again from its source (something else wrote it: a scene's save writing a
+        /// profile's values); its undo let go, as the steps named the asset it had. False when it
+        /// did not read, the page keeping what it had.
+        bool ReadAgain()
+        {
+            foundation::content::Instance* instance = m_context->Project() != nullptr ? m_context->Project()->SourceDb().GetInstance(InstanceId()) : nullptr;
+            RefPtr<ISerializable> object = instance != nullptr ? instance->ReadObject() : RefPtr<ISerializable>{};
+            if (m_object.Get() == nullptr || object.Get() == nullptr || object->GetType() != m_object->GetType())
+                return false;
+            m_object = Move(object);
+            const Instance target(m_object.Get(), m_object->GetType());
+            m_properties->SetObjects(Span<const Instance>(&target, 1u));
+            m_baseline = SnapshotObject(*m_object);
+            Commands().Clear();
+            ClearDirty();
+            OnObjectChanged();
+            return true;
+        }
+
+        /// The page's own sections let go (they are rebuilt: a material's rows follow its shader).
+        void ClearSections()
+        {
+            m_own.Clear();
+            if (m_object.Get() != nullptr)
+                StackSections();
+        }
+        /// The asset's reflected rows left out: a page whose asset reflects what no row should show
+        /// (a material's source, a property table in parallel arrays) gives the grid its own.
+        void HideAssetRows()
+        {
+            m_showsAssetRows = false;
+            if (m_object.Get() != nullptr)
+                StackSections();
+        }
+
         /// Shows `text` as the notice `key` (a warning over the asset's rows); empty hides it.
         void SetNotice(StringView key, StringView text)
         {
@@ -327,7 +362,8 @@ export namespace editor::app
         {
             m_sections->Clear();
             m_sections->Add(u8"notices", kNoticesTitle, *m_notices);
-            m_sections->Add(u8"asset", m_assetTitle.AsView(), *m_properties);
+            if (m_showsAssetRows)
+                m_sections->Add(u8"asset", m_assetTitle.AsView(), *m_properties);
             for (const OwnSection& own : m_own)
                 m_sections->Add(own.key.AsView(), own.title.AsView(), *own.source);
             m_sections->Add(u8"facts", kFactsTitle, *m_facts);
@@ -358,6 +394,7 @@ export namespace editor::app
         };
         Array<OwnSection> m_own; // the page's sections (AddSection)
         String m_assetTitle;
+        bool m_showsAssetRows = true; // HideAssetRows
         RefPtr<gui::Node> m_content;
         gui::PropertyGrid* m_grid = nullptr; // the markup's
         UniquePtr<PageActionBar> m_bar;

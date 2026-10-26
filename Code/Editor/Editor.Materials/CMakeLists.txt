@@ -1,4 +1,4 @@
-# Editor::Materials - `editor.materials`: the material page (preview + parameters). Editor exe only.
+# Editor::Materials - `editor.materials`: the material page (preview + parameters), on the GUI. Editor exe only.
 util_add_engine_library(Editor.Materials ALIAS Editor::Materials)
 target_link_libraries(Editor.Materials PUBLIC
     Foundation::Core Foundation::Content Foundation::Resource Foundation::Settings Foundation::VFS
@@ -6,8 +6,7 @@ target_link_libraries(Editor.Materials PUBLIC
     Foundation::Runtime.Client Foundation::Scene Engine::Scene Foundation::Render Engine::Render
     Foundation::Geometry Foundation::Materials Foundation::Materials.Resource Pipeline::Materials
     Foundation::Shaders Foundation::Shaders.Resource Foundation::Texture.Resource
-    Foundation::UI Foundation::UI.Runtime Foundation::UI.Toolkit Foundation::UI.Viewport
-    Foundation::VG.Renderer Editor::Core Editor::App Editor::Preview Foundation::Policy)
+    Foundation::GUI Foundation::GUI.Toolkit Editor::Core Editor::App Editor::Preview Foundation::Policy)
 target_sources(Editor.Materials
     PRIVATE
         MaterialPageImpl.cpp

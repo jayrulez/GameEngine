@@ -228,6 +228,21 @@ TEST_CASE("property grid: only the rows in view are realised")
     CHECK(editor->GetField()->GetValue() == doctest::Approx(400.0)); // a pooled editor shows its row's value
 }
 
+TEST_CASE("property bag: an owner is told of each preview and of a gesture given up")
+{
+    PropertyBag bag(core::DefaultAllocator());
+    (void)bag.Add(SV(u8"rough"), PropertyKind::Float, Variant(0.25));
+    core::Array<core::String> told(core::DefaultAllocator());
+    bag.SetOnPreview([&](core::StringView path) { told.PushBack(core::Format(u8"preview {}={}", path, bag.GetValue(path, 0).ToString().AsView())); });
+    bag.SetOnCancel([&](core::StringView path) { told.PushBack(core::Format(u8"cancel {}={}", path, bag.GetValue(path, 0).ToString().AsView())); });
+    bag.BeginEdit(SV(u8"rough"));
+    bag.PreviewEdit(SV(u8"rough"), PropertyWrite{Variant(0.5)});
+    bag.CancelEdit(SV(u8"rough"));
+    REQUIRE(told.Size() == 2u);
+    CHECK(told[0] == core::String(u8"preview rough=0.5"));
+    CHECK(told[1] == core::String(u8"cancel rough=0.25")); // the value back by then
+}
+
 TEST_CASE("property grid: an edit is one gesture of the source; its row keeps its editor while it previews")
 {
     Bed bed(2);
@@ -236,6 +251,8 @@ TEST_CASE("property grid: an edit is one gesture of the source; its row keeps it
     bed.bag.SetValue(SV(u8"speed"), 1, Variant(5.0));
     core::Array<PropertyBag::Commit> commits(core::DefaultAllocator());
     bed.bag.SetOnCommit([&commits](const PropertyBag::Commit& commit) { commits.PushBack(commit); });
+    core::Array<core::f64> previews(core::DefaultAllocator()); // what an owner showing them live reads
+    bed.bag.SetOnPreview([&bed, &previews](core::StringView path) { previews.PushBack(bed.bag.GetValue(path, 0).AsFloat()); });
     bed.Show();
 
     NumberPropertyEditor* editor = core::Cast<NumberPropertyEditor>(bed.grid->FindEditor(SV(u8"speed")));
@@ -259,6 +276,9 @@ TEST_CASE("property grid: an edit is one gesture of the source; its row keeps it
     CHECK(commits[0].Before[0].AsFloat() == doctest::Approx(2.0));
     CHECK(commits[0].Before[1].AsFloat() == doctest::Approx(5.0));
     CHECK(commits[0].After[1].AsFloat() == doctest::Approx(6.0));
+    REQUIRE(previews.Size() == 2u); // told of each preview as it went
+    CHECK(previews[0] == doctest::Approx(4.0));
+    CHECK(previews[1] == doctest::Approx(6.0));
     CHECK_FALSE(field.IsMixed());
 
     // A value changed elsewhere (an undo) shows.

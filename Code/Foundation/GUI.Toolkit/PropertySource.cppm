@@ -364,6 +364,12 @@ export namespace foundation::gui
 
         /// Told each commit, to keep it for undo.
         void SetOnCommit(core::Function<void(const Commit&)> onCommit) { m_onCommit = core::Move(onCommit); }
+        /// Told of each preview of a gesture (a drag, a scrub, a picker open) as it goes, the values
+        /// in the bag by then: an owner that shows them live (a preview) reads them; the gesture
+        /// ends in a commit or a cancel.
+        void SetOnPreview(core::Function<void(core::StringView path)> onPreview) { m_onPreview = core::Move(onPreview); }
+        /// Told of a gesture given up (Escape): the values are back as they were before it.
+        void SetOnCancel(core::Function<void(core::StringView path)> onCancel) { m_onCancel = core::Move(onCancel); }
         /// Told each list change made.
         void SetOnListEdited(core::Function<void(core::StringView, const ListEdit&)> onEdited) { m_onListEdited = core::Move(onEdited); }
         /// The edits begun and not yet ended.
@@ -417,6 +423,8 @@ export namespace foundation::gui
                 if (Variant* slot = Slot(path, i))
                     *slot = ApplyPropertyWrite(*slot, write);
             NotifyValuesChanged();
+            if (m_onPreview)
+                m_onPreview(path);
         }
         void CommitEdit(core::StringView path, const PropertyWrite& write) override
         {
@@ -449,6 +457,8 @@ export namespace foundation::gui
                         *slot = original->Values[i];
             EndEdit(path);
             NotifyValuesChanged();
+            if (m_onCancel)
+                m_onCancel(path);
         }
         [[nodiscard]] Variant GetDefault(core::StringView path, usize object) const override
         {
@@ -688,6 +698,8 @@ export namespace foundation::gui
         core::Array<Default> m_defaults;
         usize m_objects;
         core::Function<void(const Commit&)> m_onCommit;
+        core::Function<void(core::StringView)> m_onPreview;
+        core::Function<void(core::StringView)> m_onCancel;
         core::Function<void(core::StringView, const ListEdit&)> m_onListEdited;
         core::Function<void(core::StringView)> m_onReverted;
     };

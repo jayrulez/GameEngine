@@ -90,67 +90,92 @@ namespace
         }
     };
 
-    // The variant rows' names, in order ("Variant 1 | Variant 2 | Add a Variant").
-    String Groups(gui::PropertyBag& rows)
+    // A list edit by its parts, as the grid's list makes one.
+    gui::ListEdit ListEditOf(gui::ListEdit::Op kind, usize index, usize to = 0)
     {
-        Array<gui::PropertyInfo> top;
-        rows.GetProperties(StringView{}, top);
+        gui::ListEdit edit;
+        edit.Kind = kind;
+        edit.Index = index;
+        edit.To = to;
+        return edit;
+    }
+
+    // The variants' clips as the list shows them ("left | right | -" with one to fill).
+    String Clips(SoundCueEditorPage& page, const Bed& bed)
+    {
         String out;
-        for (const gui::PropertyInfo& info : top)
+        const usize count = page.VariantRows().ElementCount(u8"variants", 0);
+        for (usize i = 0; i < count; ++i)
         {
+            const String text = page.VariantRows().GetValue(Format(u8"variants.{}.clip", i).AsView(), 0).AsString();
             if (!out.IsEmpty())
                 out += u8" | ";
-            out += info.ShownName();
+            out += text == Text(bed.left) ? StringView(u8"left") : text == Text(bed.right) ? StringView(u8"right") : text == Text(bed.third) ? StringView(u8"third") : StringView(u8"-");
         }
         return out;
     }
 }
 
-TEST_CASE("sound cue page: the cue's rows, a variant per clip and one more to fill; no clip said so")
+TEST_CASE("sound cue page: the variants a list as every page's, each a clip and its weight; no clip said so")
 {
     Bed bed;
     UniquePtr<SoundCueEditorPage> page = bed.Open(*bed.steps);
     REQUIRE_FALSE(page->LoadFailed());
     CHECK(page->VariantCount() == 2u);
-    CHECK(Groups(page->VariantRows()) == String(u8"Variant 1 | Variant 2 | Add a Variant"));
-    CHECK(page->VariantRows().GetValue(u8"slot0.clip", 0).AsString() == Text(bed.left).AsView());
-    CHECK(page->VariantRows().GetValue(u8"slot1.weight", 0).AsFloat() == doctest::Approx(3.0));
-    REQUIRE(page->VariantRows().FindInfo(u8"slot0.clip") != nullptr);
-    CHECK(page->VariantRows().FindInfo(u8"slot0.clip")->ReferenceType == &foundation::audio::AudioClip::StaticType());
-    CHECK(page->VariantRows().FindInfo(u8"slot2.weight") == nullptr); // the slot to fill has no weight yet
+    gui::PropertyInfo* list = page->VariantRows().FindInfo(u8"variants");
+    REQUIRE(list != nullptr);
+    CHECK(list->Kind == gui::PropertyKind::List);
+    CHECK(list->MaxCount == 8u);
+    CHECK(Clips(*page, bed) == String(u8"left | right"));
+    CHECK(page->VariantRows().GetValue(u8"variants.1.weight", 0).AsFloat() == doctest::Approx(3.0));
+    Array<gui::PropertyInfo> fields;
+    page->VariantRows().GetProperties(u8"variants.0", fields);
+    REQUIRE(fields.Size() == 2u);
+    CHECK(fields[0].ReferenceType == &foundation::audio::AudioClip::StaticType());
     CHECK(page->CueRows().FindInfo(u8"pitchMax")->Hint == StringView(u8"slider"));
     CHECK(page->Notice(u8"empty").IsEmpty());
     CHECK_FALSE(page->CanPlay()); // no audio engine here
     CHECK(ServiceOf<IPlaybackPage>(page.Get()) == page.Get());
 
     UniquePtr<SoundCueEditorPage> empty = bed.Open(*bed.hush);
-    CHECK(Groups(empty->VariantRows()) == String(u8"Add a Variant"));
+    CHECK(empty->VariantRows().ElementCount(u8"variants", 0) == 0u);
     CHECK_FALSE(empty->Notice(u8"empty").IsEmpty());
 }
 
-TEST_CASE("sound cue page: a clip picked adds a variant, cleared takes it out, each one undo step")
+TEST_CASE("sound cue page: Add makes a variant to fill, its clip picked joins the cue; removed and moved, each one undo step")
 {
     Bed bed;
     UniquePtr<SoundCueEditorPage> page = bed.Open(*bed.steps);
-    page->EditRow(page->VariantRows(), u8"slot2.clip", gui::Variant(Text(bed.third)));
-    page->Refresh(); // the rows made again for three
+    // Add, as the list's button: a variant with no clip yet, the cue unchanged.
+    REQUIRE(page->VariantRows().EditList(u8"variants", ListEditOf(gui::ListEdit::Op::Insert, 2)));
+    CHECK(Clips(*page, bed) == String(u8"left | right | -"));
+    CHECK(page->VariantCount() == 2u);
+    CHECK_FALSE(page->Commands().CanUndo());
+    // Its clip picked: it joins the cue, one step.
+    page->EditRow(page->VariantRows(), u8"variants.2.clip", gui::Variant(Text(bed.third)));
     CHECK(page->VariantCount() == 3u);
-    CHECK(Groups(page->VariantRows()) == String(u8"Variant 1 | Variant 2 | Variant 3 | Add a Variant"));
+    CHECK(Clips(*page, bed) == String(u8"left | right | third"));
     CHECK(page->IsDirty());
 
-    page->EditRow(page->VariantRows(), u8"slot0.clip", gui::Variant(StringView{}));
-    page->Refresh();
-    CHECK(page->VariantCount() == 2u);
-    // The first slot is now the one to fill; the others keep their order.
-    CHECK(Groups(page->VariantRows()) == String(u8"Add a Variant | Variant 1 | Variant 2"));
+    // Moved, as an element's grip does: the cue's order with it.
+    REQUIRE(page->VariantRows().EditList(u8"variants", ListEditOf(gui::ListEdit::Op::Move, 2, 0)));
+    CHECK(Clips(*page, bed) == String(u8"third | left | right"));
+    auto* cue = Cast<pipeline::SoundCueAsset>(page->Object());
+    REQUIRE(cue != nullptr);
+    CHECK(cue->clipIds[0] == bed.third);
+    CHECK(cue->weights[2] == doctest::Approx(3.0f)); // right's weight went with it
 
-    page->Commands().Undo();
-    page->Refresh();
-    CHECK(page->VariantCount() == 3u);
-    page->Commands().Undo();
-    page->Refresh();
+    // Removed, as an element's menu does.
+    REQUIRE(page->VariantRows().EditList(u8"variants", ListEditOf(gui::ListEdit::Op::Remove, 1)));
+    CHECK(Clips(*page, bed) == String(u8"third | right"));
     CHECK(page->VariantCount() == 2u);
-    CHECK(page->VariantRows().GetValue(u8"slot0.clip", 0).AsString() == Text(bed.left).AsView());
+
+    page->Commands().Undo(); // the removal
+    CHECK(Clips(*page, bed) == String(u8"third | left | right"));
+    page->Commands().Undo(); // the move
+    CHECK(Clips(*page, bed) == String(u8"left | right | third"));
+    page->Commands().Undo(); // the pick
+    CHECK(page->VariantCount() == 2u);
 }
 
 TEST_CASE("sound cue page: how it picks and its ranges, each one undo step")

@@ -47,17 +47,6 @@ namespace editor
                 (void)Guid::TryParse(text, id);
             return id;
         }
-        // The variant row of slot `slot` ("slot3"), and that slot back from a row's path.
-        [[nodiscard]] String SlotPath(usize slot) { return Format(u8"slot{}", slot); }
-        [[nodiscard]] i32 SlotOf(StringView path)
-        {
-            const StringView top = gui::ParentPropertyPath(path).IsEmpty() ? path : gui::ParentPropertyPath(path);
-            if (!top.StartsWith(u8"slot"))
-                return -1;
-            const Optional<i64> slot = ParseInt(top.SubStr(4, top.Size() - 4));
-            return slot.HasValue() && slot.Value() >= 0 && slot.Value() < static_cast<i64>(pipeline::kSoundCueSlotCount) ? static_cast<i32>(slot.Value()) : -1;
-        }
-
         struct RangeRow
         {
             const char8_t* path;
@@ -106,107 +95,120 @@ namespace editor
         return count;
     }
 
+    namespace
+    {
+        // The cue's variants packed in order (the list the grid shows): each a clip and its weight.
+        struct CueVariant
+        {
+            Guid clip;
+            f32 weight = 1.0f;
+        };
+        [[nodiscard]] Array<CueVariant> VariantsOf(const pipeline::SoundCueAsset& cue)
+        {
+            Array<CueVariant> variants;
+            for (usize slot = 0; slot < pipeline::kSoundCueSlotCount; ++slot)
+                if (!cue.clipIds[slot].IsNil())
+                    variants.PushBack(CueVariant{cue.clipIds[slot], cue.weights[slot]});
+            return variants;
+        }
+        // Writes `variants` back from the first slot on, the rest emptied (a gap between variants
+        // closes: the resolver skips empty slots, so the cue plays the same).
+        void SetVariants(pipeline::SoundCueAsset& cue, const Array<CueVariant>& variants)
+        {
+            for (usize slot = 0; slot < pipeline::kSoundCueSlotCount; ++slot)
+            {
+                const bool used = slot < variants.Size();
+                cue.clipIds[slot] = used ? variants[slot].clip : Guid{};
+                cue.weights[slot] = used ? variants[slot].weight : 1.0f;
+            }
+        }
+        // The element a path names ("variants.2.weight": 2), or -1.
+        [[nodiscard]] i32 ElementOf(StringView path)
+        {
+            const StringView element = gui::ParentPropertyPath(path);
+            if (gui::ParentPropertyPath(element) != StringView(u8"variants"))
+                return -1;
+            const Optional<i64> index = ParseInt(element.SubStr(9, element.Size() - 9));
+            return index.HasValue() && index.Value() >= 0 ? static_cast<i32>(index.Value()) : -1;
+        }
+    }
+
     void SoundCueEditorPage::ShowRows()
     {
         const pipeline::SoundCueAsset* cue = Cue();
         if (cue == nullptr)
             return;
-        // The rows are made again when the variants changed in number (a bag holds what it was made
-        // with), on the next Refresh: an edit lands from inside a bag's commit, which must outlive it.
-        const usize count = VariantCount();
-        if (count != m_rowsFor)
-        {
-            m_rowsDirty = true;
-            return;
-        }
         m_cueRows->SetValue(u8"mode", 0, gui::Variant(static_cast<i64>(cue->mode)));
         for (const RangeRow& range : kRanges)
             m_cueRows->SetValue(range.path, 0, gui::Variant(static_cast<f64>(cue->*range.field)));
-        for (usize slot = 0; slot < pipeline::kSoundCueSlotCount; ++slot)
+        // The variants with a clip, then those added and given no clip yet (the page's own).
+        const Array<CueVariant> variants = VariantsOf(*cue);
+        const usize room = pipeline::kSoundCueSlotCount - variants.Size();
+        while (m_pending.Size() > room)
+            m_pending.PopBack();
+        m_variantRows->ResizeList(u8"variants", 0, variants.Size() + m_pending.Size());
+        for (usize i = 0; i < variants.Size() + m_pending.Size(); ++i)
         {
-            const String path = SlotPath(slot);
-            m_variantRows->SetValue(gui::JoinPropertyPath(path.AsView(), u8"clip").AsView(), 0, GuidText(cue->clipIds[slot]));
-            m_variantRows->SetValue(gui::JoinPropertyPath(path.AsView(), u8"weight").AsView(), 0, gui::Variant(static_cast<f64>(cue->weights[slot])));
+            const bool kept = i < variants.Size();
+            const String element = Format(u8"variants.{}", i);
+            m_variantRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"clip").AsView(), 0, GuidText(kept ? variants[i].clip : Guid{}));
+            m_variantRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"weight").AsView(), 0,
+                                    gui::Variant(static_cast<f64>(kept ? variants[i].weight : m_pending[i - variants.Size()])));
         }
-        SetNotice(u8"empty", count == 0 ? StringView(u8"This cue has no clip: pick one in its variants, or nothing plays.") : StringView{});
-    }
-
-    void SoundCueEditorPage::Refresh()
-    {
-        app::AssetObjectPage::Refresh();
-        if (!m_rowsDirty)
-            return;
-        m_rowsDirty = false;
-        BuildRows();
-        ShowRows();
+        SetNotice(u8"empty", variants.IsEmpty() ? StringView(u8"This cue has no clip: add a variant and pick its clip, or nothing plays.") : StringView{});
     }
 
     void SoundCueEditorPage::BuildRows()
     {
-        const pipeline::SoundCueAsset* cue = Cue();
-        if (cue == nullptr)
-            return;
-        m_rowsFor = VariantCount();
-        ClearSections();
         m_cueRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
         m_variantRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        gui::PropertyInfo& mode = m_cueRows->Add(u8"mode", gui::PropertyKind::Enum);
+        mode.DisplayName = String(u8"Picks");
+        mode.Description = String(u8"How a play picks its variant: at random but never the one before, at random, or each in turn");
+        mode.Choices.PushBack(gui::PropertyChoice{String(u8"At random, never twice running"), static_cast<i64>(audio::SoundCueMode::RandomNoRepeat)});
+        mode.Choices.PushBack(gui::PropertyChoice{String(u8"At random"), static_cast<i64>(audio::SoundCueMode::Random)});
+        mode.Choices.PushBack(gui::PropertyChoice{String(u8"In order"), static_cast<i64>(audio::SoundCueMode::Sequential)});
+        for (const RangeRow& range : kRanges)
         {
-            gui::PropertyInfo& mode = m_cueRows->Add(u8"mode", gui::PropertyKind::Enum);
-            mode.DisplayName = String(u8"Picks");
-            mode.Description = String(u8"How a play picks its variant: at random but never the one before, at random, or each in turn");
-            mode.Choices.PushBack(gui::PropertyChoice{String(u8"At random, never twice running"), static_cast<i64>(audio::SoundCueMode::RandomNoRepeat)});
-            mode.Choices.PushBack(gui::PropertyChoice{String(u8"At random"), static_cast<i64>(audio::SoundCueMode::Random)});
-            mode.Choices.PushBack(gui::PropertyChoice{String(u8"In order"), static_cast<i64>(audio::SoundCueMode::Sequential)});
-            for (const RangeRow& range : kRanges)
-            {
-                gui::PropertyInfo& info = m_cueRows->Add(range.path, gui::PropertyKind::Float);
-                info.DisplayName = String(range.shown);
-                info.HasRange = true;
-                info.Min = 0.0;
-                info.Max = 4.0;
-                info.Step = 0.01;
-                info.Hint = String(u8"slider");
-            }
+            gui::PropertyInfo& info = m_cueRows->Add(range.path, gui::PropertyKind::Float);
+            info.DisplayName = String(range.shown);
+            info.HasRange = true;
+            info.Min = 0.0;
+            info.Max = 4.0;
+            info.Step = 0.01;
+            info.Hint = String(u8"slider");
         }
-        // A variant per clip, then one to fill while there is room.
+        // A list as every page's: the count with Add (eight at most), a variant a clip and its weight.
+        gui::PropertyInfo& list = m_variantRows->AddList(u8"variants", gui::PropertyKind::Group, gui::Variant{});
+        list.DisplayName = String(u8"Variants");
+        list.Description = String(u8"What a play picks from: each a clip, picked against the others by its weight");
+        list.MaxCount = static_cast<u32>(pipeline::kSoundCueSlotCount);
+        if (gui::PropertyInfo* clip = m_variantRows->AddElementField(u8"variants", u8"clip", gui::PropertyKind::Reference, gui::Variant(StringView{})))
         {
-            usize shown = 0;
-            bool open = false; // one empty slot offered to fill
-            for (usize slot = 0; slot < pipeline::kSoundCueSlotCount; ++slot)
-            {
-                const bool filled = !cue->clipIds[slot].IsNil();
-                if (!filled && open)
-                    continue;
-                open = open || !filled;
-                const String path = SlotPath(slot);
-                gui::PropertyInfo& group = m_variantRows->Add(path.AsView(), gui::PropertyKind::Group);
-                group.DisplayName = filled ? Format(u8"Variant {}", ++shown) : String(u8"Add a Variant");
-                gui::PropertyInfo& clip = m_variantRows->Add(gui::JoinPropertyPath(path.AsView(), u8"clip").AsView(), gui::PropertyKind::Reference);
-                clip.DisplayName = String(u8"Clip");
-                clip.ReferenceType = &audio::AudioClip::StaticType();
-                if (filled)
-                {
-                    gui::PropertyInfo& weight = m_variantRows->Add(gui::JoinPropertyPath(path.AsView(), u8"weight").AsView(), gui::PropertyKind::Float);
-                    weight.DisplayName = String(u8"Weight");
-                    weight.Description = String(u8"How often it is picked against the others' weights");
-                    weight.HasRange = true;
-                    weight.Min = 0.0;
-                    weight.Max = 100.0;
-                    weight.Step = 0.1;
-                }
-            }
+            clip->DisplayName = String(u8"Clip");
+            clip->ReferenceType = &audio::AudioClip::StaticType();
+        }
+        if (gui::PropertyInfo* weight = m_variantRows->AddElementField(u8"variants", u8"weight", gui::PropertyKind::Float, gui::Variant(1.0)))
+        {
+            weight->DisplayName = String(u8"Weight");
+            weight->Description = String(u8"How often it is picked against the others' weights");
+            weight->HasRange = true;
+            weight->Min = 0.0;
+            weight->Max = 100.0;
+            weight->Step = 0.1;
         }
         SoundCueEditorPage* self = this;
         gui::PropertyBag* const bags[] = {m_cueRows.Get(), m_variantRows.Get()};
         for (gui::PropertyBag* raw : bags)
         {
             gui::PropertyBag* rows = raw;
-            rows->SetOnCommit([self, raw](const gui::PropertyBag::Commit& commit)
+            rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
                               {
                                   if (!commit.After.IsEmpty())
-                                      self->Committed(*raw, commit.Path.AsView(), commit.After[0]);
+                                      self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
                               });
         }
+        m_variantRows->SetOnListEdited([self](StringView, const gui::ListEdit& edit) { self->ListEdited(edit); });
         AddSection(u8"cue", u8"Cue", *m_cueRows);
         AddSection(u8"variants", u8"Variants", *m_variantRows);
     }
@@ -243,27 +245,107 @@ namespace editor
                 }
             return;
         }
-        const i32 slot = SlotOf(path);
-        if (slot < 0)
+        const i32 element = ElementOf(path);
+        if (element < 0)
             return;
-        const usize s = static_cast<usize>(slot);
+        const usize index = static_cast<usize>(element);
+        const usize kept = VariantsOf(*Cue()).Size();
         if (path.EndsWith(u8".clip"))
         {
-            // Picked, dropped or cleared: one write; cleared, the variant leaves the list.
             const Guid clip = GuidOf(value);
-            EditWhole(u8"edit_soundcue", [s, clip](ISerializable& object)
-                      {
-                          auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
-                          cue.clipIds[s] = clip;
-                          if (clip.IsNil())
-                              cue.weights[s] = 1.0f; // a slot filled again starts even
-                      });
+            if (index < kept)
+            {
+                // Its clip picked again, or cleared: a cleared one leaves the cue, its row kept to fill.
+                if (clip.IsNil())
+                    m_pending.Insert(0, 1.0f);
+                EditWhole(u8"edit_soundcue", [index, clip](ISerializable& object)
+                          {
+                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(cue);
+                              if (clip.IsNil())
+                                  variants.RemoveAt(index);
+                              else
+                                  variants[index].clip = clip;
+                              SetVariants(cue, variants);
+                          });
+            }
+            else if (!clip.IsNil() && index - kept < m_pending.Size())
+            {
+                // A variant added and now given its clip joins the cue, with the weight it was given.
+                const f32 weight = m_pending[index - kept];
+                m_pending.RemoveAt(index - kept);
+                EditWhole(u8"edit_soundcue", [clip, weight](ISerializable& object)
+                          {
+                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(cue);
+                              variants.PushBack(CueVariant{clip, weight});
+                              SetVariants(cue, variants);
+                          });
+            }
+            return;
         }
-        else if (path.EndsWith(u8".weight"))
+        if (path.EndsWith(u8".weight"))
         {
             const f32 weight = static_cast<f32>(Max(0.0, value.AsFloat()));
-            EditWhole(u8"edit_soundcue", [s, weight](ISerializable& object) { static_cast<pipeline::SoundCueAsset&>(object).weights[s] = weight; });
+            if (index < kept)
+                EditWhole(u8"edit_soundcue", [index, weight](ISerializable& object)
+                          {
+                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(cue);
+                              variants[index].weight = weight;
+                              SetVariants(cue, variants);
+                          });
+            else if (index - kept < m_pending.Size())
+                m_pending[index - kept] = weight; // kept until it has a clip
         }
+    }
+
+    void SoundCueEditorPage::ListEdited(const gui::ListEdit& edit)
+    {
+        const pipeline::SoundCueAsset* cue = Cue();
+        if (cue == nullptr)
+            return;
+        const usize kept = VariantsOf(*cue).Size();
+        switch (edit.Kind)
+        {
+        case gui::ListEdit::Op::Insert:
+            // Added at the end with no clip yet: the page's until a clip is picked (no step: the cue
+            // has not changed).
+            m_pending.PushBack(1.0f);
+            break;
+        case gui::ListEdit::Op::Remove:
+            if (edit.Index < kept)
+            {
+                const usize index = edit.Index;
+                EditWhole(u8"edit_soundcue", [index](ISerializable& object)
+                          {
+                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(cue);
+                              variants.RemoveAt(index);
+                              SetVariants(cue, variants);
+                          });
+            }
+            else if (edit.Index - kept < m_pending.Size())
+                m_pending.RemoveAt(edit.Index - kept);
+            break;
+        case gui::ListEdit::Op::Move:
+            if (edit.Index < kept && edit.To < kept)
+            {
+                const usize from = edit.Index;
+                const usize to = edit.To;
+                EditWhole(u8"edit_soundcue", [from, to](ISerializable& object)
+                          {
+                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(cue);
+                              const CueVariant moved = variants[from];
+                              variants.RemoveAt(from);
+                              variants.Insert(to, moved);
+                              SetVariants(cue, variants);
+                          });
+            }
+            break;
+        }
+        ShowRows(); // the list as the cue and the page hold it (a move past those with a clip goes back)
     }
 
     bool SoundCueEditorPage::CanPlay() const

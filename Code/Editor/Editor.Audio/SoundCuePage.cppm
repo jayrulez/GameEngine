@@ -63,8 +63,6 @@ export namespace editor
         [[nodiscard]] StringView State() const;
         /// How many variants hold a clip.
         [[nodiscard]] usize VariantCount() const;
-        /// Rows made again when the variants changed in number (a frame after the edit).
-        void Refresh() override;
 
     protected:
         void OnObjectChanged() override;
@@ -75,6 +73,7 @@ export namespace editor
         void ShowRows();
         void BuildRows();
         void Committed(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
+        void ListEdited(const foundation::gui::ListEdit& edit);
         void Audition();
         void StopAudition();
         void ShowState(StringView state, StringView text);
@@ -84,8 +83,7 @@ export namespace editor
         UniquePtr<AuditionVoice> m_voice;
         UniquePtr<foundation::gui::PropertyBag> m_cueRows;
         UniquePtr<foundation::gui::PropertyBag> m_variantRows;
-        usize m_rowsFor = ~usize{0}; // the variant count the rows were made for
-        bool m_rowsDirty = false;    // to make again on the next Refresh
+        Array<f32> m_pending; // variants added and given no clip yet: each one's weight (the cue holds none without a clip)
         HashMap<Guid, RefPtr<audio::AudioClip>> m_clips;
         Random m_random;
         i32 m_lastVariant = -1;

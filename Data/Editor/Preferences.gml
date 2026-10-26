@@ -71,5 +71,5 @@
             </Panel>
         </TabPage>
     </TabView>
-    <Panel class="dialog-buttons"><Spacer/><Button id="pref-cancel" class="ghost" text="Cancel"/><Button id="pref-save" class="primary" text="Save"/></Panel>
+    <Panel class="dialog-buttons"><Spacer/><Button id="pref-cancel" text="Cancel"/><Button id="pref-save" class="primary" text="Save"/></Panel>
 </Panel>

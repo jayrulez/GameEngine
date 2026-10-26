@@ -24,5 +24,5 @@
             <Panel class="export-files"><Button id="export-add-files" class="ghost" text="Add Files..." tooltip="Pick files to copy beside the player"/></Panel>
         </Panel>
     </Panel>
-    <Panel class="dialog-buttons"><Button id="export-templates" text="Export Templates..."/><Spacer/><Button id="export-close" class="ghost" text="Close"/><Button id="export-all" text="Export All"/><Button id="export-run" class="primary" text="Export"/></Panel>
+    <Panel class="dialog-buttons"><Button id="export-templates" text="Export Templates..."/><Spacer/><Button id="export-close" text="Close"/><Button id="export-all" text="Export All"/><Button id="export-run" class="primary" text="Export"/></Panel>
 </Panel>

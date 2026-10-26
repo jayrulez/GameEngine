@@ -366,7 +366,11 @@ export namespace foundation::gui
             row.SetIcon(icon.AsView(), GetModel()->Data(index, ModelRole::IconClass).ToString().AsView(), m_iconSize);
             row.SetRowClasses(GetModel()->Data(index, ModelRole::RowClass).ToString().AsView());
             row.Configure(static_cast<f32>(entry.Depth) * m_indentWidth, m_arrowSize, entry.HasChildren, m_expanded.Contains(entry.Id));
+            NoteRowWidth(content);
         }
+        // Rows as wide as the widest one bound, or the view when it is wider: a deep level or a
+        // long name scrolls sideways, where it had been cut at the view's edge.
+        [[nodiscard]] f32 RowWidth(f32 width) const override { return core::Max(width, m_widest); }
 
         // The arrow toward the inline end (Right, Left in right to left) opens a node, or on an open
         // one goes to its first child; toward the start closes an open one, or goes to its parent.
@@ -486,6 +490,24 @@ export namespace foundation::gui
             return -1;
         }
 
+        // The widest row bound so far, kept while the model is the same one (a model built again on
+        // each change, the hierarchy's, would else snap the sideways scroll back as rows rebind).
+        void NoteRowWidth(Node& content)
+        {
+            if (GetModel() != m_widestOf)
+            {
+                m_widestOf = GetModel();
+                m_widest = 0.0f;
+            }
+            Node* row = content.GetParent() != nullptr ? content.GetParent() : &content; // the row's own padding too
+            const f32 width = row->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{kUnbounded, kUnbounded}, core::Float2{-1.0f, -1.0f}}).x;
+            if (width > m_widest + 0.5f)
+            {
+                m_widest = width;
+                RequestLayout();
+            }
+        }
+
         void Reflatten()
         {
             m_flat.Clear();
@@ -515,6 +537,8 @@ export namespace foundation::gui
         f32 m_indentWidth = 16.0f;
         f32 m_arrowSize = 16.0f;
         f32 m_iconSize = 16.0f; // a row's icon's square
+        f32 m_widest = 0.0f;              // the widest row bound (NoteRowWidth)
+        const IModel* m_widestOf = nullptr; // the model it was measured over
         core::UniquePtr<TreeModel> m_ownModel; // markup's items
         core::RefPtr<Node> m_markupHost;       // where markup's items land, then taken in
     };

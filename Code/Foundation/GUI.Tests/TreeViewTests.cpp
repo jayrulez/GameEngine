@@ -312,3 +312,25 @@ TEST_CASE("tree-view: its model taken away, scrolled or not, it shows nothing an
     CHECK(tree->GetItemCount() == 0u);
     CHECK(tree->VisibleRowCount() == 0);
 }
+
+TEST_CASE("tree-view: a row deeper than the view is wide makes the rows that wide, so the view scrolls sideways")
+{
+    // A chain twenty levels deep at 32 px a level: the rows in view (about fifteen of 20 px in
+    // 300) pass the view's 260 px by their indent alone.
+    TreeModel model;
+    core::i32 parent = TreeModel::kRoot;
+    for (int depth = 0; depth < 20; ++depth)
+        parent = model.AddNode(parent, SV(u8"Level"));
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &model);
+    tree->SetIndentWidth(32.0f);
+    (void)root->UpdateLayout();
+    CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // collapsed: nothing passes the edge
+    for (core::i32 item = 0; item < 20; ++item)
+        tree->ExpandItem(item);
+    (void)root->UpdateLayout();
+    (void)root->UpdateLayout(); // the widest row measured as it binds; the rows take it next
+    CHECK(tree->GetContentExtent().x > 10.0f * 32.0f);
+    REQUIRE(tree->RowForItem(10) != nullptr);
+    CHECK(tree->RowForItem(10)->GetSize().x == doctest::Approx(tree->GetContentExtent().x));
+}

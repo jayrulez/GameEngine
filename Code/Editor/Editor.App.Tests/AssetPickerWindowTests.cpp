@@ -223,7 +223,7 @@ TEST_CASE("asset picker: Down then Enter picks the next row and closes; its clos
     CHECK_FALSE(bed.picker->IsOpen());
 }
 
-TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over it")
+TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over it; each where starts in one column")
 {
     Bed bed;
     content::Group* deep = bed.project->SourceDb().RootGroup()->CreateGroup(u8"Models");
@@ -268,5 +268,7 @@ TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over 
     CHECK(farName.width >= far->NameLabel()->MeasureText().x - 0.5f); // the name keeps its room
     CHECK(farKind.x >= farName.x + farName.width - 0.5f);             // the where after it, not over it
     CHECK(farKind.x + farKind.width <= farRow.x + farRow.width + 0.5f);
+    // A column: where each asset lives starts at one x, whatever its name or its path.
+    CHECK(near->KindLabel()->GetScreenBounds().x == doctest::Approx(farKind.x));
     bed.picker->Close();
 }

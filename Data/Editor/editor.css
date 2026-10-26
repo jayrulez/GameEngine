@@ -685,8 +685,11 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
 .asset-picker-grid { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-s); row-gap: var(--space-s); padding: var(--space-xs) var(--space-s); } /* the mock's */
 .asset-picker-grid > .asset-tile { width: 88px; }
 .asset-picker-items > .asset-picker-list { flex-grow: 1; min-height: 0; background-color: transparent; padding: 0; }
-/* A row's kind says where the asset is: cut in the middle, its start and its own folder kept. */
-.asset-picker-list .asset-row-text > .row-kind { text-overflow: ellipsis-middle; }
+/* A row's name a column of its own, so where each asset lives starts at one x down the list (as the
+   grid's names are): a name longer than it ends in an ellipsis. Where it lives is cut in the
+   middle, its start and the asset's own folder kept. */
+.asset-picker-list .asset-row-text > .row-name { flex-grow: 0; flex-shrink: 0; width: 40%; }
+.asset-picker-list .asset-row-text > .row-kind { flex-grow: 1; text-align: start; text-overflow: ellipsis-middle; }
 .asset-picker-state { flex-grow: 1; color: var(--text-dim); text-align: center; padding: var(--space-xl) var(--space-l); }
 /* The entity picker: the scene's tree as the hierarchy draws it, in a picker's frame. */
 .entity-picker-tree { height: 340px; background-color: transparent; padding: 0 var(--space-s); }

@@ -158,7 +158,10 @@ namespace editor
             items.Append(shape);
         }
         m_shapeChoice->SetItemsText(items);
-        m_shapeChoice->SetOnSelectionChanged([self](i32 index) { self->SetPreviewShape(static_cast<u32>(Max(0, index))); });
+        // The user's pick only: a selection set from code (the page showing the kept shape) must not
+        // count as a shape picked, which would put the kept mesh away.
+        (void)m_shapeChoice->AddEventListener(gui::EventType::Changed, [self](const gui::Event&)
+                                              { self->SetPreviewShape(static_cast<u32>(Max(0, self->m_shapeChoice->GetSelectedIndex()))); });
         m_pane->AddControl(*m_shapeChoice);
 
         // Or a mesh from the project, its real UVs (an imported model), in place of the shape.

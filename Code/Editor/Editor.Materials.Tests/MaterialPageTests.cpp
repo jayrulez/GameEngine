@@ -159,7 +159,7 @@ TEST_CASE("material page: its rows are its shader's table: the material's, each 
     }
 }
 
-TEST_CASE("material page: an edit is one undo step, the row following, Discard takes them all back; the preview's shape is kept per material")
+TEST_CASE("material page: an edit is one undo step, the row following, Discard takes them all back; the preview's shape or mesh is kept per material")
 {
     Bed bed;
     UniquePtr<editor::MaterialEditorPage> page = bed.Open();
@@ -195,4 +195,15 @@ TEST_CASE("material page: an edit is one undo step, the row following, Discard t
     page.Reset();
     UniquePtr<editor::MaterialEditorPage> again = bed.Open();
     CHECK(again->PreviewShape() == 2u);
+
+    // A mesh picked is kept too: the page showing the kept choice on its bar (the shape box set
+    // from code) is no shape picked, which would put the mesh away.
+    const Guid mesh{0x1234u, 0x5678u};
+    again->SetPreviewMesh(mesh);
+    again.Reset();
+    UniquePtr<editor::MaterialEditorPage> third = bed.Open();
+    CHECK(third->PreviewMesh() == mesh);
+    third->Refresh(); // the bar shown again
+    third.Reset();
+    CHECK(bed.Open()->PreviewMesh() == mesh);
 }

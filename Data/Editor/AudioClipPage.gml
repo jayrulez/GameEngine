@@ -2,7 +2,8 @@
   The audio clip page (Documentation/Specs/editor-gui.md, 5.4, layer 5): the kit's bar (Save, Undo,
   Redo, Discard Changes, Cook and Rebuild this asset, each an action over the page; its kind at the
   end) over the clip's waveform beside the grid. The waveform has its own bar: the kit's transport
-  (Restart, Play, Stop, each an action over the page, the audition's state named beside them), then
+  (Restart, Play, Stop, each an action over the page, Play showing Pause while it plays, the
+  audition's state named beside them), then
   the audition's volume, which scales only this page's voice. A clip whose source is missing or
   does not decode says so in the waveform's place; an asset that did not read says so in place of
   the grid.
@@ -26,7 +27,7 @@
         <Panel class="panel page-pane audio-pane">
             <Panel class="panel-toolbar audio-bar">
                 <ToolButton id="audio-restart" icon="Editor/Icons/restart.svg"/>
-                <ToolButton id="audio-play" toggle="true" icon="Editor/Icons/play.svg"/>
+                <ToolButton id="audio-play" toggle="true" icon="Editor/Icons/play.svg" checked-icon="Editor/Icons/pause.svg"/>
                 <ToolButton id="audio-stop" icon="Editor/Icons/stop.svg"/>
                 <Label id="audio-state" class="transport-state stopped" text="Stopped"/>
                 <Spacer/>

@@ -1,7 +1,8 @@
 <!--
   The sound cue page (Documentation/Specs/editor-gui.md, 5.4, layer 5): the kit's bar (Save, Undo,
   Redo, Discard Changes, Cook and Rebuild this asset, each an action over the page), then the kit's
-  transport (Restart, Play, Stop, the playback actions over the page) and what the last play picked,
+  transport (Restart, Play, Stop, the playback actions over the page, Play showing Pause while it
+  plays) and what the last play picked,
   its kind at the end; under it the grid: the cue (how it picks, its pitch and volume ranges), then
   its variants, each a clip and its weight. An asset that did not read says so in place of the grid.
 -->
@@ -16,7 +17,7 @@
         <ToolButton id="page-rebuild" icon="Editor/Icons/rebuild.svg"/>
         <Separator id="page-own"/>
         <ToolButton id="cue-restart" icon="Editor/Icons/restart.svg"/>
-        <ToolButton id="cue-play" toggle="true" icon="Editor/Icons/play.svg"/>
+        <ToolButton id="cue-play" toggle="true" icon="Editor/Icons/play.svg" checked-icon="Editor/Icons/pause.svg"/>
         <ToolButton id="cue-stop" icon="Editor/Icons/stop.svg"/>
         <Label id="cue-state" class="transport-state stopped" text="Stopped"/>
         <Spacer/>

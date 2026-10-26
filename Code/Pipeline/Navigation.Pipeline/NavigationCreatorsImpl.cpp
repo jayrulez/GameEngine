@@ -46,4 +46,11 @@ namespace pipeline
             registry.Register(Move(creator));
         }
     }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(NavigationZoneAsset, "rtti::pipeline::navigation")
+    {
+        builder.DataVersion(2) // 2: frame stamp left
+            .Attribute("displayName", String(u8"Navigation Zone"));
+    }
 }

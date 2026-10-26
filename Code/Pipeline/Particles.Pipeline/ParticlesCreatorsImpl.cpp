@@ -54,4 +54,10 @@ namespace pipeline
             registry.Register(Move(creator));
         }
     }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(ParticleEffectAsset, "rtti::pipeline::particles")
+    {
+        builder.Attribute("displayName", String(u8"Particle Effect"));
+    }
 }

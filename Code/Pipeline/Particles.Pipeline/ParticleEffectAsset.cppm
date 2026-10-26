@@ -131,7 +131,6 @@ export namespace pipeline{
 
     // Data version 0: the curve layout of 2026-10-21 (Core's keys, gradients, size as one curve)
     // moved by re-saving every sample through Tools.Mcp, version 0 having no legacy floor to keep.
-    RTTI_DEFINE_OBJECT(ParticleEffectAsset, "rtti::pipeline::particles")
 
     /// A new effect's content: one continuous fountain system.
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& effect);

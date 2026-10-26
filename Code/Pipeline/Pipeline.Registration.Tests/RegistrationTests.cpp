@@ -176,3 +176,25 @@ TEST_CASE("pipeline.registration: every creator makes its asset with no editor")
     (void)RemoveDirectoryRecursive(kRoot);
     (void)RemoveDirectoryRecursive(kSources);
 }
+
+// Tripwire: every asset type a project can hold declares its display name, the kind the editor
+// names it by (an asset page's bar, the picker); a type without one shows a blank there. Asset
+// type N+1 is caught the day it is registered.
+TEST_CASE("pipeline.registration: every serializable asset type declares a display name")
+{
+    pipeline::RegisterPipelineTypes();
+    const TypeInfo& asset = pipeline::Asset::StaticType();
+    usize assets = 0;
+    for (const TypeInfo* type : GlobalTypeRegistry().All())
+    {
+        bool isAsset = false;
+        for (const TypeInfo* b = type->base; b != nullptr && !isAsset; b = b->base)
+            isAsset = b == &asset;
+        if (!isAsset || !GlobalSerializableRegistry().Contains(type->id))
+            continue; // not an asset, or an abstract one (no project holds it as itself)
+        ++assets;
+        INFO("asset type: ", doctest::String(type->name));
+        CHECK_FALSE(TypeAttrString(*type, "displayName", StringView{}).IsEmpty());
+    }
+    CHECK(assets >= 30u);
+}

@@ -49,4 +49,16 @@ namespace pipeline{
             .PropAttribute("displayName", String(u8"Gain"))
             .PropAttribute("range", Float4{0.0f, 4.0f, 0.01f, 0.0f});
     }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(AudioBusLayoutAsset, "rtti::pipeline::audio")
+    {
+        builder.DataVersion(2)
+            .Attribute("displayName", String(u8"Audio Bus Layout"));
+    }
+
+    REFLECT_MEMBERS(SoundCueAsset, "rtti::pipeline::audio")
+    {
+        builder.Attribute("displayName", String(u8"Sound Cue"));
+    }
 }

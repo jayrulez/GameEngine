@@ -1577,7 +1577,6 @@ export namespace pipeline
         RegisterSerializable<ModelManifestAsset>();
     }
 
-    RTTI_DEFINE_OBJECT(ModelManifestAsset, "rtti::pipeline::modelimporter")
     RTTI_DEFINE_OBJECT(ModelImportOptions, "rtti::pipeline::modelimporter")
     RTTI_DEFINE_OBJECT(LoadedModel, "rtti::pipeline::modelimporter")
 }

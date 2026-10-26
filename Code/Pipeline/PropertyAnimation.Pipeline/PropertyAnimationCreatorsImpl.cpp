@@ -50,4 +50,10 @@ namespace pipeline
             registry.Register(Move(creator));
         }
     }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(PropertyAnimationClipAsset, "rtti::pipeline::propertyanimation")
+    {
+        builder.Attribute("displayName", String(u8"Property Animation Clip"));
+    }
 }

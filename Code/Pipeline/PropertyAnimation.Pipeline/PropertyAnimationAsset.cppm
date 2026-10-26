@@ -75,7 +75,6 @@ export namespace pipeline
         RegisterSerializable<PropertyAnimationClipAsset>();
     }
 
-    RTTI_DEFINE_OBJECT(PropertyAnimationClipAsset, "rtti::pipeline::propertyanimation")
 
     /// An empty clip in `target`, named `name` made unique (empty: "Clip"); the creator and
     /// the animation panel's Create Clip both make clips through this.

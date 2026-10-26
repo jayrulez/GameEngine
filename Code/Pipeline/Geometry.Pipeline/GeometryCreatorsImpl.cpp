@@ -74,4 +74,17 @@ namespace pipeline
             registry.Register(Move(creator));
         }
     }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(StaticMeshAsset, "rtti::pipeline::geometry")
+    {
+        builder.DataVersion(5)
+            .Attribute("displayName", String(u8"Static Mesh"));
+    }
+
+    REFLECT_MEMBERS(SkinnedMeshAsset, "rtti::pipeline::geometry")
+    {
+        builder.DataVersion(5)
+            .Attribute("displayName", String(u8"Skinned Mesh"));
+    }
 }

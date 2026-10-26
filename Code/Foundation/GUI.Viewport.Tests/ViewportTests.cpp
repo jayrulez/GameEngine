@@ -4,7 +4,9 @@
 // GUI.Viewport - the Viewport widget hosted on GuiHost, on the Null RHI backend and the null shell: bound
 // to the renderer of the window its node is in, its targets at the node's device pixels and its
 // colour target registered with that renderer, its drawing recorded on that window's frame (a clear
-// when it has none), bound again when its node moves to another window, and let go when it leaves.
+// when it has none), bound again when its node moves to another window, and let go when it leaves;
+// what a game in a panel needs: a clear once outside drawing stops, the colour target's twin view,
+// hosted text input, and the pointer mapped into the content's own resolution.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -178,4 +180,56 @@ TEST_CASE("gui.viewport: moved to another window it is bound there; taken out of
     CHECK(renders == 1);
     bed.host->DetachWindow(*other);
     other.Reset();
+}
+
+TEST_CASE("gui.viewport: content drawn outside that stopped is cleared once on request, then kept")
+{
+    Bed bed;
+    bed.Frame(bed.main.Get());
+    REQUIRE(bed.viewport->ClearCount() == 1u);
+    bed.viewport->SetColorState(rhi::ResourceState::ShaderRead); // drawn outside
+    bed.viewport->ClearPicture();
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->ClearCount() == 2u);
+    CHECK(bed.viewport->ColorState() == rhi::ResourceState::ShaderRead);
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->ClearCount() == 2u); // kept
+}
+
+TEST_CASE("gui.viewport: an sRGB target has its twin view; a float one has none")
+{
+    Bed bed;
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->ColorAlternateView() == nullptr); // RGBA16Float: no twin
+    bed.viewport->SetFormats(rhi::TextureFormat::RGBA8UnormSrgb, bed.viewport->DepthFormat());
+    bed.Frame(bed.main.Get());
+    CHECK(bed.viewport->ColorAlternateView() != nullptr);
+}
+
+TEST_CASE("gui.viewport: the hosted content's text input is the node's; the pointer maps into the content's own resolution")
+{
+    Bed bed;
+    CHECK_FALSE(bed.viewport->WantsTextInput());
+    bed.viewport->SetHostedTextInputWanted(true);
+    CHECK(bed.viewport->WantsTextInput());
+
+    bed.Frame(bed.main.Get());
+    shell::InputSurface* surface = bed.viewport->HostedSurface();
+    REQUIRE(surface != nullptr);
+    CHECK(surface->Fit().contentSize.x == doctest::Approx(320.0f)); // the targets' own
+    bed.viewport->SetContentResolution(1920, 1080, FitMode::Letterbox);
+    bed.Frame(bed.main.Get());
+    CHECK(surface->Fit().contentSize.x == doctest::Approx(1920.0f));
+    CHECK(surface->Fit().contentSize.y == doctest::Approx(1080.0f));
+    CHECK(surface->Fit().mode == FitMode::Letterbox);
+
+    // At a fixed resolution too: the region is the content's rectangle inside the drawn targets.
+    bed.viewport->SetFixedResolution(160, 200); // a tall screen in a wide node
+    bed.viewport->SetFitMode(FitMode::Letterbox);
+    bed.Frame(bed.main.Get());
+    const Rectangle region = surface->Fit().region;
+    CHECK(surface->Fit().mode == FitMode::Stretch);
+    CHECK(region.width == doctest::Approx(160.0f)); // the 160 by 200 targets drawn at 160 by 200, centred
+    CHECK(region.height == doctest::Approx(90.0f)); // a 16:9 picture letterboxed across their width
+    CHECK(region.x == doctest::Approx(80.0f));
 }

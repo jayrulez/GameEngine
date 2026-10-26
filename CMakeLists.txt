@@ -636,6 +636,7 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Audio) # the audio pages (the spec's 5.4, layer 5)
     add_subdirectory(Code/Editor/Editor.Input) # the input map page (the spec's 5.4, layer 5)
     add_subdirectory(Code/Editor/Editor.Script) # the script page (the spec's 5.4, layer 6)
+    add_subdirectory(Code/Editor/Editor.Shaders) # the shader page (the spec's 5.4, layer 6)
     add_subdirectory(Code/Tools/Tools.Editor)        # Editor executable: the shell on the GUI, its pages coming back as they port
 
     add_subdirectory(Code/Tools/Tools.Cook)          # Tools.Cook CLI cooker (headless)

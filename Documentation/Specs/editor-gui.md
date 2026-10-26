@@ -249,7 +249,8 @@ to follow the same order.
 | The Terrain page; a Vegetation Mask page (new, layer 7) | Parked (Editor.Vegetation's tools are in with the scene page, X5) | |
 | Editor.Script | In the build, on the GUI: the script page from its markup on Editor.App's code pages' base (the source file read into the code editor, coloured by its language's shared definition, checked a moment after each edit as the cook compiles it into the kit's problems list and onto its lines, a problem chosen taking the code there, one history for the code and the page, Save writing the source then cooking, a missing source a problem and the code read only); completion and hover from the API the runtime binds for its language, the API browser (its search over a tree) opened from the bar beside the code, breakpoints in the gutter shared with the Game tabs, a paused run's line and values | X6 (layer 6, parts 1 to 3) |
 | Editor.Script.AngelScript, Editor.Script.Luau | Retired: they held only the old code widget's lexer tables; the languages are data now (Data/Assets/code) | X6 (layer 6, part 3) |
-| Editor.Shaders, Editor.GUI | Parked | |
+| Editor.Shaders | In the build, on the GUI: the shader page from its markup on the code pages' base (the code coloured by the shared HLSL definition, checked against the engine's library a moment after each edit, its file's errors on their lines and an include's in the problems list) beside the preview (a sphere drawn with the code being edited under the page's own shader name, its material laid out by the properties block) over the asset's grid (its name and entry points, each edit one undo step in the code's history); a preview kept on the last version that compiled says so; its old lexer retired | X6 (layer 6, part 4) |
+| Editor.GUI | Parked | |
 | Editor.GameUI | Left with the old editor (ruling): never ported, deleted at the swap | |
 
 ## 5. Phases (proposed)

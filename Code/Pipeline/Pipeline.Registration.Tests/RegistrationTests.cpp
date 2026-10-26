@@ -177,12 +177,31 @@ TEST_CASE("pipeline.registration: every creator makes its asset with no editor")
     (void)RemoveDirectoryRecursive(kSources);
 }
 
-// Tripwire: every asset type a project can hold declares its display name, the kind the editor
-// names it by (an asset page's bar, the picker); a type without one shows a blank there. Asset
-// type N+1 is caught the day it is registered.
-TEST_CASE("pipeline.registration: every serializable asset type declares a display name")
+// Tripwire: every type a project can hold declares its display name, the kind the editor names it
+// by (an asset page's bar, the picker); a type without one shows a blank there. What a project holds
+// is every asset type, and what a builder cooks or a creator makes (the scene and prefab documents
+// derive no Asset). Type N+1 is caught the day it is registered.
+TEST_CASE("pipeline.registration: every type a project holds declares a display name")
 {
     pipeline::RegisterPipelineTypes();
+    const auto named = [](const TypeInfo& type)
+    {
+        INFO("type: ", doctest::String(type.name));
+        CHECK_FALSE(TypeAttrString(type, "displayName", StringView{}).IsEmpty());
+    };
+    pipeline::BuilderRegistry builders{DefaultAllocator()};
+    pipeline::RegisterAllBuilders(builders, foundation::vfs::FindDataRoot());
+    builders.ForEach([&named](const pipeline::IAssetBuilder& builder)
+                     {
+                         if (const TypeInfo* source = builder.AssetType())
+                             named(*source);
+                     });
+    pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
+    (void)pipeline::RegisterAllCreators(creators);
+    for (const pipeline::AssetCreator& creator : creators.All())
+        if (creator.type != nullptr)
+            named(*creator.type);
+
     const TypeInfo& asset = pipeline::Asset::StaticType();
     usize assets = 0;
     for (const TypeInfo* type : GlobalTypeRegistry().All())
@@ -193,8 +212,7 @@ TEST_CASE("pipeline.registration: every serializable asset type declares a displ
         if (!isAsset || !GlobalSerializableRegistry().Contains(type->id))
             continue; // not an asset, or an abstract one (no project holds it as itself)
         ++assets;
-        INFO("asset type: ", doctest::String(type->name));
-        CHECK_FALSE(TypeAttrString(*type, "displayName", StringView{}).IsEmpty());
+        named(*type);
     }
     CHECK(assets >= 30u);
 }

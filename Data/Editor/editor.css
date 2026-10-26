@@ -143,8 +143,10 @@ button.primary:hover { background-color: var(--accent-fill-hover); opacity: 1; }
 button.danger { background-color: var(--danger-background); color: var(--danger); border: 1px solid var(--danger-border); }
 button.ghost { background-color: transparent; }
 button.ghost:hover { background-color: var(--ghost-hover); opacity: 1; }
-button:hover { background-color: var(--element-hover); opacity: 1; }
-button:active { background-color: var(--element-active); opacity: 1; }
+button:hover { background-color: var(--button-hover); opacity: 1; }
+button:active { background-color: var(--button-active); opacity: 1; }
+/* On a dialog's surface a neutral button takes the overlay's element fills, which stand off it. */
+.dialog, .dialog-body { --button-background: var(--element-on-overlay); --button-hover: var(--element-on-overlay-hover); --button-active: var(--element-on-overlay-active); }
 /* A disabled button fades and stays as it is under the pointer. */
 button:disabled, button:disabled:hover, button:disabled:active { opacity: var(--disabled-opacity); }
 button.primary:disabled:hover { background-color: var(--accent-fill); }

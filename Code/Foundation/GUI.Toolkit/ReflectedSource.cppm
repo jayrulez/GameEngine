@@ -211,6 +211,22 @@ export namespace foundation::gui
 
         void GetProperties(core::StringView parent, core::Array<PropertyInfo>& out) const override
         {
+            const usize first = out.Size();
+            ListProperties(parent, out);
+            // What the application says of each (a list element named by a field of its own, a
+            // group's line, a row shown only when another holds): its describe hook, last.
+            if (m_onDescribe)
+                for (usize i = first; i < out.Size(); ++i)
+                    m_onDescribe(JoinPropertyPath(parent, out[i].Name.AsView()).AsView(), out[i]);
+        }
+        /// Told of each row as it is described, its info to change: what reflection cannot say of it
+        /// (an element's name from a field of its own, a closed group's line, a row shown or not by
+        /// another's value). The hook reads the objects through GetValue.
+        void SetOnDescribe(core::Function<void(core::StringView path, PropertyInfo& info)> onDescribe) { m_onDescribe = core::Move(onDescribe); }
+
+    private:
+        void ListProperties(core::StringView parent, core::Array<PropertyInfo>& out) const
+        {
             if (m_objects.IsEmpty())
                 return;
             Target target;
@@ -233,6 +249,7 @@ export namespace foundation::gui
                 ListParts(shape, out);
         }
 
+    public:
         [[nodiscard]] Variant GetValue(core::StringView path, usize object) const override
         {
             Target target;
@@ -1756,5 +1773,6 @@ export namespace foundation::gui
         core::Array<ReferenceType> m_referenceTypes;
         core::Array<GradientType> m_gradientTypes;
         core::Function<void(const ReflectedChange&)> m_onChange;
+        core::Function<void(core::StringView, PropertyInfo&)> m_onDescribe; // SetOnDescribe
     };
 }

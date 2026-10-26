@@ -451,6 +451,28 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     CHECK(bed.Find(rows, u8"coneAngle")->Visible);
 }
 
+TEST_CASE("reflected source: an application describes each row as it is listed")
+{
+    Bed bed;
+    core::Array<core::String> told(core::DefaultAllocator());
+    bed.source.SetOnDescribe([&told](core::StringView path, PropertyInfo& info)
+    {
+        told.PushBack(core::String(path));
+        if (path == SV(u8"intensity"))
+            info.DisplayName = core::String(u8"Brightness"); // what reflection could not say
+        if (path == SV(u8"shape"))
+            info.Summary = core::String(u8"a lamp shade");
+    });
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8""), rows);
+    CHECK(bed.Find(rows, u8"intensity")->DisplayName == core::String(u8"Brightness"));
+    CHECK(bed.Find(rows, u8"shape")->Summary == core::String(u8"a lamp shade"));
+    CHECK(told.Size() == rows.Size()); // each row, by its path
+    core::Array<PropertyInfo> parts(core::DefaultAllocator());
+    bed.source.GetProperties(SV(u8"rotation"), parts);
+    CHECK(told.Back().AsView().StartsWith(SV(u8"rotation."))); // a group's parts by their paths
+}
+
 TEST_CASE("reflected source: values read and written through addresses and setters, parts and Euler degrees")
 {
     Bed bed;

@@ -85,6 +85,7 @@ export namespace foundation::gui
         core::Array<PropertyChoice> Choices; ///< an enum's values, flags' bits
         bool ReadOnly = false;
         bool Visible = true;
+        core::String Summary; ///< a group's: what it holds, said in a line on its row while it is closed
         bool ShowsAlpha = true;   ///< a colour's alpha is edited (not an HDR colour's, nor one with `noAlpha`)
         u8 ListOps = 0;           ///< a list's: PropertyListOps
         u32 MaxCount = 0;         ///< a list's most elements (a BoundedArray's), a curve's most keys, a gradient's most stops; 0: no limit

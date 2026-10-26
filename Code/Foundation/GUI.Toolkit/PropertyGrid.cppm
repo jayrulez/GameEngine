@@ -195,6 +195,7 @@ export namespace foundation::gui
         [[nodiscard]] core::StringView GetPath() const noexcept { return m_path.AsView(); }
         [[nodiscard]] PropertyEditor* GetEditor() const noexcept { return m_editor.Get(); }
         [[nodiscard]] Label* GetLabel() const noexcept { return m_label.Get(); }
+        [[nodiscard]] Label* GetSummary() const noexcept { return m_summary.Get(); }
         [[nodiscard]] PropertySplitHandle* GetSplitHandle() const noexcept { return m_split.Get(); }
         [[nodiscard]] PropertyGrip* GetGrip() const noexcept { return m_grip.Get(); }
         /// Marked: an object's value here, or under here, differs from its default.
@@ -230,6 +231,7 @@ export namespace foundation::gui
         void OnTextStyleChange() override
         {
             ShareTextStyle(*m_label);
+            ShareTextStyle(*m_summary);
             if (m_editor)
                 ShareTextStyle(*m_editor);
         }
@@ -239,6 +241,7 @@ export namespace foundation::gui
         PropertyGrid& m_grid;
         core::RefPtr<TreeArrow> m_arrow;
         core::RefPtr<Label> m_label;
+        core::RefPtr<Label> m_summary; // a closed group's line
         core::RefPtr<PropertySplitHandle> m_split;
         core::RefPtr<PropertyGrip> m_grip;
         core::RefPtr<PropertyEditor> m_editor;
@@ -405,10 +408,15 @@ export namespace foundation::gui
         /// The editor showing `path` now (its row realised), or null.
         [[nodiscard]] PropertyEditor* FindEditor(core::StringView path) const
         {
+            PropertyRowContent* content = FindRowContent(path);
+            return content != nullptr ? content->GetEditor() : nullptr;
+        }
+        /// The row showing `path` (null when it is not in view).
+        [[nodiscard]] PropertyRowContent* FindRowContent(core::StringView path) const
+        {
             const i32 item = FindRow(path);
             ItemRow* row = item >= 0 ? RowForItem(item) : nullptr;
-            PropertyRowContent* content = row != nullptr ? core::Cast<PropertyRowContent>(row->GetContent()) : nullptr;
-            return content != nullptr ? content->GetEditor() : nullptr;
+            return row != nullptr ? core::Cast<PropertyRowContent>(row->GetContent()) : nullptr;
         }
         // === Defaults ===
         /// Whether `path`'s row shows: an object differs from its default there, or under there.
@@ -696,6 +704,17 @@ namespace foundation::gui
         }
         m_label->SetHitTestVisible(false);
         AddChild(m_label.Get());
+        // A closed group's line (its info's Summary), where an editor would be.
+        m_summary = core::MakeRef<Label>(MemoryAllocator());
+        m_summary->SetTag(core::StringView(u8"propertysummary"));
+        m_summary->SetTextAlignment(TextHAlign::Start, TextVAlign::Middle);
+        {
+            StyleWriteScope defaults(*m_summary);
+            m_summary->SetTextOverflow(TextOverflow::Ellipsis);
+        }
+        m_summary->SetHitTestVisible(false);
+        m_summary->SetDisplayed(false);
+        AddChild(m_summary.Get());
         if (m_editor)
             AddChild(m_editor.Get());
         m_grip = core::MakeRef<PropertyGrip>(MemoryAllocator(), grid);
@@ -711,7 +730,11 @@ namespace foundation::gui
         m_arrow->SetVisible(row.HasChildren);
         m_arrow->SetExpanded(row.Open);
         m_label->SetText(row.Info.ShownName());
-        m_movable = row.Element && (row.ListOps & PropertyListMove) != 0 && row.Count > 1;
+        const bool says = row.HasChildren && !row.Open && !row.Info.Summary.IsEmpty();
+        m_summary->SetDisplayed(says);
+        if (says)
+            m_summary->SetText(row.Info.Summary.AsView());
+        m_movable =row.Element && (row.ListOps & PropertyListMove) != 0 && row.Count > 1;
         m_grip->SetDisplayed(m_movable);
         m_grip->SetPath(row.Path.AsView());
         RequestLayout();
@@ -730,6 +753,8 @@ namespace foundation::gui
         m_label->Arrange(MirroredIn(Rect{box.x + textX, box.y, core::Max(0.0f, split - textX - 4.0f), box.height}, box, rtl));
         if (m_editor)
             m_editor->Arrange(MirroredIn(Rect{box.x + split + 2.0f, box.y + 1.0f, core::Max(0.0f, box.width - split - 2.0f), core::Max(0.0f, box.height - 2.0f)}, box, rtl));
+        if (m_summary->IsDisplayed())
+            m_summary->Arrange(MirroredIn(Rect{box.x + split + 4.0f, box.y, core::Max(0.0f, box.width - split - 8.0f), box.height}, box, rtl));
         m_split->Arrange(MirroredIn(Rect{box.x + split - 3.0f, box.y, 6.0f, box.height}, box, rtl));
     }
 

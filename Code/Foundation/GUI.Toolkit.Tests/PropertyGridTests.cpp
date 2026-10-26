@@ -183,6 +183,32 @@ TEST_CASE("property grid: the chevron, a header's click and Left and Right fold 
     CHECK_FALSE(bed.grid->IsOpen(SV(u8"offset")));
 }
 
+TEST_CASE("property grid: a closed group says what it holds in a line, where an editor would be; open, it does not")
+{
+    Bed bed;
+    PropertyInfo& shape = bed.Add(u8"shape", PropertyKind::Group);
+    shape.Summary = core::String(u8"Box, 2 x 1 x 2");
+    bed.Add(u8"shape.width", PropertyKind::Float, Variant(2.0));
+    bed.Add(u8"plain", PropertyKind::Group); // nothing to say: no line
+    bed.Add(u8"plain.x", PropertyKind::Float, Variant(0.0));
+    bed.Show();
+    PropertyRowContent* row = bed.grid->FindRowContent(SV(u8"shape"));
+    REQUIRE(row != nullptr);
+    REQUIRE(row->GetSummary() != nullptr);
+    CHECK(row->GetSummary()->IsDisplayed());
+    CHECK(row->GetSummary()->GetText() == SV(u8"Box, 2 x 1 x 2"));
+    CHECK(row->GetSummary()->GetScreenBounds().x >= row->GetLabel()->GetScreenBounds().x + row->GetLabel()->GetScreenBounds().width);
+    PropertyRowContent* plain = bed.grid->FindRowContent(SV(u8"plain"));
+    REQUIRE(plain != nullptr);
+    CHECK_FALSE(plain->GetSummary()->IsDisplayed());
+
+    bed.grid->SetOpen(SV(u8"shape"), true);
+    bed.Frame();
+    row = bed.grid->FindRowContent(SV(u8"shape"));
+    REQUIRE(row != nullptr);
+    CHECK_FALSE(row->GetSummary()->IsDisplayed()); // its rows say it now
+}
+
 TEST_CASE("property grid: a search keeps matches by name or path, with what holds them opened; the folding stays")
 {
     Bed bed;

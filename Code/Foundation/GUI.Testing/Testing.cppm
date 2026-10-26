@@ -48,6 +48,24 @@ export namespace foundation::gui::testing
         return {};
     }
 
+    /// The middle of `node` in `root`'s world (device pixels: where the dispatcher takes a pointer),
+    /// and whether a pointer there reaches it: the node, or a part of it (a button's label), lies
+    /// there; else `over` is what does (null: nothing). What a user's click on it would hit.
+    [[nodiscard]] inline bool AimAt(SceneRoot& root, Node& node, core::Float2& at, Node*& over)
+    {
+        const Rect box = node.GetScreenBounds();
+        at = core::Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+        Node* hit = root.OverFind(at);
+        over = hit;
+        for (Node* n = hit; n != nullptr; n = n->GetParent())
+            if (n == &node)
+                return true;
+        for (Node* n = &node; hit != nullptr && n != nullptr; n = n->GetParent())
+            if (n == hit && hit != &root)
+                return true;
+        return false;
+    }
+
     /// Which nodes a test means: by selector or text, within another finder's match, shown only
     /// unless IncludingHidden. A finder is its steps, outermost first: each looks under the first
     /// node the step before it found.
@@ -426,18 +444,11 @@ export namespace foundation::gui::testing
             Node* node = One(target);
             if (node == nullptr)
                 return false;
-            const Rect box = node->GetScreenBounds();
-            at = core::Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
-            Node* hit = m_root.OverFind(at);
-            for (Node* n = hit; n != nullptr; n = n->GetParent())
-                if (n == node)
-                    return true;
-            // A part of it (a button's label) counts; what lies over it does not.
-            for (Node* n = node; hit != nullptr && n != nullptr; n = n->GetParent())
-                if (n == hit && hit != &m_root)
-                    return true;
+            Node* over = nullptr;
+            if (AimAt(m_root, *node, at, over))
+                return true;
             Fail(core::Format(u8"{} is covered at its middle by {}", target.Describe(),
-                              hit != nullptr ? inspector::Label(*hit) : core::String(core::StringView(u8"nothing"))).AsView());
+                              over != nullptr ? inspector::Label(*over) : core::String(core::StringView(u8"nothing"))).AsView());
             return false;
         }
         bool Press(const Finder& target, MouseButton button, int clicks)

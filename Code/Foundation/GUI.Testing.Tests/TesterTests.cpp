@@ -15,6 +15,7 @@ import foundation.image;
 using namespace foundation::gui;
 using foundation::gui::testing::Finder;
 using foundation::gui::testing::Tester;
+using foundation::gui::testing::AimAt;
 namespace core = foundation::core;
 using core::f32;
 using core::usize;
@@ -119,6 +120,21 @@ TEST_CASE("testing: clicks reach what they aim at, and fail when something lies 
     CHECK(bed.clicks == before);
     REQUIRE_FALSE(t.Failures().IsEmpty());
     CHECK(t.Failures()[t.Failures().Size() - 1].AsView().ContainsIgnoreCase(SV(u8"covered at its middle by Panel #cover")));
+}
+
+TEST_CASE("testing: aiming at a node gives its middle, and what lies there when it is not the node")
+{
+    Bed bed;
+    Tester t(*bed.root.Get());
+    core::Float2 at;
+    Node* over = nullptr;
+    CHECK(AimAt(*bed.root.Get(), *bed.show.Get(), at, over));
+    CHECK(at.x == doctest::Approx(50.0f));
+    CHECK(at.y == doctest::Approx(25.0f));
+    auto cover = Add<Panel>(*bed.root.Get(), u8"cover", 0.0f, 0.0f, 120.0f, 60.0f);
+    t.Frame();
+    CHECK_FALSE(AimAt(*bed.root.Get(), *bed.show.Get(), at, over));
+    CHECK(over == cover.Get());
 }
 
 TEST_CASE("testing: typing goes to the focus, keys move it, and a held arrow repeats")

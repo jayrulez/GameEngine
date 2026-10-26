@@ -1025,6 +1025,8 @@ namespace foundation::gui
         builder.AccessorProperty<&ButtonBase::GetRepeatInterval, &ButtonBase::SetRepeatInterval>("repeatInterval")
             .PropAttribute("css", core::String(u8"repeat-interval"));
         builder.AccessorProperty<&ButtonBase::GetIconSource, &ButtonBase::SetIconSource>("icon").PropAttribute("css", core::String(u8"icon"));
+        builder.AccessorProperty<&ButtonBase::GetCheckedIconSource, &ButtonBase::SetCheckedIconSource>("checkedIcon")
+            .PropAttribute("css", core::String(u8"checked-icon"));
         builder.Method<&ElementOf<ButtonBase>, ButtonBase, Node>("of");
     }
 

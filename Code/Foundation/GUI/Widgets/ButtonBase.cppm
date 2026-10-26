@@ -236,15 +236,18 @@ export namespace foundation::gui
         /// Its icon by path (markup's `icon`), loaded through the GUI's resource provider; empty: none.
         void SetIconSource(const core::String& path)
         {
-            if (path.IsEmpty())
-            {
-                SetIcon(core::RefPtr<Drawable>{});
-                return;
-            }
-            EnsureIconPart();
-            m_iconPart->SetSource(path);
+            m_iconSource = path;
+            ShowIconSource();
         }
-        [[nodiscard]] core::String GetIconSource() const { return m_iconPart ? m_iconPart->GetSource() : core::String{}; }
+        [[nodiscard]] core::String GetIconSource() const { return m_iconSource; }
+        /// A toggle's icon while it is checked (markup's `checked-icon`: a play button showing pause
+        /// while it plays, as what a click does then); empty: its icon either way.
+        void SetCheckedIconSource(const core::String& path)
+        {
+            m_checkedIconSource = path;
+            ShowIconSource();
+        }
+        [[nodiscard]] core::String GetCheckedIconSource() const { return m_checkedIconSource; }
         /// The parts it made (null until it has them).
         [[nodiscard]] Label* GetTextPart() const noexcept { return m_textPart.Get(); }
         [[nodiscard]] Image* GetIconPart() const noexcept { return m_iconPart.Get(); }
@@ -475,6 +478,19 @@ export namespace foundation::gui
             return m_keepsChecked || !m_name.IsEmpty();
         }
 
+        // The icon its state shows: the checked one while checked (where it has one), else its own.
+        void ShowIconSource()
+        {
+            const core::String& path = m_checked && !m_checkedIconSource.IsEmpty() ? m_checkedIconSource : m_iconSource;
+            if (path.IsEmpty())
+            {
+                SetIcon(core::RefPtr<Drawable>{});
+                return;
+            }
+            EnsureIconPart();
+            m_iconPart->SetSource(path);
+        }
+
         void ApplyChecked(bool checked)
         {
             const bool settled = m_indeterminate;
@@ -487,6 +503,8 @@ export namespace foundation::gui
             RedrawIndicator();
             if (changed)
             {
+                if (!m_checkedIconSource.IsEmpty())
+                    ShowIconSource(); // its checked icon, or its own again
                 m_checkedChanged.Notify();
                 OnCheckedChange();
             }
@@ -563,6 +581,8 @@ export namespace foundation::gui
         core::Function<void(bool)> m_onToggled;
         core::RefPtr<ButtonGroup> m_group;
         core::String m_name;
+        core::String m_iconSource;        // `icon`
+        core::String m_checkedIconSource; // `checked-icon`: shown while checked
         core::RefPtr<Label> m_textPart;
         char32_t m_mnemonic = 0; // its access key (E12), from an `&` in its text
         core::RefPtr<Image> m_iconPart;

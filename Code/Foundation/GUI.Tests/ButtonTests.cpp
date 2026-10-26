@@ -340,3 +340,33 @@ TEST_CASE("button: its text part is aligned as the button is: centred on a butto
     check->SetText(core::StringView(u8"Music"));
     CHECK(check->GetTextPart()->GetTextAlignH() == TextHAlign::Start);
 }
+
+TEST_CASE("button: a toggle shows its checked icon while checked, its own icon otherwise")
+{
+    // A play button showing pause while it plays: what a click does then.
+    auto root = MakeRoot();
+    auto b = Place<Button>(*root, core::Float2{0.0f, 0.0f});
+    b->SetToggle(true);
+    b->SetIconSource(core::String(u8"icons/play.svg"));
+    b->SetCheckedIconSource(core::String(u8"icons/pause.svg"));
+    REQUIRE(b->GetIconPart() != nullptr);
+    CHECK(b->GetIconPart()->GetSource() == core::StringView(u8"icons/play.svg"));
+    b->SetChecked(true); // from code (a bound action checked)
+    CHECK(b->GetIconPart()->GetSource() == core::StringView(u8"icons/pause.svg"));
+    CHECK(b->GetIconSource() == core::StringView(u8"icons/play.svg")); // its own icon is still its own
+    Click(*root->GetEventDispatcher(), core::Float2{10.0f, 10.0f}); // by the user
+    CHECK_FALSE(b->IsChecked());
+    CHECK(b->GetIconPart()->GetSource() == core::StringView(u8"icons/play.svg"));
+
+    // From markup.
+    RegisterGuiElements();
+    static const ElementSet elements = ElementSet::All();
+    MarkupLoader loader(elements, core::DefaultAllocator());
+    core::RefPtr<Node> loaded = loader.LoadFromString(core::StringView(u8"<Button toggle=\"true\" icon=\"icons/play.svg\" checked-icon=\"icons/pause.svg\"/>"));
+    auto* marked = core::Cast<Button>(loaded.Get());
+    REQUIRE(marked != nullptr);
+    CHECK(marked->GetCheckedIconSource() == core::StringView(u8"icons/pause.svg"));
+    marked->SetChecked(true);
+    REQUIRE(marked->GetIconPart() != nullptr);
+    CHECK(marked->GetIconPart()->GetSource() == core::StringView(u8"icons/pause.svg"));
+}

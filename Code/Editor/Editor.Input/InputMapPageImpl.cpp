@@ -40,7 +40,7 @@ namespace editor
         if (auto* remove = Find<gui::ButtonBase>(u8"input-remove"))
             remove->SetOnClick([self]() { (void)self->RemoveChosen(); });
         if (auto* search = Find<gui::TextField>(u8"input-search"))
-            search->SetOnTextChanged([self](StringView text) { self->Search(text); });
+            search->SetOnTextChanging([self](StringView text) { self->Search(text); });
         if (m_tree != nullptr)
         {
             m_tree->SetModel(m_model.Get());

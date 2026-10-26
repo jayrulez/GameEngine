@@ -478,7 +478,7 @@ namespace editor
             if (auto* search = Find<gui::TextField>(u8"form-search"))
             {
                 GenericAssetEditorPage* self = this;
-                search->SetOnTextChanged([self](StringView text)
+                search->SetOnTextChanging([self](StringView text)
                                          {
                                              if (self->m_grid != nullptr)
                                                  self->m_grid->SetFilter(text);

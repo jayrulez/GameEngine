@@ -496,6 +496,74 @@ TEST_CASE("property grid: Add puts an element at the end of each object's list a
     CHECK_FALSE(list->GetAddButton()->IsEnabled()); // its most
 }
 
+namespace
+{
+    // A list edit by its parts (the struct's other fields left as they are).
+    ListEdit ListEditOf(ListEdit::Op kind, usize index, usize to = 0)
+    {
+        ListEdit edit;
+        edit.Kind = kind;
+        edit.Index = index;
+        edit.To = to;
+        return edit;
+    }
+}
+
+TEST_CASE("property bag: a list of groups, each element its fields, added, edited, moved and removed whole")
+{
+    Bed bed(1);
+    PropertyInfo& info = bed.bag.AddList(SV(u8"variants"), PropertyKind::Group, Variant{});
+    info.MaxCount = 3;
+    PropertyInfo* clip = bed.bag.AddElementField(SV(u8"variants"), SV(u8"clip"), PropertyKind::String, Variant(SV(u8"")));
+    PropertyInfo* weight = bed.bag.AddElementField(SV(u8"variants"), SV(u8"weight"), PropertyKind::Float, Variant(1.0));
+    REQUIRE(clip != nullptr);
+    REQUIRE(weight != nullptr);
+    weight->HasRange = true;
+    weight->Max = 100.0;
+    CHECK(bed.bag.AddElementField(SV(u8"nothing"), SV(u8"x"), PropertyKind::Float) == nullptr); // no such list
+    bed.bag.ResizeList(SV(u8"variants"), 0, 2);
+    CHECK(bed.bag.ElementCount(SV(u8"variants"), 0) == 2u);
+    CHECK(bed.bag.GetValue(SV(u8"variants"), 0).AsInt() == 2);
+    bed.bag.SetValue(SV(u8"variants.0.clip"), 0, Variant(SV(u8"step")));
+    bed.bag.SetValue(SV(u8"variants.1.clip"), 0, Variant(SV(u8"scuff")));
+    bed.bag.SetValue(SV(u8"variants.1.weight"), 0, Variant(3.0));
+
+    // An element is a group; its fields are its rows, each with what it says.
+    core::Array<PropertyInfo> elements(core::DefaultAllocator());
+    bed.bag.GetProperties(SV(u8"variants"), elements);
+    REQUIRE(elements.Size() == 2u);
+    CHECK(elements[1].Kind == PropertyKind::Group);
+    core::Array<PropertyInfo> fields(core::DefaultAllocator());
+    bed.bag.GetProperties(SV(u8"variants.1"), fields);
+    REQUIRE(fields.Size() == 2u);
+    CHECK(fields[0].Name == core::String(u8"clip"));
+    CHECK(fields[1].HasRange);
+    CHECK(bed.bag.GetValue(SV(u8"variants.1.weight"), 0).AsFloat() == doctest::Approx(3.0));
+
+    // The grid shows it as any list: the count with Add, an element a group of its rows.
+    bed.Show();
+    REQUIRE(core::Cast<ListPropertyEditor>(bed.grid->FindEditor(SV(u8"variants"))) != nullptr);
+
+    // A field edited as the grid commits one.
+    bed.bag.BeginEdit(SV(u8"variants.0.weight"));
+    bed.bag.CommitEdit(SV(u8"variants.0.weight"), PropertyWrite{Variant(5.0)});
+    CHECK(bed.bag.GetValue(SV(u8"variants.0.weight"), 0).AsFloat() == doctest::Approx(5.0));
+
+    // Added with its fields' new values; moved and removed whole.
+    CHECK(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Insert, 2)));
+    CHECK(bed.bag.ElementCount(SV(u8"variants"), 0) == 3u);
+    CHECK(bed.bag.GetValue(SV(u8"variants.2.weight"), 0).AsFloat() == doctest::Approx(1.0));
+    CHECK_FALSE(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Insert, 3))); // its most
+    CHECK(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Move, 1, 0)));
+    CHECK(bed.bag.GetValue(SV(u8"variants.0.clip"), 0).AsString() == SV(u8"scuff"));
+    CHECK(bed.bag.GetValue(SV(u8"variants.0.weight"), 0).AsFloat() == doctest::Approx(3.0));
+    CHECK(bed.bag.GetValue(SV(u8"variants.1.clip"), 0).AsString() == SV(u8"step"));
+    CHECK(bed.bag.EditList(SV(u8"variants"), ListEditOf(ListEdit::Op::Remove, 0)));
+    CHECK(bed.bag.ElementCount(SV(u8"variants"), 0) == 2u);
+    CHECK(bed.bag.GetValue(SV(u8"variants.0.clip"), 0).AsString() == SV(u8"step"));
+    CHECK(bed.bag.GetValue(SV(u8"variants.0.weight"), 0).AsFloat() == doctest::Approx(5.0));
+}
+
 TEST_CASE("property grid: a list of several types adds the one picked from a menu")
 {
     Bed bed;

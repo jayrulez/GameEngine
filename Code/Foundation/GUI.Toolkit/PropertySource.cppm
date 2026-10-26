@@ -308,6 +308,24 @@ export namespace foundation::gui
             Entry* entry = Find(path);
             return entry != nullptr && entry->Info.Kind == PropertyKind::List ? &entry->ElementInfo : nullptr;
         }
+        /// Gives every element of the list `path` a field `name` of `kind` (new elements `value`):
+        /// its elements are groups of their fields from then on (`path.N.name`), as a reflected
+        /// list's struct elements are. Declared before the list has elements; returns the field's
+        /// info to fill in (a range, a reference's type), null when `path` is no list.
+        PropertyInfo* AddElementField(core::StringView path, core::StringView name, PropertyKind kind, const Variant& value = {})
+        {
+            Entry* list = Find(path);
+            if (list == nullptr || list->Info.Kind != PropertyKind::List)
+                return nullptr;
+            list->ElementKind = PropertyKind::Group;
+            ElementField field;
+            field.Info.Name = core::String(name);
+            field.Info.Kind = kind;
+            field.Value = value;
+            list->Fields.PushBack(core::Move(field));
+            NotifyPropertiesChanged();
+            return &list->Fields.Back().Info;
+        }
         /// Tells the grid what FindInfo's changes were.
         void PropertiesChanged() { NotifyPropertiesChanged(); }
 
@@ -327,17 +345,17 @@ export namespace foundation::gui
             if (list == nullptr || list->Info.Kind != PropertyKind::List || object >= list->Elements.Size())
                 return;
             core::Array<Variant>& elements = list->Elements[object];
-            while (elements.Size() > count)
+            while (elements.Size() > count * list->Stride())
                 elements.PopBack();
-            while (elements.Size() < count)
-                elements.PushBack(list->ElementDefault);
+            while (elements.Size() < count * list->Stride())
+                list->AppendElement(elements);
             NotifyPropertiesChanged();
         }
         /// How many elements object `object`'s list `path` has.
         [[nodiscard]] usize ElementCount(core::StringView path, usize object) const
         {
             const Entry* entry = Find(path);
-            return entry != nullptr && object < entry->Elements.Size() ? entry->Elements[object].Size() : 0;
+            return entry != nullptr && object < entry->Elements.Size() ? entry->Elements[object].Size() / entry->Stride() : 0;
         }
 
         /// Object `object`'s default at `path` (a property's or an element's); every object's with
@@ -383,13 +401,24 @@ export namespace foundation::gui
             {
                 usize count = ~usize{0};
                 for (const core::Array<Variant>& elements : list->Elements)
-                    count = core::Min(count, elements.Size());
+                    count = core::Min(count, elements.Size() / list->Stride());
                 for (usize i = 0; i < count && i != ~usize{0}; ++i)
                 {
                     PropertyInfo info = list->ElementInfo;
                     info.Name = core::Format(u8"{}", i);
                     info.Kind = list->ElementKind;
                     info.ReadOnly = list->Info.ReadOnly;
+                    out.PushBack(core::Move(info));
+                }
+                return;
+            }
+            // A group element's fields ("variants.2": its clip, its weight).
+            if (const Entry* list = Find(ParentPropertyPath(parent)); list != nullptr && list->Info.Kind == PropertyKind::List && !list->Fields.IsEmpty())
+            {
+                for (const ElementField& field : list->Fields)
+                {
+                    PropertyInfo info = field.Info;
+                    info.ReadOnly = info.ReadOnly || list->Info.ReadOnly;
                     out.PushBack(core::Move(info));
                 }
                 return;
@@ -401,7 +430,7 @@ export namespace foundation::gui
         [[nodiscard]] Variant GetValue(core::StringView path, usize object) const override
         {
             if (const Entry* list = Find(path); list != nullptr && list->Info.Kind == PropertyKind::List)
-                return object < list->Elements.Size() ? Variant(static_cast<i64>(list->Elements[object].Size())) : Variant{};
+                return object < list->Elements.Size() ? Variant(static_cast<i64>(list->Elements[object].Size() / list->Stride())) : Variant{};
             const Variant* slot = const_cast<PropertyBag*>(this)->Slot(path, object);
             return slot != nullptr ? *slot : Variant{};
         }
@@ -552,33 +581,46 @@ export namespace foundation::gui
             if ((list->Info.ListOps & needs) == 0)
                 return false;
             bool changed = false;
+            const usize stride = list->Stride(); // an element's values: one, or a group's fields
             for (core::Array<Variant>& elements : list->Elements)
+            {
+                const usize count = elements.Size() / stride;
                 switch (edit.Kind)
                 {
                 case ListEdit::Op::Insert:
-                    if (list->Info.MaxCount == 0 || elements.Size() < list->Info.MaxCount)
+                    if (list->Info.MaxCount == 0 || count < list->Info.MaxCount)
                     {
-                        elements.Insert(core::Min(edit.Index, elements.Size()), list->ElementDefault);
+                        core::Array<Variant> element(*m_allocator);
+                        list->AppendElement(element);
+                        const usize at = core::Min(edit.Index, count) * stride;
+                        for (usize f = 0; f < stride; ++f)
+                            elements.Insert(at + f, element[f]);
                         changed = true;
                     }
                     break;
                 case ListEdit::Op::Remove:
-                    if (edit.Index < elements.Size())
+                    if (edit.Index < count)
                     {
-                        elements.RemoveAt(edit.Index);
+                        for (usize f = 0; f < stride; ++f)
+                            elements.RemoveAt(edit.Index * stride);
                         changed = true;
                     }
                     break;
                 case ListEdit::Op::Move:
-                    if (edit.Index < elements.Size() && edit.To < elements.Size() && edit.Index != edit.To)
+                    if (edit.Index < count && edit.To < count && edit.Index != edit.To)
                     {
-                        Variant moved = elements[edit.Index];
-                        elements.RemoveAt(edit.Index);
-                        elements.Insert(edit.To, core::Move(moved));
+                        core::Array<Variant> moved(*m_allocator);
+                        for (usize f = 0; f < stride; ++f)
+                            moved.PushBack(elements[edit.Index * stride + f]);
+                        for (usize f = 0; f < stride; ++f)
+                            elements.RemoveAt(edit.Index * stride);
+                        for (usize f = 0; f < stride; ++f)
+                            elements.Insert(edit.To * stride + f, moved[f]);
                         changed = true;
                     }
                     break;
                 }
+            }
             if (!changed)
                 return false;
             NotifyPropertiesChanged();
@@ -588,16 +630,34 @@ export namespace foundation::gui
         }
 
     private:
+        // A group element's field: its info (name, kind, what else it says) and a new element's value.
+        struct ElementField
+        {
+            PropertyInfo Info;
+            Variant Value;
+        };
         struct Entry
         {
-            explicit Entry(core::IAllocator& allocator) : Values(allocator), Elements(allocator) {}
+            explicit Entry(core::IAllocator& allocator) : Values(allocator), Elements(allocator), Fields(allocator) {}
             core::String Path;
             PropertyInfo Info;
             core::Array<Variant> Values;                 // each object's
-            core::Array<core::Array<Variant>> Elements;  // a list's: each object's elements
+            core::Array<core::Array<Variant>> Elements;  // a list's: each object's elements, a group's fields one after another
             PropertyKind ElementKind = PropertyKind::Float;
             Variant ElementDefault;
             PropertyInfo ElementInfo; // a list's: what each element says beyond its name and kind
+            core::Array<ElementField> Fields; // a list of groups: each element's fields, in order
+
+            /// How many values an element is: one, or its group's fields.
+            [[nodiscard]] usize Stride() const noexcept { return Fields.IsEmpty() ? 1u : Fields.Size(); }
+            /// A new element's values onto `elements`.
+            void AppendElement(core::Array<Variant>& elements) const
+            {
+                if (Fields.IsEmpty())
+                    elements.PushBack(ElementDefault);
+                for (const ElementField& field : Fields)
+                    elements.PushBack(field.Value);
+            }
         };
         struct Original
         {
@@ -628,11 +688,30 @@ export namespace foundation::gui
                 return entry->Info.Kind == PropertyKind::List ? nullptr : &entry->Values[object];
             const core::StringView parent = ParentPropertyPath(path);
             Entry* list = parent.Size() != 0 ? Find(parent) : nullptr;
-            if (list == nullptr || list->Info.Kind != PropertyKind::List)
+            if (list != nullptr && list->Info.Kind == PropertyKind::List)
+            {
+                if (!list->Fields.IsEmpty())
+                    return nullptr; // a group element has no value of its own: its fields do
+                const Optional<i64> index = core::ParseInt(path.SubStr(parent.Size() + 1, path.Size() - parent.Size() - 1));
+                core::Array<Variant>& elements = list->Elements[object];
+                return index.HasValue() && index.Value() >= 0 && static_cast<usize>(index.Value()) < elements.Size() ? &elements[static_cast<usize>(index.Value())] : nullptr;
+            }
+            // A group element's field ("variants.2.weight").
+            const core::StringView element = parent;
+            const core::StringView listPath = ParentPropertyPath(element);
+            list = listPath.Size() != 0 ? Find(listPath) : nullptr;
+            if (list == nullptr || list->Info.Kind != PropertyKind::List || list->Fields.IsEmpty())
                 return nullptr;
-            const Optional<i64> index = core::ParseInt(path.SubStr(parent.Size() + 1, path.Size() - parent.Size() - 1));
-            core::Array<Variant>& elements = list->Elements[object];
-            return index.HasValue() && index.Value() >= 0 && static_cast<usize>(index.Value()) < elements.Size() ? &elements[static_cast<usize>(index.Value())] : nullptr;
+            const Optional<i64> index = core::ParseInt(element.SubStr(listPath.Size() + 1, element.Size() - listPath.Size() - 1));
+            const core::StringView name = path.SubStr(element.Size() + 1, path.Size() - element.Size() - 1);
+            for (usize f = 0; f < list->Fields.Size(); ++f)
+                if (list->Fields[f].Info.Name.AsView() == name)
+                {
+                    core::Array<Variant>& elements = list->Elements[object];
+                    const usize at = index.HasValue() && index.Value() >= 0 ? static_cast<usize>(index.Value()) * list->Stride() + f : elements.Size();
+                    return at < elements.Size() ? &elements[at] : nullptr;
+                }
+            return nullptr;
         }
         [[nodiscard]] Variant Read(core::StringView path, usize object)
         {
@@ -644,7 +723,15 @@ export namespace foundation::gui
             if (const Entry* entry = Find(path))
                 return entry->Info.Kind;
             const Entry* list = Find(ParentPropertyPath(path));
-            return list != nullptr && list->Info.Kind == PropertyKind::List ? list->ElementKind : PropertyKind::Group;
+            if (list != nullptr && list->Info.Kind == PropertyKind::List)
+                return list->ElementKind;
+            // A group element's field: its own kind.
+            const core::StringView element = ParentPropertyPath(path);
+            if (const Entry* outer = Find(ParentPropertyPath(element)); outer != nullptr && outer->Info.Kind == PropertyKind::List)
+                for (const ElementField& field : outer->Fields)
+                    if (field.Info.Name.AsView() == path.SubStr(element.Size() + 1, path.Size() - element.Size() - 1))
+                        return field.Info.Kind;
+            return PropertyKind::Group;
         }
         static core::StringView PropertyKindLabel(PropertyKind kind) noexcept
         {
@@ -673,7 +760,10 @@ export namespace foundation::gui
             if (const Entry* entry = Find(path))
                 return entry->Info.ReadOnly;
             const Entry* list = Find(ParentPropertyPath(path));
-            return list != nullptr && list->Info.ReadOnly;
+            if (list != nullptr)
+                return list->Info.ReadOnly;
+            const Entry* outer = Find(ParentPropertyPath(ParentPropertyPath(path))); // a group element's field
+            return outer != nullptr && outer->Info.Kind == PropertyKind::List && outer->Info.ReadOnly;
         }
         const Original* FindOriginal(core::StringView path) const
         {

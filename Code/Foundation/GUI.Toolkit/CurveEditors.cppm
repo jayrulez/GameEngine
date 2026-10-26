@@ -456,6 +456,7 @@ export namespace foundation::gui
         registry.RegisterKind(PropertyKind::String, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StringPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Enum, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<EnumPropertyEditor>(a); });
         registry.RegisterKind(PropertyKind::Color, [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<ColorPropertyEditor>(a); });
+        registry.RegisterHint(core::StringView(u8"slider"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<SliderPropertyEditor>(a); });
         registry.RegisterHint(core::StringView(u8"stops"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<StopsPropertyEditor>(a); });
         registry.RegisterHint(core::StringView(u8"ColorHdr"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<HdrColorPropertyEditor>(a); },
                               true);

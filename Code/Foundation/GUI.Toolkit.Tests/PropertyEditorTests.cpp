@@ -113,14 +113,17 @@ TEST_CASE("property editors: chosen by hint, then kind, else a row that says non
     CHECK(number != PropertyEditorRegistry::kNoEditor);
     CHECK(core::Cast<NumberPropertyEditor>(registry.Create(number, core::DefaultAllocator()).Get()) != nullptr);
 
-    info.Hint = core::String(u8"slider"); // no editor takes the hint: the kind's does
+    info.Hint = core::String(u8"slider"); // a number over its range
+    CHECK(core::Cast<SliderPropertyEditor>(registry.Create(registry.Choose(info), core::DefaultAllocator()).Get()) != nullptr);
+
+    info.Hint = core::String(u8"dial"); // no editor takes the hint: the kind's does
     CHECK(registry.Choose(info) == number);
     const core::u32 before = registry.GetGeneration();
-    registry.RegisterHint(SV(u8"slider"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<BoolPropertyEditor>(a); });
+    registry.RegisterHint(SV(u8"dial"), [](core::IAllocator& a) -> core::RefPtr<PropertyEditor> { return core::MakeRef<BoolPropertyEditor>(a); });
     CHECK(registry.GetGeneration() != before);
-    const core::u32 slider = registry.Choose(info);
-    CHECK(slider != number);
-    CHECK(core::Cast<BoolPropertyEditor>(registry.Create(slider, core::DefaultAllocator()).Get()) != nullptr);
+    const core::u32 dial = registry.Choose(info);
+    CHECK(dial != number);
+    CHECK(core::Cast<BoolPropertyEditor>(registry.Create(dial, core::DefaultAllocator()).Get()) != nullptr);
 
     info.Kind = PropertyKind::Group;
     info.Hint = core::String(u8"curve");
@@ -182,6 +185,50 @@ TEST_CASE("property editors: a number's scrub previews, commits on release, or c
     REQUIRE(bed.host.calls.Size() == 3u);
     CHECK(bed.host.Last() == SV(u8"cancel speed"));
     CHECK(field.GetValue() == doctest::Approx(20.0));
+}
+
+TEST_CASE("property editors: a slider's drag previews and commits on release, the field following; Escape puts it back")
+{
+    Bed bed;
+    PropertyInfo info = Info(PropertyKind::Float);
+    info.Hint = core::String(u8"slider");
+    info.HasRange = true;
+    info.Min = 0.0;
+    info.Max = 1.0;
+    info.Step = 0.01;
+    auto editor = bed.Editor<SliderPropertyEditor>(info, Value(Variant(0.25)), SV(u8"rough"));
+    Slider& slider = *editor->GetSlider();
+    NumberField& field = *editor->GetField();
+    CHECK(slider.GetValue() == doctest::Approx(0.25));
+    CHECK(field.GetValue() == doctest::Approx(0.25));
+    CHECK_FALSE(slider.StepsOnWheel()); // the grid scrolls
+    CHECK_FALSE(field.StepsOnWheel());
+    const Rect track = slider.GetScreenBounds();
+    CHECK(track.width > 40.0f);                                           // the slider takes the room
+    CHECK(field.GetScreenBounds().x >= track.x + track.width - 0.5f);    // its value after it
+
+    const f32 y = track.y + track.height * 0.5f;
+    const core::Float2 start{track.x + track.width * 0.5f, y};
+    const core::Float2 end{track.x + track.width + 50.0f, y}; // past its end: the top
+    slider.RequestFocus();
+    bed.D().InjectMouseDown(start, MouseButton::Left);
+    bed.D().InjectMouseMove(end);
+    CHECK(field.GetValue() == doctest::Approx(1.0)); // the field follows the drag
+    bed.D().InjectMouseUp(end, MouseButton::Left);
+    REQUIRE(bed.host.calls.Size() == 4u);
+    CHECK(bed.host.calls[0] == core::String(u8"begin rough"));
+    CHECK(bed.host.calls[1] == core::String(u8"preview rough=0.5"));
+    CHECK(bed.host.calls[2] == core::String(u8"preview rough=1"));
+    CHECK(bed.host.calls[3] == core::String(u8"commit rough=1"));
+
+    bed.host.calls.Clear();
+    bed.D().InjectMouseDown(start, MouseButton::Left);
+    bed.D().InjectKeyDown(Bed::K(KeyCode::Escape));
+    bed.D().InjectMouseUp(start, MouseButton::Left);
+    REQUIRE(bed.host.calls.Size() == 3u);
+    CHECK(bed.host.Last() == SV(u8"cancel rough"));
+    CHECK(slider.GetValue() == doctest::Approx(1.0)); // back, both
+    CHECK(field.GetValue() == doctest::Approx(1.0));
 }
 
 TEST_CASE("property editors: an integer writes whole numbers; mixed shows the placeholder")

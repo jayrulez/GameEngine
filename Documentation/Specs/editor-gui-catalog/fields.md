@@ -67,7 +67,7 @@ Attribute keys found via `.PropAttribute(...)` / `.Attribute(...)` across the co
 
 | Hint (where declared) | Count | Old grid (scene inspector / settings rows) | Other old consumers | New grid (`ReflectedSource`) |
 |---|---|---|---|---|
-| `range` Float4 {min,max,step,_} (prop) | 75 | f32 only: `RangeEditor` (slider + field). Ignored on ints (IntEditor gets full i64), ignored on Float2/3/4 | `SettingsDialog` u32 rows: NumericField min/max; asset pages re-type the numbers by hand (Texture anisotropy 1..16, Font 8..128) | any number: `HasRange` -> bounded `NumberPropertyEditor` (no slider) |
+| `range` Float4 {min,max,step,_} (prop) | 75 | f32 only: `RangeEditor` (slider + field). Ignored on ints (IntEditor gets full i64), ignored on Float2/3/4 | `SettingsDialog` u32 rows: NumericField min/max; asset pages re-type the numbers by hand (Texture anisotropy 1..16, Font 8..128) | any number: `HasRange`; a float also hint `slider` -> `SliderPropertyEditor` (slider + field, X6); an integer a bounded `NumberPropertyEditor` |
 | `displayName` (prop) | 127 | row label (else `PrettifyPropertyName`) | ContainerList label | DisplayName (else `ReadablePropertyName`) |
 | `displayName` (type) | 89 | component/section header, Add Component menu | settings category name | list element type names |
 | `description` (prop) | 121 | row tooltip | ContainerList tooltip | row tooltip |
@@ -86,8 +86,8 @@ Implicit "hints" by type in the new grid (`ReflectedSource::DescribeType`): Floa
 `Float2|Float3|Float4` (FloatsPropertyEditor covering children); Quaternion gets hint `Float3` with children
 pitch/yaw/roll (step 1); nested structs and unknown types get their TYPE NAME as hint (so an application can
 register a per-type editor); registered curve/gradient types get kinds Curve/Gradient; `stops` hint is set on an
-HDR colour's intensity part. Registered hints by default: `Float2`, `Float3`, `Float4`, `stops`, `ColorHdr`.
-The `PropertyInfo::Hint` comment mentions `"slider"` but no slider editor is registered.
+HDR colour's intensity part; `slider` on a float with a `range`. Registered hints by default: `Float2`, `Float3`, `Float4`,
+`slider`, `stops`, `ColorHdr`. (Until X6 no slider editor was registered.)
 
 Non-reflection "hint" channels in the old editor:
 - Script properties (`ScriptPropertyType`): Float, Int, Bool, String, Color, Vec3, Entity, Asset (`assetType` +
@@ -148,7 +148,9 @@ Call-site counts are direct `MakeRef<X>` sites outside tests, by library.
 - Look: `Slider` (grows) + NumericField fixed width computed from |min|/|max| (60px minimum), 2 decimals.
 - Undo: slider drag start/end = gesture; field focus = gesture; no Escape cancel on either part.
 - Used: Materials 1, Scene 2, Texture 1 = 4 sites (but drives every ranged reflected f32: 75 range declarations).
-- New GUI: no slider editor. `NumberPropertyEditor` bounded by `HasRange` is the nearest.
+- New GUI (X6): `SliderPropertyEditor` (hint `slider`): the slider beside its field, one gesture either way, Escape
+  putting a drag or a scrub back, the wheel left to the grid; set by `ReflectedSource` on a ranged float and by the
+  material page on its ranged floats.
 - Problems: step from the attribute applies to the slider but the field uses 0.1 when step is 0; 2 decimals
   regardless of step (a 0.001 step shows 2 digits); radians ranges (0..1.55, 0..6.2832) shown raw;
   min/max not labelled; two controls for one value.

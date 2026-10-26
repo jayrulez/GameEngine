@@ -9,6 +9,9 @@
 //   - integer and float: a number field, scrubbed (the scrub previewed, committed on release,
 //     cancelled by Escape), its range and step the property's (unbounded when it has no range; a
 //     float's step 0.01 when it has none), and the wheel left to the grid;
+//   - a number on a slider (hint "slider"): a slider over its range beside its number field, each
+//     the same gesture (a drag previewed, committed on release, Escape putting it back), the wheel
+//     left to the grid;
 //   - string: a one-line field, committed on Return or on leaving it; Escape puts back what it had;
 //   - enum: a combo box of its choices;
 //   - flags: a button naming the flags set, opening a list of check boxes, a flag that differs
@@ -164,6 +167,128 @@ export namespace foundation::gui
         core::RefPtr<NumberField> m_field;
         bool m_integer = false;
         bool m_begun = false; // a gesture under way (a scrub's previews)
+    };
+
+    /// A number over its range: a slider beside its field. Either is one gesture: previewed as it
+    /// goes, committed on release (the field: on Return or leaving it), Escape putting it back.
+    class SliderPropertyEditor : public PropertyEditor
+    {
+        RTTI_OBJECT(SliderPropertyEditor, PropertyEditor)
+    public:
+        [[nodiscard]] bool IsTyping() const override { return m_field->IsEditing(); }
+        SliderPropertyEditor()
+        {
+            AddClass(core::StringView(u8"slider-field"));
+            EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Row;
+                s.AlignItems = Align::Center;
+                s.ColumnGap = 8.0f;
+            });
+            SliderPropertyEditor* self = this;
+            m_slider = core::MakeRef<Slider>(MemoryAllocator());
+            m_slider->SetStepsOnWheel(false); // the wheel scrolls the grid
+            m_slider->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Grow = 1.0f;
+                s.MinWidth = LayoutLength::Px(0.0f);
+            });
+            m_slider->SetOnValueChanging([self](f64 value)
+            {
+                self->Begin();
+                self->m_field->SetValue(value);
+                self->PreviewEdit(PropertyWrite{self->ValueOf(value)});
+            });
+            m_slider->SetOnValueChanged([self](f64 value) { self->Commit(value); });
+            m_slider->SetOnValueCancelled([self]()
+            {
+                self->m_field->SetValue(self->m_slider->GetValue()); // back with it
+                self->Cancel();
+            });
+            AddChild(m_slider.Get());
+            m_field = core::MakeRef<NumberField>(MemoryAllocator());
+            m_field->SetStepsOnWheel(false);
+            m_field->SetPlaceholder(MixedValueText());
+            m_field->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Width = LayoutLength::Px(64.0f);
+                s.Shrink = 0.0f;
+            });
+            m_field->SetOnValueChanging([self](f64 value)
+            {
+                self->Begin();
+                self->m_slider->SetValue(value);
+                self->PreviewEdit(PropertyWrite{self->ValueOf(value)});
+            });
+            m_field->SetOnValueChanged([self](f64 value) { self->Commit(value); });
+            m_field->SetOnValueCancelled([self]()
+            {
+                self->m_slider->SetValue(self->m_field->GetValue()); // back with it
+                self->Cancel();
+            });
+            AddChild(m_field.Get());
+        }
+        [[nodiscard]] Slider* GetSlider() const noexcept { return m_slider.Get(); }
+        [[nodiscard]] NumberField* GetField() const noexcept { return m_field.Get(); }
+
+    protected:
+        void OnBind(const PropertyInfo& info, const PropertyValue& value) override
+        {
+            m_begun = false;
+            m_integer = info.Kind == PropertyKind::Integer;
+            // A slider needs both ends: without a range it runs 0 to 1.
+            const f64 lo = info.HasRange ? info.Min : 0.0;
+            const f64 hi = info.HasRange ? info.Max : 1.0;
+            const f64 step = info.Step > 0.0 ? info.Step : (m_integer ? 1.0 : 0.01);
+            m_slider->SetMin(lo);
+            m_slider->SetMax(hi);
+            m_slider->SetStep(step);
+            m_field->SetInteger(m_integer);
+            m_field->SetMin(lo);
+            m_field->SetMax(hi);
+            m_field->SetAllowLesser(false);
+            m_field->SetAllowGreater(false);
+            m_field->SetStep(step);
+            m_slider->SetValue(value.Value.AsFloat());
+            m_field->SetValue(value.Value.AsFloat());
+            m_field->SetMixed(value.Mixed);
+            m_slider->SetEnabled(!IsReadOnly());
+            m_field->SetEnabled(!IsReadOnly());
+        }
+        void OnTextStyleChange() override { ShareTextStyle(*m_field); }
+
+    private:
+        [[nodiscard]] Variant ValueOf(f64 value) const
+        {
+            return m_integer ? Variant(static_cast<i64>(value < 0.0 ? value - 0.5 : value + 0.5)) : Variant(value);
+        }
+        void Begin()
+        {
+            if (m_begun)
+                return;
+            m_begun = true;
+            BeginEdit();
+        }
+        void Commit(f64 value)
+        {
+            Begin();
+            m_begun = false;
+            m_slider->SetValue(value);
+            m_field->SetValue(value);
+            CommitEdit(PropertyWrite{ValueOf(value)});
+        }
+        void Cancel()
+        {
+            if (!m_begun)
+                return;
+            m_begun = false;
+            CancelEdit();
+        }
+
+        core::RefPtr<Slider> m_slider;
+        core::RefPtr<NumberField> m_field;
+        bool m_integer = false;
+        bool m_begun = false; // a gesture under way (a drag's or a scrub's previews)
     };
 
     class StringPropertyEditor : public SingleControlEditor

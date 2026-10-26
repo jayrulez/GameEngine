@@ -410,6 +410,8 @@ TEST_CASE("reflected source: a type's properties as rows, each of its kind, with
     CHECK(intensity.HasRange);
     CHECK(intensity.Max == doctest::Approx(100.0));
     CHECK(intensity.Step == doctest::Approx(0.5));
+    CHECK(intensity.Hint == core::String(u8"slider")); // a ranged float slides over its range
+    CHECK(bed.Find(rows, u8"range")->Hint.IsEmpty());  // an unranged one keeps its field
     CHECK(bed.Find(rows, u8"range")->DisplayName == core::String(u8"Reach"));
     const PropertyInfo& kind = *bed.Find(rows, u8"kind");
     CHECK(kind.Kind == PropertyKind::Enum);

@@ -68,6 +68,7 @@ namespace foundation::gui
     RTTI_DEFINE_OBJECT(SingleControlEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(BoolPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(NumberPropertyEditor, "rtti::gui::toolkit")
+    RTTI_DEFINE_OBJECT(SliderPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(StringPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(EnumPropertyEditor, "rtti::gui::toolkit")
     RTTI_DEFINE_OBJECT(PropertyFlagsList, "rtti::gui::toolkit")

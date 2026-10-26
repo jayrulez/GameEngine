@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI - Slider tests: value clamping + change callback, drag-to-set, and pointer
-// capture (a drag keeps tracking after the cursor leaves the slider).
+// GUI - Slider tests: value clamping + change callback, drag-to-set, pointer capture (a drag
+// keeps tracking after the cursor leaves the slider), Escape putting a drag back, the wheel's switch.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -207,6 +207,42 @@ TEST_CASE("slider: a drag reports input as it goes and one change on release; ke
     CHECK(wheelsAbove == 1); // it could not move: the wheel went on up
     (void)d->InjectMouseWheel(core::Float2{50.0f, 10.0f}, core::Float2{0.0f, -2.0f});
     CHECK(s->GetValue() == doctest::Approx(98.0));
+    CHECK(wheelsAbove == 1);
+}
+
+TEST_CASE("slider: Escape during a drag puts the value back and reports it cancelled; the wheel may be left to what holds it")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{300.0f, 300.0f});
+    auto s = Make<Slider>();
+    s->SetSize(core::Float2{100.0f, 20.0f}); // usable x in [10, 90]
+    s->SetMax(100.0);
+    s->SetStep(1.0);
+    s->SetValue(40.0);
+    root->AddChild(s.Get());
+    EventDispatcher* d = root->GetEventDispatcher();
+    int changes = 0, cancels = 0;
+    s->SetOnValueChanged([&](core::f64) { ++changes; });
+    s->SetOnValueCancelled([&]() { ++cancels; });
+    s->RequestFocus();
+    d->InjectMouseDown(core::Float2{70.0f, 10.0f}, MouseButton::Left); // 75
+    CHECK(s->IsDragging());
+    CHECK(s->GetValue() == doctest::Approx(75.0));
+    d->InjectKeyDown(static_cast<core::u32>(KeyCode::Escape));
+    CHECK_FALSE(s->IsDragging());
+    CHECK(s->GetValue() == doctest::Approx(40.0)); // as before the drag
+    CHECK(cancels == 1);
+    d->InjectMouseMove(core::Float2{30.0f, 10.0f});
+    d->InjectMouseUp(core::Float2{30.0f, 10.0f}, MouseButton::Left);
+    CHECK(s->GetValue() == doctest::Approx(40.0)); // the release after it changes nothing
+    CHECK(changes == 0);
+
+    // Told not to step on the wheel (in a scrolling list), the wheel goes on to what holds it.
+    s->SetStepsOnWheel(false);
+    int wheelsAbove = 0;
+    (void)root->AddEventListener(EventType::MouseWheel, [&](const Event&) { ++wheelsAbove; });
+    (void)d->InjectMouseWheel(core::Float2{50.0f, 10.0f}, core::Float2{0.0f, 1.0f});
+    CHECK(s->GetValue() == doctest::Approx(40.0));
     CHECK(wheelsAbove == 1);
 }
 

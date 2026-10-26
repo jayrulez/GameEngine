@@ -696,6 +696,9 @@ export namespace foundation::gui
                     info.Min = bounds->x;
                     info.Max = bounds->y;
                     info.Step = bounds->z;
+                    // A ranged float slides over its range (an integer's range only bounds its field).
+                    if (info.Kind == PropertyKind::Float && info.Hint.IsEmpty())
+                        info.Hint = core::String(u8"slider");
                 }
             // A bare Guid's property may name what it points at, by its type's name.
             if (info.Kind == PropertyKind::Reference && info.ReferenceType == nullptr)

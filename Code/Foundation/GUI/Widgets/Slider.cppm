@@ -9,7 +9,9 @@
 // capture keeping a drag that leaves it; a drag reports `input` as it goes and `change` on release.
 // The arrows along it step it (and stay its own at its ends: holding the d-pad to reach an end must
 // not throw focus off it), Page Up and Down step a page, Home and End go to the ends, and the wheel
-// steps it while it is hovered or focused. Ticks, when asked for, mark the track at even steps.
+// steps it while it is hovered or focused (unless told not to: in a scrolling list the wheel is the
+// list's). Escape during a drag puts the value back as it was before it, and reports the drag
+// cancelled. Ticks, when asked for, mark the track at even steps.
 // Modeled on eepp's UISlider (role only).
 
 module;
@@ -43,6 +45,13 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"slider"));
             SetTabFocusable(true);
         }
+
+        /// Whether the wheel steps it (default); off, the wheel goes on to what holds it.
+        void SetStepsOnWheel(bool steps) noexcept { m_stepsOnWheel = steps; }
+        [[nodiscard]] bool StepsOnWheel() const noexcept { return m_stepsOnWheel; }
+        /// A drag given up with Escape: the value is back as it was before it.
+        void SetOnValueCancelled(core::Function<void()> callback) { m_onCancelled = core::Move(callback); }
+        [[nodiscard]] bool IsDragging() const noexcept { return m_dragging; }
 
         /// A page key's step (0: a tenth of the range).
         [[nodiscard]] f64 GetPage() const noexcept { return GetPageSize(); }
@@ -118,6 +127,18 @@ export namespace foundation::gui
             if (event.Modifiers != 0)
                 return;
             const KeyCode key = static_cast<KeyCode>(event.KeyCode);
+            if (m_dragging)
+            {
+                if (key == KeyCode::Escape)
+                {
+                    m_dragging = false;
+                    SetValue(m_dragStart); // back, and nothing to commit
+                    if (m_onCancelled)
+                        m_onCancelled();
+                    event.Handled = true;
+                }
+                return; // a drag's keys are its own
+            }
             const bool vertical = m_orientation == Orientation::Vertical;
             const f64 step = GetRange().KeyStep();
             const f64 v = GetRange().Value;
@@ -144,7 +165,7 @@ export namespace foundation::gui
         void OnMouseWheel(const WheelEvent& event) override
         {
             const f32 notches = event.Delta.y != 0.0f ? event.Delta.y : event.Delta.x;
-            if (notches == 0.0f)
+            if (notches == 0.0f || !m_stepsOnWheel)
                 return;
             const f64 before = GetRange().Value;
             ChangeByUser(before + GetRange().KeyStep() * static_cast<f64>(notches), true);
@@ -158,6 +179,7 @@ export namespace foundation::gui
             if (event.Button != MouseButton::Left)
                 return;
             m_dragging = true;
+            m_dragStart = GetValue();
             UpdateFromEvent(event);
             event.Handled = true;
         }
@@ -255,6 +277,9 @@ export namespace foundation::gui
         Orientation m_orientation = Orientation::Horizontal;
         i32 m_ticks = 0;
         bool m_dragging = false;
+        f64 m_dragStart = 0.0; // the value before the drag, what Escape puts back
+        bool m_stepsOnWheel = true;
+        core::Function<void()> m_onCancelled;
         Color m_trackColor{0.28f, 0.30f, 0.35f, 1.0f};
         Color m_fillColor{0.31f, 0.63f, 0.85f, 1.0f};
         Color m_handleColor{0.86f, 0.89f, 0.93f, 1.0f};

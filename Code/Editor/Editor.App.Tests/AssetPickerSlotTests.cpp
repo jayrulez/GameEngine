@@ -20,7 +20,7 @@ namespace gui = foundation::gui;
 TEST_CASE("asset-slot: the verbs show once wired; open, reveal and clear only with something referenced; empty says None")
 {
     RefPtr<AssetPickerSlot> slot = MakeRef<AssetPickerSlot>(DefaultAllocator());
-    CHECK(slot->ShownName() == StringView(u8"None"));
+    CHECK(slot->ShownName() == StringView(u8"Not set"));
     CHECK(slot->HasClass(u8"empty"));
     CHECK_FALSE(slot->PickButton()->IsDisplayed());
     int picks = 0;

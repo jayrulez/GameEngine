@@ -9,7 +9,8 @@
 // by its type's icon in its category's colour, opened and closed by its arrow; the way to the
 // current entity open and its row lit. The search keeps each match with what holds it and opens
 // every way to them. Up and Down move the light from the search, Enter or a double click picks,
-// None clears, Esc keeps the value. It opens in the window's middle, as every picker does.
+// Esc or its close keeps the value (a slot's own clear sets nothing). It opens in the window's
+// middle, as every picker does.
 
 module;
 #include "Core/Prelude.h"
@@ -50,7 +51,7 @@ export namespace editor
 
         /// The picker over `edit`'s scene in `content` (the markup's `entity-picker-search`,
         /// `entity-picker-tree`, `entity-picker-state`, `entity-picker-hint` and
-        /// `entity-picker-none`, by id).
+        /// `entity-picker-close`, by id).
         EntityPickerWindow(IAllocator& allocator, SceneEditContext& edit, Services services, RefPtr<foundation::gui::Node> content)
             : m_edit(&edit), m_services(Move(services)), m_content(Move(content)), m_model(allocator)
         {
@@ -69,8 +70,8 @@ export namespace editor
                 m_tree->SetModel(&m_model);
                 m_tree->SetOnActivated([self](gui::ModelIndex index) { self->PickEntity(self->m_model.EntityOfNode(index.InternalId)); });
             }
-            if (auto* none = Find<gui::Button>(u8"entity-picker-none"))
-                none->SetOnClick([self]() { self->Pick(Guid{}); });
+            if (auto* close = Find<gui::Button>(u8"entity-picker-close"))
+                close->SetOnClick([self]() { self->Close(); });
             // Up, Down and Enter before the search takes them.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
@@ -174,7 +175,7 @@ export namespace editor
         // === What it shows (for tests) ===
         [[nodiscard]] RefPtr<foundation::gui::Node> Content() const { return m_content; }
         [[nodiscard]] foundation::gui::TreeView* Tree() const noexcept { return m_tree; }
-        [[nodiscard]] foundation::gui::Button* NoneButton() const { return Find<foundation::gui::Button>(u8"entity-picker-none"); }
+        [[nodiscard]] foundation::gui::Button* CloseButton() const { return Find<foundation::gui::Button>(u8"entity-picker-close"); }
         /// The shown rows' texts in order, the scene's first, nested by two spaces a level.
         [[nodiscard]] String Rows() const
         {

@@ -9,8 +9,9 @@
 // row shows its glyph (its category's tint), its name, what it is, a star when a favourite, and a
 // check on the current value. The current value is lit when it opens; Up and Down move the light
 // past the section headings while the search keeps the keys, and Enter, a double click or Enter on
-// the list picks. The foot says so ("Esc keeps" the current value) and holds None when the owner
-// allows nothing. With nothing to pick it says what is missing and offers the owner's next step;
+// the list picks. The foot says so ("Esc keeps" the current value), and a close at the search's end
+// keeps it too: no button sets nothing, so a pick never clears a value by a slip. With nothing to
+// pick it says what is missing and offers the owner's next step;
 // with nothing matching, it says so and offers to clear the search. It opens as a modal popup in
 // the window's middle.
 module;
@@ -48,7 +49,6 @@ export namespace editor::app
         String Placeholder;      ///< the search's ("Search materials")
         Array<PickerItem> Items; ///< in their order; each section where its first item is
         String Current;          ///< the current value's key: checked, and lit when it opens
-        bool AllowNone = false;  ///< the foot's None, which picks nothing (an empty key)
         bool Tree = false;       ///< the items a tree (by Depth, in their order): a search keeps where each match is
         String EmptyTitle;       ///< with nothing to pick ("No materials yet")
         String EmptyText;
@@ -136,7 +136,7 @@ export namespace editor::app
         static constexpr StringView kFavourites = u8"Favourites";
 
         /// The picker in `content` (the markup's: `picker-search`, `picker-list`, `picker-state` and
-        /// its parts, `picker-hint`, `picker-none`, by id).
+        /// its parts, `picker-hint`, `picker-close`, by id).
         Picker(IAllocator& allocator, RefPtr<gui::Node> content) : m_allocator(allocator), m_content(Move(content)), m_rows(allocator), m_model(*this)
         {
             if (!m_content)
@@ -145,7 +145,6 @@ export namespace editor::app
             m_list = Find<gui::ListView>(u8"picker-list");
             m_state = Find<gui::UIWidget>(u8"picker-state");
             m_hint = Find<gui::Label>(u8"picker-hint");
-            m_none = Find<gui::Button>(u8"picker-none");
             Picker* self = this;
             if (m_search != nullptr)
                 m_search->SetOnTextChanging([self](StringView text) { self->Filter(text); });
@@ -161,8 +160,8 @@ export namespace editor::app
                 m_list->SetOnActivated([self](gui::ModelIndex index) { self->PickRow(index.Row); });
                 m_list->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowHint(); });
             }
-            if (m_none != nullptr)
-                m_none->SetOnClick([self]() { self->Pick(String{}); });
+            if (auto* close = Find<gui::Button>(u8"picker-close"))
+                close->SetOnClick([self]() { self->Close(); });
             if (auto* verb = Find<gui::Button>(u8"picker-state-verb"))
                 verb->SetOnClick([self]() { self->StateVerb(); });
             // Up, Down and Enter before the search takes them.
@@ -209,8 +208,6 @@ export namespace editor::app
                 m_search->SetPlaceholder(m_request.Placeholder.AsView());
                 m_search->SetText(StringView{});
             }
-            if (m_none != nullptr)
-                m_none->SetDisplayed(m_request.AllowNone);
             Filter(StringView{});
             gui::PopupOptions options;
             options.Kind = gui::PopupKind::Auto;
@@ -292,7 +289,7 @@ export namespace editor::app
             return title != nullptr ? title->GetText() : StringView{};
         }
         [[nodiscard]] gui::ListView* List() const noexcept { return m_list; }
-        [[nodiscard]] gui::Button* NoneButton() const noexcept { return m_none; }
+        [[nodiscard]] gui::Button* CloseButton() const { return Find<gui::Button>(u8"picker-close"); }
         [[nodiscard]] gui::Button* StateVerbButton() const { return Find<gui::Button>(u8"picker-state-verb"); }
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
@@ -573,7 +570,6 @@ export namespace editor::app
         gui::UIWidget* m_state = nullptr;
         gui::Label* m_hint = nullptr;
         String m_keysHint; // what the keys do, the foot's when the lit item says nothing
-        gui::Button* m_none = nullptr;
         gui::SceneRoot* m_root = nullptr; // what it opened over
         PickerRequest m_request;
         Array<Row> m_rows;

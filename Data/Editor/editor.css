@@ -657,6 +657,9 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
                 padding: var(--space-xs); }
 .picker { padding-bottom: var(--space-s); width: 420px; } /* its own width: a dialog's 380 is a form's */
 .picker-search { padding: var(--space-m); border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: var(--separator); margin-bottom: var(--space-s); }
+/* The search, then the picker's close at its end. */
+.picker-search { flex-direction: row; align-items: center; column-gap: var(--space-s); }
+.picker-search > .search { flex-grow: 1; }
 .picker-group { font-size: 11px; font-weight: 600; color: var(--text-dim); padding: var(--space-s) var(--space-l) var(--space-xs); }
 .picker > .asset-row { margin: 0 var(--space-s); }
 /* A tree picker's rows: indented by level (the width is the row's), a row kept only to show where

@@ -64,7 +64,7 @@ TEST_CASE("shortcut-capture: click, press, chosen - with the cancel, clear, modi
     d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Delete));
     REQUIRE(chosen.Size() == 2u);
     CHECK_FALSE(chosen[1].IsSet());
-    CHECK(button->GetText() == StringView(u8"None"));
+    CHECK(button->GetText() == StringView(u8"Not set"));
 
     // The focus leaving cancels; the keys are the GUI's again.
     CHECK(button->HandleActivate());

@@ -251,7 +251,7 @@ export namespace editor::app
         }
 
         // A setting's value as text: a choice by its name, a flag as On or Off, a number, a string
-        // ("(none)" when empty). Empty for a kind it does not show.
+        // ("Not set" when empty). Empty for a kind it does not show.
         [[nodiscard]] static String SettingText(const PropertyInfo& property, const void* address)
         {
             if (IsEnum(*property.type))
@@ -272,7 +272,7 @@ export namespace editor::app
             if (property.type == &TypeOf<String>())
             {
                 const String& text = *static_cast<const String*>(address);
-                return text.IsEmpty() ? String(u8"(none)") : text;
+                return text.IsEmpty() ? String(u8"Not set") : text;
             }
             return {};
         }
@@ -317,7 +317,7 @@ export namespace editor::app
                     {
                         const Guid& id = *static_cast<const Guid*>(address);
                         const String* empty = proj::SettingAttribute(property, proj::kSettingEmptyTextAttribute);
-                        const StringView emptyText = empty != nullptr ? empty->AsView() : StringView(u8"(none)");
+                        const StringView emptyText = empty != nullptr ? empty->AsView() : StringView(u8"Not set");
                         value = AssetLink(id, emptyText);
                         const content::Instance* instance = id.IsNil() ? nullptr : project.SourceDb().GetInstance(id);
                         text = id.IsNil() ? String(emptyText) : instance != nullptr ? String(instance->Name()) : String(u8"(missing)");
@@ -329,14 +329,14 @@ export namespace editor::app
                         list->AddClass(u8"home-links");
                         for (const Guid& id : ids)
                         {
-                            list->AddChild(AssetLink(id, u8"(none)").Get());
+                            list->AddChild(AssetLink(id, u8"Not set").Get());
                             const content::Instance* instance = project.SourceDb().GetInstance(id);
                             text += text.IsEmpty() ? u8"" : u8", ";
                             text += instance != nullptr ? instance->Name() : StringView(u8"(missing)");
                         }
                         if (ids.IsEmpty())
                         {
-                            text = String(u8"(none)");
+                            text = String(u8"Not set");
                             list->AddChild(Text(text.AsView(), u8"home-value dim").Get());
                         }
                         value = RefPtr<gui::Node>(list);

@@ -63,7 +63,6 @@ namespace
             request.Items.PushBack(Item(u8"dark", u8"Wood_Dark", u8"Town", true));
             request.Items.PushBack(Item(u8"redwood", u8"Redwood", u8"Town"));
             request.Current = String(u8"wood");
-            request.AllowNone = true;
             request.OnPicked = [this](StringView key) { picked.PushBack(String(key)); };
             return request;
         }
@@ -97,7 +96,7 @@ TEST_CASE("picker: rows under their sections, favourites first; the current lit;
     CHECK(bed.Rows() == String(u8"#Favourites Wood_Dark #Props Wood Wool #Town Wood_Dark Redwood"));
     CHECK(bed.picker.LitKey() == StringView(u8"wood"));
     CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc keeps Wood"));
-    CHECK(bed.picker.NoneButton()->IsDisplayed());
+    REQUIRE(bed.picker.CloseButton() != nullptr);
 
     bed.Key(gui::KeyCode::Up); // over the Props heading to the favourite
     CHECK(bed.picker.LitKey() == StringView(u8"dark"));
@@ -131,9 +130,9 @@ TEST_CASE("picker: a search narrows, a name starting with it first; nothing matc
     CHECK_FALSE(bed.picker.ShowsState());
     CHECK(bed.picker.RowCount() == 8u);
 
-    CHECK(bed.picker.NoneButton()->HandleActivate());
-    REQUIRE(bed.picked.Size() == 1u);
-    CHECK(bed.picked[0].IsEmpty());
+    // The close keeps the value: nothing picked, no None to slip onto.
+    CHECK(bed.picker.CloseButton()->HandleActivate());
+    CHECK(bed.picked.IsEmpty());
     CHECK_FALSE(bed.picker.IsOpen());
 }
 
@@ -188,7 +187,6 @@ TEST_CASE("picker: nothing to pick says what is missing and runs the owner's nex
     bed.Open(Move(request));
     CHECK(bed.picker.ShowsState());
     CHECK(bed.picker.StateTitle() == StringView(u8"No materials yet"));
-    CHECK_FALSE(bed.picker.NoneButton()->IsDisplayed());
     CHECK(bed.picker.Hint() == StringView(u8"Enter picks, Esc closes"));
     CHECK(bed.picker.StateVerbButton()->GetText() == StringView(u8"Create Material..."));
     CHECK(bed.picker.StateVerbButton()->HandleActivate());

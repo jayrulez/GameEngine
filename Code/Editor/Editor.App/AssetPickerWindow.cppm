@@ -7,7 +7,9 @@
 // the mock's asset-picker.gml): the project's groups a tree at its side (Favourites and All first),
 // what the chosen group holds of the slot's types beside it as tiles or a list (the last one chosen
 // kept with the project), the current value lit, the search over every group while it has text (by
-// name or a guid's start, as the browser's; each match saying where it lives). Enter or a double click picks, None clears, Esc keeps the value. Its
+// name or a guid's start, as the browser's; each match saying where it lives). Enter or a double
+// click picks; Esc or its close keeps the value (a slot's own clear sets nothing, so a pick can
+// never clear it by a slip). Its
 // cells are the browser's (AssetCell); it opens in the window's middle, as every picker does.
 module;
 #include "Core/Prelude.h"
@@ -56,7 +58,7 @@ export namespace editor::app
 
         /// The picker in `content` (the markup's `asset-picker-search`, `asset-picker-tiles`,
         /// `asset-picker-list`, `asset-picker-groups`, `asset-picker-where`, `asset-picker-items`,
-        /// `asset-picker-state`, `asset-picker-hint` and `asset-picker-none`, by id).
+        /// `asset-picker-state`, `asset-picker-hint` and `asset-picker-close`, by id).
         AssetPickerWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_services(Move(services)), m_content(Move(content)), m_sources(allocator), m_rows(allocator), m_model(*this)
         {
@@ -96,8 +98,8 @@ export namespace editor::app
                 tiles->SetOnClick([self]() { self->SetTiles(true); });
             if (auto* list = Find<gui::Button>(u8"asset-picker-list"))
                 list->SetOnClick([self]() { self->SetTiles(false); });
-            if (auto* none = Find<gui::Button>(u8"asset-picker-none"))
-                none->SetOnClick([self]() { self->Pick(Guid{}); });
+            if (auto* close = Find<gui::Button>(u8"asset-picker-close"))
+                close->SetOnClick([self]() { self->Close(); });
             // The arrows and Enter before the search takes them; in tiles Up and Down cross a row.
             (void)m_content->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
                                               {
@@ -243,7 +245,7 @@ export namespace editor::app
         [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
         [[nodiscard]] bool ShowsTiles() const noexcept { return m_tiles; }
         [[nodiscard]] gui::ListView* List() const noexcept { return m_list; }
-        [[nodiscard]] gui::Button* NoneButton() const { return Find<gui::Button>(u8"asset-picker-none"); }
+        [[nodiscard]] gui::Button* CloseButton() const { return Find<gui::Button>(u8"asset-picker-close"); }
         /// The tree's rows by name, in order ("Favourites | All Materials | Content | Props").
         [[nodiscard]] String Groups() const
         {

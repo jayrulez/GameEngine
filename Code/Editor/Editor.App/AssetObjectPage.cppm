@@ -172,11 +172,11 @@ export namespace editor::app
         [[nodiscard]] gui::ReflectedPropertySource& Properties() noexcept { return *m_properties; }
         [[nodiscard]] gui::PropertyBag& Facts() noexcept { return *m_facts; }
         [[nodiscard]] PropertySections& Sections() noexcept { return *m_sections; }
-        /// The asset's source file as its row says it ("(none)": embedded, or not a source asset).
+        /// The asset's source file as its row says it ("Not set": embedded, or not a source asset).
         [[nodiscard]] String SourceFile() const
         {
             const auto* asset = Cast<pipeline::Asset>(m_object.Get());
-            return asset != nullptr && !asset->fileName.IsEmpty() ? String(asset->fileName.View()) : String(u8"(none)");
+            return asset != nullptr && !asset->fileName.IsEmpty() ? String(asset->fileName.View()) : String(u8"Not set");
         }
         /// What the notice `key` says ("" when it is not shown).
         [[nodiscard]] String Notice(StringView key) const

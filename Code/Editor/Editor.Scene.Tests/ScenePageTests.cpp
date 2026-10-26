@@ -654,7 +654,7 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     REQUIRE_FALSE(path.IsEmpty());
     auto* slot = Cast<EntityRefEditor>(inspector->Grid()->FindEditor(path.AsView()));
     REQUIRE(slot != nullptr); // the entity slot, not the asset one
-    CHECK(slot->Slot()->ShownName() == StringView(u8"None"));
+    CHECK(slot->Slot()->ShownName() == StringView(u8"Not set"));
 
     // The pick: the entity picker, the scene as the hierarchy shows it; a search keeps a match.
     const i64 before = page->Commands().UndoIndex();
@@ -689,11 +689,14 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     slot = Cast<EntityRefEditor>(inspector->Grid()->FindEditor(path.AsView()));
     REQUIRE(slot != nullptr);
     CHECK(slot->Slot()->ShownName() == StringView(u8"Lamp"));
-    // Again: the current entity lit, the foot saying Esc keeps it; closing writes nothing.
+    // Again: the current entity lit, the foot saying Esc keeps it; its close writes nothing (no
+    // None to slip onto: the slot's own clear sets nothing).
     REQUIRE(page->PickEntity(slot->Request()));
     CHECK(picker->LitName() == String(u8"Lamp"));
     CHECK(picker->Hint() == StringView(u8"Enter picks, Esc keeps Lamp"));
-    picker->Close();
+    REQUIRE(picker->CloseButton() != nullptr);
+    CHECK(picker->CloseButton()->HandleActivate());
+    CHECK_FALSE(picker->IsOpen());
     CHECK(page->Commands().UndoIndex() == before + 1);
     page->Commands().Undo(); // one step
     CHECK(member()->instancedMesh.id.IsNil());

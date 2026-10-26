@@ -137,5 +137,5 @@ TEST_CASE("heightfield page: a blank heightfield said in the picture's place")
     CHECK_FALSE(page->LoadFailed());
     CHECK_FALSE(page->Preview()->View().HasImage());
     CHECK(app::FindById<gui::Node>(*page->Content(), u8"image-empty")->IsDisplayed());
-    CHECK(page->SourceFile() == StringView(u8"(none)"));
+    CHECK(page->SourceFile() == StringView(u8"Not set"));
 }

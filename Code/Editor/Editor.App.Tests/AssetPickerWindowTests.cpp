@@ -202,7 +202,7 @@ TEST_CASE("asset picker: tiles or a list, kept with the project for the next pic
     CHECK(bed.picker->ShowsTiles());
 }
 
-TEST_CASE("asset picker: Down then Enter picks the next row and closes; None picks nothing")
+TEST_CASE("asset picker: Down then Enter picks the next row and closes; its close keeps the value")
 {
     Bed bed;
     bed.Open(bed.barrel->Id());
@@ -214,9 +214,8 @@ TEST_CASE("asset picker: Down then Enter picks the next row and closes; None pic
     CHECK_FALSE(bed.picker->IsOpen());
 
     bed.Open(bed.barrel->Id());
-    REQUIRE(bed.picker->NoneButton() != nullptr);
-    CHECK(bed.picker->NoneButton()->HandleActivate());
-    REQUIRE(bed.chosen.Size() == 2u);
-    CHECK(bed.chosen[1].IsNil());
+    REQUIRE(bed.picker->CloseButton() != nullptr);
+    CHECK(bed.picker->CloseButton()->HandleActivate());
+    CHECK(bed.chosen.Size() == 1u); // nothing picked: the value stays
     CHECK_FALSE(bed.picker->IsOpen());
 }

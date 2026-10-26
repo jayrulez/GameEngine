@@ -371,7 +371,7 @@ namespace editor
         m_previewSize = outcome.size;
         if (outcome.image.Width() == 0)
         {
-            SetFact(u8"Atlas", u8"(none)");
+            SetFact(u8"Atlas", u8"Not baked");
             if (m_preview)
                 m_preview->ShowNone(u8"No atlas: the source file is missing or unreadable, or the atlas is too small for the range.");
             return;

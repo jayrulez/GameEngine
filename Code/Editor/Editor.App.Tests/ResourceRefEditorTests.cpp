@@ -145,7 +145,7 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     editor::app::AssetPickerSlot& slot = *mesh.Slot();
     REQUIRE(slot.AcceptedTypes().Size() == 2u);
     CHECK(slot.AcceptedTypes()[0] == String(u8"ModelAsset"));
-    CHECK(slot.ShownName() == StringView(u8"None"));
+    CHECK(slot.ShownName() == StringView(u8"Not set"));
     CHECK(slot.PickButton()->IsDisplayed());
     CHECK_FALSE(slot.ClearButton()->IsDisplayed());
     CHECK(bed.Editor(u8"other").Slot()->ShownName() == ResourceRefEditor::kMissingText); // dangling: still cleared
@@ -173,7 +173,7 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     (void)bed.root->UpdateLayout();
     CHECK(bed.commits == 2);
     CHECK(bed.bag.GetValue(StringView(u8"mesh"), 0).AsString().IsEmpty());
-    CHECK(slot.ShownName() == StringView(u8"None"));
+    CHECK(slot.ShownName() == StringView(u8"Not set"));
 }
 
 TEST_CASE("resource-ref: a dropped asset of a type it takes is one write; a read-only one only opens; objects that differ are Mixed")

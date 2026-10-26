@@ -42,7 +42,7 @@ namespace editor
     String CollisionShapeEditorPage::MeshName(const Guid& id) const
     {
         if (id.IsNil() || Context().Project() == nullptr)
-            return String(u8"(none)");
+            return String(u8"Not set");
         content::Instance* inst = Context().Project()->SourceDb().GetInstance(id);
         return inst != nullptr ? String(inst->Path().AsView()) : String(u8"(missing mesh)");
     }

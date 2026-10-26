@@ -114,7 +114,7 @@ export namespace editor::app
         void ShowChord()
         {
             const String text = FormatShortcut(m_chord);
-            SetText(text.IsEmpty() ? StringView(u8"None") : text.AsView());
+            SetText(text.IsEmpty() ? StringView(u8"Not set") : text.AsView());
         }
 
         EditorShortcut m_chord;

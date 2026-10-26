@@ -77,7 +77,7 @@ export namespace editor::app
         void SetValue(StringView name)
         {
             m_hasValue = !name.IsEmpty();
-            m_name->SetText(m_hasValue ? name : StringView(u8"None"));
+            m_name->SetText(m_hasValue ? name : StringView(u8"Not set"));
             Show();
         }
         [[nodiscard]] bool HasValue() const noexcept { return m_hasValue; }

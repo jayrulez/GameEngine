@@ -777,7 +777,10 @@ TEST_CASE("script behaviors: a list of behaviours, each its script, Enabled and 
     source.GetProperties(u8"behaviors.0", rows);
     REQUIRE(rows.Size() == 3u); // no script yet: its own rows only
     CHECK(rows[0].Kind == gui::PropertyKind::Reference);
-    CHECK(rows[0].ReferenceType == &TypeOf<foundation::script::ScriptClass>());
+    REQUIRE(rows[0].ReferenceType == &foundation::script::ScriptClass::StaticType());
+    // Its registered type, by its name: what the asset picker asks the builders for (an
+    // unregistered TypeOf named it "<value>", and the picker offered "<value>s").
+    CHECK(StringView(reinterpret_cast<const utf8char*>(rows[0].ReferenceType->name)) == StringView(u8"ScriptClass"));
 
     gui::PropertyWrite off;
     off.Value = gui::Variant(false);

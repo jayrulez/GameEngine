@@ -311,7 +311,7 @@ namespace editor
         script.Name = String(u8"script");
         script.DisplayName = String(u8"Script");
         script.Kind = gui::PropertyKind::Reference;
-        script.ReferenceType = &TypeOf<script::ScriptClass>();
+        script.ReferenceType = &script::ScriptClass::StaticType(); // its registered type: TypeOf names an unregistered one "<value>"
         out.PushBack(Move(script));
         gui::PropertyInfo enabled;
         enabled.Name = String(u8"enabled");

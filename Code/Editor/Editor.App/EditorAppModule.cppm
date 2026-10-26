@@ -36,7 +36,7 @@ export import :asset_picker_slot;
 export import :resource_ref_editor;
 export import :picker;
 export import :path_picker_dialog;
-export import :asset_picker_dialog;
+export import :asset_picker_window;
 export import :group_picker_dialog;
 export import :asset_create_dialog;
 export import :settings_dialog;

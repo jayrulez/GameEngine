@@ -639,8 +639,10 @@ button.toast-action { height: var(--control-height); padding: 0 var(--space-m); 
 .asset-picker-items { flex-grow: 1; min-width: 0; flex-direction: column; padding: var(--space-xs) var(--space-s); }
 .asset-picker-where { font-size: var(--font-small); color: var(--text-dim); padding: var(--space-xs) var(--space-m) var(--space-s); }
 .asset-picker-bar { flex-direction: row; align-items: center; column-gap: var(--space-s); }
-.asset-picker-grid { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-s); row-gap: var(--space-s); padding: var(--space-xs) var(--space-s); }
+.asset-picker-grid { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-s); row-gap: var(--space-s); padding: var(--space-xs) var(--space-s); } /* the mock's */
 .asset-picker-grid > .asset-tile { width: 88px; }
+.asset-picker-items > .asset-picker-list { flex-grow: 1; min-height: 0; background-color: transparent; padding: 0; }
+.asset-picker-state { flex-grow: 1; color: var(--text-dim); text-align: center; padding: var(--space-xl) var(--space-l); }
 /* The entity picker: the scene's tree as the hierarchy draws it, in a picker's frame. */
 .entity-picker-tree { height: 340px; background-color: transparent; padding: 0 var(--space-s); }
 /* The render textures picker: its passes a tree, wide enough for a texture's size and format. */

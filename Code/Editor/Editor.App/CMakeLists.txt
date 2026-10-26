@@ -54,7 +54,7 @@ target_sources(Editor.App
             AssetPickerSlot.cppm
             Picker.cppm
             PathPickerDialog.cppm
-            AssetPickerDialog.cppm
+            AssetPickerWindow.cppm
             GroupPickerDialog.cppm
             AssetCreateDialog.cppm
             SettingsDialog.cppm

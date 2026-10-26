@@ -3,16 +3,16 @@
 
 // Editor App - :picker partition
 //
-// The picker (Documentation/Specs/editor-gui.md, 5.2, layer 5; catalog 2.4): one for assets, paths
-// and groups, as the kit draws it (Data/Editor/Picker.gml). A search over the rows, which sit under
+// The picker (Documentation/Specs/editor-gui.md, 5.2, layer 5; catalog 2.4): one for paths, groups
+// and components (an asset slot's is the asset picker, AssetPickerWindow), as the kit draws it (Data/Editor/Picker.gml). A search over the rows, which sit under
 // their sections in the order the owner gives them, favourites first in a section of their own; a
 // row shows its glyph (its category's tint), its name, what it is, a star when a favourite, and a
 // check on the current value. The current value is lit when it opens; Up and Down move the light
 // past the section headings while the search keeps the keys, and Enter, a double click or Enter on
 // the list picks. The foot says so ("Esc keeps" the current value) and holds None when the owner
 // allows nothing. With nothing to pick it says what is missing and offers the owner's next step;
-// with nothing matching, it says so and offers to clear the search. It opens as a modal popup
-// below what it picks for, or near the top of the window.
+// with nothing matching, it says so and offers to clear the search. It opens as a modal popup in
+// the window's middle.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"

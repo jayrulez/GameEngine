@@ -1,6 +1,6 @@
 <!--
-  The picker (Documentation/Specs/editor-gui.md, 5.2, layer 5): the kit's picker, one for assets,
-  paths and groups. A search over the rows, the rows under their sections (favourites first), an
+  The picker (Documentation/Specs/editor-gui.md, 5.2, layer 5): the kit's picker, one for paths,
+  groups and components (an asset slot's is AssetPicker.gml). A search over the rows, the rows under their sections (favourites first), an
   empty or no-match state saying what is so, and the foot's hint and None. Code fills it.
 -->
 <Panel class="dialog picker">

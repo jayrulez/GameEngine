@@ -7,7 +7,7 @@
 // grid's editor for GUI.Toolkit's Reference kind, an asset slot. What may fill it is asked of the
 // builders, never listed here (ruling 19): the source asset types whose builder makes the type the
 // reference points at, or one derived from it. Pick, drop and clear are one write, the grid's, so
-// one undo step; a pick opens the asset picker below the slot. Open and reveal show the asset.
+// one undo step; a pick opens the asset picker (AssetPickerWindow). Open and reveal show the asset.
 // What it asks of the editor is a table of its own (ResourceRefServices), so a test gives its own
 // and the application fills it from its context.
 module;
@@ -22,8 +22,7 @@ import foundation.gui;
 import foundation.gui.toolkit;
 import editor.core;
 import :asset_picker_slot;
-import :picker;
-import :asset_picker_dialog;
+import :asset_picker_window; // AssetPickRequest
 
 using namespace foundation::core;
 
@@ -55,26 +54,24 @@ export namespace editor::app
         /// Filled from the editor's context: the builders' types (SourceAssetTypesOf; none, the
         /// type itself, a reference naming a source asset type), the
         /// project's names, the type icons, the asset picker over the project's assets (`open`
-        /// shows a picker's request), the context's open and reveal. `context`
+        /// shows the asset picker for a request), the context's open and reveal. `context`
         /// and `icons` outlive what it is given to.
         [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons,
-                                                      Function<void(PickerRequest request)> open)
+                                                      Function<void(AssetPickRequest request)> open)
         {
             ResourceRefServices services;
             editor::EditorContext* ctx = &context;
             editor::EditorIcons* typeIcons = &icons;
             if (open)
-                services.Pick = [ctx, typeIcons, open = Move(open)](Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)
+                services.Pick = [ctx, open = Move(open)](Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)
                 {
                     if (ctx->Project() == nullptr)
                         return;
-                    PickerRequest request = AssetPicker::Request(ctx->Project()->SourceDb(), *typeIcons, ctx->Favorites(), types, current);
-                    request.OnPicked = [chosen = Move(chosen)](StringView key)
-                    {
-                        Guid id;
-                        if (key.IsEmpty() || Guid::TryParse(key, id))
-                            chosen(id);
-                    };
+                    AssetPickRequest request;
+                    for (const String& type : types)
+                        request.types.PushBack(type);
+                    request.current = current;
+                    request.chosen = Move(chosen);
                     open(Move(request));
                 };
             // What the builders make it from; none: the type itself, a reference naming a source

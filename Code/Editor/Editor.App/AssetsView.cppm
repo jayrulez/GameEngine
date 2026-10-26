@@ -55,6 +55,7 @@ export namespace editor::app
             bool Favourite = false;
             bool AlwaysExported = false; ///< an export takes it (or all a group holds) whatever reaches it
             bool Group = false;
+            bool StateColumns = true; ///< a row's badge and Always Export columns: the browser's; a picker's rows show neither
             RefPtr<gui::Drawable> Picture; ///< its thumbnail, a tile's in place of its glyph; null: none yet
         };
 
@@ -143,6 +144,8 @@ export namespace editor::app
             else
             {
                 m_badge->SetVisible(!shown.Badge.IsEmpty());
+                m_badge->SetDisplayed(shown.StateColumns);
+                m_exportIcon->SetDisplayed(shown.StateColumns);
                 Lit(*m_exportIcon, shown.AlwaysExported);
                 m_exportIcon->SetTooltip(shown.AlwaysExported ? StringView(u8"Always exported") : StringView(u8"Exported when something it ships uses it"));
                 Lit(*m_star, shown.Favourite);
@@ -207,6 +210,15 @@ export namespace editor::app
         /// Its markup, under the data root.
         static constexpr const char8_t* kPath = u8"Editor/Assets.gml";
         static constexpr StringView kTopGroup = u8"Content";
+        /// What an asset type (by name) is called to the user: its displayName, else its name. The
+        /// asset picker's rows say it as the browser's do.
+        [[nodiscard]] static String KindOf(StringView typeName)
+        {
+            for (const TypeInfo* type : GlobalTypeRegistry().All())
+                if (type != nullptr && type->name != nullptr && StringView(reinterpret_cast<const utf8char*>(type->name)) == typeName)
+                    return String(TypeAttrString(*type, "displayName", typeName));
+            return String(typeName);
+        }
 
         /// What it works over.
         struct Services
@@ -680,14 +692,6 @@ export namespace editor::app
         {
             return GlobalTypeRegistry().FindByName(reinterpret_cast<const char*>(String(instance.TypeNamespace()).CStr()),
                                                    reinterpret_cast<const char*>(String(instance.TypeName()).CStr()));
-        }
-        // What a type is called to the user: its displayName, else its name.
-        [[nodiscard]] static String KindOf(StringView typeName)
-        {
-            for (const TypeInfo* type : GlobalTypeRegistry().All())
-                if (type != nullptr && type->name != nullptr && StringView(reinterpret_cast<const utf8char*>(type->name)) == typeName)
-                    return String(TypeAttrString(*type, "displayName", typeName));
-            return String(typeName);
         }
 
         void Search(StringView text)

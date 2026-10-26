@@ -219,7 +219,7 @@ export namespace editor::app
         RTTI_OBJECT(EditorAssetBrowserSettings, ISerializable)
     public:
         bool gridMode = false;       // false = list, true = grid
-        bool pickerGridMode = false; // the asset picker dialog's own list / grid choice
+        bool pickerGridMode = false; // the asset picker's own list / grid choice (AssetPickerWindow)
 
         void Serialize(ISerializer& ar) override
         {

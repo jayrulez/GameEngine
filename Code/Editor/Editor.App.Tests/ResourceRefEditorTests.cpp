@@ -25,7 +25,6 @@ using editor::app::AssetDrag;
 using editor::app::ResourceRefEditor;
 using editor::app::ResourceRefServices;
 using editor::app::ResourceRefShown;
-using editor::app::PickerRequest;
 namespace gui = foundation::gui;
 
 namespace
@@ -250,7 +249,7 @@ TEST_CASE("resource-ref: the context's table asks the builders' join for the typ
     CHECK(revealed[0] == Guid{3u, 4u});
 }
 
-TEST_CASE("resource-ref: the context's pick opens the asset picker over the project's assets of the types, favourites first; a pick or None answers")
+TEST_CASE("resource-ref: the context's pick asks the asset picker for the slot's types and value; a pick or None answers")
 {
     std::error_code ec;
     std::filesystem::remove_all("resource_ref_project", ec);
@@ -272,23 +271,18 @@ TEST_CASE("resource-ref: the context's pick opens the asset picker over the proj
     context.SetProject(project.Get());
     context.ToggleFavorite(barrel->Id());
     editor::EditorIcons icons(DefaultAllocator(), [](StringView) { return false; });
-    PickerRequest opened;
-    const ResourceRefServices services = ResourceRefServices::From(context, icons, [&opened](PickerRequest request) { opened = Move(request); });
+    editor::app::AssetPickRequest opened;
+    const ResourceRefServices services = ResourceRefServices::From(context, icons, [&opened](editor::app::AssetPickRequest request) { opened = Move(request); });
     REQUIRE(static_cast<bool>(services.Pick));
     Array<Guid> chosen;
     const String meshes[] = {String(reinterpret_cast<const utf8char*>(RefMeshAsset::StaticType().name))};
     services.Pick(Span<const String>(meshes, 1u), crate->Id(), [&chosen](const Guid& id) { chosen.PushBack(id); });
-    REQUIRE(opened.Items.Size() == 2u); // the sound is not one it takes
-    CHECK(opened.Items[0].Name == String(u8"Crate"));
-    CHECK(opened.Items[0].Section == String(u8"Content"));
-    CHECK(opened.Items[1].Name == String(u8"Barrel"));
-    CHECK(opened.Items[1].Section == String(u8"Town"));
-    CHECK(opened.Items[1].Favourite);
-    CHECK(opened.Current == editor::app::AssetPicker::KeyOf(crate->Id()));
-    CHECK(opened.AllowNone);
-
-    opened.OnPicked(opened.Items[1].Key.AsView());
-    opened.OnPicked(StringView{}); // None
+    REQUIRE(opened.types.Size() == 1u); // the asset picker shows them (AssetPickerWindowTests)
+    CHECK(opened.types[0] == meshes[0]);
+    CHECK(opened.current == crate->Id());
+    REQUIRE(static_cast<bool>(opened.chosen));
+    opened.chosen(barrel->Id());
+    opened.chosen(Guid{}); // None
     REQUIRE(chosen.Size() == 2u);
     CHECK(chosen[0] == barrel->Id());
     CHECK(chosen[1].IsNil());

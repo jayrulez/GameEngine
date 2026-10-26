@@ -614,6 +614,23 @@ namespace editor::app
         (void)m_picker->Open(*root, Move(request));
     }
 
+    void EditorApplication::ShowAssetPicker(AssetPickRequest request)
+    {
+        gui::SceneRoot* root = m_window.Root();
+        if (root == nullptr)
+            return;
+        if (!m_assetPicker)
+        {
+            AssetPickerWindow::Services services;
+            services.context = &m_context;
+            services.icons = &TypeIcons();
+            EditorApplication* self = this;
+            services.picture = [self](const Guid& id) { return self->m_thumbnailService.Get(id); };
+            m_assetPicker = MakeUnique<AssetPickerWindow>(m_editorAllocator, m_editorAllocator, Move(services), m_window.LoadMarkup(AssetPickerWindow::kPath));
+        }
+        (void)m_assetPicker->Open(*root, Move(request));
+    }
+
     // The slots' table, from the context, the type icons and the picker (made the first time).
     const ResourceRefServices& EditorApplication::RefServices()
     {
@@ -623,7 +640,7 @@ namespace editor::app
             m_typeIcons = MakeUnique<editor::EditorIcons>(m_editorAllocator, m_editorAllocator, [window](StringView path)
                                                           { return window->Resources() != nullptr && window->Resources()->Exists(path); });
             EditorApplication* self = this;
-            m_refs = ResourceRefServices::From(m_context, *m_typeIcons, [self](PickerRequest request) { self->ShowPicker(Move(request)); });
+            m_refs = ResourceRefServices::From(m_context, *m_typeIcons, [self](AssetPickRequest request) { self->ShowAssetPicker(Move(request)); });
         }
         return m_refs;
     }

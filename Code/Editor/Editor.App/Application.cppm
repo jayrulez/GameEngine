@@ -133,6 +133,8 @@ export namespace editor::app
         [[nodiscard]] const ResourceRefServices& RefServices();
         /// Opens the picker over the window for `request`, in its middle.
         void ShowPicker(PickerRequest request);
+        /// Opens the asset picker (its groups beside what each holds) over the window for `request`.
+        void ShowAssetPicker(AssetPickRequest request);
         /// A type's icon, asked of the type (made the first time, with the slots' table).
         [[nodiscard]] editor::EditorIcons& TypeIcons()
         {
@@ -216,7 +218,8 @@ export namespace editor::app
         UniquePtr<CommandPalette> m_palette;    // every action by name (View > Command Palette)
         UniquePtr<EditorPreferencesDialog> m_preferences; // Edit > Preferences
         UniquePtr<editor::EditorIcons> m_typeIcons; // a type's icon, asked of the type
-        UniquePtr<Picker> m_picker;                 // the one picker (assets, paths, groups), made the first time
+        UniquePtr<Picker> m_picker;                 // the one picker (paths, groups, components), made the first time
+        UniquePtr<AssetPickerWindow> m_assetPicker; // an asset slot's picker, made the first time
         ResourceRefServices m_refs;                 // what an asset slot asks of the editor
         UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
         UniquePtr<TemplatesDialog> m_templates;             // Edit > Export Templates

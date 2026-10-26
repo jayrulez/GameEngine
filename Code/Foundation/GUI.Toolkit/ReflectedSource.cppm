@@ -20,7 +20,8 @@
 //   - A reference-shaped type (Core's TypeInfo::reference: a Ref<T>) is one value of kind
 //     Reference, its Guid as text (empty: none), naming the type it points at; a write drops its
 //     binding, so the next resolve binds the new id. The toolkit has no slot: the application
-//     registers one for the kind.
+//     registers one for the kind. A bare Guid is a reference too, to the type its property's
+//     `referenceType` attribute names (by the type's name), else to nothing in particular.
 //   - A struct's group carries its type's name as its hint, and so does any other type, for an
 //     application's editor (a Color until T4, an EntityRef); a struct no editor takes shows its own
 //     rows, anything else the grid's row saying no editor fits.
@@ -480,6 +481,8 @@ export namespace foundation::gui
         {
             if (type.reference != nullptr)
                 return type.reference->Id(address);
+            if (&type == &core::TypeOf<Guid>() || type.id == core::TypeOf<Guid>().id)
+                return static_cast<const Guid*>(address); // a bare Guid is its own id
             const ReflectedReferenceParts* parts = FindReferenceType(core::StringView(reinterpret_cast<const char8_t*>(type.name)));
             const core::PropertyInfo* id = parts != nullptr ? core::FindProperty(type, reinterpret_cast<const char*>(parts->Id.CStr())) : nullptr;
             if (id == nullptr || id->address == nullptr || id->type != &core::TypeOf<Guid>())
@@ -491,6 +494,8 @@ export namespace foundation::gui
         {
             if (type.reference != nullptr)
                 return type.reference->Target != nullptr ? type.reference->Target() : nullptr;
+            if (&type == &core::TypeOf<Guid>() || type.id == core::TypeOf<Guid>().id)
+                return nullptr; // a bare Guid says not what it points at; its property may (`referenceType`)
             return &type;
         }
         [[nodiscard]] const ReflectedGradientParts* FindGradientType(core::StringView name) const
@@ -524,8 +529,8 @@ export namespace foundation::gui
                 return Shape::Color;
             if (core::IsEnum(type))
                 return Shape::Enum;
-            if (type.reference != nullptr)
-                return Shape::Reference;
+            if (type.reference != nullptr || is.template operator()<Guid>())
+                return Shape::Reference; // a bare Guid: what something is known by, as a Ref<T>'s id
             if (type.container != nullptr)
                 return Shape::List;
             for (const core::TypeInfo* t = &type; t != nullptr; t = t->base)
@@ -692,6 +697,10 @@ export namespace foundation::gui
                     info.Max = bounds->y;
                     info.Step = bounds->z;
                 }
+            // A bare Guid's property may name what it points at, by its type's name.
+            if (info.Kind == PropertyKind::Reference && info.ReferenceType == nullptr)
+                if (const core::String* named = StringAttribute(property, u8"referenceType"))
+                    info.ReferenceType = TypeNamed(named->AsView());
             if (const core::String* condition = StringAttribute(property, u8"visibleWhen"))
                 info.Visible = Holds(path, condition->AsView());
             return true;
@@ -754,7 +763,7 @@ export namespace foundation::gui
             {
                 info.Kind = PropertyKind::Reference;
                 info.ReferenceType = ReferenceTargetOf(type);
-                if (type.reference == nullptr) // a registered one: its type's name, for the application's editor
+                if (type.reference == nullptr && info.ReferenceType != nullptr) // a registered one: its type's name, for the application's editor
                     info.Hint = core::String(reinterpret_cast<const char8_t*>(type.name));
                 break;
             }
@@ -823,6 +832,13 @@ export namespace foundation::gui
                 info.DisplayName = object ? core::Format(u8"{} {}", TypeShownName(*target.Type), i + 1) : core::Format(u8"Element {}", i + 1);
                 out.PushBack(core::Move(info));
             }
+        }
+        [[nodiscard]] static const core::TypeInfo* TypeNamed(core::StringView name)
+        {
+            for (const core::TypeInfo* type : core::GlobalTypeRegistry().All())
+                if (type != nullptr && type->name != nullptr && core::StringView(reinterpret_cast<const char8_t*>(type->name)) == name)
+                    return type;
+            return nullptr;
         }
         [[nodiscard]] static const core::String* StringAttribute(const core::PropertyInfo& property, const char8_t* key)
         {

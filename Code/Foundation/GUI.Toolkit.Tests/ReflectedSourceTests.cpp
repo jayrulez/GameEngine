@@ -317,6 +317,23 @@ namespace reflected
     REFLECT_VALUE(TestOther, "rtti::tests::reflected") {}
 }
 
+// Bare Guids: one naming what it points at by its type's name, one naming nothing.
+namespace reflected
+{
+    class TestIds : public core::Object
+    {
+        RTTI_OBJECT(TestIds, core::Object)
+    public:
+        core::Guid mesh;
+        core::Guid anything;
+    };
+    REFLECT_MEMBERS(TestIds, "rtti::tests::reflected")
+    {
+        builder.Property<&TestIds::mesh>("mesh").PropAttribute("referenceType", core::String(u8"TestTarget"));
+        builder.Property<&TestIds::anything>("anything");
+    }
+}
+
 // A struct an application takes as a reference by its Guid (an editor's entity reference), and
 // something holding two.
 namespace reflected
@@ -967,6 +984,40 @@ TEST_CASE("reflected source: a reference is its Guid as text, naming what it poi
     source.BeginEdit(SV(u8"plug"));
     source.CommitEdit(SV(u8"plug"), PropertyWrite{Variant(core::StringView{})});
     CHECK(socket->plug.id.IsNil());
+}
+
+TEST_CASE("reflected source: a bare Guid is a reference, to what its property's referenceType names, else to nothing in particular")
+{
+    reflected::Register();
+    reflected::RttiRegisterValue_TestTarget();
+    core::GlobalTypeRegistry().Register(core::TypeOf<reflected::TestTarget>());
+    core::RefPtr<reflected::TestIds> ids = core::MakeRef<reflected::TestIds>(core::DefaultAllocator());
+    ReflectedPropertySource source{core::DefaultAllocator()};
+    const core::Instance object(ids.Get(), ids->GetType());
+    source.SetObjects(core::Span<const core::Instance>(&object, 1u));
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    source.GetProperties(SV(u8""), rows);
+    REQUIRE(rows.Size() == 2u);
+    CHECK(rows[0].Kind == PropertyKind::Reference);
+    CHECK(rows[0].ReferenceType == &core::TypeOf<reflected::TestTarget>());
+    CHECK(rows[0].Hint.IsEmpty());
+    CHECK(rows[1].Kind == PropertyKind::Reference);
+    CHECK(rows[1].ReferenceType == nullptr);
+    CHECK(source.GetValue(SV(u8"mesh"), 0).AsString().IsEmpty());
+
+    const core::Guid crate{0x42u, 0x7u};
+    core::utf8char text[37];
+    crate.ToChars(text);
+    source.BeginEdit(SV(u8"mesh"));
+    source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(core::StringView(text, 36))});
+    CHECK(ids->mesh == crate);
+    CHECK(source.GetValue(SV(u8"mesh"), 0).AsString() == core::StringView(text, 36));
+    source.BeginEdit(SV(u8"mesh"));
+    source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(SV(u8"crate"))}); // not a Guid: refused
+    CHECK(ids->mesh == crate);
+    source.BeginEdit(SV(u8"mesh"));
+    source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(core::StringView{})});
+    CHECK(ids->mesh.IsNil());
 }
 
 TEST_CASE("reflected source: a struct the application registers as a reference is one by its Guid, naming itself")

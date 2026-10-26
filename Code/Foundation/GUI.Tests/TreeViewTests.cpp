@@ -7,6 +7,9 @@
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 import foundation.core;
+import foundation.vfs;
+import foundation.fonts;
+import foundation.fonts.truetype;
 import foundation.gui;
 
 using namespace foundation::gui;
@@ -331,6 +334,29 @@ TEST_CASE("tree-view: a row deeper than the view is wide makes the rows that wid
     (void)root->UpdateLayout();
     (void)root->UpdateLayout(); // the widest row measured as it binds; the rows take it next
     CHECK(tree->GetContentExtent().x > 10.0f * 32.0f);
+    CHECK(tree->GetScrollRange().x > 0.0f); // and it scrolls across them, not only cut at its edge
     REQUIRE(tree->RowForItem(10) != nullptr);
     CHECK(tree->RowForItem(10)->GetSize().x == doctest::Approx(tree->GetContentExtent().x));
+}
+
+TEST_CASE("tree-view: a long name bound before the row had a font widens the rows once it has one")
+{
+    // A row just made has no font until the sheet reaches it (the editor's hierarchy), so its name
+    // measured nothing as it bound; placed with its font, it is measured again.
+    TreeModel model;
+    (void)model.AddNode(TreeModel::kRoot, SV(u8"An entity whose name runs far past the edge of a view two hundred and sixty wide"));
+    core::RefPtr<SceneRoot> root;
+    auto tree = MountTree(root, &model);
+    CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // no font: no width to its name
+    namespace fonts = foundation::fonts;
+    fonts::TrueTypeFonts::Initialize();
+    fonts::TrueTypeFontService service{core::DefaultAllocator()};
+    const core::String data = foundation::vfs::FindDataRoot();
+    REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+            fonts::FontLoadResult::Success);
+    tree->SetFont(service.GetFont(u8"DejaVu", 13.0f)); // as the sheet gives it, after the bind
+    (void)root->UpdateLayout();
+    (void)root->UpdateLayout(); // measured as placed; the rows take it next
+    CHECK(tree->GetContentExtent().x > 400.0f);
+    CHECK(tree->GetScrollRange().x > 140.0f); // scrolled across to see the rest of the name
 }

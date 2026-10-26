@@ -256,6 +256,9 @@ export namespace foundation::gui
             SetTag(core::StringView(u8"treeview"));
             StyleWriteScope defaults(*this); // its own values, which a sheet returns to
             SetTextColor(Color{0.88f, 0.90f, 0.94f, 1.0f});
+            // Sideways too, as a table across its columns: its rows are as wide as its widest
+            // (RowWidth), and without it a row wider than the view was only cut at its edge.
+            EditLayoutStyle([](LayoutStyle& s) { s.OverflowX = Overflow::Auto; });
         }
         // Its own model goes before the view's base would let go of it: let go first.
         ~TreeView() override { SetModel(nullptr); }
@@ -371,6 +374,13 @@ export namespace foundation::gui
         // Rows as wide as the widest one bound, or the view when it is wider: a deep level or a
         // long name scrolls sideways, where it had been cut at the view's edge.
         [[nodiscard]] f32 RowWidth(f32 width) const override { return core::Max(width, m_widest); }
+        // The rows in view measured again once placed: one bound before the sheet reached it (a
+        // row just made has no font yet, its name no width) is measured as it is drawn.
+        void OnLayoutDecorations() override
+        {
+            for (const core::RefPtr<ItemRow>& row : LiveRows())
+                NoteRowWidth(*row);
+        }
 
         // The arrow toward the inline end (Right, Left in right to left) opens a node, or on an open
         // one goes to its first child; toward the start closes an open one, or goes to its parent.
@@ -499,7 +509,7 @@ export namespace foundation::gui
                 m_widestOf = GetModel();
                 m_widest = 0.0f;
             }
-            Node* row = content.GetParent() != nullptr ? content.GetParent() : &content; // the row's own padding too
+            Node* row = core::Cast<ItemRow>(&content) != nullptr ? &content : (content.GetParent() != nullptr ? content.GetParent() : &content); // the row's own padding too
             const f32 width = row->Measure(LayoutConstraints{core::Float2{0.0f, 0.0f}, core::Float2{kUnbounded, kUnbounded}, core::Float2{-1.0f, -1.0f}}).x;
             if (width > m_widest + 0.5f)
             {

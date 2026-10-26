@@ -245,7 +245,8 @@ to follow the same order.
 | Editor.Geometry, Editor.Physics | In the build, on the GUI: the preview pages from one markup, the preview beside the grid, the preview's own choices on its bar (Editor.App's PreviewPane); the mesh viewer (its stats read only, its preview material kept per mesh, a chain's level held); the collision shape (its outline, its source mesh a slot for what a mesh cooks to, each edit one undo step, no mesh a notice, no Cook now) | X6 (layer 3) |
 | Editor.Materials, Editor.Render | In the build, on the GUI, on the preview pages' markup: the material page (its shader's table in three sections: the material's (the shader a reference, the built-in template while there is none, the pipeline state), its properties each by its declared type (a range from the shader, a colour, an HDR colour a colour and an intensity, a vector its parts), its textures each a slot), the preview on a shape or a mesh of the project, kept per material, a stale cook and a missing shader as notices); the settings profile page (the values' rows, the scene's own fields left out, each edit one undo step, previewed on the built-in scene or a project scene picked on the preview's bar, kept per profile) | X6 (layer 4) |
 | Editor.Audio | In the build in parts, on the GUI: the audio clip page from its markup (the clip's waveform, a widget of the editor's coloured by the sheet, under the kit's transport, the playback actions over the page, auditioned through the runtime's audio engine with a playhead and a volume of the page's own; the clip's options on the grid, each edit one undo step the audition follows; its source's facts read only; a missing source said in the waveform's place), the sound cue page (how it picks and its pitch and volume ranges, a variant per clip, a clip slot and its weight, and one more to fill, each edit one undo step; the kit's transport playing the variant the runtime's resolver picks, what it picked said beside it; no clip a notice), the audition shared by the audio pages (a clip read from its source, one voice), the bus layout page (the buses a tree beside the chosen bus's rows: a custom bus's name and parent, only the parents that make no loop offered, then its mix, filters, delay and reverb, each a section; a bus added and removed from the tree's bar and a row's menu; a loop said; each edit one undo step), the clip thumbnails | X6 (layer 5, parts 1 to 3) |
-| Editor.Input; the Terrain page; a Vegetation Mask page (new, layer 7) | Parked (Editor.Vegetation's tools are in with the scene page, X5) | |
+| Editor.Input | In the build, on the GUI: the input map page from its markup (the sets and their actions a tree beside the grid, its bar adding a set and removing the chosen row, its search by an action's name or input; the chosen set's rows from reflection, each action opening in place and saying its kind and bindings in a line when closed, a binding's settings shown by its source, the sources by what the action's kind takes; an action chosen in the tree opened there; a binding's input captured by pressing it, the page reading the devices; each edit one undo step; a map the game could not read a notice, Save refusing it) | X6 (layer 5, part 4) |
+| The Terrain page; a Vegetation Mask page (new, layer 7) | Parked (Editor.Vegetation's tools are in with the scene page, X5) | |
 | Editor.Script, Editor.Script.AngelScript, Editor.Script.Luau, Editor.Shaders, Editor.GUI | Parked | |
 | Editor.GameUI | Left with the old editor (ruling): never ported, deleted at the swap | |
 
@@ -546,11 +547,11 @@ The layers:
    action a group opening in place (its kind and interaction, its bindings a list of their own, its
    processing), closed showing its name, kind and bindings in a line; an action chosen in the tree
    opens it there. In parts:
-   1. The grid: each level's names start past its parent's (a list element's grip and arrow come
-      before its name), and a closed group may say what it holds in a line beside its name.
-   2. The reflected source: a list may name its elements by a field of theirs (an action by its
-      name) and say each in a line; the input types' rows declare when they show (a binding's
-      settings by its source).
+   1. The grid: each level's names start past its parent's (it did already: a list element's grip
+      sits in its indent), and a closed group may say what it holds in a line beside its name.
+   2. The reflected source: the application describes each row as it is listed (a hook over the
+      row's path), so the page names an action by its name and sums it up in a line, and shows a
+      binding's settings by its source, without the input types knowing the editor.
    3. The page (Editor.Input): the tree, the set's rows from the reflected source over the chosen
       set (each edit one undo step), a binding's input captured by pressing it (an editor of the
       editor's, listening to the devices the action's kind takes).

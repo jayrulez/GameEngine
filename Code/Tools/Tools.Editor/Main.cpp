@@ -72,6 +72,7 @@ import editor.physics; // RegisterCollisionShapeEditor
 import editor.materials; // RegisterMaterialEditor
 import editor.render; // RegisterSettingsProfileEditor
 import editor.audio; // RegisterAudioClipEditor
+import editor.input; // RegisterInputMapEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -315,6 +316,7 @@ int main(int argc, char** argv)
         editor::RegisterMaterialEditor(app.Context(), pageServices);
         editor::RegisterSettingsProfileEditor(app.Context(), pageServices);
         editor::RegisterAudioClipEditor(app.Context(), pageServices); // and its thumbnails
+        editor::RegisterInputMapEditor(app.Context(), pageServices);
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too). The script page and its "New Asset > <Lang> Script" creators come

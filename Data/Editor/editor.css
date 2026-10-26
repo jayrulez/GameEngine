@@ -259,6 +259,10 @@ waveform::playhead { background-color: var(--warning); }
 /* The bus layout page: the buses' tree under its bar, beside the chosen bus's grid. */
 .bus-pane { flex-direction: column; }
 .bus-tree { flex-grow: 1; min-height: 0; }
+/* The input map page: the sets' tree under its bar and search, beside the chosen set's grid. */
+.input-tree-pane { flex-direction: column; }
+.input-tree-pane > .search-row { flex-direction: row; padding: var(--space-s); }
+.input-tree { flex-grow: 1; min-height: 0; }
 .image-zoom { min-width: 48px; color: var(--text-dim); font-size: var(--font-small); }
 .image-readout { color: var(--text-dim); font-size: var(--font-small); }
 /* The preview pages (PreviewPage.gml): the preview's own bar over its stage, which the viewport fills. */
@@ -412,6 +416,8 @@ propertyrowcontent { padding-right: var(--space-m); }
 treeview { arrow-size: var(--arrow); indent-width: var(--tree-indent); icon-size: var(--icon-size); }
 treeicon { image-color: var(--icon); }
 propertygrid { arrow-size: var(--arrow); indent-width: var(--grid-indent); }
+/* A closed group's line: what it holds, dim, where an editor would be. */
+propertysummary { color: var(--text-dim); font-size: var(--font-small); }
 /* A vector's parts keep their room for their numbers: a small inset, not a field's full one. */
 propertyeditor.floats numberfield { padding: 0 var(--space-xs); }
 

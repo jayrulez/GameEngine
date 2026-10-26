@@ -238,7 +238,7 @@ to follow the same order.
 | Tools.Editor | In the build with a trimmed Main: no pages yet | X3 (layer 3) |
 | Editor.Scene | In the build in parts: its UI-free half (the edit context and its commands, the gizmos and the select tool, the component gizmos, the grid, the view gizmo, the zoom readout, the view settings, the camera preview's sizing, the capture recorder, entity JSON, loading, settings profiles, the thumbnail generators, the page interface, the scene MCP tools, the actions on the keymap's keystrokes) and its services (the document types, the export's scene seams, a model import's prefab), registered by Tools.Editor; the scene page on the GUI in parts (the page, its viewport, its overlays, its view state, Simulate, the prefab flows, the registration), its bar on the actions, the hierarchy on the GUI's tree, the inspector on the property grid (its first part: the head, Active, Transform, the components' reflected rows, their verbs, Add Component, one undo step an edit, read only while simulating; its second: entity references, a slot over the scene's entities; its third: a component's extras asked of its type, the rigid body's notice, the zone's Bake, the script component's behaviours); the scene's settings and the picker dialogs out until their parts | X5 (layers 1 to 4, part 1) |
 | Editor.Preview | In the build in parts: the thumbnail stage (owned by the editor session per project, staged and rendered by the application, the scene editor's generators registered again); the preview viewport out until the asset pages | X5 (layer 2) |
-| Editor.Play | In the build, on the GUI: the resolutions a Game tab offers, the PIE instance seam, the PIE MCP tools; the Game tab from its markup on GUI.Viewport (the kit's transport, the resolution and the phone, the script debugger beside the game), registered by Tools.Editor | X5 (layer 7, parts 2 and 3) |
+| Editor.Play | In the build, on the GUI: the resolutions a Game tab offers, the PIE instance seam, the PIE MCP tools; the Game tab from its markup on GUI.Viewport (the kit's transport, the resolution and the phone, the script debugger beside the game), registered by Tools.Editor; several instances side by side (the Game menu's Play and Play New Instance, the layout tools) and the PIE MCP tools on it | X5 (layer 7, parts 2 to 4) |
 | Editor.Animation, Editor.Particles, Editor.PropertyAnimation | Parked | |
 | Editor.Generic, Texture, Fonts, Image, Heightfield, Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain | Parked | |
 | Editor.Script, Editor.Script.AngelScript, Editor.Script.Luau, Editor.Shaders, Editor.GUI | Parked | |
@@ -486,7 +486,10 @@ The layers:
    (3) the Game tab on GUI.Viewport with the kit's transport (Restart, Play, Pause, Stop and the
    state), its resolution and phone frame, the keyboard captured with Shift+F1 to leave, a cook
    it waits for named on its bar; (4) several instances side by side, the Game menu's Play and
-   Play New Instance, and the PIE MCP tools.
+   Play New Instance, and the PIE MCP tools. Part 4 needed nothing of its own: the Game menu and
+   the layout tools open and place the tabs, and the PIE tools act through IPieInstancePage, so
+   they worked on the ported tab as they were (played on Sky Hopper, 2026-10-25: two instances
+   side by side, each scripted on its own, a capture, the phone, Stop).
 
 The property animation panel under the viewport comes back with Editor.PropertyAnimation (X6).
 

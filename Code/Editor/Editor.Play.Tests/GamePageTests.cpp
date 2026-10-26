@@ -17,6 +17,7 @@ import foundation.graphics;
 import foundation.settings;
 import foundation.gui;
 import foundation.gui.toolkit;
+import foundation.gui.viewport; // the game's view
 import editor.core;
 import editor.play;
 
@@ -183,4 +184,35 @@ TEST_CASE("game tab: the resolutions in the dropdown, a pick and the phone kept 
     (void)toggle->HandleActivate();
     REQUIRE(stage->GetWeights().Size() == 2u);
     CHECK(stage->GetWeights()[1] == doctest::Approx(0.4f));
+}
+
+TEST_CASE("game tab: tabs side by side are told apart: Game, then Game 2, Game 3")
+{
+    CHECK(GameEditorPage::TitleFor(u8"game-page") == StringView(u8"Game"));
+    CHECK(GameEditorPage::TitleFor(u8"game-page-1") == StringView(u8"Game 2"));
+    CHECK(GameEditorPage::TitleFor(u8"game-page-2") == StringView(u8"Game 3"));
+    Bed bed; // the bed's tab is the first
+    CHECK(bed.page->Title() == StringView(u8"Game"));
+}
+
+TEST_CASE("game tab: Shift+F1 gives the keyboard back: the game view lets the focus go, and captures no more until it is clicked")
+{
+    Bed bed;
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{800.0f, 600.0f});
+    root->AddChild(bed.page->Content().Get());
+    (void)root->UpdateLayout();
+    gui::Viewport* view = bed.page->View();
+    REQUIRE(view != nullptr);
+    // As a running game's view is: focused (a click) and capturing every key.
+    view->RequestFocus();
+    view->SetCapturesAllKeys(true);
+    REQUIRE(view->IsFocused());
+    root->GetEventDispatcher()->InjectKeyDown(static_cast<u32>(gui::KeyCode::F1), gui::KeyModShift);
+    CHECK_FALSE(view->GetCapturesAllKeys());
+    CHECK_FALSE(view->IsFocused()); // the game reads keys only while its view has the focus
+    // The next frame does not arm it again while the view is not focused.
+    bed.page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(view->GetCapturesAllKeys());
+    root->RemoveChild(bed.page->Content().Get());
 }

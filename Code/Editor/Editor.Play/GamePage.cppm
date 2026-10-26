@@ -191,7 +191,10 @@ export namespace editor
         GameEditorPage(EditorContext& context, runtime::IApplicationHost& host, Services services, engine::runtime::DefaultApplication* embeddedApp,
                        engine::runtime::GameInstance* instance, StringView pieId);
 
-        [[nodiscard]] StringView Title() const override { return u8"Game"; }
+        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
+        /// A Game tab's name from its play id: the first "Game", Play New Instance's "Game 2",
+        /// "Game 3" (its id's number and one), so tabs side by side are told apart.
+        [[nodiscard]] static String TitleFor(StringView pieId);
         [[nodiscard]] Status Save() override { return Status{}; } // nothing here is a document
         [[nodiscard]] RefPtr<foundation::gui::Node> Content() override { return m_content; }
 
@@ -269,6 +272,8 @@ export namespace editor
         [[nodiscard]] StringView ResolutionKey() const noexcept override { return m_resolutionKey.AsView(); }
         bool SelectResolution(StringView key) override;
         [[nodiscard]] bool PhonePreview() const noexcept override { return m_phonePreview; }
+        /// The game's view (for tests: its focus and capture).
+        [[nodiscard]] foundation::gui::Viewport* View() const noexcept { return m_viewport.Get(); }
         /// Whether the script debugger is beside the game now.
         [[nodiscard]] bool DebuggerShown() const;
         void SelectPhonePreview(bool on) override;
@@ -423,6 +428,7 @@ export namespace editor
 
         String m_sceneTitle;
         String m_pieId;                // IPieInstancePage::PieId
+        String m_title;                // TitleFor(m_pieId)
         u64 m_frameCount = 0;          // frames rendered since the run started
         f64 m_stoppedRunTime = 0.0;    // the run time a stopped run ended at
         UniquePtr<foundation::input::ScriptedInputSource> m_scripted; // while a run scripts this tab

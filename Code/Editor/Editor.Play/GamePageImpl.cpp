@@ -209,7 +209,7 @@ namespace editor
     GameEditorPage::GameEditorPage(EditorContext& context, runtime::IApplicationHost& host, Services services,
                                    engine::runtime::DefaultApplication* embeddedApp, engine::runtime::GameInstance* instance, StringView pieId)
         : app::UIEditorPage(context.Allocator()), m_context(&context), m_host(&host), m_services(Move(services)), m_app(embeddedApp),
-          m_gameInstance(instance), m_pieId(pieId)
+          m_gameInstance(instance), m_pieId(pieId), m_title(TitleFor(pieId))
     {
         Provide<IPieInstancePage>(*this); // what the PIE tools act through
         Provide<IGameScenePage>(*this);   // what the scene tools read of the run
@@ -227,6 +227,13 @@ namespace editor
         // the viewports' float default, so the Game tab matches the player and its screen UI can
         // blend encoded values through the target's twin view (RenderOverlays).
         m_viewport->SetFormats(rhi::TextureFormat::RGBA8UnormSrgb, m_viewport->DepthFormat());
+        // Shift+F1 (the GUI's capture release) gives the keyboard back to the editor: the game
+        // view lets the focus go too, as the game reads its keys while the view has it; a click
+        // in the view takes it, and the capture, again.
+        {
+            gui::Viewport* view = m_viewport.Get();
+            (void)m_viewport->AddNamedListener(u8"keysreleased", [view](const gui::Event&) { view->ReleaseFocus(); });
+        }
         // The game's input is the viewport's surface, gated to it (hover the mouse, focus the keys).
         m_viewportSource.viewport = m_viewport.Get();
         m_viewportSource.shellInput = m_shellInput;
@@ -315,6 +322,15 @@ namespace editor
         if (m_debuggerToggle != nullptr)
             m_debuggerToggle->SetOnToggled([self](bool shown) { self->ShowDebugger(shown); });
         BindResolution();
+    }
+
+    String GameEditorPage::TitleFor(StringView pieId)
+    {
+        constexpr StringView kNewInstance = u8"game-page-";
+        if (!pieId.StartsWith(kNewInstance))
+            return String(u8"Game");
+        const Optional<i64> number = ParseInt(pieId.SubStr(kNewInstance.Size(), pieId.Size() - kNewInstance.Size()));
+        return number.HasValue() ? Format(u8"Game {}", number.Value() + 1) : String(pieId);
     }
 
     void GameEditorPage::ShowDebugger(bool shown)
@@ -716,9 +732,11 @@ namespace editor
         AdvanceScriptedInput();
         TickResolution(dt);
         SyncGameFit(); // the target may have changed shape: the turn, and so the pointer's map
-        // A running game owns every key its focused viewport receives (the editor's focus moves
-        // and single key bindings stay out of it); Shift+F1 gives the keyboard back (X1).
-        m_viewport->SetCapturesAllKeys(m_running);
+        // A running game owns every key while its view has the focus (the editor's focus moves and
+        // its bindings stay out of it); Shift+F1 gives the keyboard back, the focus with it, until
+        // a click in the view. Armed only while focused: armed whenever it ran, the release was
+        // undone the next frame and the game kept the keys.
+        m_viewport->SetCapturesAllKeys(m_running && m_viewport->IsFocused());
         SyncRunAudio();
         RefreshToolbar();
         // The game UI's input (one pump for every Game tab) goes to the tab the keyboard is in, or

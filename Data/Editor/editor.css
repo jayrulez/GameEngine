@@ -263,6 +263,11 @@ waveform::playhead { background-color: var(--warning); }
 .input-tree-pane { flex-direction: column; }
 .input-tree-pane > .search-row { flex-direction: row; padding: var(--space-s); }
 .input-tree { flex-grow: 1; min-height: 0; }
+/* A code page: its code over its problems, beside what is the page's own (a script's API). */
+.code-page { flex-direction: column; }
+.code-pane { flex-grow: 1; min-width: 0; }
+.page-code { font-family: var(--mono-font); font-size: var(--font-code); min-height: 0; }
+.page-problems { min-height: 0; }
 /* A code page's problems: how many over a row each, its severity's icon, its place, its message. */
 .problems { flex-direction: column; }
 .problems-summary { padding: var(--space-xs) var(--space-s); color: var(--text-dim); font-size: var(--font-small); }

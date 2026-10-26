@@ -23,10 +23,10 @@ TEST_CASE("problems list: errors first in their places' order, the count said, a
     CHECK(problems.Summary() == StringView(u8"No problems"));
 
     const CodeProblem found[] = {
-        CodeProblem{gui::CodeSeverity::Warning, String(u8"unused variable"), String{}, 2, 4},
-        CodeProblem{gui::CodeSeverity::Error, String(u8"no such type"), String{}, 9, 0},
-        CodeProblem{gui::CodeSeverity::Error, String(u8"in the include"), String(u8"Shaders/Common.hlsli"), 0, 0},
-        CodeProblem{gui::CodeSeverity::Error, String(u8"missing ;"), String{}, 3, 7},
+        CodeProblem{gui::CodeSeverity::Warning, String(u8"unused variable"), String{}, 2, 4, true},
+        CodeProblem{gui::CodeSeverity::Error, String(u8"no such type"), String{}, 9, 0, true},
+        CodeProblem{gui::CodeSeverity::Error, String(u8"in the include"), String(u8"Shaders/Common.hlsli"), 0, 0, true},
+        CodeProblem{gui::CodeSeverity::Error, String(u8"missing ;"), String{}, 3, 7, true},
     };
     problems.Show(Span<const CodeProblem>(found, 4));
     CHECK(problems.Summary() == StringView(u8"3 errors, 1 warning"));
@@ -38,6 +38,9 @@ TEST_CASE("problems list: errors first in their places' order, the count said, a
     CHECK(shown[3].severity == gui::CodeSeverity::Warning);
     CHECK(editor::app::ProblemsList::PlaceOf(shown[0]) == StringView(u8"4:8"));
     CHECK(editor::app::ProblemsList::PlaceOf(shown[2]) == StringView(u8"Common.hlsli 1:1"));
+    CodeProblem lineOnly = shown[0];
+    lineOnly.atColumn = false; // the check named the line alone
+    CHECK(editor::app::ProblemsList::PlaceOf(lineOnly) == StringView(u8"4"));
 
     String chosen;
     problems.SetOnChoose([&chosen](const CodeProblem& p) { chosen = p.message; });

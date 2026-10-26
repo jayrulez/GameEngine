@@ -34,6 +34,7 @@ export namespace editor::app
         String file; ///< empty: the page's own code; else the file it is in (an include)
         u32 line = 0;   ///< from 0
         u32 column = 0; ///< from 0
+        bool atColumn = true; ///< false: the check named the line alone (the whole of it is marked)
     };
 
     /// The problems a code editor's diagnostics are (its own code's).
@@ -41,7 +42,7 @@ export namespace editor::app
     {
         Array<CodeProblem> out;
         for (const gui::CodeDiagnostic& d : diagnostics)
-            out.PushBack(CodeProblem{d.Severity, d.Message, String{}, d.Range.Start.Line, d.Range.Start.Column});
+            out.PushBack(CodeProblem{d.Severity, d.Message, String{}, d.Range.Start.Line, d.Range.Start.Column, true});
         return out;
     }
 
@@ -125,7 +126,8 @@ export namespace editor::app
         /// What row `row` says where it is ("12:4", "Common.hlsli 3:1").
         [[nodiscard]] static String PlaceOf(const CodeProblem& p)
         {
-            return p.file.IsEmpty() ? Format(u8"{}:{}", p.line + 1, p.column + 1) : Format(u8"{} {}:{}", PathFilename(p.file.AsView()), p.line + 1, p.column + 1);
+            const String at = p.atColumn ? Format(u8"{}:{}", p.line + 1, p.column + 1) : Format(u8"{}", p.line + 1);
+            return p.file.IsEmpty() ? at : Format(u8"{} {}", PathFilename(p.file.AsView()), at);
         }
         void Choose(gui::ModelIndex index)
         {

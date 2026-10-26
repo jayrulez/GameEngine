@@ -263,6 +263,17 @@ waveform::playhead { background-color: var(--warning); }
 .input-tree-pane { flex-direction: column; }
 .input-tree-pane > .search-row { flex-direction: row; padding: var(--space-s); }
 .input-tree { flex-grow: 1; min-height: 0; }
+/* A code page's problems: how many over a row each, its severity's icon, its place, its message. */
+.problems { flex-direction: column; }
+.problems-summary { padding: var(--space-xs) var(--space-s); color: var(--text-dim); font-size: var(--font-small); }
+.problems-list { flex-grow: 1; min-height: 0; }
+.problem-row { flex-direction: row; align-items: center; column-gap: var(--space-s); padding: 0 var(--space-s); height: 22px; }
+.problem-icon { width: var(--icon-size); height: var(--icon-size); flex-shrink: 0; }
+.problem-row.error > .problem-icon { image-color: var(--danger); }
+.problem-row.warning > .problem-icon { image-color: var(--warning); }
+.problem-row.info > .problem-icon, .problem-row.hint > .problem-icon { image-color: var(--icon-dim); }
+.problem-place { color: var(--text-dim); font-size: var(--font-small); flex-shrink: 0; }
+.problem-message { flex-grow: 1; min-width: 0; text-overflow: ellipsis; }
 .image-zoom { min-width: 48px; color: var(--text-dim); font-size: var(--font-small); }
 .image-readout { color: var(--text-dim); font-size: var(--font-small); }
 /* The preview pages (PreviewPage.gml): the preview's own bar over its stage, which the viewport fills. */

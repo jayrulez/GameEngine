@@ -309,6 +309,8 @@ namespace editor
                     info->Max = zeroToOne ? 1.0 : 2.0;
                 }
                 info->Step = 0.01;
+                if (info->HasRange)
+                    info->Hint = String(u8"slider"); // over its range, as the old page's were
                 break;
             }
             case MaterialPropertyRow::Numbers2:

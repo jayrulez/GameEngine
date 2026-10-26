@@ -147,6 +147,7 @@ TEST_CASE("material page: its rows are its shader's table: the material's, each 
     REQUIRE(properties.FindInfo(u8"Metallic") != nullptr);
     CHECK(properties.FindInfo(u8"Metallic")->HasRange);
     CHECK(properties.FindInfo(u8"Metallic")->Max == doctest::Approx(1.0));
+    CHECK(properties.FindInfo(u8"Metallic")->Hint == StringView(u8"slider")); // a slider over its range
 
     Array<gui::PropertyInfo> textures;
     page->TextureRows().GetProperties(StringView{}, textures);

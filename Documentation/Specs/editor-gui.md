@@ -560,6 +560,24 @@ The layers:
    API browser as a tree beside the code, the problems list), Shaders (the code beside a preview
    and the shader's grid) and the GUI's documents and sheets (the code beside a live preview), each
    with the kit's problems list rather than a status line.
+   In parts (surveyed 2026-10-26; the GUISandbox's Code page proved the GUI.Code side):
+   1. The languages: one definition each, a data file read through the XML serialization, shared
+      by the editor and the sandbox in Data/Assets/code (user 2026-10-26: one folder, not a copy
+      each); the script modules give the editor AngelScript and Luau, Editor.Shaders HLSL,
+      Editor.GUI XML and CSS (CSS coloured for the first time).
+   2. The problems list, a part of the editor's kit (Editor.App, until something else needs it):
+      the errors and warnings a check found, each with its severity's icon, its place and its
+      message, a click going to its line; it replaces the old pages' inert error boxes and the GUI
+      page's one-line status.
+   3. The Script page: the code (its language by the asset's, checked as it is typed) beside the
+      API browser (a tree with its search, in a splitter, opened from the page's bar rather than a
+      button in a status row), completion and hover from the API the runtime binds, breakpoints in
+      the gutter and the execution line shared with the Game tabs, the problems list under the code.
+   4. The Shader page: the code and its problems beside the preview and the shader's grid, in
+      splitters; the name and entry points edited on the undo stack; a preview showing the last
+      shader that compiled says so.
+   5. The GUI document and sheet page: the code and its problems beside the live preview, in a
+      splitter; a sheet's preview markup the page's own, not an edit of the asset.
 7. The terrain page (Editor.Terrain's), its layers a list on the grid, beside the preview; and a
    vegetation mask page, new (user 2026-10-26: no editor had one, a mask opened on the generic page):
    its density planes as pictures on the image view, its options on the grid, as the heightfield

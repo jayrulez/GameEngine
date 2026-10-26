@@ -292,6 +292,8 @@ public:
     [[nodiscard]] bool IsEditorMock() const noexcept { return m_editorMockMode; }
     void SetMockSideBySide(bool on) { m_mockSideBySide = on; }
     void SetMockKit(bool on) { m_mockKit = on; }
+    // --mock-page <id>: that page of the mock in front (the input map's designs: input-outline, input-split).
+    void SetMockPage(StringView id) { m_mockPage = String(id); }
     // --mock-size <w>x<h>: the mock's window at another size (a large monitor, a laptop).
     void SetMockSize(u32 width, u32 height) { m_mockWidth = width; m_mockHeight = height; }
     [[nodiscard]] u32 MockWidth() const noexcept { return m_mockWidth; }
@@ -437,6 +439,7 @@ private:
     bool m_editorMockMode = false; // --editor-mock: the editor's mock instead of the sandbox
     bool m_mockSideBySide = false; // --mock-side-by-side: its two scene pages side by side
     bool m_mockKit = false;        // --mock-kit: the kit page in front
+    String m_mockPage;             // --mock-page: a page in front by its id
     u32 m_mockWidth = 1920;        // a full HD display, the user's (2026-10-24)
     u32 m_mockHeight = 1080;
     UniquePtr<sandbox::EditorMock> m_editorMock;
@@ -1042,6 +1045,8 @@ void GUISandbox::BuildEditorMock()
         m_editorMock->SetSideBySide(true);
     if (m_mockKit)
         m_editorMock->ShowKit();
+    if (!m_mockPage.IsEmpty())
+        m_editorMock->ShowPage(m_mockPage.AsView());
     (void)m_root->OnCommand(u8"inspector.toggle", [app](gui::CommandEvent&) { app->ToggleInspector(); });
     (void)m_gui->GetKeymap().Bind(u8"ctrl-shift-i", u8"inspector.toggle");
     m_root->SetDebugFont(m_font);
@@ -3500,6 +3505,8 @@ int main(int argc, char** argv)
             app.SetMockSideBySide(true);
         else if (arg == StringView(u8"--mock-kit"))
             app.SetMockKit(true);
+        else if (arg == StringView(u8"--mock-page") && i + 1 < argc)
+            app.SetMockPage(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
         else if (arg == StringView(u8"--mock-size") && i + 1 < argc)
         {
             unsigned width = 0, height = 0;

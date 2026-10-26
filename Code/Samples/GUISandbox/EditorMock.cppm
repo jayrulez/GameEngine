@@ -68,6 +68,16 @@ export namespace sandbox
             m_sideBySide = side;
         }
 
+        /// A page of the mock in front by its id (--mock-page: "input-outline", "input-split").
+        void ShowPage(StringView id)
+        {
+            if (m_dock)
+            {
+                const String page(id);
+                Said(m_dock->Edit([&page](gui::DockLayout& layout) { return layout.Activate(page.AsView()); }));
+            }
+        }
+
         /// The kit page in front (--mock-kit): every shared piece in its states.
         void ShowKit()
         {
@@ -345,6 +355,9 @@ export namespace sandbox
             Register(u8"scene", u8"Level 1", u8"Editor/Mock/scene.gml");
             Register(u8"scene-2", u8"Level 2", u8"Editor/Mock/scene.gml");
             Register(u8"kit", u8"Kit", u8"Editor/Mock/kit.gml");
+            // The input map page's two designs, to compare (the user, 2026-10-26).
+            Register(u8"input-outline", u8"Input A: Outline", u8"Editor/Mock/input-outline.gml");
+            Register(u8"input-split", u8"Input B: Tree and Grid", u8"Editor/Mock/input-split.gml");
             Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.gml");
             Register(u8"console", u8"Console", u8"Editor/Mock/console.gml");
             Said(m_dock->Adopt(DefaultLayout(false)));
@@ -371,6 +384,8 @@ export namespace sandbox
             else
                 Said(layout.InsertTab(u8"scene-2", central));
             Said(layout.InsertTab(u8"kit", central));
+            Said(layout.InsertTab(u8"input-outline", central));
+            Said(layout.InsertTab(u8"input-split", central));
             Said(layout.Activate(u8"scene"));
             Said(layout.InsertBeside(u8"assets", central, gui::DockSide::Bottom, 0.28f));
             Said(layout.InsertTab(u8"console", layout.StackOf(u8"assets")));

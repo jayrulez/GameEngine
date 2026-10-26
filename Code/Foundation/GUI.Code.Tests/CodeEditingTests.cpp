@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Code - editing (C3 of Specs/gui-lab-evolution-3.md), with the sandbox's AngelScript, Luau and
+// GUI.Code - editing (C3 of Specs/gui-lab-evolution-3.md), with the shared AngelScript, Luau and
 // XML definitions: brackets and quotes closed as typed and typed over, a selection surrounded, an
 // empty pair or an indent's spaces deleted back; Return indenting after what opens a block and a
 // closing word outdenting; comments toggled by line or by block; lines indented, moved, copied and
@@ -69,9 +69,9 @@ namespace
         core::f32 MeasureString(core::StringView text, core::Array<fonts::GlyphPosition>&) const override { return MeasureString(text); }
     };
 
-    bool LoadSandboxLanguage(const char* id, CodeLanguage& out)
+    bool LoadSharedLanguage(const char* id, CodeLanguage& out)
     {
-        std::ifstream file(std::string(GUI_CODE_SANDBOX_LANGUAGES) + "/" + id + ".xml", std::ios::binary);
+        std::ifstream file(std::string(GUI_CODE_LANGUAGES) + "/" + id + ".xml", std::ios::binary);
         if (!file)
             return false;
         std::stringstream text;
@@ -95,7 +95,7 @@ namespace
 
         explicit Bed(const char* id, const char8_t* text = u8"")
         {
-            REQUIRE(LoadSandboxLanguage(id, language));
+            REQUIRE(LoadSharedLanguage(id, language));
             BindCodeEditorKeys(root->GetContext().GetKeymap());
             root->SetSize(core::Float2{800.0f, 600.0f});
             root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });

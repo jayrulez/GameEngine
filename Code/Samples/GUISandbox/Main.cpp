@@ -1086,16 +1086,17 @@ void GUISandbox::FillNativeHosts()
     // Toolkit: a dataflow graph and a lamp's state machine (T6), after the clip.
     if (gui::Node* section = FindById(*m_shellNode, u8"graph-section"))
         FillGraphs(*section);
-    // Code: a script checked as it is typed and a shader, in the sandbox's languages (C8).
+    // Code: a script checked as it is typed and a shader, in the shared languages (C8).
     if (auto* editor = Cast<gui::CodeEditor>(FindById(*m_shellNode, u8"code-script")))
     {
-        const String dir = Format(u8"{}code/", kSandboxDir);
+        const String dir = Format(u8"{}code/", kSandboxDir); // the sandbox's samples
+        const StringView languages = u8"Assets/code/";      // the languages, the editor's too
         m_code = MakeUnique<sandbox::CodePage>(AppRoot(), AppRoot(), m_scripts.Get());
-        m_code->AttachScript(*editor, ReadText(Format(u8"{}angelscript.xml", dir).AsView()).AsView(),
+        m_code->AttachScript(*editor, ReadText(Format(u8"{}angelscript.xml", languages).AsView()).AsView(),
                              ReadText(Format(u8"{}sample.as", dir).AsView()).AsView(),
                              Cast<gui::Label>(FindById(*m_shellNode, u8"code-status")));
         if (auto* shader = Cast<gui::CodeEditor>(FindById(*m_shellNode, u8"code-shader")))
-            m_code->AttachShader(*shader, ReadText(Format(u8"{}hlsl.xml", dir).AsView()).AsView(),
+            m_code->AttachShader(*shader, ReadText(Format(u8"{}hlsl.xml", languages).AsView()).AsView(),
                                  ReadText(Format(u8"{}sample.hlsl", dir).AsView()).AsView());
     }
     if (gui::Node* section = FindById(*m_shellNode, u8"crumbs-section"))

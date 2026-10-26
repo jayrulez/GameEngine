@@ -231,10 +231,10 @@ TEST_CASE("code editor: keeps each line's tokens, tokenizing again only what cha
 
 namespace
 {
-    // One of the sandbox's definitions (Data/Assets/ui/sandbox/code), read as the sandbox reads it.
-    bool LoadSandboxLanguage(const char* id, CodeLanguage& out)
+    // One of the shared definitions (Data/Assets/code), read as the sandbox and the editor read it.
+    bool LoadSharedLanguage(const char* id, CodeLanguage& out)
     {
-        std::ifstream file(std::string(GUI_CODE_SANDBOX_LANGUAGES) + "/" + id + ".xml", std::ios::binary);
+        std::ifstream file(std::string(GUI_CODE_LANGUAGES) + "/" + id + ".xml", std::ios::binary);
         if (!file)
             return false;
         std::stringstream text;
@@ -249,14 +249,14 @@ namespace
     }
 }
 
-TEST_CASE("code language: the sandbox's definitions read, each tokenizing its language")
+TEST_CASE("code language: the shared definitions read, each tokenizing its language")
 {
     CodeLanguage as, luau, hlsl, markup, css;
-    REQUIRE(LoadSandboxLanguage("angelscript", as));
-    REQUIRE(LoadSandboxLanguage("luau", luau));
-    REQUIRE(LoadSandboxLanguage("hlsl", hlsl));
-    REQUIRE(LoadSandboxLanguage("xml", markup));
-    REQUIRE(LoadSandboxLanguage("css", css));
+    REQUIRE(LoadSharedLanguage("angelscript", as));
+    REQUIRE(LoadSharedLanguage("luau", luau));
+    REQUIRE(LoadSharedLanguage("hlsl", hlsl));
+    REQUIRE(LoadSharedLanguage("xml", markup));
+    REQUIRE(LoadSharedLanguage("css", css));
     CHECK(as.Name == core::String(u8"AngelScript"));
     REQUIRE(luau.Extensions.Size() == 2);
 

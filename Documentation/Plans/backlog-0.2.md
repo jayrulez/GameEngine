@@ -131,6 +131,16 @@ page showing the cooked SPIR-V or WGSL of a chosen variant (the parity doc's "li
 from the cook's own output), and a project's own `.hlsli` include files with their dependency
 tracking (today `#include` reaches the engine's shader library only).
 
+## A sound cue's thumbnail: its variants' waveforms stacked (user 2026-10-26)
+
+A sound cue shows only its type icon in the assets browser and the pickers; no editor ever drew it
+a thumbnail (the one audio thumbnail, Editor.Audio's AudioClipThumbnailGenerator, takes clips
+alone). A cue's thumbnail would draw each variant's clip as a band of its waveform, one under the
+other, so cues tell apart at a glance. The clip generator's pattern: read each variant's clip from
+its source (the audio pages' `ReadAuditionClip`), its peaks into a band. Decide: an empty variant's
+band, whether the weights show (a band's height or shade), and refreshing when a variant's clip
+changes (the thumbnail's recipe hashing the clips' sources).
+
 ## Android: a native player and its export (user 2026-10-11)
 
 Games run on phones today through the web export (touch drives the game UI, touch controls with

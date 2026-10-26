@@ -3,12 +3,11 @@
 
 // PreviewViewport implementation (see PreviewViewport.cppm). The bodies here are the
 // substrate each bespoke page would otherwise hand-roll verbatim: build a private preview
-// scene, bind the ViewportView to its host window on first frame, drive the EditorCamera
-// from the gated viewport devices, and render the scene through the real renderer with a
-// CameraOverride into the viewport's color target.
+// scene, drive the EditorCamera from the viewport's own input, and render the scene through
+// the real renderer with a CameraOverride into the viewport's color target.
 //
-// All the heavy render/scene/rhi/viewport/vg imports live HERE, behind Impl, so the module
-// interface can be imported by heavy page TUs without the GCC module-merge ICE.
+// All the heavy render/scene/rhi imports live HERE, behind Impl, so the module interface can be
+// imported by heavy page TUs without the GCC module-merge ICE.
 
 module;
 #include "Core/Prelude.h"
@@ -25,10 +24,9 @@ import foundation.scene;
 import engine.scene;
 import foundation.render;
 import engine.render;
-import foundation.ui;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import foundation.gui;
+import foundation.gui.hosting;
+import foundation.gui.viewport;
 import editor.camera;
 
 using namespace foundation::core;
@@ -37,22 +35,16 @@ namespace editor
 {
     namespace rhi = foundation::rhi;
     namespace render = foundation::render;
-    namespace vg = foundation::vg;
+    namespace gui = foundation::gui;
 
     struct PreviewViewport::Impl
     {
-        runtime::IApplicationHost* host = nullptr;
-        ui::runtime::UIHost* uiHost = nullptr;
         engine::scene::SceneSubsystem* scenes = nullptr;
         scene::SceneManager sceneManager{editor::EditorRootAllocator()}; // this preview's OWN scene group
         engine::render::RenderSubsystem* render = nullptr;
         scene::Scene* scene = nullptr;
         EditorCamera camera = PreviewCamera();
-        UniquePtr<foundation::shell::InputRouter> router;
-        RefPtr<ui::viewport::ViewportView> viewport;
-        foundation::graphics::RenderWindow* hostWindow = nullptr;
-
-        void EnsureViewportBound();
+        RefPtr<gui::Viewport> view;
 
         // A preview looks at one asset close up: a nearer near plane and a shorter reach than
         // the scene view's.
@@ -63,29 +55,38 @@ namespace editor
             c.farZ = 500.0f;
             return c;
         }
+
+        // Its content has the input: hovered, focused, or holding a press (a look drag, its
+        // pointer locked and hidden, may drift off it).
+        [[nodiscard]] bool IsActive() const
+        {
+            const foundation::shell::InputSurface* surface = view->HostedSurface();
+            return view->IsHovered() || view->IsFocused() || (surface != nullptr && surface->Captured());
+        }
+        // The keyboard while it has the focus or holds a press; null otherwise.
+        [[nodiscard]] foundation::shell::IKeyboard* Keyboard() const
+        {
+            const foundation::shell::InputSurface* surface = view->HostedSurface();
+            return view->IsFocused() || (surface != nullptr && surface->Captured()) ? view->Keyboard() : nullptr;
+        }
     };
 
-    PreviewViewport::PreviewViewport(runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost,
-                                     StringView sceneName)
+    PreviewViewport::PreviewViewport(runtime::IApplicationHost& host, gui::GuiHost* gui, StringView sceneName)
         : m_impl(MakeUnique<Impl>(editor::EditorRootAllocator()))
     {
-        m_impl->host = &host;
-        m_impl->uiHost = &uiHost;
-        m_impl->router =
-            MakeUnique<foundation::shell::InputRouter>(editor::EditorRootAllocator(), host.Shell()->Input());
-
         m_impl->scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
         m_impl->render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
-
         if (m_impl->scenes != nullptr)
         {
             m_impl->scenes->RegisterManager(&m_impl->sceneManager);
             m_impl->scene = m_impl->sceneManager.CreateScene(sceneName);
             m_impl->scene->SetSimulationEnabled(false);
         }
-
-        m_impl->viewport = MakeRef<ui::viewport::ViewportView>(editor::EditorRootAllocator());
-        m_impl->viewport->ClearColor = rhi::ClearColor{0.349f, 0.366f, 0.396f, 1.0f};
+        m_impl->view = MakeRef<gui::Viewport>(editor::EditorRootAllocator());
+        m_impl->view->AddClass(u8"preview-view");
+        m_impl->view->ClearColor = kBackdrop;
+        if (gui != nullptr)
+            m_impl->view->HostIn(*gui);
     }
 
     PreviewViewport::~PreviewViewport()
@@ -119,14 +120,19 @@ namespace editor
         return m_impl->scene;
     }
 
-    ui::View* PreviewViewport::View() const
+    RefPtr<gui::Node> PreviewViewport::View() const
     {
-        return m_impl->viewport.Get();
+        return RefPtr<gui::Node>(m_impl->view.Get());
     }
 
     EditorCamera& PreviewViewport::Camera()
     {
         return m_impl->camera;
+    }
+
+    void PreviewViewport::Frame(Float3 center, f32 radius)
+    {
+        m_impl->camera.FrameBounds(center, radius);
     }
 
     render::debug::DebugDraw& PreviewViewport::SceneDebugDraw()
@@ -136,7 +142,7 @@ namespace editor
 
     void PreviewViewport::SetClearColor(Color color)
     {
-        m_impl->viewport->ClearColor = rhi::ClearColor{color.r, color.g, color.b, color.a};
+        m_impl->view->ClearColor = color;
     }
 
     void PreviewViewport::SetSimulationEnabled(bool enabled)
@@ -152,55 +158,45 @@ namespace editor
         m_impl->sceneManager.SetTimeScale(scale);
     }
 
-    void PreviewViewport::Update(f32 dt)
+    bool PreviewViewport::Update(f32 dt)
     {
-        m_impl->EnsureViewportBound();
-        if (m_impl->hostWindow == nullptr)
+        gui::Viewport& view = *m_impl->view;
+        foundation::shell::InputSurface* surface = view.HostedSurface();
+        bool frame = false;
+        if (m_impl->IsActive())
         {
-            return;
-        }
-        m_impl->viewport->SyncInputRegion();
-        if (m_impl->router)
-        {
-            // One app keyboard (same arbitration as the Game/Scene pages): while the editor
-            // UI's keyboard focus is on any view but this viewport, drop surface focus so the
-            // preview camera's keys never fire while the user types into an editor widget.
-            m_impl->router->SetExternalCapture(
-                false, m_impl->viewport->HostKeyboardFocusElsewhere());
-            m_impl->router->Update();
-        }
-        foundation::shell::InputSurface* surface = m_impl->viewport->Surface();
-        if (m_impl->viewport->IsHovered() || m_impl->viewport->IsFocused() || (surface != nullptr && surface->Captured()))
-        {
-            m_impl->camera.Update(m_impl->viewport->Keyboard(), m_impl->viewport->Mouse(), dt);
+            foundation::shell::IKeyboard* keyboard = m_impl->Keyboard();
+            m_impl->camera.Update(keyboard, view.Mouse(), dt);
+            // An orbit, look or pan drag: the pointer locked meanwhile, ended with the press.
             if (surface != nullptr)
-            {
-                surface->SetPointerLock(m_impl->camera.WantsPointerLock()); // an orbit, look or pan drag
-            }
+                surface->SetPointerLock(m_impl->camera.WantsPointerLock());
+            // F frames, as the scene view's does (not while the camera flies on WASD).
+            frame = keyboard != nullptr && keyboard->IsKeyPressed(foundation::shell::KeyCode::F) && !m_impl->camera.WantsPointerLock();
         }
-        else if (surface != nullptr)
+        else
         {
-            surface->SetPointerLock(false);
+            // Losing the input releases a captured fly at once.
+            m_impl->camera.ReleaseCapture(view.Mouse());
+            if (surface != nullptr)
+                surface->SetPointerLock(false);
         }
+        m_impl->camera.Advance(dt); // a framing glides on either way
+        return frame;
     }
 
     void PreviewViewport::RenderFrame(foundation::graphics::FrameContext& frame)
     {
-        ui::viewport::ViewportView* vp = m_impl->viewport.Get();
-        if (vp == nullptr || !vp->IsReady() || !frame.valid)
+        gui::Viewport& view = *m_impl->view;
+        if (!frame.valid || m_impl->render == nullptr || !m_impl->render->IsReady() || m_impl->scene == nullptr)
         {
             return;
         }
-        if (m_impl->render == nullptr || !m_impl->render->IsReady() || m_impl->scene == nullptr)
+        if (!view.IsReady() || !view.IsTreeVisible() || view.RenderWidth() == 0 || view.RenderHeight() == 0)
         {
-            return;
+            return; // hidden (a tab not in front) or not placed yet
         }
-        const u32 w = vp->RenderWidth();
-        const u32 h = vp->RenderHeight();
-        if (w == 0 || h == 0 || !vp->IsEffectivelyVisible())
-        {
-            return;
-        }
+        const u32 w = view.RenderWidth();
+        const u32 h = view.RenderHeight();
 
         const EditorCamera& cam = m_impl->camera;
         render::ViewCamera camera;
@@ -212,25 +208,25 @@ namespace editor
         render::CameraOverride cameraOverride;
         cameraOverride.camera = camera;
         // The viewport's colour is a UI colour (sRGB); the render view takes linear.
-        const rhi::ClearColor clear = vp->LinearClearColor();
+        const rhi::ClearColor clear = view.LinearClearColor();
         cameraOverride.clearColor = Color{clear.r, clear.g, clear.b, clear.a};
 
+        // The graph imports the colour target and owns its transitions: from the viewport's state
+        // to ShaderRead for the GUI to sample.
         render::TargetState targetState;
-        targetState.texture = vp->ColorTexture();
-        targetState.currentState = vp->ColorState();
+        targetState.texture = view.ColorTexture();
+        targetState.currentState = view.ColorState();
         targetState.finalState = rhi::ResourceState::ShaderRead;
 
-        m_impl->render->RenderScene(*m_impl->scene, vp->ColorTargetView(), vp->ColorFormat(), w, h,
+        m_impl->render->RenderScene(*m_impl->scene, view.ColorView(), view.ColorFormat(), w, h,
                                     render::ViewportRect{0, 0, w, h}, &cameraOverride, targetState);
-        vp->SetColorState(rhi::ResourceState::ShaderRead);
+        view.SetColorState(rhi::ResourceState::ShaderRead);
     }
 
     void PreviewViewport::Shutdown()
     {
-        if (m_impl->viewport.Get() != nullptr)
-        {
-            m_impl->viewport->Shutdown();
-        }
+        if (m_impl->view)
+            m_impl->camera.ReleaseCapture(m_impl->view->Mouse());
         if (m_impl->scene != nullptr)
         {
             m_impl->sceneManager.DestroyScene(m_impl->scene);
@@ -241,38 +237,5 @@ namespace editor
             m_impl->scenes->UnregisterManager(&m_impl->sceneManager);
             m_impl->scenes = nullptr;
         }
-    }
-
-    void PreviewViewport::Impl::EnsureViewportBound()
-    {
-        foundation::ui::RootView* root = viewport->Root();
-        if (root == nullptr)
-        {
-            return;
-        }
-        foundation::graphics::RenderWindow* window = uiHost->WindowForRoot(root);
-        if (window == nullptr || window == hostWindow)
-        {
-            return;
-        }
-        vg::renderer::VGRenderer* renderer = uiHost->RendererFor(window);
-        if (renderer == nullptr)
-        {
-            return;
-        }
-        if (hostWindow == nullptr)
-        {
-            viewport->Initialize(host->Graphics()->Raw(), renderer, host->Shell()->Input(),
-                                 window->Window().Id());
-            if (viewport->Surface() != nullptr)
-            {
-                router->AddSurface(viewport->Surface());
-            }
-        }
-        else
-        {
-            viewport->AttachToWindow(renderer, window->Window().Id());
-        }
-        hostWindow = window;
     }
 }

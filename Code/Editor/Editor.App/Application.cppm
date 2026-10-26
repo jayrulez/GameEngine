@@ -143,7 +143,7 @@ export namespace editor::app
             return *m_typeIcons;
         }
         /// What an asset page asks of the editor when it is made: its markup, the asset slots'
-        /// table, the type icons.
+        /// table, the type icons, the host and the window's GUI a preview renders in.
         [[nodiscard]] AssetPageServices PageServices()
         {
             AssetPageServices services;
@@ -151,6 +151,8 @@ export namespace editor::app
             services.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
             services.refs = &RefServices();
             services.icons = &TypeIcons();
+            services.host = m_embeddedHost.Get(); // the runtime's, with its scenes and renderer (the scene page's too)
+            services.gui = m_window.Host();
             return services;
         }
         [[nodiscard]] EditorDock& Dock() noexcept { return m_dock; }

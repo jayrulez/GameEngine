@@ -33,6 +33,7 @@ namespace pipeline{
             .Attribute("category", String(u8"Physics"))
             .Property<&CollisionShapeAsset::sourceMesh>("sourceMesh")
             .PropAttribute("displayName", String(u8"Source Mesh"))
+            .PropAttribute("referenceType", String(u8"StaticMeshSource")) // what a mesh cooks to, static or skinned
             .Property<&CollisionShapeAsset::cook>("cook")
             .PropAttribute("displayName", String(u8"Cook Mode"))
             .Property<&CollisionShapeAsset::hullTolerance>("hullTolerance")

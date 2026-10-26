@@ -67,6 +67,8 @@ import editor.image; // RegisterImageEditor
 import editor.heightfield; // RegisterHeightfieldEditor
 import editor.texture; // RegisterTextureEditor
 import editor.fonts; // RegisterFontEditor
+import editor.geometry; // RegisterMeshEditor
+import editor.physics; // RegisterCollisionShapeEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -306,6 +308,8 @@ int main(int argc, char** argv)
         editor::RegisterHeightfieldEditor(app.Context(), pageServices); // and its thumbnails
         editor::RegisterTextureEditor(app.Context(), pageServices);     // and its thumbnails
         editor::RegisterFontEditor(app.Context(), pageServices);        // and its thumbnails
+        editor::RegisterMeshEditor(app.Context(), pageServices);        // static and skinned
+        editor::RegisterCollisionShapeEditor(app.Context(), pageServices); // and its thumbnails
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too). The script page and its "New Asset > <Lang> Script" creators come

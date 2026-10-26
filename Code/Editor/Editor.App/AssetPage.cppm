@@ -6,7 +6,7 @@
 // What every asset page shares (Documentation/Specs/editor-gui.md, 5.4, layer 1), so each of the
 // twenty libraries does not write its own:
 //   - AssetPageServices: what a page asks of the editor when it is made (its markup, the asset
-//     slots' table, the type icons), filled by the application.
+//     slots' table, the type icons, what a preview renders through), filled by the application.
 //   - FindById: an element of a page's markup by its id, which is how code binds to markup.
 //   - XmlPropertyTextFormat: the engine's XmlSerializer as a reflected source's text format, what
 //     an edit's before and after are written in and an undo reads back (the scene's inspector's
@@ -25,8 +25,10 @@ export module editor.app:asset_page;
 import foundation.core;
 import foundation.xml;
 import foundation.xml.serialization;
+import foundation.runtime.client; // IApplicationHost
 import foundation.gui;
 import foundation.gui.toolkit;
+import foundation.gui.hosting; // GuiHost
 import editor.core;
 import :resource_ref_editor;
 
@@ -42,6 +44,10 @@ export namespace editor::app
         Function<RefPtr<gui::Node>(StringView path)> loadMarkup;
         const ResourceRefServices* refs = nullptr; // the asset slots' (null: none)
         editor::EditorIcons* icons = nullptr;
+        /// What a page's preview renders through and its window's GUI, which hosts the
+        /// preview's viewport (null: none, a test; the preview then draws nothing).
+        foundation::runtime::IApplicationHost* host = nullptr;
+        gui::GuiHost* gui = nullptr;
     };
 
     /// The element under `root` (itself included) whose id is `id`, as a T; null when there is

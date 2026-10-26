@@ -1,5 +1,5 @@
 # Editor::Physics - `editor.physics` (the CollisionShapeAsset authoring page:
-# typed mesh picker + cook-kind toggle + Cook now + status). Tooling only.
+# the cooked outline beside the asset's rows), on the GUI. Tooling only.
 
 util_add_engine_library(Editor.Physics ALIAS Editor::Physics)
 target_link_libraries(Editor.Physics
@@ -7,7 +7,7 @@ target_link_libraries(Editor.Physics
            Foundation::Resource Pipeline::Physics Foundation::Physics.Resource
            Foundation::Render Foundation::Graphics
            Foundation::Scene Engine::Scene Engine::Render Foundation::Geometry Foundation::Materials
-           Foundation::UI Foundation::UI.Runtime Foundation::UI.Toolkit
+           Foundation::GUI Foundation::GUI.Toolkit
            Editor::Core Editor::App Editor::Preview
            Foundation::Policy)
 

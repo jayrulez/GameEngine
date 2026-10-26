@@ -246,6 +246,12 @@ treerowcontent.inactive { opacity: 0.45; }
 .image-empty { flex-grow: 1; background-color: var(--surface-sunken); }
 .image-zoom { min-width: 48px; color: var(--text-dim); font-size: var(--font-small); }
 .image-readout { color: var(--text-dim); font-size: var(--font-small); }
+/* The preview pages (PreviewPage.gml): the preview's own bar over its stage, which the viewport fills. */
+.preview-pane { flex-direction: column; }
+.preview-stage { flex-grow: 1; min-height: 0; }
+.preview-view { flex-grow: 1; }
+.preview-empty { flex-grow: 1; background-color: var(--surface-sunken); }
+.preview-hint { color: var(--text-dim); font-size: var(--font-small); text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
 /* An editor grid's notice: what it says wraps, in the warning's colour. */
 .notice-text { white-space: normal; color: var(--warning); }
 /* The HUD's zones: each a corner of the viewport, its pieces stacked from that corner, so they

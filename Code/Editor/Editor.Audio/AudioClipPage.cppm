@@ -13,8 +13,8 @@
 // turned on loops the next play), and its source's facts read only (channels, rate, length). The
 // old page edited nothing itself; its options were the inspector's.
 //
-// The sound cue page is its :sound_cue_page partition; the bus layout page comes back in its own
-// part of the layer, out of the build until then.
+// The sound cue page is its :sound_cue_page partition, the bus layout page its :bus_layout_page
+// (the rules it edits by its :bus_layout_model).
 
 module;
 #include "Core/Prelude.h"
@@ -25,6 +25,8 @@ export module editor.audio;
 export import :waveform_view;
 export import :audition;
 export import :sound_cue_page;
+export import :bus_layout_model;
+export import :bus_layout_page;
 export import :thumbnail_generator;
 
 import foundation.core;
@@ -117,6 +119,8 @@ export namespace editor
             editor::EditorRootAllocator().New<AudioClipPageFactory>(services), editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             editor::EditorRootAllocator().New<SoundCuePageFactory>(services), editor::EditorRootAllocator()));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(
+            editor::EditorRootAllocator().New<AudioBusLayoutPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
             RegisterAudioThumbnailGenerator(*context.Thumbnails());
     }

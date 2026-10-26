@@ -256,6 +256,9 @@ treerowcontent.inactive { opacity: 0.45; }
 .audio-volume-icon { width: 16px; height: 16px; image-color: var(--icon-dim); }
 waveform::wave { background-color: var(--accent); }
 waveform::playhead { background-color: var(--warning); }
+/* The bus layout page: the buses' tree under its bar, beside the chosen bus's grid. */
+.bus-pane { flex-direction: column; }
+.bus-tree { flex-grow: 1; min-height: 0; }
 .image-zoom { min-width: 48px; color: var(--text-dim); font-size: var(--font-small); }
 .image-readout { color: var(--text-dim); font-size: var(--font-small); }
 /* The preview pages (PreviewPage.gml): the preview's own bar over its stage, which the viewport fills. */

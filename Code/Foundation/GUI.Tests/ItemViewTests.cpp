@@ -177,6 +177,26 @@ TEST_CASE("itemview: rows inserted above leave what is in view where it is")
     CHECK(static_cast<Label*>(top->GetContent())->GetText() == SV(u8"item 50"));
 }
 
+TEST_CASE("itemview: scrolled to an item before a layout that clamps the offset, the rows follow the clamp")
+{
+    // Twenty rows, then three: they fit the view, so it cannot scroll. Scrolled to the third with
+    // the layout still pending (the offset unclamped until it runs), the layout's range clamps the
+    // offset back to the top; the rows are taken there, not left where the scroll aimed (the first
+    // two missing, a gap over the rest).
+    StringListModel model(Numbered(20));
+    Mounted m = MountList(model);
+    for (int i = 0; i < 17; ++i)
+        model.RemoveItem(3);
+    m.list->ScrollToItem(2, ScrollAlign::Start);
+    m.Layout();
+    CHECK(m.list->GetScrollOffset().y == doctest::Approx(0.0f));
+    ItemRow* first = m.list->RowForItem(0);
+    REQUIRE(first != nullptr);
+    CHECK(static_cast<Label*>(first->GetContent())->GetText() == SV(u8"item 0"));
+    CHECK(first->GetScreenBounds().y == doctest::Approx(m.list->GetScreenBounds().y));
+    CHECK(m.list->RowForItem(1) != nullptr);
+}
+
 TEST_CASE("itemview: a row above measuring taller than its estimate leaves the view where it is")
 {
     StringListModel model(Numbered(100));

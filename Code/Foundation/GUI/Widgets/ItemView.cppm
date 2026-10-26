@@ -1466,6 +1466,13 @@ export namespace foundation::gui
                 row->m_taken = false;
 
             SetScrollExtent(core::Float2{width, inset + m_heights.Total()});
+            // The new range moved the offset (a scroll aimed before a layout, clamped now): the
+            // rows are taken again where it is, since the scroll it reports is not heard here.
+            if (core::Abs(GetScrollOffset().y - top) >= 0.5f)
+            {
+                UpdateScrollAnchor();
+                continue;
+            }
             if (IsFlinging() || IsSmoothScrolling() || m_scrollAnchor >= static_cast<i32>(count))
                 break;
             const f32 want = m_heights.Top(static_cast<usize>(m_scrollAnchor)) + m_scrollAnchorDelta;

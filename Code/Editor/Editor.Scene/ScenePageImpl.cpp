@@ -200,7 +200,8 @@ namespace editor
         {
             SceneEditorPage* self = this;
             m_bar = MakeUnique<SceneBar>(Allocator(), Allocator(), context.Actions(), *this,
-                                         [self](StringView id) { return self->Find<gui::ButtonBase>(id); }, [self]() { return self->Gizmos(); });
+                                         [self](StringView id) { return self->Find<gui::ButtonBase>(id); },
+                                         Find<gui::Label>(u8"scene-simulate-state"), [self]() { return self->Gizmos(); });
         }
         // A prefab is marked as one: the same page edits both.
         if (gui::Node* kind = Find<gui::Node>(u8"scene-kind"))

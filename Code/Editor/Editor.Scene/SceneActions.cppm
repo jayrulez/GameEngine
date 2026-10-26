@@ -120,10 +120,10 @@ export namespace editor
 
         // --- Simulate: snapshot, run, restore ---
         {
-            EditorActionDeclaration d = Declare(kSimulateStart, u8"Play",
-                                                u8"Start the page's edit-mode Simulate from a "
-                                                u8"snapshot (Stop restores it)",
-                                                u8"Scene/Simulate/Play", 100);
+            EditorActionDeclaration d = Declare(kSimulateStart, u8"Simulate",
+                                                u8"Run the scene here from a snapshot, the edits "
+                                                u8"locked meanwhile (Stop restores it; Play is the Game tab's)",
+                                                u8"Scene/Simulate/Start", 100);
             d.enabled = [scenePage](EditorPage* page)
             {
                 ISceneEditorPage* scene = scenePage(page);
@@ -134,7 +134,7 @@ export namespace editor
         }
         {
             EditorActionDeclaration d = Declare(kSimulatePause, u8"Pause",
-                                                u8"Hold the running Simulate; again resumes",
+                                                u8"Hold the running Simulate; again resumes it",
                                                 u8"Scene/Simulate/Pause", 101);
             d.kind = EditorActionKind::Toggle;
             d.enabled = [scenePage](EditorPage* page)

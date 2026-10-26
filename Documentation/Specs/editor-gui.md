@@ -477,7 +477,16 @@ The layers:
 7. Simulate and play in editor: Simulate on the page's bar (named so: Play is the Game tab's), the
    edits locked and shown so; Editor.Play's UI-free half back, the Game tab on GUI.Viewport (its
    resolution and phone frame, the keyboard captured with Shift+F1 to leave, X1), several
-   instances, the PIE MCP tools.
+   instances, the PIE MCP tools. In four parts: (1) Simulate, Pause and Stop on the scene
+   page's bar between its editing controls and its tools, as the mock draws them, each an action
+   (the start one labelled Simulate), the state named beside them while it runs (Simulating,
+   Paused: the kit's transport state), the edits locked meanwhile (the inspector read only and
+   saying so, the hierarchy's verbs refused visibly, as before); (2) Editor.Play's UI-free half
+   back in the build (the resolutions, the PIE run and instance seams, the game-audio settings);
+   (3) the Game tab on GUI.Viewport with the kit's transport (Restart, Play, Pause, Stop and the
+   state), its resolution and phone frame, the keyboard captured with Shift+F1 to leave, a cook
+   it waits for named on its bar; (4) several instances side by side, the Game menu's Play and
+   Play New Instance, and the PIE MCP tools.
 
 The property animation panel under the viewport comes back with Editor.PropertyAnimation (X6).
 

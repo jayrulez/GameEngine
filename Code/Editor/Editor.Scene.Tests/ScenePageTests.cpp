@@ -977,7 +977,7 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     Shown shown(*page);
     SceneBar* bar = page->Bar();
     REQUIRE(bar != nullptr);
-    CHECK(bar->Bound() == 11u); // save, undo, redo, four transform, space, snap, vertex snap, frame
+    CHECK(bar->Bound() == 14u); // save, undo, redo, four transform, space, snap, vertex snap, Simulate's three, frame
     GizmoController* gizmos = page->Gizmos();
     REQUIRE(gizmos != nullptr);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
@@ -1433,5 +1433,43 @@ TEST_CASE("camera preview: the selected camera's view titled with its name at it
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(preview->Pinned().IsNil());
     CHECK_FALSE(preview->IsShown());
+    page->OnClose();
+}
+
+TEST_CASE("scene bar: Simulate, Pause and Stop are the page's actions, its state named beside them while it runs")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    Shown shown(*page);
+    SceneBar* bar = page->Bar();
+    REQUIRE(bar != nullptr);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    auto* simulate = FindId<gui::ButtonBase>(*page->Content(), u8"scene-simulate");
+    auto* pause = FindId<gui::ButtonBase>(*page->Content(), u8"scene-pause");
+    auto* stop = FindId<gui::ButtonBase>(*page->Content(), u8"scene-stop");
+    REQUIRE(simulate != nullptr);
+    REQUIRE(pause != nullptr);
+    REQUIRE(stop != nullptr);
+    CHECK(String(simulate->GetTooltipText()).AsView().StartsWith(u8"Simulate"));
+    CHECK(simulate->IsEnabled());
+    CHECK_FALSE(pause->IsEnabled());
+    CHECK_FALSE(stop->IsEnabled());
+    CHECK(bar->State().IsEmpty());
+
+    shown.Click(*simulate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(page->IsSimulating());
+    CHECK(bar->State() == StringView(u8"Simulating"));
+    CHECK_FALSE(simulate->IsEnabled());
+    CHECK(stop->IsEnabled());
+    shown.Click(*pause);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(page->IsPaused());
+    CHECK(bar->State() == StringView(u8"Paused"));
+    CHECK(pause->IsChecked());
+    shown.Click(*stop);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(page->IsSimulating());
+    CHECK(bar->State().IsEmpty());
     page->OnClose();
 }

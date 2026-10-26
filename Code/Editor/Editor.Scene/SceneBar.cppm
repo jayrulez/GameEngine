@@ -6,7 +6,8 @@
 // The scene page's bar (Documentation/Specs/editor-gui.md, 5.3, layer 5, part 1): Save, Undo and
 // Redo; Select, Move, Rotate and Scale as one choice; the space, its icon the space it is in;
 // Snap, every drag snapping while it is on, with its increments in its menu (they had no UI:
-// Ctrl snapped by fixed steps); Vertex Snap; Frame. Each button is an action over the page
+// Ctrl snapped by fixed steps); Vertex Snap; Simulate, Pause and Stop, the state named beside
+// them while it runs (layer 7, part 1: Simulate is named so, Play is the Game tab's); Frame. Each button is an action over the page
 // (PageActionBar), so its tooltip says its keys and it is disabled where the action is (the
 // transform choice while the camera owns the keys). The view's own controls are the HUD's chips,
 // not the bar's (ruling 22).
@@ -23,6 +24,7 @@ import editor.core;
 import editor.app;
 import :gizmo;
 import :actions;
+import :scene_page_interface;
 
 using namespace foundation::core;
 
@@ -54,10 +56,12 @@ export namespace editor
         };
 
         /// The bar's buttons, by their markup ids (`scene-save` ... `scene-frame`), found by
-        /// `find`; `gizmos` the page's controller, asked each time (the tool may come later).
+        /// `find`; `state` the label naming Simulate's state (null: none); `gizmos` the page's
+        /// controller, asked each time (the tool may come later).
         SceneBar(IAllocator& allocator, EditorActionRegistry& actions, EditorPage& page, const Function<foundation::gui::ButtonBase*(StringView)>& find,
-                 Function<GizmoController*()> gizmos)
-            : m_bar(allocator, actions, page), m_gizmos(Move(gizmos)), m_moveItems(allocator), m_rotateItems(allocator), m_scaleItems(allocator)
+                 foundation::gui::Label* state, Function<GizmoController*()> gizmos)
+            : m_bar(allocator, actions, page), m_page(&page), m_state(state), m_gizmos(Move(gizmos)), m_moveItems(allocator), m_rotateItems(allocator),
+              m_scaleItems(allocator)
         {
             using namespace SceneActionIds;
             m_bar.Bind(find(u8"scene-save"), u8"file.save");
@@ -71,9 +75,13 @@ export namespace editor
             m_bar.Bind(m_space, kGizmoWorldSpace);
             m_bar.Bind(find(u8"scene-snap"), kGizmoSnap);
             m_bar.Bind(find(u8"scene-vertex-snap"), kGizmoVertexSnap);
+            m_bar.Bind(find(u8"scene-simulate"), kSimulateStart);
+            m_bar.Bind(find(u8"scene-pause"), kSimulatePause);
+            m_bar.Bind(find(u8"scene-stop"), kSimulateStop);
             m_bar.Bind(find(u8"scene-frame"), kFrameSelection);
             if (auto* snap = Cast<foundation::gui::ToolMenuButton>(find(u8"scene-snap")))
                 BuildSnapMenu(snap->GetMenu());
+            SyncState(); // hidden until it runs
         }
         SceneBar(const SceneBar&) = delete;
         SceneBar& operator=(const SceneBar&) = delete;
@@ -83,6 +91,7 @@ export namespace editor
         void Sync()
         {
             m_bar.Sync();
+            SyncState();
             GizmoController* gizmos = m_gizmos ? m_gizmos() : nullptr;
             if (gizmos == nullptr)
                 return;
@@ -128,8 +137,30 @@ export namespace editor
             Sync();
         }
         [[nodiscard]] usize Bound() const noexcept { return m_bar.Count(); }
+        /// What the state label says ("Simulating", "Paused"); empty while it shows nothing.
+        [[nodiscard]] StringView State() const { return m_state != nullptr && m_state->IsDisplayed() ? m_state->GetText() : StringView{}; }
 
     private:
+        // Simulate's state beside its buttons: shown while it runs, the edits locked meanwhile.
+        void SyncState()
+        {
+            if (m_state == nullptr)
+                return;
+            const ISceneEditorPage* scene = ServiceOf<ISceneEditorPage>(m_page);
+            const bool running = scene != nullptr && scene->IsSimulating();
+            const bool paused = running && scene->IsPaused();
+            if (m_state->IsDisplayed() != running)
+                m_state->SetDisplayed(running);
+            if (!running || (m_stateShown && paused == m_paused))
+                return;
+            m_state->SetText(paused ? StringView(u8"Paused") : StringView(u8"Simulating"));
+            m_state->RemoveClass(paused ? StringView(u8"playing") : StringView(u8"paused"));
+            m_state->AddClass(paused ? StringView(u8"paused") : StringView(u8"playing"));
+            m_state->SetTooltip(u8"The scene runs here; edits wait until Stop, which puts it back as it was");
+            m_paused = paused;
+            m_stateShown = true;
+        }
+
         template <usize N>
         void AddIncrements(foundation::gui::Menu& menu, SnapKind kind, const Increment (&increments)[N], Array<foundation::gui::MenuItem*>& items)
         {
@@ -157,6 +188,10 @@ export namespace editor
         }
 
         app::PageActionBar m_bar;
+        EditorPage* m_page;
+        foundation::gui::Label* m_state;
+        bool m_paused = false;
+        bool m_stateShown = false;
         Function<GizmoController*()> m_gizmos;
         foundation::gui::ButtonBase* m_space = nullptr;
         bool m_world = true;

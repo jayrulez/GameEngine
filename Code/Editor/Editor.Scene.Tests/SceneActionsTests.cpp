@@ -142,7 +142,8 @@ TEST_CASE("scene-actions: registered once, disabled off a scene page; simulate, 
     RegisterSceneEditorActions(context);
     EditorActionRegistry& actions = context.Actions();
     REQUIRE(actions.Find(kSimulateStart) != nullptr);
-    CHECK(actions.Find(kSimulateStart)->menuPath == u8"Scene/Simulate/Play");
+    CHECK(actions.Find(kSimulateStart)->menuPath == u8"Scene/Simulate/Start");
+    CHECK(actions.Find(kSimulateStart)->label == u8"Simulate"); // Play is the Game tab's
     CHECK(actions.Find(kGizmoTranslate)->kind == EditorActionKind::Toggle);
     CHECK(actions.Shortcut(kGizmoTranslate).Keys() == String(u8"w"));
     CHECK(actions.Shortcut(kEntityDelete).Keys() == String(u8"delete"));

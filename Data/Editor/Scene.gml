@@ -1,6 +1,6 @@
 <!--
-  The scene page (Documentation/Specs/editor-gui.md, 5.3, layers 2 and 5): its bar (the editing
-  controls, each an action) over its own hierarchy, viewport and inspector, as the mock draws it
+  The scene page (Documentation/Specs/editor-gui.md, 5.3, layers 2, 5 and 7): its bar (the editing
+  controls and Simulate, each an action) over its own hierarchy, viewport and inspector, as the mock draws it
   (Editor/Mock/scene.gml). A prefab is marked as one.
   Code puts the viewport in its pane (under the state a scene that did not load shows), binds the
   bar to the actions, the hierarchy to the scene and the inspector to its selection.
@@ -19,6 +19,12 @@
         <ToolButton id="scene-space" toggle="true" icon="Editor/Icons/world.svg"/>
         <ToolMenuButton id="scene-snap" toggle="true" split="true" icon="Editor/Icons/magnet.svg"/>
         <ToolButton id="scene-vertex-snap" toggle="true" icon="Editor/Icons/target.svg"/>
+        <Spacer/>
+        <!-- Simulate (layer 7): run the scene here; its state named beside it while it runs. -->
+        <ToolButton id="scene-simulate" icon="Editor/Icons/play.svg"/>
+        <ToolButton id="scene-pause" toggle="true" icon="Editor/Icons/pause.svg"/>
+        <ToolButton id="scene-stop" icon="Editor/Icons/stop.svg"/>
+        <Label id="scene-simulate-state" class="transport-state playing" text="Simulating"/>
         <Spacer/>
         <!-- The viewport tools, from the tool registry, go here (code adds them before this). -->
         <Separator id="scene-tools-end"/>

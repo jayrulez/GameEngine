@@ -30,6 +30,7 @@ import foundation.gui;
 import editor.core;
 import editor.app;
 import :edit;
+import :scene_tree;
 
 using namespace foundation::core;
 
@@ -127,63 +128,33 @@ export namespace editor
         [[nodiscard]] foundation::gui::ModelIndex IndexOf(const Guid& entity) const;
 
     private:
-        // The tree's model over the rows as built: the scene's row (node 0), its entities under it.
-        // A row's id is its entity's guid (the scene's row a fixed one), so the view keeps what is
-        // open and selected across builds; a build tells the view once.
-        class Model final : public foundation::gui::IModel
+        // The tree's model: the scene as the shared tree shows it, plus rename in place and drops
+        // (a reparent, a reorder, a prefab spawned). A build tells the view once.
+        class Model final : public SceneTreeModel
         {
         public:
-            explicit Model(SceneHierarchyView& view) : m_view(view) {}
-            [[nodiscard]] usize RowCount(const foundation::gui::ModelIndex& parent = {}) const override;
-            [[nodiscard]] usize ColumnCount() const override { return 1; }
-            [[nodiscard]] foundation::gui::ModelIndex Index(i32 row, i32 column = 0, const foundation::gui::ModelIndex& parent = {}) const override;
-            [[nodiscard]] foundation::gui::ModelIndex ParentIndex(const foundation::gui::ModelIndex& child) const override;
-            [[nodiscard]] bool HasChildren(const foundation::gui::ModelIndex& parent = {}) const override { return RowCount(parent) > 0; }
-            [[nodiscard]] foundation::gui::ItemId IdOf(const foundation::gui::ModelIndex& index) const override;
-            [[nodiscard]] foundation::gui::Variant Data(const foundation::gui::ModelIndex& index,
-                                                         foundation::gui::ModelRole role = foundation::gui::ModelRole::Display) const override;
+            Model(SceneHierarchyView& view, IAllocator& allocator) : SceneTreeModel(allocator), m_view(view) {}
             [[nodiscard]] bool IsEditable(const foundation::gui::ModelIndex& index) const override;
             bool SetData(const foundation::gui::ModelIndex& index, const foundation::gui::Variant& value) override;
             [[nodiscard]] foundation::gui::DropEffect CanDrop(const foundation::gui::ModelDrop& drop, String& reason) const override;
             bool Drop(const foundation::gui::ModelDrop& drop) override;
-            void Reset() { NotifyReset(); }
 
         private:
             SceneHierarchyView& m_view;
         };
 
-        struct Row
-        {
-            Guid entity;   // nil: the scene's row
-            i32 parent = -1;
-            i32 rowInParent = 0;
-            Array<i32> children;
-            String name;
-            String classes; // "member", "inactive"
-            String icon;
-            String iconClass;
-        };
-
         void Build();
-        void AddEntity(foundation::scene::Scene& scene, foundation::scene::EntityHandle e, i32 parent);
         // A drop's target: the entity it goes under (nil: a root) and the sibling it goes before (nil: last).
         [[nodiscard]] bool DropTarget(const foundation::gui::ModelDrop& drop, Guid& parent, Guid& before) const;
-        [[nodiscard]] bool SubtreeMatches(foundation::scene::Scene& scene, foundation::scene::EntityHandle e) const;
         void SyncSelectionToTree();
         void SyncSelectionFromTree();
         void OpenWayTo(const Guid& entity);
-        [[nodiscard]] Guid EntityOfNode(i64 node) const;
-        [[nodiscard]] Guid EntityOfId(foundation::gui::ItemId id) const;
-        [[nodiscard]] static foundation::gui::ItemId IdOfEntity(const Guid& entity);
-        void IconOf(foundation::scene::EntityHandle e, Row& row) const;
         void RunAction(StringView id);
 
         IAllocator& m_allocator;
         SceneEditContext* m_edit;
         Services m_services;
         Model m_model;
-        Array<Row> m_rows; // by node id
-        HashMap<foundation::gui::ItemId, Guid> m_entityOfId;
         HashSet<foundation::gui::ItemId> m_known; // rows built with children before: one new to children opens
         foundation::gui::TreeView* m_tree = nullptr;
         foundation::gui::TextField* m_search = nullptr;

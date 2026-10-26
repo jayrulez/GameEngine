@@ -40,6 +40,7 @@ target_sources(Editor.Scene
         ComponentGizmosImpl.cpp
         AssetThumbnailsImpl.cpp
         ScenePageImpl.cpp
+        SceneTreeImpl.cpp
         HierarchyViewImpl.cpp
         InspectorViewImpl.cpp
         EntityRefEditorImpl.cpp
@@ -77,6 +78,7 @@ target_sources(Editor.Scene
             SceneViewState.cppm
             SceneSimulation.cppm
             PrefabFlows.cppm
+            SceneTree.cppm
             HierarchyView.cppm
             EntityRefEditor.cppm
             InspectorExtras.cppm

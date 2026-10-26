@@ -17,6 +17,7 @@ import editor.core;
 import editor.app;
 import :edit;
 import :actions;
+import :scene_tree;
 import :hierarchy;
 
 using namespace foundation::core;
@@ -27,8 +28,7 @@ namespace editor
 {
     namespace
     {
-        // The scene's row: an id no entity's guid hashes to in practice, kept apart from them.
-        constexpr gui::ItemId kSceneRowId = 0x5ce4e0000000001ull;
+        constexpr gui::ItemId kSceneRowId = SceneTreeModel::kSceneRowId;
 
         template <typename T>
         T* FindIn(gui::Node& node, StringView id)
@@ -43,8 +43,7 @@ namespace editor
     }
 
     SceneHierarchyView::SceneHierarchyView(IAllocator& allocator, SceneEditContext& edit, Services services, gui::Node& pane)
-        : m_allocator(allocator), m_edit(&edit), m_services(Move(services)), m_model(*this), m_rows(allocator), m_entityOfId(allocator),
-          m_known(allocator)
+        : m_allocator(allocator), m_edit(&edit), m_services(Move(services)), m_model(*this, allocator), m_known(allocator)
     {
         SceneHierarchyView* self = this;
         m_tree = FindIn<gui::TreeView>(pane, u8"hierarchy-tree");
@@ -74,7 +73,7 @@ namespace editor
             m_tree->SetOnSelectionChanged([self](gui::ModelIndex) { self->SyncSelectionFromTree(); });
             m_tree->SetOnActivated([self](gui::ModelIndex index)
                                    {
-                                       const Guid entity = self->EntityOfNode(index.InternalId);
+                                       const Guid entity = self->m_model.EntityOfNode(index.InternalId);
                                        if (!entity.IsNil() && self->m_services.frame)
                                            self->m_services.frame(entity);
                                    });
@@ -83,7 +82,7 @@ namespace editor
                                      {
                                          Array<Guid> entities(self->m_allocator);
                                          for (const gui::ItemId id : ids)
-                                             if (const Guid entity = self->EntityOfId(id); !entity.IsNil())
+                                             if (const Guid entity = self->m_model.EntityOfId(id); !entity.IsNil())
                                                  entities.PushBack(entity);
                                          if (!entities.IsEmpty())
                                              payload = self->DragOf(Span<const Guid>(entities.Data(), entities.Size()));
@@ -152,18 +151,9 @@ namespace editor
     void SceneHierarchyView::Build()
     {
         m_built = true;
-        m_rows.Clear();
-        m_entityOfId.Clear();
         scene::Scene& scene = m_edit->Scene();
-        Row top;
-        top.name = m_services.sceneName ? String(m_services.sceneName()) : String(scene.Name());
-        top.icon = String(m_services.sceneIcon);
-        m_rows.PushBack(Move(top));
-        // Roots in list order (the order reordering keeps and saving writes), then each one's
-        // children depth first; with a search, an entity whose subtree holds a match.
-        for (scene::EntityHandle r = scene.GetFirstRoot(); r.IsAssigned(); r = scene.GetNextSibling(r))
-            if (SubtreeMatches(scene, r))
-                AddEntity(scene, r, 0);
+        const String name = m_services.sceneName ? String(m_services.sceneName()) : String(scene.Name());
+        m_model.Build(scene, name.AsView(), m_services.sceneIcon, m_services.icons, m_filter.AsView());
         // The scene's row is always open. The scene opens with its top level shown (a model's
         // skeleton stays closed); after that an entity seen with children for the first time
         // opens (what an edit makes shows), and one the user closed stays closed.
@@ -172,11 +162,11 @@ namespace editor
             m_tree->SetIdExpanded(kSceneRowId, true);
             const bool first = !m_opened;
             m_opened = true;
-            for (const Row& row : m_rows)
+            for (const SceneTreeModel::Row& row : m_model.Rows())
             {
                 if (row.entity.IsNil() || row.children.IsEmpty())
                     continue;
-                const gui::ItemId id = IdOfEntity(row.entity);
+                const gui::ItemId id = SceneTreeModel::IdOfEntity(row.entity);
                 if (!m_known.Contains(id))
                 {
                     if (!first)
@@ -186,66 +176,12 @@ namespace editor
             }
             // A search opens every way to its matches.
             if (!m_filter.IsEmpty())
-                for (const Row& row : m_rows)
+                for (const SceneTreeModel::Row& row : m_model.Rows())
                     if (!row.entity.IsNil() && !row.children.IsEmpty())
-                        m_tree->SetIdExpanded(IdOfEntity(row.entity), true);
+                        m_tree->SetIdExpanded(SceneTreeModel::IdOfEntity(row.entity), true);
         }
         m_model.Reset();
         SyncSelectionToTree();
-    }
-
-    void SceneHierarchyView::AddEntity(scene::Scene& scene, scene::EntityHandle e, i32 parent)
-    {
-        const i32 node = static_cast<i32>(m_rows.Size());
-        Row row;
-        row.entity = scene.GetEntityId(e);
-        row.parent = parent;
-        row.rowInParent = static_cast<i32>(m_rows[static_cast<usize>(parent)].children.Size());
-        row.name = String(scene.GetEntityName(e));
-        if (row.name.IsEmpty())
-            row.name = String(u8"(unnamed)");
-        // A prefab's members read apart; an entity that is not active, with what is under it, dims.
-        scene::PrefabMemberInfo member;
-        const bool prefabMember = scene::FindPrefabMember(scene, row.entity, member);
-        const bool active = scene.IsEffectivelyActive(e);
-        if (prefabMember)
-            row.classes = String(u8"member");
-        if (!active)
-            row.classes = row.classes.IsEmpty() ? String(u8"inactive") : Format(u8"{} inactive", row.classes);
-        IconOf(e, row);
-        m_entityOfId.InsertOrAssign(IdOfEntity(row.entity), row.entity);
-        m_rows[static_cast<usize>(parent)].children.PushBack(node);
-        m_rows.PushBack(Move(row));
-        for (scene::EntityHandle c = scene.GetFirstChild(e); c.IsAssigned(); c = scene.GetNextSibling(c))
-            if (SubtreeMatches(scene, c))
-                AddEntity(scene, c, node);
-    }
-
-    // An entity by its first component that has an icon of its own; a plain entity by the generic one.
-    void SceneHierarchyView::IconOf(scene::EntityHandle e, Row& row) const
-    {
-        if (m_services.icons == nullptr)
-            return;
-        m_edit->Scene().ForEachManager([&](scene::ComponentManagerBase& manager)
-                                       {
-                                           if (!row.icon.IsEmpty() || manager.ComponentType() == nullptr || !manager.HasComponent(e))
-                                               return;
-                                           const TypeIcon icon = m_services.icons->For(*manager.ComponentType(), StringView{});
-                                           row.icon = icon.Source;
-                                           row.iconClass = icon.Class;
-                                       });
-        if (row.icon.IsEmpty())
-            row.icon = String(u8"Editor/Icons/cube.svg");
-    }
-
-    bool SceneHierarchyView::SubtreeMatches(scene::Scene& scene, scene::EntityHandle e) const
-    {
-        if (m_filter.IsEmpty() || NameOrGuidMatches(scene.GetEntityName(e), scene.GetEntityId(e), m_filter.AsView()))
-            return true;
-        for (scene::EntityHandle c = scene.GetFirstChild(e); c.IsAssigned(); c = scene.GetNextSibling(c))
-            if (SubtreeMatches(scene, c))
-                return true;
-        return false;
     }
 
     void SceneHierarchyView::SyncSelectionToTree()
@@ -254,7 +190,7 @@ namespace editor
             return;
         Array<gui::ItemId> ids(m_allocator);
         for (const Guid& entity : m_edit->EntitySelection().Items())
-            ids.PushBack(IdOfEntity(entity));
+            ids.PushBack(SceneTreeModel::IdOfEntity(entity));
         m_syncing = true;
         m_tree->SetSelectedIds(Span<const gui::ItemId>(ids.Data(), ids.Size()));
         m_syncing = false;
@@ -268,7 +204,7 @@ namespace editor
         m_tree->GetSelectedIds(ids);
         Array<Guid> entities(m_allocator);
         for (const gui::ItemId id : ids)
-            if (const Guid entity = EntityOfId(id); !entity.IsNil())
+            if (const Guid entity = m_model.EntityOfId(id); !entity.IsNil())
                 entities.PushBack(entity);
         m_syncing = true;
         if (entities.IsEmpty())
@@ -289,7 +225,7 @@ namespace editor
             return;
         scene::Scene& scene = m_edit->Scene();
         for (scene::EntityHandle e = scene.GetParent(scene.FindEntity(entity)); scene.IsValid(e); e = scene.GetParent(e))
-            m_tree->SetIdExpanded(IdOfEntity(scene.GetEntityId(e)), true);
+            m_tree->SetIdExpanded(SceneTreeModel::IdOfEntity(scene.GetEntityId(e)), true);
     }
 
     void SceneHierarchyView::BeginRename(const Guid& entity)
@@ -381,7 +317,7 @@ namespace editor
     {
         if (m_tree == nullptr || item < 0 || item >= static_cast<i32>(m_tree->GetItemCount()))
             return Guid{};
-        return EntityOfNode(m_tree->GetItemIndex(item).InternalId);
+        return m_model.EntityOfNode(m_tree->GetItemIndex(item).InternalId);
     }
 
     i32 SceneHierarchyView::ItemOf(const Guid& entity) const
@@ -394,32 +330,12 @@ namespace editor
         return -1;
     }
 
-    gui::ModelIndex SceneHierarchyView::IndexOf(const Guid& entity) const
-    {
-        for (usize node = 0; node < m_rows.Size(); ++node)
-            if (m_rows[node].entity == entity)
-                return gui::MakeModelIndex(m_rows[node].rowInParent, 0, static_cast<i64>(node));
-        return gui::ModelIndex{};
-    }
+    gui::ModelIndex SceneHierarchyView::IndexOf(const Guid& entity) const { return m_model.IndexOf(entity); }
 
     gui::DragPayload SceneHierarchyView::DragOf(Span<const Guid> entities) const
     {
         const scene::EntityHandle first = entities.IsEmpty() ? scene::EntityHandle{} : m_edit->Scene().FindEntity(entities[0]);
         return EntityDrag::Payload(entities, first.IsAssigned() ? m_edit->Scene().GetEntityName(first) : StringView{});
-    }
-
-    Guid SceneHierarchyView::EntityOfNode(i64 node) const
-    {
-        return node >= 0 && static_cast<usize>(node) < m_rows.Size() ? m_rows[static_cast<usize>(node)].entity : Guid{};
-    }
-    Guid SceneHierarchyView::EntityOfId(gui::ItemId id) const
-    {
-        const Guid* entity = m_entityOfId.Find(id);
-        return entity != nullptr ? *entity : Guid{};
-    }
-    gui::ItemId SceneHierarchyView::IdOfEntity(const Guid& entity)
-    {
-        return entity.IsNil() ? kSceneRowId : static_cast<gui::ItemId>(Hash<Guid>{}(entity) & ~kSceneRowId);
     }
 
     bool SceneHierarchyView::DropTarget(const gui::ModelDrop& drop, Guid& parent, Guid& before) const
@@ -428,7 +344,7 @@ namespace editor
         before = Guid{};
         if (!drop.Index.IsValid())
             return true; // below the rows: the end of the roots
-        const Guid target = EntityOfNode(drop.Index.InternalId);
+        const Guid target = m_model.EntityOfNode(drop.Index.InternalId);
         if (target.IsNil() || drop.Place == gui::DropPlace::On)
         {
             parent = target; // onto an entity: under it; onto the scene's row: a root
@@ -462,65 +378,13 @@ namespace editor
 
     // === The model ===
 
-    usize SceneHierarchyView::Model::RowCount(const gui::ModelIndex& parent) const
-    {
-        if (!parent.IsValid())
-            return m_view.m_rows.IsEmpty() ? 0u : 1u;
-        const i64 node = parent.InternalId;
-        return node >= 0 && static_cast<usize>(node) < m_view.m_rows.Size() ? m_view.m_rows[static_cast<usize>(node)].children.Size() : 0u;
-    }
-    gui::ModelIndex SceneHierarchyView::Model::Index(i32 row, i32 column, const gui::ModelIndex& parent) const
-    {
-        if (!parent.IsValid())
-            return row == 0 && !m_view.m_rows.IsEmpty() ? gui::MakeModelIndex(0, column, 0) : gui::ModelIndex{};
-        const i64 node = parent.InternalId;
-        if (node < 0 || static_cast<usize>(node) >= m_view.m_rows.Size())
-            return gui::ModelIndex{};
-        const Array<i32>& children = m_view.m_rows[static_cast<usize>(node)].children;
-        return row >= 0 && static_cast<usize>(row) < children.Size() ? gui::MakeModelIndex(row, column, children[static_cast<usize>(row)]) : gui::ModelIndex{};
-    }
-    gui::ModelIndex SceneHierarchyView::Model::ParentIndex(const gui::ModelIndex& child) const
-    {
-        const i64 node = child.InternalId;
-        if (node <= 0 || static_cast<usize>(node) >= m_view.m_rows.Size())
-            return gui::ModelIndex{};
-        const i32 parent = m_view.m_rows[static_cast<usize>(node)].parent;
-        return parent >= 0 ? gui::MakeModelIndex(m_view.m_rows[static_cast<usize>(parent)].rowInParent, 0, parent) : gui::ModelIndex{};
-    }
-    gui::ItemId SceneHierarchyView::Model::IdOf(const gui::ModelIndex& index) const
-    {
-        if (!index.IsValid())
-            return gui::kNoItem;
-        return IdOfEntity(m_view.EntityOfNode(index.InternalId));
-    }
-    gui::Variant SceneHierarchyView::Model::Data(const gui::ModelIndex& index, gui::ModelRole role) const
-    {
-        const i64 node = index.InternalId;
-        if (node < 0 || static_cast<usize>(node) >= m_view.m_rows.Size())
-            return gui::Variant{};
-        const Row& row = m_view.m_rows[static_cast<usize>(node)];
-        switch (role)
-        {
-        case gui::ModelRole::Display:
-        case gui::ModelRole::Sort:
-            return gui::Variant(row.name.AsView());
-        case gui::ModelRole::Icon:
-            return row.icon.IsEmpty() ? gui::Variant{} : gui::Variant(row.icon.AsView());
-        case gui::ModelRole::IconClass:
-            return row.iconClass.IsEmpty() ? gui::Variant{} : gui::Variant(row.iconClass.AsView());
-        case gui::ModelRole::RowClass:
-            return row.classes.IsEmpty() ? gui::Variant{} : gui::Variant(row.classes.AsView());
-        default:
-            return gui::Variant{};
-        }
-    }
     bool SceneHierarchyView::Model::IsEditable(const gui::ModelIndex& index) const
     {
-        return !m_view.EntityOfNode(index.InternalId).IsNil();
+        return !EntityOfNode(index.InternalId).IsNil();
     }
     bool SceneHierarchyView::Model::SetData(const gui::ModelIndex& index, const gui::Variant& value)
     {
-        const Guid entity = m_view.EntityOfNode(index.InternalId);
+        const Guid entity = EntityOfNode(index.InternalId);
         const String name = value.ToString();
         if (entity.IsNil() || name.IsEmpty())
             return false;
@@ -538,7 +402,7 @@ namespace editor
         {
             for (const gui::ItemId id : drop.Ids)
             {
-                const Guid entity = m_view.EntityOfId(id);
+                const Guid entity = EntityOfId(id);
                 if (entity.IsNil())
                 {
                     reason = String(u8"The scene stays where it is");
@@ -579,7 +443,7 @@ namespace editor
         {
             for (const gui::ItemId id : drop.Ids)
             {
-                const Guid entity = m_view.EntityOfId(id);
+                const Guid entity = EntityOfId(id);
                 if (entity == before || entity == parent)
                     continue;
                 if (!before.IsNil() || parent.IsNil())

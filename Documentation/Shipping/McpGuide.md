@@ -305,6 +305,20 @@ read the file before trusting it, and leave the judgement of how it looks to the
   Screenshot Editor) does. For a run with no MCP, `Tools.Editor <project> --screenshot <png>
   [--screenshot-after <s>] [--screenshot-exit]` writes the main window once it has drawn, and
   with `--screenshot-exit` quits once the file is written.
+- *Using the editor's own UI*, to check what a page does and not only how it looks (the editor
+  host): `editor_find` lists the nodes a target names with where they are, `editor_click` clicks
+  one (`button` right for a context menu, `clicks` 2 for a double click, `modifiers` held),
+  `editor_hover` moves the pointer over one (a tooltip shows after its delay), `editor_scroll`
+  turns the wheel, `editor_type` types into the focus and `editor_key` presses a key or a chord
+  (`return`, `escape`, `ctrl-s`; the keymap's names). They go through the editor's own input,
+  never the operating system's, so they reach that editor alone, its window hidden or not. A
+  target is named as the GUI's tests name one: a CSS selector (`#input-tree`, `treeitem`),
+  `text=Jump`, or `text~=Jum`, with `within` to look under another match and `index` to pick
+  among several; or `x` and `y` in the screenshot's pixels. A click is refused when its target
+  finds no node or several (each is named), or when something else lies over the target's middle
+  (a popup or a dialog). Each acting tool answers a frame after it acts, with what has the focus;
+  then `editor_screenshot` to see it. The main window only; a drag (a dock panel moved) is not
+  offered, and `panel_dock` does that.
 - *An exported game (the player)*, which is a different host from PIE: `<dist>/<player>
   --screenshot <png> [--screenshot-frame N | --screenshot-after S] [--screenshot-count N]
   [--screenshot-exit]` writes the window at frame N (30 by default) or after S seconds, N files

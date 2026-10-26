@@ -19,6 +19,7 @@ export module editor.app:mcp_service;
 import foundation.core;
 import foundation.content;
 import foundation.mcp;
+import foundation.gui; // the input tools' root
 import foundation.vfs;
 import foundation.shaders.system; // kShaderFolder
 import foundation.profiler;
@@ -32,6 +33,7 @@ import :mcp_host;
 import :mcp_operations;
 import :mcp_page_tools;
 import :mcp_window_tools;
+import :mcp_input_tools;
 import :mcp_profiler_tools;
 
 using namespace foundation::core;
@@ -68,6 +70,8 @@ export namespace editor::app
             Function<void(editor::EditorPage*)> closePage;
             /// The windows' screenshots (the application's capture).
             WindowToolSeams windows;
+            /// The main window's GUI, which the input tools drive.
+            Function<foundation::gui::SceneRoot*()> guiRoot;
             /// The tools the application adds over its other parts (the dock, the actions).
             Function<void(foundation::mcp::McpServer&)> addTools;
         };
@@ -154,6 +158,9 @@ export namespace editor::app
             };
             windows.shots = [self]() { return self->m_services.windows.shots ? self->m_services.windows.shots() : Array<WindowShot>{}; };
             RegisterWindowTools(m_host->Server(), Move(windows));
+            InputToolSeams input;
+            input.root = [self]() { return self->m_services.guiRoot ? self->m_services.guiRoot() : nullptr; };
+            RegisterInputTools(m_host->Server(), Move(input));
             ProfilerToolSeams profiler;
             profiler.profiler = &foundation::profiler::Profiler::Get();
             profiler.recorder = &foundation::profiler::CaptureRecorder::Get();

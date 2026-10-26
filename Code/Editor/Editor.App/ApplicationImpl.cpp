@@ -249,6 +249,7 @@ namespace editor::app
         mcp.windows.windows = [self]() { return self->CapturableWindows(); };
         mcp.windows.request = [self](Span<const WindowShotRequest> requests) { self->m_windowCapture.Request(requests); };
         mcp.windows.shots = [self]() { return self->m_windowCapture.Shots(); };
+        mcp.guiRoot = [self]() { return self->m_window.Root(); };
         m_mcp = MakeUnique<EditorMcpService>(m_editorAllocator, m_editorAllocator, Move(mcp));
 
         // Per-subsystem editor plugins register here with the EMBEDDED host (every page's scenes

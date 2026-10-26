@@ -13,6 +13,7 @@ target_link_libraries(Editor.App
         Foundation::Image Foundation::Image.IO Foundation::RHI.Capture
         Foundation::Profiler Foundation::Profiler.Capture
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
+        Foundation::GUI.Testing # the input tools aim as the GUI's tests do
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
         Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::UI Engine::GUI Foundation::UI.Resource # the game UI's defaults (the runtime's)
         Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
@@ -25,6 +26,7 @@ target_sources(Editor.App
         ToolPanelImpl.cpp
         EditorSplashImpl.cpp
         EditorWindowToolsImpl.cpp
+        EditorInputToolsImpl.cpp
         EditorProfilerToolsImpl.cpp
         EditorMcpHostImpl.cpp
         EditorProjectOperationsImpl.cpp
@@ -84,6 +86,7 @@ target_sources(Editor.App
             EditorSplash.cppm
             WindowCapture.cppm
             EditorWindowTools.cppm
+            EditorInputTools.cppm
             EditorProfilerTools.cppm
             EditorMcpHost.cppm
             EditorProjectOperations.cppm

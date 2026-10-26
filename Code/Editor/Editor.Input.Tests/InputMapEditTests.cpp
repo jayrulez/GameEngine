@@ -163,7 +163,7 @@ TEST_CASE("input map rows: an action by its name and a line, a binding by its so
     editor::DescribeInputRow(set, u8"actions.0.interaction", fires);
     editor::DescribeInputRow(set, u8"actions.0.interaction.kind", firesKind);
     editor::DescribeInputRow(set, u8"actions.0.interaction.seconds", seconds);
-    CHECK(fires.DisplayName == StringView(u8"When It Fires"));
+    CHECK(fires.DisplayName == StringView(u8"Interaction"));
     CHECK(fires.Summary == StringView(u8"On press"));
     CHECK(firesKind.Choices[0].Name == StringView(u8"On press"));
     CHECK(firesKind.Choices[3].Name == StringView(u8"Double tap"));
@@ -300,6 +300,13 @@ TEST_CASE("input map page: the sets and their actions a tree, the chosen set's r
     REQUIRE(move.HasValue());
     CHECK(move.Value().DisplayName == StringView(u8"Move"));
     CHECK_FALSE(move.Value().Summary.IsEmpty());
+    // An action's rows: its interaction right after its kind.
+    Array<gui::PropertyInfo> rows;
+    f.page->SetRows().GetProperties(u8"actions.0", rows);
+    REQUIRE(rows.Size() == 5u);
+    CHECK(rows[1].Name == StringView(u8"kind"));
+    CHECK(rows[2].Name == StringView(u8"interaction"));
+    CHECK(rows[3].Name == StringView(u8"bindings"));
 
     // An action chosen in the tree: its set shown, it and its list opened in place.
     f.page->ChooseAction(1, 0);

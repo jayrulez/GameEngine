@@ -122,9 +122,9 @@ namespace foundation::input
             .PropAttribute("displayName", String(u8"Name"))
             .Property<&Action::kind>("kind")
             .PropAttribute("displayName", String(u8"Kind"))
-            .Nested<&Action::bindings>("bindings")   // Array<Binding> (container)
-            .Nested<&Action::processors>("processors")
-            .Nested<&Action::interaction>("interaction");
+            .Nested<&Action::interaction>("interaction") // beside the kind: when it fires
+            .Nested<&Action::bindings>("bindings")       // Array<Binding> (container)
+            .Nested<&Action::processors>("processors");
     }
 
     REFLECT_VALUE(ActionSet, "rtti::input")

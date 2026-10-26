@@ -239,11 +239,11 @@ export namespace editor
             return;
         }
         // When it fires: as soon as pressed, after a hold, on a quick tap or on two (the old page's
-        // words); closed, the choice and its time in a line.
+        // words for the choices); closed, the choice and its time in a line.
         if (rest == u8"interaction")
         {
-            info.DisplayName = String(u8"When It Fires");
-            info.Description = String(u8"As soon as pressed, after a hold, on a quick tap, or on two");
+            info.DisplayName = String(u8"Interaction");
+            info.Description = String(u8"When it fires: as soon as pressed, after a hold, on a quick tap, or on two");
             info.Summary = action.interaction.kind == input::InteractionKind::None
                                ? String(input_map_edit::InteractionTitle(action.interaction.kind))
                                : Format(u8"{} {} {}s", input_map_edit::InteractionTitle(action.interaction.kind),
@@ -253,7 +253,7 @@ export namespace editor
         }
         if (rest == u8"interaction.kind")
         {
-            info.DisplayName = String(u8"Fires");
+            info.DisplayName = String(u8"Kind");
             for (gui::PropertyChoice& choice : info.Choices)
                 choice.Name = String(input_map_edit::InteractionTitle(static_cast<input::InteractionKind>(choice.Value)));
             return;

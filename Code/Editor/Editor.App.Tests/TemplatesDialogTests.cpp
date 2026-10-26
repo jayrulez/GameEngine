@@ -216,6 +216,12 @@ TEST_CASE("templates dialog: a long folder wraps inside the details, never past 
     CHECK(value.width > 0.0f);
     CHECK(value.x + value.width <= box.x + box.width + 0.5f);
     CHECK(value.height > 30.0f); // wrapped onto several lines
+
+    // The list's rows are two lines with room above and below (the row's own height), where the
+    // view's default of one line squeezed them into each other.
+    auto* list = app::FindById<gui::ListView>(*f.ui, u8"templates-list");
+    REQUIRE(list != nullptr);
+    CHECK(list->GetRowHeight() == doctest::Approx(52.0f));
 }
 
 TEST_CASE("templates dialog: installs a bundle from a folder and removes one, the list following")

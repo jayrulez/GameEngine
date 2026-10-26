@@ -718,6 +718,9 @@ button.group-field { justify-content: flex-start; }
 .templates, .export { flex-grow: 1; padding-bottom: 0; }
 .templates-split, .export-split { flex-direction: row; flex-grow: 1; min-height: 0; column-gap: var(--space-l); }
 .templates-list { width: 290px; flex-shrink: 0; }
+/* A template's and a preset's row is two lines with room above and below (.template-row's height):
+   the lists' own row height, where the views' default one line had squeezed them into each other. */
+.templates-list, .export-list { row-height: 52px; }
 .templates-side { flex-grow: 1; min-width: 0; }
 .templates-detail { flex-direction: column; row-gap: var(--space-m); }
 .templates-head { flex-direction: row; align-items: center; column-gap: var(--space-m); }

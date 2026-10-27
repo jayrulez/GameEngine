@@ -332,6 +332,22 @@ namespace reflected
         builder.Property<&TestIds::mesh>("mesh").PropAttribute("referenceType", core::String(u8"TestTarget"));
         builder.Property<&TestIds::anything>("anything");
     }
+
+    // A list of bare Guids naming what they point at, and tints a runtime keeps as four floats.
+    class TestIdList : public core::Object
+    {
+        RTTI_OBJECT(TestIdList, core::Object)
+    public:
+        core::Array<core::Guid> meshes;
+        core::Float4 tint{1.0f, 0.5f, 0.25f, 0.75f};
+        core::Float4 rim{0.0f, 0.0f, 1.0f, 1.0f};
+    };
+    REFLECT_MEMBERS(TestIdList, "rtti::tests::reflected")
+    {
+        builder.Nested<&TestIdList::meshes>("meshes").PropAttribute("referenceType", core::String(u8"TestTarget"));
+        builder.Property<&TestIdList::tint>("tint").PropAttribute("color", true);
+        builder.Property<&TestIdList::rim>("rim").PropAttribute("color", true).PropAttribute("noAlpha", true);
+    }
 }
 
 // A struct an application takes as a reference by its Guid (an editor's entity reference), and
@@ -1042,6 +1058,51 @@ TEST_CASE("reflected source: a bare Guid is a reference, to what its property's 
     source.BeginEdit(SV(u8"mesh"));
     source.CommitEdit(SV(u8"mesh"), PropertyWrite{Variant(core::StringView{})});
     CHECK(ids->mesh.IsNil());
+}
+
+TEST_CASE("reflected source: a list of bare Guids names its elements' type by its referenceType; a Float4 with color is a colour")
+{
+    reflected::Register();
+    reflected::RttiRegisterValue_TestTarget();
+    core::GlobalTypeRegistry().Register(core::TypeOf<reflected::TestTarget>());
+    core::RegisterArrayType<core::Guid>();
+    core::RefPtr<reflected::TestIdList> ids = core::MakeRef<reflected::TestIdList>(core::DefaultAllocator());
+    ids->meshes.PushBack(core::Guid{});
+    ReflectedPropertySource source{core::DefaultAllocator()};
+    reflected::BlobFormat format;
+    source.SetTextFormat(&format);
+    core::Array<ReflectedChange> changes(core::DefaultAllocator());
+    source.SetOnChange([&changes](const ReflectedChange& change) { changes.PushBack(change); });
+    const core::Instance object(ids.Get(), ids->GetType());
+    source.SetObjects(core::Span<const core::Instance>(&object, 1u));
+
+    core::Array<PropertyInfo> elements(core::DefaultAllocator());
+    source.GetProperties(SV(u8"meshes"), elements);
+    REQUIRE(elements.Size() == 1u);
+    CHECK(elements[0].Kind == PropertyKind::Reference);
+    CHECK(elements[0].ReferenceType == &core::TypeOf<reflected::TestTarget>());
+
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    source.GetProperties(SV(u8""), rows);
+    REQUIRE(rows.Size() == 3u);
+    CHECK(rows[1].Kind == PropertyKind::Color);
+    CHECK(rows[1].ShowsAlpha);
+    CHECK(rows[2].Kind == PropertyKind::Color);
+    CHECK_FALSE(rows[2].ShowsAlpha);
+    core::Array<PropertyInfo> parts(core::DefaultAllocator());
+    source.GetProperties(SV(u8"tint"), parts);
+    CHECK(parts.IsEmpty()); // one value, not its parts
+    CHECK(source.GetValue(SV(u8"tint"), 0).AsColor().g == doctest::Approx(0.5f));
+    CHECK(source.GetValue(SV(u8"tint"), 0).AsColor().a == doctest::Approx(0.75f));
+
+    source.BeginEdit(SV(u8"tint"));
+    source.CommitEdit(SV(u8"tint"), PropertyWrite{Variant(core::Color{0.1f, 0.2f, 0.3f, 0.4f})});
+    CHECK(ids->tint.y == doctest::Approx(0.2f));
+    CHECK(ids->tint.w == doctest::Approx(0.4f));
+    REQUIRE(changes.Size() == 1u);
+    CHECK(source.Restore(changes.Back(), true));
+    CHECK(ids->tint.y == doctest::Approx(0.5f));
+    CHECK(ids->tint.w == doctest::Approx(0.75f));
 }
 
 TEST_CASE("reflected source: a struct the application registers as a reference is one by its Guid, naming itself")

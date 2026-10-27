@@ -10,7 +10,8 @@
 //     property's address); a ReadOnly property is read only.
 //   - A Color is a colour (T4), its alpha hidden with `noAlpha`; a Float4 with `hdrColor` (sRGB
 //     rgb, a linear intensity in w) is an HDR colour, hinted "ColorHdr", its parts `color` and
-//     `intensity` (shown in stops).
+//     `intensity` (shown in stops); a Float4 with `color` is a colour as a Color is (four floats a
+//     runtime keeps its tints in), `noAlpha` hiding its alpha.
 //   - Float2, Float3 and Float4 are groups hinted with their names, their parts x, y, z, w; a
 //     Quaternion is a Float3 group of Euler degrees (pitch, yaw, roll) the source converts, as the
 //     editor's Transform row does; a Nested struct, or a reflected value struct, is a group.
@@ -21,7 +22,8 @@
 //     Reference, its Guid as text (empty: none), naming the type it points at; a write drops its
 //     binding, so the next resolve binds the new id. The toolkit has no slot: the application
 //     registers one for the kind. A bare Guid is a reference too, to the type its property's
-//     `referenceType` attribute names (by the type's name), else to nothing in particular.
+//     `referenceType` attribute names (by the type's name), else to nothing in particular; a list
+//     of bare Guids names its elements' by its own property's.
 //   - A struct's group carries its type's name as its hint, and so does any other type, for an
 //     application's editor (a Color until T4, an EntityRef); a struct no editor takes shows its own
 //     rows, anything else the grid's row saying no editor fits.
@@ -245,7 +247,7 @@ export namespace foundation::gui
             }
             if (target.Part < 0 && target.Hdr)
                 ListHdrParts(out);
-            else if (target.Part < 0 && (shape == Shape::Float2 || shape == Shape::Float3 || shape == Shape::Float4 || shape == Shape::Quaternion))
+            else if (target.Part < 0 && !target.AsColor && (shape == Shape::Float2 || shape == Shape::Float3 || shape == Shape::Float4 || shape == Shape::Quaternion))
                 ListParts(shape, out);
         }
 
@@ -463,6 +465,7 @@ export namespace foundation::gui
             bool Element = false;
             i32 Part = -1;                              // a part of the Float or Quaternion above
             bool Hdr = false;                           // a Float4 that is an HDR colour
+            bool AsColor = false;                       // a Float4 that is a colour (`color`)
             bool ReadOnly = false;
         };
 
@@ -605,6 +608,7 @@ export namespace foundation::gui
                 next.Address = property->address != nullptr ? property->address(owner) : nullptr;
                 next.ReadOnly = at.ReadOnly || (static_cast<u32>(property->flags) & static_cast<u32>(core::PropertyFlags::ReadOnly)) != 0;
                 next.Hdr = core::FindAttribute(*property, core::StringView(u8"hdrColor")) != nullptr && ShapeOf(*property->type) == Shape::Float4;
+                next.AsColor = core::FindAttribute(*property, core::StringView(u8"color")) != nullptr && ShapeOf(*property->type) == Shape::Float4;
                 at = next;
                 return true;
             }
@@ -633,6 +637,8 @@ export namespace foundation::gui
                 at = next;
                 return true;
             }
+            if (at.AsColor)
+                return false; // a colour is one value, not its parts
             const i32 part = at.Hdr ? HdrPartIndex(segment) : PartIndex(shape, segment);
             if (part >= 0)
             {
@@ -706,6 +712,13 @@ export namespace foundation::gui
                 info.ShowsAlpha = core::FindAttribute(property, core::StringView(u8"noAlpha")) == nullptr;
             if (ShapeOf(*property.type) == Shape::Float4 && core::FindAttribute(property, core::StringView(u8"hdrColor")) != nullptr)
                 info.Hint = core::String(u8"ColorHdr");
+            else if (ShapeOf(*property.type) == Shape::Float4 && core::FindAttribute(property, core::StringView(u8"color")) != nullptr)
+            {
+                // Four floats kept as a colour (a particle's tint): one colour, as a Color is.
+                info.Kind = PropertyKind::Color;
+                info.Hint = core::String{};
+                info.ShowsAlpha = core::FindAttribute(property, core::StringView(u8"noAlpha")) == nullptr;
+            }
             if (const core::Attribute* range = core::FindAttribute(property, core::StringView(u8"range")))
                 if (const core::Float4* bounds = range->value.TryGet<core::Float4>())
                 {
@@ -838,6 +851,10 @@ export namespace foundation::gui
                 count = core::Min(count, static_cast<usize>(GetValue(path, o).AsInt()));
             if (m_objects.IsEmpty())
                 return;
+            // A list of bare ids names what its elements point at as a bare id does, by its own
+            // property's `referenceType`.
+            Target list;
+            const core::String* named = Resolve(0, path, list) && list.Property != nullptr ? StringAttribute(*list.Property, u8"referenceType") : nullptr;
             for (usize i = 0; i < count; ++i)
             {
                 const core::String element = core::Format(u8"{}.{}", path, i);
@@ -848,6 +865,8 @@ export namespace foundation::gui
                 info.Name = core::Format(u8"{}", i);
                 info.ReadOnly = target.ReadOnly;
                 DescribeType(*target.Type, false, info);
+                if (info.Kind == PropertyKind::Reference && info.ReferenceType == nullptr && named != nullptr)
+                    info.ReferenceType = TypeNamed(named->AsView());
                 const bool object = info.Kind == PropertyKind::Group && target.Address != nullptr;
                 info.DisplayName = object ? core::Format(u8"{} {}", TypeShownName(*target.Type), i + 1) : core::Format(u8"Element {}", i + 1);
                 out.PushBack(core::Move(info));
@@ -948,6 +967,11 @@ export namespace foundation::gui
                 core::Float4 parts{};
                 return ReadCompound(target, shape, parts) ? Variant(core::Color{parts.x, parts.y, parts.z, 1.0f}) : Variant{};
             }
+            if (target.AsColor)
+            {
+                core::Float4 parts{};
+                return ReadCompound(target, shape, parts) ? Variant(core::Color{parts.x, parts.y, parts.z, parts.w}) : Variant{};
+            }
             if (target.Part >= 0)
                 return Variant(PartOf(target, shape));
             if (shape == Shape::List)
@@ -978,6 +1002,11 @@ export namespace foundation::gui
                     return false;
                 const core::Color color = value.AsColor();
                 return WriteCompound(target, shape, core::Float4{color.r, color.g, color.b, parts.w});
+            }
+            if (target.AsColor)
+            {
+                const core::Color color = value.AsColor();
+                return WriteCompound(target, shape, core::Float4{color.r, color.g, color.b, color.a});
             }
             if (target.Part >= 0)
                 return SetPart(target, shape, value.AsFloat());
@@ -1273,7 +1302,7 @@ export namespace foundation::gui
                 return;
             const bool reading = ar.Mode() == core::SerializeMode::Read;
             const Shape shape = ShapeOf(*target.Type);
-            if (target.Part == kHdrColorPart)
+            if (target.Part == kHdrColorPart || target.AsColor)
             {
                 core::Color value = Read(target).AsColor();
                 core::Serialize(ar, key, value);
@@ -1538,7 +1567,7 @@ export namespace foundation::gui
         // a value's kind.
         [[nodiscard]] core::String ShapeTag(const Target& target) const
         {
-            if (target.Part == kHdrColorPart)
+            if (target.Part == kHdrColorPart || target.AsColor)
                 return core::String(u8"Color");
             if (target.Part >= 0)
                 return core::String(u8"number");

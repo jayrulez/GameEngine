@@ -259,7 +259,7 @@ namespace editor
             return;
         const materials::MaterialSource& src = Asset()->source;
 
-        // The shader: a shader asset, or a built-in (PBR or Unlit) while it is on none.
+        // The shader: a shader asset, or a built-in (PBR, Unlit or Phong) while it is on none.
         {
             gui::PropertyInfo& shader = m_materialRows->Add(u8"shader", gui::PropertyKind::Reference);
             shader.DisplayName = String(u8"Shader");
@@ -267,8 +267,8 @@ namespace editor
             shader.ReferenceType = &foundation::shaders::ShaderResource::StaticType();
             gui::PropertyInfo& builtIn = m_materialRows->Add(u8"builtIn", gui::PropertyKind::Enum);
             builtIn.DisplayName = String(u8"Built-in");
-            const StringView kBuiltIns[] = {u8"PBR", u8"Unlit"};
-            AddChoices(builtIn, Span<const StringView>(kBuiltIns, 2));
+            for (const materials::BuiltinShadingInfo& builtin : materials::kBuiltinShadings)
+                builtIn.Choices.PushBack(gui::PropertyChoice{String(builtin.label), static_cast<i64>(builtin.shading)});
             for (const PipelineRow& row : kPipelineRows)
             {
                 gui::PropertyInfo& info = m_materialRows->Add(row.path, gui::PropertyKind::Enum);
@@ -407,7 +407,8 @@ namespace editor
                 rows.SetValue(path, 0, value);
         };
         show(*m_materialRows, u8"shader", gui::Variant(GuidText(src.shaderId)));
-        show(*m_materialRows, u8"builtIn", gui::Variant(static_cast<i64>(src.shaderName.AsView() == u8"unlit" ? 1 : 0)));
+        const materials::BuiltinShadingInfo* builtin = materials::FindBuiltinShadingByShader(src.shaderName.AsView());
+        show(*m_materialRows, u8"builtIn", gui::Variant(static_cast<i64>(builtin != nullptr ? builtin->shading : materials::BuiltinShading::Pbr)));
         if (gui::PropertyInfo* builtIn = m_materialRows->FindInfo(u8"builtIn"); builtIn != nullptr && builtIn->Visible != src.shaderId.IsNil())
         {
             builtIn->Visible = src.shaderId.IsNil(); // a built-in only while it is on no shader asset
@@ -514,7 +515,9 @@ namespace editor
             }
             if (path == u8"builtIn")
             {
-                SwitchToBuiltIn(value.AsInt() == 1);
+                const i64 chosen = value.AsInt();
+                if (chosen >= 0 && static_cast<usize>(chosen) < materials::kBuiltinShadingCount)
+                    SwitchToBuiltIn(static_cast<materials::BuiltinShading>(chosen));
                 return;
             }
             for (const PipelineRow& row : kPipelineRows)
@@ -971,7 +974,7 @@ namespace editor
         }
         if (shader.IsNil())
         {
-            SwitchToBuiltIn(false);
+            SwitchToBuiltIn(materials::BuiltinShading::Pbr);
             return;
         }
         RefPtr<foundation::shaders::ShaderSource> table = ReadShader(shader);
@@ -987,20 +990,20 @@ namespace editor
                                   { pipeline::SetMaterialShader(s, shader, *table); }});
     }
 
-    void MaterialEditorPage::SwitchToBuiltIn(bool unlit)
+    void MaterialEditorPage::SwitchToBuiltIn(materials::BuiltinShading shading)
     {
         if (Asset() == nullptr)
         {
             return;
         }
         const materials::MaterialSource& current = Asset()->source;
-        if (current.shaderId.IsNil() && (current.shaderName.AsView() == u8"unlit") == unlit)
+        if (current.shaderId.IsNil() && current.shaderName.AsView() == materials::BuiltinShadingOf(shading).shaderName)
         {
             return;
         }
         ApplyEdit(u8"Shader", Function<void(materials::MaterialSource&)>{
-                                  [unlit](materials::MaterialSource& s)
-                                  { pipeline::SetMaterialBuiltInShader(s, unlit); }});
+                                  [shading](materials::MaterialSource& s)
+                                  { pipeline::SetMaterialBuiltInShader(s, shading); }});
     }
 
     void MaterialEditorPage::BindShader()

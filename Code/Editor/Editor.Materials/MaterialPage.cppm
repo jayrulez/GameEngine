@@ -201,7 +201,7 @@ export namespace editor
         // Moves the material onto a shader asset, or back to a built-in (nil), as one undoable
         // edit: re-laid by the new shader's table, every value that still fits kept.
         void SwitchShader(const Guid& shader);
-        void SwitchToBuiltIn(bool unlit);
+        void SwitchToBuiltIn(foundation::materials::BuiltinShading shading);
         // Binds the material's shader asset and re-lays the material by its current table.
         void BindShader();
 

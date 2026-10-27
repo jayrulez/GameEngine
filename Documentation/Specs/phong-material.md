@@ -1,6 +1,6 @@
 # The Phong material - a built-in for models authored with Phong, made by the import
 
-> Status: PROPOSED 2026-10-27 (user: "it makes sense to have a builtin phong shader, and
+> Status: phase 1 DONE 2026-10-27 (the built-in); proposed 2026-10-27 (user: "it makes sense to have a builtin phong shader, and
 > investigate how our import pipeline could detect and create the right material"; "like how we
 > have unlit"). Not built.
 > Mirror: Sedulous ports each phase after it lands (told 2026-10-27).
@@ -65,10 +65,11 @@ beside the other two.
   through the vertex path), and under GBUFFER the five targets every forward shader writes, so SSR,
   SSGI and the rest go on working (written as a rough dielectric: Phong has no metal, and its
   highlight is not a mirror).
-- **Its properties**, in this order (the cbuffer written to match): `DiffuseColor` (colour),
-  `SpecularColor` (colour), `Shininess` (float, an exponent from 1 to 512), `EmissiveColor` (HDR
-  colour), `NormalScale`, `AlphaCutoff`; `DiffuseMap`, `SpecularMap`, `NormalMap`, `EmissiveMap`;
-  `MainSampler`.
+- **Its properties**, in this order (the cbuffer written to match, 64 bytes): `DiffuseColor`
+  (colour), `SpecularColor` (colour; black, no highlight), `EmissiveColor` (HDR colour),
+  `Shininess` (float, the highlight's exponent), `NormalScale`, `AlphaCutoff`; `DiffuseMap`,
+  `SpecularMap`, `NormalMap`, `EmissiveMap`; `MainSampler`. No wind properties, as Unlit has none:
+  a Phong material never selects the swaying vertex variant.
 - **Where it is known by name.** `BuiltinMaterialTemplate` gains its branch; the built-in shader a
   material asset names becomes one of three (PBR, Unlit, Phong) in `SetMaterialBuiltInShader`, the
   MCP material tool ("phong") and the material page's built-in row. Documents in step: the MCP guide

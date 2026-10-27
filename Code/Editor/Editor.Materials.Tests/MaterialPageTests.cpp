@@ -119,7 +119,7 @@ namespace
             wood = project->SourceDb().RootGroup()->CreateInstance(u8"Wood", pipeline::MaterialAsset::StaticType());
             REQUIRE(wood != nullptr);
             pipeline::MaterialAsset asset;
-            pipeline::SetMaterialBuiltInShader(asset.source, false);
+            pipeline::SetMaterialBuiltInShader(asset.source, foundation::materials::BuiltinShading::Pbr);
             REQUIRE(wood->WriteObject(asset).IsOk());
         }
         ~Bed()
@@ -186,6 +186,27 @@ TEST_CASE("material page: a built-in switched lays the rows out as its own, and 
     CHECK(page->PropertyRows().FindInfo(u8"BaseColor") != nullptr);
     page->Commands().Undo();
     page->Refresh();
+    CHECK(page->PropertyRows().FindInfo(u8"Metallic") != nullptr);
+}
+
+TEST_CASE("material page: the built-in row offers each built-in; Phong lays the material out as its own, one step")
+{
+    Bed bed;
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    const gui::PropertyInfo* builtIn = page->MaterialRows().FindInfo(u8"builtIn");
+    REQUIRE(builtIn != nullptr);
+    REQUIRE(builtIn->Choices.Size() == 3u);
+    CHECK(builtIn->Choices[2].Name == String(u8"Phong"));
+
+    page->EditRow(page->MaterialRows(), u8"builtIn", gui::Variant(static_cast<i64>(2)));
+    page->Refresh();
+    CHECK(page->Source()->shaderName == StringView(u8"phong"));
+    CHECK(page->MaterialRows().GetValue(u8"builtIn", 0).AsInt() == 2);
+    CHECK(page->PropertyRows().FindInfo(u8"Shininess") != nullptr);
+    CHECK(page->PropertyRows().FindInfo(u8"Metallic") == nullptr);
+    page->Commands().Undo();
+    page->Refresh();
+    CHECK(page->Source()->shaderName == StringView(u8"forward"));
     CHECK(page->PropertyRows().FindInfo(u8"Metallic") != nullptr);
 }
 

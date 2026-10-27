@@ -1198,5 +1198,12 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     CHECK(onPbr.Get(u8"properties").Count() == 16);
     CHECK(onPbr.Get(u8"shaderName").AsString() == StringView(u8"forward"));
 
+    // On the built-in Phong: its eleven (six values, four maps, the sampler).
+    const JsonValue onPhong = FfCall(
+        server, u8"material_set_shader",
+        FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"phong"));
+    CHECK(onPhong.Get(u8"properties").Count() == 11);
+    CHECK(onPhong.Get(u8"shaderName").AsString() == StringView(u8"phong"));
+
     std::filesystem::remove_all("mcp_material_shader_project", ec);
 }

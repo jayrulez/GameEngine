@@ -70,5 +70,5 @@ export namespace pipeline
     inline constexpr usize kBuilderCount = 31 + kGuiAssetKinds;
     inline constexpr usize kImporterCount = 13;
     /// The creators every build has; the scripts add three per language with a cook on top.
-    inline constexpr usize kCreatorCount = 31 + kGuiAssetKinds;
+    inline constexpr usize kCreatorCount = 32 + kGuiAssetKinds; // 32: the Phong Material (phong-material.md)
 }

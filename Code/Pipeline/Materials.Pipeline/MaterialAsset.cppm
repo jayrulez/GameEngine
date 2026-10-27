@@ -327,12 +327,11 @@ export namespace pipeline{
         AssignMaterialSource(source, laid);
     }
 
-    // Puts a material back on a built-in shader, PBR or Unlit: the built-in's own layout (what
-    // Create > Materials makes), the material's values and render state carried onto it.
-    inline void SetMaterialBuiltInShader(MaterialSource& source, bool unlit)
+    // Puts a material back on a built-in shader (PBR, Unlit or Phong): the built-in's own layout
+    // (what Create > Materials makes), the material's values and render state carried onto it.
+    inline void SetMaterialBuiltInShader(MaterialSource& source, foundation::materials::BuiltinShading shading)
     {
-        RefPtr<Material> built = unlit ? CreateUnlit(source.name.AsView())
-                                       : CreatePBR(source.name.AsView());
+        RefPtr<Material> built = foundation::materials::CreateBuiltin(shading, source.name.AsView());
         MaterialSource to;
         MaterialSource::FromMaterial(*built, Guid{}, to);
         to.name = source.name;
@@ -358,9 +357,9 @@ export namespace pipeline{
     // property) in MaterialAssetImpl.cpp - GCC module hygiene: REFLECT_MEMBERS out of interfaces.
 
 
-    /// A preset material (PBR, or unlit) in `target`, named `baseName` made unique.
+    /// A material on the built-in `shading` in `target`, named `baseName` made unique.
     [[nodiscard]] foundation::content::Instance* CreateMaterialInstance(
-        foundation::content::Group* target, StringView baseName, bool unlit);
+        foundation::content::Group* target, StringView baseName, foundation::materials::BuiltinShading shading);
     /// File > New's material creators (pipeline.registration composes every domain's).
     void RegisterMaterialCreators(AssetCreatorRegistry& registry);
 } // namespace foundation::materials

@@ -648,7 +648,9 @@ namespace editor
             most += effect->GetSystem(s)->MaxParticles();
         }
         const StringView state = m_stopped ? StringView(u8"stopped") : (m_paused ? StringView(u8"paused") : StringView(u8"playing"));
-        const String text = m_stopped ? String(u8"Stopped") : Format(u8"{} of {}{}", alive, most, m_paused ? StringView(u8"  ·  Paused") : StringView{});
+        // Its width fixed by the sheet; paused says so by its colour, as the Play button does by its
+        // icon (a running count beside a word grew and shrank, moving what follows it).
+        const String text = m_stopped ? String(u8"Stopped") : Format(u8"{} of {}", alive, most);
         if (m_count->GetText() != text.AsView())
             m_count->SetText(text.AsView());
         constexpr StringView kStates[] = {u8"stopped", u8"paused", u8"playing"};

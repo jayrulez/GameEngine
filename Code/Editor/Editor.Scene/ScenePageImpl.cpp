@@ -407,14 +407,15 @@ namespace editor
             m_animation->BindEntity(entity);
     }
 
-    String SceneEditorPage::UnsavedBesides() const
+    void SceneEditorPage::ListUnsavedBesides(Array<String>& out) const
     {
-        return m_animation && m_animation->Document().IsDirty() ? Format(u8"the clip '{}'", m_animation->Document().Name()) : String{};
+        if (m_animation && m_animation->Document().IsDirty())
+            out.PushBack(Format(u8"The clip '{}'", m_animation->Document().Name()));
     }
 
     Status SceneEditorPage::SaveBesides()
     {
-        return m_animation ? m_animation->Save() : Status{};
+        return m_animation && m_animation->Document().IsDirty() ? m_animation->Save() : Status{};
     }
 
     void SceneEditorPage::BuildTools(EditorContext& context)

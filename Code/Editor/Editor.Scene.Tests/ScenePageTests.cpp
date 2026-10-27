@@ -235,7 +235,10 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
     const scene::EntityHandle crate = page->ScenePtr()->FindEntity(bed.crate);
     CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(5.0f));
     CHECK_FALSE(page->IsDirty());
-    CHECK(page->UnsavedBesides() == String(u8"the clip 'Bounce'"));
+    Array<String> besides;
+    page->ListUnsavedBesides(besides);
+    REQUIRE(besides.Size() == 1u);
+    CHECK(besides[0] == String(u8"The clip 'Bounce'"));
     CHECK(page->HasUnsavedWork());
 
     // Saved: the scene as it is (x 0), the crate posed again after.
@@ -248,7 +251,9 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
         CHECK(stored.GetLocalTransform(stored.FindEntity(bed.crate)).position.x == doctest::Approx(0.0f));
     }
     REQUIRE(page->SaveBesides().IsOk());
-    CHECK(page->UnsavedBesides().IsEmpty());
+    besides.Clear();
+    page->ListUnsavedBesides(besides);
+    CHECK(besides.IsEmpty());
 
     // Hidden from its own Close: what it posed goes back.
     REQUIRE(panel->RequestClose);

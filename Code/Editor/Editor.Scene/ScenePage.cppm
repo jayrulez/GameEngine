@@ -103,7 +103,7 @@ export namespace editor
         // === EditorPage ===
         [[nodiscard]] Status Save() override;
         /// The clip its animation panel edits, while unsaved: asked about beside the scene.
-        [[nodiscard]] String UnsavedBesides() const override;
+        void ListUnsavedBesides(Array<String>& out) const override;
         Status SaveBesides() override;
         void OnSavedAs(foundation::content::Instance& instance) override;
         /// The asset changed under this page (apply-to-prefab from another page): read again, its

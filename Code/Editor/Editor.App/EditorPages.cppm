@@ -207,7 +207,11 @@ export namespace editor::app
             gui::SceneRoot* root = m_services.dialogRoot ? m_services.dialogRoot() : nullptr;
             if (root == nullptr)
                 return false; // nothing to ask over: the unsaved work stays
-            const String message = dirty == 1 ? String(u8"1 page has unsaved changes.") : Format(u8"{} pages have unsaved changes.", dirty);
+            // Each named, as the page's tab and its panels name them (a count says nothing of where).
+            Array<String> lines(m_allocator);
+            for (const OpenPage& open : m_open)
+                UnsavedLines(*open.page, lines);
+            const String message = UnsavedText(lines);
             auto box = MakeRef<gui::MessageBox>(m_allocator);
             box->Configure(u8"Unsaved changes", message.AsView(), gui::MessageBox::Buttons::Ok);
             box->ClearButtons();
@@ -241,7 +245,7 @@ export namespace editor::app
             {
                 if (open.page->IsDirty() && !open.page->Save().IsOk())
                     all = false;
-                if (!open.page->UnsavedBesides().IsEmpty() && !open.page->SaveBesides().IsOk())
+                if (open.page->HasUnsavedWork() && !open.page->SaveBesides().IsOk())
                     all = false; // a clip its panel edits
             }
             return all;
@@ -397,6 +401,28 @@ export namespace editor::app
             id.ToChars(text);
             return String(StringView(text, 36));
         }
+        /// What is unsaved on `page`, a line each: its own changes by its name ("Level1"), the work
+        /// it holds besides with its name ("The clip 'Bounce', in Level1").
+        static void UnsavedLines(const editor::EditorPage& page, Array<String>& out)
+        {
+            if (page.IsDirty())
+                out.PushBack(String(page.Title()));
+            Array<String> besides;
+            page.ListUnsavedBesides(besides);
+            for (const String& work : besides)
+                out.PushBack(Format(u8"{}, in {}", work, page.Title()));
+        }
+        /// The prompt's words for `lines`: one in a sentence, several listed.
+        [[nodiscard]] static String UnsavedText(const Array<String>& lines)
+        {
+            if (lines.Size() == 1)
+                return Format(u8"{} has unsaved changes.", lines[0]);
+            String text(u8"These have unsaved changes:");
+            for (const String& line : lines)
+                text += Format(u8"\n    {}", line).AsView();
+            return text;
+        }
+
         /// How many pages have unsaved changes, or hold unsaved work of their own (a clip).
         [[nodiscard]] usize DirtyCount() const
         {
@@ -453,12 +479,10 @@ export namespace editor::app
             if (root == nullptr)
                 return; // nothing to ask over: it stays open
             auto box = MakeRef<gui::MessageBox>(m_allocator);
-            // The page's own changes, the work it holds besides (a clip), or both.
-            const String besides = page->UnsavedBesides();
-            const String text = besides.IsEmpty()     ? Format(u8"'{}' has unsaved changes.", page->Title())
-                                : !page->IsDirty()   ? Format(u8"{} has unsaved changes.", besides)
-                                                     : Format(u8"'{}' and {} have unsaved changes.", page->Title(), besides);
-            box->Configure(u8"Unsaved changes", text.AsView(), gui::MessageBox::Buttons::Ok);
+            // What is unsaved, each named: the page's own changes, the work it holds besides (a clip).
+            Array<String> lines(m_allocator);
+            UnsavedLines(*page, lines);
+            box->Configure(u8"Unsaved changes", UnsavedText(lines).AsView(), gui::MessageBox::Buttons::Ok);
             box->ClearButtons();
             (void)box->AddButton(u8"Discard", u8"discard", gui::DialogRole::Destructive);
             (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
@@ -474,7 +498,7 @@ export namespace editor::app
                 return; // closed meanwhile
             if (answer == StringView(u8"save"))
             {
-                if ((page->IsDirty() && !page->Save().IsOk()) || (!page->UnsavedBesides().IsEmpty() && !page->SaveBesides().IsOk()))
+                if ((page->IsDirty() && !page->Save().IsOk()) || !page->SaveBesides().IsOk())
                 {
                     m_services.context->Notify(editor::NoticeKind::Error, u8"Save FAILED (see Console) - the page stays open.");
                     return;

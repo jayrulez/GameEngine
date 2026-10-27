@@ -57,9 +57,15 @@ namespace
                 ++*closed;
         }
         // Work it holds besides its asset (a scene page's clip).
-        [[nodiscard]] String UnsavedBesides() const override { return besides; }
+        void ListUnsavedBesides(Array<String>& out) const override
+        {
+            if (!besides.IsEmpty())
+                out.PushBack(besides);
+        }
         Status SaveBesides() override
         {
+            if (besides.IsEmpty())
+                return Status{};
             ++besidesSaves;
             besides = String{};
             return Status{};
@@ -280,12 +286,13 @@ TEST_CASE("editor pages: a page holding unsaved work besides its asset is asked 
     Bed bed;
     auto* page = static_cast<TestPage*>(bed.pages->Open(*bed.one));
     REQUIRE(page != nullptr);
-    page->besides = String(u8"the clip 'Bounce'");
+    page->besides = String(u8"The clip 'Bounce'");
     CHECK_FALSE(page->IsDirty()); // its own mark says nothing of the clip
     bed.pages->RequestClose(page);
     (void)bed.root->UpdateLayout();
     gui::MessageBox* box = FindBox(*bed.root);
     REQUIRE(box != nullptr);
+    CHECK(box->GetMessage() == StringView(u8"The clip 'Bounce', in One has unsaved changes."));
     CHECK(ButtonNamed(*box, u8"Save")->HandleActivate());
     CHECK(page->besidesSaves == 1);
     CHECK(page->saves == 0); // nothing of its own to save
@@ -295,12 +302,15 @@ TEST_CASE("editor pages: a page holding unsaved work besides its asset is asked 
     // The exit gate counts it, and Save All saves it.
     page = static_cast<TestPage*>(bed.pages->Open(*bed.two));
     REQUIRE(page != nullptr);
-    page->besides = String(u8"the clip 'Spin'");
+    page->besides = String(u8"The clip 'Spin'");
+    page->MarkDirty();
     int proceeded = 0;
     CHECK_FALSE(bed.pages->ConfirmUnsavedThen(u8"Save All and Exit", u8"Exit Without Saving", [&proceeded]() { ++proceeded; }));
     (void)bed.root->UpdateLayout();
     box = FindBox(*bed.root);
     REQUIRE(box != nullptr);
+    // Each named, the page's own changes and its clip: never a count of pages.
+    CHECK(box->GetMessage() == StringView(u8"These have unsaved changes:\n    Two\n    The clip 'Spin', in Two"));
     CHECK(ButtonNamed(*box, u8"Save All and Exit")->HandleActivate());
     CHECK(page->besidesSaves == 1);
     CHECK(proceeded == 1);

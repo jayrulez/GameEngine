@@ -27,6 +27,10 @@ namespace foundation::profiler::gui
     {
         builder.Creator();
     }
+    REFLECT_MEMBERS(ProfileTimeline, "rtti::profiler::gui")
+    {
+        builder.Creator();
+    }
 
     void RegisterProfilerElements()
     {
@@ -35,6 +39,7 @@ namespace foundation::profiler::gui
             const core::TypeInfo* const kElements[] = {
                 &FrameStrip::StaticType(),
                 &CounterPlot::StaticType(),
+                &ProfileTimeline::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)foundation::gui::ElementTypes::Register(*type);

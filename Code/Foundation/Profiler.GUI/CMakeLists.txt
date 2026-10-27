@@ -13,6 +13,7 @@ target_sources(Profiler.GUI
             ProfileFocus.cppm
             ProfilerWidget.cppm
             FrameStrip.cppm
+            ProfileTimeline.cppm
             ProfilerSheet.cppm
     PRIVATE
         ProfilerGUIReflection.cpp)

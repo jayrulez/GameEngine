@@ -10,7 +10,6 @@ module;
 
 #include <algorithm>
 #include <cctype>
-#include <cmath> // fabs: a held channel against the default pose
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -1338,9 +1337,9 @@ export namespace foundation::model::fbx
                     const ufbx_node* sourceNode = bakedNode->typed_id < m_scene->nodes.count ? m_scene->nodes.data[bakedNode->typed_id] : nullptr;
                     const ufbx_transform rest = sourceNode != nullptr ? sourceNode->local_transform : ufbx_identity_transform;
                     const auto heldAway = [](ufbx_vec3 held, ufbx_vec3 restValue)
-                    { return std::fabs(held.x - restValue.x) > 1e-5 || std::fabs(held.y - restValue.y) > 1e-5 || std::fabs(held.z - restValue.z) > 1e-5; };
+                    { return Abs(held.x - restValue.x) > 1e-5 || Abs(held.y - restValue.y) > 1e-5 || Abs(held.z - restValue.z) > 1e-5; };
                     const auto turnedAway = [](ufbx_quat held, ufbx_quat restValue)
-                    { return std::fabs(held.x * restValue.x + held.y * restValue.y + held.z * restValue.z + held.w * restValue.w) < 1.0 - 1e-7; };
+                    { return Abs(held.x * restValue.x + held.y * restValue.y + held.z * restValue.z + held.w * restValue.w) < 1.0 - 1e-7; };
                     const bool keepTranslation = bakedNode->translation_keys.count > 0 &&
                                                  (!bakedNode->constant_translation || heldAway(bakedNode->translation_keys.data[0].value, rest.translation));
                     const bool keepRotation = bakedNode->rotation_keys.count > 0 &&

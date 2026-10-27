@@ -101,10 +101,13 @@
   baked per pixel at import. FBX (`FbxLoader.cppm`, the legacy Lambert/Phong path): metallic 0 and
   roughness 0.8, the specular colour, its texture and the shininess never read. Bistro's FBX binds
   its `*_Specular.dds` to Phong's SpecularColor slot, and its README says those maps pack occlusion
-  (R), roughness (G) and metalness (B), so all of its maps are dropped. Wanted: an import option to
-  read that slot as packed ORM (not the default: a true Phong specular map would turn to metal),
-  and the spec-gloss style conversion for real specular maps. Test against Bistro v5.2 (FBX only)
-  at `~/Downloads/Bistro_v5_2`.
+  (R), roughness (G) and metalness (B), so all of its maps are dropped. Wanted: the spec-gloss
+  style conversion for real specular maps. The FBX half is now `Specs/phong-material.md`: legacy
+  Phong and Lambert materials import as authored, onto a built-in Phong material that keeps their
+  specular. The import option once wanted here, to read Phong's specular slot as packed ORM, is
+  dropped (user, 2026-10-27: no importer case for one asset's convention); Bistro's materials are
+  fixed by a script outside the engine (rebuilt as PBR with the packed maps wired as such) so it
+  imports normally. Test data: Bistro v5.2 (FBX only) at `~/Downloads/Bistro_v5_2`.
 - **A slot's own depth and shadow program.** The forward pass draws each submesh with its slot's
   material (2026-10-15), but the depth prepass, shadows and picking still draw a mesh (and an
   instanced set) whole with its first material (`MeshRenderer::DepthLikeFor` over `md.material`):

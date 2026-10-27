@@ -1,4 +1,4 @@
-add_executable(Profiler.GUI.Tests TestsMain.cpp ProfileFocusTests.cpp FrameStripTests.cpp ProfileTimelineTests.cpp)
+add_executable(Profiler.GUI.Tests TestsMain.cpp ProfileFocusTests.cpp FrameStripTests.cpp ProfileTimelineTests.cpp ScopeTableTests.cpp)
 target_link_libraries(Profiler.GUI.Tests PRIVATE Foundation::Profiler.GUI Foundation::GUI doctest::doctest)
 target_include_directories(Profiler.GUI.Tests PRIVATE ${CMAKE_SOURCE_DIR}/Code/Foundation/Profiler.Tests) # KnownSource.h
 target_compile_definitions(Profiler.GUI.Tests PRIVATE DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

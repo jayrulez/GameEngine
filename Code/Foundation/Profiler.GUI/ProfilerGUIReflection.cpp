@@ -31,6 +31,14 @@ namespace foundation::profiler::gui
     {
         builder.Creator();
     }
+    REFLECT_MEMBERS(ScopeTable, "rtti::profiler::gui")
+    {
+        builder.Creator();
+    }
+    REFLECT_MEMBERS(ScopeDetail, "rtti::profiler::gui")
+    {
+        builder.Creator();
+    }
 
     void RegisterProfilerElements()
     {
@@ -40,6 +48,8 @@ namespace foundation::profiler::gui
                 &FrameStrip::StaticType(),
                 &CounterPlot::StaticType(),
                 &ProfileTimeline::StaticType(),
+                &ScopeTable::StaticType(),
+                &ScopeDetail::StaticType(),
             };
             for (const core::TypeInfo* type : kElements)
                 (void)foundation::gui::ElementTypes::Register(*type);

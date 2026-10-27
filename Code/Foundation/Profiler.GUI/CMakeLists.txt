@@ -14,6 +14,8 @@ target_sources(Profiler.GUI
             ProfilerWidget.cppm
             FrameStrip.cppm
             ProfileTimeline.cppm
+            ScopeTable.cppm
+            ScopeDetail.cppm
             ProfilerSheet.cppm
     PRIVATE
         ProfilerGUIReflection.cpp)

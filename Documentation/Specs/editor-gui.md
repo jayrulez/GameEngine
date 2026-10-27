@@ -785,7 +785,8 @@ The design (proposed; the mock is judged before anything is built):
   by any other heading; columns Name, Calls, Total, Self, Mean, Max, % of frame; a filter; GPU
   passes their own group in it. Over a marked range, the range's.
 - **The detail.** The chosen scope's parents, its children by name with their share, and its
-  durations' spread over the chosen frames, with Longest (the longest instance zoomed to).
+  durations' spread over every frame held (one frame chosen has too few calls to spread), the
+  bars holding the chosen frames' calls lit; with Longest (the longest instance zoomed to).
 - **Not in X7:** comparing two captures, and the overlay's move (X8 deletes Profiler.UI with the
   old UI once the overlay is on the GUI).
 - **Keys.** The docking ruling (mouse first; ask before adding default shortcuts) holds: every

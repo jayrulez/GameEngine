@@ -32,6 +32,8 @@ import editor.camera;
 import editor.viewporttools;
 import editor.propertyanimation; // the animation panel under the viewport
 import propertyanimation.pipeline; // CreatePropertyAnimationClip (the panel's New)
+import engine.animation;          // PropertyAnimatorComponent (a new clip given to it)
+import foundation.propertyanimation.resource;
 import :view_settings;
 import :view_gizmo;
 import :edit;
@@ -274,6 +276,8 @@ namespace editor
             return primary != nullptr ? *primary : Guid{};
         };
         m_animation->GuardUnsaved = [self](Function<void()> proceed) { self->AskAboutClip(Move(proceed)); };
+        // Hidden: what it posed goes back, its clip stays open in it (unsaved or not) for next time.
+        m_animation->RequestClose = [self]() { self->Later([self]() { self->SetAnimationPanelShown(false); }); };
         if (m_services.refs != nullptr && m_services.refs->Pick)
             m_animation->RequestOpenClip = [self]()
             {
@@ -285,34 +289,60 @@ namespace editor
                                                     self->m_animation->RequestEditClip(picked, Guid{});
                                             });
             };
-        // A new clip in Animations, named for the entity it animates; renamed or moved in Assets.
-        m_animation->RequestNewClip = [self]()
-        {
-            self->AskAboutClip([self]()
-                               {
-                                   foundation::content::Group* top = self->m_context->Project() != nullptr ? self->m_context->Project()->SourceDb().RootGroup() : nullptr;
-                                   if (top == nullptr)
-                                       return;
-                                   foundation::content::Group* group = nullptr;
-                                   for (foundation::content::Group* child : top->Groups())
-                                       if (child->Name() == StringView(u8"Animations"))
-                                           group = child;
-                                   if (group == nullptr)
-                                       group = top->CreateGroup(u8"Animations");
-                                   const Guid entity = self->m_animation->BoundEntity();
-                                   const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : self->m_scene->FindEntity(entity);
-                                   const String name = handle.IsAssigned() ? Format(u8"{} Clip", self->m_scene->GetEntityName(handle)) : String(u8"Clip");
-                                   foundation::content::Instance* made = group != nullptr ? pipeline::CreatePropertyAnimationClip(group, name.AsView()) : nullptr;
-                                   if (made == nullptr)
-                                   {
-                                       self->m_context->Notify(NoticeKind::Warning, u8"The clip could not be made; the Console says why.");
-                                       return;
-                                   }
-                                   (void)self->m_animation->LoadClip(made->Id());
-                                   self->m_context->Notify(NoticeKind::Info, Format(u8"Made the clip '{}' in Animations.", made->Name()).AsView());
-                               });
-        };
+        // New: the clip named and placed in Create Asset (Animations and the entity's name to
+        // start), then opened; an animator on the entity with no clip yet plays it.
+        m_animation->RequestNewClip = [self]() { self->AskAboutClip([self]() { self->NewClip(); }); };
         m_animationPane->GetParent()->RemoveChild(m_animationPane.Get()); // hidden until shown
+    }
+
+    void SceneEditorPage::NewClip()
+    {
+        foundation::content::Group* top = m_context->Project() != nullptr ? m_context->Project()->SourceDb().RootGroup() : nullptr;
+        if (top == nullptr)
+            return;
+        foundation::content::Group* animations = nullptr;
+        for (foundation::content::Group* child : top->Groups())
+            if (child->Name() == StringView(u8"Animations"))
+                animations = child;
+        const Guid entity = m_animation->BoundEntity();
+        const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : m_scene->FindEntity(entity);
+        // A name not taken where it starts.
+        const String base = handle.IsAssigned() ? Format(u8"{} Clip", m_scene->GetEntityName(handle)) : String(u8"Clip");
+        const String suggested = (animations != nullptr ? animations : top)->UniqueInstanceName(base.AsView());
+        SceneEditorPage* self = this;
+        const auto make = [self, entity](foundation::content::Group& group, StringView name)
+        {
+            foundation::content::Instance* made = pipeline::CreatePropertyAnimationClip(&group, name);
+            if (made == nullptr)
+            {
+                self->m_context->Notify(NoticeKind::Warning, u8"The clip could not be made; the Console says why.");
+                return;
+            }
+            (void)self->m_animation->LoadClip(made->Id());
+            self->GiveClipToAnimator(entity, made->Id());
+        };
+        if (m_services.createAsset)
+        {
+            m_services.createAsset(u8"New Clip", suggested.AsView(), animations, make);
+            return;
+        }
+        // No dialog (a test): Animations, as suggested.
+        if (animations == nullptr)
+            animations = top->CreateGroup(u8"Animations");
+        if (animations != nullptr)
+            make(*animations, suggested.AsView()); // made unique there
+    }
+
+    void SceneEditorPage::GiveClipToAnimator(const Guid& entity, const Guid& clip)
+    {
+        // Only an animator with no clip: one that plays another keeps it (this is another clip).
+        auto* animators = m_scene->GetSystem<engine::animation::PropertyAnimatorComponentManager>();
+        const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : m_scene->FindEntity(entity);
+        engine::animation::PropertyAnimatorComponent* animator = animators != nullptr && handle.IsAssigned() ? animators->Get(handle) : nullptr;
+        if (animator == nullptr || !animator->clip.id.IsNil())
+            return;
+        m_editContext->SetComponentResourceRef<foundation::propertyanimation::PropertyAnimationClipResource>(
+            entity, &TypeOf<engine::animation::PropertyAnimatorComponent>(), "clip", clip, m_context->Resources());
     }
 
     void SceneEditorPage::AskAboutClip(Function<void()> proceed)

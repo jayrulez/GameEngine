@@ -663,7 +663,13 @@ The layers:
       before a run starts and before the scene saves (what it posed is never the scene's); an
       unsaved clip asked about apart from the scene when another clip opens, and beside the
       scene's own changes when the page closes or the editor exits (a page's unsaved work besides
-      its asset, Editor.Core and Editor.App); New makes a clip in Animations named for the entity.
+      its asset, Editor.Core and Editor.App). New names and places the clip in Create Asset
+      (Animations and the entity's name to start), opens it, and gives it to the entity's
+      animator when that has no clip yet, one step of the scene's (user 2026-10-27); an animator
+      playing another keeps it. The bar ends with the clip's name and unsaved mark, after its
+      space, so no button moves as the mark comes and goes; the curve view fits its values to what
+      it shows whenever that changes (never its time, which the dopesheet shares), and the bar's
+      Frame frames the curves in time and value.
 10. The animation pages (Animation): the clip (a preview, its events as markers on the time axis),
     the skeleton (the bone tree with a search beside the preview) and the graph (GraphView over the
     preview, its layers and parameters as lists).

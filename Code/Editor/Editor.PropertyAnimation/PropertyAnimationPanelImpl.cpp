@@ -162,11 +162,17 @@ namespace editor
         m_save = button(u8"anim-save", [self]() { (void)self->Save(); });
         m_undo = button(u8"anim-undo", [self]() { self->Undo(); });
         m_redo = button(u8"anim-redo", [self]() { self->Redo(); });
-        m_bind = button(u8"anim-bind", [self]() { self->BindSelected(); });
+        (void)button(u8"anim-bind", [self]() { self->BindSelected(); }); // always on: the page's selection is read when clicked
         m_addTrack = button(u8"anim-add-track", [self]() { self->OpenTrackMenu(); });
         m_key = button(u8"anim-key", [self]() { (void)self->KeyChosen(); });
         m_remove = button(u8"anim-remove", [self]() { (void)self->RemoveChosen(); });
         m_restart = button(u8"anim-restart", [self]() { self->Restart(); });
+        (void)button(u8"anim-frame", [self]() { self->FrameCurves(); });
+        (void)button(u8"anim-close", [self]()
+                     {
+                         if (self->RequestClose)
+                             self->RequestClose();
+                     });
         m_stop = button(u8"anim-stop", [self]() { self->Stop(); });
         m_play = Find<gui::ButtonBase>(u8"anim-play");
         if (m_play != nullptr)
@@ -458,6 +464,40 @@ namespace editor
         m_axis->SetPlayhead(time); // as the ruler's scrub: the transport and the pose follow
     }
 
+    void PropertyAnimationPanel::FrameCurves()
+    {
+        if (m_curves != nullptr)
+            m_curves->FrameAll();
+    }
+
+    void PropertyAnimationPanel::FitValues()
+    {
+        if (m_curves == nullptr)
+            return;
+        f32 low = 0.0f;
+        f32 high = 0.0f;
+        bool any = false;
+        for (usize c = 0; c < m_source.CurveCount(); ++c)
+            for (const CurveKey& key : m_source.GetKeys(c))
+            {
+                low = any ? Min(low, key.value) : key.value;
+                high = any ? Max(high, key.value) : key.value;
+                any = true;
+            }
+        if (!any)
+        {
+            low = 0.0f;
+            high = 1.0f;
+        }
+        if (high - low < 1e-3f)
+        {
+            low -= 1.0f; // one value: a span about it
+            high += 1.0f;
+        }
+        const f32 margin = (high - low) * 0.1f;
+        m_curves->SetValueRange(low - margin, high + margin);
+    }
+
     void PropertyAnimationPanel::Update(f32 dt, bool simulating)
     {
         if (simulating != m_simulating)
@@ -481,6 +521,11 @@ namespace editor
         }
         // The dopesheet tells no one of its choice: the curve view follows it here.
         ShowCurves();
+        if (m_fitValues)
+        {
+            m_fitValues = false;
+            FitValues();
+        }
     }
 
     // === Showing it ===
@@ -489,6 +534,13 @@ namespace editor
     {
         m_source.Refresh();
         m_axis->SetDuration(m_document.Length());
+        // Another clip, or tracks come or gone: the curves shown are others (a key's edit is not).
+        if (m_document.ClipId() != m_shownClip || m_document.Clip().tracks.Size() != m_trackCount)
+        {
+            m_shownClip = m_document.ClipId();
+            m_trackCount = m_document.Clip().tracks.Size();
+            m_fitValues = true;
+        }
         // The length it plays over (a new clip's second, its last key's time when later).
         if (m_length != nullptr && static_cast<f32>(m_length->GetValue()) != m_document.Length())
             m_length->SetValue(static_cast<f64>(m_document.Length()));
@@ -519,6 +571,7 @@ namespace editor
             return;
         m_shownTracks = tracks;
         m_source.ShowTracks(tracks.AsSpan());
+        m_fitValues = true; // other curves: their values fill the view
     }
 
     void PropertyAnimationPanel::ShowBar()
@@ -552,7 +605,6 @@ namespace editor
         enable(m_play, editable);
         enable(m_restart, editable);
         enable(m_stop, editable);
-        enable(m_bind, static_cast<bool>(SelectedEntity));
         if (m_play != nullptr)
             m_play->SetChecked(m_transport.IsPlaying());
     }

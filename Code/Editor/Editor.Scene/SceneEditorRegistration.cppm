@@ -70,6 +70,9 @@ export namespace editor
             services.refs = &editor->RefServices();
             services.icons = &editor->TypeIcons();
             services.pick = [editor](app::PickerRequest request) { editor->ShowPicker(Move(request)); };
+            services.createAsset = [editor](StringView title, StringView suggested, foundation::content::Group* group,
+                                            Function<void(foundation::content::Group&, StringView)> create)
+            { editor->ShowCreateAsset(title, suggested, group, Move(create)); };
             return services;
         };
         context.Pages().Register(UniquePtr<IEditorPageFactory>(

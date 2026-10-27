@@ -134,6 +134,10 @@ TEST_CASE("animation panel: an entity bound, a track added holding what it shows
     Bed bed;
     REQUIRE(bed.panel->LoadClip(bed.clip));
     CHECK(bed.panel->OfferedTracks().IsEmpty()); // no entity yet
+    // Use Selected is on from the start (the page's selection read as it is clicked).
+    auto* bind = app::FindById<gui::ButtonBase>(*bed.panel->Content(), u8"anim-bind");
+    REQUIRE(bind != nullptr);
+    CHECK(bind->IsEnabled());
     bed.panel->BindSelected();
     CHECK(bed.panel->BoundEntity() == bed.sc.GetEntityId(bed.box));
     auto* entity = app::FindById<gui::Label>(*bed.panel->Content(), u8"anim-entity");
@@ -168,6 +172,28 @@ TEST_CASE("animation panel: an entity bound, a track added holding what it shows
     CHECK(bed.Clip().tracks.Size() == 1u);
     bed.panel->Redo();
     CHECK(bed.Clip().tracks.IsEmpty());
+}
+
+TEST_CASE("animation panel: the curve view's values fit what it shows when that changes, not as a key is edited")
+{
+    Bed bed;
+    REQUIRE(bed.panel->LoadClip(bed.clip));
+    bed.panel->BindSelected();
+    bed.panel->AddTrack(bed.PositionSeed()); // keys at 1, 2 and 3 (where the box is)
+    bed.panel->Update(0.0f, false);
+    auto* curves = app::FindById<gui::CurveView>(*bed.panel->Content(), u8"anim-curves");
+    REQUIRE(curves != nullptr);
+    CHECK(curves->ValueLow() < 1.0f);
+    CHECK(curves->ValueHigh() > 3.0f);
+    CHECK(curves->ValueHigh() < 4.0f); // fitted, a tenth either side
+    // A key's value edited: no refit (the view would jump under the drag).
+    const f32 high = curves->ValueHigh();
+    bed.panel->Document().Edit(u8"test", [](propanim::PropertyAnimationClip& c) { c.tracks[0].channels[2].Keys()[0].value = 50.0f; });
+    bed.panel->Update(0.0f, false);
+    CHECK(curves->ValueHigh() == doctest::Approx(high));
+    // Frame: everything shown, the new value too.
+    bed.panel->FrameCurves();
+    CHECK(curves->ValueHigh() >= 50.0f);
 }
 
 TEST_CASE("animation panel: its keys are the clip's while it holds the focus; the rest go on to the page")

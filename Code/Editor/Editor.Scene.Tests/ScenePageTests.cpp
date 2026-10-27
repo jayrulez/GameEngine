@@ -29,6 +29,7 @@ import engine.render;      // RegisterRenderComponentReflection, LightComponent
 import engine.composition; // FullSceneComposition
 import engine.physics;
 import engine.navigation;
+import engine.animation;
 import foundation.physics;
 import engine.script;
 import foundation.script.resource;
@@ -249,9 +250,29 @@ TEST_CASE("scene page: the animation panel under the viewport, its clip its own,
     REQUIRE(page->SaveBesides().IsOk());
     CHECK(page->UnsavedBesides().IsEmpty());
 
-    // Hidden: what it posed goes back.
-    page->SetAnimationPanelShown(false);
+    // Hidden from its own Close: what it posed goes back.
+    REQUIRE(panel->RequestClose);
+    panel->RequestClose();
+    CHECK_FALSE(page->AnimationPanelShown());
     CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(0.0f));
+
+    // New on an entity whose animator has no clip: the clip made in Animations and given to it,
+    // one step of the scene's; an animator playing a clip keeps it.
+    page->EditContext().AddComponent(bed.crate, &TypeOf<engine::animation::PropertyAnimatorComponent>());
+    REQUIRE(panel->RequestNewClip);
+    panel->RequestNewClip();
+    auto* animators = page->ScenePtr()->GetSystem<engine::animation::PropertyAnimatorComponentManager>();
+    REQUIRE(animators != nullptr);
+    const Guid made = animators->Get(crate)->clip.id;
+    CHECK_FALSE(made.IsNil());
+    CHECK(panel->Document().ClipId() == made);
+    CHECK(panel->Document().Name() == StringView(u8"Crate Clip"));
+    page->Commands().Undo();
+    CHECK(animators->Get(crate)->clip.id.IsNil());
+    page->Commands().Redo();
+    panel->RequestNewClip(); // another: the animator keeps the first
+    CHECK(animators->Get(crate)->clip.id == made);
+    CHECK(panel->Document().ClipId() != made);
     page->OnClose();
 }
 

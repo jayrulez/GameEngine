@@ -1,20 +1,18 @@
 <!--
   The property animation panel (Documentation/Specs/editor-gui.md, 5.4, layer 9): under the scene
-  page's viewport, a clip of its own, not the scene. Its bar: the clip (its name and unsaved mark,
-  New, Open, Save, its own Undo and Redo), the entity it animates (named, Use Selected binds the
+  page's viewport, a clip of its own, not the scene. Its bar: the clip (New, Open, Save, its own
+  Undo and Redo), the entity it animates (named, Use Selected binds the
   scene's selection), the tracks (Add Track offers the entity's animatable properties, Key keys the
   chosen tracks with what the entity shows at the playhead, Remove takes the chosen tracks away),
-  the kit's transport over the preview (Restart, Play showing Pause while it plays, Stop, Loop) and
-  the clip's length. Under it the ruler, the dopesheet and the curve view on one time axis, the
+  the kit's transport over the preview (Restart, Play showing Pause while it plays, Stop, Loop),
+  Frame (the curves shown) and the clip's length; at its end the clip's name and its unsaved mark,
+  which grow into the space before them so no button moves, and Close. Under it the ruler, the dopesheet and the curve view on one time axis, the
   curve view showing the chosen tracks' curves. With no clip, a state says so in their place.
   While the panel holds the focus its keys are its own (Ctrl+Z, Ctrl+Y, Ctrl+S act on the clip);
   the rest go on to the scene page. Code fills the names and wires the parts.
 -->
 <Panel class="anim-panel">
     <ToolBar id="anim-bar" class="panel-toolbar anim-bar">
-        <Image class="anim-icon" src="Editor/Icons/animation.svg"/>
-        <Label id="anim-clip" class="anim-clip" text="No clip"/>
-        <Label id="anim-dirty" class="badge anim-dirty" text="Unsaved"/>
         <ToolButton id="anim-new" icon="Editor/Icons/plus.svg" tooltip="A new clip"/>
         <ToolButton id="anim-open" icon="Editor/Icons/open.svg" tooltip="Open a clip"/>
         <ToolButton id="anim-save" icon="Editor/Icons/save.svg" tooltip="Save the clip (Ctrl+S while the panel has the focus)"/>
@@ -33,9 +31,15 @@
         <ToolButton id="anim-play" toggle="true" icon="Editor/Icons/play.svg" checked-icon="Editor/Icons/pause.svg" tooltip="Play or pause the preview"/>
         <ToolButton id="anim-stop" icon="Editor/Icons/stop.svg" tooltip="Stop, back at the start"/>
         <ToolButton id="anim-loop" toggle="true" checked="true" icon="Editor/Icons/restart.svg" text="Loop" shows-text="true" tooltip="Loop the preview, as an animator loops"/>
-        <Spacer/>
+        <Separator/>
+        <ToolButton id="anim-frame" icon="Editor/Icons/frame-selection.svg" tooltip="Frame the curves shown"/>
         <Label class="anim-length-label" text="Length"/>
         <NumberField id="anim-length" class="anim-length" min="0" step="0.1" value="1" tooltip="The clip's length in seconds (never shorter than its last key)"/>
+        <Spacer/>
+        <Image class="anim-icon" src="Editor/Icons/animation.svg"/>
+        <Label id="anim-clip" class="anim-clip" text="No clip"/>
+        <Label id="anim-dirty" class="badge anim-dirty" text="Unsaved"/>
+        <ToolButton id="anim-close" icon="Editor/Icons/close.svg" tooltip="Close the panel (Scene > Animation Panel opens it again)"/>
     </ToolBar>
     <Panel id="anim-empty" class="state-box anim-empty">
         <Image class="state-icon" src="Editor/Icons/animation.svg"/>

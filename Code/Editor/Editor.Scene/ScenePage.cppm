@@ -80,6 +80,11 @@ export namespace editor
             EditorIcons* icons = nullptr;
             /// Opens the picker for a request (the inspector's Add Component).
             Function<void(app::PickerRequest request)> pick;
+            /// Opens Create Asset (a title, a suggested name, a group to start; null: the top),
+            /// told the group and the name chosen (the animation panel's New Clip). Null: none.
+            Function<void(StringView title, StringView suggested, foundation::content::Group* group,
+                          Function<void(foundation::content::Group&, StringView)> create)>
+                createAsset;
         };
 
         SceneEditorPage(EditorContext& context, Services services, foundation::content::Instance& instance);
@@ -179,6 +184,10 @@ export namespace editor
         void BuildAnimationPanel(EditorContext& context);
         // The page's prompt for the panel's unsaved clip: Save, Discard (as saved) or Cancel.
         void AskAboutClip(Function<void()> proceed);
+        // New Clip: named and placed (Create Asset), opened, given to the entity's animator when it
+        // has none.
+        void NewClip();
+        void GiveClipToAnimator(const Guid& entity, const Guid& clip);
         template <typename T>
         [[nodiscard]] T* Find(StringView id) const;
 

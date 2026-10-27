@@ -60,6 +60,8 @@ export namespace editor
         /// Runs `proceed` now, or once the user has saved or discarded the unsaved clip (the page's
         /// prompt); unset: at once.
         Function<void(Function<void()>)> GuardUnsaved;
+        /// The bar's Close: the page hides the panel (the clip stays open in it). Unset: nothing.
+        Function<void()> RequestClose;
 
         // === The clip ===
         /// Edits the clip asset `clipId` (false: no such clip); the transport stopped, at the start.
@@ -97,6 +99,8 @@ export namespace editor
         void SetLooping(bool looping);
         /// The playhead moved to `time`, as a scrub of the ruler moves it.
         void Scrub(f32 time);
+        /// The curves shown framed, in time and value (the bar's Frame).
+        void FrameCurves();
 
         /// Once a frame from the page: the transport, the preview (stood down while `simulating`),
         /// the bar's state.
@@ -119,6 +123,9 @@ export namespace editor
         void Pose();
         void ShowBar();
         void ShowCurves();
+        // The curve view's values fitted to the curves it shows (never its time: the dopesheet
+        // shares that axis, and a choice made there must not rezoom it under the mouse).
+        void FitValues();
         void OpenTrackMenu();
         [[nodiscard]] Variant EntityValue(StringView componentType, StringView propertyPath) const;
         template <typename T>
@@ -136,6 +143,9 @@ export namespace editor
         bool m_simulating = false;
         bool m_moving = false;        // the transport moving the playhead: not a scrub
         Array<usize> m_shownTracks;   // the tracks the curve view shows, as last chosen
+        bool m_fitValues = true;      // what the curve view shows changed: fit its values
+        usize m_trackCount = 0;       // the clip's tracks, as last shown
+        Guid m_shownClip;             // the clip, as last shown
         Array<u32> m_commands;        // the root's command handlers
         RefPtr<foundation::gui::Menu> m_trackMenu;
 
@@ -156,6 +166,5 @@ export namespace editor
         foundation::gui::ButtonBase* m_remove = nullptr;
         foundation::gui::ButtonBase* m_restart = nullptr;
         foundation::gui::ButtonBase* m_stop = nullptr;
-        foundation::gui::ButtonBase* m_bind = nullptr;
     };
 }

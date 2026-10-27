@@ -41,13 +41,13 @@ namespace
         const image::ImageData* LoadImage(core::StringView path) override
         {
             ++images;
-            return path == core::StringView(u8"missing.png") ? nullptr : &img;
+            return path == core::StringView(u8"missing.png") || path == core::StringView(u8"{vector}") ? nullptr : &img;
         }
         bool LoadText(core::StringView, core::String&) override { return false; }
         const foundation::vg::svg::SVGDocument* LoadSvg(core::StringView path) override
         {
             ++svgs;
-            return path == core::StringView(u8"missing.svg") ? nullptr : &svg;
+            return path == core::StringView(u8"missing.svg") || path == core::StringView(u8"missing.png") ? nullptr : &svg;
         }
     };
 
@@ -112,6 +112,23 @@ TEST_CASE("svg-drawable: a picture by its path is an SVG by its ending, a raster
     CHECK(pictures.images == 1);
     CHECK(PictureDrawable(pictures, core::StringView(u8"missing.svg"), core::DefaultAllocator()).Get() == nullptr);
     CHECK(PictureDrawable(pictures, core::StringView(u8"missing.png"), core::DefaultAllocator()).Get() == nullptr);
+    CHECK(pictures.svgs == 2); // a missing raster named by its file is not asked for as an SVG
+}
+
+TEST_CASE("svg-drawable: a picture by an id is whichever the provider has, a raster first")
+{
+    // An engine names its pictures by id ("{guid}"): no ending says the kind, the provider does.
+    Pictures pictures;
+    core::RefPtr<Drawable> vector = PictureDrawable(pictures, core::StringView(u8"{vector}"), core::DefaultAllocator());
+    REQUIRE(vector.Get() != nullptr);
+    CHECK(core::Cast<SvgDrawable>(vector.Get()) != nullptr);
+    core::RefPtr<Drawable> raster = PictureDrawable(pictures, core::StringView(u8"{texture}"), core::DefaultAllocator());
+    REQUIRE(raster.Get() != nullptr);
+    CHECK(core::Cast<ImageDrawable>(raster.Get()) != nullptr);
+    CHECK(pictures.svgs == 1); // the raster was found first
+    CHECK_FALSE(HasFileEnding(core::StringView(u8"{6faf9764-c33a-444f-8126-91cc8eade4f5}")));
+    CHECK_FALSE(HasFileEnding(core::StringView(u8"v1.2/icon")));
+    CHECK(HasFileEnding(core::StringView(u8"Icons/a.png")));
 }
 
 TEST_CASE("svg-drawable: an Image shows an SVG by its src or from markup, sized as the document")

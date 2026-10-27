@@ -97,9 +97,22 @@ export namespace foundation::gui
 
     RTTI_DEFINE_OBJECT(SvgDrawable, "rtti::gui")
 
+    /// Whether a source's last name has an ending (".png", ".svg"): a file's, not an id's.
+    [[nodiscard]] inline bool HasFileEnding(core::StringView path) noexcept
+    {
+        for (usize i = path.Size(); i-- > 0;)
+        {
+            if (path[i] == u8'.')
+                return true;
+            if (path[i] == u8'/' || path[i] == u8'\\')
+                return false;
+        }
+        return false;
+    }
+
     /// A picture by its source, as a resource provider has it: an SvgDrawable for an SVG source
-    /// (IsSvgSource: a .svg path or one written inline), an ImageDrawable otherwise; null when the
-    /// provider has none.
+    /// (IsSvgSource: a .svg path or one written inline), an ImageDrawable otherwise, or for a source
+    /// with no file ending (an id) whichever of the two the provider has; null when it has none.
     [[nodiscard]] inline RefPtr<Drawable> PictureDrawable(IResourceProvider& resources, core::StringView path, IAllocator& allocator)
     {
         if (IsSvgSource(path))
@@ -110,6 +123,11 @@ export namespace foundation::gui
         }
         if (const foundation::image::ImageData* image = resources.LoadImage(path))
             return core::MakeRef<ImageDrawable>(allocator, image);
+        // A source with no file ending (a resource id, an engine's "{guid}") says nothing of its
+        // kind: the provider knows, so a vector image named so is asked for as one.
+        if (!HasFileEnding(path))
+            if (const foundation::vg::svg::SVGDocument* document = resources.Svg(path))
+                return core::MakeRef<SvgDrawable>(allocator, document);
         return {};
     }
 }

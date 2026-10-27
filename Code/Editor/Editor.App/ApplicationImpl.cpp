@@ -756,12 +756,13 @@ namespace editor::app
         EditorApplication* self = this;
         gui::MessageBox* raw = box.Get();
         const String path(directory);
-        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, path](const gui::Event&)
+        const bool restamp = editor::ProjectManagerController::RestampsOnOpen(decision.gate);
+        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, path, restamp](const gui::Event&)
                                     {
                                         const String answer(raw->GetResultName());
                                         if (answer.AsView() == StringView(u8"cancel"))
                                             return;
-                                        self->Later([self, path, answer]()
+                                        self->Later([self, path, answer, restamp]()
                                                     {
                                                         if (answer.AsView() == StringView(u8"backup") &&
                                                             !self->m_projectManager.BackupManifest(path.AsView()).HasValue())
@@ -770,8 +771,10 @@ namespace editor::app
                                                                 self->m_manager->SetStatus(u8"The backup FAILED: not opening.");
                                                             return;
                                                         }
-                                                        if (self->OpenProject(path.AsView(), false) && self->m_session.Project() != nullptr)
-                                                            (void)self->m_session.Project()->SaveSettings(); // stamped with this engine at once
+                                                        // An older engine's project is stamped with this one at once; a
+                                                        // newer engine's (Open Anyway) keeps its stamp.
+                                                        if (self->OpenProject(path.AsView(), false) && restamp && self->m_session.Project() != nullptr)
+                                                            (void)self->m_session.Project()->SaveSettings();
                                                     });
                                     });
         box->OpenModal(*root);

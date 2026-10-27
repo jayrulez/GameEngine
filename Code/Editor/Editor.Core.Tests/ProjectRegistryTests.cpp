@@ -223,6 +223,10 @@ TEST_CASE("project-manager controller: open gates + prompt copy + registry pass-
     }
     controller.DecideOpen(dir, decision);
     CHECK(decision.gate == ProjectOpenGate::PromptNewerEngine);
+    // Opened anyway, a newer engine's project keeps its stamp; only an older one's is upgraded.
+    CHECK_FALSE(ProjectManagerController::RestampsOnOpen(decision.gate));
+    CHECK(ProjectManagerController::RestampsOnOpen(ProjectOpenGate::PromptOlderBackup));
+    CHECK_FALSE(ProjectManagerController::RestampsOnOpen(ProjectOpenGate::OpenDirectly));
     CHECK(Contains(decision.promptBody.AsView(), u8"99.0.0"));
     CHECK(Contains(decision.promptBody.AsView(), project::kEngineVersionString));
 

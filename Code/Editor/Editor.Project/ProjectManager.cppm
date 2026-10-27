@@ -40,6 +40,12 @@ export namespace editor
     public:
         explicit ProjectManagerController(settings::Settings& store) : m_store(&store) {}
 
+        /// Whether opening through `gate`, once the user agrees, stamps the project with this
+        /// engine: an older engine's project is upgraded (backed up first or not, as asked); a
+        /// newer engine's is opened as it is, keeping its stamp, so the newer engine still knows
+        /// it as its own; one of this engine's needs nothing.
+        [[nodiscard]] static constexpr bool RestampsOnOpen(ProjectOpenGate gate) noexcept { return gate == ProjectOpenGate::PromptOlderBackup; }
+
         struct OpenDecision
         {
             ProjectOpenGate gate = ProjectOpenGate::NotAProject;

@@ -139,10 +139,12 @@ export namespace editor
         }
         [[nodiscard]] usize Bound() const noexcept { return m_bar.Count(); }
         /// What the state label says ("Simulating", "Paused"); empty while it shows nothing.
-        [[nodiscard]] StringView State() const { return m_state != nullptr && m_state->IsDisplayed() ? m_state->GetText() : StringView{}; }
+        [[nodiscard]] StringView State() const { return m_state != nullptr && m_state->IsVisible() ? m_state->GetText() : StringView{}; }
 
     private:
-        // Simulate's state beside its buttons: shown while it runs, the edits locked meanwhile.
+        // Simulate's state beside its buttons: shown while it runs, the edits locked meanwhile. Its
+        // place is kept while it shows nothing, and its width is the sheet's whatever it says, so the
+        // buttons centred beside it never move as it starts, pauses or stops.
         void SyncState()
         {
             if (m_state == nullptr)
@@ -150,8 +152,8 @@ export namespace editor
             const ISceneEditorPage* scene = ServiceOf<ISceneEditorPage>(m_page);
             const bool running = scene != nullptr && scene->IsSimulating();
             const bool paused = running && scene->IsPaused();
-            if (m_state->IsDisplayed() != running)
-                m_state->SetDisplayed(running);
+            if (m_state->IsVisible() != running)
+                m_state->SetVisible(running);
             if (!running || (m_stateShown && paused == m_paused))
                 return;
             m_state->SetText(paused ? StringView(u8"Paused") : StringView(u8"Simulating"));

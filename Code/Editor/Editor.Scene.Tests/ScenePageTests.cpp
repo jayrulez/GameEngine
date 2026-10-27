@@ -1549,6 +1549,14 @@ TEST_CASE("scene bar: Simulate, Pause and Stop are the page's actions, its state
     CHECK_FALSE(pause->IsEnabled());
     CHECK_FALSE(stop->IsEnabled());
     CHECK(bar->State().IsEmpty());
+    // The buttons are centred beside the state: it keeps its place and one width whatever it says,
+    // so they never move as the scene starts, pauses or stops.
+    const auto pauseAt = [&]()
+    {
+        (void)shown.root->UpdateLayout();
+        return pause->GetScreenBounds().x;
+    };
+    const f32 resting = pauseAt();
 
     shown.Click(*simulate);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
@@ -1556,15 +1564,18 @@ TEST_CASE("scene bar: Simulate, Pause and Stop are the page's actions, its state
     CHECK(bar->State() == StringView(u8"Simulating"));
     CHECK_FALSE(simulate->IsEnabled());
     CHECK(stop->IsEnabled());
+    CHECK(pauseAt() == doctest::Approx(resting));
     shown.Click(*pause);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(page->IsPaused());
     CHECK(bar->State() == StringView(u8"Paused"));
     CHECK(pause->IsChecked());
+    CHECK(pauseAt() == doctest::Approx(resting));
     shown.Click(*stop);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK_FALSE(page->IsSimulating());
     CHECK(bar->State().IsEmpty());
+    CHECK(pauseAt() == doctest::Approx(resting));
     page->OnClose();
 }
 

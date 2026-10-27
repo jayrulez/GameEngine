@@ -105,10 +105,10 @@ export namespace foundation::gui
                 static_cast<UIWidget*>(GetContent())->SetPadding(Thickness{kPad});
             }
             m_message = core::MakeRef<Label>(MemoryAllocator());
-            m_message->AddClass(core::StringView(u8"dialogmessage")); // white-space inherits under a sheet: the theme wraps it
+            m_message->AddClass(core::StringView(u8"dialogmessage")); // white-space inherits under a sheet: the theme wraps it, keeping its lines
             {
                 StyleWriteScope messageDefaults(*m_message); // its own values, which a sheet returns to
-                m_message->SetWhiteSpace(TextWhiteSpace::Normal); // a message wraps
+                m_message->SetWhiteSpace(TextWhiteSpace::PreWrap); // a message wraps, and keeps the lines it is written in (a list)
                 m_message->SetTextAlignment(TextHAlign::Start, TextVAlign::Top);
                 m_message->EditLayoutStyle([](LayoutStyle& st) { st.Grow = 1.0f; });
             }

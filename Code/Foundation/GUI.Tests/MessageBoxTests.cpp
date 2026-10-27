@@ -284,6 +284,30 @@ TEST_CASE("messagebox: under the theme, its message wraps (styled after it is wr
     CHECK_FALSE(longBox->GetBox().Shadows.IsEmpty());
 }
 
+TEST_CASE("message box: a message written in lines keeps them, as well as wrapping, with or without the theme")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{800.0f, 600.0f});
+    fonts::CachedFont font(core::DefaultAllocator(), core::DefaultAllocator().New<WideFont>(), nullptr, nullptr);
+    const auto make = [&](const char8_t* text)
+    {
+        auto box = Make<MessageBox>();
+        box->SetFont(&font);
+        box->Configure(core::StringView(u8"Unsaved changes"), core::StringView(text), MessageBox::Buttons::Ok);
+        root->AddChild(box.Get());
+        return box;
+    };
+    auto one = make(u8"These have unsaved changes: a b");
+    auto lines = make(u8"These have unsaved changes:\n    a\n    b");
+    (void)root->UpdateLayout();
+    CHECK(lines->GetSize().y >= one->GetSize().y + 24.0f); // three lines of 12 px, not one
+    StyleManager styles;
+    styles.SetUserAgentSheet(CSSParser::Parse(DefaultThemeCSS()));
+    styles.ApplyTree(*root.Get());
+    (void)root->UpdateLayout();
+    CHECK(lines->GetSize().y >= one->GetSize().y + 24.0f);
+}
+
 TEST_CASE("message box: shown in no GUI it refuses, rather than becoming its own child")
 {
     auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());

@@ -290,6 +290,14 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(TimeRuler, UIWidget)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            out.PushBack(core::StringView(u8"tick"));
+            out.PushBack(core::StringView(u8"marker"));
+            out.PushBack(core::StringView(u8"marker-chosen"));
+            out.PushBack(core::StringView(u8"playhead"));
+        }
         /// Labelled ticks at least this far apart (pixels).
         static constexpr f32 kMinLabelSpacing = 60.0f;
         /// A marker is under the pointer this near its time (pixels).

@@ -543,6 +543,18 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(GraphView, UIWidget)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            out.PushBack(core::StringView(u8"grid"));
+            out.PushBack(core::StringView(u8"grid-major"));
+            out.PushBack(core::StringView(u8"node-link"));
+            out.PushBack(core::StringView(u8"link-selected"));
+            out.PushBack(core::StringView(u8"link-highlight"));
+            out.PushBack(core::StringView(u8"link-drag"));
+            out.PushBack(core::StringView(u8"link-refused"));
+            out.PushBack(core::StringView(u8"selection-box"));
+        }
         static constexpr f32 kDragThreshold = 3.0f;
         /// How near a pin a press or a drop takes it (at least; the pin's own size when larger).
         static constexpr f32 kPinReach = 9.0f;

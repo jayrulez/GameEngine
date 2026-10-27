@@ -52,6 +52,17 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(Dopesheet, UIWidget)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            out.PushBack(core::StringView(u8"labels"));
+            out.PushBack(core::StringView(u8"separator"));
+            out.PushBack(core::StringView(u8"key"));
+            out.PushBack(core::StringView(u8"summary"));
+            out.PushBack(core::StringView(u8"selected"));
+            out.PushBack(core::StringView(u8"playhead"));
+            out.PushBack(core::StringView(u8"selection-box"));
+        }
         static constexpr f32 kRowHeight = 20.0f;
         static constexpr f32 kIndent = 12.0f;
         static constexpr f32 kHitRadius = 5.0f;

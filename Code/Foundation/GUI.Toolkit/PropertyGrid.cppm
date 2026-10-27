@@ -256,6 +256,12 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(PropertyGrid, ItemView)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            ItemView::CollectStyleParts(out);
+            out.PushBack(core::StringView(u8"drop-indicator"));
+        }
         static constexpr u32 kCategoryRow = 0x80000000u;
         static constexpr u32 kGroupRow = 0x80000001u;
 

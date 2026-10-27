@@ -55,6 +55,14 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(CurveView, UIWidget)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            out.PushBack(core::StringView(u8"grid"));
+            out.PushBack(core::StringView(u8"selected"));
+            out.PushBack(core::StringView(u8"playhead"));
+            out.PushBack(core::StringView(u8"selection-box"));
+        }
         static constexpr f32 kHitRadius = 6.0f;
         static constexpr f32 kHandleLength = 40.0f;
         static constexpr f32 kDragThreshold = 3.0f;

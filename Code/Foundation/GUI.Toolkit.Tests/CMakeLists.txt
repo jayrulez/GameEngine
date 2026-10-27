@@ -13,6 +13,7 @@ add_executable(GUI.Toolkit.Tests
     GraphSourceTests.cpp
     GraphViewTests.cpp
     BreadcrumbBarTests.cpp
+    ToolkitPartsTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(GUI.Toolkit.Tests PRIVATE Foundation::GUI.Toolkit Foundation::GUI Foundation::Xml doctest::doctest)

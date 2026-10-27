@@ -85,6 +85,11 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(PropertyValuePreview, UIWidget)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            out.PushBack(core::StringView(u8"curve"));
+        }
         PropertyValuePreview()
         {
             SetTag(core::StringView(u8"propertypreview"));

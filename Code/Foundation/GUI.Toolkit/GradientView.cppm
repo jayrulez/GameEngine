@@ -50,6 +50,11 @@ export namespace foundation::gui
     {
         RTTI_OBJECT(GradientStrip, UIWidget)
     public:
+        /// The parts it draws: a sheet reaches only the parts named here.
+        void CollectStyleParts(core::Array<core::StringView>& out) const override
+        {
+            out.PushBack(core::StringView(u8"selected"));
+        }
         static constexpr f32 kLane = 12.0f;       // each stop lane's height
         static constexpr f32 kHitRadius = 6.0f;
         static constexpr f32 kPullOff = 24.0f;    // past the strip by this much, a dragged stop goes

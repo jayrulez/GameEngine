@@ -312,6 +312,7 @@ int main(int argc, char** argv)
         const editor::app::AssetPageServicesSource& pageServices = app.PageServicesSource();
         editor::RegisterImageEditor(app.Context(), pageServices);
         editor::RegisterHeightfieldEditor(app.Context(), pageServices); // and its thumbnails
+        editor::RegisterTerrainEditor(app.Context(), pageServices);
         editor::RegisterTextureEditor(app.Context(), pageServices);     // and its thumbnails
         editor::RegisterFontEditor(app.Context(), pageServices);        // and its thumbnails
         editor::RegisterMeshEditor(app.Context(), pageServices);        // static and skinned

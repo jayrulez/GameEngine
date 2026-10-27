@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TerrainEditorPage tests (headless): the pure stat-lines readout + the TerrainAsset v2 blob
-// round-trip the page's undo snapshots ride (versioned payload - the page wraps its snapshots in
-// BeginVersionedPayload so the top-K fields survive) + the v1 upgrade the page reads old assets
-// through. The 3D preview + field grid need a live editor harness.
+// TerrainEditorPage tests: the cooked terrain's facts (pure), the TerrainAsset blob round-trips a
+// snapshot rides (versioned payload, so the top-K fields survive), and the page over its markup
+// (Data/Editor/PreviewPage.gml) and a scratch project without a host (no preview): its rows from
+// the asset, each edit one undo step, layers added and removed, new splat weights made.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -19,51 +19,38 @@ using namespace foundation::core;
 namespace hf = foundation::heightfield;
 namespace terrain = foundation::terrain;
 
-TEST_CASE("TerrainStatLines reports grid / chunks / palette / cast-shadows from a resolved product")
+TEST_CASE("TerrainFacts says the grid, world size, chunks, layers and shadows of a cooked terrain")
 {
-    RefPtr<hf::Heightfield> grid =
-        MakeRef<hf::Heightfield>(DefaultAllocator(), 129, Float2{128.0f, 128.0f}, 0.0f, 20.0f);
-
+    RefPtr<hf::Heightfield> grid = MakeRef<hf::Heightfield>(DefaultAllocator(), 129, Float2{128.0f, 128.0f}, 0.0f, 20.0f);
     RefPtr<terrain::TerrainResource> res = MakeRef<terrain::TerrainResource>(DefaultAllocator());
     res->heightfield = grid.Get(); // direct in-memory product
     res->castShadows = true;
     res->palette.PushBack(terrain::TerrainResource::Layer{});
     res->palette.PushBack(terrain::TerrainResource::Layer{});
 
-    const Array<String> lines = editor::TerrainStatLines(*res);
-    REQUIRE(lines.Size() >= 4u);
-
-    const auto has = [&](StringView needle)
+    const Array<editor::TerrainFact> facts = editor::TerrainFacts(*res);
+    const auto value = [&](StringView name)
     {
-        for (const String& l : lines)
-        {
-            if (l.AsView() == needle)
-            {
-                return true;
-            }
-        }
-        return false;
+        for (const editor::TerrainFact& fact : facts)
+            if (fact.name.AsView() == name)
+                return fact.value;
+        return String(u8"?");
     };
-    CHECK(has(u8"Grid: 129 x 129"));
-    CHECK(has(u8"Chunks: 2 x 2 = 4")); // 129 -> 2x2 chunks
-    CHECK(has(u8"Palette layers: 2"));
-    CHECK(has(u8"Cast shadows: yes"));
+    CHECK(value(u8"Grid") == String(u8"129 x 129"));
+    CHECK(value(u8"World") == String(u8"128 x 128 m"));
+    CHECK(value(u8"Chunks") == String(u8"2 x 2 (4)")); // 129 -> 2x2 chunks
+    CHECK(value(u8"Paint layers") == String(u8"2"));
+    CHECK(value(u8"Casts shadows") == String(u8"Yes"));
 }
 
-TEST_CASE("TerrainStatLines is robust when the heightfield is unresolved")
+TEST_CASE("TerrainFacts says when there is no heightfield")
 {
     RefPtr<terrain::TerrainResource> res = MakeRef<terrain::TerrainResource>(DefaultAllocator());
     res->castShadows = false;
-    const Array<String> lines = editor::TerrainStatLines(*res);
-    bool unresolved = false;
-    bool noShadows = false;
-    for (const String& l : lines)
-    {
-        unresolved |= (l.AsView() == StringView(u8"Heightfield: unresolved"));
-        noShadows |= (l.AsView() == StringView(u8"Cast shadows: no"));
-    }
-    CHECK(unresolved);
-    CHECK(noShadows);
+    const Array<editor::TerrainFact> facts = editor::TerrainFacts(*res);
+    REQUIRE_FALSE(facts.IsEmpty());
+    CHECK(facts[0].value == String(u8"No heightfield"));
+    CHECK(facts.Back().value == String(u8"No"));
 }
 
 TEST_CASE("TerrainAsset v2 blob snapshot round-trips its authored fields (the undo path)")

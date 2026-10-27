@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Terrain - the `editor.terrain` module (implementation).
+// Editor::Terrain - the `:page` partition (implementation).
 //
-// The heavy engine.terrain / engine.render / engine.scene / ui.toolkit imports live here, out of the
-// interface (GCC module-merger hygiene). The page is a composition + preview surface: it edits the
-// TerrainAsset's references + layers + castShadows and previews the cooked product; brushes are not
-// hosted here (they are scene-viewport IViewportTools).
+// The heavy engine imports (the terrain component, the lights, the scene) live here, out of the
+// interface (GCC module hygiene).
 
 module;
 #include "Core/Prelude.h"
@@ -22,768 +20,606 @@ import foundation.scene;
 import engine.scene;
 import foundation.render;
 import engine.render;
-import engine.terrain;              // TerrainComponentManager / TerrainComponent
-import foundation.terrain;          // ChunksPerSide (stats)
+import engine.terrain;              // TerrainComponentManager
+import foundation.terrain;          // ChunksPerSide, SplatWeights, RemapOnPaletteRemove
 import foundation.terrain.resource; // TerrainResource
-import foundation.heightfield;      // Heightfield (stats via the resolved product)
+import foundation.heightfield;      // Heightfield (the facts, the framing)
+import foundation.texture.resource; // Texture (the maps' references)
 import foundation.resource;
-import foundation.ui;
-import foundation.ui.toolkit;       // SplitView, PropertyGrid, BoolEditor, FloatEditor
-import foundation.ui.runtime;
+import foundation.gui;
+import foundation.gui.toolkit;
+import pipeline.core;
+import terrain.pipeline;
+import heightfield.pipeline; // HeightfieldAsset (the heightfield's reference)
 import editor.core;
 import editor.app;
 import editor.preview;
 
 using namespace foundation::core;
-namespace core = foundation::core;
-namespace runtime = foundation::runtime;
-namespace scene = foundation::scene;
-namespace ui = foundation::ui;
-namespace terrain = foundation::terrain;
 
 namespace editor
 {
+    namespace gui = foundation::gui;
+    namespace scene = foundation::scene;
+
     namespace
     {
-        String AssetName(EditorContext* ctx, const Guid& id)
+        [[nodiscard]] gui::Variant GuidText(const Guid& id)
         {
             if (id.IsNil())
+                return gui::Variant(StringView{});
+            utf8char text[37];
+            id.ToChars(text);
+            return gui::Variant(String(StringView(text, 36)));
+        }
+
+        [[nodiscard]] Guid GuidOf(const gui::Variant& value)
+        {
+            Guid id;
+            const StringView text = Trim(value.AsString());
+            if (!text.IsEmpty())
+                (void)Guid::TryParse(text, id);
+            return id;
+        }
+
+        // A layer's maps: the row's name and what it says, and the array that keeps it (each
+        // parallel to the albedos; an older terrain's may be shorter, nil past its end).
+        struct LayerMap
+        {
+            StringView path;
+            StringView shown;
+            StringView about;
+            Array<Guid> pipeline::TerrainAsset::*ids;
+        };
+        constexpr LayerMap kLayerMaps[] = {
+            {u8"albedo", u8"Albedo", u8"Its colour", &pipeline::TerrainAsset::paletteAlbedoIds},
+            {u8"normal", u8"Normal", u8"Its normal map (none: flat)", &pipeline::TerrainAsset::paletteNormalIds},
+            {u8"orm", u8"ORM", u8"Its occlusion, roughness and metalness (none: 1, 1, 0)", &pipeline::TerrainAsset::paletteOrmIds},
+            {u8"height", u8"Height", u8"Its height map, which the height blend reads where layers meet (none: flat)", &pipeline::TerrainAsset::paletteHeightIds},
+            {u8"mask", u8"Coverage", u8"A mask of where it may show over what it is painted on (none: everywhere)", &pipeline::TerrainAsset::paletteMaskIds},
+        };
+
+        // The base layer's maps, and the terrain's own references.
+        struct BaseMap
+        {
+            StringView path;
+            StringView shown;
+            StringView about;
+            Guid pipeline::TerrainAsset::*id;
+        };
+        constexpr BaseMap kBaseMaps[] = {
+            {u8"albedo", u8"Albedo", u8"Its colour (none: white)", &pipeline::TerrainAsset::baseAlbedoId},
+            {u8"normal", u8"Normal", u8"Its normal map (none: flat)", &pipeline::TerrainAsset::baseNormalId},
+            {u8"orm", u8"ORM", u8"Its occlusion, roughness and metalness (none: 1, 1, 0)", &pipeline::TerrainAsset::baseOrmId},
+            {u8"height", u8"Height", u8"Its height map, which the height blend reads (none: flat)", &pipeline::TerrainAsset::baseHeightId},
+        };
+
+        constexpr f32 kNewLayerTile = 32.0f;
+
+        // Every layer array as long as the albedos, so a layer's maps line up whatever the asset
+        // kept (an older terrain has fewer maps).
+        void Square(pipeline::TerrainAsset& asset)
+        {
+            const usize layers = asset.paletteAlbedoIds.Size();
+            for (const LayerMap& map : kLayerMaps)
             {
-                return String(u8"(none)");
+                Array<Guid>& ids = asset.*map.ids;
+                while (ids.Size() < layers)
+                    ids.PushBack(Guid{});
             }
-            if (ctx != nullptr && ctx->Project() != nullptr)
-            {
-                if (auto* inst = ctx->Project()->SourceDb().GetInstance(id))
-                {
-                    return String(inst->Name());
-                }
-            }
-            return String(u8"(missing)");
+            while (asset.paletteTileScales.Size() < layers)
+                asset.paletteTileScales.PushBack(kNewLayerTile);
+        }
+
+        // The layer a path names ("layers.2.normal": 2), or -1.
+        [[nodiscard]] i32 LayerOf(StringView path)
+        {
+            const StringView element = gui::ParentPropertyPath(path);
+            if (gui::ParentPropertyPath(element) != StringView(u8"layers"))
+                return -1;
+            const Optional<i64> index = ParseInt(element.SubStr(7, element.Size() - 7));
+            return index.HasValue() && index.Value() >= 0 ? static_cast<i32>(index.Value()) : -1;
+        }
+
+        [[nodiscard]] StringView LastSegment(StringView path)
+        {
+            for (usize i = path.Size(); i-- > 0;)
+                if (path[i] == u8'.')
+                    return path.SubStr(i + 1, path.Size() - i - 1);
+            return path;
+        }
+
+        gui::PropertyInfo& AddReference(gui::PropertyBag& rows, StringView path, StringView shown, StringView about, const TypeInfo& type)
+        {
+            gui::PropertyInfo& info = rows.Add(path, gui::PropertyKind::Reference, gui::Variant(StringView{}));
+            info.DisplayName = String(shown);
+            info.Description = String(about);
+            info.ReferenceType = &type;
+            return info;
+        }
+
+        gui::PropertyInfo& AddTile(gui::PropertyInfo& info, StringView about)
+        {
+            info.DisplayName = String(u8"Tile");
+            info.Description = String(about);
+            info.HasRange = true;
+            info.Min = 0.1;
+            info.Max = 8192.0;
+            info.Step = 1.0;
+            return info;
         }
     }
 
-    Array<String> TerrainStatLines(const terrain::TerrainResource& product)
+    Array<TerrainFact> TerrainFacts(const terrain::TerrainResource& product)
     {
-        Array<String> lines;
+        Array<TerrainFact> facts;
         if (foundation::heightfield::Heightfield* hf = product.heightfield.Get())
         {
             const i32 size = hf->Size();
-            const i32 k = terrain::ChunksPerSide(size);
-            const Float2 ws = hf->WorldSize();
-            lines.PushBack(Format(u8"Grid: {} x {}", size, size));
-            lines.PushBack(Format(u8"World: {} x {} m", static_cast<i64>(ws.x),
-                                  static_cast<i64>(ws.y)));
-            lines.PushBack(Format(u8"Chunks: {} x {} = {}", k, k, k * k));
+            const i32 chunks = terrain::ChunksPerSide(size);
+            const Float2 world = hf->WorldSize();
+            facts.PushBack(TerrainFact{String(u8"Grid"), Format(u8"{} x {}", size, size)});
+            facts.PushBack(TerrainFact{String(u8"World"), Format(u8"{} x {} m", static_cast<i64>(world.x), static_cast<i64>(world.y))});
+            facts.PushBack(TerrainFact{String(u8"Chunks"), Format(u8"{} x {} ({})", chunks, chunks, chunks * chunks)});
         }
         else
-        {
-            lines.PushBack(String(u8"Heightfield: unresolved"));
-        }
-        lines.PushBack(Format(u8"Palette layers: {}", product.PaletteCount()));
-        lines.PushBack(
-            Format(u8"Cast shadows: {}", product.castShadows ? StringView(u8"yes")
-                                                             : StringView(u8"no")));
-        return lines;
+            facts.PushBack(TerrainFact{String(u8"Grid"), String(u8"No heightfield")});
+        facts.PushBack(TerrainFact{String(u8"Paint layers"), Format(u8"{}", product.PaletteCount())});
+        facts.PushBack(TerrainFact{String(u8"Casts shadows"), String(product.castShadows ? StringView(u8"Yes") : StringView(u8"No"))});
+        return facts;
     }
 
-    TerrainEditorPage::TerrainEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                                         ui::runtime::UIHost& uiHost,
-                                         foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_host(&host), m_uiHost(&uiHost), m_title(instance.Name())
+    TerrainEditorPage::TerrainEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::TerrainAsset::StaticType(), kPath)
     {
-        SetInstanceId(instance.Id());
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset = RefPtr<pipeline::TerrainAsset>(Cast<pipeline::TerrainAsset>(object.Get()));
-
-        m_preview =
-            MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"terrain.preview");
-        m_preview->Camera().position = Float3{180.0f, 140.0f, 180.0f};
-        m_preview->Camera().LookAt(Float3{0.0f, 0.0f, 0.0f});
-        BuildPreviewScene();
-
-        m_fields = MakeRef<ui::FlexLayout>(Allocator());
-        m_fields->Direction = ui::Orientation::Vertical;
-        m_fields->Spacing = 4.0f;
-        m_fields->Padding = ui::Thickness{8, 6};
-
-        auto scroll = MakeRef<ui::ScrollView>(Allocator());
-        scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-        scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
+        // Its layers live in parallel arrays no one edits by hand: the rows are the page's own.
+        HideAssetRows(); // an older terrain's shorter arrays are squared by its first edit, not by opening it
+        if (Content())
         {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            scroll->AddView(m_fields.Get(), lp);
+            m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"terrain.preview");
+            TerrainEditorPage* self = this;
+            m_pane->OnFrame = [self]() { self->FramePreview(); };
+            BuildPreviewScene();
+            AddSplatButton();
         }
-
-        auto split = MakeRef<ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.62f);
-        split->SetPanes(m_preview->View(), scroll.Get());
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *split);
-
-        m_undoBaseline = Snapshot();
-        BindTerrain(); // binds the cooked product (if cooked) + builds the fields/stats
-        RebuildFields();
+        BuildRows();
+        if (Context().Resources() != nullptr)
+            m_product = Context().Resources()->Bind<terrain::TerrainResource>(InstanceId());
+        ShowRows();
+        ShowFacts();
     }
+
+    TerrainEditorPage::~TerrainEditorPage() = default;
+
+    // === The rows ===
+
+    void TerrainEditorPage::BuildRows()
+    {
+        m_terrainRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_baseRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_layerRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+
+        AddReference(*m_terrainRows, u8"heightfield", u8"Heightfield", u8"The heights it is drawn from (shared with its collision and navigation)",
+                     pipeline::HeightfieldAsset::StaticType());
+        AddReference(*m_terrainRows, u8"weights", u8"Splat weights",
+                     u8"Where each paint layer shows, as the Paint Layers tool paints it (none: the base layer everywhere)",
+                     pipeline::SplatmapAsset::StaticType());
+        gui::PropertyInfo& shadows = m_terrainRows->Add(u8"castShadows", gui::PropertyKind::Bool, gui::Variant(true));
+        shadows.DisplayName = String(u8"Casts shadows");
+        gui::PropertyInfo& blend = m_terrainRows->Add(u8"heightBlend", gui::PropertyKind::Float, gui::Variant(0.25));
+        blend.DisplayName = String(u8"Height blend");
+        blend.Description = String(u8"How wide the seam is where layers with height maps meet: smaller is crisper");
+        blend.HasRange = true;
+        blend.Min = 0.0;
+        blend.Max = 1.0;
+        blend.Step = 0.01;
+        blend.Hint = String(u8"slider");
+        gui::PropertyInfo& packed = m_terrainRows->Add(u8"textureSize", gui::PropertyKind::Integer, gui::Variant(static_cast<i64>(1024)));
+        packed.DisplayName = String(u8"Layer texture size");
+        packed.Description = String(u8"The size every paint layer's maps are packed at, in texels a side");
+        packed.HasRange = true;
+        packed.Min = 64.0;
+        packed.Max = 4096.0;
+        packed.Step = 64.0;
+
+        for (const BaseMap& map : kBaseMaps)
+            AddReference(*m_baseRows, map.path, map.shown, map.about, foundation::texture::Texture::StaticType());
+        AddTile(m_baseRows->Add(u8"tile", gui::PropertyKind::Float, gui::Variant(1.0)), u8"How many metres its textures repeat over");
+
+        // The layers as every page's lists: the count with Add, each a group of its maps and its
+        // tiling. A layer's place is its channel in the splat weights: added and removed, never moved.
+        gui::PropertyInfo& list = m_layerRows->AddList(u8"layers", gui::PropertyKind::Group, gui::Variant{});
+        list.DisplayName = String(u8"Paint layers");
+        list.Description = String(u8"What the splat weights paint over the base layer, each in its own channel");
+        list.ListOps = gui::PropertyListAdd | gui::PropertyListRemove;
+        for (const LayerMap& map : kLayerMaps)
+            if (gui::PropertyInfo* field = m_layerRows->AddElementField(u8"layers", map.path, gui::PropertyKind::Reference, gui::Variant(StringView{})))
+            {
+                field->DisplayName = String(map.shown);
+                field->Description = String(map.about);
+                field->ReferenceType = &foundation::texture::Texture::StaticType();
+            }
+        if (gui::PropertyInfo* tile = m_layerRows->AddElementField(u8"layers", u8"tile", gui::PropertyKind::Float, gui::Variant(static_cast<f64>(kNewLayerTile))))
+            AddTile(*tile, u8"How many metres its textures repeat over");
+
+        TerrainEditorPage* self = this;
+        gui::PropertyBag* const bags[] = {m_terrainRows.Get(), m_baseRows.Get(), m_layerRows.Get()};
+        for (gui::PropertyBag* raw : bags)
+        {
+            gui::PropertyBag* rows = raw;
+            rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
+                              {
+                                  if (!commit.After.IsEmpty())
+                                      self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
+                              });
+        }
+        m_layerRows->SetOnListEdited([self](StringView, const gui::ListEdit& edit) { self->EditLayers(edit); });
+        // Each layer by its channel, numbered from 1 as the paint tool's keys are, and closed, by
+        // the albedo it shows.
+        m_layerRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
+                                   {
+                                       if (gui::ParentPropertyPath(path) != StringView(u8"layers"))
+                                           return;
+                                       const Optional<i64> index = ParseInt(LastSegment(path));
+                                       if (!index.HasValue())
+                                           return;
+                                       info.DisplayName = Format(u8"Layer {}", index.Value() + 1);
+                                       const Guid albedo = GuidOf(self->m_layerRows->GetValue(gui::JoinPropertyPath(path, u8"albedo").AsView(), 0));
+                                       foundation::content::Instance* named =
+                                           !albedo.IsNil() && self->Context().Project() != nullptr ? self->Context().Project()->SourceDb().GetInstance(albedo) : nullptr;
+                                       info.Summary = named != nullptr ? String(named->Name()) : String(u8"No albedo");
+                                   });
+        AddSection(u8"terrain", u8"Terrain", *m_terrainRows);
+        AddSection(u8"base", u8"Base layer", *m_baseRows);
+        AddSection(u8"layers", u8"Paint layers", *m_layerRows);
+    }
+
+    void TerrainEditorPage::ShowRows()
+    {
+        const pipeline::TerrainAsset* asset = Asset();
+        if (asset == nullptr)
+            return;
+        m_terrainRows->SetValue(u8"heightfield", 0, GuidText(asset->heightfieldId));
+        m_terrainRows->SetValue(u8"weights", 0, GuidText(asset->weightsId));
+        m_terrainRows->SetValue(u8"castShadows", 0, gui::Variant(asset->castShadows));
+        m_terrainRows->SetValue(u8"heightBlend", 0, gui::Variant(static_cast<f64>(asset->heightBlendContrast)));
+        m_terrainRows->SetValue(u8"textureSize", 0, gui::Variant(static_cast<i64>(asset->paletteTextureSize)));
+        for (const BaseMap& map : kBaseMaps)
+            m_baseRows->SetValue(map.path, 0, GuidText(asset->*map.id));
+        m_baseRows->SetValue(u8"tile", 0, gui::Variant(static_cast<f64>(asset->baseTileScale)));
+
+        const usize layers = asset->paletteAlbedoIds.Size();
+        m_layerRows->ResizeList(u8"layers", 0, layers);
+        for (usize i = 0; i < layers; ++i)
+        {
+            const String element = Format(u8"layers.{}", i);
+            for (const LayerMap& map : kLayerMaps)
+            {
+                const Array<Guid>& ids = asset->*map.ids;
+                m_layerRows->SetValue(gui::JoinPropertyPath(element.AsView(), map.path).AsView(), 0, GuidText(i < ids.Size() ? ids[i] : Guid{}));
+            }
+            const f32 tile = i < asset->paletteTileScales.Size() ? asset->paletteTileScales[i] : kNewLayerTile;
+            m_layerRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"tile").AsView(), 0, gui::Variant(static_cast<f64>(tile)));
+        }
+        SetNotice(u8"heightfield", asset->heightfieldId.IsNil() ? StringView(u8"This terrain has no heightfield: pick one, or there is nothing to draw.")
+                                                                 : StringView{});
+        if (m_splat)
+            m_splat->SetEnabled(asset->weightsId.IsNil());
+    }
+
+    void TerrainEditorPage::ShowFacts()
+    {
+        terrain::TerrainResource* product = m_product ? m_product.Get() : nullptr;
+        if (product == nullptr)
+        {
+            SetFact(u8"Grid", u8"Not cooked yet: Save to cook it");
+            return;
+        }
+        for (const TerrainFact& fact : TerrainFacts(*product))
+            SetFact(fact.name.AsView(), fact.value.AsView());
+    }
+
+    void TerrainEditorPage::AddSplatButton()
+    {
+        // After the bar's own separator, as every page's own controls.
+        gui::Node* own = Find<gui::Node>(u8"page-own");
+        gui::Node* bar = own != nullptr ? own->GetParent() : nullptr;
+        if (bar == nullptr || LoadFailed())
+            return;
+        m_splat = MakeRef<gui::ToolMenuButton>(Allocator());
+        m_splat->SetId(u8"terrain-new-weights");
+        m_splat->SetText(u8"New Splat Weights");
+        m_splat->SetTooltip(u8"Make splat weights for this terrain to paint its layers on, at a size (texels a side)");
+        TerrainEditorPage* self = this;
+        for (const i32 size : kSplatSizes)
+            (void)m_splat->GetMenu().AddItem(Format(u8"{} x {}", size, size).AsView(), [self, size]() { (void)self->CreateSplatWeights(size); });
+        bar->AddChildAt(m_splat.Get(), bar->GetChildIndex(own) + 1);
+    }
+
+    void TerrainEditorPage::OnObjectChanged()
+    {
+        ShowRows();
+        PointPreviewAt(m_product ? m_product.Get() : nullptr);
+    }
+
+    void TerrainEditorPage::EditRow(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+    {
+        rows.SetValue(path, 0, value); // as the grid's commit leaves it
+        Committed(rows, path, value);
+    }
+
+    void TerrainEditorPage::Committed(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+    {
+        if (Asset() == nullptr)
+            return;
+        if (&rows == m_terrainRows.Get())
+        {
+            if (path == u8"heightfield" || path == u8"weights")
+            {
+                const Guid id = GuidOf(value);
+                Guid pipeline::TerrainAsset::*field = path == u8"heightfield" ? &pipeline::TerrainAsset::heightfieldId : &pipeline::TerrainAsset::weightsId;
+                EditWhole(u8"edit_terrain", [field, id](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).*field = id; });
+            }
+            else if (path == u8"castShadows")
+            {
+                const bool casts = value.AsBool();
+                EditWhole(u8"edit_terrain", [casts](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).castShadows = casts; });
+            }
+            else if (path == u8"heightBlend")
+            {
+                const f32 blend = static_cast<f32>(Clamp(value.AsFloat(), 0.0, 1.0));
+                EditWhole(u8"edit_terrain", [blend](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).heightBlendContrast = blend; });
+            }
+            else if (path == u8"textureSize")
+            {
+                const i32 size = static_cast<i32>(Clamp<i64>(value.AsInt(), 64, 4096));
+                EditWhole(u8"edit_terrain", [size](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).paletteTextureSize = size; });
+            }
+            return;
+        }
+        if (&rows == m_baseRows.Get())
+        {
+            if (path == u8"tile")
+            {
+                const f32 tile = static_cast<f32>(Max(0.1, value.AsFloat()));
+                EditWhole(u8"edit_terrain", [tile](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).baseTileScale = tile; });
+                return;
+            }
+            for (const BaseMap& map : kBaseMaps)
+                if (path == map.path)
+                {
+                    const Guid id = GuidOf(value);
+                    Guid pipeline::TerrainAsset::*field = map.id;
+                    EditWhole(u8"edit_terrain", [field, id](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).*field = id; });
+                }
+            return;
+        }
+        const i32 layer = LayerOf(path);
+        if (layer < 0 || static_cast<usize>(layer) >= Asset()->paletteAlbedoIds.Size())
+            return;
+        const usize index = static_cast<usize>(layer);
+        const StringView field = LastSegment(path);
+        if (field == u8"tile")
+        {
+            const f32 tile = static_cast<f32>(Max(0.1, value.AsFloat()));
+            EditWhole(u8"edit_terrain", [index, tile](ISerializable& object)
+                      {
+                          auto& asset = static_cast<pipeline::TerrainAsset&>(object);
+                          Square(asset);
+                          asset.paletteTileScales[index] = tile;
+                      });
+            return;
+        }
+        for (const LayerMap& map : kLayerMaps)
+            if (field == map.path)
+            {
+                const Guid id = GuidOf(value);
+                Array<Guid> pipeline::TerrainAsset::*ids = map.ids;
+                EditWhole(u8"edit_terrain", [ids, index, id](ISerializable& object)
+                          {
+                              auto& asset = static_cast<pipeline::TerrainAsset&>(object);
+                              Square(asset);
+                              (asset.*ids)[index] = id;
+                          });
+            }
+    }
+
+    void TerrainEditorPage::EditLayers(const gui::ListEdit& edit)
+    {
+        const pipeline::TerrainAsset* asset = Asset();
+        if (asset == nullptr)
+            return;
+        if (edit.Kind == gui::ListEdit::Op::Insert)
+        {
+            // At the end, its maps unset: the next channel of the weights.
+            EditWhole(u8"edit_terrain", [](ISerializable& object)
+                      {
+                          auto& terrainAsset = static_cast<pipeline::TerrainAsset&>(object);
+                          Square(terrainAsset);
+                          for (const LayerMap& map : kLayerMaps)
+                              (terrainAsset.*map.ids).PushBack(Guid{});
+                          terrainAsset.paletteTileScales.PushBack(kNewLayerTile);
+                      });
+        }
+        else if (edit.Kind == gui::ListEdit::Op::Remove && edit.Index < asset->paletteAlbedoIds.Size())
+        {
+            const usize index = edit.Index;
+            // Its weights freed and those above it moved down, in the live weights and their files.
+            RemapWeightsOnRemove(static_cast<u32>(index));
+            EditWhole(u8"edit_terrain", [index](ISerializable& object)
+                      {
+                          auto& terrainAsset = static_cast<pipeline::TerrainAsset&>(object);
+                          Square(terrainAsset);
+                          for (const LayerMap& map : kLayerMaps)
+                              (terrainAsset.*map.ids).RemoveAt(index);
+                          terrainAsset.paletteTileScales.RemoveAt(index);
+                      });
+        }
+        ShowRows(); // the list as the terrain holds it (a move, which the list does not offer, goes back)
+    }
+
+    void TerrainEditorPage::RemapWeightsOnRemove(u32 removed)
+    {
+        terrain::TerrainResource* product = m_product ? m_product.Get() : nullptr;
+        terrain::SplatWeights* weights = product != nullptr ? product->weights.Get() : nullptr;
+        if (weights == nullptr || weights->IsEmpty() || !terrain::RemapOnPaletteRemove(*weights, removed))
+            return; // no live weights (not cooked yet): nothing names the layers by channel
+        if (product->weights.id.IsNil())
+            return;
+        // Written with the next save, as a brush's strokes are.
+        RefPtr<terrain::SplatWeights> kept(weights);
+        const Guid id = product->weights.id;
+        Context().RegisterAssetEdit(id,
+                                    [kept, id](foundation::content::ContentDatabase& db) -> Status
+                                    {
+                                        foundation::content::Instance* instance = db.GetInstance(id);
+                                        if (instance == nullptr || kept.Get() == nullptr)
+                                            return Status{ErrorCode::NotFound};
+                                        RefPtr<ISerializable> object = instance->ReadObject();
+                                        auto* splat = Cast<pipeline::SplatmapAsset>(object.Get());
+                                        if (splat == nullptr)
+                                            return Status{ErrorCode::InvalidArgument};
+                                        splat->fileName = {};
+                                        splat->width = kept->Width();
+                                        splat->height = kept->Height();
+                                        if (const Status wrote = instance->WriteObject(*splat); !wrote.IsOk())
+                                            return wrote;
+                                        if (const Status wrote = instance->WriteData(terrain::kSplatStream, terrain::SplatWeightsSource::WeightBlob(*kept)); !wrote.IsOk())
+                                            return wrote;
+                                        return instance->WriteData(terrain::kSplatIndexStream, terrain::SplatWeightsSource::IndexBlob(*kept));
+                                    });
+    }
+
+    bool TerrainEditorPage::CreateSplatWeights(i32 size)
+    {
+        // Made here, not by a stroke: the paint tool edits weights that exist, so no stroke ever
+        // makes an asset and its undo stays the stroke's.
+        const pipeline::TerrainAsset* asset = Asset();
+        if (asset == nullptr || !asset->weightsId.IsNil() || Context().Project() == nullptr)
+            return false;
+        // Beside the terrain, in its group.
+        foundation::content::Instance* self = Context().Project()->SourceDb().GetInstance(InstanceId());
+        foundation::content::Group* group = self != nullptr ? &self->OwningGroup() : Context().Project()->SourceDb().RootGroup();
+        if (group == nullptr)
+            return false;
+        const String name = Format(u8"{}_splat", Title());
+        foundation::content::Instance* made = group->CreateInstance(name.AsView(), pipeline::SplatmapAsset::StaticType());
+        if (made == nullptr)
+        {
+            Context().Notify(NoticeKind::Error, Format(u8"No splat weights made: '{}' is taken.", name).AsView());
+            return false;
+        }
+        pipeline::SplatmapAsset splat;
+        splat.width = size > 0 ? size : 1024;
+        splat.height = splat.width;
+        (void)made->WriteObject(splat); // all zero: the base layer everywhere, as its cook makes it
+        const Guid id = made->Id();
+        EditWhole(u8"edit_terrain", [id](ISerializable& object) { static_cast<pipeline::TerrainAsset&>(object).weightsId = id; });
+        Context().RequestCook(false);
+        Context().Notify(NoticeKind::Success, Format(u8"Made splat weights '{}'.", name).AsView());
+        return true;
+    }
+
+    // === The preview ===
 
     void TerrainEditorPage::BuildPreviewScene()
     {
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
+        scene::Scene* scenePtr = m_pane && m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
         if (scenePtr == nullptr)
-        {
             return;
-        }
         m_entity = scenePtr->CreateEntity(u8"PreviewTerrain");
         if (auto* terrains = scenePtr->GetSystem<engine::terrain::TerrainComponentManager>())
-        {
-            terrains->Add(m_entity); // terrain bound in BindTerrain once the product resolves
-        }
+            terrains->Add(m_entity); // given its terrain once the product resolves
         const scene::EntityHandle sun = scenePtr->CreateEntity(u8"Sun");
         Transform t;
-        t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.5f) *
-                     Quaternion::FromAxisAngle(Float3{1, 0, 0}, -0.9f);
+        t.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.5f) * Quaternion::FromAxisAngle(Float3{1, 0, 0}, -0.9f);
         scenePtr->SetLocalTransform(sun, t);
         if (auto* lights = scenePtr->GetSystem<engine::render::LightComponentManager>())
         {
             engine::render::LightComponent& light = lights->Add(sun);
             light.type = engine::render::LightType::Directional;
-            light.castsShadows = true; // show the terrain's self-shadowing in the preview
+            light.castsShadows = true; // the terrain's own shadows show
         }
     }
 
-    void TerrainEditorPage::BindTerrain()
+    void TerrainEditorPage::PointPreviewAt(terrain::TerrainResource* product)
     {
-        if (m_context->Resources() != nullptr)
-        {
-            m_terrainProxy = m_context->Resources()->Bind<terrain::TerrainResource>(InstanceId());
-        }
-        terrain::TerrainResource* product = m_terrainProxy ? m_terrainProxy.Get() : nullptr;
-        PointComponentAtTerrain(product);
-        m_lastProduct = product;
-        FramePreview(product);
-    }
-
-    void TerrainEditorPage::PointComponentAtTerrain(terrain::TerrainResource* product)
-    {
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        auto* terrains =
-            scenePtr ? scenePtr->GetSystem<engine::terrain::TerrainComponentManager>() : nullptr;
-        engine::terrain::TerrainComponent* tc =
-            (terrains != nullptr) ? terrains->Get(m_entity) : nullptr;
-        if (tc == nullptr)
-        {
+        scene::Scene* scenePtr = m_pane && m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
+        auto* terrains = scenePtr != nullptr ? scenePtr->GetSystem<engine::terrain::TerrainComponentManager>() : nullptr;
+        engine::terrain::TerrainComponent* component = terrains != nullptr ? terrains->Get(m_entity) : nullptr;
+        if (component == nullptr)
             return;
-        }
-        tc->terrain.SetId(Guid{});
+        component->terrain.SetId(Guid{});
         if (product != nullptr)
-        {
-            tc->terrain = product; // direct override to the cooked product
-        }
+            component->terrain = product; // the cooked product itself
         else
+            component->terrain.SetDirect(RefPtr<terrain::TerrainResource>{});
+        if (m_pane)
         {
-            tc->terrain.SetDirect(RefPtr<terrain::TerrainResource>{});
+            if (product != nullptr)
+                m_pane->Show();
+            else
+                m_pane->ShowEmpty(StringView{}, StringView{});
         }
     }
 
-    void TerrainEditorPage::FramePreview(terrain::TerrainResource* product)
+    void TerrainEditorPage::FramePreview()
     {
-        if (!m_preview)
-        {
+        if (!m_pane || m_pane->Viewport() == nullptr)
             return;
-        }
-        f32 worldSize = 256.0f;
-        f32 midY = 0.0f;
-        if (product != nullptr)
-        {
-            if (foundation::heightfield::Heightfield* hf = product->heightfield.Get())
-            {
-                const Float2 ws = hf->WorldSize();
-                worldSize = Max(ws.x, ws.y);
-                midY = 0.5f * (hf->MinY() + hf->MaxY());
-            }
-        }
-        const f32 dist = worldSize * 0.85f;
-        m_preview->Camera().position = Float3{dist * 0.7f, dist * 0.6f + midY, dist * 0.7f};
-        m_preview->Camera().LookAt(Float3{0.0f, midY, 0.0f});
+        terrain::TerrainResource* product = m_product ? m_product.Get() : nullptr;
+        foundation::heightfield::Heightfield* hf = product != nullptr ? product->heightfield.Get() : nullptr;
+        const Float2 world = hf != nullptr ? hf->WorldSize() : Float2{256.0f, 256.0f};
+        const f32 middle = hf != nullptr ? 0.5f * (hf->MinY() + hf->MaxY()) : 0.0f;
+        const f32 size = Max(world.x, world.y);
+        PreviewViewport* preview = m_pane->Viewport();
+        // From above a corner, far enough that the whole of it is in view (the terrain is centred on
+        // its origin), and its far side within the camera's reach.
+        const Float3 away = Normalized(Float3{1.0f, 0.85f, 1.0f});
+        const f32 distance = size * 1.25f;
+        preview->Camera().position = Float3{0.0f, middle, 0.0f} + away * distance;
+        preview->Camera().LookAt(Float3{0.0f, middle, 0.0f});
+        preview->Camera().farZ = Max(preview->Camera().farZ, distance + size);
     }
 
-    // ---- fields ---------------------------------------------------------------------------------
-
-    void TerrainEditorPage::RebuildFieldsDeferred()
+    void TerrainEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
     {
-        ui::UIContext* ctx = m_content.Get() != nullptr ? m_content->Context : nullptr;
-        if (ctx == nullptr)
+        app::AssetObjectPage::OnUpdate(host, dt);
+        if (m_pane)
+            m_pane->Update(dt);
+        // The cooked terrain came, or a cook replaced it: the preview, its framing and the facts follow.
+        terrain::TerrainResource* product = m_product ? m_product.Get() : nullptr;
+        if (product != m_shownProduct)
         {
-            RebuildFields();
-            return;
-        }
-        TerrainEditorPage* self = this;
-        ctx->MutationQueueRef().QueueAction(core::Function<void()>{[self]() { self->RebuildFields(); }});
-    }
-
-    void TerrainEditorPage::RebuildFields()
-    {
-        if (m_fields.Get() == nullptr || m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        while (m_fields->ChildCount() > 0)
-        {
-            m_fields->RemoveView(m_fields->GetChildAt(0), true);
-        }
-        m_referenceRows.Clear();
-        TerrainEditorPage* self = this;
-
-        const auto addLabel = [&](StringView text, f32 fontSize)
-        {
-            auto lbl = MakeRef<ui::Label>(Allocator(), text);
-            lbl->FontSize.SetValue(Optional<f32>{fontSize});
-            m_fields->AddView(lbl.Get());
-        };
-        const auto addButton = [&](StringView text, core::Function<void()> onClick)
-        {
-            auto btn = MakeRef<ui::Button>(Allocator(), text);
-            btn->FontSize.SetValue(Optional<f32>{12.0f});
-            btn->OnClick.Add([cb = Move(onClick)](ui::ButtonBase*) { cb(); });
-            m_fields->AddView(btn.Get());
-        };
-
-        // References: each a labelled asset slot (pick, drop and clear are one assignment).
-        addLabel(u8"References", 13.0f);
-        AddReference(u8"Heightfield", u8"HeightfieldAsset", u8"heightfield",
-                     [self]() { return self->m_asset->heightfieldId; },
-                     [self](const Guid& g) { self->m_asset->heightfieldId = g; });
-        AddReference(u8"Weights", u8"SplatmapAsset", u8"weights",
-                     [self]() { return self->m_asset->weightsId; },
-                     [self](const Guid& g) { self->m_asset->weightsId = g; });
-        // No weights yet: offer to author them (the Splat Paint tool needs an existing raster).
-        // Resolution is an authoring choice independent of the heightfield (Fable Q3) - presets.
-        if (m_asset->weightsId.IsNil())
-        {
-            addLabel(u8"Create weights:", 11.0f);
-            addButton(u8"512", [self]() { self->CreateSplatmap(512); });
-            addButton(u8"1024", [self]() { self->CreateSplatmap(1024); });
-            addButton(u8"2048", [self]() { self->CreateSplatmap(2048); });
-        }
-
-        // BASE layer: what shows wherever paint doesn't cover; never painted (top-K model).
-        addLabel(u8"Base layer", 13.0f);
-        AddReference(u8"Base albedo", u8"TextureAsset", u8"baseAlbedo",
-                     [self]() { return self->m_asset->baseAlbedoId; },
-                     [self](const Guid& g) { self->m_asset->baseAlbedoId = g; });
-        AddReference(u8"Base normal", u8"TextureAsset", u8"baseNormal",
-                     [self]() { return self->m_asset->baseNormalId; },
-                     [self](const Guid& g) { self->m_asset->baseNormalId = g; });
-        AddReference(u8"Base ORM", u8"TextureAsset", u8"baseOrm",
-                     [self]() { return self->m_asset->baseOrmId; },
-                     [self](const Guid& g) { self->m_asset->baseOrmId = g; });
-        AddReference(u8"Base height", u8"TextureAsset", u8"baseHeight",
-                     [self]() { return self->m_asset->baseHeightId; },
-                     [self](const Guid& g) { self->m_asset->baseHeightId = g; });
-
-        // The paint layers are a section list: the header's add icon, and each layer a section
-        // inside Paint layers with its maps, its tiling and its remove icon (removal remaps the weight raster). A
-        // layer's index is its weight channel, so the order is not the user's to change.
-        auto layers = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        {
-            auto layerList = MakeRef<app::ContainerListEditor>(
-                Allocator(), StringView(u8"Paint layers"), StringView(u8"Paint layers"));
-            layerList->ElementsAsSections = true;
-            for (const Guid& albedo : m_asset->paletteAlbedoIds)
-            {
-                layerList->slotNames.PushBack(String(m_context->AssetNameFor(albedo)));
-            }
-            layerList->OnAdd = [self]() { self->AddLayer(); };
-            layers->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(layerList.Get()));
-        }
-        const u32 layerCount = static_cast<u32>(m_asset->paletteAlbedoIds.Size());
-        for (u32 i = 0; i < layerCount; ++i)
-        {
-            const u32 idx = i;
-            const String section = LayerSection(i);
-            const StringView cat = section.AsView();
-            layers->SetCategoryParent(cat, u8"Paint layers");
-            layers->SetCategoryHeaderActions(
-                cat, app::ContainerListEditor::ElementActions(
-                         Allocator(), i, layerCount, core::Function<void(usize, bool)>{},
-                         [self](usize index) { self->RemoveLayer(static_cast<u32>(index)); }));
-            layers->AddProperty(MakeReference(
-                u8"Albedo", u8"TextureAsset", u8"palette", cat,
-                [self, idx]()
-                {
-                    return idx < self->m_asset->paletteAlbedoIds.Size()
-                               ? self->m_asset->paletteAlbedoIds[idx]
-                               : Guid{};
-                },
-                [self, idx](const Guid& g)
-                {
-                    if (idx < self->m_asset->paletteAlbedoIds.Size())
-                    {
-                        self->m_asset->paletteAlbedoIds[idx] = g;
-                    }
-                }));
-            layers->AddProperty(
-                MakeMapReference(idx, u8"Normal", PaletteMap::Normal, u8"paletteNormal", cat));
-            layers->AddProperty(MakeMapReference(idx, u8"ORM", PaletteMap::Orm, u8"paletteOrm", cat));
-            layers->AddProperty(
-                MakeMapReference(idx, u8"Height", PaletteMap::Height, u8"paletteHeight", cat));
-            layers->AddProperty(
-                MakeMapReference(idx, u8"Mask", PaletteMap::Mask, u8"paletteMask", cat));
-            if (i < m_asset->paletteTileScales.Size())
-            {
-                const String mergeKey = Format(u8"tile{}", i);
-                layers->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::FloatEditor>(
-                        Allocator(), StringView(u8"Tile"),
-                        static_cast<f64>(m_asset->paletteTileScales[i]), 0.1, 8192.0, 1.0, 2,
-                        core::Function<void(f64)>{
-                            [self, idx, mergeKey](f64 v)
-                            {
-                                if (idx < self->m_asset->paletteTileScales.Size())
-                                {
-                                    self->m_asset->paletteTileScales[idx] = static_cast<f32>(v);
-                                    self->CommitEdit(mergeKey.AsView());
-                                }
-                            }},
-                        cat)
-                        .Get()));
-            }
-        }
-        {
-            ui::LayoutStyle layersStyle;
-            layersStyle.Width = ui::SizeSpec::Match();
-            m_fields->AddView(layers.Get(), layersStyle);
-        }
-
-        // Scalars (cast shadows + per-layer tile scale) in a property grid.
-        auto grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        {
-            auto cs = MakeRef<ui::toolkit::BoolEditor>(
-                Allocator(), StringView(u8"Cast Shadows"), m_asset->castShadows,
-                core::Function<void(bool)>{[self](bool v)
-                                           {
-                                               self->m_asset->castShadows = v;
-                                               self->CommitEdit(u8"castShadows");
-                                           }},
-                StringView(u8"Terrain"));
-            grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(cs.Get()));
-        }
-        {
-            // Height-blend soft-skirt width: only bites when a layer has a
-            // height map; smaller = crisper interlocked seams, larger = a wider skirt.
-            auto hb = MakeRef<ui::toolkit::FloatEditor>(
-                Allocator(), StringView(u8"Height blend"),
-                static_cast<f64>(m_asset->heightBlendContrast), 0.0, 1.0, 0.05, 2,
-                core::Function<void(f64)>{[self](f64 v)
-                                          {
-                                              self->m_asset->heightBlendContrast =
-                                                  static_cast<f32>(v);
-                                              self->CommitEdit(u8"heightBlend");
-                                          }},
-                StringView(u8"Terrain"));
-            grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(hb.Get()));
-        }
-        {
-            auto fe = MakeRef<ui::toolkit::FloatEditor>(
-                Allocator(), StringView(u8"Base tile"),
-                static_cast<f64>(m_asset->baseTileScale), 0.1, 8192.0, 1.0, 2,
-                core::Function<void(f64)>{[self](f64 v)
-                                          {
-                                              self->m_asset->baseTileScale = static_cast<f32>(v);
-                                              self->CommitEdit(u8"baseTile");
-                                          }},
-                StringView(u8"Base"));
-            grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(fe.Get()));
-        }
-        m_fields->AddView(grid.Get());
-
-        // Stats (from the cooked product, if resolved)
-        addLabel(u8"Stats", 13.0f);
-        terrain::TerrainResource* product = m_terrainProxy ? m_terrainProxy.Get() : nullptr;
-        if (product != nullptr)
-        {
-            for (const String& line : TerrainStatLines(*product))
-            {
-                addLabel(line.AsView(), 12.0f);
-            }
-        }
-        else
-        {
-            addLabel(u8"(not cooked yet - Save to preview)", 12.0f);
+            const bool first = m_shownProduct == nullptr;
+            m_shownProduct = product;
+            PointPreviewAt(product);
+            if (first)
+                FramePreview();
+            ShowFacts();
         }
     }
 
-    RefPtr<ui::toolkit::PropertyEditor> TerrainEditorPage::MakeReference(
-        StringView label, StringView assetTypeName, StringView mergeKey, StringView category,
-        core::Function<Guid()> current, core::Function<void(const Guid&)> apply)
+    void TerrainEditorPage::OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        TerrainEditorPage* self = this;
-        const StringView types[] = {assetTypeName};
-        auto row = MakeRef<app::ResourceRefEditor>(Allocator(), label, StringView(u8"(none)"),
-                                                   category, Span<const StringView>{types, 1});
-        // The write rebuilds this pane, deferred; the row outlives its own assignment either way.
-        row->BindAsset(*m_context, Move(current),
-                       [self, applyFn = Move(apply), key = String(mergeKey)](const Guid& picked)
-                       {
-                           applyFn(picked);
-                           self->CommitEdit(key.AsView());
-                           self->PointComponentAtTerrain(
-                               self->m_terrainProxy ? self->m_terrainProxy.Get() : nullptr);
-                           self->RebuildFieldsDeferred();
-                       });
-        return RefPtr<ui::toolkit::PropertyEditor>(row.Get());
-    }
-
-    void TerrainEditorPage::AddReference(StringView label, StringView assetTypeName,
-                                         StringView mergeKey, core::Function<Guid()> current,
-                                         core::Function<void(const Guid&)> apply)
-    {
-        RefPtr<ui::toolkit::PropertyEditor> row =
-            MakeReference(label, assetTypeName, mergeKey, StringView{}, Move(current), Move(apply));
-        auto line = MakeRef<ui::FlexLayout>(Allocator());
-        line->Direction = ui::Orientation::Horizontal;
-        line->Spacing = 6.0f;
-        auto text = MakeRef<ui::Label>(Allocator(), label);
-        text->FontSize.SetValue(Optional<f32>{12.0f});
-        ui::LayoutStyle fixedWidth;
-        fixedWidth.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(110.0f));
-        fixedWidth.AlignSelf = ui::Align::Center;
-        line->AddView(text.Get(), fixedWidth);
-        ui::LayoutStyle grow;
-        grow.FlexGrow = 1.0f;
-        line->AddView(row->EditorView(), grow);
-        ui::LayoutStyle style;
-        style.Width = ui::SizeSpec::Match();
-        m_fields->AddView(line.Get(), style);
-        m_referenceRows.PushBack(Move(row));
-    }
-
-    RefPtr<ui::toolkit::PropertyEditor> TerrainEditorPage::MakeMapReference(
-        u32 index, StringView mapLabel, PaletteMap map, StringView mergeKey, StringView category)
-    {
-        TerrainEditorPage* self = this;
-        return MakeReference(mapLabel, u8"TextureAsset", mergeKey, category,
-                             [self, index, map]() { return self->PaletteMapId(map, index); },
-                             [self, index, map](const Guid& g) { self->SetPaletteMap(map, index, g); });
-    }
-
-    String TerrainEditorPage::LayerSection(u32 index)
-    {
-        return Format(u8"Layer {}", index + 1);
-    }
-
-    void TerrainEditorPage::AddLayer()
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        m_asset->paletteAlbedoIds.PushBack(Guid{});
-        m_asset->paletteTileScales.PushBack(32.0f);
-        // Keep the optional map arrays parallel with the albedo list so rows line up.
-        m_asset->paletteNormalIds.PushBack(Guid{});
-        m_asset->paletteOrmIds.PushBack(Guid{});
-        m_asset->paletteHeightIds.PushBack(Guid{});
-        m_asset->paletteMaskIds.PushBack(Guid{});
-        CommitEdit(u8"addLayer");
-        RebuildFieldsDeferred();
-    }
-
-    // Set a per-layer normal / ORM / height / mask map id, growing the (optional) target array to match
-    // the albedo list first so an older terrain with no maps still edits cleanly.
-    Array<Guid>& TerrainEditorPage::PaletteMapIds(PaletteMap map) const
-    {
-        return (map == PaletteMap::Normal)   ? m_asset->paletteNormalIds
-               : (map == PaletteMap::Orm)    ? m_asset->paletteOrmIds
-               : (map == PaletteMap::Height) ? m_asset->paletteHeightIds
-                                             : m_asset->paletteMaskIds;
-    }
-
-    Guid TerrainEditorPage::PaletteMapId(PaletteMap map, u32 index) const
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return Guid{};
-        }
-        const Array<Guid>& ids = PaletteMapIds(map);
-        return index < ids.Size() ? ids[index] : Guid{};
-    }
-
-    void TerrainEditorPage::SetPaletteMap(PaletteMap map, u32 index, const Guid& g)
-    {
-        if (m_asset.Get() == nullptr || index >= m_asset->paletteAlbedoIds.Size())
-        {
-            return;
-        }
-        Array<Guid>& ids = PaletteMapIds(map);
-        while (ids.Size() < m_asset->paletteAlbedoIds.Size())
-        {
-            ids.PushBack(Guid{});
-        }
-        ids[index] = g;
-    }
-
-    void TerrainEditorPage::RemoveLayer(u32 index)
-    {
-        if (m_asset.Get() == nullptr || index >= m_asset->paletteAlbedoIds.Size())
-        {
-            return;
-        }
-        m_asset->paletteAlbedoIds.RemoveAt(index);
-        if (index < m_asset->paletteTileScales.Size())
-        {
-            m_asset->paletteTileScales.RemoveAt(index);
-        }
-        if (index < m_asset->paletteNormalIds.Size())
-        {
-            m_asset->paletteNormalIds.RemoveAt(index);
-        }
-        if (index < m_asset->paletteOrmIds.Size())
-        {
-            m_asset->paletteOrmIds.RemoveAt(index);
-        }
-        if (index < m_asset->paletteHeightIds.Size())
-        {
-            m_asset->paletteHeightIds.RemoveAt(index);
-        }
-        if (index < m_asset->paletteMaskIds.Size())
-        {
-            m_asset->paletteMaskIds.RemoveAt(index);
-        }
-        // Remap the weight raster (ruling R6): slots referencing the removed layer are freed
-        // (their weight falls to base); indices above it decrement. Applied to the LIVE runtime
-        // raster + persisted to the source sidecars; a full-raster snapshot rides the SAME undo
-        // entry as the asset edit (rare op - no region-delta machinery).
-        RemapWeightsOnRemove(index);
-        CommitEdit(u8"removeLayer");
-        m_context->RequestCook(false);
-        RebuildFieldsDeferred();
-    }
-
-    void TerrainEditorPage::RemapWeightsOnRemove(u32 removedIndex)
-    {
-        terrain::TerrainResource* product = m_terrainProxy ? m_terrainProxy.Get() : nullptr;
-        terrain::SplatWeights* sw = product != nullptr ? product->weights.Get() : nullptr;
-        if (sw == nullptr || sw->IsEmpty())
-        {
-            return; // no live raster (not cooked yet): nothing references the palette indices
-        }
-        if (!terrain::RemapOnPaletteRemove(*sw, removedIndex))
-        {
-            return;
-        }
-        // Persist both sidecars through the standard asset-edit drain (Save flow).
-        if (m_context != nullptr && !product->weights.id.IsNil())
-        {
-            RefPtr<terrain::SplatWeights> weights(sw);
-            const Guid id = product->weights.id;
-            m_context->RegisterAssetEdit(
-                id,
-                [weights, id](foundation::content::ContentDatabase& db) -> Status
-                {
-                    foundation::content::Instance* inst = db.GetInstance(id);
-                    if (inst == nullptr || weights.Get() == nullptr)
-                    {
-                        return Status{ErrorCode::NotFound};
-                    }
-                    RefPtr<ISerializable> object = inst->ReadObject();
-                    auto* asset = Cast<pipeline::SplatmapAsset>(object.Get());
-                    if (asset == nullptr)
-                    {
-                        return Status{ErrorCode::InvalidArgument};
-                    }
-                    asset->fileName = {};
-                    asset->width = weights->Width();
-                    asset->height = weights->Height();
-                    const Status wrote = inst->WriteObject(*asset);
-                    if (!wrote.IsOk())
-                    {
-                        return wrote;
-                    }
-                    const Status wroteWeights =
-                        inst->WriteData(terrain::kSplatStream,
-                                        terrain::SplatWeightsSource::WeightBlob(*weights));
-                    if (!wroteWeights.IsOk())
-                    {
-                        return wroteWeights;
-                    }
-                    return inst->WriteData(terrain::kSplatIndexStream,
-                                           terrain::SplatWeightsSource::IndexBlob(*weights));
-                });
-        }
-    }
-
-    void TerrainEditorPage::CreateSplatmap(i32 size)
-    {
-        // Composition, not painting: the PAGE authors the splatmap asset (a new source instance,
-        // seeded to the base layer) and assigns it; the Splat Paint tool only edits an existing one
-        // (Fable ruling Q3 - no stroke ever implies asset creation, so undo stays clean).
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return;
-        }
-        foundation::content::Group* root = m_context->Project()->SourceDb().RootGroup();
-        if (root == nullptr)
-        {
-            return;
-        }
-        const i32 dim = size > 0 ? size : 1024;
-        const String terrainName = AssetName(m_context, InstanceId());
-        const String name = Format(u8"{}_splat", terrainName);
-        foundation::content::Instance* inst =
-            root->CreateInstance(name.AsView(), pipeline::SplatmapAsset::StaticType());
-        if (inst == nullptr)
-        {
-            m_context->Notify(editor::NoticeKind::Error, u8"Splatmap create FAILED (name in use?).");
-            return;
-        }
-        pipeline::SplatmapAsset sa;
-        sa.width = dim;
-        sa.height = dim;
-        (void)inst->WriteObject(sa);
-        // No seeding: an all-zero top-K raster is a valid "pure base" surface by construction
-        // (the builder cooks empty sidecars to exactly that).
-
-        m_asset->weightsId = inst->Id();
-        CommitEdit(u8"createSplatmap");
-        m_context->RequestCook(false); // cook the new SplatmapAsset -> Splatmap product
-        PointComponentAtTerrain(m_terrainProxy ? m_terrainProxy.Get() : nullptr);
-        RebuildFieldsDeferred();
-        m_context->Notify(editor::NoticeKind::Success, u8"Created splatmap.");
-    }
-
-    // ---- undo / save ----------------------------------------------------------------------------
-
-    Array<byte> TerrainEditorPage::Snapshot() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        BeginVersionedPayload(ar, m_asset->GetType() != nullptr ? *m_asset->GetType()
-                                                                : pipeline::TerrainAsset::StaticType());
-        m_asset->Serialize(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void TerrainEditorPage::ApplyBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr || blob.IsEmpty())
-        {
-            return;
-        }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        BeginVersionedPayload(ar, m_asset->GetType() != nullptr ? *m_asset->GetType()
-                                                                : pipeline::TerrainAsset::StaticType());
-        m_asset->Serialize(ar);
-        m_undoBaseline = blob;
-        PointComponentAtTerrain(m_terrainProxy ? m_terrainProxy.Get() : nullptr);
-        RebuildFields(); // undo path (outside a live UI event) - rebuild directly
-        MarkDirty();
-    }
-
-    void TerrainEditorPage::CommitEdit(StringView mergeKey)
-    {
-        Array<byte> after = Snapshot();
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditCommand>(*this, mergeKey, m_undoBaseline, after),
-            Allocator()));
-        m_undoBaseline = Move(after);
-        MarkDirty();
-    }
-
-    Status TerrainEditorPage::Save()
-    {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false); // hot-swap the bound TerrainResource
-            LOG_INFO(u8"Editor", u8"saved terrain '{}'", m_title);
-        }
-        return saved;
-    }
-
-    // ---- lifecycle ------------------------------------------------------------------------------
-
-    void TerrainEditorPage::OnUpdate(runtime::IApplicationHost&, f32 dt)
-    {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh(); // sync the page's actions to it each frame
-        }
-        if (m_preview)
-        {
-            m_preview->Update(dt);
-        }
-        // Product resolve / hot-reload watchdog: rebind + reframe + refresh stats on (re)cook.
-        terrain::TerrainResource* product = m_terrainProxy ? m_terrainProxy.Get() : nullptr;
-        if (product != m_lastProduct)
-        {
-            PointComponentAtTerrain(product);
-            m_lastProduct = product;
-            FramePreview(product);
-            RebuildFields();
-        }
-    }
-
-    void TerrainEditorPage::OnRenderWindow(runtime::IApplicationHost&,
-                                           foundation::graphics::FrameContext& frame)
-    {
-        if (m_preview)
-        {
-            m_preview->RenderFrame(frame);
-        }
+        if (m_pane)
+            m_pane->Render(frame);
     }
 
     void TerrainEditorPage::OnClose()
     {
-        if (m_preview)
-        {
-            m_preview->Shutdown();
-        }
+        if (m_pane)
+            m_pane->Close();
     }
 
-    UniquePtr<EditorPage>
-    TerrainEditorPageFactory::CreatePage(EditorContext& context,
-                                         foundation::content::Instance& instance)
+    UniquePtr<EditorPage> TerrainEditorPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page =
-            editor::EditorRootAllocator().New<TerrainEditorPage>(context, *m_host, *m_uiHost, instance);
+        auto* page = editor::EditorRootAllocator().New<TerrainEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    void RegisterTerrainEditor(EditorContext& context, runtime::IApplicationHost& host,
-                               ui::runtime::UIHost& uiHost)
+    void RegisterTerrainEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<TerrainEditorPageFactory>(host, uiHost), editor::EditorRootAllocator()));
-        if (context.Thumbnails() != nullptr)
-        {
-            RegisterSplatmapThumbnailGenerator(*context.Thumbnails());
-        }
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<TerrainEditorPageFactory>(services), editor::EditorRootAllocator()));
     }
 }

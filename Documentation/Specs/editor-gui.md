@@ -585,6 +585,17 @@ The layers:
    vegetation mask page, new (user 2026-10-26: no editor had one, a mask opened on the generic page):
    its density planes as pictures on the image view, its options on the grid, as the heightfield
    page's; its painting stays the scene view's tool.
+   In parts:
+   1. The terrain page: the preview pages' shape, the cooked terrain under a sun beside the grid. The
+      asset keeps its layers in parallel arrays, so the rows are the page's own: the terrain's
+      (heightfield, splat weights, shadows, height blend, layer texture size), the base layer's
+      (its four maps and tiling), and the paint layers a list of groups (five maps and tiling each),
+      named by channel ("Layer 1", the albedo's name while closed: the property bag's describe hook,
+      as the reflected source has). A layer's place is its channel in the weights: the list adds and
+      removes, never reorders, and a removal frees its weights as before. New splat weights are the
+      bar's (a size from its menu), made beside the terrain; the cooked terrain's grid, world size
+      and chunks are read-only rows. Each edit one undo step.
+   2. The vegetation mask page.
 8. The particle effect page (Particles): the systems a tree, the preview, the inspector with its
    curves and gradients on the grid's own editors (a gradient's stop recoloured, which nothing
    handled before).

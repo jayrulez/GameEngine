@@ -174,6 +174,21 @@ TEST_CASE("material page: its rows are its shader's table: the material's, each 
     }
 }
 
+TEST_CASE("material page: a built-in switched lays the rows out as its own, and its undo as they were")
+{
+    Bed bed;
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    REQUIRE(page->PropertyRows().FindInfo(u8"Metallic") != nullptr);
+    page->EditRow(page->MaterialRows(), u8"builtIn", gui::Variant(static_cast<i64>(1))); // Unlit
+    page->Refresh();
+    CHECK(page->Source()->shaderName == StringView(u8"unlit"));
+    CHECK(page->PropertyRows().FindInfo(u8"Metallic") == nullptr); // PBR's rows gone with it
+    CHECK(page->PropertyRows().FindInfo(u8"BaseColor") != nullptr);
+    page->Commands().Undo();
+    page->Refresh();
+    CHECK(page->PropertyRows().FindInfo(u8"Metallic") != nullptr);
+}
+
 TEST_CASE("material page: an edit is one undo step, the row following, Discard takes them all back; the preview's shape or mesh is kept per material")
 {
     Bed bed;

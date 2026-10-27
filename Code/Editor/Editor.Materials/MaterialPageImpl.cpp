@@ -693,7 +693,16 @@ namespace editor
         // The gesture's one step starts from the source before its previews.
         Array<byte> before = m_inGesture ? Move(m_gestureBefore) : SnapshotSource();
         m_inGesture = false;
+        // The rows follow a change of what the material holds (a built-in switched): the command's
+        // Execute below applies `after` over itself, so it cannot see that change.
+        Array<String> namesBefore;
+        for (const String& name : Asset()->source.propertyNames)
+            namesBefore.PushBack(String(name.AsView()));
         mutate(Asset()->source);
+        bool sameRows = namesBefore.Size() == Asset()->source.propertyNames.Size();
+        for (usize i = 0; sameRows && i < namesBefore.Size(); ++i)
+            sameRows = namesBefore[i].AsView() == Asset()->source.propertyNames[i].AsView();
+        m_rowsDirty = m_rowsDirty || !sameRows;
         Array<byte> after = SnapshotSource();
         // The mutation already ran; Execute() re-applies `after` (idempotent).
         (void)Commands().Execute(UniquePtr<IEditorCommand>(Allocator().New<EditMaterialCommand>(*this, mergeKey, Move(before), Move(after)), Allocator()));

@@ -568,7 +568,7 @@ if(OPTION_BUILD_TOOLS)
     # The editor moves onto the GUI on this branch (Documentation/Specs/editor-gui.md, 4): a library
     # still on foundation.ui is PARKED, out of the build with its tests, its source untouched, and
     # comes back with its port commit (the spec's ledger, 4.1, keeps the list):
-    # Animation, Generic, Texture, Fonts, Image, Heightfield,
+    # Generic, Texture, Fonts, Image, Heightfield,
     # Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain, Script (and its
     # AngelScript and Luau lexers), Shaders, GUI, GameUI.
     # Editor.App, the shell, comes back in parts (the spec's 5.1): its source list names the files
@@ -594,6 +594,7 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Terrain) # the terrain's scene-view brushes and their panels (its asset page later)
     add_subdirectory(Code/Editor/Editor.Vegetation) # the vegetation's scene-view brushes and their panels
     add_subdirectory(Code/Editor/Editor.Particles) # the particle effect page
+    add_subdirectory(Code/Editor/Editor.Animation) # the animation pages (the clip page so far)
     add_subdirectory(Code/Editor/Editor.PropertyAnimation) # property animation in the scene (its UI-free half so far)
     add_subdirectory(Code/Editor/Editor.ViewportTools) # viewport tool-mode framework (IViewportTool + manager + provider registry)
     add_subdirectory(Code/Editor/Editor.Camera) # shared free-fly viewport camera (lean, foundation-only) for all editor pages

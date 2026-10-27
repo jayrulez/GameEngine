@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Animation - :clip_page partition (implementation).
+// Editor::Animation - the `:clip_page` partition (implementation).
 
 module;
-#include <cmath> // std::fmod (looping playhead wrap)
+#include <cmath> // std::fmod (a looping clip's clock)
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
@@ -12,46 +12,29 @@ module;
 module editor.animation;
 
 import foundation.core;
-import foundation.fonts; // VerticalAlignment (the labels)
-import foundation.settings; // per-project editor-settings store (preview skeleton/mesh prefs)
+import foundation.settings; // the per-project editor settings (the preview's rig, per clip)
 import foundation.content;
-import foundation.rhi;
 import foundation.graphics;
-import foundation.shell;
 import foundation.runtime;
-import foundation.runtime.client;
-import foundation.scene;
-import engine.scene;
+import foundation.resource;
 import foundation.animation;
 import foundation.animation.resource;
 import animation.pipeline;
-import foundation.resource;
-import foundation.render;
-import engine.render;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import editor.preview;
-import :graph_page; // DrawSkeletonWireframe (shared preview helper, impl-only)
 
 using namespace foundation::core;
-namespace animation = foundation::animation;
-namespace render = foundation::render;
-namespace rhi = foundation::rhi;
-namespace runtime = foundation::runtime;
-namespace scene = foundation::scene; // :actions declares it too; MSVC does not see a partition's
-namespace ui = foundation::ui;
-namespace vg = foundation::vg;
-namespace fonts = foundation::fonts;
 
 namespace editor
 {
-    // Per-asset clip-preview prefs: {clipGuid -> (skeleton guid, skinned-mesh guid)} - a section in
-    // the per-project editor-settings store, so a reopened clip viewer restores its preview rig.
+    namespace gui = foundation::gui;
+
+    // The preview's rig per clip ({clip -> skeleton, skinned mesh}), a section of the per-project
+    // editor settings, so a clip opened again plays on what it played on. Its type id is the old
+    // page's, so what that kept still reads.
     struct ClipPreviewPref
     {
         Guid asset;
@@ -78,785 +61,631 @@ namespace editor
         RTTI_OBJECT(ClipPreviewSettings, ISerializable)
     public:
         Array<ClipPreviewPref> prefs;
-        void Serialize(ISerializer& ar) override
-        {
-            foundation::core::Serialize(ar, "prefs", prefs);
-        }
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "prefs", prefs); }
     };
 
-    // ============================ Construction ==============================================
-
-    AnimationClipEditorPage::AnimationClipEditorPage(EditorContext& context,
-                                                     runtime::IApplicationHost& host,
-                                                     ui::runtime::UIHost& uiHost,
-                                                     foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_host(&host), m_uiHost(&uiHost), m_title(instance.Name())
+    namespace
     {
-        // Shared preview substrate (viewport + preview scene + orbit camera + render loop).
-        m_preview =
-            MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"animclip.preview");
-        m_preview->SetClearColor(Color{0.248f, 0.248f, 0.293f, 1.0f});
-        m_preview->Camera().position = Float3{0.0f, 1.4f, 3.2f};
-        m_preview->Camera().LookAt(Float3{0.0f, 0.9f, 0.0f});
+        constexpr StringView kEvents = u8"events";
+        constexpr StringView kNewEventName = u8"Event";
 
-        SetInstanceId(instance.Id());
-        Provide<IPlaybackPage>(*this);
-
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset = RefPtr<pipeline::AnimationClipAsset>(
-            Cast<pipeline::AnimationClipAsset>(object.Get()));
-        if (m_asset.Get() == nullptr)
+        // The event a row's path names ("events.2.time": 2), or -1.
+        [[nodiscard]] i32 EventOf(StringView path)
         {
-            LOG_ERROR(u8"Editor",
-                               u8"animation clip '{}' failed to read - page opens empty", m_title);
-        }
-        m_undoBaseline = SnapshotAsset();
-        if (m_context->Resources() != nullptr)
-        {
-            m_clip = m_context->Resources()->Bind<animation::AnimationClip>(InstanceId());
+            StringView element = path;
+            if (gui::ParentPropertyPath(element) != kEvents)
+                element = gui::ParentPropertyPath(path);
+            if (gui::ParentPropertyPath(element) != kEvents)
+                return -1;
+            const StringView index = element.SubStr(kEvents.Size() + 1, element.Size() - kEvents.Size() - 1);
+            const Optional<i64> parsed = ParseInt(index);
+            return parsed.HasValue() && parsed.Value() >= 0 ? static_cast<i32>(parsed.Value()) : -1;
         }
 
-        BuildPreviewScene();
-
-        // Transport: skeleton pick + play/pause + a normalized scrub slider + time readout.
-        auto transport = MakeRef<ui::FlexLayout>(Allocator());
-        transport->Direction = ui::Orientation::Horizontal;
-        transport->Spacing = 6.0f;
-        transport->Padding = ui::Thickness{6, 4};
+        [[nodiscard]] StringView LastSegment(StringView path)
         {
-            AnimationClipEditorPage* self = this;
-            // The preview rig: compact asset slots (pick, drop and clear are one assignment).
-            const StringView skeletonTypes[] = {u8"SkeletonAsset"};
-            m_skeletonSlot = MakeRef<app::CompactAssetSlot>(
-                Allocator(), StringView(u8"Skeleton"), Span<const StringView>{skeletonTypes, 1});
-            m_skeletonSlot->Editor().BindAsset(*m_context,
-                                               [self]() { return self->m_skeletonGuid; },
-                                               [self](const Guid& picked)
-                                               {
-                                                   self->SetPreviewSkeleton(picked);
-                                                   self->SavePreviewPref();
-                                               });
-            m_skeletonSlot->Build();
-            const StringView meshTypes[] = {u8"SkinnedMeshAsset"};
-            m_meshSlot = MakeRef<app::CompactAssetSlot>(Allocator(), StringView(u8"Mesh"),
-                                                        Span<const StringView>{meshTypes, 1});
-            m_meshSlot->Editor().BindAsset(*m_context, [self]() { return self->m_previewMeshId; },
-                                           [self](const Guid& picked)
-                                           {
-                                               self->SetPreviewMesh(picked);
-                                               self->SavePreviewPref();
-                                           });
-            m_meshSlot->Build();
-            {
-                ui::LayoutStyle slot;
-                slot.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(200.0f));
-                transport->AddView(m_skeletonSlot.Get(), slot);
-                transport->AddView(m_meshSlot.Get(), slot);
-            }
-
-            m_timeSlider = MakeRef<ui::Slider>(Allocator());
-            m_timeSlider->Min.SetValue(0.0f);
-            m_timeSlider->Max.SetValue(1.0f);
-            m_timeSlider->OnValueChanged.Add(
-                [self](ui::Slider*, f32 v)
-                {
-                    if (self->m_scrubbing)
-                    {
-                        return; // playback echo
-                    }
-                    animation::AnimationClip* clip = self->m_clip.Get();
-                    if (clip != nullptr && clip->duration > 0.0f)
-                    {
-                        self->m_time = v * clip->duration;
-                        self->m_playing = false;
-                    }
-                });
-            ui::LayoutStyle slp;
-            slp.FlexGrow = 1.0f;
-            transport->AddView(m_timeSlider.Get(), slp);
-
-            m_timeLabel = MakeRef<ui::Label>(Allocator());
-            m_timeLabel->FontSize.SetValue(Optional<f32>{12.0f});
-            m_timeLabel->VAlign.SetValue(fonts::VerticalAlignment::Middle);
-            ui::LayoutStyle tlp;
-            tlp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(110.0f));
-            transport->AddView(m_timeLabel.Get(), tlp);
+            for (usize i = path.Size(); i-- > 0;)
+                if (path[i] == u8'.')
+                    return path.SubStr(i + 1, path.Size() - i - 1);
+            return path;
         }
 
-        auto previewColumn = MakeRef<ui::FlexLayout>(Allocator());
-        previewColumn->Direction = ui::Orientation::Vertical;
+        // The events' two arrays as long as each other, whatever an older clip kept.
+        void Square(foundation::animation::AnimationClipSource& source)
         {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            previewColumn->AddView(transport.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            previewColumn->AddView(m_preview->View(), grow);
+            while (source.eventNames.Size() < source.eventTimes.Size())
+                source.eventNames.PushBack(String{});
+            while (source.eventTimes.Size() < source.eventNames.Size())
+                source.eventTimes.PushBack(0.0f);
         }
 
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        RebuildGrid();
-
-        auto split = MakeRef<ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.66f);
-        split->SetPanes(previewColumn.Get(), m_grid.Get());
-        // The page toolbar (Save, Undo, Redo, Discard, then the playback transport) over the page.
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_toolbar->AddPlayback();
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *split);
-
-        // Restore the persisted preview rig (skeleton + skinned mesh) for this clip.
-        LoadPreviewPref();
+        // Two decimals always, so a time running past ("0.90 s", "0.95 s") keeps its width.
+        [[nodiscard]] String Seconds(f32 seconds)
+        {
+            const i64 cents = static_cast<i64>(Max(seconds, 0.0f) * 100.0f + 0.5f);
+            return Format(u8"{}.{}{} s", cents / 100, (cents % 100) / 10, cents % 10);
+        }
     }
+
+    AnimationClipEditorPage::AnimationClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::AnimationClipAsset::StaticType(), kPath)
+    {
+        // Its tracks and keys are its import's: the rows are the page's own.
+        HideAssetRows();
+        Provide<IPlaybackPage>(*this);
+        AnimationClipEditorPage* self = this;
+        BuildRows();
+
+        m_axis = MakeRef<gui::TimeAxis>(Allocator());
+        m_axis->SetFrameRate(30.0f);
+        m_axis->SetDuration(Length());
+        m_axis->SetOnPlayheadChanged([self](f32 time)
+                                     {
+                                         if (self->m_moving)
+                                             return;
+                                         // A scrub: the preview holds where it is put.
+                                         self->m_time = time;
+                                         self->m_playing = false;
+                                     });
+        if (Content())
+        {
+            m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"animclip.preview");
+            m_pane->OnFrame = [self]() { self->FramePreview(); };
+            m_rig = MakeUnique<AnimationPreviewRig>(Allocator(), Context(), Services(), *m_pane);
+            m_rig->OnPicked = [self]() { self->SavePreviewPref(); };
+            m_rig->OnFirstShown = [self]() { self->FramePreview(); };
+            BindAction(Find<gui::ButtonBase>(u8"clip-restart"), u8"playback.restart");
+            BindAction(Find<gui::ButtonBase>(u8"clip-play"), u8"playback.play");
+            BindAction(Find<gui::ButtonBase>(u8"clip-stop"), u8"playback.stop");
+            m_state = Find<gui::Label>(u8"clip-state");
+            m_travelButton = Find<gui::ButtonBase>(u8"clip-travel");
+            if (m_travelButton != nullptr)
+                m_travelButton->SetOnClick([self]() { self->SetTravel(!self->m_travel); });
+            m_ruler = Find<gui::TimeRuler>(u8"clip-ruler");
+            if (m_ruler != nullptr)
+            {
+                m_ruler->SetTimeAxis(m_axis);
+                m_ruler->SetMarkerSource(this);
+                m_ruler->OnMarkerChosen = [self](i32 marker) { self->ChooseEvent(marker); };
+            }
+        }
+        if (Context().Resources() != nullptr)
+            m_clip = Context().Resources()->Bind<foundation::animation::AnimationClip>(InstanceId());
+        LoadPreviewPref();
+        ShowRows();
+        ShowFacts();
+    }
+
+    AnimationClipEditorPage::~AnimationClipEditorPage()
+    {
+        if (m_ruler != nullptr)
+        {
+            m_ruler->SetMarkerSource(nullptr);
+            m_ruler->OnMarkerChosen = nullptr;
+        }
+    }
+
+    pipeline::AnimationClipAsset* AnimationClipEditorPage::Clip() const
+    {
+        return ObjectAs<pipeline::AnimationClipAsset>();
+    }
+
+    f32 AnimationClipEditorPage::Length() const
+    {
+        const foundation::animation::AnimationClip* cooked = m_clip ? m_clip.Get() : nullptr;
+        if (cooked != nullptr && cooked->duration > 0.0f)
+            return cooked->duration;
+        const pipeline::AnimationClipAsset* clip = Clip();
+        return clip != nullptr && clip->source.duration > 0.0f ? clip->source.duration : 1.0f;
+    }
+
+    // === The rows ===
+
+    void AnimationClipEditorPage::BuildRows()
+    {
+        m_clipRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_rootRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_eventRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+
+        gui::PropertyInfo& looping = m_clipRows->Add(u8"looping", gui::PropertyKind::Bool, gui::Variant(false));
+        looping.DisplayName = String(u8"Looping");
+        looping.Description = String(u8"Whether it plays again from its start when it ends (an animator may say otherwise)");
+
+        gui::PropertyInfo& bone = m_rootRows->Add(u8"bone", gui::PropertyKind::String, gui::Variant(StringView{}));
+        bone.DisplayName = String(u8"Root bone");
+        bone.Description = String(u8"The bone its travel is read from, by name (empty: the skeleton's first root)");
+        const auto axis = [&](StringView path, StringView shown, StringView about)
+        {
+            gui::PropertyInfo& info = m_rootRows->Add(path, gui::PropertyKind::Bool, gui::Variant(false));
+            info.DisplayName = String(shown);
+            info.Description = String(about);
+        };
+        axis(u8"horizontal", u8"Travel", u8"Its travel along the ground taken out of the pose, for the character to move by");
+        axis(u8"vertical", u8"Height", u8"Its rise and fall taken out too (a jump that should lift the character)");
+        axis(u8"yaw", u8"Turning", u8"Its turning about the vertical taken out, for the character to turn by");
+
+        // The events as every page's lists: each a group of its time and its name, a new one at
+        // the playhead. Their order means nothing (a time places each), so the list does not move them.
+        gui::PropertyInfo& list = m_eventRows->AddList(kEvents, gui::PropertyKind::Group, gui::Variant{});
+        list.DisplayName = String(u8"Events");
+        list.Description = String(u8"What the clip tells its listeners as it plays past each (a footstep, a hit); each a marker on the ruler");
+        list.ListOps = gui::PropertyListAdd | gui::PropertyListRemove;
+        if (gui::PropertyInfo* time = m_eventRows->AddElementField(kEvents, u8"time", gui::PropertyKind::Float, gui::Variant(0.0)))
+        {
+            time->DisplayName = String(u8"Time");
+            time->Description = String(u8"When it fires, in seconds from the clip's start (kept within the clip)");
+            time->Step = 0.01;
+        }
+        if (gui::PropertyInfo* name = m_eventRows->AddElementField(kEvents, u8"name", gui::PropertyKind::String, gui::Variant(kNewEventName)))
+        {
+            name->DisplayName = String(u8"Name");
+            name->Description = String(u8"What its listeners are told");
+        }
+
+        AnimationClipEditorPage* self = this;
+        gui::PropertyBag* const bags[] = {m_clipRows.Get(), m_rootRows.Get(), m_eventRows.Get()};
+        for (gui::PropertyBag* raw : bags)
+        {
+            gui::PropertyBag* rows = raw;
+            rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
+                              {
+                                  if (!commit.After.IsEmpty())
+                                      self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
+                              });
+        }
+        m_eventRows->SetOnListEdited([self](StringView, const gui::ListEdit& edit) { self->EditEvents(edit); });
+        // Each event by its name, closed showing when it fires.
+        m_eventRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
+                                   {
+                                       if (gui::ParentPropertyPath(path) != kEvents)
+                                           return;
+                                       const i32 index = EventOf(path);
+                                       const pipeline::AnimationClipAsset* clip = self->Clip();
+                                       if (clip == nullptr || index < 0 || static_cast<usize>(index) >= clip->source.eventTimes.Size())
+                                           return;
+                                       const usize at = static_cast<usize>(index);
+                                       const StringView name = at < clip->source.eventNames.Size() ? clip->source.eventNames[at].AsView() : StringView{};
+                                       info.DisplayName = name.IsEmpty() ? Format(u8"Event {}", index + 1) : String(name);
+                                       info.Summary = Format(u8"at {}", Seconds(clip->source.eventTimes[at]));
+                                   });
+        AddSection(u8"clip", u8"Clip", *m_clipRows);
+        AddSection(u8"root", u8"Root motion", *m_rootRows);
+        AddSection(u8"events", u8"Events", *m_eventRows);
+    }
+
+    void AnimationClipEditorPage::ShowRows()
+    {
+        const pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr)
+            return;
+        const foundation::animation::AnimationClipSource& source = clip->source;
+        m_clipRows->SetValue(u8"looping", 0, gui::Variant(source.isLooping));
+        m_rootRows->SetValue(u8"bone", 0, gui::Variant(source.rootMotion.rootBone.AsView()));
+        m_rootRows->SetValue(u8"horizontal", 0, gui::Variant(source.rootMotion.horizontal));
+        m_rootRows->SetValue(u8"vertical", 0, gui::Variant(source.rootMotion.vertical));
+        m_rootRows->SetValue(u8"yaw", 0, gui::Variant(source.rootMotion.yaw));
+        const usize count = Max(source.eventTimes.Size(), source.eventNames.Size()); // an edit squares them
+        m_eventRows->ResizeList(kEvents, 0, count);
+        for (usize i = 0; i < count; ++i)
+        {
+            const String element = Format(u8"{}.{}", kEvents, i);
+            const f32 time = i < source.eventTimes.Size() ? source.eventTimes[i] : 0.0f;
+            const StringView name = i < source.eventNames.Size() ? source.eventNames[i].AsView() : StringView{};
+            m_eventRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"time").AsView(), 0, gui::Variant(static_cast<f64>(time)));
+            m_eventRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"name").AsView(), 0, gui::Variant(name));
+        }
+        m_eventRows->PropertiesChanged(); // the names and summaries described again
+    }
+
+    void AnimationClipEditorPage::ShowFacts()
+    {
+        const pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr)
+            return;
+        const foundation::animation::AnimationClipSource& source = clip->source;
+        SetFact(u8"Name", source.name.IsEmpty() ? StringView(u8"Unnamed") : source.name.AsView());
+        SetFact(u8"Duration", Seconds(source.duration).AsView());
+        SetFact(u8"Tracks", Format(u8"{}", source.trackBone.Size()).AsView());
+        SetFact(u8"Keys", Format(u8"{}", source.keyTimes.Size()).AsView());
+    }
+
+    void AnimationClipEditorPage::Committed(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+    {
+        if (Clip() == nullptr)
+            return;
+        using Source = foundation::animation::AnimationClipSource;
+        const auto edit = [this](const Function<void(Source&)>& mutate)
+        { EditWhole(u8"edit_animclip", [&mutate](ISerializable& object) { mutate(static_cast<pipeline::AnimationClipAsset&>(object).source); }); };
+        if (&rows == m_clipRows.Get())
+        {
+            const bool looping = value.AsBool();
+            edit([looping](Source& source) { source.isLooping = looping; });
+            return;
+        }
+        if (&rows == m_rootRows.Get())
+        {
+            if (path == u8"bone")
+            {
+                const String bone(Trim(value.AsString()));
+                edit([&bone](Source& source) { source.rootMotion.rootBone = bone; });
+                return;
+            }
+            const bool on = value.AsBool();
+            bool foundation::animation::RootMotionSettings::*field = path == u8"horizontal" ? &foundation::animation::RootMotionSettings::horizontal
+                                                                     : path == u8"vertical" ? &foundation::animation::RootMotionSettings::vertical
+                                                                                            : &foundation::animation::RootMotionSettings::yaw;
+            edit([field, on](Source& source) { source.rootMotion.*field = on; });
+            return;
+        }
+        const i32 index = EventOf(path);
+        if (index < 0 || static_cast<usize>(index) >= Clip()->source.eventTimes.Size())
+            return;
+        const usize at = static_cast<usize>(index);
+        const StringView field = LastSegment(path);
+        if (field == u8"time")
+        {
+            const f32 time = static_cast<f32>(Clamp(value.AsFloat(), 0.0, static_cast<f64>(Length())));
+            edit([at, time](Source& source)
+                 {
+                     Square(source);
+                     source.eventTimes[at] = time;
+                 });
+        }
+        else if (field == u8"name")
+        {
+            const String name(value.AsString());
+            edit([at, &name](Source& source)
+                 {
+                     Square(source);
+                     source.eventNames[at] = name;
+                 });
+        }
+    }
+
+    void AnimationClipEditorPage::EditEvents(const gui::ListEdit& edit)
+    {
+        const pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr)
+            return;
+        if (edit.Kind == gui::ListEdit::Op::Insert)
+        {
+            // At the playhead, at the end of the list: its place in the list means nothing.
+            const f32 time = Clamp(m_time, 0.0f, Length());
+            EditWhole(u8"edit_animclip", [time](ISerializable& object)
+                      {
+                          auto& source = static_cast<pipeline::AnimationClipAsset&>(object).source;
+                          Square(source);
+                          source.eventTimes.PushBack(time);
+                          source.eventNames.PushBack(String(kNewEventName));
+                      });
+        }
+        else if (edit.Kind == gui::ListEdit::Op::Remove && edit.Index < clip->source.eventTimes.Size())
+        {
+            const usize index = edit.Index;
+            EditWhole(u8"edit_animclip", [index](ISerializable& object)
+                      {
+                          auto& source = static_cast<pipeline::AnimationClipAsset&>(object).source;
+                          Square(source);
+                          source.eventTimes.RemoveAt(index);
+                          source.eventNames.RemoveAt(index);
+                      });
+        }
+        ShowRows(); // the list as the clip holds it (a move, which the list does not offer, goes back)
+    }
+
+    void AnimationClipEditorPage::OnObjectChanged()
+    {
+        ShowRows();
+        ShowFacts();
+        NotifyTimeMarkersChanged();
+    }
+
+    void AnimationClipEditorPage::ChooseEvent(i32 index)
+    {
+        const pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr || index < 0 || static_cast<usize>(index) >= clip->source.eventTimes.Size())
+            return;
+        if (m_ruler != nullptr && m_ruler->GetChosenMarker() != index)
+            m_ruler->ChooseMarker(index); // tells this again, which opens it below
+        gui::PropertyGrid* grid = Grid();
+        if (grid == nullptr)
+            return;
+        grid->SetOpen(Sections().PathIn(u8"events", kEvents).AsView(), true);
+        const String path = Sections().PathIn(u8"events", Format(u8"{}.{}", kEvents, index).AsView());
+        grid->SetOpen(path.AsView(), true);
+        const i32 found = grid->FindRow(path.AsView());
+        if (found >= 0)
+            grid->ScrollToItem(found, gui::ScrollAlign::Start);
+    }
+
+    // === The events as the ruler's markers ===
+
+    usize AnimationClipEditorPage::MarkerCount() const
+    {
+        const pipeline::AnimationClipAsset* clip = Clip();
+        return clip != nullptr ? clip->source.eventTimes.Size() : 0;
+    }
+
+    gui::TimeMarker AnimationClipEditorPage::GetMarker(usize marker) const
+    {
+        const pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr || marker >= clip->source.eventTimes.Size())
+            return gui::TimeMarker{};
+        const StringView name = marker < clip->source.eventNames.Size() ? clip->source.eventNames[marker].AsView() : StringView{};
+        return gui::TimeMarker{clip->source.eventTimes[marker], name.IsEmpty() ? Format(u8"Event {}", marker + 1) : String(name)};
+    }
+
+    void AnimationClipEditorPage::BeginMarkerMove(usize marker)
+    {
+        pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr || marker >= clip->source.eventTimes.Size())
+            return;
+        m_markerMoving = static_cast<i32>(marker);
+        m_markerFrom = clip->source.eventTimes[marker];
+    }
+
+    void AnimationClipEditorPage::PreviewMarkerMove(usize marker, f32 time)
+    {
+        pipeline::AnimationClipAsset* clip = Clip();
+        if (clip == nullptr || static_cast<i32>(marker) != m_markerMoving || marker >= clip->source.eventTimes.Size())
+            return;
+        // Live in the asset (the row follows), the step taken once the drag ends.
+        clip->source.eventTimes[marker] = Clamp(time, 0.0f, Length());
+        m_eventRows->SetValue(gui::JoinPropertyPath(Format(u8"{}.{}", kEvents, marker).AsView(), u8"time").AsView(), 0,
+                              gui::Variant(static_cast<f64>(clip->source.eventTimes[marker])));
+    }
+
+    void AnimationClipEditorPage::CommitMarkerMove()
+    {
+        pipeline::AnimationClipAsset* clip = Clip();
+        const i32 moving = m_markerMoving;
+        m_markerMoving = -1;
+        if (clip == nullptr || moving < 0 || static_cast<usize>(moving) >= clip->source.eventTimes.Size())
+            return;
+        const usize at = static_cast<usize>(moving);
+        const f32 time = clip->source.eventTimes[at];
+        clip->source.eventTimes[at] = m_markerFrom; // the step's before is where the drag began
+        if (time == m_markerFrom)
+            return;
+        EditWhole(u8"edit_animclip", [at, time](ISerializable& object)
+                  {
+                      auto& source = static_cast<pipeline::AnimationClipAsset&>(object).source;
+                      Square(source);
+                      source.eventTimes[at] = time;
+                  });
+    }
+
+    void AnimationClipEditorPage::CancelMarkerMove()
+    {
+        pipeline::AnimationClipAsset* clip = Clip();
+        const i32 moving = m_markerMoving;
+        m_markerMoving = -1;
+        if (clip == nullptr || moving < 0 || static_cast<usize>(moving) >= clip->source.eventTimes.Size())
+            return;
+        clip->source.eventTimes[static_cast<usize>(moving)] = m_markerFrom;
+        ShowRows();
+    }
+
+    // === The preview ===
 
     void AnimationClipEditorPage::LoadPreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
-        if (store == nullptr)
-        {
+        if (!m_rig)
             return;
-        }
-        const ClipPreviewSettings* section = store->Find<ClipPreviewSettings>();
-        if (section == nullptr)
-        {
-            return;
-        }
-        for (const ClipPreviewPref& p : section->prefs)
-        {
-            if (p.asset != InstanceId())
-            {
-                continue;
-            }
-            SetPreviewSkeleton(p.skeleton);
-            SetPreviewMesh(p.mesh);
-            return;
-        }
+        if (foundation::settings::Settings* store = Context().ProjectEditorSettings())
+            if (const ClipPreviewSettings* section = store->Find<ClipPreviewSettings>())
+                for (const ClipPreviewPref& p : section->prefs)
+                    if (p.asset == InstanceId())
+                    {
+                        m_rig->SetSkeleton(p.skeleton);
+                        m_rig->SetMesh(p.mesh);
+                        return;
+                    }
+        // Never shown before: on the skeleton its import names, the one its bones address.
+        if (const pipeline::AnimationClipAsset* clip = Clip())
+            m_rig->SetSkeleton(clip->skeleton);
+        m_rig->SetMesh(Guid{});
     }
 
     void AnimationClipEditorPage::SavePreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
-        if (store == nullptr)
-        {
+        foundation::settings::Settings* store = Context().ProjectEditorSettings();
+        if (store == nullptr || !m_rig)
             return;
-        }
         ClipPreviewSettings& section = store->Section<ClipPreviewSettings>();
+        bool found = false;
         for (ClipPreviewPref& p : section.prefs)
-        {
             if (p.asset == InstanceId())
             {
-                p.skeleton = m_skeletonGuid;
-                p.mesh = m_previewMeshId;
-                return;
+                p.skeleton = m_rig->SkeletonId();
+                p.mesh = m_rig->MeshId();
+                found = true;
             }
-        }
-        section.prefs.PushBack(ClipPreviewPref{InstanceId(), m_skeletonGuid, m_previewMeshId});
+        if (!found)
+            section.prefs.PushBack(ClipPreviewPref{InstanceId(), m_rig->SkeletonId(), m_rig->MeshId()});
+        store->MarkChanged<ClipPreviewSettings>();
+        Context().RequestProjectEditorSettingsSave();
     }
 
-    // ============================ Preview ===================================================
-
-    void AnimationClipEditorPage::BuildPreviewScene()
+    void AnimationClipEditorPage::FramePreview()
     {
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        if (scenePtr == nullptr)
+        if (!m_pane || m_pane->Viewport() == nullptr)
+            return;
+        if (m_rig && m_rig->Frame())
+            return;
+        // Nothing shown yet: a character's height in view, from a little above its middle.
+        PreviewViewport* preview = m_pane->Viewport();
+        preview->Camera().position = Float3{0.0f, 1.4f, 3.2f};
+        preview->Camera().LookAt(Float3{0.0f, 0.9f, 0.0f});
+    }
+
+    void AnimationClipEditorPage::SetTime(f32 seconds)
+    {
+        m_time = Clamp(seconds, 0.0f, Length());
+        m_moving = true;
+        m_axis->SetPlayhead(m_time);
+        m_moving = false;
+    }
+
+    void AnimationClipEditorPage::SetTravel(bool travel)
+    {
+        m_travel = travel;
+        if (m_travelButton != nullptr)
+            m_travelButton->SetChecked(travel);
+    }
+
+    void AnimationClipEditorPage::Pose()
+    {
+        if (!m_rig)
+            return;
+        foundation::animation::AnimationClip* clip = m_clip ? m_clip.Get() : nullptr;
+        foundation::animation::Skeleton* skeleton = m_rig->Skeleton();
+        if (m_pane)
         {
+            if (skeleton == nullptr)
+                m_pane->ShowEmpty(u8"No skeleton to play it on", u8"Pick the skeleton its bones belong to on the preview's bar.");
+            else
+                m_pane->Show();
+        }
+        if (clip == nullptr || skeleton == nullptr || skeleton->BoneCount() <= 0)
+        {
+            m_rig->Show(Span<const foundation::animation::BoneTransform>{});
             return;
         }
+        const usize bones = static_cast<usize>(skeleton->BoneCount());
+        m_pose.Resize(bones);
+        foundation::animation::SampleClip(*clip, *skeleton, m_time, Span<foundation::animation::BoneTransform>{m_pose.Data(), bones});
+        // Under the armature's rest transform, as the model places it (a Z-up file's turn, its
+        // units); cooked, the pose plays in place, travelling, it goes where its root motion takes it.
+        const Float4x4 rest = Clip() != nullptr ? Clip()->modelRest.ToMatrix() : Float4x4::Identity();
+        const Float4x4 base = m_travel ? rest * RootMotionPlacement(*clip, m_time) : rest;
+        m_rig->Show(m_pose.AsSpan(), base);
+        if (m_pane && m_pane->Viewport() != nullptr && m_pane->Viewport()->IsValid())
+            DrawRootMotionPath(m_pane->Viewport()->SceneDebugDraw(), *clip, m_time);
+    }
 
-        // A sun so a picked skinned mesh is lit (the skeleton wireframe needs none).
-        const scene::EntityHandle sun = scenePtr->CreateEntity(u8"Sun");
-        Transform st;
-        st.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.35f) *
-                      Quaternion::FromAxisAngle(Float3{1, 0, 0}, -1.05f);
-        scenePtr->SetLocalTransform(sun, st);
-        if (auto* lights = scenePtr->GetSystem<engine::render::LightComponentManager>())
+    void AnimationClipEditorPage::FollowAxis()
+    {
+        // The ruler shows the whole clip, fitted again when its width or the clip's length changes.
+        const f32 length = Length();
+        if (m_axis->Duration() != length)
+            m_axis->SetDuration(length);
+        const f32 width = m_ruler != nullptr ? m_ruler->GetContentBounds().width : 0.0f;
+        if (width > 0.0f && (width != m_rulerWidth || length != m_fittedLength))
         {
-            engine::render::LightComponent& light = lights->Add(sun);
-            light.castsShadows = false;
-        }
-
-        // The optional skinned mesh: its MeshComponent gets bone matrices fed each frame from the
-        // preview player (see UpdatePreview). No mesh bound until the user picks one.
-        m_meshEntity = scenePtr->CreateEntity(u8"PreviewMesh");
-        if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-        {
-            meshes->Add(m_meshEntity);
+            m_rulerWidth = width;
+            m_fittedLength = length;
+            m_axis->Frame(0.0f, length, width);
         }
     }
 
-    void AnimationClipEditorPage::SetPreviewSkeleton(const Guid& id)
+    void AnimationClipEditorPage::ShowTransport()
     {
-        m_skeletonGuid = id;
-        if (m_context->Resources() != nullptr && !id.IsNil())
-        {
-            m_skeleton = m_context->Resources()->Bind<animation::Skeleton>(id);
-        }
-        else
-        {
-            m_skeleton = foundation::resource::Proxy<animation::Skeleton>{};
-        }
-        if (m_skeletonSlot.Get() != nullptr)
-        {
-            m_skeletonSlot->Editor().Refresh();
-        }
-    }
-
-    void AnimationClipEditorPage::SetPreviewMesh(const Guid& id)
-    {
-        m_previewMeshId = id;
-        if (m_context->Resources() != nullptr && !id.IsNil())
-        {
-            m_previewMesh = m_context->Resources()->Bind<foundation::geometry::StaticMesh>(id);
-        }
-        else
-        {
-            m_previewMesh = foundation::resource::Proxy<foundation::geometry::StaticMesh>{};
-        }
-        // Point the preview MeshComponent at the mesh (bone matrices feed per frame).
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        if (scenePtr != nullptr)
-        {
-            if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-            {
-                if (auto* mc = meshes->Get(m_meshEntity))
-                {
-                    if (foundation::geometry::StaticMesh* pm = m_previewMesh.Get())
-                    {
-                        mc->mesh = pm;
-                    }
-                    else
-                    {
-                        mc->mesh.SetDirect(RefPtr<foundation::geometry::StaticMesh>{});
-                        mc->boneMatrices = nullptr;
-                        mc->boneCount = 0;
-                    }
-                }
-            }
-        }
-        if (m_meshSlot.Get() != nullptr)
-        {
-            m_meshSlot->Editor().Refresh();
-        }
-    }
-
-    void AnimationClipEditorPage::UpdatePreview(f32 dt)
-    {
-        animation::AnimationClip* clip = m_clip.Get();
-        animation::Skeleton* skeleton = m_skeleton.Get();
-        if (clip == nullptr || clip->duration <= 0.0f)
-        {
-            if (m_timeLabel.Get() != nullptr)
-            {
-                m_timeLabel->SetText(u8"(clip not cooked)");
-            }
+        if (m_state == nullptr)
             return;
-        }
-
+        const bool cooked = m_clip && m_clip.Get() != nullptr;
+        // Its width fixed by the sheet; paused says so by its colour, as the Play button does by its icon.
+        const String text = !cooked ? String(u8"Not cooked yet") : Format(u8"{} / {}", Seconds(m_time), Seconds(Length()));
+        if (m_state->GetText() != text.AsView())
+            m_state->SetText(text.AsView());
         if (m_playing)
         {
-            m_time += dt;
-            if (m_time > clip->duration)
-            {
-                m_time = clip->isLooping ? std::fmod(m_time, clip->duration) : clip->duration;
-                if (!clip->isLooping)
-                {
-                    m_playing = false;
-                }
-            }
-            // Echo playback into the slider without re-entering the scrub handler.
-            SyncTimeSlider();
-        }
-        if (m_timeLabel.Get() != nullptr)
-        {
-            m_timeLabel->SetText(Format(u8"{}s / {}s", static_cast<i32>(m_time * 100.0f) / 100.0f,
-                                        static_cast<i32>(clip->duration * 100.0f) / 100.0f)
-                                     .AsView());
-        }
-
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        if (skeleton == nullptr || skeleton->BoneCount() <= 0 || m_preview.Get() == nullptr ||
-            !m_preview->IsValid() || scenePtr == nullptr)
-        {
-            return;
-        }
-        const usize boneCount = static_cast<usize>(skeleton->BoneCount());
-        m_poseScratch.Resize(boneCount);
-        animation::SampleClip(*clip, *skeleton, m_time,
-                              Span<animation::BoneTransform>{m_poseScratch.Data(), boneCount});
-
-        // Root motion: the cooked pose plays in place; with Show travel the rig goes where the
-        // clip's extracted travel takes it from its start (one loop's worth).
-        Float4x4 travel = Float4x4::Identity();
-        if (m_showTravel && !clip->rootMotion.IsEmpty())
-        {
-            const animation::RootMotionDelta moved = animation::ClipRootMotion(*clip, 0.0f, m_time, false);
-            travel = RotationMatrix(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, moved.yaw)) *
-                     Float4x4::Translation(moved.translation);
-        }
-        if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-        {
-            if (meshes->Get(m_meshEntity) != nullptr)
-            {
-                Transform at;
-                at.position = Float3{travel.m[3][0], travel.m[3][1], travel.m[3][2]};
-                at.rotation = QuaternionFromRotationMatrix(travel);
-                scenePtr->SetLocalTransform(m_meshEntity, at);
-            }
-        }
-
-        // Skinned preview mesh: drive the player to the SAME m_time and push its skinning matrices
-        // onto the MeshComponent (borrowed for this frame's render).
-        if (m_previewMesh.Get() != nullptr)
-        {
-            if (m_previewPlayer.Get() == nullptr || m_playerSkeleton != skeleton)
-            {
-                m_previewPlayer =
-                    MakeUnique<animation::AnimationPlayer>(Allocator(), *skeleton);
-                m_playerSkeleton = skeleton;
-                m_playerClip = nullptr;
-            }
-            if (m_playerClip != clip)
-            {
-                m_playerClip = clip;
-                m_previewPlayer->Play(clip);
-            }
-            m_previewPlayer->SetCurrentTime(m_time);
-            m_previewPlayer->Update(0.0f); // resample at m_time without advancing
-            const Span<const Float4x4> mats = m_previewPlayer->GetSkinningMatrices();
-            if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-            {
-                if (auto* mc = meshes->Get(m_meshEntity))
-                {
-                    mc->boneMatrices = mats.Data();
-                    mc->boneCount = static_cast<u32>(mats.Size());
-                }
-            }
-        }
-
-        auto& draw = m_preview->SceneDebugDraw();
-        draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
-        DrawSkeletonWireframe(draw, *skeleton,
-                              Span<const animation::BoneTransform>{m_poseScratch.Data(), boneCount},
-                              m_worldScratch, travel);
-
-        // The extracted path on the ground (height too when the clip extracts it), and where the
-        // clip is along it now.
-        const animation::RootMotionCurve& curve = clip->rootMotion;
-        if (!curve.IsEmpty())
-        {
-            const Color path{1.0f, 0.75f, 0.2f, 1.0f};
-            const auto onGround = [&](Float3 p)
-            {
-                const Float3 start = curve.positions[0];
-                return Float3{curve.horizontal ? p.x - start.x : 0.0f, curve.vertical ? p.y - start.y : 0.0f,
-                              curve.horizontal ? p.z - start.z : 0.0f};
-            };
-            for (usize i = 0; i + 1 < curve.positions.Size(); ++i)
-            {
-                draw.DrawLine(onGround(curve.positions[i]), onGround(curve.positions[i + 1]), path, true);
-            }
-            const animation::RootMotionDelta now = animation::ClipRootMotion(*clip, 0.0f, m_time, false);
-            draw.DrawWireSphere(now.translation, 0.04f, path, 10, true);
-        }
-    }
-
-    // ============================ Inspector =================================================
-
-    void AnimationClipEditorPage::RebuildGrid()
-    {
-        m_grid->Clear();
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        AnimationClipEditorPage* self = this;
-        animation::AnimationClipSource& source = m_asset->source;
-        ui::toolkit::PropertyGrid& g = *m_grid;
-
-        // --- stats (read-only) ---
-        {
-            const StringView cat = u8"Clip";
-            auto stat = [&](StringView name, String value)
-            {
-                g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::StringEditor>(Allocator(), name, value.AsView(),
-                                                       Function<void(StringView)>{}, cat)
-                        .Get()));
-            };
-            stat(u8"Name", String(source.name.AsView()));
-            stat(u8"Duration", Format(u8"{} s", source.duration));
-            stat(u8"Tracks", Format(u8"{}", source.trackBone.Size()));
-
-            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::BoolEditor>(Allocator(), u8"Looping", source.isLooping,
-                                                 Function<void(bool)>{[self, &source](bool v)
-                                                                      {
-                                                                          source.isLooping = v;
-                                                                          self->CommitEdit(
-                                                                              u8"clip-loop");
-                                                                      }},
-                                                 cat)
-                    .Get()));
-        }
-
-        // --- root motion (root-motion.md): what the cook extracts; the preview shows its path ---
-        {
-            const StringView cat = u8"Root Motion";
-            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::StringEditor>(
-                    Allocator(), u8"Root bone", source.rootMotion.rootBone.AsView(),
-                    Function<void(StringView)>{[self, &source](StringView v)
-                                               {
-                                                   source.rootMotion.rootBone = String(v);
-                                                   self->CommitEdit(u8"clip-rootbone");
-                                               }},
-                    cat)
-                    .Get()));
-            const auto toggle = [&](StringView name, bool& field)
-            {
-                bool* target = &field;
-                g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::BoolEditor>(Allocator(), name, field,
-                                                     Function<void(bool)>{[self, target](bool v)
-                                                                          {
-                                                                              *target = v;
-                                                                              self->CommitEdit(u8"clip-rootmotion");
-                                                                          }},
-                                                     cat)
-                        .Get()));
-            };
-            toggle(u8"Horizontal", source.rootMotion.horizontal);
-            toggle(u8"Vertical", source.rootMotion.vertical);
-            toggle(u8"Yaw", source.rootMotion.yaw);
-            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::BoolEditor>(Allocator(), u8"Show travel", m_showTravel,
-                                                 Function<void(bool)>{[self](bool v) { self->m_showTravel = v; }},
-                                                 cat)
-                    .Get()));
-        }
-
-        // --- events (time + name, add/remove, undoable) ---
-        while (source.eventNames.Size() < source.eventTimes.Size())
-        {
-            source.eventNames.PushBack(String{});
-        }
-        while (source.eventTimes.Size() < source.eventNames.Size())
-        {
-            source.eventTimes.PushBack(0.0f);
-        }
-        // The events are a section list: the header's add icon places one at the playhead, and
-        // each event is a section of its own inside Events with its remove icon (their order means
-        // nothing: an event's time places it).
-        auto events = MakeRef<app::ContainerListEditor>(Allocator(), StringView(u8"Events"),
-                                                        StringView(u8"Events"));
-        events->ElementsAsSections = true;
-        for (const String& name : source.eventNames)
-        {
-            events->slotNames.PushBack(name);
-        }
-        events->OnAdd = [self]()
-        {
-            self->QueueStructural(u8"add-event",
-                                  Function<void()>{[self]()
-                                                   {
-                                                       animation::AnimationClipSource& s =
-                                                           self->m_asset->source;
-                                                       s.eventTimes.PushBack(self->m_time);
-                                                       s.eventNames.PushBack(String(u8"event"));
-                                                   }});
-        };
-        g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(events.Get()));
-        const usize eventCount = source.eventTimes.Size();
-        for (usize e = 0; e < eventCount; ++e)
-        {
-            const String cat = EventSection(e);
-            g.SetCategoryParent(cat.AsView(), u8"Events");
-            g.SetCategoryHeaderActions(
-                cat.AsView(),
-                app::ContainerListEditor::ElementActions(
-                    Allocator(), e, eventCount, Function<void(usize, bool)>{},
-                    [self](usize i)
-                    {
-                        self->QueueStructural(
-                            u8"del-event",
-                            Function<void()>{[self, i]()
-                                             {
-                                                 animation::AnimationClipSource& s =
-                                                     self->m_asset->source;
-                                                 if (i < s.eventTimes.Size())
-                                                 {
-                                                     s.eventTimes.RemoveAt(i);
-                                                 }
-                                                 if (i < s.eventNames.Size())
-                                                 {
-                                                     s.eventNames.RemoveAt(i);
-                                                 }
-                                             }});
-                    }));
-            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::FloatEditor>(
-                    Allocator(), u8"Time (s)", static_cast<f64>(source.eventTimes[e]), 0.0,
-                    static_cast<f64>(Max(source.duration, 0.0f)), 0.01, 3,
-                    Function<void(f64)>{[self, &source, e](f64 v)
-                                        {
-                                            source.eventTimes[e] = static_cast<f32>(v);
-                                            self->CommitEdit(u8"event-time");
-                                        }},
-                    cat.AsView())
-                    .Get()));
-            g.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::StringEditor>(
-                    Allocator(), u8"Name", source.eventNames[e].AsView(),
-                    Function<void(StringView)>{[self, &source, e](StringView v)
-                                               {
-                                                   source.eventNames[e] = String(v);
-                                                   self->CommitEdit(u8"event-name");
-                                               }},
-                    cat.AsView())
-                    .Get()));
-        }
-    }
-
-    String AnimationClipEditorPage::EventSection(usize index)
-    {
-        return Format(u8"Event {}", index + 1);
-    }
-
-    void AnimationClipEditorPage::QueueStructural(StringView undoKey, Function<void()> mutate)
-    {
-        AnimationClipEditorPage* self = this;
-        String key(undoKey);
-        auto run = [self, mutate = Move(mutate), key = Move(key)]() mutable
-        {
-            mutate();
-            Array<byte> after = self->SnapshotAsset();
-            (void)self->Commands().Execute(
-                UniquePtr<IEditorCommand>(self->Allocator().New<EditClipCommand>(
-                                              *self, key.AsView(), self->m_undoBaseline, after),
-                                          self->Allocator()));
-            self->m_undoBaseline = Move(after);
-            self->RebuildGrid();
-            self->MarkDirty();
-        };
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(Function<void()>{Move(run)});
+            m_state->AddClass(u8"playing");
+            m_state->RemoveClass(u8"paused");
         }
         else
         {
-            run();
+            m_state->AddClass(u8"paused");
+            m_state->RemoveClass(u8"playing");
         }
     }
 
-    // ============================ Undo ======================================================
-
-    Array<byte> AnimationClipEditorPage::SnapshotAsset() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        m_asset->Serialize(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void AnimationClipEditorPage::ApplyAssetBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        Array<byte> current = SnapshotAsset();
-        if (current.Size() == blob.Size())
-        {
-            bool same = true;
-            for (usize i = 0; i < blob.Size(); ++i)
-            {
-                if (current[i] != blob[i])
-                {
-                    same = false;
-                    break;
-                }
-            }
-            if (same)
-            {
-                return;
-            }
-        }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        // Clear the array fields in place (the source is an ISerializable - no copy assign).
-        animation::AnimationClipSource& source = m_asset->source;
-        source.trackBone.Clear();
-        source.trackKind.Clear();
-        source.trackInterp.Clear();
-        source.trackStart.Clear();
-        source.trackCount.Clear();
-        source.eventTimes.Clear();
-        source.eventNames.Clear();
-        m_asset->Serialize(ar);
-        m_undoBaseline = blob;
-        AnimationClipEditorPage* self = this;
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(
-                Function<void()>{[self]() { self->RebuildGrid(); }});
-        }
-        else
-        {
-            RebuildGrid();
-        }
-        MarkDirty();
-    }
-
-    void AnimationClipEditorPage::CommitEdit(StringView mergeKey)
-    {
-        Array<byte> after = SnapshotAsset();
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditClipCommand>(*this, mergeKey, m_undoBaseline, after),
-            Allocator()));
-        m_undoBaseline = Move(after);
-        MarkDirty();
-    }
-
-    // ============================ Frame / save / close ======================================
-
-    ui::UIContext* AnimationClipEditorPage::Ctx() const
-    {
-        return (m_grid.Get() != nullptr) ? m_grid->Context : nullptr;
-    }
+    // === The transport: the preview's alone ===
 
     bool AnimationClipEditorPage::CanPlay() const
     {
-        return m_clip.Get() != nullptr;
+        return m_clip && m_clip.Get() != nullptr;
     }
 
     void AnimationClipEditorPage::Play()
     {
-        // Resumes; a clip that ran to its end starts over.
-        animation::AnimationClip* clip = m_clip.Get();
-        if (clip != nullptr && m_time >= clip->duration)
-        {
-            m_time = 0.0f;
-        }
+        // Resumes; one that ran to its end starts over.
+        if (m_time >= Length())
+            SetTime(0.0f);
         m_playing = true;
     }
 
     void AnimationClipEditorPage::Stop()
     {
         m_playing = false;
-        m_time = 0.0f;
-        SyncTimeSlider();
+        SetTime(0.0f);
     }
 
     void AnimationClipEditorPage::Restart()
     {
-        m_time = 0.0f;
+        SetTime(0.0f);
         m_playing = true;
     }
 
-    void AnimationClipEditorPage::SyncTimeSlider()
+    void AnimationClipEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
     {
-        animation::AnimationClip* clip = m_clip.Get();
-        if (m_timeSlider.Get() == nullptr || clip == nullptr || clip->duration <= 0.0f)
+        app::AssetObjectPage::OnUpdate(host, dt);
+        FollowAxis();
+        if (m_playing && CanPlay())
         {
-            return;
+            const foundation::animation::AnimationClip* clip = m_clip.Get();
+            const f32 length = Length();
+            f32 time = m_time + dt;
+            if (time > length)
+            {
+                if (clip->isLooping)
+                    time = std::fmod(time, length);
+                else
+                {
+                    time = length;
+                    m_playing = false;
+                }
+            }
+            SetTime(time);
         }
-        m_scrubbing = true;
-        m_timeSlider->Value.SetValue(m_time / clip->duration);
-        m_scrubbing = false;
+        ShowTransport();
+        Pose();
+        if (m_pane)
+            m_pane->Update(dt);
     }
 
-    void AnimationClipEditorPage::OnUpdate(runtime::IApplicationHost&, f32 dt)
+    void AnimationClipEditorPage::OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh(); // the page's actions and the transport follow it each frame
-        }
-        UpdatePreview(dt);
-        if (m_preview)
-        {
-            m_preview->Update(dt);
-        }
-    }
-
-    void AnimationClipEditorPage::OnRenderWindow(runtime::IApplicationHost&,
-                                                 foundation::graphics::FrameContext& frame)
-    {
-        if (m_preview)
-        {
-            m_preview->RenderFrame(frame);
-        }
-    }
-
-    Status AnimationClipEditorPage::Save()
-    {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false);
-            LOG_INFO(u8"Editor", u8"saved animation clip '{}'", m_title);
-        }
-        return saved;
+        if (m_pane)
+            m_pane->Render(frame);
     }
 
     void AnimationClipEditorPage::OnClose()
     {
-        if (m_preview)
-        {
-            m_preview->Shutdown();
-        }
+        if (m_pane)
+            m_pane->Close();
     }
 
-    // ============================ Factory ===================================================
+    // === The factory ===
 
     const TypeInfo* AnimationClipPageFactory::PrimaryType() const
     {
         return &pipeline::AnimationClipAsset::StaticType();
     }
 
-    UniquePtr<EditorPage>
-    AnimationClipPageFactory::CreatePage(EditorContext& context,
-                                         foundation::content::Instance& instance)
+    UniquePtr<EditorPage> AnimationClipPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page =
-            editor::EditorRootAllocator().New<AnimationClipEditorPage>(context, *m_host, *m_uiHost, instance);
+        auto* page = editor::EditorRootAllocator().New<AnimationClipEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    void RegisterAnimationClipEditor(EditorContext& context, runtime::IApplicationHost& host,
-                                     ui::runtime::UIHost& uiHost)
+    void RegisterAnimationClipEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        // The preview-prefs section (registered before the app loads the per-project store).
+        // The preview prefs' section, registered before the app reads the per-project store.
         GlobalTypeRegistry().Register(ClipPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<ClipPreviewSettings>();
-
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<AnimationClipPageFactory>(host, uiHost), editor::EditorRootAllocator()));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<AnimationClipPageFactory>(services),
+                                                               editor::EditorRootAllocator()));
     }
 
     RTTI_DEFINE_OBJECT_VERSIONED(ClipPreviewSettings, "rtti::editor::editor.clip", 1)

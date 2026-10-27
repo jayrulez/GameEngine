@@ -77,6 +77,7 @@ import editor.script; // RegisterScriptEditor
 import editor.shaders; // RegisterShaderEditor
 import editor.gui; // RegisterGuiEditor
 import editor.particles; // RegisterParticleEditor
+import editor.animation; // RegisterAnimationClipEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -328,6 +329,7 @@ int main(int argc, char** argv)
                                      foundation::vfs::DataPath(g_dataRoot.AsView(), foundation::shaders::kShaderFolder).AsView()); // a check's include path
         editor::RegisterGuiEditor(app.Context(), pageServices); // the GUI's documents and sheets
         editor::RegisterParticleEditor(app.Context(), pageServices);
+        editor::RegisterAnimationClipEditor(app.Context(), pageServices);
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too): the script page's check compiles through them.

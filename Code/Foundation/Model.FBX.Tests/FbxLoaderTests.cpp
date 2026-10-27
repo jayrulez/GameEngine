@@ -275,3 +275,53 @@ Connections:  {
     CHECK(model.materials()[0]->shadingModel == ShadingModel::Pbr);
     std::remove("scratch_fbx_blender.fbx");
 }
+
+// A limb node is a bone of the file's skeleton, an empty (null) node is not: what tells 3ds Max's
+// Dummy helper bone, animated with the pose, from Blender's armature object.
+TEST_CASE("fbx: a limb node is a skeleton bone, a null node is not")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	NodeAttribute: 10, "NodeAttribute::Dummy", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1, "Model::Dummy001", "LimbNode" {
+		Version: 232
+	}
+	NodeAttribute: 11, "NodeAttribute::Armature", "Null" {
+		TypeFlags: "Null"
+	}
+	Model: 2, "Model::Armature", "Null" {
+		Version: 232
+	}
+}
+Connections:  {
+	C: "OO",1,0
+	C: "OO",10,1
+	C: "OO",2,0
+	C: "OO",11,2
+}
+)";
+    WriteText("scratch_fbx_limb.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_limb.fbx")), model) == ModelLoadResult::Ok);
+    const ModelBone* dummy = nullptr;
+    const ModelBone* armature = nullptr;
+    for (const ModelBone* b : model.bones())
+    {
+        if (b->name() == StringView{u8"Dummy001"})
+            dummy = b;
+        if (b->name() == StringView{u8"Armature"})
+            armature = b;
+    }
+    REQUIRE(dummy != nullptr);
+    REQUIRE(armature != nullptr);
+    CHECK(dummy->isSkeletonBone);
+    CHECK_FALSE(armature->isSkeletonBone);
+    std::remove("scratch_fbx_limb.fbx");
+}

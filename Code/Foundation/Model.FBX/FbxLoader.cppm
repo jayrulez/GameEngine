@@ -1208,6 +1208,9 @@ export namespace foundation::model::fbx
                     // Note: skin index may be set later when loadSkins runs.
                 }
 
+                // A limb or root node of the file's skeleton (ufbx's bone attribute), not an empty.
+                bone->isSkeletonBone = node->bone != nullptr;
+
                 i32 boneIdx = model.addBone(bone);
                 m_nodeToBoneIndex.InsertOrAssign(node->element.typed_id, boneIdx);
             }

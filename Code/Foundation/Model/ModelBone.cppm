@@ -86,6 +86,11 @@ export namespace foundation::model
         /// Skin index if this is a skinned mesh node (-1 if none).
         i32 skinIndex = -1;
 
+        /// Whether the file makes this node a bone of its skeleton (an FBX limb or root node), so a
+        /// helper bone the skin's joints hang from (3ds Max's Dummy, animated with the pose) joins the
+        /// skeleton, where an empty or null node they hang from (Blender's armature object) does not.
+        bool isSkeletonBone = false;
+
     private:
         String m_name;
         Array<ModelBone*> m_children;

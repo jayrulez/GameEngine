@@ -1042,14 +1042,15 @@ export namespace pipeline
                 return;
             }
             const foundation::model::ModelSkin& skin = *model.skins()[0];
-            const HashMap<i32, i32> boneToJoint = BuildBoneToJoint(skin);
-            manifest.skeletonParentNode = SkeletonParentNode(model, skin, boneToJoint);
+            const Array<i32> joints = SkeletonJoints(model, skin); // the skin's, then the bones it hangs from
+            const HashMap<i32, i32> boneToJoint = BuildBoneToJoint(joints.AsSpan());
+            manifest.skeletonParentNode = SkeletonParentNode(model, joints.AsSpan());
 
             const String skelBase = SkeletonBaseName(skin);
             if (sel.SelectionEnabled(pipeline::ImportResourceKind::Skeleton, skelBase.AsView()))
             {
                 pipeline::SkeletonAsset skeleton;
-                SkeletonSourceFromModel(model, skin, boneToJoint, skeleton.source);
+                SkeletonSourceFromModel(model, skin, joints.AsSpan(), boneToJoint, skeleton.source);
                 content::Instance* skelInst = ClaimInstance(
                     group,
                     sel.SelectionName(pipeline::ImportResourceKind::Skeleton, skelBase.AsView()),

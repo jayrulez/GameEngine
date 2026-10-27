@@ -328,18 +328,19 @@ export namespace pipeline
         CookMaterials(outDb.Allocator(), model, root, namePrefix, textureGuids, manifest.materialGuids,
                       manifest.materialAlbedo);
 
-        // Skeleton + animations (skin 0 only). The skeleton's bone order = the skin's joint order;
+        // Skeleton + animations (skin 0 only). The skeleton's bones: the skin's joints in order, then the bones it hangs from;
         // animation channels + bone parents are remapped from model bone indices into joint indices.
         HashMap<i32, i32> boneToJoint;
         const bool hasSkin = model.skins().Size() > 0;
         if (hasSkin)
         {
             const model::ModelSkin& skin = *model.skins()[0];
-            boneToJoint = BuildBoneToJoint(skin);
-            manifest.skeletonParentNode = SkeletonParentNode(model, skin, boneToJoint);
+            const Array<i32> joints = SkeletonJoints(model, skin); // the skin's, then the bones it hangs from
+            boneToJoint = BuildBoneToJoint(joints.AsSpan());
+            manifest.skeletonParentNode = SkeletonParentNode(model, joints.AsSpan());
 
             pipeline::SkeletonAsset skelAsset;
-            SkeletonSourceFromModel(model, skin, boneToJoint, skelAsset.source);
+            SkeletonSourceFromModel(model, skin, joints.AsSpan(), boneToJoint, skelAsset.source);
             pipeline::SkeletonAssetBuilder skelBuilder;
             content::Instance* skelInst =
                 root->CreateInstance(Format(u8"{}.skeleton", namePrefix).AsView(),

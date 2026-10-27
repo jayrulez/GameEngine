@@ -2165,17 +2165,87 @@ TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's p
     model::ModelSkin skin;
     skin.addJoint(spine, Float4x4::Identity());
     skin.addJoint(hips, Float4x4::Identity());
-    CHECK(pipeline::SkeletonParentNode(m, skin, pipeline::BuildBoneToJoint(skin)) == armature);
+    CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, skin).AsSpan()) == armature);
 
     // A root joint at the top of the file has no parent node: the scene root (-1).
     model::ModelSkin top;
     top.addJoint(scene, Float4x4::Identity());
     top.addJoint(armature, Float4x4::Identity());
-    CHECK(pipeline::SkeletonParentNode(m, top, pipeline::BuildBoneToJoint(top)) == -1);
+    CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, top).AsSpan()) == -1);
 
     // No joints: unknown (-2), and the prefab keeps the file's placement.
     model::ModelSkin empty;
-    CHECK(pipeline::SkeletonParentNode(m, empty, pipeline::BuildBoneToJoint(empty)) == -2);
+    CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, empty).AsSpan()) == -2);
+}
+
+TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, its animation played; an empty one does not")
+{
+    // 3ds Max hangs a skeleton from a Dummy helper bone with no vertices of its own and animates it
+    // with the pose (a creature bobbing as it idles). Left outside the skeleton, as Blender's
+    // armature object is, the bob was a model track the pose never played.
+    for (const bool helperIsBone : {true, false})
+    {
+        model::Model m;
+        auto bone = [&](StringView name, i32 parent, bool isBone)
+        {
+            auto* b = new model::ModelBone();
+            b->setName(name);
+            b->parentIndex = parent;
+            b->isSkeletonBone = isBone;
+            return m.addBone(b);
+        };
+        const i32 root = bone(u8"300024", -1, false);
+        const i32 dummy = bone(u8"Dummy001", root, helperIsBone);
+        const i32 spine = bone(u8"Bone001", dummy, true);
+        const i32 arm = bone(u8"Bone002", spine, true);
+        model::ModelSkin skin;
+        skin.addJoint(spine, Float4x4::Identity());
+        skin.addJoint(arm, Float4x4::Identity());
+
+        model::ModelAnimation idle;
+        idle.duration = 1.0f;
+        auto* bob = new model::AnimationChannel();
+        bob->targetBone = dummy;
+        bob->path = model::AnimationPath::Translation;
+        bob->addKeyframe(0.0f, Float4{0.0f, 1.0f, 0.0f, 0.0f});
+        bob->addKeyframe(1.0f, Float4{0.0f, 1.6f, 0.0f, 0.0f});
+        idle.addChannel(bob);
+        auto* wave = new model::AnimationChannel();
+        wave->targetBone = arm;
+        wave->path = model::AnimationPath::Rotation;
+        wave->addKeyframe(0.0f, Float4{0.0f, 0.0f, 0.0f, 1.0f});
+        idle.addChannel(wave);
+
+        const Array<i32> joints = pipeline::SkeletonJoints(m, skin);
+        const HashMap<i32, i32> boneToJoint = pipeline::BuildBoneToJoint(joints.AsSpan());
+        foundation::animation::SkeletonSource skeleton;
+        pipeline::SkeletonSourceFromModel(m, skin, joints.AsSpan(), boneToJoint, skeleton);
+        const i32 hangsFrom = pipeline::SkeletonParentNode(m, joints.AsSpan());
+        foundation::animation::AnimationClipSource clip;
+        pipeline::AnimationClipSourceFromModel(idle, boneToJoint, u8"idle", clip, hangsFrom);
+        REQUIRE(clip.trackBone.Size() == 2u);
+        if (helperIsBone)
+        {
+            // Appended after the skin's joints (no vertex's joint index moves), the skin's root
+            // joint under it, the mesh's placement node above it, and its bob a track of the pose.
+            REQUIRE(joints.Size() == 3u);
+            CHECK(joints[2] == dummy);
+            CHECK(skeleton.boneNames[2] == String(u8"Dummy001"));
+            CHECK(skeleton.parentIndices[0] == 2);
+            CHECK(skeleton.parentIndices[2] == -1);
+            CHECK(hangsFrom == root);
+            CHECK(clip.trackBone[0] == 2);
+        }
+        else
+        {
+            // An empty node: the node the skeleton hangs from, its channel the clip's model track.
+            CHECK(joints.Size() == 2u);
+            CHECK(skeleton.parentIndices[0] == -1);
+            CHECK(hangsFrom == dummy);
+            CHECK(clip.trackBone[0] == -1);
+        }
+        CHECK(clip.trackBone[1] == 1); // the arm, wherever the helper went
+    }
 }
 
 TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and rest, and a re-import keeps its root motion")

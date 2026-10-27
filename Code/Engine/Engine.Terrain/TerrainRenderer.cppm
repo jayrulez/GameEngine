@@ -886,7 +886,7 @@ export namespace engine::terrain
         // (VUID-vkCmdDraw-None-09600). Terrain has no skinning; it uses this per-frame encoder hook
         // (the only Renderer callback holding the OUTER command encoder, before any render pass) purely
         // for that transition. Mirrors MeshRenderer::UploadSkinning.
-        void UploadSkinning(const render::ExtractedScene&, rhi::CommandEncoder& encoder) override
+        void UploadSkinning(Span<const render::ExtractedScene* const>, rhi::CommandEncoder& encoder) override
         {
             if (!m_dummyDepthInit && m_dummyShadowTex != nullptr)
             {

@@ -30,6 +30,13 @@ namespace shaders = foundation::shaders;
 
 namespace
 {
+    // A frame drawing the one scene (the upload takes every scene a frame draws).
+    void UploadOne(MeshRenderer& renderer, const ExtractedScene& scene)
+    {
+        const ExtractedScene* one = &scene;
+        renderer.UploadMultiMeshes(Span<const ExtractedScene* const>(&one, 1u));
+    }
+
     struct Systems
     {
         shaders::Compiler* compiler = nullptr;
@@ -97,7 +104,7 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
     AddSet(seen, 0x22u, cube.Get(), material.Get(), Span<const Float4x4>{transforms.Data(), 3},
            renderer.RendererId());
     renderer.PrepareFrame(2, 0);
-    renderer.UploadMultiMeshes(seen);
+    UploadOne(renderer, seen);
     CHECK(renderer.MultiMeshSetCount() == 2u);
     const usize pendingAfterUpload = retire.PendingCount();
 
@@ -108,11 +115,11 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
     for (u32 f = 0; f < MeshRenderer::kMultiMeshEvictFrames; ++f)
     {
         renderer.PrepareFrame(2, f % 2);
-        renderer.UploadMultiMeshes(partial);
+        UploadOne(renderer, partial);
         CHECK(renderer.MultiMeshSetCount() == 2u); // not yet: exactly the window
     }
     renderer.PrepareFrame(2, 0);
-    renderer.UploadMultiMeshes(partial); // one past the window
+    UploadOne(renderer, partial); // one past the window
     CHECK(renderer.MultiMeshSetCount() == 1u);
     // Its buffer + the two region bind groups went through the queue, not vkDestroy in place.
     CHECK(retire.PendingCount() >= pendingAfterUpload + 3u);
@@ -122,13 +129,13 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
     for (u32 f = 0; f <= MeshRenderer::kMultiMeshEvictFrames; ++f)
     {
         renderer.PrepareFrame(2, f % 2);
-        renderer.UploadMultiMeshes(empty);
+        UploadOne(renderer, empty);
     }
     CHECK(renderer.MultiMeshSetCount() == 0u);
 
     // A returning key rebuilds a fresh set.
     renderer.PrepareFrame(2, 0);
-    renderer.UploadMultiMeshes(seen);
+    UploadOne(renderer, seen);
     CHECK(renderer.MultiMeshSetCount() == 2u);
     retire.Flush();
     renderer.SetRetireQueue(nullptr);
@@ -252,7 +259,7 @@ TEST_CASE("multimesh: a draw count that grows within the capacity rewrites the r
         AddSet(scene, 0x77u, cube.Get(), material.Get(),
                Span<const Float4x4>{transforms.Data(), count}, renderer.RendererId(), version);
         renderer.PrepareFrame(2, index % 2);
-        renderer.UploadMultiMeshes(scene);
+        UploadOne(renderer, scene);
     };
     Float4x4 world;
 
@@ -320,7 +327,7 @@ TEST_CASE("multimesh: a set with an uploadCount holds its whole list from the fi
                Span<const Float4x4>{transforms.Data(), drawCount}, renderer.RendererId(),
                /*version*/ 1, /*uploadCount*/ 8);
         renderer.PrepareFrame(2, index % 2);
-        renderer.UploadMultiMeshes(scene);
+        UploadOne(renderer, scene);
     };
     Float4x4 world;
     frame(0, 3); // far: draws three, holds eight
@@ -379,7 +386,7 @@ TEST_CASE("multimesh: a faded set uploads each instance's rank in its tint alpha
     faded->fadeStart = 40.0f;
     faded->fadeEnd = 80.0f;
     renderer.PrepareFrame(2, 0);
-    renderer.UploadMultiMeshes(scene);
+    UploadOne(renderer, scene);
 
     Color tint;
     REQUIRE(renderer.ReadMultiMeshInstanceTint(0x51u, 0, 0, tint));

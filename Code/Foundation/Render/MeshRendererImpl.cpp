@@ -359,16 +359,16 @@ namespace foundation::render
         return true;
     }
 
-    void MeshRenderer::UploadSkinning(const ExtractedScene& scene, rhi::CommandEncoder& encoder)
+    void MeshRenderer::UploadSkinning(Span<const ExtractedScene* const> scenes, rhi::CommandEncoder& encoder)
     {
+        // Once for the frame: every scene's skeletons share this lookup and this one block.
         m_boneStart.Clear();
         m_skinnedScratch.Clear();
         if (!m_ready)
         {
             return;
         }
-        UploadMultiMeshes(
-            scene); // ensure/upload the persistent instanced-mesh buffers (once per frame)
+        UploadMultiMeshes(scenes); // ensure/upload the persistent instanced-mesh buffers (once per frame)
         // One-time: bring the out-of-graph dummy depth textures into the layout their descriptors
         // expect, so they're never sampled while UNDEFINED on caster-less frames (VUID-09600).
         if (!m_dummyDepthInit)
@@ -401,10 +401,13 @@ namespace foundation::render
             }
             m_dummyDepthInit = true;
         }
-        // Pass 1: collect DISTINCT skinned instances (by boneMatrices ptr). Total matrices = sum of
-        // 2*boneCount (current slab + previous slab). The map reserves the key so dups are skipped.
+        // Pass 1: collect DISTINCT skinned instances (by boneMatrices ptr) across every scene of the
+        // frame. Total matrices = sum of 2*boneCount (current slab + previous slab). The map reserves
+        // the key so dups are skipped. All of them at once: the pool grows (if it must) before this
+        // frame's one block is allocated, the only time it may.
         u32 total = 0;
-        for (RenderData* data : scene.Items())
+        for (const ExtractedScene* scene : scenes)
+        for (RenderData* data : scene->Items())
         {
             if (data == nullptr || data->rendererId != RendererId())
             {
@@ -432,7 +435,8 @@ namespace foundation::render
         // Skinned-MultiMesh POSE POOLS: M palettes (poseCount * boneCount matrices) per crowd, uploaded once
         // (no prev slab - crowd motion vectors are not produced). Each set's per-instance bone base is filled
         // into its DataOffsets buffer in FillSkinnedMultiMeshOffsets once the pool base is known.
-        for (RenderData* data : scene.Items())
+        for (const ExtractedScene* scene : scenes)
+        for (RenderData* data : scene->Items())
         {
             if (data == nullptr || data->rendererId != RendererId())
             {
@@ -513,8 +517,8 @@ namespace foundation::render
                                    block.byteOffset, static_cast<u64>(total) * sizeof(Float4x4));
         encoder.TransitionBuffer(m_boneDevice, rhi::ResourceState::CopyDst,
                                  rhi::ResourceState::ShaderRead);
-        FillSkinnedMultiMeshOffsets(
-            scene); // per-instance bone base into each skinned set's DataOffsets
+        for (const ExtractedScene* scene : scenes)
+            FillSkinnedMultiMeshOffsets(*scene); // per-instance bone base into each skinned set's DataOffsets
     }
 
     void MeshRenderer::ReleaseMultiMeshSet(MultiMeshSet& set)
@@ -561,12 +565,14 @@ namespace foundation::render
         }
     }
 
-    void MeshRenderer::UploadMultiMeshes(const ExtractedScene& scene)
+    void MeshRenderer::UploadMultiMeshes(Span<const ExtractedScene* const> scenes)
     {
+        // One frame, however many scenes it draws: a set ages by frames, not by scenes.
         ++m_multiMeshFrame;
         EvictStaleMultiMeshSets(); // before the early return: a frame with no sets still ages them
         u32 maxCount = 0;
-        for (RenderData* data : scene.Items())
+        for (const ExtractedScene* scene : scenes)
+        for (RenderData* data : scene->Items())
         {
             if (data == nullptr || data->rendererId != RendererId())
             {
@@ -591,7 +597,8 @@ namespace foundation::render
         {
             return;
         }
-        for (RenderData* data : scene.Items())
+        for (const ExtractedScene* scene : scenes)
+        for (RenderData* data : scene->Items())
         {
             if (data == nullptr || data->rendererId != RendererId())
             {

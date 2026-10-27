@@ -84,9 +84,9 @@ namespace foundation::render
         (void)frameIndex;
     }
 
-    void Renderer::UploadSkinning(const ExtractedScene& scene, rhi::CommandEncoder& encoder)
+    void Renderer::UploadSkinning(Span<const ExtractedScene* const> scenes, rhi::CommandEncoder& encoder)
     {
-        (void)scene;
+        (void)scenes;
         (void)encoder;
     }
     void RendererRegistry::Register(Renderer* renderer)
@@ -1422,16 +1422,17 @@ namespace foundation::render
                     m_frameIndex);
             }
             // Skinning bone upload: write each distinct skeleton instance's matrices ONCE into the bone
-            // pool + copy staging->device, before any pass reads them. Once per DISTINCT scene (a scene's
-            // instances cover every view of it; multi-scene frames upload each scene's skeletons).
+            // pool + copy staging->device, before any pass reads them. Every distinct scene at once (a
+            // scene's instances cover every view of it): uploaded one scene at a time, each upload lost
+            // the one before it, and every page but the last drew its skinned meshes in their bind pose.
             if (m_encoder != nullptr)
             {
+                m_frameScenes.Clear();
                 for (usize k = 0; k < sceneCount; ++k)
+                    m_frameScenes.PushBack(m_sceneShadowPool[k]->scene);
+                for (Renderer* r : m_registry->Unique())
                 {
-                    for (Renderer* r : m_registry->Unique())
-                    {
-                        r->UploadSkinning(*m_sceneShadowPool[k]->scene, *m_encoder);
-                    }
+                    r->UploadSkinning(m_frameScenes.AsSpan(), *m_encoder);
                 }
             }
             if (m_clusters != nullptr)

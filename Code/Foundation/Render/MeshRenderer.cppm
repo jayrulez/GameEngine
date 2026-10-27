@@ -153,13 +153,14 @@ export namespace foundation::render
         // slab then previous slab, per Sedulous's [cur][prev] layout) + copy the populated range to the
         // device mirror. Builds m_boneStart: boneMatrices ptr -> { current base, prev base } in MATRIX
         // units, which Resolve uses for the per-draw bone base (DataOffsets.y/.z later). Called once per
-        // frame before any pass; replaces the old per-pass MemCopy into the ring.
-        void UploadSkinning(const ExtractedScene& scene, rhi::CommandEncoder& encoder) override;
+        // frame before any pass, with every scene the frame draws; replaces the old per-pass MemCopy into
+        // the ring.
+        void UploadSkinning(Span<const ExtractedScene* const> scenes, rhi::CommandEncoder& encoder) override;
 
         // Ensure every instanced-mesh SET in the snapshot has an up-to-date persistent GPU buffer, and grow
         // the shared DataOffsets ramp to the largest set. Called once per frame (from UploadSkinning). Static
         // sets fall through instantly after their first upload - that O(1)/frame path is the whole point.
-        void UploadMultiMeshes(const ExtractedScene& scene);
+        void UploadMultiMeshes(Span<const ExtractedScene* const> scenes);
 
         // A MultiMesh set not extracted for this many upload frames releases its GPU buffers and
         // bind groups (through the retire queue when wired) and leaves the pool: per-chunk
@@ -390,6 +391,9 @@ export namespace foundation::render
     public:
         /// Bone-matrix slots the pool currently holds per frame (grows on demand; tests pin it).
         [[nodiscard]] u32 BonePoolSlotsPerFrame() const noexcept { return m_boneRing.SlotsPerFrame(); }
+        /// Whether the skeleton whose matrices are at `boneMatrices` was uploaded this frame (its meshes
+        /// draw skinned; else in their bind pose).
+        [[nodiscard]] bool IsSkinUploaded(const Float4x4* boneMatrices) const { return m_boneStart.Contains(boneMatrices); }
         [[nodiscard]] static constexpr u32 InitialBonePoolSlots() noexcept { return kInitialBoneMatrices; }
     private:
 

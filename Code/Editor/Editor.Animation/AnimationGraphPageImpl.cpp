@@ -1,235 +1,38 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Animation - :graph_page partition (implementation).
-//
-// The state-machine / blend-tree authoring tool (see AnimationGraphPage.cppm for the overview).
+// Editor::Animation - the `:graph_page` partition (implementation).
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h"
 #include "Core/Reflection/Reflect.h"
 
 module editor.animation;
 
-import foundation.settings; // per-project editor-settings store (preview skeleton/mesh prefs)
-
 import foundation.core;
-import foundation.fonts; // VerticalAlignment (the labels)
+import foundation.settings; // the per-project editor settings (the preview's rig, per graph)
 import foundation.content;
-import foundation.rhi;
 import foundation.graphics;
-import foundation.shell;
 import foundation.runtime;
-import foundation.runtime.client;
-import foundation.scene;
-import engine.scene;
+import foundation.resource;
 import foundation.animation;
 import foundation.animation.resource;
 import animation.pipeline;
-import foundation.geometry;
-import foundation.render;
-import engine.render;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import editor.preview;
 
 using namespace foundation::core;
-namespace animation = foundation::animation;
-namespace core = foundation::core;
-namespace render = foundation::render;
-namespace rhi = foundation::rhi;
-namespace runtime = foundation::runtime;
-namespace scene = foundation::scene; // :actions declares it too; MSVC does not see a partition's
-namespace ui = foundation::ui;
-namespace vg = foundation::vg;
-namespace fonts = foundation::fonts;
 
 namespace editor
 {
-    namespace
-    {
+    namespace gui = foundation::gui;
+    namespace animation = foundation::animation;
 
-        using Page = AnimationGraphEditorPage*;
-
-        // Node palette: node 0 = "Any State", node 1+i = state i.
-        constexpr i32 kAnyStateNode = 0;
-        [[nodiscard]] constexpr i32 StateToNode(i32 state) noexcept { return state + 1; }
-        [[nodiscard]] constexpr i32 NodeToState(i32 node) noexcept { return node - 1; }
-
-        [[nodiscard]] core::Color HeaderPlain() { return core::Color{0.27f, 0.40f, 0.60f, 1.0f}; }
-        [[nodiscard]] core::Color HeaderDefault() { return core::Color{0.80f, 0.52f, 0.18f, 1.0f}; }
-        [[nodiscard]] core::Color HeaderAny() { return core::Color{0.30f, 0.55f, 0.50f, 1.0f}; }
-
-        [[nodiscard]] StringView NodeKindLabel(u8 kind)
-        {
-            switch (kind)
-            {
-            case 1:
-                return u8"Blend Tree 1D";
-            case 2:
-                return u8"Blend Tree 2D";
-            default:
-                return u8"Clip";
-            }
-        }
-
-        void Add(ui::toolkit::PropertyGrid& g, RefPtr<ui::toolkit::PropertyEditor> e)
-        {
-            g.AddProperty(Move(e));
-        }
-
-        void RowFloat(ui::toolkit::PropertyGrid& g, StringView name, f32* field, StringView cat,
-                      Page page, f64 mn = -1e9, f64 mx = 1e9, f64 step = 0.05)
-        {
-            String key(cat);
-            key.Append(name);
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::FloatEditor>(
-                           editor::EditorRootAllocator(), name, static_cast<f64>(*field), mn, mx, step, 3,
-                           Function<void(f64)>{[field, page, key](f64 v)
-                                               {
-                                                   *field = static_cast<f32>(v);
-                                                   page->CommitEdit(key.AsView());
-                                               }},
-                           cat)
-                           .Get()));
-        }
-        void RowInt(ui::toolkit::PropertyGrid& g, StringView name, i32* field, StringView cat,
-                    Page page, i64 mn = -1000000, i64 mx = 1000000)
-        {
-            String key(cat);
-            key.Append(name);
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::IntEditor>(
-                           editor::EditorRootAllocator(), name, static_cast<i64>(*field), mn, mx,
-                           Function<void(i64)>{[field, page, key](i64 v)
-                                               {
-                                                   *field = static_cast<i32>(v);
-                                                   page->CommitEdit(key.AsView());
-                                               }},
-                           cat)
-                           .Get()));
-        }
-        void RowBool(ui::toolkit::PropertyGrid& g, StringView name, bool* field, StringView cat,
-                     Page page)
-        {
-            String key(cat);
-            key.Append(name);
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::BoolEditor>(
-                           editor::EditorRootAllocator(), name, *field,
-                           Function<void(bool)>{[field, page, key](bool v)
-                                                {
-                                                    *field = v;
-                                                    page->CommitEdit(key.AsView());
-                                                }},
-                           cat)
-                           .Get()));
-        }
-        void RowEnum(ui::toolkit::PropertyGrid& g, StringView name, i32 value,
-                     Span<const StringView> items, Function<void(i32)> setter, StringView cat)
-        {
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::EnumEditor>(editor::EditorRootAllocator(), name, value, items,
-                                                        Move(setter), cat)
-                           .Get()));
-        }
-        void RowButton(ui::toolkit::PropertyGrid& g, StringView name, StringView cat,
-                       Function<void()> action)
-        {
-            Add(g,
-                RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::ButtonEditor>(editor::EditorRootAllocator(), name, Move(action), cat)
-                        .Get()));
-        }
-        void RowString(ui::toolkit::PropertyGrid& g, StringView name, String* field, StringView cat,
-                       Page page)
-        {
-            String key(cat);
-            key.Append(name);
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::StringEditor>(
-                           editor::EditorRootAllocator(), name, field->AsView(),
-                           Function<void(StringView)>{[field, page, key](StringView v)
-                                                      {
-                                                          *field = String(v);
-                                                          page->CommitEdit(key.AsView());
-                                                      }},
-                           cat)
-                           .Get()));
-        }
-
-        // Parameter dropdown: "(none)" + every graph parameter name. Selected value = index + 1.
-        void RowParamPick(ui::toolkit::PropertyGrid& g, StringView name,
-                          const animation::AnimationGraphSource& source, i32 current,
-                          Function<void(i32)> setIndex, StringView cat)
-        {
-            Array<String> owned;
-            owned.PushBack(String(u8"(none)"));
-            for (const String& p : source.paramNames)
-            {
-                owned.PushBack(String(p.AsView()));
-            }
-            Array<StringView> items;
-            for (const String& s : owned)
-            {
-                items.PushBack(s.AsView());
-            }
-            RowEnum(g, name, current + 1, Span<const StringView>{items.Data(), items.Size()},
-                    Function<void(i32)>{[setIndex = Move(setIndex)](i32 v) { setIndex(v - 1); }},
-                    cat);
-        }
-
-        // A section header's remove icon.
-        RefPtr<ui::View> RemoveIcon(IAllocator& allocator, StringView tooltip,
-                                    Function<void()> action)
-        {
-            auto remove =
-                MakeRef<ui::IconButton>(allocator, app::EditorIcons::Get().remove.Get());
-            remove->TooltipText = String(tooltip);
-            remove->OnClick.Add([action = Move(action)](ui::ButtonBase*) { action(); });
-            return RefPtr<ui::View>(remove.Get());
-        }
-    } // namespace
-
-    // A left panel row whose right click opens its context menu (Delete, when it has one).
-    class GraphListRow final : public ui::Button
-    {
-    public:
-        GraphListRow(StringView text, Function<void()> onDelete)
-            : ui::Button(text), m_onDelete(Move(onDelete))
-        {
-        }
-
-        void OnMouseDown(ui::MouseEventArgs& e) override
-        {
-            if (e.Button != ui::MouseButton::Right || !m_onDelete || Context == nullptr)
-            {
-                ui::Button::OnMouseDown(e);
-                return;
-            }
-            auto menu = MakeRef<ui::ContextMenu>(MemoryAllocator());
-            GraphListRow* self = this;
-            menu->AddItem(u8"Delete", [self]() { self->m_onDelete(); });
-            const Float2 at = LocalToScreen(Float2{e.X, e.Y});
-            menu->Show(Context, at.x, at.y);
-            e.Handled = true;
-        }
-
-    private:
-        Function<void()> m_onDelete;
-    };
-
-    // ============================ Construction ==============================================
-
-    // Per-asset graph-preview prefs: {graphGuid -> (skeleton guid, skinned-mesh guid)} - a section
-    // in the per-project editor-settings store, so a reopened graph editor restores its preview rig.
+    // The preview's rig per graph ({graph -> skeleton, skinned mesh}), a section of the per-project
+    // editor settings. Its type id is the old page's, so what that kept still reads.
     struct GraphPreviewPref
     {
         Guid asset;
@@ -256,2017 +59,1220 @@ namespace editor
         RTTI_OBJECT(GraphPreviewSettings, ISerializable)
     public:
         Array<GraphPreviewPref> prefs;
-        void Serialize(ISerializer& ar) override
-        {
-            foundation::core::Serialize(ar, "prefs", prefs);
-        }
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "prefs", prefs); }
     };
 
-    AnimationGraphEditorPage::AnimationGraphEditorPage(EditorContext& context,
-                                                       runtime::IApplicationHost& host,
-                                                       ui::runtime::UIHost& uiHost,
-                                                       foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_host(&host), m_uiHost(&uiHost), m_title(instance.Name())
+    namespace
     {
-        // Shared preview substrate (viewport + preview scene + orbit camera + render loop).
-        m_preview =
-            MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"animgraph.preview");
-        m_preview->SetClearColor(Color{0.248f, 0.248f, 0.293f, 1.0f});
-        m_preview->Camera().position = Float3{0.0f, 1.4f, 3.2f};
-        m_preview->Camera().LookAt(Float3{0.0f, 0.9f, 0.0f});
+        constexpr StringView kEntries = u8"entries";
+        constexpr StringView kConditions = u8"conditions";
+        constexpr StringView kParameterTypes[] = {u8"Float", u8"Int", u8"Bool", u8"Trigger"};
+        constexpr StringView kBlendModes[] = {u8"Override", u8"Additive"};
+        constexpr StringView kStateKinds[] = {u8"A clip", u8"A blend by one parameter", u8"A blend by two parameters"};
+        constexpr StringView kComparisons[] = {u8"equals", u8"differs from", u8"is above", u8"is below", u8"is at least", u8"is at most"};
 
-        // Preview content: a sun so a picked skinned mesh is lit (the wireframe needs none) + the
-        // optional mesh entity (its MeshComponent gets skinning matrices fed each frame; no mesh
-        // bound until the user picks one).
-        if (scene::Scene* scenePtr = m_preview->Scene())
+        [[nodiscard]] gui::Variant GuidText(const Guid& id)
         {
-            const scene::EntityHandle sun = scenePtr->CreateEntity(u8"Sun");
-            Transform st;
-            st.rotation = Quaternion::FromAxisAngle(Float3{0, 1, 0}, 0.35f) *
-                          Quaternion::FromAxisAngle(Float3{1, 0, 0}, -1.05f);
-            scenePtr->SetLocalTransform(sun, st);
-            if (auto* lights = scenePtr->GetSystem<engine::render::LightComponentManager>())
-            {
-                lights->Add(sun).castsShadows = false;
-            }
-            m_meshEntity = scenePtr->CreateEntity(u8"PreviewMesh");
-            if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-            {
-                meshes->Add(m_meshEntity);
-            }
+            if (id.IsNil())
+                return gui::Variant(StringView{});
+            utf8char text[37];
+            id.ToChars(text);
+            return gui::Variant(String(StringView(text, 36)));
+        }
+        [[nodiscard]] Guid GuidOf(const gui::Variant& value)
+        {
+            Guid id;
+            const StringView text = Trim(value.AsString());
+            if (!text.IsEmpty())
+                (void)Guid::TryParse(text, id);
+            return id;
         }
 
-        SetInstanceId(instance.Id());
-        Provide<IPlaybackPage>(*this);
-
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset = RefPtr<pipeline::AnimationGraphAsset>(
-            Cast<pipeline::AnimationGraphAsset>(object.Get()));
-        if (m_asset.Get() == nullptr)
+        [[nodiscard]] StringView LastSegment(StringView path)
         {
-            LOG_ERROR(u8"Editor",
-                               u8"animation graph '{}' failed to read - page opens empty", m_title);
+            for (usize i = path.Size(); i-- > 0;)
+                if (path[i] == u8'.')
+                    return path.SubStr(i + 1, path.Size() - i - 1);
+            return path;
         }
-        else
+        // The element a path is in ("entries.2.clip" in "entries": 2), or -1.
+        [[nodiscard]] i32 ElementOf(StringView path, StringView list)
         {
-            SyncLayoutArrays();
-        }
-        m_undoBaseline = SnapshotAsset();
-
-        // ---- center: the state-machine canvas ----
-        m_canvas = MakeRef<ui::toolkit::NodeGraphCanvas>(Allocator());
-        m_canvas->EdgeStyle = ui::toolkit::ConnectionStyle::StraightNodeToNode;
-        {
-            AnimationGraphEditorPage* self = this;
-            m_canvas->OnNodeMoved.Add(
-                [self](i32 node)
-                {
-                    if (self->m_syncingCanvas || self->m_asset.Get() == nullptr)
-                    {
-                        return;
-                    }
-                    ui::toolkit::NodeGraphNode* n = self->m_canvas->GetNode(node);
-                    if (n == nullptr)
-                    {
-                        return;
-                    }
-                    self->SyncLayoutArrays();
-                    const usize layer = static_cast<usize>(self->m_selectedLayer);
-                    if (node == kAnyStateNode)
-                    {
-                        self->m_asset->layerAnyStatePositions[layer] = n->Position;
-                    }
-                    else
-                    {
-                        Array<Float2>& positions = self->m_asset->layerStatePositions[layer];
-                        const i32 state = NodeToState(node);
-                        if (state >= 0 && static_cast<usize>(state) < positions.Size())
-                        {
-                            positions[static_cast<usize>(state)] = n->Position;
-                        }
-                    }
-                    self->CommitEdit(u8"move-node");
-                });
-            m_canvas->OnCanvasContextMenu.Add([self](f32 x, f32 y) { self->ShowCanvasMenu(x, y); });
-            m_canvas->OnNodeContextMenu.Add([self](i32 node) { self->ShowNodeMenu(node); });
-            m_canvas->OnConnectionContextMenu.Add([self](i32 conn)
-                                                  { self->ShowConnectionMenu(conn); });
-            m_canvas->OnNodeDoubleClicked.Add(
-                [self](i32 node)
-                {
-                    if (node != kAnyStateNode)
-                    {
-                        self->Select(GraphSel{GraphSelKind::State, self->m_selectedLayer,
-                                              NodeToState(node)});
-                    }
-                });
-            m_canvas->OnNodeLinkRequested.Add(
-                [self](i32 sourceNode, i32 targetNode)
-                {
-                    // Transitions cannot LAND on Any State.
-                    if (targetNode == kAnyStateNode || self->m_asset.Get() == nullptr)
-                    {
-                        return;
-                    }
-                    const i32 layerIndex = self->m_selectedLayer;
-                    const i32 src = (sourceNode == kAnyStateNode) ? -1 : NodeToState(sourceNode);
-                    const i32 dst = NodeToState(targetNode);
-                    self->QueueStructural(
-                        u8"add-transition",
-                        Function<void()>{
-                            [self, layerIndex, src, dst]()
-                            {
-                                animation::AnimationGraphSource& source = self->m_asset->source;
-                                if (layerIndex < 0 ||
-                                    static_cast<usize>(layerIndex) >= source.layers.Size())
-                                {
-                                    return;
-                                }
-                                animation::GraphTransitionData t;
-                                t.src = src;
-                                t.dst = dst;
-                                source.layers[static_cast<usize>(layerIndex)]
-                                    .transitions.PushBack(Move(t));
-                            }},
-                        GraphSel{GraphSelKind::Transition, layerIndex, -2 /*"last" - resolved
-                                                                            in the apply*/});
-                });
-            m_canvas->OnConnectionDeleting.Add(
-                [self](i32 connectionIndex)
-                {
-                    if (self->m_syncingCanvas)
-                    {
-                        return;
-                    }
-                    const i32 layerIndex = self->m_selectedLayer;
-                    self->QueueStructural(
-                        u8"del-transition",
-                        Function<void()>{
-                            [self, layerIndex, connectionIndex]()
-                            {
-                                animation::AnimationGraphSource& source = self->m_asset->source;
-                                if (layerIndex < 0 ||
-                                    static_cast<usize>(layerIndex) >= source.layers.Size())
-                                {
-                                    return;
-                                }
-                                Array<animation::GraphTransitionData>& transitions =
-                                    source.layers[static_cast<usize>(layerIndex)].transitions;
-                                if (connectionIndex >= 0 &&
-                                    static_cast<usize>(connectionIndex) < transitions.Size())
-                                {
-                                    transitions.RemoveAt(static_cast<usize>(connectionIndex));
-                                }
-                            }},
-                        GraphSel{});
-                });
-            m_canvas->OnSelectionChanged.Add(
-                [self]()
-                {
-                    if (self->m_syncingCanvas)
-                    {
-                        return;
-                    }
-                    Array<i32> nodes;
-                    self->m_canvas->GetSelectedNodes(nodes);
-                    GraphSel derived{}; // None: empty-space click / cleared box select
-                    if (!nodes.IsEmpty())
-                    {
-                        if (nodes[0] != kAnyStateNode)
-                        {
-                            derived = GraphSel{GraphSelKind::State, self->m_selectedLayer,
-                                               NodeToState(nodes[0])};
-                        }
-                        // Any State stays None - the pseudo-node has nothing to inspect.
-                    }
-                    else
-                    {
-                        for (i32 i = 0; i < self->m_canvas->ConnectionCount(); ++i)
-                        {
-                            if (self->m_canvas->GetConnection(i).IsSelected)
-                            {
-                                derived =
-                                    GraphSel{GraphSelKind::Transition, self->m_selectedLayer, i};
-                                break;
-                            }
-                        }
-                    }
-                    // Deselect must CLEAR the inspector (user report): always push the derived
-                    // selection, including the None case.
-                    if (!(derived == self->m_selected))
-                    {
-                        self->Select(derived);
-                    }
-                });
+            if (!path.StartsWith(list) || path.Size() <= list.Size() + 1 || path[list.Size()] != u8'.')
+                return -1;
+            const StringView rest = path.SubStr(list.Size() + 1, path.Size() - list.Size() - 1);
+            usize dot = 0;
+            while (dot < rest.Size() && rest[dot] != u8'.')
+                ++dot;
+            const Optional<i64> index = ParseInt(rest.SubStr(0, dot));
+            return index.HasValue() && index.Value() >= 0 ? static_cast<i32>(index.Value()) : -1;
         }
 
-        // ---- left: layers + parameters ----
-        m_leftRows = MakeRef<ui::FlexLayout>(Allocator());
-        m_leftRows->Direction = ui::Orientation::Vertical;
-        m_leftRows->Spacing = 2.0f;
-        m_leftRows->Padding = ui::Thickness{6, 6};
-        auto leftScroll = MakeRef<ui::ScrollView>(Allocator());
-        leftScroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-        leftScroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
+        gui::PropertyInfo& Row(gui::PropertyBag& rows, StringView path, gui::PropertyKind kind, const gui::Variant& value, StringView shown, StringView about)
         {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            leftScroll->AddView(m_leftRows.Get(), lp);
+            gui::PropertyInfo& info = rows.Add(path, kind, value);
+            info.DisplayName = String(shown);
+            info.Description = String(about);
+            return info;
+        }
+        void Choices(gui::PropertyInfo& info, Span<const StringView> names)
+        {
+            info.Choices.Clear();
+            for (usize i = 0; i < names.Size(); ++i)
+                info.Choices.PushBack(gui::PropertyChoice{String(names[i]), static_cast<i64>(i)});
         }
 
-        // ---- right: inspector ----
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        m_inspectorTitle = MakeRef<ui::Label>(Allocator());
-        m_inspectorTitle->FontSize.SetValue(Optional<f32>{12.0f});
-        auto inspectorColumn = MakeRef<ui::FlexLayout>(Allocator());
-        inspectorColumn->Direction = ui::Orientation::Vertical;
-        inspectorColumn->Spacing = 4.0f;
-        inspectorColumn->Padding = ui::Thickness{6, 4};
+        // The parallel arrays of the graph's parameters as long as its names.
+        void SquareParameters(animation::AnimationGraphSource& source)
         {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            inspectorColumn->AddView(m_inspectorTitle.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            inspectorColumn->AddView(m_grid.Get(), grow);
+            const usize count = source.paramNames.Size();
+            source.paramTypes.Resize(count, 0);
+            source.paramFloats.Resize(count, 0.0f);
+            source.paramInts.Resize(count, 0);
+            source.paramBools.Resize(count, 0);
         }
-
-        // ---- center-bottom: the live preview strip (transport + wireframe viewport) ----
-        auto transport = MakeRef<ui::FlexLayout>(Allocator());
-        transport->Direction = ui::Orientation::Horizontal;
-        transport->Spacing = 6.0f;
-        transport->Padding = ui::Thickness{6, 4};
+        // A blend's entries as many in each array as it has clips.
+        void SquareEntries(animation::GraphNodeData& node)
         {
-            AnimationGraphEditorPage* self = this;
-            // The preview rig: compact asset slots (pick, drop and clear are one assignment).
-            const StringView skeletonTypes[] = {u8"SkeletonAsset"};
-            m_skeletonSlot = MakeRef<app::CompactAssetSlot>(
-                Allocator(), StringView(u8"Skeleton"), Span<const StringView>{skeletonTypes, 1});
-            m_skeletonSlot->Editor().BindAsset(*m_context,
-                                               [self]() { return self->m_skeletonGuid; },
-                                               [self](const Guid& picked)
-                                               {
-                                                   self->SetPreviewSkeleton(picked);
-                                                   self->RebuildPreviewGraph();
-                                                   self->SavePreviewPref();
-                                               });
-            m_skeletonSlot->Build();
-            const StringView meshTypes[] = {u8"SkinnedMeshAsset"};
-            m_meshSlot = MakeRef<app::CompactAssetSlot>(Allocator(), StringView(u8"Mesh"),
-                                                        Span<const StringView>{meshTypes, 1});
-            m_meshSlot->Editor().BindAsset(*m_context, [self]() { return self->m_previewMeshId; },
-                                           [self](const Guid& picked)
-                                           {
-                                               self->SetPreviewMesh(picked);
-                                               self->SavePreviewPref();
-                                           });
-            m_meshSlot->Build();
-            {
-                ui::LayoutStyle slot;
-                slot.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(200.0f));
-                transport->AddView(m_skeletonSlot.Get(), slot);
-                transport->AddView(m_meshSlot.Get(), slot);
-            }
-            m_previewStatus = MakeRef<ui::Label>(Allocator());
-            m_previewStatus->FontSize.SetValue(Optional<f32>{12.0f});
-            m_previewStatus->VAlign.SetValue(fonts::VerticalAlignment::Middle);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            transport->AddView(m_previewStatus.Get(), grow);
+            node.entryThresholds.Resize(node.entryClips.Size(), 0.0f);
+            node.entryPositions.Resize(node.entryClips.Size(), Float2{});
         }
-        auto previewColumn = MakeRef<ui::FlexLayout>(Allocator());
-        previewColumn->Direction = ui::Orientation::Vertical;
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            previewColumn->AddView(transport.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            previewColumn->AddView(m_preview->View(), grow);
-        }
-        auto centerSplit = MakeRef<ui::toolkit::SplitView>(Allocator());
-        centerSplit->Orientation = ui::Orientation::Vertical;
-        centerSplit->SetSplitRatio(0.62f);
-        centerSplit->SetPanes(m_canvas.Get(), previewColumn.Get());
-
-        auto leftSplit = MakeRef<ui::toolkit::SplitView>(Allocator());
-        leftSplit->SetSplitRatio(0.18f);
-        leftSplit->SetPanes(leftScroll.Get(), centerSplit.Get());
-        auto rightSplit = MakeRef<ui::toolkit::SplitView>(Allocator());
-        rightSplit->SetSplitRatio(0.74f);
-        rightSplit->SetPanes(leftSplit.Get(), inspectorColumn.Get());
-        // The page toolbar: the standard set, playback, then the preview's bones and mesh toggles.
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_toolbar->AddPlayback();
-        m_toolbar->AddSeparator();
-        {
-            AnimationGraphEditorPage* self = this;
-            ui::toolkit::ToolbarToggle* bones = m_toolbar->AddToggle(u8"Bones");
-            bones->SetIsChecked(m_showSkeleton);
-            bones->OnCheckedChanged.Add([self](ui::toolkit::ToolbarToggle*, bool on)
-                                        { self->m_showSkeleton = on; });
-            ui::toolkit::ToolbarToggle* mesh = m_toolbar->AddToggle(u8"Mesh");
-            mesh->SetIsChecked(m_showMesh);
-            mesh->OnCheckedChanged.Add([self](ui::toolkit::ToolbarToggle*, bool on)
-                                       { self->m_showMesh = on; });
-            ui::toolkit::ToolbarToggle* travel = m_toolbar->AddToggle(u8"Travel");
-            travel->SetIsChecked(m_showTravel);
-            travel->OnCheckedChanged.Add([self](ui::toolkit::ToolbarToggle*, bool on)
-                                         {
-                                             self->m_showTravel = on;
-                                             self->m_travelPosition = Float3{};
-                                             self->m_travelYaw = 0.0f;
-                                         });
-        }
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *rightSplit);
-
-        RebuildLeftPanel();
-        RebuildCanvas();
-        LoadPreviewPref(); // restore skeleton + mesh before the player builds below
-        RebuildPreviewGraph();
-        Select(GraphSel{GraphSelKind::Layer, 0, 0});
     }
+
+    AnimationGraphEditorPage::AnimationGraphEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::AnimationGraphAsset::StaticType(), kPath)
+    {
+        HideAssetRows(); // parallel arrays and kinds kept as numbers: the rows are the page's own
+        Provide<IPlaybackPage>(*this);
+        AnimationGraphEditorPage* self = this;
+        m_states = MakeUnique<AnimationGraphStates>(Allocator(), [self]() { return self->Graph(); },
+                                                    [self](StringView typeId, const Function<void(pipeline::AnimationGraphAsset&)>& mutate) { self->Edit(typeId, mutate); });
+        m_states->NameOf = [self](const Guid& id) { return self->ClipName(id); };
+        m_states->Refresh(); // the clips named on their states
+        BuildRows();
+
+        m_layerModel = MakeUnique<gui::TreeModel>(Allocator());
+        m_parameterModel = MakeUnique<gui::TreeModel>(Allocator());
+        m_layerTree = Find<gui::TreeView>(u8"graph-layers");
+        if (m_layerTree != nullptr)
+        {
+            m_layerTree->SetModel(m_layerModel.Get());
+            m_layerTree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                               {
+                                                   if (!self->m_showing && index.IsValid())
+                                                       self->ChooseLayer(static_cast<i32>(index.InternalId));
+                                               });
+        }
+        m_parameterTree = Find<gui::TreeView>(u8"graph-parameters");
+        if (m_parameterTree != nullptr)
+        {
+            m_parameterTree->SetModel(m_parameterModel.Get());
+            m_parameterTree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                                   {
+                                                       if (!self->m_showing && index.IsValid())
+                                                           self->Choose(GraphChoice{GraphChoiceKind::Parameter, static_cast<i32>(index.InternalId)});
+                                                   });
+        }
+        if (auto* add = Find<gui::ButtonBase>(u8"graph-add-layer"))
+            add->SetOnClick([self]() { self->AddLayer(); });
+        if (auto* remove = Find<gui::ButtonBase>(u8"graph-remove-layer"))
+            remove->SetOnClick([self]() { (void)self->RemoveLayer(); });
+        if (auto* add = Find<gui::ToolMenuButton>(u8"graph-add-parameter"))
+            for (usize t = 0; t < 4; ++t)
+            {
+                const auto type = static_cast<animation::AnimationParameterType>(t);
+                (void)add->GetMenu().AddItem(kParameterTypes[t], [self, type]() { self->AddParameter(type); });
+            }
+        if (auto* remove = Find<gui::ButtonBase>(u8"graph-remove-parameter"))
+            remove->SetOnClick([self]() { (void)self->RemoveParameter(); });
+
+        m_view = Find<gui::GraphView>(u8"graph-view");
+        if (m_view != nullptr)
+        {
+            m_view->SetSource(m_states.Get());
+            m_view->SetOnSelectionChanged([self]() { self->FollowView(); });
+        }
+
+        if (Content())
+        {
+            m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"animgraph.preview");
+            m_pane->OnFrame = [self]() { self->FramePreview(); };
+            m_rig = MakeUnique<AnimationPreviewRig>(Allocator(), Context(), Services(), *m_pane);
+            m_rig->OnPicked = [self]()
+            {
+                self->SavePreviewPref();
+                self->m_rebuild = true;
+            };
+            m_rig->OnFirstShown = [self]() { self->FramePreview(); };
+            BindAction(Find<gui::ButtonBase>(u8"graph-restart"), u8"playback.restart");
+            BindAction(Find<gui::ButtonBase>(u8"graph-play"), u8"playback.play");
+            BindAction(Find<gui::ButtonBase>(u8"graph-stop"), u8"playback.stop");
+            m_state = Find<gui::Label>(u8"graph-state");
+            m_travelButton = Find<gui::ButtonBase>(u8"graph-travel");
+            if (m_travelButton != nullptr)
+                m_travelButton->SetOnClick([self]()
+                                           {
+                                               self->m_travel = !self->m_travel;
+                                               self->m_travelButton->SetChecked(self->m_travel);
+                                               self->m_travelPosition = Float3{};
+                                               self->m_travelYaw = 0.0f;
+                                           });
+        }
+        LoadPreviewPref();
+        BuildLiveRows();
+        ShowLists();
+        Choose(GraphChoice{GraphChoiceKind::Layer, 0});
+        ShowFacts();
+    }
+
+    AnimationGraphEditorPage::~AnimationGraphEditorPage()
+    {
+        if (m_view != nullptr)
+            m_view->SetSource(nullptr);
+        if (m_layerTree != nullptr)
+            m_layerTree->SetModel(nullptr);
+        if (m_parameterTree != nullptr)
+            m_parameterTree->SetModel(nullptr);
+        m_player.Reset(); // before the graph it borrows
+    }
+
+    pipeline::AnimationGraphAsset* AnimationGraphEditorPage::Graph() const
+    {
+        return ObjectAs<pipeline::AnimationGraphAsset>();
+    }
+
+    String AnimationGraphEditorPage::ClipName(const Guid& id) const
+    {
+        foundation::content::Instance* instance = Context().Project() != nullptr ? Context().Project()->SourceDb().GetInstance(id) : nullptr;
+        return instance != nullptr ? String(instance->Name()) : String(u8"A missing clip");
+    }
+
+    void AnimationGraphEditorPage::Edit(StringView typeId, const Function<void(pipeline::AnimationGraphAsset&)>& mutate)
+    {
+        EditWhole(typeId, [&mutate](ISerializable& object) { mutate(static_cast<pipeline::AnimationGraphAsset&>(object)); });
+    }
+
+    // === The rows ===
+
+    void AnimationGraphEditorPage::BuildRows()
+    {
+        AnimationGraphEditorPage* self = this;
+        m_layerRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        Row(*m_layerRows, u8"name", gui::PropertyKind::String, gui::Variant(StringView{}), u8"Name", u8"What the layer is called");
+        Choices(Row(*m_layerRows, u8"blend", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(0)), u8"Blend",
+                    u8"Over the layers under it (Override), or added to them (Additive)"),
+                Span<const StringView>(kBlendModes, 2u));
+        gui::PropertyInfo& weight = Row(*m_layerRows, u8"weight", gui::PropertyKind::Float, gui::Variant(1.0), u8"Weight", u8"How much of it shows over the layers under it");
+        weight.HasRange = true;
+        weight.Min = 0.0;
+        weight.Max = 1.0;
+        weight.Step = 0.01;
+        weight.Hint = String(u8"slider");
+        Row(*m_layerRows, u8"start", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(0)), u8"Starts in", u8"The state the layer plays first");
+        m_layerRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
+                                   {
+                                       if (path != StringView(u8"start"))
+                                           return;
+                                       info.Choices.Clear();
+                                       pipeline::AnimationGraphAsset* graph = self->Graph();
+                                       if (graph == nullptr || self->m_layer >= static_cast<i32>(graph->source.layers.Size()))
+                                           return;
+                                       const auto& states = graph->source.layers[static_cast<usize>(self->m_layer)].states;
+                                       for (usize s = 0; s < states.Size(); ++s)
+                                           info.Choices.PushBack(gui::PropertyChoice{String(states[s].name.AsView()), static_cast<i64>(s)});
+                                   });
+
+        m_parameterRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        Row(*m_parameterRows, u8"name", gui::PropertyKind::String, gui::Variant(StringView{}), u8"Name", u8"What a script sets it by");
+        Choices(Row(*m_parameterRows, u8"type", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(0)), u8"Type",
+                    u8"A number, a whole number, on or off, or a trigger (on for one step, then off)"),
+                Span<const StringView>(kParameterTypes, 4u));
+        Row(*m_parameterRows, u8"float", gui::PropertyKind::Float, gui::Variant(0.0), u8"Default", u8"Its value when the graph starts");
+        Row(*m_parameterRows, u8"int", gui::PropertyKind::Integer, gui::Variant(static_cast<i64>(0)), u8"Default", u8"Its value when the graph starts");
+        Row(*m_parameterRows, u8"bool", gui::PropertyKind::Bool, gui::Variant(false), u8"Default", u8"Its value when the graph starts");
+        m_parameterRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
+                                       {
+                                           // The default of its type alone; a trigger has none.
+                                           const pipeline::AnimationGraphAsset* graph = self->Graph();
+                                           const i32 p = self->m_chosen.index;
+                                           const u8 type = graph != nullptr && p >= 0 && static_cast<usize>(p) < graph->source.paramTypes.Size() ? graph->source.paramTypes[static_cast<usize>(p)] : 0;
+                                           if (path == StringView(u8"float"))
+                                               info.Visible = type == 0;
+                                           else if (path == StringView(u8"int"))
+                                               info.Visible = type == 1;
+                                           else if (path == StringView(u8"bool"))
+                                               info.Visible = type == 2;
+                                       });
+
+        m_stateRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        Row(*m_stateRows, u8"name", gui::PropertyKind::String, gui::Variant(StringView{}), u8"Name", u8"What the state is called");
+        gui::PropertyInfo& speed = Row(*m_stateRows, u8"speed", gui::PropertyKind::Float, gui::Variant(1.0), u8"Speed", u8"How fast it plays (1: as authored)");
+        speed.Step = 0.05;
+        Row(*m_stateRows, u8"loop", gui::PropertyKind::Bool, gui::Variant(true), u8"Loops", u8"Whether it plays again from its start when it ends; else it holds its last pose");
+        Choices(Row(*m_stateRows, u8"kind", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(0)), u8"Plays",
+                    u8"One clip, or a blend of clips by one parameter or by two"),
+                Span<const StringView>(kStateKinds, 3u));
+        gui::PropertyInfo& clip = Row(*m_stateRows, u8"clip", gui::PropertyKind::Reference, gui::Variant(StringView{}), u8"Clip", u8"The clip it plays");
+        clip.ReferenceType = &animation::AnimationClip::StaticType();
+        Row(*m_stateRows, u8"driver", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(-1)), u8"By", u8"The parameter the blend follows");
+        Row(*m_stateRows, u8"driverX", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(-1)), u8"Across by", u8"The parameter across the blend's plane");
+        Row(*m_stateRows, u8"driverY", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(-1)), u8"Up by", u8"The parameter up the blend's plane");
+        gui::PropertyInfo& entries = m_stateRows->AddList(kEntries, gui::PropertyKind::Group, gui::Variant{});
+        entries.DisplayName = String(u8"Entries");
+        entries.Description = String(u8"The clips it blends between, each where it plays alone");
+        entries.ListOps = gui::PropertyListAdd | gui::PropertyListRemove;
+        if (gui::PropertyInfo* field = m_stateRows->AddElementField(kEntries, u8"clip", gui::PropertyKind::Reference, gui::Variant(StringView{})))
+        {
+            field->DisplayName = String(u8"Clip");
+            field->ReferenceType = &animation::AnimationClip::StaticType();
+        }
+        if (gui::PropertyInfo* field = m_stateRows->AddElementField(kEntries, u8"threshold", gui::PropertyKind::Float, gui::Variant(0.0)))
+        {
+            field->DisplayName = String(u8"At");
+            field->Description = String(u8"The parameter's value where this clip plays alone");
+        }
+        if (gui::PropertyInfo* field = m_stateRows->AddElementField(kEntries, u8"x", gui::PropertyKind::Float, gui::Variant(0.0)))
+            field->DisplayName = String(u8"Across");
+        if (gui::PropertyInfo* field = m_stateRows->AddElementField(kEntries, u8"y", gui::PropertyKind::Float, gui::Variant(0.0)))
+            field->DisplayName = String(u8"Up");
+        m_stateRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
+                                   {
+                                       const pipeline::AnimationGraphAsset* graph = self->Graph();
+                                       const animation::GraphStateData* state = nullptr;
+                                       if (graph != nullptr && self->m_layer < static_cast<i32>(graph->source.layers.Size()))
+                                       {
+                                           const auto& states = graph->source.layers[static_cast<usize>(self->m_layer)].states;
+                                           if (self->m_chosen.index >= 0 && static_cast<usize>(self->m_chosen.index) < states.Size())
+                                               state = &states[static_cast<usize>(self->m_chosen.index)];
+                                       }
+                                       const u8 kind = state != nullptr ? state->node.kind : 0;
+                                       // Each row shown where what it plays uses it.
+                                       if (path == StringView(u8"clip"))
+                                           info.Visible = kind == 0;
+                                       else if (path == StringView(u8"driver"))
+                                           info.Visible = kind == 1;
+                                       else if (path == StringView(u8"driverX") || path == StringView(u8"driverY"))
+                                           info.Visible = kind == 2;
+                                       else if (path == kEntries)
+                                           info.Visible = kind != 0;
+                                       if (path.StartsWith(u8"driver") && graph != nullptr)
+                                       {
+                                           info.Choices.Clear();
+                                           info.Choices.PushBack(gui::PropertyChoice{String(u8"Nothing"), -1});
+                                           for (usize p = 0; p < graph->source.paramNames.Size(); ++p)
+                                               info.Choices.PushBack(gui::PropertyChoice{String(graph->source.paramNames[p].AsView()), static_cast<i64>(p)});
+                                       }
+                                       const i32 entry = ElementOf(path, kEntries);
+                                       if (entry < 0 || state == nullptr)
+                                           return;
+                                       const StringView field = LastSegment(path);
+                                       if (field == StringView(u8"threshold"))
+                                           info.Visible = kind == 1;
+                                       else if (field == StringView(u8"x") || field == StringView(u8"y"))
+                                           info.Visible = kind == 2;
+                                       else if (gui::ParentPropertyPath(path) == kEntries && static_cast<usize>(entry) < state->node.entryClips.Size())
+                                       {
+                                           // Closed, an entry says its clip and where it plays alone.
+                                           const Guid& id = state->node.entryClips[static_cast<usize>(entry)];
+                                           info.DisplayName = id.IsNil() ? Format(u8"Entry {}", entry + 1) : self->ClipName(id);
+                                           if (kind == 1 && static_cast<usize>(entry) < state->node.entryThresholds.Size())
+                                               info.Summary = Format(u8"at {}", state->node.entryThresholds[static_cast<usize>(entry)]);
+                                       }
+                                   });
+
+        m_transitionRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        Row(*m_transitionRows, u8"from", gui::PropertyKind::String, gui::Variant(StringView{}), u8"From", u8"The state it leaves (Any State: every state)").ReadOnly = true;
+        Row(*m_transitionRows, u8"to", gui::PropertyKind::String, gui::Variant(StringView{}), u8"To", u8"The state it goes to").ReadOnly = true;
+        gui::PropertyInfo& duration = Row(*m_transitionRows, u8"duration", gui::PropertyKind::Float, gui::Variant(0.25), u8"Blend time",
+                                          u8"How long the two states are blended across, in seconds");
+        duration.Step = 0.05;
+        Row(*m_transitionRows, u8"exit", gui::PropertyKind::Bool, gui::Variant(false), u8"Waits to exit",
+            u8"Whether it waits for the state to play so far before it may go (with its conditions, if any)");
+        gui::PropertyInfo& exitTime = Row(*m_transitionRows, u8"exitTime", gui::PropertyKind::Float, gui::Variant(1.0), u8"Exits at",
+                                          u8"How far through the state it may go, from 0 (its start) to 1 (its end)");
+        exitTime.HasRange = true;
+        exitTime.Min = 0.0;
+        exitTime.Max = 1.0;
+        exitTime.Step = 0.01;
+        exitTime.Hint = String(u8"slider");
+        Row(*m_transitionRows, u8"priority", gui::PropertyKind::Integer, gui::Variant(static_cast<i64>(0)), u8"Priority",
+            u8"Which goes when several could: the lowest first");
+        gui::PropertyInfo& conditions = m_transitionRows->AddList(kConditions, gui::PropertyKind::Group, gui::Variant{});
+        conditions.DisplayName = String(u8"Conditions");
+        conditions.Description = String(u8"What must all hold for it to go (none: it goes as soon as it may)");
+        conditions.ListOps = gui::PropertyListAdd | gui::PropertyListRemove;
+        if (gui::PropertyInfo* field = m_transitionRows->AddElementField(kConditions, u8"parameter", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(0))))
+            field->DisplayName = String(u8"Parameter");
+        if (gui::PropertyInfo* field = m_transitionRows->AddElementField(kConditions, u8"compare", gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(0))))
+        {
+            field->DisplayName = String(u8"Holds when it");
+            Choices(*field, Span<const StringView>(kComparisons, 6u));
+        }
+        if (gui::PropertyInfo* field = m_transitionRows->AddElementField(kConditions, u8"value", gui::PropertyKind::Float, gui::Variant(1.0)))
+        {
+            field->DisplayName = String(u8"Value");
+            field->Description = String(u8"What it is compared with (on and off: 1 and 0)");
+        }
+        m_transitionRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
+                                        {
+                                            const pipeline::AnimationGraphAsset* graph = self->Graph();
+                                            if (graph == nullptr)
+                                                return;
+                                            if (path == StringView(u8"exitTime"))
+                                            {
+                                                info.Visible = self->m_transitionRows->GetValue(u8"exit", 0).AsBool();
+                                                return;
+                                            }
+                                            const i32 condition = ElementOf(path, kConditions);
+                                            if (condition < 0)
+                                                return;
+                                            const auto& source = graph->source;
+                                            const auto name = [&source](i32 p)
+                                            {
+                                                return p >= 0 && static_cast<usize>(p) < source.paramNames.Size() ? String(source.paramNames[static_cast<usize>(p)].AsView())
+                                                                                                                  : String(u8"Nothing");
+                                            };
+                                            if (LastSegment(path) == StringView(u8"parameter"))
+                                            {
+                                                info.Choices.Clear();
+                                                for (usize p = 0; p < source.paramNames.Size(); ++p)
+                                                    info.Choices.PushBack(gui::PropertyChoice{String(source.paramNames[p].AsView()), static_cast<i64>(p)});
+                                                return;
+                                            }
+                                            if (gui::ParentPropertyPath(path) != kConditions)
+                                                return;
+                                            // Closed, a condition reads as what it says ("Speed is above 0.5").
+                                            const i64 p = self->m_transitionRows->GetValue(gui::JoinPropertyPath(path, u8"parameter").AsView(), 0).AsInt();
+                                            const i64 op = Clamp<i64>(self->m_transitionRows->GetValue(gui::JoinPropertyPath(path, u8"compare").AsView(), 0).AsInt(), 0, 5);
+                                            const f64 value = self->m_transitionRows->GetValue(gui::JoinPropertyPath(path, u8"value").AsView(), 0).AsFloat();
+                                            info.DisplayName = Format(u8"Condition {}", condition + 1);
+                                            info.Summary = Format(u8"{} {} {}", name(static_cast<i32>(p)), kComparisons[op], value);
+                                        });
+
+        gui::PropertyBag* const bags[] = {m_layerRows.Get(), m_parameterRows.Get(), m_stateRows.Get(), m_transitionRows.Get()};
+        for (gui::PropertyBag* raw : bags)
+        {
+            gui::PropertyBag* rows = raw;
+            rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
+                              {
+                                  if (!commit.After.IsEmpty())
+                                      self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
+                              });
+            rows->SetOnListEdited([self, rows](StringView path, const gui::ListEdit& edit) { self->ListEdited(*rows, path, edit); });
+        }
+    }
+
+    void AnimationGraphEditorPage::BuildLiveRows()
+    {
+        // Made again whenever the parameters change: a row a parameter, by its type.
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        const usize count = graph != nullptr ? graph->source.paramNames.Size() : 0;
+        if (count == m_liveCount && m_liveRows)
+            return;
+        m_liveCount = count;
+        ClearSections(); // the grid lets the old rows go before they do
+        m_liveRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_live.Resize(count, 0.0);
+        AnimationGraphEditorPage* self = this;
+        for (usize p = 0; p < count; ++p)
+        {
+            const auto& source = graph->source;
+            const u8 type = p < source.paramTypes.Size() ? source.paramTypes[p] : 0;
+            m_live[p] = type == 0 ? static_cast<f64>(p < source.paramFloats.Size() ? source.paramFloats[p] : 0.0f)
+                      : type == 1 ? static_cast<f64>(p < source.paramInts.Size() ? source.paramInts[p] : 0)
+                      : type == 2 ? (p < source.paramBools.Size() && source.paramBools[p] != 0 ? 1.0 : 0.0)
+                                  : 0.0;
+            const String path = Format(u8"p{}", p);
+            const gui::PropertyKind kind = type == 0 ? gui::PropertyKind::Float : type == 1 ? gui::PropertyKind::Integer : gui::PropertyKind::Bool;
+            const gui::Variant value = type == 0 ? gui::Variant(m_live[p]) : type == 1 ? gui::Variant(static_cast<i64>(m_live[p])) : gui::Variant(m_live[p] != 0.0);
+            gui::PropertyInfo& info = m_liveRows->Add(path.AsView(), kind, value);
+            info.DisplayName = type == 3 ? Format(u8"Fire {}", source.paramNames[p]) : String(source.paramNames[p].AsView());
+            info.Description = type == 3 ? String(u8"Ticked, the trigger fires once in the preview") : String(u8"Its value in the preview: this page's alone, never the graph's");
+            if (type == 0)
+                info.Step = 0.05;
+        }
+        m_liveRows->SetOnCommit([self](const gui::PropertyBag::Commit& commit)
+                                {
+                                    if (!commit.After.IsEmpty())
+                                        self->LiveCommitted(commit.Path.AsView(), commit.After[0]);
+                                });
+        ShowSections();
+    }
+
+    void AnimationGraphEditorPage::ShowSections()
+    {
+        ClearSections();
+        switch (m_chosen.kind)
+        {
+        case GraphChoiceKind::Layer:
+            AddSection(u8"layer", u8"Layer", *m_layerRows);
+            break;
+        case GraphChoiceKind::Parameter:
+            AddSection(u8"parameter", u8"Parameter", *m_parameterRows);
+            break;
+        case GraphChoiceKind::State:
+            AddSection(u8"state", u8"State", *m_stateRows);
+            break;
+        case GraphChoiceKind::Transition:
+            AddSection(u8"transition", u8"Transition", *m_transitionRows);
+            break;
+        }
+        if (m_liveRows)
+            AddSection(u8"preview", u8"Preview parameters", *m_liveRows);
+    }
+
+    void AnimationGraphEditorPage::ShowRows()
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr || graph->source.layers.IsEmpty())
+            return;
+        const auto& source = graph->source;
+        const animation::GraphLayerData& layer = source.layers[static_cast<usize>(m_layer)];
+        switch (m_chosen.kind)
+        {
+        case GraphChoiceKind::Layer:
+            m_layerRows->SetValue(u8"name", 0, gui::Variant(layer.name.AsView()));
+            m_layerRows->SetValue(u8"blend", 0, gui::Variant(static_cast<i64>(layer.blendMode)));
+            m_layerRows->SetValue(u8"weight", 0, gui::Variant(static_cast<f64>(layer.weight)));
+            m_layerRows->SetValue(u8"start", 0, gui::Variant(static_cast<i64>(layer.defaultState)));
+            m_layerRows->PropertiesChanged();
+            break;
+        case GraphChoiceKind::Parameter:
+        {
+            const usize p = static_cast<usize>(m_chosen.index);
+            if (p >= source.paramNames.Size())
+                return;
+            m_parameterRows->SetValue(u8"name", 0, gui::Variant(source.paramNames[p].AsView()));
+            m_parameterRows->SetValue(u8"type", 0, gui::Variant(static_cast<i64>(p < source.paramTypes.Size() ? source.paramTypes[p] : 0)));
+            m_parameterRows->SetValue(u8"float", 0, gui::Variant(static_cast<f64>(p < source.paramFloats.Size() ? source.paramFloats[p] : 0.0f)));
+            m_parameterRows->SetValue(u8"int", 0, gui::Variant(static_cast<i64>(p < source.paramInts.Size() ? source.paramInts[p] : 0)));
+            m_parameterRows->SetValue(u8"bool", 0, gui::Variant(p < source.paramBools.Size() && source.paramBools[p] != 0));
+            m_parameterRows->PropertiesChanged();
+            break;
+        }
+        case GraphChoiceKind::State:
+        {
+            const usize s = static_cast<usize>(m_chosen.index);
+            if (s >= layer.states.Size())
+                return;
+            const animation::GraphStateData& state = layer.states[s];
+            m_stateRows->SetValue(u8"name", 0, gui::Variant(state.name.AsView()));
+            m_stateRows->SetValue(u8"speed", 0, gui::Variant(static_cast<f64>(state.speed)));
+            m_stateRows->SetValue(u8"loop", 0, gui::Variant(state.loop));
+            m_stateRows->SetValue(u8"kind", 0, gui::Variant(static_cast<i64>(state.node.kind)));
+            m_stateRows->SetValue(u8"clip", 0, GuidText(state.node.clipRef));
+            m_stateRows->SetValue(u8"driver", 0, gui::Variant(static_cast<i64>(state.node.paramIndex)));
+            m_stateRows->SetValue(u8"driverX", 0, gui::Variant(static_cast<i64>(state.node.paramIndexX)));
+            m_stateRows->SetValue(u8"driverY", 0, gui::Variant(static_cast<i64>(state.node.paramIndexY)));
+            m_stateRows->ResizeList(kEntries, 0, state.node.entryClips.Size());
+            for (usize e = 0; e < state.node.entryClips.Size(); ++e)
+            {
+                const String element = Format(u8"{}.{}", kEntries, e);
+                m_stateRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"clip").AsView(), 0, GuidText(state.node.entryClips[e]));
+                m_stateRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"threshold").AsView(), 0,
+                                      gui::Variant(static_cast<f64>(e < state.node.entryThresholds.Size() ? state.node.entryThresholds[e] : 0.0f)));
+                const Float2 at = e < state.node.entryPositions.Size() ? state.node.entryPositions[e] : Float2{};
+                m_stateRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"x").AsView(), 0, gui::Variant(static_cast<f64>(at.x)));
+                m_stateRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"y").AsView(), 0, gui::Variant(static_cast<f64>(at.y)));
+            }
+            m_stateRows->PropertiesChanged();
+            break;
+        }
+        case GraphChoiceKind::Transition:
+        {
+            const usize t = static_cast<usize>(m_chosen.index);
+            if (t >= layer.transitions.Size())
+                return;
+            const animation::GraphTransitionData& transition = layer.transitions[t];
+            const auto stateName = [&layer](i32 s)
+            {
+                return s < 0 ? String(u8"Any State") : s < static_cast<i32>(layer.states.Size()) ? String(layer.states[static_cast<usize>(s)].name.AsView()) : String(u8"Nothing");
+            };
+            m_transitionRows->SetValue(u8"from", 0, gui::Variant(stateName(transition.src).AsView()));
+            m_transitionRows->SetValue(u8"to", 0, gui::Variant(stateName(transition.dst).AsView()));
+            m_transitionRows->SetValue(u8"duration", 0, gui::Variant(static_cast<f64>(transition.duration)));
+            m_transitionRows->SetValue(u8"exit", 0, gui::Variant(transition.hasExitTime));
+            m_transitionRows->SetValue(u8"exitTime", 0, gui::Variant(static_cast<f64>(transition.exitTime)));
+            m_transitionRows->SetValue(u8"priority", 0, gui::Variant(static_cast<i64>(transition.priority)));
+            m_transitionRows->ResizeList(kConditions, 0, transition.conditions.Size());
+            for (usize c = 0; c < transition.conditions.Size(); ++c)
+            {
+                const String element = Format(u8"{}.{}", kConditions, c);
+                const animation::GraphConditionData& condition = transition.conditions[c];
+                m_transitionRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"parameter").AsView(), 0, gui::Variant(static_cast<i64>(condition.paramIndex)));
+                m_transitionRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"compare").AsView(), 0, gui::Variant(static_cast<i64>(condition.op)));
+                m_transitionRows->SetValue(gui::JoinPropertyPath(element.AsView(), u8"value").AsView(), 0, gui::Variant(static_cast<f64>(condition.threshold)));
+            }
+            m_transitionRows->PropertiesChanged();
+            break;
+        }
+        }
+    }
+
+    void AnimationGraphEditorPage::ShowFacts()
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr)
+            return;
+        usize states = 0;
+        usize transitions = 0;
+        for (const animation::GraphLayerData& layer : graph->source.layers)
+        {
+            states += layer.states.Size();
+            transitions += layer.transitions.Size();
+        }
+        SetFact(u8"Layers", Format(u8"{}", graph->source.layers.Size()).AsView());
+        SetFact(u8"States", Format(u8"{}", states).AsView());
+        SetFact(u8"Transitions", Format(u8"{}", transitions).AsView());
+        SetFact(u8"Parameters", Format(u8"{}", graph->source.paramNames.Size()).AsView());
+    }
+
+    void AnimationGraphEditorPage::Committed(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+    {
+        pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr)
+            return;
+        const usize l = static_cast<usize>(m_layer);
+        const usize at = static_cast<usize>(Max(m_chosen.index, 0));
+        if (&rows == m_layerRows.Get())
+        {
+            const String text(value.AsString());
+            const i64 number = value.AsInt();
+            const f64 real = value.AsFloat();
+            Edit(u8"edit_animgraph_layer", [l, path, &text, number, real](pipeline::AnimationGraphAsset& asset)
+                 {
+                     animation::GraphLayerData& layer = asset.source.layers[l];
+                     if (path == StringView(u8"name"))
+                         layer.name = text;
+                     else if (path == StringView(u8"blend"))
+                         layer.blendMode = static_cast<u8>(Clamp<i64>(number, 0, 1));
+                     else if (path == StringView(u8"weight"))
+                         layer.weight = static_cast<f32>(Clamp(real, 0.0, 1.0));
+                     else if (path == StringView(u8"start"))
+                         layer.defaultState = static_cast<i32>(Clamp<i64>(number, 0, static_cast<i64>(layer.states.Size()) - 1));
+                 });
+            return;
+        }
+        if (&rows == m_parameterRows.Get())
+        {
+            if (at >= graph->source.paramNames.Size())
+                return;
+            const String text(value.AsString());
+            const i64 number = value.AsInt();
+            const f64 real = value.AsFloat();
+            const bool on = value.AsBool();
+            Edit(u8"edit_animgraph_parameter", [at, path, &text, number, real, on](pipeline::AnimationGraphAsset& asset)
+                 {
+                     animation::AnimationGraphSource& source = asset.source;
+                     SquareParameters(source);
+                     if (path == StringView(u8"name"))
+                         source.paramNames[at] = text;
+                     else if (path == StringView(u8"type"))
+                         source.paramTypes[at] = static_cast<u8>(Clamp<i64>(number, 0, 3));
+                     else if (path == StringView(u8"float"))
+                         source.paramFloats[at] = static_cast<f32>(real);
+                     else if (path == StringView(u8"int"))
+                         source.paramInts[at] = static_cast<i32>(number);
+                     else if (path == StringView(u8"bool"))
+                         source.paramBools[at] = on ? 1 : 0;
+                 });
+            return;
+        }
+        if (&rows == m_stateRows.Get())
+        {
+            if (at >= graph->source.layers[l].states.Size())
+                return;
+            const String text(value.AsString());
+            const i64 number = value.AsInt();
+            const f64 real = value.AsFloat();
+            const bool on = value.AsBool();
+            const Guid id = GuidOf(value);
+            const i32 entry = ElementOf(path, kEntries);
+            const StringView field = LastSegment(path);
+            Edit(u8"edit_animgraph_state", [l, at, path, field, entry, &text, number, real, on, id](pipeline::AnimationGraphAsset& asset)
+                 {
+                     animation::GraphStateData& state = asset.source.layers[l].states[at];
+                     animation::GraphNodeData& node = state.node;
+                     if (entry >= 0)
+                     {
+                         SquareEntries(node);
+                         if (static_cast<usize>(entry) >= node.entryClips.Size())
+                             return;
+                         const usize e = static_cast<usize>(entry);
+                         if (field == StringView(u8"clip"))
+                             node.entryClips[e] = id;
+                         else if (field == StringView(u8"threshold"))
+                             node.entryThresholds[e] = static_cast<f32>(real);
+                         else if (field == StringView(u8"x"))
+                             node.entryPositions[e].x = static_cast<f32>(real);
+                         else if (field == StringView(u8"y"))
+                             node.entryPositions[e].y = static_cast<f32>(real);
+                         return;
+                     }
+                     if (path == StringView(u8"name"))
+                         state.name = text;
+                     else if (path == StringView(u8"speed"))
+                         state.speed = static_cast<f32>(real);
+                     else if (path == StringView(u8"loop"))
+                         state.loop = on;
+                     else if (path == StringView(u8"kind"))
+                         node.kind = static_cast<u8>(Clamp<i64>(number, 0, 2));
+                     else if (path == StringView(u8"clip"))
+                         node.clipRef = id;
+                     else if (path == StringView(u8"driver"))
+                         node.paramIndex = static_cast<i32>(number);
+                     else if (path == StringView(u8"driverX"))
+                         node.paramIndexX = static_cast<i32>(number);
+                     else if (path == StringView(u8"driverY"))
+                         node.paramIndexY = static_cast<i32>(number);
+                 });
+            return;
+        }
+        if (&rows == m_transitionRows.Get())
+        {
+            if (at >= graph->source.layers[l].transitions.Size())
+                return;
+            const i64 number = value.AsInt();
+            const f64 real = value.AsFloat();
+            const bool on = value.AsBool();
+            const i32 condition = ElementOf(path, kConditions);
+            const StringView field = LastSegment(path);
+            Edit(u8"edit_animgraph_transition", [l, at, path, field, condition, number, real, on](pipeline::AnimationGraphAsset& asset)
+                 {
+                     animation::GraphTransitionData& transition = asset.source.layers[l].transitions[at];
+                     if (condition >= 0)
+                     {
+                         if (static_cast<usize>(condition) >= transition.conditions.Size())
+                             return;
+                         animation::GraphConditionData& changed = transition.conditions[static_cast<usize>(condition)];
+                         if (field == StringView(u8"parameter"))
+                             changed.paramIndex = static_cast<i32>(number);
+                         else if (field == StringView(u8"compare"))
+                             changed.op = static_cast<u8>(Clamp<i64>(number, 0, 5));
+                         else if (field == StringView(u8"value"))
+                             changed.threshold = static_cast<f32>(real);
+                         return;
+                     }
+                     if (path == StringView(u8"duration"))
+                         transition.duration = static_cast<f32>(Max(real, 0.0));
+                     else if (path == StringView(u8"exit"))
+                         transition.hasExitTime = on;
+                     else if (path == StringView(u8"exitTime"))
+                         transition.exitTime = static_cast<f32>(Clamp(real, 0.0, 1.0));
+                     else if (path == StringView(u8"priority"))
+                         transition.priority = static_cast<i32>(number);
+                 });
+        }
+    }
+
+    void AnimationGraphEditorPage::ListEdited(gui::PropertyBag& rows, StringView path, const gui::ListEdit& edit)
+    {
+        pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr)
+            return;
+        const usize l = static_cast<usize>(m_layer);
+        const usize at = static_cast<usize>(Max(m_chosen.index, 0));
+        const bool insert = edit.Kind == gui::ListEdit::Op::Insert;
+        const usize index = edit.Index;
+        if (&rows == m_stateRows.Get() && path == kEntries && at < graph->source.layers[l].states.Size())
+        {
+            if (!insert && edit.Kind != gui::ListEdit::Op::Remove)
+                return;
+            Edit(u8"edit_animgraph_state", [l, at, insert, index](pipeline::AnimationGraphAsset& asset)
+                 {
+                     animation::GraphNodeData& node = asset.source.layers[l].states[at].node;
+                     SquareEntries(node);
+                     if (insert)
+                     {
+                         // After the last, a step past it.
+                         node.entryThresholds.PushBack(node.entryThresholds.IsEmpty() ? 0.0f : node.entryThresholds.Back() + 1.0f);
+                         node.entryPositions.PushBack(Float2{});
+                         node.entryClips.PushBack(Guid{});
+                     }
+                     else if (index < node.entryClips.Size())
+                     {
+                         node.entryClips.RemoveAt(index);
+                         node.entryThresholds.RemoveAt(index);
+                         node.entryPositions.RemoveAt(index);
+                     }
+                 });
+        }
+        else if (&rows == m_transitionRows.Get() && path == kConditions && at < graph->source.layers[l].transitions.Size())
+        {
+            if (!insert && edit.Kind != gui::ListEdit::Op::Remove)
+                return;
+            Edit(u8"edit_animgraph_transition", [l, at, insert, index](pipeline::AnimationGraphAsset& asset)
+                 {
+                     auto& conditions = asset.source.layers[l].transitions[at].conditions;
+                     if (insert)
+                         conditions.PushBack(animation::GraphConditionData{0, 0, 1.0f});
+                     else if (index < conditions.Size())
+                         conditions.RemoveAt(index);
+                 });
+        }
+        ShowRows(); // the list as the graph holds it (a move, which these lists do not offer, goes back)
+    }
+
+    void AnimationGraphEditorPage::LiveCommitted(StringView path, const gui::Variant& value)
+    {
+        const Optional<i64> index = path.StartsWith(u8"p") ? ParseInt(path.SubStr(1, path.Size() - 1)) : Optional<i64>{};
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (!index.HasValue() || graph == nullptr || index.Value() < 0 || static_cast<usize>(index.Value()) >= graph->source.paramNames.Size())
+            return;
+        const usize p = static_cast<usize>(index.Value());
+        const u8 type = p < graph->source.paramTypes.Size() ? graph->source.paramTypes[p] : 0;
+        if (type == 3)
+        {
+            if (value.AsBool())
+                SetLive(static_cast<i32>(p), 1.0);
+            m_liveRows->SetValue(path, 0, gui::Variant(false)); // ready to fire again
+            return;
+        }
+        SetLive(static_cast<i32>(p), type == 2 ? (value.AsBool() ? 1.0 : 0.0) : type == 1 ? static_cast<f64>(value.AsInt()) : value.AsFloat());
+    }
+
+    void AnimationGraphEditorPage::SetLive(i32 parameter, f64 value)
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr || parameter < 0 || static_cast<usize>(parameter) >= m_live.Size())
+            return;
+        const u8 type = static_cast<usize>(parameter) < graph->source.paramTypes.Size() ? graph->source.paramTypes[static_cast<usize>(parameter)] : 0;
+        if (type == 3)
+        {
+            if (m_player)
+                m_player->SetTrigger(parameter);
+            return;
+        }
+        m_live[static_cast<usize>(parameter)] = value;
+        ApplyLive();
+    }
+
+    // === The lists and the view ===
+
+    void AnimationGraphEditorPage::ShowLists()
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr)
+            return;
+        m_showing = true;
+        m_layerModel->Clear();
+        for (const animation::GraphLayerData& layer : graph->source.layers)
+        {
+            const i32 node = m_layerModel->AddNode(gui::TreeModel::kRoot, layer.name.IsEmpty() ? StringView(u8"Layer") : layer.name.AsView());
+            m_layerModel->SetIcon(node, u8"Editor/Icons/layers.svg");
+        }
+        m_parameterModel->Clear();
+        for (usize p = 0; p < graph->source.paramNames.Size(); ++p)
+        {
+            const u8 type = p < graph->source.paramTypes.Size() ? graph->source.paramTypes[p] : 0;
+            (void)m_parameterModel->AddNode(gui::TreeModel::kRoot, Format(u8"{}   {}", graph->source.paramNames[p], kParameterTypes[Min<u8>(type, 3)]).AsView());
+        }
+        if (m_layerTree != nullptr)
+        {
+            const gui::ItemId id = static_cast<gui::ItemId>(m_layer);
+            m_layerTree->SetSelectedIds(Span<const gui::ItemId>(&id, 1u));
+        }
+        if (m_parameterTree != nullptr)
+        {
+            if (m_chosen.kind == GraphChoiceKind::Parameter)
+            {
+                const gui::ItemId id = static_cast<gui::ItemId>(m_chosen.index);
+                m_parameterTree->SetSelectedIds(Span<const gui::ItemId>(&id, 1u));
+            }
+            else
+                m_parameterTree->SetSelectedIds(Span<const gui::ItemId>{});
+        }
+        m_showing = false;
+    }
+
+    String AnimationGraphEditorPage::LayerList() const
+    {
+        String out;
+        if (const pipeline::AnimationGraphAsset* graph = Graph())
+            for (const animation::GraphLayerData& layer : graph->source.layers)
+            {
+                if (!out.IsEmpty())
+                    out += u8"\n";
+                out += layer.name.AsView();
+            }
+        return out;
+    }
+
+    String AnimationGraphEditorPage::ParameterList() const
+    {
+        String out;
+        if (const pipeline::AnimationGraphAsset* graph = Graph())
+            for (usize p = 0; p < graph->source.paramNames.Size(); ++p)
+            {
+                if (!out.IsEmpty())
+                    out += u8"\n";
+                const u8 type = p < graph->source.paramTypes.Size() ? graph->source.paramTypes[p] : 0;
+                out += Format(u8"{}  {}", graph->source.paramNames[p], kParameterTypes[Min<u8>(type, 3)]).AsView();
+            }
+        return out;
+    }
+
+    void AnimationGraphEditorPage::FollowView()
+    {
+        if (m_showing || m_view == nullptr)
+            return;
+        const Array<gui::GraphId>& nodes = m_view->GetSelectedNodes();
+        const Array<gui::GraphId>& links = m_view->GetSelectedLinks();
+        if (nodes.Size() == 1 && links.IsEmpty() && m_states->StateOf(nodes[0]) >= 0)
+            Choose(GraphChoice{GraphChoiceKind::State, m_states->StateOf(nodes[0])});
+        else if (links.Size() == 1 && nodes.IsEmpty() && m_states->TransitionOf(links[0]) >= 0)
+            Choose(GraphChoice{GraphChoiceKind::Transition, m_states->TransitionOf(links[0])});
+        else if (nodes.IsEmpty() && links.IsEmpty())
+            Choose(GraphChoice{GraphChoiceKind::Layer, m_layer});
+    }
+
+    void AnimationGraphEditorPage::ChooseLayer(i32 layer)
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr || graph->source.layers.IsEmpty())
+            return;
+        m_layer = Clamp(layer, 0, static_cast<i32>(graph->source.layers.Size()) - 1);
+        m_states->SetLayer(m_layer);
+        m_lit = 0;
+        m_graphFramed = false; // another layer's states, framed once shown
+        Choose(GraphChoice{GraphChoiceKind::Layer, m_layer});
+    }
+
+    void AnimationGraphEditorPage::Choose(const GraphChoice& choice)
+    {
+        m_chosen = choice;
+        if (m_chosen.kind == GraphChoiceKind::Layer)
+            m_chosen.index = m_layer;
+        ShowSections();
+        ShowRows();
+        ShowLists();
+        // The view chooses the state too (a choice from a list or from code).
+        if (m_view != nullptr && m_chosen.kind == GraphChoiceKind::State)
+        {
+            m_showing = true;
+            const gui::GraphId node = m_states->StateId(m_chosen.index);
+            m_view->SetSelectedLinks(Span<const gui::GraphId>{});
+            m_view->SetSelectedNodes(Span<const gui::GraphId>(&node, 1u));
+            m_showing = false;
+        }
+    }
+
+    void AnimationGraphEditorPage::AddLayer()
+    {
+        i32 made = -1;
+        Edit(u8"add_animgraph_layer", [&made](pipeline::AnimationGraphAsset& asset) { made = animgraph::AddLayer(asset, u8"Layer"); });
+        if (made >= 0)
+            ChooseLayer(made);
+    }
+
+    bool AnimationGraphEditorPage::RemoveLayer()
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr || graph->source.layers.Size() <= 1)
+            return false;
+        const i32 layer = m_layer;
+        Edit(u8"remove_animgraph_layer", [layer](pipeline::AnimationGraphAsset& asset) { (void)animgraph::RemoveLayer(asset, layer); });
+        ChooseLayer(Max(layer - 1, 0));
+        return true;
+    }
+
+    void AnimationGraphEditorPage::AddParameter(animation::AnimationParameterType type)
+    {
+        i32 made = -1;
+        Edit(u8"add_animgraph_parameter", [&made, type](pipeline::AnimationGraphAsset& asset)
+             { made = animgraph::AddParameter(asset, type == animation::AnimationParameterType::Trigger ? StringView(u8"Trigger") : StringView(u8"Parameter"), type); });
+        if (made >= 0)
+            Choose(GraphChoice{GraphChoiceKind::Parameter, made});
+    }
+
+    bool AnimationGraphEditorPage::RemoveParameter()
+    {
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph == nullptr || m_chosen.kind != GraphChoiceKind::Parameter || m_chosen.index < 0 ||
+            static_cast<usize>(m_chosen.index) >= graph->source.paramNames.Size())
+            return false;
+        const i32 parameter = m_chosen.index;
+        Edit(u8"remove_animgraph_parameter", [parameter](pipeline::AnimationGraphAsset& asset) { (void)animgraph::RemoveParameter(asset, parameter); });
+        Choose(GraphChoice{GraphChoiceKind::Layer, m_layer});
+        return true;
+    }
+
+    void AnimationGraphEditorPage::OnObjectChanged()
+    {
+        // An edit, its undo or redo: the view, the lists and the rows read again, the preview made anew.
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (graph != nullptr && !graph->source.layers.IsEmpty() && m_layer >= static_cast<i32>(graph->source.layers.Size()))
+        {
+            m_layer = static_cast<i32>(graph->source.layers.Size()) - 1;
+            m_states->SetLayer(m_layer);
+        }
+        m_states->Refresh();
+        // What was chosen may be gone.
+        if (graph != nullptr && !graph->source.layers.IsEmpty())
+        {
+            const animation::GraphLayerData& layer = graph->source.layers[static_cast<usize>(m_layer)];
+            const usize count = m_chosen.kind == GraphChoiceKind::Parameter ? graph->source.paramNames.Size()
+                              : m_chosen.kind == GraphChoiceKind::State     ? layer.states.Size()
+                              : m_chosen.kind == GraphChoiceKind::Transition ? layer.transitions.Size()
+                                                                             : graph->source.layers.Size();
+            if (m_chosen.index < 0 || static_cast<usize>(m_chosen.index) >= count)
+                m_chosen = GraphChoice{GraphChoiceKind::Layer, m_layer};
+        }
+        BuildLiveRows();
+        ShowLists();
+        ShowRows();
+        ShowFacts();
+        m_rebuild = true;
+    }
+
+    // === The preview ===
 
     void AnimationGraphEditorPage::LoadPreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
-        if (store == nullptr)
-        {
+        if (!m_rig)
             return;
-        }
-        const GraphPreviewSettings* section = store->Find<GraphPreviewSettings>();
-        if (section == nullptr)
+        if (foundation::settings::Settings* store = Context().ProjectEditorSettings())
+            if (const GraphPreviewSettings* section = store->Find<GraphPreviewSettings>())
+                for (const GraphPreviewPref& p : section->prefs)
+                    if (p.asset == InstanceId())
+                    {
+                        m_rig->SetSkeleton(p.skeleton);
+                        m_rig->SetMesh(p.mesh);
+                        return;
+                    }
+        // Never shown before: on the skeleton its first clip's import names.
+        Guid skeleton;
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        foundation::content::ContentDatabase* db = Context().Project() != nullptr ? &Context().Project()->SourceDb() : nullptr;
+        const auto skeletonOf = [db](const Guid& clip) -> Guid
         {
-            return;
-        }
-        for (const GraphPreviewPref& p : section->prefs)
-        {
-            if (p.asset != InstanceId())
-            {
-                continue;
-            }
-            SetPreviewSkeleton(p.skeleton);
-            SetPreviewMesh(p.mesh);
-            return;
-        }
+            foundation::content::Instance* instance = db != nullptr && !clip.IsNil() ? db->GetInstance(clip) : nullptr;
+            RefPtr<ISerializable> object = instance != nullptr ? instance->ReadObject() : RefPtr<ISerializable>{};
+            const auto* asset = Cast<pipeline::AnimationClipAsset>(object.Get());
+            return asset != nullptr ? asset->skeleton : Guid{};
+        };
+        if (graph != nullptr)
+            for (const animation::GraphLayerData& layer : graph->source.layers)
+                for (const animation::GraphStateData& state : layer.states)
+                {
+                    if (skeleton.IsNil())
+                        skeleton = skeletonOf(state.node.clipRef);
+                    for (const Guid& entry : state.node.entryClips)
+                        if (skeleton.IsNil())
+                            skeleton = skeletonOf(entry);
+                }
+        m_rig->SetSkeleton(skeleton);
+        m_rig->SetMesh(Guid{});
     }
 
     void AnimationGraphEditorPage::SavePreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
-        if (store == nullptr)
-        {
+        foundation::settings::Settings* store = Context().ProjectEditorSettings();
+        if (store == nullptr || !m_rig)
             return;
-        }
         GraphPreviewSettings& section = store->Section<GraphPreviewSettings>();
+        bool found = false;
         for (GraphPreviewPref& p : section.prefs)
-        {
             if (p.asset == InstanceId())
             {
-                p.skeleton = m_skeletonGuid;
-                p.mesh = m_previewMeshId;
-                return;
+                p.skeleton = m_rig->SkeletonId();
+                p.mesh = m_rig->MeshId();
+                found = true;
             }
-        }
-        section.prefs.PushBack(GraphPreviewPref{InstanceId(), m_skeletonGuid, m_previewMeshId});
+        if (!found)
+            section.prefs.PushBack(GraphPreviewPref{InstanceId(), m_rig->SkeletonId(), m_rig->MeshId()});
+        store->MarkChanged<GraphPreviewSettings>();
+        Context().RequestProjectEditorSettingsSave();
     }
 
-    // ============================ Model helpers =============================================
-
-    animation::GraphLayerData* AnimationGraphEditorPage::SelectedLayer()
+    void AnimationGraphEditorPage::RebuildPlayer()
     {
-        if (m_asset.Get() == nullptr)
-        {
-            return nullptr;
-        }
-        Array<animation::GraphLayerData>& layers = m_asset->source.layers;
-        if (m_selectedLayer < 0 || static_cast<usize>(m_selectedLayer) >= layers.Size())
-        {
-            return nullptr;
-        }
-        return &layers[static_cast<usize>(m_selectedLayer)];
-    }
-
-    void AnimationGraphEditorPage::SyncLayoutArrays()
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        const Array<animation::GraphLayerData>& layers = m_asset->source.layers;
-        while (m_asset->layerStatePositions.Size() < layers.Size())
-        {
-            m_asset->layerStatePositions.PushBack(Array<Float2>{});
-        }
-        while (m_asset->layerStatePositions.Size() > layers.Size())
-        {
-            m_asset->layerStatePositions.RemoveAt(m_asset->layerStatePositions.Size() - 1);
-        }
-        while (m_asset->layerAnyStatePositions.Size() < layers.Size())
-        {
-            m_asset->layerAnyStatePositions.PushBack(Float2{40.0f, 40.0f});
-        }
-        while (m_asset->layerAnyStatePositions.Size() > layers.Size())
-        {
-            m_asset->layerAnyStatePositions.RemoveAt(m_asset->layerAnyStatePositions.Size() - 1);
-        }
-        for (usize l = 0; l < layers.Size(); ++l)
-        {
-            Array<Float2>& positions = m_asset->layerStatePositions[l];
-            // New states fan out to the right of the last known position.
-            while (positions.Size() < layers[l].states.Size())
-            {
-                const f32 x = 240.0f + 60.0f * static_cast<f32>(positions.Size() % 5);
-                const f32 y = 90.0f + 70.0f * static_cast<f32>(positions.Size() / 5);
-                positions.PushBack(Float2{x, y});
-            }
-            while (positions.Size() > layers[l].states.Size())
-            {
-                positions.RemoveAt(positions.Size() - 1);
-            }
-        }
-    }
-
-    // ============================ Canvas sync ===============================================
-
-    void AnimationGraphEditorPage::RebuildCanvas()
-    {
-        m_syncingCanvas = true;
-        m_canvas->Clear();
-        animation::GraphLayerData* layer = SelectedLayer();
-        if (layer != nullptr)
-        {
-            SyncLayoutArrays();
-            const usize layerIdx = static_cast<usize>(m_selectedLayer);
-
-            // Node 0: the Any State pseudo-node.
-            {
-                auto node = MakeUnique<ui::toolkit::NodeGraphNode>(Allocator());
-                node->Title = String(u8"Any State");
-                node->Position = m_asset->layerAnyStatePositions[layerIdx];
-                node->Size = Float2{140.0f, 44.0f};
-                node->HeaderColor = HeaderAny();
-                node->IsDeletable = false;
-                (void)m_canvas->AddNode(Move(node));
-            }
-            // Node 1+i: the states.
-            for (usize i = 0; i < layer->states.Size(); ++i)
-            {
-                const animation::GraphStateData& s = layer->states[i];
-                auto node = MakeUnique<ui::toolkit::NodeGraphNode>(Allocator());
-                node->Title = String(s.name.AsView());
-                node->Subtitle = String(NodeKindLabel(s.node.kind));
-                node->Position = m_asset->layerStatePositions[layerIdx][i];
-                node->Size = Float2{150.0f, 46.0f};
-                node->HeaderColor =
-                    (static_cast<i32>(i) == layer->defaultState) ? HeaderDefault() : HeaderPlain();
-                node->IsDeletable = false; // deletion goes through the context menu (source-first)
-                (void)m_canvas->AddNode(Move(node));
-            }
-            // Connections in TRANSITION ORDER: connection index == transition index.
-            for (usize t = 0; t < layer->transitions.Size(); ++t)
-            {
-                const animation::GraphTransitionData& tr = layer->transitions[t];
-                ui::toolkit::NodeGraphConnection conn;
-                conn.SourceNodeIndex = (tr.src < 0) ? kAnyStateNode : StateToNode(tr.src);
-                conn.DestNodeIndex = StateToNode(tr.dst);
-                (void)m_canvas->AddConnection(conn);
-            }
-        }
-        m_syncingCanvas = false;
-    }
-
-    void AnimationGraphEditorPage::RebuildLeftPanel()
-    {
-        m_leftRows->RemoveAllViews();
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        AnimationGraphEditorPage* self = this;
-        // A list row: a click selects it, and a right click offers Delete when `onDelete` is set.
-        auto addRow = [&](StringView text, Function<void()> onClick, bool emphasized,
-                          Function<void()> onDelete)
-        {
-            auto button = MakeRef<GraphListRow>(Allocator(), text, Move(onDelete));
-            if (emphasized)
-            {
-                button->AddClass(u8"accent");
-            }
-            button->OnClick.Add(
-                [onClick = Move(onClick)](ui::ButtonBase*) mutable
-                {
-                    if (onClick)
-                    {
-                        onClick();
-                    }
-                });
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(24.0f));
-            m_leftRows->AddView(button.Get(), lp);
-        };
-        // A list's header: its title, and its add icon on the right.
-        auto addHeader = [&](StringView text, StringView addTooltip, Function<void()> onAdd)
-        {
-            auto header = MakeRef<app::ListHeader>(Allocator(), text, addTooltip, Move(onAdd));
-            m_leftRows->AddView(header.Get(), app::ListHeader::RowStyle());
-        };
-
-        addHeader(u8"Layers", u8"Add layer",
-                  [self]()
-                  {
-                      self->QueueStructural(
-                          u8"add-layer",
-                          Function<void()>{
-                              [self]()
-                              {
-                                  animation::GraphLayerData layer;
-                                  layer.name =
-                                      Format(u8"Layer {}", self->m_asset->source.layers.Size());
-                                  self->m_asset->source.layers.PushBack(Move(layer));
-                                  self->m_selectedLayer =
-                                      static_cast<i32>(self->m_asset->source.layers.Size()) - 1;
-                              }},
-                          GraphSel{GraphSelKind::Layer, 0, 0});
-                  });
-        const animation::AnimationGraphSource& source = m_asset->source;
-        for (usize l = 0; l < source.layers.Size(); ++l)
-        {
-            const i32 layerIndex = static_cast<i32>(l);
-            String text(source.layers[l].name.AsView());
-            if (layerIndex == m_selectedLayer)
-            {
-                text.Append(u8"  <");
-            }
-            addRow(text.AsView(),
-                   Function<void()>{[self, layerIndex]()
-                                    {
-                                        self->m_selectedLayer = layerIndex;
-                                        self->Select(
-                                            GraphSel{GraphSelKind::Layer, layerIndex, layerIndex});
-                                        ui::UIContext* ctx = self->Ctx();
-                                        if (ctx != nullptr)
-                                        {
-                                            AnimationGraphEditorPage* page = self;
-                                            ctx->MutationQueueRef().QueueAction(
-                                                Function<void()>{[page]()
-                                                                 {
-                                                                     page->RebuildLeftPanel();
-                                                                     page->RebuildCanvas();
-                                                                 }});
-                                        }
-                                    }},
-                   layerIndex == m_selectedLayer,
-                   source.layers.Size() > 1
-                       ? Function<void()>{[self, layerIndex]() { self->DeleteLayer(layerIndex); }}
-                       : Function<void()>{});
-        }
-
-        addHeader(u8"Parameters", u8"Add parameter",
-                  [self]()
-                  {
-                      self->QueueStructural(
-                          u8"add-param",
-                          Function<void()>{[self]()
-                                           {
-                                               animation::AnimationGraphSource& s =
-                                                   self->m_asset->source;
-                                               s.paramNames.PushBack(
-                                                   Format(u8"Param{}", s.paramNames.Size()));
-                                               s.paramTypes.PushBack(0); // Float
-                                               s.paramFloats.PushBack(0.0f);
-                                               s.paramInts.PushBack(0);
-                                               s.paramBools.PushBack(0);
-                                           }},
-                          GraphSel{GraphSelKind::Parameter, 0, -2 /*last*/});
-                  });
-        for (usize p = 0; p < source.paramNames.Size(); ++p)
-        {
-            const i32 paramIndex = static_cast<i32>(p);
-            addRow(source.paramNames[p].AsView(),
-                   Function<void()>{
-                       [self, paramIndex]()
-                       { self->Select(GraphSel{GraphSelKind::Parameter, 0, paramIndex}); }},
-                   m_selected.kind == GraphSelKind::Parameter && m_selected.index == paramIndex,
-                   Function<void()>{[self, paramIndex]() { self->DeleteParam(paramIndex); }});
-        }
-    }
-
-    void AnimationGraphEditorPage::DeleteLayer(i32 layerIndex)
-    {
-        AnimationGraphEditorPage* self = this;
-        QueueStructural(u8"del-layer",
-                        Function<void()>{[self, layerIndex]()
-                                         {
-                                             animation::AnimationGraphSource& s =
-                                                 self->m_asset->source;
-                                             const usize at = static_cast<usize>(layerIndex);
-                                             if (layerIndex >= 0 && at < s.layers.Size() &&
-                                                 s.layers.Size() > 1)
-                                             {
-                                                 s.layers.RemoveAt(at);
-                                                 self->m_asset->layerStatePositions.RemoveAt(at);
-                                                 self->m_asset->layerAnyStatePositions.RemoveAt(at);
-                                             }
-                                         }},
-                        GraphSel{GraphSelKind::Layer, 0, 0});
-    }
-
-    void AnimationGraphEditorPage::DeleteParam(i32 paramIndex)
-    {
-        AnimationGraphEditorPage* self = this;
-        QueueStructural(u8"del-param",
-                        Function<void()>{[self, paramIndex]()
-                                         { self->DeleteParameterInternal(paramIndex); }},
-                        GraphSel{});
-    }
-
-    animation::GraphTransitionData* AnimationGraphEditorPage::TransitionAt(i32 layer,
-                                                                           i32 transition) const
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (layer < 0 || transition < 0 || static_cast<usize>(layer) >= source.layers.Size())
-        {
-            return nullptr;
-        }
-        Array<animation::GraphTransitionData>& transitions =
-            source.layers[static_cast<usize>(layer)].transitions;
-        return static_cast<usize>(transition) < transitions.Size()
-                   ? &transitions[static_cast<usize>(transition)]
-                   : nullptr;
-    }
-
-    // ============================ Context menus =============================================
-
-    void AnimationGraphEditorPage::ShowCanvasMenu(f32 canvasX, f32 canvasY)
-    {
-        ui::UIContext* ctx = Ctx();
-        if (ctx == nullptr || m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        AnimationGraphEditorPage* self = this;
-        const i32 layerIndex = m_selectedLayer;
-        const Float2 at{canvasX, canvasY};
-        auto menu = MakeRef<ui::ContextMenu>(Allocator());
-        auto addState = [self, layerIndex, at, &menu](StringView label, u8 kind)
-        {
-            menu->AddItem(
-                label,
-                [self, layerIndex, at, kind]()
-                {
-                    self->QueueStructural(
-                        u8"add-state",
-                        Function<void()>{
-                            [self, layerIndex, at, kind]()
-                            {
-                                animation::AnimationGraphSource& source = self->m_asset->source;
-                                if (layerIndex < 0 ||
-                                    static_cast<usize>(layerIndex) >= source.layers.Size())
-                                {
-                                    return;
-                                }
-                                animation::GraphLayerData& layer =
-                                    source.layers[static_cast<usize>(layerIndex)];
-                                animation::GraphStateData state;
-                                state.name = Format(u8"State {}", layer.states.Size());
-                                state.node.kind = kind;
-                                layer.states.PushBack(Move(state));
-                                self->SyncLayoutArrays();
-                                self->m_asset->layerStatePositions[static_cast<usize>(layerIndex)]
-                                    .Back() = at;
-                            }},
-                        GraphSel{GraphSelKind::State, layerIndex, -2 /*last*/});
-                });
-        };
-        addState(u8"Add Clip State", 0);
-        addState(u8"Add Blend Tree 1D", 1);
-        addState(u8"Add Blend Tree 2D", 2);
-        // The canvas hands CANVAS coords; local = canvas * zoom + pan, then to screen.
-        const Float2 local{canvasX * m_canvas->Zoom() + m_canvas->PanOffset().x,
-                           canvasY * m_canvas->Zoom() + m_canvas->PanOffset().y};
-        const Float2 screen = m_canvas->LocalToScreen(local);
-        menu->Show(ctx, screen.x, screen.y);
-    }
-
-    void AnimationGraphEditorPage::ShowNodeMenu(i32 nodeIndex)
-    {
-        ui::UIContext* ctx = Ctx();
-        animation::GraphLayerData* layer = SelectedLayer();
-        if (ctx == nullptr || layer == nullptr)
-        {
-            return;
-        }
-        AnimationGraphEditorPage* self = this;
-        const i32 layerIndex = m_selectedLayer;
-        auto menu = MakeRef<ui::ContextMenu>(Allocator());
-        menu->AddItem(u8"Make Transition",
-                      [self, nodeIndex]() { self->m_canvas->StartLinkFrom(nodeIndex); });
-        if (nodeIndex != kAnyStateNode)
-        {
-            const i32 stateIndex = NodeToState(nodeIndex);
-            menu->AddItem(
-                u8"Set as Default State",
-                [self, layerIndex, stateIndex]()
-                {
-                    self->QueueStructural(
-                        u8"set-default",
-                        Function<void()>{
-                            [self, layerIndex, stateIndex]()
-                            {
-                                animation::AnimationGraphSource& source = self->m_asset->source;
-                                if (layerIndex >= 0 &&
-                                    static_cast<usize>(layerIndex) < source.layers.Size())
-                                {
-                                    source.layers[static_cast<usize>(layerIndex)].defaultState =
-                                        stateIndex;
-                                }
-                            }},
-                        GraphSel{GraphSelKind::State, layerIndex, stateIndex});
-                });
-            menu->AddSeparator();
-            menu->AddItem(
-                u8"Delete State",
-                [self, layerIndex, stateIndex]()
-                {
-                    self->QueueStructural(
-                        u8"del-state",
-                        Function<void()>{[self, layerIndex, stateIndex]()
-                                         { self->DeleteStateInternal(layerIndex, stateIndex); }},
-                        GraphSel{GraphSelKind::Layer, layerIndex, layerIndex});
-                });
-        }
-        const Float2 screen = m_canvas->LocalToScreen(Float2{0.0f, 0.0f});
-        // Anchor near the node header.
-        ui::toolkit::NodeGraphNode* node = m_canvas->GetNode(nodeIndex);
-        Float2 at = screen;
-        if (node != nullptr)
-        {
-            const Float2 nodeScreen{(node->Position.x * m_canvas->Zoom()) + m_canvas->PanOffset().x,
-                                    (node->Position.y * m_canvas->Zoom()) +
-                                        m_canvas->PanOffset().y};
-            at = m_canvas->LocalToScreen(nodeScreen);
-        }
-        menu->Show(ctx, at.x + 16.0f, at.y + 16.0f);
-    }
-
-    void AnimationGraphEditorPage::ShowConnectionMenu(i32 connectionIndex)
-    {
-        ui::UIContext* ctx = Ctx();
-        if (ctx == nullptr)
-        {
-            return;
-        }
-        AnimationGraphEditorPage* self = this;
-        const i32 layerIndex = m_selectedLayer;
-        auto menu = MakeRef<ui::ContextMenu>(Allocator());
-        menu->AddItem(
-            u8"Edit Transition", [self, layerIndex, connectionIndex]()
-            { self->Select(GraphSel{GraphSelKind::Transition, layerIndex, connectionIndex}); });
-        menu->AddSeparator();
-        menu->AddItem(u8"Delete Transition",
-                      [self, layerIndex, connectionIndex]()
-                      {
-                          self->QueueStructural(
-                              u8"del-transition",
-                              Function<void()>{
-                                  [self, layerIndex, connectionIndex]()
-                                  {
-                                      animation::AnimationGraphSource& source =
-                                          self->m_asset->source;
-                                      if (layerIndex < 0 ||
-                                          static_cast<usize>(layerIndex) >= source.layers.Size())
-                                      {
-                                          return;
-                                      }
-                                      Array<animation::GraphTransitionData>& transitions =
-                                          source.layers[static_cast<usize>(layerIndex)].transitions;
-                                      if (connectionIndex >= 0 &&
-                                          static_cast<usize>(connectionIndex) < transitions.Size())
-                                      {
-                                          transitions.RemoveAt(static_cast<usize>(connectionIndex));
-                                      }
-                                  }},
-                              GraphSel{});
-                      });
-        const Float2 screen = m_canvas->LocalToScreen(Float2{20.0f, 20.0f});
-        menu->Show(ctx, screen.x, screen.y);
-    }
-
-    // ============================ Structural apply ==========================================
-
-    void AnimationGraphEditorPage::QueueStructural(StringView undoKey, Function<void()> mutate,
-                                                   GraphSel reselect)
-    {
-        AnimationGraphEditorPage* self = this;
-        String key(undoKey);
-        auto run = [self, mutate = Move(mutate), reselect, key = Move(key)]() mutable
-        {
-            mutate();
-            self->SyncLayoutArrays();
-            // Clamp the layer selection (layer deletes shift it).
-            const i32 layerCount = static_cast<i32>(self->m_asset->source.layers.Size());
-            self->m_selectedLayer = Clamp(self->m_selectedLayer, 0, Max(layerCount - 1, 0));
-            // "-2" = select the LAST element of the reselect kind (new additions).
-            GraphSel sel = reselect;
-            if (sel.index == -2)
-            {
-                animation::AnimationGraphSource& source = self->m_asset->source;
-                if (sel.kind == GraphSelKind::Parameter)
-                {
-                    sel.index = static_cast<i32>(source.paramNames.Size()) - 1;
-                }
-                else if (sel.kind == GraphSelKind::State &&
-                         static_cast<usize>(sel.layer) < source.layers.Size())
-                {
-                    sel.index = static_cast<i32>(
-                                    source.layers[static_cast<usize>(sel.layer)].states.Size()) -
-                                1;
-                }
-                else if (sel.kind == GraphSelKind::Transition &&
-                         static_cast<usize>(sel.layer) < source.layers.Size())
-                {
-                    sel.index =
-                        static_cast<i32>(
-                            source.layers[static_cast<usize>(sel.layer)].transitions.Size()) -
-                        1;
-                }
-            }
-            self->m_selected = sel;
-
-            Array<byte> after = self->SnapshotAsset();
-            (void)self->Commands().Execute(
-                UniquePtr<IEditorCommand>(self->Allocator().New<EditGraphCommand>(
-                                              *self, key.AsView(), self->m_undoBaseline, after),
-                                          self->Allocator()));
-            self->m_undoBaseline = Move(after);
-            self->RebuildLeftPanel();
-            self->RebuildCanvas();
-            self->RebuildInspector();
-            self->RebuildPreviewGraph();
-            self->MarkDirty();
-        };
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(Function<void()>{Move(run)});
-        }
-        else
-        {
-            run();
-        }
-    }
-
-    void AnimationGraphEditorPage::Select(const GraphSel& sel)
-    {
-        m_selected = sel;
-        AnimationGraphEditorPage* self = this;
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(
-                Function<void()>{[self]() { self->RebuildInspector(); }});
-        }
-        else
-        {
-            RebuildInspector();
-        }
-    }
-
-    ui::UIContext* AnimationGraphEditorPage::Ctx() const
-    {
-        return (m_canvas.Get() != nullptr) ? m_canvas->Context : nullptr;
-    }
-
-    // ============================ Inspectors ================================================
-
-    void AnimationGraphEditorPage::RebuildInspector()
-    {
-        m_grid->Clear();
-        if (m_asset.Get() == nullptr)
-        {
-            m_inspectorTitle->SetText(u8"(no asset)");
-            return;
-        }
-        switch (m_selected.kind)
-        {
-        case GraphSelKind::Layer:
-            m_inspectorTitle->SetText(u8"Layer");
-            BuildLayerInspector(m_selected.index);
-            break;
-        case GraphSelKind::Parameter:
-            m_inspectorTitle->SetText(u8"Parameter");
-            BuildParameterInspector(m_selected.index);
-            break;
-        case GraphSelKind::State:
-            m_inspectorTitle->SetText(u8"State");
-            BuildStateInspector(m_selected.layer, m_selected.index);
-            break;
-        case GraphSelKind::Transition:
-            m_inspectorTitle->SetText(u8"Transition");
-            BuildTransitionInspector(m_selected.layer, m_selected.index);
-            break;
-        case GraphSelKind::None:
-        default:
-            m_inspectorTitle->SetText(u8"");
-            break;
-        }
-    }
-
-    void AnimationGraphEditorPage::BuildLayerInspector(i32 layerIndex)
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (layerIndex < 0 || static_cast<usize>(layerIndex) >= source.layers.Size())
-        {
-            return;
-        }
-        animation::GraphLayerData& layer = source.layers[static_cast<usize>(layerIndex)];
-        Page page = this;
-        ui::toolkit::PropertyGrid& g = *m_grid;
-        const StringView cat = u8"Layer";
-        AnimationGraphEditorPage* self = this;
-
-        RowString(g, u8"Name", &layer.name, cat, page);
-        static constexpr StringView kBlend[] = {u8"Override", u8"Additive"};
-        RowEnum(g, u8"Blend Mode", static_cast<i32>(layer.blendMode),
-                Span<const StringView>{kBlend, 2},
-                Function<void(i32)>{[&layer, page](i32 v)
-                                    {
-                                        layer.blendMode = static_cast<u8>(v);
-                                        page->CommitEdit(u8"layer-blend");
-                                    }},
-                cat);
-        RowFloat(g, u8"Weight", &layer.weight, cat, page, 0.0, 1.0, 0.01);
-        // Default state dropdown by name.
-        {
-            Array<String> owned;
-            for (const animation::GraphStateData& s : layer.states)
-            {
-                owned.PushBack(String(s.name.AsView()));
-            }
-            Array<StringView> items;
-            for (const String& s : owned)
-            {
-                items.PushBack(s.AsView());
-            }
-            if (!items.IsEmpty())
-            {
-                const i32 layerIdx = layerIndex;
-                RowEnum(
-                    g, u8"Default State",
-                    Clamp(layer.defaultState, 0, static_cast<i32>(items.Size()) - 1),
-                    Span<const StringView>{items.Data(), items.Size()},
-                    Function<void(i32)>{
-                        [self, layerIdx](i32 v)
-                        {
-                            self->QueueStructural(
-                                u8"layer-default",
-                                Function<void()>{
-                                    [self, layerIdx, v]()
-                                    {
-                                        animation::AnimationGraphSource& s = self->m_asset->source;
-                                        if (static_cast<usize>(layerIdx) < s.layers.Size())
-                                        {
-                                            s.layers[static_cast<usize>(layerIdx)].defaultState = v;
-                                        }
-                                    }},
-                                GraphSel{GraphSelKind::Layer, layerIdx, layerIdx});
-                        }},
-                    cat);
-            }
-        }
-        if (source.layers.Size() > 1)
-        {
-            const i32 layerIdx = layerIndex;
-            g.SetCategoryHeaderActions(
-                cat, RemoveIcon(Allocator(), u8"Delete layer",
-                                [self, layerIdx]() { self->DeleteLayer(layerIdx); }));
-        }
-    }
-
-    void AnimationGraphEditorPage::BuildParameterInspector(i32 paramIndex)
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (paramIndex < 0 || static_cast<usize>(paramIndex) >= source.paramNames.Size())
-        {
-            return;
-        }
-        Page page = this;
-        AnimationGraphEditorPage* self = this;
-        ui::toolkit::PropertyGrid& g = *m_grid;
-        const StringView cat = u8"Parameter";
-        const usize p = static_cast<usize>(paramIndex);
-
-        RowString(g, u8"Name", &source.paramNames[p], cat, page);
-        static constexpr StringView kTypes[] = {u8"Float", u8"Int", u8"Bool", u8"Trigger"};
-        RowEnum(g, u8"Type",
-                static_cast<i32>(p < source.paramTypes.Size() ? source.paramTypes[p] : 0),
-                Span<const StringView>{kTypes, 4},
-                Function<void(i32)>{[&source, p, page](i32 v)
-                                    {
-                                        if (p < source.paramTypes.Size())
-                                        {
-                                            source.paramTypes[p] = static_cast<u8>(v);
-                                            page->CommitEdit(u8"param-type");
-                                        }
-                                    }},
-                cat);
-        const u8 type = p < source.paramTypes.Size() ? source.paramTypes[p] : 0;
-        if (type == 0 && p < source.paramFloats.Size())
-        {
-            RowFloat(g, u8"Default", &source.paramFloats[p], cat, page);
-        }
-        else if (type == 1 && p < source.paramInts.Size())
-        {
-            RowInt(g, u8"Default", &source.paramInts[p], cat, page);
-        }
-        else if ((type == 2 || type == 3) && p < source.paramBools.Size())
-        {
-            // Bool stored as u8; edit through a temp.
-            const bool current = source.paramBools[p] != 0;
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::BoolEditor>(
-                           Allocator(), u8"Default", current,
-                           Function<void(bool)>{[&source, p, page](bool v)
-                                                {
-                                                    source.paramBools[p] = v ? 1 : 0;
-                                                    page->CommitEdit(u8"param-default");
-                                                }},
-                           cat)
-                           .Get()));
-        }
-        // Live scrub: when the preview player is running, drive ITS runtime copy of the
-        // parameter directly (no undo - runtime state, not asset data).
-        if (m_player.Get() != nullptr)
-        {
-            const StringView liveCat = u8"Live (preview)";
-            const i32 pi = paramIndex;
-            if (type == 0)
-            {
-                Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                           MakeRef<ui::toolkit::FloatEditor>(
-                               Allocator(), u8"Value",
-                               static_cast<f64>(m_player->GetFloat(pi)), -1e6, 1e6, 0.02, 3,
-                               Function<void(f64)>{[self, pi](f64 v)
-                                                   {
-                                                       if (self->m_player.Get() != nullptr)
-                                                       {
-                                                           self->m_player->SetFloat(
-                                                               pi, static_cast<f32>(v));
-                                                       }
-                                                   }},
-                               liveCat)
-                               .Get()));
-            }
-            else if (type == 1)
-            {
-                Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                           MakeRef<ui::toolkit::IntEditor>(
-                               Allocator(), u8"Value",
-                               static_cast<i64>(m_player->GetInt(pi)), -1000000, 1000000,
-                               Function<void(i64)>{[self, pi](i64 v)
-                                                   {
-                                                       if (self->m_player.Get() != nullptr)
-                                                       {
-                                                           self->m_player->SetInt(
-                                                               pi, static_cast<i32>(v));
-                                                       }
-                                                   }},
-                               liveCat)
-                               .Get()));
-            }
-            else if (type == 2)
-            {
-                Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                           MakeRef<ui::toolkit::BoolEditor>(
-                               Allocator(), u8"Value", m_player->GetBool(pi),
-                               Function<void(bool)>{[self, pi](bool v)
-                                                    {
-                                                        if (self->m_player.Get() != nullptr)
-                                                        {
-                                                            self->m_player->SetBool(pi, v);
-                                                        }
-                                                    }},
-                               liveCat)
-                               .Get()));
-            }
-            else
-            {
-                RowButton(g, u8"Fire Trigger", liveCat,
-                          [self, pi]()
-                          {
-                              if (self->m_player.Get() != nullptr)
-                              {
-                                  self->m_player->SetTrigger(pi);
-                              }
-                          });
-            }
-        }
-
-        const i32 paramIdx = paramIndex;
-        g.SetCategoryHeaderActions(cat,
-                                   RemoveIcon(Allocator(), u8"Delete parameter",
-                                              [self, paramIdx]() { self->DeleteParam(paramIdx); }));
-    }
-
-    void AnimationGraphEditorPage::BuildStateInspector(i32 layerIndex, i32 stateIndex)
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (layerIndex < 0 || static_cast<usize>(layerIndex) >= source.layers.Size())
-        {
-            return;
-        }
-        animation::GraphLayerData& layer = source.layers[static_cast<usize>(layerIndex)];
-        if (stateIndex < 0 || static_cast<usize>(stateIndex) >= layer.states.Size())
-        {
-            return;
-        }
-        animation::GraphStateData& state = layer.states[static_cast<usize>(stateIndex)];
-        Page page = this;
-        AnimationGraphEditorPage* self = this;
-        ui::toolkit::PropertyGrid& g = *m_grid;
-        const StringView cat = u8"State";
-
-        // Name edits relabel the canvas node - structural (rebuild) so the title updates.
-        {
-            const i32 li = layerIndex, si = stateIndex;
-            Add(g,
-                RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::StringEditor>(
-                        Allocator(), u8"Name", state.name.AsView(),
-                        Function<void(StringView)>{
-                            [self, li, si](StringView v)
-                            {
-                                String name(v);
-                                self->QueueStructural(
-                                    u8"state-name",
-                                    Function<void()>{
-                                        [self, li, si, name]()
-                                        {
-                                            animation::AnimationGraphSource& s =
-                                                self->m_asset->source;
-                                            if (static_cast<usize>(li) < s.layers.Size() &&
-                                                static_cast<usize>(si) <
-                                                    s.layers[static_cast<usize>(li)].states.Size())
-                                            {
-                                                s.layers[static_cast<usize>(li)]
-                                                    .states[static_cast<usize>(si)]
-                                                    .name = String(name.AsView());
-                                            }
-                                        }},
-                                    GraphSel{GraphSelKind::State, li, si});
-                            }},
-                        cat)
-                        .Get()));
-        }
-        RowFloat(g, u8"Speed", &state.speed, cat, page, -10.0, 10.0, 0.05);
-        RowBool(g, u8"Loop", &state.loop, cat, page);
-
-        // --- node config (kind-specific) ---
-        animation::GraphNodeData& node = state.node;
-        const String kindCat = Format(u8"{}", NodeKindLabel(node.kind));
-        if (node.kind == 0)
-        {
-            // The state's clip: the shared asset row (pick, drop and clear are one assignment).
-            const i32 li = layerIndex, si = stateIndex;
-            const StringView clipTypes[] = {u8"AnimationClipAsset"};
-            auto clip = MakeRef<app::ResourceRefEditor>(Allocator(), StringView(u8"Clip"),
-                                                        StringView(u8"(none)"), kindCat.AsView(),
-                                                        Span<const StringView>{clipTypes, 1});
-            clip->BindAsset(
-                *m_context,
-                [self, li, si]()
-                {
-                    animation::GraphNodeData* n = self->StateNode(li, si);
-                    return n != nullptr ? n->clipRef : Guid{};
-                },
-                [self, li, si](const Guid& picked)
-                {
-                    if (animation::GraphNodeData* n = self->StateNode(li, si))
-                    {
-                        n->clipRef = picked;
-                        self->CommitEdit(u8"state-clip");
-                        self->Select(GraphSel{GraphSelKind::State, li, si});
-                    }
-                });
-            Add(g, RefPtr<ui::toolkit::PropertyEditor>(clip.Get()));
-        }
-        else
-        {
-            // Blend tree drivers.
-            if (node.kind == 1)
-            {
-                RowParamPick(g, u8"Parameter", source, node.paramIndex,
-                             Function<void(i32)>{[&node, page](i32 v)
-                                                 {
-                                                     node.paramIndex = v;
-                                                     page->CommitEdit(u8"blend-param");
-                                                 }},
-                             kindCat.AsView());
-            }
-            else
-            {
-                RowParamPick(g, u8"Parameter X", source, node.paramIndexX,
-                             Function<void(i32)>{[&node, page](i32 v)
-                                                 {
-                                                     node.paramIndexX = v;
-                                                     page->CommitEdit(u8"blend-param-x");
-                                                 }},
-                             kindCat.AsView());
-                RowParamPick(g, u8"Parameter Y", source, node.paramIndexY,
-                             Function<void(i32)>{[&node, page](i32 v)
-                                                 {
-                                                     node.paramIndexY = v;
-                                                     page->CommitEdit(u8"blend-param-y");
-                                                 }},
-                             kindCat.AsView());
-            }
-
-            // The entries are a section list: the header's add icon, and each entry a section
-            // inside the state's kind with its remove icon (an entry's threshold or position places it, so its order
-            // means nothing).
-            {
-                const i32 li = layerIndex, si = stateIndex;
-                auto entries = MakeRef<app::ContainerListEditor>(
-                    Allocator(), StringView(u8"Entries"), kindCat.AsView());
-                entries->ElementsAsSections = true;
-                for (const Guid& clipId : node.entryClips)
-                {
-                    entries->slotNames.PushBack(String(m_context->AssetNameFor(clipId)));
-                }
-                entries->OnAdd = [self, li, si]()
-                {
-                    self->QueueStructural(u8"add-entry",
-                                          Function<void()>{[self, li, si]()
-                                                           {
-                                                               animation::GraphNodeData* n =
-                                                                   self->StateNode(li, si);
-                                                               if (n != nullptr)
-                                                               {
-                                                                   n->entryClips.PushBack(Guid{});
-                                                                   n->entryThresholds.PushBack(0.0f);
-                                                                   n->entryPositions.PushBack(
-                                                                       Float2{0.0f, 0.0f});
-                                                               }
-                                                           }},
-                                          GraphSel{GraphSelKind::State, li, si});
-                };
-                Add(g, RefPtr<ui::toolkit::PropertyEditor>(entries.Get()));
-            }
-            const usize entryCount = node.entryClips.Size();
-            for (usize e = 0; e < entryCount; ++e)
-            {
-                const String entryCat = Format(u8"Entry {}", e + 1);
-                g.SetCategoryParent(entryCat.AsView(), kindCat.AsView());
-                {
-                    const i32 li = layerIndex, si = stateIndex;
-                    g.SetCategoryHeaderActions(
-                        entryCat.AsView(),
-                        app::ContainerListEditor::ElementActions(
-                            Allocator(), e, entryCount, Function<void(usize, bool)>{},
-                            [self, li, si](usize i)
-                            {
-                                self->QueueStructural(
-                                    u8"del-entry",
-                                    Function<void()>{[self, li, si, i]()
-                                                     {
-                                                         animation::GraphNodeData* n =
-                                                             self->StateNode(li, si);
-                                                         if (n == nullptr)
-                                                         {
-                                                             return;
-                                                         }
-                                                         if (i < n->entryClips.Size())
-                                                         {
-                                                             n->entryClips.RemoveAt(i);
-                                                         }
-                                                         if (i < n->entryThresholds.Size())
-                                                         {
-                                                             n->entryThresholds.RemoveAt(i);
-                                                         }
-                                                         if (i < n->entryPositions.Size())
-                                                         {
-                                                             n->entryPositions.RemoveAt(i);
-                                                         }
-                                                     }},
-                                    GraphSel{GraphSelKind::State, li, si});
-                            }));
-                }
-                if (node.kind == 1)
-                {
-                    while (node.entryThresholds.Size() < node.entryClips.Size())
-                    {
-                        node.entryThresholds.PushBack(0.0f);
-                    }
-                    RowFloat(g, u8"Threshold", &node.entryThresholds[e], entryCat.AsView(), page);
-                }
-                else
-                {
-                    while (node.entryPositions.Size() < node.entryClips.Size())
-                    {
-                        node.entryPositions.PushBack(Float2{0.0f, 0.0f});
-                    }
-                    Add(g, RefPtr<ui::toolkit::PropertyEditor>(
-                               MakeRef<ui::toolkit::Float2Editor>(
-                                   Allocator(), u8"Position", node.entryPositions[e],
-                                   -1000.0f, 1000.0f, 0.05f,
-                                   Function<void(Float2)>{[&node, e, page](Float2 v)
-                                                          {
-                                                              node.entryPositions[e] = v;
-                                                              page->CommitEdit(u8"entry-pos");
-                                                          }},
-                                   entryCat.AsView())
-                                   .Get()));
-                }
-                const i32 li = layerIndex, si = stateIndex;
-                const usize entryIdx = e;
-                const StringView entryTypes[] = {u8"AnimationClipAsset"};
-                auto entryClip = MakeRef<app::ResourceRefEditor>(
-                    Allocator(), StringView(u8"Clip"), StringView(u8"(none)"), entryCat.AsView(),
-                    Span<const StringView>{entryTypes, 1});
-                entryClip->BindAsset(
-                    *m_context,
-                    [self, li, si, entryIdx]()
-                    {
-                        animation::GraphNodeData* n = self->StateNode(li, si);
-                        return n != nullptr && entryIdx < n->entryClips.Size()
-                                   ? n->entryClips[entryIdx]
-                                   : Guid{};
-                    },
-                    [self, li, si, entryIdx](const Guid& picked)
-                    {
-                        animation::GraphNodeData* n = self->StateNode(li, si);
-                        if (n != nullptr && entryIdx < n->entryClips.Size())
-                        {
-                            n->entryClips[entryIdx] = picked;
-                            self->CommitEdit(u8"entry-clip");
-                            self->Select(GraphSel{GraphSelKind::State, li, si});
-                        }
-                    });
-                Add(g, RefPtr<ui::toolkit::PropertyEditor>(entryClip.Get()));
-            }
-        }
-    }
-
-    void AnimationGraphEditorPage::BuildTransitionInspector(i32 layerIndex, i32 transitionIndex)
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (layerIndex < 0 || static_cast<usize>(layerIndex) >= source.layers.Size())
-        {
-            return;
-        }
-        animation::GraphLayerData& layer = source.layers[static_cast<usize>(layerIndex)];
-        if (transitionIndex < 0 || static_cast<usize>(transitionIndex) >= layer.transitions.Size())
-        {
-            return;
-        }
-        animation::GraphTransitionData& transition =
-            layer.transitions[static_cast<usize>(transitionIndex)];
-        Page page = this;
-        AnimationGraphEditorPage* self = this;
-        ui::toolkit::PropertyGrid& g = *m_grid;
-        const StringView cat = u8"Transition";
-
-        // Readout: src -> dst by state name.
-        {
-            auto nameOf = [&layer](i32 idx) -> String
-            {
-                if (idx < 0)
-                {
-                    return String(u8"Any State");
-                }
-                if (static_cast<usize>(idx) < layer.states.Size())
-                {
-                    return String(layer.states[static_cast<usize>(idx)].name.AsView());
-                }
-                return String(u8"?");
-            };
-            String route = nameOf(transition.src);
-            route.Append(u8"  ->  ");
-            route.Append(nameOf(transition.dst).AsView());
-            m_inspectorTitle->SetText(route.AsView());
-        }
-
-        RowFloat(g, u8"Duration (s)", &transition.duration, cat, page, 0.0, 10.0, 0.01);
-        RowBool(g, u8"Has Exit Time", &transition.hasExitTime, cat, page);
-        RowFloat(g, u8"Exit Time", &transition.exitTime, cat, page, 0.0, 1.0, 0.01);
-        RowInt(g, u8"Priority", &transition.priority, cat, page, -100, 100);
-
-        // The conditions are a section list, all of them required, so their order means
-        // nothing: the header's add icon, and each condition a section inside the transition's
-        // with its remove icon.
-        const i32 li = layerIndex, ti = transitionIndex;
-        auto conditions =
-            MakeRef<app::ContainerListEditor>(Allocator(), StringView(u8"Conditions"), cat);
-        conditions->ElementsAsSections = true;
-        for (const animation::GraphConditionData& condition : transition.conditions)
-        {
-            const bool named = condition.paramIndex >= 0 &&
-                               static_cast<usize>(condition.paramIndex) < source.paramNames.Size();
-            conditions->slotNames.PushBack(
-                named ? source.paramNames[static_cast<usize>(condition.paramIndex)]
-                      : String(u8"(none)"));
-        }
-        conditions->OnAdd = [self, li, ti]()
-        {
-            self->QueueStructural(u8"add-cond",
-                                  Function<void()>{[self, li, ti]()
-                                                   {
-                                                       if (animation::GraphTransitionData* t =
-                                                               self->TransitionAt(li, ti))
-                                                       {
-                                                           t->conditions.PushBack(
-                                                               animation::GraphConditionData{});
-                                                       }
-                                                   }},
-                                  GraphSel{GraphSelKind::Transition, li, ti});
-        };
-        Add(g, RefPtr<ui::toolkit::PropertyEditor>(conditions.Get()));
-        const usize conditionCount = transition.conditions.Size();
-        for (usize c = 0; c < conditionCount; ++c)
-        {
-            animation::GraphConditionData& condition = transition.conditions[c];
-            const String condCat = Format(u8"Condition {}", c + 1);
-            g.SetCategoryParent(condCat.AsView(), cat);
-            g.SetCategoryHeaderActions(
-                condCat.AsView(),
-                app::ContainerListEditor::ElementActions(
-                    Allocator(), c, conditionCount, Function<void(usize, bool)>{},
-                    [self, li, ti](usize i)
-                    {
-                        self->QueueStructural(
-                            u8"del-cond",
-                            Function<void()>{[self, li, ti, i]()
-                                             {
-                                                 animation::GraphTransitionData* t =
-                                                     self->TransitionAt(li, ti);
-                                                 if (t != nullptr && i < t->conditions.Size())
-                                                 {
-                                                     t->conditions.RemoveAt(i);
-                                                 }
-                                             }},
-                            GraphSel{GraphSelKind::Transition, li, ti});
-                    }));
-            RowParamPick(g, u8"Parameter", source, condition.paramIndex,
-                         Function<void(i32)>{[&condition, page](i32 v)
-                                             {
-                                                 condition.paramIndex = v;
-                                                 page->CommitEdit(u8"cond-param");
-                                             }},
-                         condCat.AsView());
-            static constexpr StringView kOps[] = {u8"==", u8"!=", u8">", u8"<", u8">=", u8"<="};
-            RowEnum(g, u8"Compare", static_cast<i32>(condition.op), Span<const StringView>{kOps, 6},
-                    Function<void(i32)>{[&condition, page](i32 v)
-                                        {
-                                            condition.op = static_cast<u8>(v);
-                                            page->CommitEdit(u8"cond-op");
-                                        }},
-                    condCat.AsView());
-            RowFloat(g, u8"Threshold", &condition.threshold, condCat.AsView(), page);
-        }
-    }
-
-    // ============================ Structural internals ======================================
-
-    void AnimationGraphEditorPage::DeleteStateInternal(i32 layerIndex, i32 stateIndex)
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (layerIndex < 0 || static_cast<usize>(layerIndex) >= source.layers.Size())
-        {
-            return;
-        }
-        animation::GraphLayerData& layer = source.layers[static_cast<usize>(layerIndex)];
-        if (stateIndex < 0 || static_cast<usize>(stateIndex) >= layer.states.Size())
-        {
-            return;
-        }
-        layer.states.RemoveAt(static_cast<usize>(stateIndex));
-        // Transitions: drop the ones touching the state, remap indices above it.
-        for (i32 t = static_cast<i32>(layer.transitions.Size()) - 1; t >= 0; --t)
-        {
-            animation::GraphTransitionData& tr = layer.transitions[static_cast<usize>(t)];
-            if (tr.src == stateIndex || tr.dst == stateIndex)
-            {
-                layer.transitions.RemoveAt(static_cast<usize>(t));
-                continue;
-            }
-            if (tr.src > stateIndex)
-            {
-                tr.src--;
-            }
-            if (tr.dst > stateIndex)
-            {
-                tr.dst--;
-            }
-        }
-        if (layer.defaultState == stateIndex)
-        {
-            layer.defaultState = 0;
-        }
-        else if (layer.defaultState > stateIndex)
-        {
-            layer.defaultState--;
-        }
-        // Layout array stays parallel.
-        Array<Float2>& positions = m_asset->layerStatePositions[static_cast<usize>(layerIndex)];
-        if (static_cast<usize>(stateIndex) < positions.Size())
-        {
-            positions.RemoveAt(static_cast<usize>(stateIndex));
-        }
-    }
-
-    void AnimationGraphEditorPage::DeleteParameterInternal(i32 paramIndex)
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (paramIndex < 0 || static_cast<usize>(paramIndex) >= source.paramNames.Size())
-        {
-            return;
-        }
-        const usize p = static_cast<usize>(paramIndex);
-        source.paramNames.RemoveAt(p);
-        if (p < source.paramTypes.Size())
-        {
-            source.paramTypes.RemoveAt(p);
-        }
-        if (p < source.paramFloats.Size())
-        {
-            source.paramFloats.RemoveAt(p);
-        }
-        if (p < source.paramInts.Size())
-        {
-            source.paramInts.RemoveAt(p);
-        }
-        if (p < source.paramBools.Size())
-        {
-            source.paramBools.RemoveAt(p);
-        }
-        // Remap references: conditions on it DROP; blend drivers on it clear to -1; higher
-        // indices decrement.
-        auto remap = [paramIndex](i32& index)
-        {
-            if (index == paramIndex)
-            {
-                index = -1;
-            }
-            else if (index > paramIndex)
-            {
-                index--;
-            }
-        };
-        for (animation::GraphLayerData& layer : source.layers)
-        {
-            for (animation::GraphStateData& state : layer.states)
-            {
-                remap(state.node.paramIndex);
-                remap(state.node.paramIndexX);
-                remap(state.node.paramIndexY);
-            }
-            for (animation::GraphTransitionData& transition : layer.transitions)
-            {
-                for (i32 c = static_cast<i32>(transition.conditions.Size()) - 1; c >= 0; --c)
-                {
-                    animation::GraphConditionData& condition =
-                        transition.conditions[static_cast<usize>(c)];
-                    if (condition.paramIndex == paramIndex)
-                    {
-                        transition.conditions.RemoveAt(static_cast<usize>(c));
-                    }
-                    else if (condition.paramIndex > paramIndex)
-                    {
-                        condition.paramIndex--;
-                    }
-                }
-            }
-        }
-    }
-
-    // ============================ Undo ======================================================
-
-    Array<byte> AnimationGraphEditorPage::SnapshotAsset() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        m_asset->Serialize(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void AnimationGraphEditorPage::ApplyAssetBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        // If-changed guard: Execute() at push time is a no-op (state already applied live).
-        Array<byte> current = SnapshotAsset();
-        if (current.Size() == blob.Size())
-        {
-            bool same = true;
-            for (usize i = 0; i < blob.Size(); ++i)
-            {
-                if (current[i] != blob[i])
-                {
-                    same = false;
-                    break;
-                }
-            }
-            if (same)
-            {
-                return;
-            }
-        }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        // Reset the asset to defaults, then deserialize (arrays are appended by Serialize;
-        // the source is an ISerializable - no copy assign - so clear its arrays in place).
-        m_asset->source.paramNames.Clear();
-        m_asset->source.paramTypes.Clear();
-        m_asset->source.paramFloats.Clear();
-        m_asset->source.paramInts.Clear();
-        m_asset->source.paramBools.Clear();
-        m_asset->source.layers.Clear();
-        m_asset->layerStatePositions.Clear();
-        m_asset->layerAnyStatePositions.Clear();
-        m_asset->Serialize(ar);
-        m_undoBaseline = blob;
-        SyncLayoutArrays();
-        const i32 layerCount = static_cast<i32>(m_asset->source.layers.Size());
-        m_selectedLayer = Clamp(m_selectedLayer, 0, Max(layerCount - 1, 0));
-        AnimationGraphEditorPage* self = this;
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(Function<void()>{[self]()
-                                                                 {
-                                                                     self->RebuildLeftPanel();
-                                                                     self->RebuildCanvas();
-                                                                     self->RebuildInspector();
-                                                                     self->RebuildPreviewGraph();
-                                                                 }});
-        }
-        else
-        {
-            RebuildLeftPanel();
-            RebuildCanvas();
-            RebuildInspector();
-            RebuildPreviewGraph();
-        }
-        MarkDirty();
-    }
-
-    void AnimationGraphEditorPage::CommitEdit(StringView mergeKey)
-    {
-        Array<byte> after = SnapshotAsset();
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditGraphCommand>(*this, mergeKey, m_undoBaseline, after),
-            Allocator()));
-        m_undoBaseline = Move(after);
-        RebuildPreviewGraph();
-        MarkDirty();
-    }
-
-    // ============================ Live preview ==============================================
-
-    animation::GraphNodeData* AnimationGraphEditorPage::StateNode(i32 layer, i32 state) const
-    {
-        animation::AnimationGraphSource& source = m_asset->source;
-        if (layer < 0 || state < 0 || static_cast<usize>(layer) >= source.layers.Size() ||
-            static_cast<usize>(state) >= source.layers[static_cast<usize>(layer)].states.Size())
-        {
-            return nullptr;
-        }
-        return &source.layers[static_cast<usize>(layer)].states[static_cast<usize>(state)].node;
-    }
-
-    void AnimationGraphEditorPage::SetPreviewSkeleton(const Guid& id)
-    {
-        m_skeletonGuid = id;
-        if (m_context->Resources() != nullptr && !id.IsNil())
-        {
-            m_skeleton = m_context->Resources()->Bind<animation::Skeleton>(id);
-        }
-        else
-        {
-            m_skeleton = foundation::resource::Proxy<animation::Skeleton>{};
-        }
-        if (m_skeletonSlot.Get() != nullptr)
-        {
-            m_skeletonSlot->Editor().Refresh();
-        }
-    }
-
-    void AnimationGraphEditorPage::SetPreviewMesh(const Guid& id)
-    {
-        m_previewMeshId = id;
-        if (m_context->Resources() != nullptr && !id.IsNil())
-        {
-            m_previewMesh = m_context->Resources()->Bind<foundation::geometry::StaticMesh>(id);
-        }
-        else
-        {
-            m_previewMesh = foundation::resource::Proxy<foundation::geometry::StaticMesh>{};
-        }
-        // Point the preview MeshComponent at the mesh (skinning matrices feed per frame).
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        if (scenePtr != nullptr)
-        {
-            if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-            {
-                if (auto* mc = meshes->Get(m_meshEntity))
-                {
-                    if (foundation::geometry::StaticMesh* pm = m_previewMesh.Get())
-                    {
-                        mc->mesh = pm;
-                    }
-                    else
-                    {
-                        mc->mesh.SetDirect(RefPtr<foundation::geometry::StaticMesh>{});
-                    }
-                }
-            }
-        }
-        if (m_meshSlot.Get() != nullptr)
-        {
-            m_meshSlot->Editor().Refresh();
-        }
-    }
-
-    void AnimationGraphEditorPage::RebuildPreviewGraph()
-    {
-        // Tear down in dependency order: the player borrows graph + skeleton.
+        // Torn down in order: the player borrows the graph and the skeleton.
         m_player.Reset();
-        m_previewGraph = RefPtr<animation::AnimationGraph>{};
-        m_playerSkeleton = nullptr;
-        m_lastHighlightedNode = -1;
-        if (m_asset.Get() == nullptr || m_context->Resources() == nullptr)
-        {
+        m_graph = RefPtr<animation::AnimationGraph>{};
+        m_playerSkeleton = m_rig ? m_rig->Skeleton() : nullptr;
+        m_lit = 0;
+        const pipeline::AnimationGraphAsset* asset = Graph();
+        if (asset == nullptr || Context().Resources() == nullptr || m_playerSkeleton == nullptr || m_playerSkeleton->BoneCount() <= 0)
             return;
-        }
-        animation::Skeleton* skeleton = m_skeleton.Get();
-        if (skeleton == nullptr || skeleton->BoneCount() <= 0)
-        {
+        m_graph = MakeRef<animation::AnimationGraph>(Allocator());
+        asset->source.BuildInto(*Context().Resources(), *m_graph); // the clips bound by their guids, as the game binds them
+        if (m_graph->Layers().IsEmpty())
             return;
-        }
-        m_previewGraph = MakeRef<animation::AnimationGraph>(Allocator());
-        m_asset->source.BuildInto(*m_context->Resources(), *m_previewGraph);
-        if (m_previewGraph->Layers().IsEmpty())
-        {
-            return;
-        }
-        m_player = MakeUnique<animation::AnimationGraphPlayer>(Allocator(), *m_previewGraph,
-                                                               *skeleton);
-        m_playerSkeleton = skeleton;
+        m_player = MakeUnique<animation::AnimationGraphPlayer>(Allocator(), *m_graph, *m_playerSkeleton);
+        ApplyLive();
     }
 
-    void AnimationGraphEditorPage::UpdatePreview(f32 dt)
+    void AnimationGraphEditorPage::ApplyLive()
     {
-        // Skeleton hot-reload (or first resolve): the proxy's object changed identity.
-        if (m_skeleton.Get() != m_playerSkeleton)
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (!m_player || graph == nullptr)
+            return;
+        for (usize p = 0; p < m_live.Size() && p < graph->source.paramNames.Size(); ++p)
         {
-            RebuildPreviewGraph();
+            const u8 type = p < graph->source.paramTypes.Size() ? graph->source.paramTypes[p] : 0;
+            const i32 index = static_cast<i32>(p);
+            if (type == 0)
+                m_player->SetFloat(index, static_cast<f32>(m_live[p]));
+            else if (type == 1)
+                m_player->SetInt(index, static_cast<i32>(m_live[p]));
+            else if (type == 2)
+                m_player->SetBool(index, m_live[p] != 0.0);
         }
-        if (m_player.Get() == nullptr)
+    }
+
+    void AnimationGraphEditorPage::Pose(f32 dt)
+    {
+        if (!m_rig)
+            return;
+        if (m_rebuild || (m_rig->Skeleton() != m_playerSkeleton))
         {
-            if (m_previewStatus.Get() != nullptr)
-            {
-                m_previewStatus->SetText(m_skeletonGuid.IsNil() ? u8"pick a skeleton to preview"
-                                                                : u8"(skeleton not cooked yet)");
-            }
+            m_rebuild = false;
+            RebuildPlayer();
+        }
+        if (m_pane)
+        {
+            if (m_rig->Skeleton() == nullptr)
+                m_pane->ShowEmpty(u8"No skeleton to play it on", u8"Pick the skeleton its clips belong to on the preview's bar.");
+            else
+                m_pane->Show();
+        }
+        if (!m_player)
+        {
+            m_rig->Show(Span<const animation::BoneTransform>{});
             return;
         }
-        if (m_previewPlaying)
-        {
+        if (m_playing)
             m_player->Update(dt);
-        }
-        // Root motion: read every frame (so it never piles up), applied while Travel is on.
+        // Its root motion read every frame, so it never piles up; applied while it travels, and
+        // back to the middle once it has gone a few metres.
         const animation::RootMotionDelta moved = m_player->ConsumeRootMotion();
-        if (m_showTravel)
+        if (m_travel)
         {
-            m_travelPosition = m_travelPosition +
-                               RotateVector(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw),
-                                            moved.translation);
+            m_travelPosition = m_travelPosition + RotateVector(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw), moved.translation);
             m_travelYaw += moved.yaw;
             if (Length(Float3{m_travelPosition.x, 0.0f, m_travelPosition.z}) > 6.0f)
-            {
-                m_travelPosition = Float3{}; // back to the middle of the grid
-            }
+                m_travelPosition = Float3{};
         }
-        const Float4x4 travel =
-            RotationMatrix(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw)) *
-            Float4x4::Translation(m_travelPosition);
+        const Float4x4 base = RotationMatrix(Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw)) * Float4x4::Translation(m_travelPosition);
+        m_rig->Show(m_player->GetLocalPoses(), base);
 
-        // Status readout + ACTIVE-state ring on the canvas.
-        const i32 current = m_player->GetCurrentStateIndex(
-            Min(m_selectedLayer, static_cast<i32>(m_previewGraph->Layers().Size()) - 1));
-        if (m_previewStatus.Get() != nullptr)
+        // The state it plays lit on the graph.
+        const i32 layers = static_cast<i32>(m_graph->Layers().Size());
+        const i32 current = m_player->GetCurrentStateIndex(Min(m_layer, layers - 1));
+        const gui::GraphId lit = current >= 0 ? m_states->StateId(current) : 0;
+        if (lit != m_lit && m_view != nullptr)
         {
-            String status;
-            animation::GraphLayerData* layer = SelectedLayer();
-            if (layer != nullptr && current >= 0 &&
-                static_cast<usize>(current) < layer->states.Size())
-            {
-                status.Append(layer->states[static_cast<usize>(current)].name.AsView());
-            }
-            if (m_player->IsTransitioning(m_selectedLayer))
-            {
-                status.Append(u8"  (transitioning)");
-            }
-            m_previewStatus->SetText(status.AsView());
-        }
-        const i32 highlightNode = (current >= 0) ? StateToNode(current) : -1;
-        if (highlightNode != m_lastHighlightedNode)
-        {
-            for (i32 n = 0; n < m_canvas->NodeCount(); ++n)
-            {
-                if (ui::toolkit::NodeGraphNode* node = m_canvas->GetNode(n))
-                {
-                    node->IsHighlighted = (n == highlightNode);
-                }
-            }
-            m_lastHighlightedNode = highlightNode;
-            m_canvas->Invalidate();
-        }
-
-        if (m_preview.Get() == nullptr || !m_preview->IsValid())
-        {
-            return;
-        }
-        scene::Scene* scenePtr = m_preview->Scene();
-
-        // Skinned preview mesh: feed the graph player's skinning matrices to the MeshComponent
-        // (borrowed for this frame's render); the toggle shows/hides the whole mesh entity.
-        if (scenePtr != nullptr && m_meshEntity.IsAssigned())
-        {
-            const bool meshVisible = m_showMesh && m_previewMesh.Get() != nullptr;
-            scenePtr->SetActive(m_meshEntity, meshVisible);
-            Transform at;
-            at.position = m_travelPosition;
-            at.rotation = Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_travelYaw);
-            scenePtr->SetLocalTransform(m_meshEntity, at);
-            if (meshVisible)
-            {
-                const Span<const Float4x4> mats = m_player->GetSkinningMatrices();
-                if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
-                {
-                    if (auto* mc = meshes->Get(m_meshEntity))
-                    {
-                        mc->boneMatrices = mats.Data();
-                        mc->boneCount = static_cast<u32>(mats.Size());
-                    }
-                }
-            }
-        }
-
-        // Bone wireframe + ground grid into the preview scene's debug lane.
-        auto& draw = m_preview->SceneDebugDraw();
-        draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
-        if (m_showSkeleton)
-        {
-            DrawSkeletonWireframe(draw, *m_playerSkeleton, m_player->GetLocalPoses(), m_worldScratch, travel);
+            m_lit = lit;
+            m_view->SetHighlightedNodes(lit != 0 ? Span<const gui::GraphId>(&m_lit, 1u) : Span<const gui::GraphId>{});
         }
     }
 
-    void DrawSkeletonWireframe(foundation::render::debug::DebugDraw& draw,
-                               animation::Skeleton& skeleton,
-                               Span<const animation::BoneTransform> localPoses,
-                               Array<Float4x4>& worldScratch, const Float4x4& base)
+    void AnimationGraphEditorPage::ShowTransport()
     {
-        const usize boneCount = static_cast<usize>(skeleton.BoneCount());
-        if (boneCount == 0 || localPoses.Size() < boneCount)
-        {
+        if (m_state == nullptr)
             return;
-        }
-        worldScratch.Resize(boneCount);
-        skeleton.ComputeWorldPoses(localPoses, Span<Float4x4>{worldScratch.Data(), boneCount});
-        for (usize b = 0; b < boneCount; ++b)
+        String text;
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        if (!m_player)
+            text = String(m_rig && m_rig->Skeleton() == nullptr ? StringView(u8"No skeleton") : StringView(u8"Not cooked yet"));
+        else if (graph != nullptr)
         {
-            worldScratch[b] = worldScratch[b] * base;
+            const i32 layers = static_cast<i32>(m_graph->Layers().Size());
+            const i32 layer = Min(m_layer, layers - 1);
+            const i32 current = m_player->GetCurrentStateIndex(layer);
+            const auto& states = graph->source.layers[static_cast<usize>(m_layer)].states;
+            text = current >= 0 && static_cast<usize>(current) < states.Size() ? String(states[static_cast<usize>(current)].name.AsView()) : String(u8"No state");
+            if (m_player->IsTransitioning(layer))
+                text += u8" (blending in)";
         }
-        const Color boneColor{0.35f, 0.85f, 1.0f, 1.0f};
-        for (usize b = 0; b < boneCount; ++b)
+        if (m_state->GetText() != text.AsView())
+            m_state->SetText(text.AsView());
+        if (m_playing)
         {
-            const animation::Bone* bone = skeleton.GetBone(static_cast<i32>(b));
-            const Float4x4& world = worldScratch[b];
-            const Float3 pos{world.m[3][0], world.m[3][1], world.m[3][2]};
-            if (bone != nullptr && bone->parentIndex >= 0 &&
-                static_cast<usize>(bone->parentIndex) < boneCount)
-            {
-                const Float4x4& parent = worldScratch[static_cast<usize>(bone->parentIndex)];
-                draw.DrawLine(Float3{parent.m[3][0], parent.m[3][1], parent.m[3][2]}, pos,
-                              boneColor);
-            }
-            draw.DrawCross(pos, 0.02f, boneColor);
+            m_state->AddClass(u8"playing");
+            m_state->RemoveClass(u8"paused");
+        }
+        else
+        {
+            m_state->AddClass(u8"paused");
+            m_state->RemoveClass(u8"playing");
         }
     }
 
-
-    // ============================ Frame / save / close ======================================
+    void AnimationGraphEditorPage::FramePreview()
+    {
+        if (m_rig && m_rig->Frame())
+            return;
+        if (m_pane && m_pane->Viewport() != nullptr)
+        {
+            m_pane->Viewport()->Camera().position = Float3{0.0f, 1.4f, 3.2f};
+            m_pane->Viewport()->Camera().LookAt(Float3{0.0f, 0.9f, 0.0f});
+        }
+    }
 
     void AnimationGraphEditorPage::Stop()
     {
-        m_previewPlaying = false;
-        RebuildPreviewGraph(); // a rebuild is the rewind
+        // Back to where the graph starts: a player made anew, its parameters as the preview set them.
+        m_playing = false;
+        m_travelPosition = Float3{};
+        m_travelYaw = 0.0f;
+        m_rebuild = true;
     }
 
     void AnimationGraphEditorPage::Restart()
     {
-        RebuildPreviewGraph();
-        m_previewPlaying = true;
+        Stop();
+        m_playing = true;
     }
 
-    void AnimationGraphEditorPage::OnUpdate(runtime::IApplicationHost&, f32 dt)
+    void AnimationGraphEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
     {
-        if (m_toolbar.Get() != nullptr)
+        app::AssetObjectPage::OnUpdate(host, dt);
+        // The layer's states in view once the view has its size (the first frame it is laid out).
+        if (!m_graphFramed && m_view != nullptr && m_view->GetContentBounds().width > 0.0f)
         {
-            m_toolbar->Refresh(); // the page's actions and the transport follow it each frame
+            m_graphFramed = true;
+            m_view->FrameAll();
         }
-        UpdatePreview(dt);
-        if (m_preview)
-        {
-            m_preview->Update(dt);
-        }
+        Pose(dt);
+        ShowTransport();
+        if (m_pane)
+            m_pane->Update(dt);
     }
 
-    void AnimationGraphEditorPage::OnRenderWindow(runtime::IApplicationHost&,
-                                                  foundation::graphics::FrameContext& frame)
+    void AnimationGraphEditorPage::OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        if (m_preview)
-        {
-            m_preview->RenderFrame(frame);
-        }
-    }
-
-    Status AnimationGraphEditorPage::Save()
-    {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false);
-            LOG_INFO(u8"Editor", u8"saved animation graph '{}'", m_title);
-        }
-        return saved;
+        if (m_pane)
+            m_pane->Render(frame);
     }
 
     void AnimationGraphEditorPage::OnClose()
     {
-        m_player.Reset();
-        m_previewGraph = RefPtr<animation::AnimationGraph>{};
-        if (m_preview)
-        {
-            m_preview->Shutdown();
-        }
+        if (m_pane)
+            m_pane->Close();
     }
 
-    // ============================ Factory / creator =========================================
+    // === The factory ===
 
     const TypeInfo* AnimationGraphPageFactory::PrimaryType() const
     {
         return &pipeline::AnimationGraphAsset::StaticType();
     }
 
-    UniquePtr<EditorPage>
-    AnimationGraphPageFactory::CreatePage(EditorContext& context,
-                                          foundation::content::Instance& instance)
+    UniquePtr<EditorPage> AnimationGraphPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page =
-            editor::EditorRootAllocator().New<AnimationGraphEditorPage>(context, *m_host, *m_uiHost, instance);
+        auto* page = editor::EditorRootAllocator().New<AnimationGraphEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    void RegisterAnimationGraphEditor(EditorContext& context, runtime::IApplicationHost& host,
-                                      ui::runtime::UIHost& uiHost)
+    void RegisterAnimationGraphEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        // The preview-prefs section (registered before the app loads the per-project store).
+        // The preview prefs' section, registered before the app reads the per-project store.
         GlobalTypeRegistry().Register(GraphPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<GraphPreviewSettings>();
-
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<AnimationGraphPageFactory>(host, uiHost), editor::EditorRootAllocator()));
-
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<AnimationGraphPageFactory>(services),
+                                                               editor::EditorRootAllocator()));
     }
 
     RTTI_DEFINE_OBJECT_VERSIONED(GraphPreviewSettings, "rtti::editor::editor.graph", 1)

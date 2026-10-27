@@ -77,7 +77,7 @@ import editor.script; // RegisterScriptEditor
 import editor.shaders; // RegisterShaderEditor
 import editor.gui; // RegisterGuiEditor
 import editor.particles; // RegisterParticleEditor
-import editor.animation; // RegisterAnimationClipEditor, RegisterSkeletonEditor
+import editor.animation; // RegisterAnimationClipEditor, RegisterSkeletonEditor, RegisterAnimationGraphEditor
 import texture.pipeline;
 import fonts.pipeline;
 import image.pipeline;
@@ -331,6 +331,7 @@ int main(int argc, char** argv)
         editor::RegisterParticleEditor(app.Context(), pageServices);
         editor::RegisterAnimationClipEditor(app.Context(), pageServices);
         editor::RegisterSkeletonEditor(app.Context(), pageServices);
+        editor::RegisterAnimationGraphEditor(app.Context(), pageServices);
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too): the script page's check compiles through them.

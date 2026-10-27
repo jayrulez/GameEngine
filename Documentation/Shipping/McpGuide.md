@@ -201,7 +201,8 @@ numbers there; `type_info` on the field's type names the cases.
 The engine GUI's assets are linked text, as scripts are:
 `asset_create` with `GUI Document` (`.gml` markup) or `GUI Style Sheet` (`.css`), or
 `asset_import` of such a file, each validated by its cook (what the loader or parser dropped is a
-warning, markup that does not build an error); they reference images, vector images, fonts, sheets
+warning, markup that does not build an error; `gui_validate` runs that check on text before it is
+saved: loop on it while writing a screen, then edit the asset's linked source file and cook); they reference images, vector images, fonts, sheets
 and documents by asset guid (`{guid}`), each a dependency of the cook. A scene shows them with
 `gui.Canvas`, `gui.Billboard` and `gui.WorldPanel`; the editor's page for each is its text beside a
 live preview.

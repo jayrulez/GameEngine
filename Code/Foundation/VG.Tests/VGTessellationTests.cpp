@@ -59,12 +59,16 @@ TEST_CASE("vg.fill: AA adds an inner+outer fringe ring")
     // Inner ring (4) + outer ring (4); fringe quads + inner fan.
     CHECK(verts.Size() == 8u);
     CHECK(idx.Size() > 6u);
-    // Outer ring vertices are the transparent fringe (coverage 0).
-    bool sawTransparent = false;
+    // Outer ring vertices are the fringe: no coverage, the colour's own alpha (the shader
+    // multiplies the two, so fading alpha as well would square the ramp).
+    usize fringe = 0;
     for (usize i = 0; i < verts.Size(); ++i)
-        if (verts[i].coverage == 0.0f && verts[i].color.a == 0.0f)
-            sawTransparent = true;
-    CHECK(sawTransparent);
+        if (verts[i].coverage == 0.0f)
+        {
+            ++fringe;
+            CHECK(verts[i].color == Color::Red);
+        }
+    CHECK(fringe == 4u);
 }
 
 TEST_CASE("vg.fill: gradient fill interpolates per-vertex color (no AA)")

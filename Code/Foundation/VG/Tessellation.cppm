@@ -598,7 +598,6 @@ export namespace foundation::vg
             Array<Float2> normals;
             ComputeFringeNormals(points, normals);
 
-            const Color transColor{color.r, color.g, color.b, 0.0f};
             Array<Color> innerColors;
             Array<Color> outerColors;
             innerColors.Resize(n);
@@ -606,7 +605,7 @@ export namespace foundation::vg
             for (usize i = 0; i < n; ++i)
             {
                 innerColors[i] = color;
-                outerColors[i] = transColor;
+                outerColors[i] = color; // faded by coverage alone (EmitFringeRing)
             }
 
             EmitFringeRing(points, fillRule, normals, innerColors, outerColors, vertices, indices,
@@ -649,7 +648,7 @@ export namespace foundation::vg
             {
                 const Color fc = fill.GetColorAt(points[i], bounds);
                 innerColors[i] = fc;
-                outerColors[i] = Color{fc.r, fc.g, fc.b, 0.0f};
+                outerColors[i] = fc; // faded by coverage alone: alpha too would square the ramp
             }
 
             EmitFringeRing(points, fillRule, normals, innerColors, outerColors, vertices, indices,
@@ -796,19 +795,26 @@ export namespace foundation::vg
                 }
             }
 
+            // The fringe straddles the stroke's edge, so the stroke covers its own width: solid to
+            // half a fringe inside the edge, nothing half a fringe outside it. The fringe keeps the
+            // colour's alpha and fades by coverage alone (the shader multiplies the two; fading
+            // both squared the ramp to a stepped edge). A stroke thinner than the fringe is solid
+            // nowhere: it is drawn as wide as its fringe, at the alpha that covers its own width.
+            const f32 innerHalf = Max(halfWidth - fringeWidth * 0.5f, 0.0f);
+            const f32 outerHalf = halfWidth + fringeWidth * 0.5f;
+            Color strokeColor = color;
+            if (antiAlias && halfWidth - fringeWidth * 0.5f < 0.0f)
+                strokeColor.a *= 2.0f * halfWidth / outerHalf;
+
             if (antiAlias)
             {
-                const Color transColor{color.r, color.g, color.b, 0.0f};
-
                 // Ring 0: outer fringe (left side, coverage=0).
                 const u32 outerLeftBase = static_cast<u32>(vertices.Size());
                 for (i32 i = 0; i < n; ++i)
                 {
                     const Float2 p = points[static_cast<usize>(i)];
-                    const Float2 bodyOffset = vertNormals[static_cast<usize>(i)] * halfWidth;
-                    const Float2 fringeOffset = unitNormals[static_cast<usize>(i)] * fringeWidth;
-                    vertices.PushBack(
-                        VGVertex::Solid(p + bodyOffset + fringeOffset, transColor, 0.0f));
+                    const Float2 offset = vertNormals[static_cast<usize>(i)] * outerHalf;
+                    vertices.PushBack(VGVertex::Solid(p + offset, strokeColor, 0.0f));
                 }
 
                 // Ring 1: stroke left edge (coverage=1).
@@ -816,8 +822,8 @@ export namespace foundation::vg
                 for (i32 i = 0; i < n; ++i)
                 {
                     const Float2 p = points[static_cast<usize>(i)];
-                    const Float2 offset = vertNormals[static_cast<usize>(i)] * halfWidth;
-                    vertices.PushBack(VGVertex::Solid(p + offset, color, 1.0f));
+                    const Float2 offset = vertNormals[static_cast<usize>(i)] * innerHalf;
+                    vertices.PushBack(VGVertex::Solid(p + offset, strokeColor, 1.0f));
                 }
 
                 // Ring 2: stroke right edge (coverage=1).
@@ -825,8 +831,8 @@ export namespace foundation::vg
                 for (i32 i = 0; i < n; ++i)
                 {
                     const Float2 p = points[static_cast<usize>(i)];
-                    const Float2 offset = vertNormals[static_cast<usize>(i)] * halfWidth;
-                    vertices.PushBack(VGVertex::Solid(p - offset, color, 1.0f));
+                    const Float2 offset = vertNormals[static_cast<usize>(i)] * innerHalf;
+                    vertices.PushBack(VGVertex::Solid(p - offset, strokeColor, 1.0f));
                 }
 
                 // Ring 3: outer fringe (right side, coverage=0).
@@ -834,10 +840,8 @@ export namespace foundation::vg
                 for (i32 i = 0; i < n; ++i)
                 {
                     const Float2 p = points[static_cast<usize>(i)];
-                    const Float2 bodyOffset = vertNormals[static_cast<usize>(i)] * halfWidth;
-                    const Float2 fringeOffset = unitNormals[static_cast<usize>(i)] * fringeWidth;
-                    vertices.PushBack(
-                        VGVertex::Solid(p - bodyOffset - fringeOffset, transColor, 0.0f));
+                    const Float2 offset = vertNormals[static_cast<usize>(i)] * outerHalf;
+                    vertices.PushBack(VGVertex::Solid(p - offset, strokeColor, 0.0f));
                 }
 
                 const i32 segCount = closed ? n : n - 1;
@@ -906,9 +910,10 @@ export namespace foundation::vg
 
                 const i32 prevEdge = closed ? (i + edgeCount - 1) % edgeCount : i - 1;
                 const i32 nextEdge = closed ? i % edgeCount : i;
+                // At the solid radius: the body's mitred edge (and its fringe) covers the corner.
                 AddJoin(points[static_cast<usize>(i)], edgeNormals[static_cast<usize>(prevEdge)],
-                        edgeNormals[static_cast<usize>(nextEdge)], halfWidth, style.join, color,
-                        vertices, indices);
+                        edgeNormals[static_cast<usize>(nextEdge)], innerHalf, style.join,
+                        strokeColor, vertices, indices);
             }
 
             // Add caps for open paths.
@@ -921,8 +926,9 @@ export namespace foundation::vg
                     if (len > 0.0001f)
                     {
                         dir = dir / len;
-                        AddCap(points[0], -dir, edgeNormals[0], halfWidth, style.cap, color,
-                               vertices, indices);
+                        AddCap(points[0], -dir, edgeNormals[0], innerHalf,
+                               antiAlias ? outerHalf : innerHalf, style.cap, strokeColor, vertices,
+                               indices);
                     }
                 }
                 // End cap.
@@ -934,8 +940,9 @@ export namespace foundation::vg
                     {
                         dir = dir / len;
                         AddCap(points[static_cast<usize>(n - 1)], dir,
-                               edgeNormals[static_cast<usize>(edgeCount - 1)], halfWidth, style.cap,
-                               color, vertices, indices);
+                               edgeNormals[static_cast<usize>(edgeCount - 1)], innerHalf,
+                               antiAlias ? outerHalf : innerHalf, style.cap, strokeColor, vertices,
+                               indices);
                     }
                 }
             }
@@ -1056,54 +1063,60 @@ export namespace foundation::vg
             }
         }
 
-        static void AddCap(Float2 point, Float2 direction, Float2 normal, f32 halfWidth,
-                           VGLineCap capType, Color color, Array<VGVertex>& vertices,
+        // The cap's outline runs from the stroke's one side, out through `direction`, round to its
+        // other side: solid to `innerHalf`, and with a fringe (`outerHalf` beyond it) faded by
+        // coverage to nothing there, meeting the body's fringe at either side.
+        static void AddCap(Float2 point, Float2 direction, Float2 normal, f32 innerHalf,
+                           f32 outerHalf, VGLineCap capType, Color color, Array<VGVertex>& vertices,
                            Array<u32>& indices)
         {
+            // The outline's offsets per unit of radius.
+            Array<Float2> outline;
             if (capType == VGLineCap::Square)
             {
-                const u32 baseIdx = static_cast<u32>(vertices.Size());
-                const Float2 p0 = point - normal * halfWidth;
-                const Float2 p1 = point + normal * halfWidth;
-                const Float2 p2 = point + direction * halfWidth + normal * halfWidth;
-                const Float2 p3 = point + direction * halfWidth - normal * halfWidth;
-
-                vertices.PushBack(VGVertex::Solid(p0, color));
-                vertices.PushBack(VGVertex::Solid(p1, color));
-                vertices.PushBack(VGVertex::Solid(p2, color));
-                vertices.PushBack(VGVertex::Solid(p3, color));
-
-                indices.PushBack(baseIdx + 0);
-                indices.PushBack(baseIdx + 1);
-                indices.PushBack(baseIdx + 2);
-                indices.PushBack(baseIdx + 0);
-                indices.PushBack(baseIdx + 2);
-                indices.PushBack(baseIdx + 3);
+                outline.PushBack(normal);
+                outline.PushBack(normal + direction);
+                outline.PushBack(direction - normal);
+                outline.PushBack(-normal);
             }
             else if (capType == VGLineCap::Round)
             {
-                const i32 segments = Max(4, static_cast<i32>(halfWidth * 0.5f));
-                const u32 baseIdx = static_cast<u32>(vertices.Size());
-
-                vertices.PushBack(VGVertex::Solid(point, color));
-
-                const f32 startAngle = Atan2(normal.y, normal.x);
-                const f32 angleStep = kPi / static_cast<f32>(segments);
-
+                const i32 segments = Max(4, static_cast<i32>(outerHalf * 0.5f));
                 for (i32 i = 0; i <= segments; ++i)
                 {
-                    const f32 angle = startAngle + static_cast<f32>(i) * angleStep;
-                    const f32 x = point.x + Cos(angle) * halfWidth;
-                    const f32 y = point.y + Sin(angle) * halfWidth;
-                    vertices.PushBack(VGVertex::Solid(x, y, color));
+                    const f32 angle = kPi * static_cast<f32>(i) / static_cast<f32>(segments);
+                    outline.PushBack(normal * Cos(angle) + direction * Sin(angle));
                 }
+            }
+            else
+                return;
 
-                for (i32 i = 0; i < segments; ++i)
-                {
-                    indices.PushBack(baseIdx);
-                    indices.PushBack(baseIdx + static_cast<u32>(i + 1));
-                    indices.PushBack(baseIdx + static_cast<u32>(i + 2));
-                }
+            const u32 count = static_cast<u32>(outline.Size());
+            const u32 centre = static_cast<u32>(vertices.Size());
+            vertices.PushBack(VGVertex::Solid(point, color));
+            const u32 inner = static_cast<u32>(vertices.Size());
+            for (const Float2& offset : outline)
+                vertices.PushBack(VGVertex::Solid(point + offset * innerHalf, color));
+            for (u32 i = 0; i + 1 < count; ++i)
+            {
+                indices.PushBack(centre);
+                indices.PushBack(inner + i);
+                indices.PushBack(inner + i + 1);
+            }
+            if (outerHalf <= innerHalf)
+                return;
+
+            const u32 outer = static_cast<u32>(vertices.Size());
+            for (const Float2& offset : outline)
+                vertices.PushBack(VGVertex::Solid(point + offset * outerHalf, color, 0.0f));
+            for (u32 i = 0; i + 1 < count; ++i)
+            {
+                indices.PushBack(inner + i);
+                indices.PushBack(outer + i);
+                indices.PushBack(outer + i + 1);
+                indices.PushBack(inner + i);
+                indices.PushBack(outer + i + 1);
+                indices.PushBack(inner + i + 1);
             }
         }
     };

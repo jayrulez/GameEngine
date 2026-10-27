@@ -16,8 +16,6 @@ class LightMeter
     [7, "How many material slots the figure has"] int slots;
 
     private float m_shown = 0.0f;
-    private UIProgressBar@ m_bar;
-    private UILabel@ m_label;
     private Entity@ m_figure;
     private float m_glow = -1.0f; // the glow last set
 
@@ -35,9 +33,6 @@ class LightMeter
 
     void onStart()
     {
-        // The HUD is the game's (Lamplight.as pushes it before the level loads).
-        @m_bar = ui::findProgressBar("hud-light");
-        @m_label = ui::findLabel("hud-light-label");
         m_shown = level();
     }
 
@@ -45,13 +40,13 @@ class LightMeter
     {
         float k = follow * float(dt);
         m_shown += (level() - m_shown) * Math::Min(k, 1.0f);
-        if (m_bar !is null && m_bar.isValid())
+        // The HUD is the game's (Lamplight.as pushes it before the level loads), looked up each
+        // frame: a new level's HUD is a new tree.
+        Node@ bar = gui::root().find("hud-light");
+        if (bar !is null)
         {
-            m_bar.setValue(m_shown);
-        }
-        if (m_label !is null && m_label.isValid())
-        {
-            m_label.setText(m_shown < 0.25f ? "Hidden" : (m_shown < 0.6f ? "Dim" : "Lit"));
+            ProgressBar::of(bar).value = m_shown;
+            Label::of(gui::root().find("hud-light-label")).text = m_shown < 0.25f ? "Hidden" : (m_shown < 0.6f ? "Dim" : "Lit");
         }
         glow();
     }

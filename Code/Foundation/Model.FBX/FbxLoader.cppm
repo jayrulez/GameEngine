@@ -10,6 +10,7 @@ module;
 
 #include <algorithm>
 #include <cctype>
+#include <cmath> // fabs: a held channel against the default pose
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -1329,8 +1330,26 @@ export namespace foundation::model::fbx
                         continue;
                     i32 boneIdx = *bit;
 
+                    // A channel the take holds constant is kept when it holds the node somewhere
+                    // other than its default pose (the skeleton's bind pose, which a clip with no
+                    // track for it plays): a 3ds Max take often poses a bone and leaves it there, a
+                    // head turned for the whole idle. One key says it; one at the default says
+                    // nothing and is left out.
+                    const ufbx_node* sourceNode = bakedNode->typed_id < m_scene->nodes.count ? m_scene->nodes.data[bakedNode->typed_id] : nullptr;
+                    const ufbx_transform rest = sourceNode != nullptr ? sourceNode->local_transform : ufbx_identity_transform;
+                    const auto heldAway = [](ufbx_vec3 held, ufbx_vec3 restValue)
+                    { return std::fabs(held.x - restValue.x) > 1e-5 || std::fabs(held.y - restValue.y) > 1e-5 || std::fabs(held.z - restValue.z) > 1e-5; };
+                    const auto turnedAway = [](ufbx_quat held, ufbx_quat restValue)
+                    { return std::fabs(held.x * restValue.x + held.y * restValue.y + held.z * restValue.z + held.w * restValue.w) < 1.0 - 1e-7; };
+                    const bool keepTranslation = bakedNode->translation_keys.count > 0 &&
+                                                 (!bakedNode->constant_translation || heldAway(bakedNode->translation_keys.data[0].value, rest.translation));
+                    const bool keepRotation = bakedNode->rotation_keys.count > 0 &&
+                                              (!bakedNode->constant_rotation || turnedAway(bakedNode->rotation_keys.data[0].value, rest.rotation));
+                    const bool keepScale = bakedNode->scale_keys.count > 0 &&
+                                           (!bakedNode->constant_scale || heldAway(bakedNode->scale_keys.data[0].value, rest.scale));
+
                     // Translation channel.
-                    if (bakedNode->translation_keys.count > 0 && !bakedNode->constant_translation)
+                    if (keepTranslation)
                     {
                         auto* channel = new AnimationChannel();
                         channel->targetBone = boneIdx;
@@ -1350,7 +1369,7 @@ export namespace foundation::model::fbx
                     }
 
                     // Rotation channel.
-                    if (bakedNode->rotation_keys.count > 0 && !bakedNode->constant_rotation)
+                    if (keepRotation)
                     {
                         auto* channel = new AnimationChannel();
                         channel->targetBone = boneIdx;
@@ -1370,7 +1389,7 @@ export namespace foundation::model::fbx
                     }
 
                     // Scale channel.
-                    if (bakedNode->scale_keys.count > 0 && !bakedNode->constant_scale)
+                    if (keepScale)
                     {
                         auto* channel = new AnimationChannel();
                         channel->targetBone = boneIdx;

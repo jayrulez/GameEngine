@@ -325,3 +325,86 @@ Connections:  {
     CHECK_FALSE(armature->isSkeletonBone);
     std::remove("scratch_fbx_limb.fbx");
 }
+
+// A take that holds a bone somewhere other than its default pose for the whole clip (3ds Max poses a
+// head and leaves it there) keeps that as a channel: skipped as constant, the bone played its default
+// pose and the head never turned. One held at its default still says nothing.
+TEST_CASE("fbx: a channel the take holds constant away from the default pose is kept")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	NodeAttribute: 10, "NodeAttribute::Head", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1, "Model::Head", "LimbNode" {
+		Version: 232
+	}
+	NodeAttribute: 11, "NodeAttribute::Tail", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 2, "Model::Tail", "LimbNode" {
+		Version: 232
+	}
+	AnimationStack: 100, "AnimStack::idle", "" {
+		Properties70:  {
+			P: "LocalStop", "KTime", "Time", "",46186158000
+			P: "ReferenceStop", "KTime", "Time", "",46186158000
+		}
+	}
+	AnimationLayer: 101, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationCurveNode: 102, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",45
+		}
+	}
+	AnimationCurveNode: 103, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+}
+Connections:  {
+	C: "OO",1,0
+	C: "OO",10,1
+	C: "OO",2,0
+	C: "OO",11,2
+	C: "OO",101,100
+	C: "OO",102,101
+	C: "OO",103,101
+	C: "OP",102,1, "Lcl Rotation"
+	C: "OP",103,2, "Lcl Rotation"
+}
+)";
+    WriteText("scratch_fbx_held.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_held.fbx")), model) == ModelLoadResult::Ok);
+    REQUIRE(model.animations().Size() == 1u);
+    i32 head = -1;
+    for (usize b = 0; b < model.bones().Size(); ++b)
+        if (model.bones()[b]->name() == StringView{u8"Head"})
+            head = static_cast<i32>(b);
+    REQUIRE(head >= 0);
+    const ModelAnimation& idle = *model.animations()[0];
+    usize rotations = 0;
+    for (const AnimationChannel* channel : idle.channels())
+    {
+        if (channel->path != AnimationPath::Rotation)
+            continue;
+        ++rotations;
+        CHECK(channel->targetBone == head); // the tail, held at its default, has none
+        REQUIRE_FALSE(channel->keyframes().IsEmpty());
+        CHECK(channel->keyframes()[0].value.z == doctest::Approx(0.38268f).epsilon(0.001)); // 45 degrees about z
+    }
+    CHECK(rotations == 1u);
+    std::remove("scratch_fbx_held.fbx");
+}

@@ -633,8 +633,33 @@ The layers:
       A row the user folds in the tree stays folded. Every edit one undo step. The preview's transport plays, pauses and clears the preview and never writes the
       effect (the old Stop and Play set every system emitting, a sub-emitter's child too).
 9. The property animation panel under the scene page's viewport (PropertyAnimation): its clips'
-   tracks on the Dopesheet, a track's curve on CurveView, its transport the kit's, its undo the
-   scene page's.
+   tracks on the Dopesheet, a track's curve on CurveView, its transport the kit's. A clip is an
+   asset of its own, not the scene: the panel has its own history, its own Undo, Redo and Save on
+   its bar and its own unsaved mark, and while it is open and holds the focus the keys go to it
+   (Ctrl+Z, Ctrl+Y, Ctrl+S and the rest act on the clip, not the scene; user 2026-10-27: the old
+   panel's edits on the scene page's stack read as the scene's); a key it does not handle goes on
+   to the scene page and the editor (the GUI's commands bubble along the focus path: the panel's
+   root handles the actions' commands it binds, and lets the rest propagate). A key it binds
+   stays with it while it holds the focus, so Ctrl+Z on a clip with nothing to undo never
+   reaches the scene. Its preview poses the scene's
+   entities without touching the scene's history or its unsaved mark; an unsaved clip is asked
+   about on its own when the scene page closes or another clip opens.
+   In parts (surveyed 2026-10-27: the toolkit's time axis, ruler, dopesheet and curve view take
+   sources; the old panel's binding, preview, track seeds and transport carry over):
+   1. The UI-free half (Editor.PropertyAnimation): the clip document (a clip asset loaded, saved
+      and cooked, its unsaved mark, its own history: each edit the whole clip before and after);
+      the clip as the dopesheet's and the curve view's source (a channel per scalar curve,
+      "Light.color.r", a rotation track one channel of its keys; a key inserted takes the clip's
+      value there; the curve view the chosen tracks' curves); the track seeds (a bound entity's
+      animatable properties); the preview (the bound entity posed at the playhead, every value it
+      wrote put back when it stops, never a step of the scene's); the transport's clock.
+   2. The panel on the GUI from its markup: its bar (the clip's name and unsaved mark, New, Open,
+      Save, Undo, Redo, the bound entity and Use Selected, Add Track, the kit's transport and
+      Loop, the clip's length), the ruler, dopesheet and curve view on one axis, a state with no
+      clip; the keys it binds handled on its root (the actions' commands), the rest let through.
+   3. On the scene page: under the viewport in a splitter, opened from the View menu and from an
+      animator's clip, its preview stood down while simulating, an unsaved clip asked about when
+      the page closes or another clip opens.
 10. The animation pages (Animation): the clip (a preview, its events as markers on the time axis),
     the skeleton (the bone tree with a search beside the preview) and the graph (GraphView over the
     preview, its layers and parameters as lists).

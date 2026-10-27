@@ -134,6 +134,9 @@ export namespace pipeline{
 
     /// A new effect's content: one continuous fountain system.
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& effect);
+    /// Adds the default system (a continuous fountain: a lifetime, a velocity, a size, a colour and
+    /// gravity) after the effect's others; what the seed and the editor's Add System make.
+    foundation::particles::ParticleSystem& AddDefaultParticleSystem(foundation::particles::ParticleEffect& effect);
     /// File > New's particle creator (pipeline.registration composes every domain's).
     void RegisterParticleCreators(AssetCreatorRegistry& registry);
 }

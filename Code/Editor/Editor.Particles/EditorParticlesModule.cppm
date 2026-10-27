@@ -3,8 +3,8 @@
 
 // Editor::Particles - the `editor.particles` module.
 //
-// The particle effect's editor page: ParticleEffectEditorPage, its factory and
-// RegisterParticleEditor, which the editor EXECUTABLE calls.
+// The particle effect page: ParticleEffectEditorPage, its factory and RegisterParticleEditor, which
+// the editor's assembly calls.
 
 export module editor.particles;
 

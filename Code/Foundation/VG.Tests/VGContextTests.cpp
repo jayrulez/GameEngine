@@ -1718,3 +1718,32 @@ TEST_CASE("vg.context: premultiplied pictures from one texture, one after anothe
     ctx.PopClip();
     CHECK(batch.CommandCount() == 5u);
 }
+
+TEST_CASE("vg.context: a premultiplied picture drawn at its own size lands on the pixel grid")
+{
+    VGContext ctx;
+    const u8 px[32 * 32 * 4] = {};
+    image::OwnedImageData atlas(32, 32, image::PixelFormat::RGBA8, Span<const u8>(px, sizeof(px)));
+    // An icon baked at 16 x 16, centred at a half pixel: moved onto whole pixels, its size kept.
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{5.5f, 3.25f, 16, 16}, Rectangle{0, 0, 16, 16}, Color::White);
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.vertices.Size() == 4u);
+    f32 minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+    for (const VGVertex& v : batch.vertices)
+    {
+        minX = Min(minX, v.position.x), minY = Min(minY, v.position.y);
+        maxX = Max(maxX, v.position.x), maxY = Max(maxY, v.position.y);
+    }
+    CHECK(minX == doctest::Approx(Round(5.5f)));
+    CHECK(minY == doctest::Approx(3.0f));
+    CHECK(maxX - minX == doctest::Approx(16.0f));
+    CHECK(maxY - minY == doctest::Approx(16.0f));
+
+    // Drawn larger than it was baked, it is scaled where it was asked for.
+    ctx.Clear();
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{5.5f, 3.25f, 24, 24}, Rectangle{0, 0, 16, 16}, Color::White);
+    bool sawAsked = false;
+    for (const VGVertex& v : ctx.GetBatch().vertices)
+        sawAsked = sawAsked || (v.position.x == doctest::Approx(5.5f) && v.position.y == doctest::Approx(3.25f));
+    CHECK(sawAsked);
+}

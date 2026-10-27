@@ -1283,6 +1283,21 @@ export namespace foundation::vg
         {
             if (texture == nullptr || destRect.width <= 0.0f || destRect.height <= 0.0f)
                 return;
+            // A picture drawn at its own size (an icon baked at the size it is shown) lands on the
+            // pixel grid: at a fractional offset the sampler would blend each texel with its
+            // neighbour and soften what was baked crisp.
+            if (m_pixelSnap && TransformIsAxisAligned())
+            {
+                const Float4x4& m = m_currentState.transform;
+                const f32 sx = m(0, 0), sy = m(1, 1);
+                if (Abs(sx) > 1e-4f && Abs(sy) > 1e-4f && Abs(destRect.width * Abs(sx) - srcRect.width) < 1.0f &&
+                    Abs(destRect.height * Abs(sy) - srcRect.height) < 1.0f)
+                {
+                    const Float2 origin = TransformPoint(Float2{destRect.x, destRect.y});
+                    destRect = Rectangle{destRect.x + (Round(origin.x) - origin.x) / sx, destRect.y + (Round(origin.y) - origin.y) / sy,
+                                         srcRect.width / Abs(sx), srcRect.height / Abs(sy)};
+                }
+            }
             FlushCurrentCommand();
             const i32 start = static_cast<i32>(m_batch.indices.Size());
             const usize startVertex = m_batch.vertices.Size();

@@ -1732,6 +1732,7 @@ export namespace foundation::core
         TypeBuilder& ReadsDataVersionsFrom(u32 oldest)
         {
             m_minReadDataVersion = oldest;
+            m_readsLegacyData = true;
             return *this;
         }
 
@@ -2010,6 +2011,7 @@ export namespace foundation::core
             m_data.info = MakeTypeInfo<T>(m_name, m_namespace, m_base, m_dataVersion);
             m_data.info.creator = m_creator;
             m_data.info.minReadDataVersion = m_minReadDataVersion;
+            m_data.info.readsLegacyData = m_readsLegacyData;
             // Wire per-property attribute spans (the inner Array buffers survive TypeData's
             // move - only the outer array's control block moves).
             while (m_data.propertyAttributes.Size() < m_data.properties.Size())
@@ -2058,6 +2060,7 @@ export namespace foundation::core
         const TypeInfo* m_base;
         u32 m_dataVersion = 0;
         u32 m_minReadDataVersion = 0;
+        bool m_readsLegacyData = false;
         TypeData m_data;
         const CreatorInfo* m_creator = nullptr;
     };

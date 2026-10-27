@@ -1572,7 +1572,7 @@ export namespace pipeline
         // keeps the whole list for them; a v2 one knows no skeleton parent and its prefab keeps
         // the file's placement. No REFLECT block owns this type - patched on the TypeInfo.
         const_cast<TypeInfo&>(ModelManifestAsset::StaticType()).dataVersion = 3;
-        const_cast<TypeInfo&>(ModelManifestAsset::StaticType()).minReadDataVersion = 1;
+        KeepLegacyReader(const_cast<TypeInfo&>(ModelManifestAsset::StaticType()), 1);
         GlobalTypeRegistry().Register(ModelManifestAsset::StaticType());
         RegisterSerializable<ModelManifestAsset>();
     }

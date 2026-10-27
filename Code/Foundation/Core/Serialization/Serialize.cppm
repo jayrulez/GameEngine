@@ -328,7 +328,7 @@ export namespace foundation::core
             bool matches = count == currentCount;
             for (u32 i = 0; matches && i < read; ++i)
             {
-                const bool legacy = i == 0 && type.minReadDataVersion != 0 &&
+                const bool legacy = i == 0 && type.readsLegacyData &&
                                     chain[i].version >= type.minReadDataVersion &&
                                     chain[i].version < current[i].version;
                 matches = chain[i].typeId == current[i].typeId &&

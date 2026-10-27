@@ -148,7 +148,7 @@ export namespace editor
     {
         // v4 (markers / FPS / camera / selection) keeps a v3 legacy reader: a project's saved
         // prefs from before 2026-09-24 load without the new keys and re-save as v4.
-        const_cast<TypeInfo&>(SceneViewSettings::StaticType()).minReadDataVersion = 3;
+        KeepLegacyReader(const_cast<TypeInfo&>(SceneViewSettings::StaticType()), 3);
         GlobalTypeRegistry().Register(SceneViewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<SceneViewSettings>();
     }

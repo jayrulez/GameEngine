@@ -82,15 +82,26 @@ export namespace foundation::core
         // on ar.Version() for those). 0 = never versioned. Set via RTTI_DEFINE_OBJECT_VERSIONED
         // or TypeBuilder::DataVersion.
         u32 dataVersion = 0;
-        // The oldest stored data version the reader still accepts (0 = the current one only).
+        // The oldest stored data version the reader still accepts, when `readsLegacyData` (else
+        // the current one only; a floor of 0 is a reader of never-versioned data).
         // TypeBuilder::ReadsDataVersionsFrom; a legacy reader is one version back, named in its
         // commit and removed once the data has moved (Process/CONVENTIONS.md).
         u32 minReadDataVersion = 0;
+        bool readsLegacyData = false;
         // A reference-shaped value (a resource::Ref<T>, whatever T): its identity is a Guid,
         // and generic tooling reads and writes THAT instead of the value. The ops come from
         // ReferenceTraits<T> when the type's TypeInfo is made; null for every other type.
         const ReferenceOps* reference = nullptr;
     };
+
+    /// `type` keeps a legacy reader for data stored under `oldest` up to its current version (a
+    /// type no REFLECT block owns, patched on its TypeInfo; TypeBuilder::ReadsDataVersionsFrom
+    /// for the rest). The floor and the flag together: 0 is a floor too.
+    inline void KeepLegacyReader(TypeInfo& type, u32 oldest) noexcept
+    {
+        type.minReadDataVersion = oldest;
+        type.readsLegacyData = true;
+    }
 
     /// The customization point a module specializes for its reference template (Resource does
     /// for Ref<T>): `isReference` true and `Ops()` the table. Every TypeInfo made for such a

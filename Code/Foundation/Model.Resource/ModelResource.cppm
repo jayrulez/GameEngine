@@ -273,7 +273,7 @@ export namespace foundation::model
         // parent known, the prefab keeps the file's placement). v0 and v1 re-cook: the strict
         // reader refuses them. No REFLECT block owns this type - patched on the TypeInfo.
         const_cast<TypeInfo&>(ModelManifestSource::StaticType()).dataVersion = 3;
-        const_cast<TypeInfo&>(ModelManifestSource::StaticType()).minReadDataVersion = 2;
+        KeepLegacyReader(const_cast<TypeInfo&>(ModelManifestSource::StaticType()), 2);
         GlobalTypeRegistry().Register(ModelManifestSource::StaticType());
         RegisterSerializable<ModelManifestSource>();
         GlobalTypeRegistry().Register(ModelResource::StaticType());

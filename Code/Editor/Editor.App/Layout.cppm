@@ -236,7 +236,7 @@ export namespace editor::app
         RegisterSerializable<EditorDockLayoutSettings>();
         // Version 1 (the old dock's tree) still reads, into the new layout: a legacy reader one
         // version back, removed once projects have saved past it (Process/CONVENTIONS.md).
-        const_cast<TypeInfo&>(EditorDockLayoutSettings::StaticType()).minReadDataVersion = 1;
+        KeepLegacyReader(const_cast<TypeInfo&>(EditorDockLayoutSettings::StaticType()), 1);
         GlobalTypeRegistry().Register(EditorFavoritesSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorFavoritesSettings>();

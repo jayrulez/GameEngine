@@ -157,6 +157,30 @@ TEST_CASE("engine-gui-script: AngelScript finds the screen tier at gui::root() a
 }
 #endif
 
+#ifdef OPTION_HAS_ANGELSCRIPT
+TEST_CASE("engine-gui-script: AngelScript reaches a canvas's, a billboard's and a world panel's tree by root()")
+{
+    // root() hands back a Node handle in a Variant; AngelScript binds it only with the type named,
+    // so a script calling it fails to compile without.
+    Bed bed;
+    RefPtr<script::IScriptManager> manager = script::angelscript::CreateScriptManager(DefaultAllocator());
+    script::RegisterReflectedTypes(*manager);
+    RefPtr<script::IScriptContext> scripts = manager->CreateContext();
+    Errors errors;
+    scripts->SetErrorHandler(&errors);
+    bed.gui->ExposeToScript(*scripts);
+    const Status loaded = scripts->Load(StringView(u8"Node@ canvas(Entity@ e) { return GuiCanvasComponent::of(e).root(); }\n"
+                                                   u8"Node@ board(Entity@ e) { return GuiBillboardComponent::of(e).root(); }\n"
+                                                   u8"Node@ panel(Entity@ e) { return GuiWorldPanelComponent::of(e).root(); }\n"),
+                                        u8"main");
+    INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
+    CHECK(loaded.IsOk());
+    CHECK(errors.count == 0);
+    ClearGuiScriptService(*scripts);
+    scripts->SetErrorHandler(nullptr);
+}
+#endif
+
 #ifdef OPTION_HAS_LUAU
 TEST_CASE("engine-gui-script: Luau finds the screen tier at gui.root() and pushes a cooked document by its guid")
 {

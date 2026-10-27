@@ -372,7 +372,7 @@ namespace engine::gui
             .Attribute("description", String(u8"Shows a GUI document in its scene, as a menu or a HUD, or draws it into a texture."))
             .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<GuiCanvasComponent>, GuiCanvasComponent>("of");
-        builder.Method<&GuiCanvasComponent::rootNode>("root");
+        builder.Method<&GuiCanvasComponent::rootNode, Node>("root"); // its Variant a Node handle: AngelScript binds it only typed
         builder.Property<&GuiCanvasComponent::document>("document");
         builder.Property<&GuiCanvasComponent::sheet>("sheet");
         builder.Property<&GuiCanvasComponent::order>("order");
@@ -404,7 +404,7 @@ namespace engine::gui
             .Attribute("description", String(u8"Shows a GUI document over the entity, such as a nameplate or a health bar."))
             .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<GuiBillboardComponent>, GuiBillboardComponent>("of");
-        builder.Method<&GuiBillboardComponent::rootNode>("root");
+        builder.Method<&GuiBillboardComponent::rootNode, Node>("root"); // its Variant a Node handle: AngelScript binds it only typed
         builder.Property<&GuiBillboardComponent::document>("document");
         builder.Property<&GuiBillboardComponent::sheet>("sheet");
         builder.Property<&GuiBillboardComponent::offset>("offset");
@@ -455,7 +455,7 @@ namespace engine::gui
             .Attribute("description", String(u8"Shows a GUI document on a panel in the world, in the entity's plane, optionally taking the pointer."))
             .DataVersion(1);
         builder.Method<&foundation::script::ComponentOf<GuiWorldPanelComponent>, GuiWorldPanelComponent>("of");
-        builder.Method<&GuiWorldPanelComponent::rootNode>("root");
+        builder.Method<&GuiWorldPanelComponent::rootNode, Node>("root"); // its Variant a Node handle: AngelScript binds it only typed
         builder.Property<&GuiWorldPanelComponent::document>("document");
         builder.Property<&GuiWorldPanelComponent::sheet>("sheet");
         builder.Property<&GuiWorldPanelComponent::sizeMeters>("sizeMeters");

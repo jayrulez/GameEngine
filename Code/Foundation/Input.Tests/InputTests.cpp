@@ -1263,3 +1263,33 @@ TEST_CASE("input.runtime: a rumble waits for the next update and reaches its pad
     StopRumble(devices);
     CHECK(pad0.rumbleLow == doctest::Approx(0.0f));
 }
+
+TEST_CASE("input: the bindings' version moves when what a binding resolves to may change, and only then")
+{
+    InputMap map;
+    ActionSet gameplay;
+    gameplay.name = String(u8"Gameplay");
+    map.sets.PushBack(gameplay);
+    ActionSet menu;
+    menu.name = String(u8"Menu");
+    map.sets.PushBack(menu);
+
+    ActionRuntime rt;
+    const u64 start = rt.BindingsVersion();
+    rt.SetMap(map);
+    const u64 mapped = rt.BindingsVersion();
+    CHECK(mapped != start);
+    rt.EnableSet(u8"Menu", true); // already enabled: nothing changed
+    CHECK(rt.BindingsVersion() == mapped);
+    rt.DisableSet(u8"Menu");
+    const u64 disabled = rt.BindingsVersion();
+    CHECK(disabled != mapped);
+    rt.PushExclusiveSet(u8"Gameplay");
+    CHECK(rt.BindingsVersion() != disabled);
+    const u64 pushed = rt.BindingsVersion();
+    rt.PopExclusiveSet();
+    CHECK(rt.BindingsVersion() != pushed);
+    const u64 popped = rt.BindingsVersion();
+    rt.PopExclusiveSet(); // nothing to pop
+    CHECK(rt.BindingsVersion() == popped);
+}

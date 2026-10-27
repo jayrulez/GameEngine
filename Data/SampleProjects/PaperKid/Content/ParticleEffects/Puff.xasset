@@ -4,7 +4,7 @@
 	<string name="typeName">ParticleEffectAsset</string>
 	<array name="dataVersions" count="1">
 		<u64 name="type">15440632563532191078</u64>
-		<u32 name="version">0</u32>
+		<u32 name="version">1</u32>
 	</array>
 	<object name="payload">
 		<string name="fileName"/>
@@ -183,9 +183,9 @@
 						</object>
 					</object>
 				</array>
+				<array name="subEmitters" count="0"/>
 			</object>
 		</array>
-		<array name="links" count="0"/>
 		<array name="texturePaths" count="0"/>
 	</object>
 </root>

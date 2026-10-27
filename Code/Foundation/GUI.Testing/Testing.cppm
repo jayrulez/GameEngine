@@ -55,7 +55,9 @@ export namespace foundation::gui::testing
     {
         const Rect box = node.GetScreenBounds();
         at = core::Float2{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
-        Node* hit = root.OverFind(at);
+        // As input finds it: an open popup's first (a menu item, a dialog over a panel), then the root's.
+        EventDispatcher* dispatcher = root.GetEventDispatcher();
+        Node* hit = dispatcher != nullptr ? dispatcher->NodeAt(at) : root.OverFind(at);
         over = hit;
         for (Node* n = hit; n != nullptr; n = n->GetParent())
             if (n == &node)

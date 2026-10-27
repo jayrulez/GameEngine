@@ -137,6 +137,25 @@ TEST_CASE("testing: aiming at a node gives its middle, and what lies there when 
     CHECK(over == cover.Get());
 }
 
+TEST_CASE("testing: aiming sees an open popup as input does: what it holds is reached, what it covers is not")
+{
+    Bed bed;
+    Tester t(*bed.root.Get());
+    // A popup over the field, holding a button of its own.
+    auto popup = core::MakeRef<Panel>(core::DefaultAllocator());
+    popup->SetPosition(core::Float2{0.0f, 40.0f});
+    popup->SetSize(core::Float2{200.0f, 60.0f});
+    auto inside = Add<Button>(*popup.Get(), u8"inside", 0.0f, 0.0f, 200.0f, 60.0f);
+    bed.root->GetEventDispatcher()->OpenPopup(*bed.show, *popup, PopupOptions{});
+    t.Frame();
+    core::Float2 at;
+    Node* over = nullptr;
+    CHECK(AimAt(*bed.root.Get(), *inside.Get(), at, over)); // in a popup over the root's nodes
+    CHECK_FALSE(AimAt(*bed.root.Get(), *bed.field.Get(), at, over)); // under it
+    CHECK(over == inside.Get());
+    bed.root->GetEventDispatcher()->CloseAllPopups(PopupCloseReason::Code);
+}
+
 TEST_CASE("testing: typing goes to the focus, keys move it, and a held arrow repeats")
 {
     Bed bed;

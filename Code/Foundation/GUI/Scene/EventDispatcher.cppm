@@ -858,6 +858,9 @@ export namespace foundation::gui
         /// the pointer (Node::TakesPointer), not only over a layout container. A game host asks
         /// before treating a click as its own.
         [[nodiscard]] bool IsPointerOver(core::Float2 position) const { return IsPointerTaken(HitTest(position)); }
+        /// What the pointer at `position` reaches, as input finds it: an open popup's first (a menu,
+        /// a dialog), then the root's; null under a modal popup, where everything is inert.
+        [[nodiscard]] Node* NodeAt(core::Float2 position) const { return HitTest(position); }
 
         // === Focus ===
         /// A focused node no longer shown (it or a node above it hidden, or out of the layout) gives

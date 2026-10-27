@@ -354,6 +354,19 @@ TEST_CASE("input map page: a row's edit, an added set and a removed action each 
     CHECK(f.Map().sets[0].actions.Size() == 2u);
 }
 
+TEST_CASE("input map page: a set folded in the tree stays folded when another is chosen")
+{
+    PageFixture f;
+    auto* tree = editor::app::FindById<gui::TreeView>(*f.page->Content(), u8"input-tree");
+    REQUIRE(tree != nullptr);
+    CHECK(tree->IsIdExpanded(0)); // Gameplay
+    tree->SetIdExpanded(0, false);
+    f.page->ChooseSet(1);
+    CHECK_FALSE(tree->IsIdExpanded(0));
+    f.Edit(u8"name", gui::Variant(StringView(u8"Menus"))); // an edit rebuilds the tree
+    CHECK_FALSE(tree->IsIdExpanded(0));
+}
+
 TEST_CASE("input map page: a set added and undone after a row's edit keeps that edit")
 {
     // The whole edit's before is the map as it is, not as the base page's own last step left it.

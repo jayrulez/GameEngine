@@ -199,6 +199,12 @@ namespace editor
         if (map == nullptr)
             return;
         m_showing = true;
+        // A set the user folded stays folded through the rebuild (a choice, an edit, a search).
+        Array<i32> folded(Allocator());
+        if (m_tree != nullptr)
+            for (usize node = 0; node < m_rows.Size(); ++node)
+                if (m_rows[node].action < 0 && !m_tree->IsIdExpanded(static_cast<gui::ItemId>(node)))
+                    folded.PushBack(m_rows[node].set);
         m_model->Clear();
         m_rows.Clear();
         i32 chosen = -1;
@@ -237,7 +243,12 @@ namespace editor
         {
             for (usize node = 0; node < m_rows.Size(); ++node)
                 if (m_rows[node].action < 0)
-                    m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
+                {
+                    bool wasFolded = false;
+                    for (const i32 set : folded)
+                        wasFolded = wasFolded || set == m_rows[node].set;
+                    m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), !wasFolded);
+                }
             if (chosen >= 0)
             {
                 const gui::ItemId id = static_cast<gui::ItemId>(chosen);

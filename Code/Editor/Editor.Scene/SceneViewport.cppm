@@ -43,6 +43,18 @@ using namespace foundation::core;
 
 export namespace editor
 {
+    /// Whether Shift is held for what the pointer does over a view: the keyboard the view has
+    /// while focused, else, while the pointer is over it, the device's own (a wheel goes where the
+    /// pointer is, whatever has the keys). Pure, so tested without a window.
+    [[nodiscard]] inline bool ShiftHeldOver(foundation::shell::IKeyboard* focused, foundation::shell::IKeyboard* device, bool hovered)
+    {
+        const auto shift = [](foundation::shell::IKeyboard& keys)
+        { return keys.IsKeyDown(foundation::shell::KeyCode::LeftShift) || keys.IsKeyDown(foundation::shell::KeyCode::RightShift); };
+        if (focused != nullptr)
+            return shift(*focused);
+        return hovered && device != nullptr && shift(*device);
+    }
+
     class SceneViewport
     {
     public:
@@ -97,6 +109,16 @@ export namespace editor
         {
             const foundation::shell::InputSurface* surface = m_view->HostedSurface();
             return m_view->IsFocused() || (surface != nullptr && surface->Captured()) ? m_view->Keyboard() : nullptr;
+        }
+
+        /// Whether Shift is held for what the pointer does over the view (a brush's Shift + wheel
+        /// resize, a Shift click): read with the pointer, so it holds while the keys' focus is
+        /// elsewhere (the brush's own panel, picked a moment ago).
+        [[nodiscard]] bool ShiftHeld() const
+        {
+            const foundation::shell::InputSurface* surface = m_view->HostedSurface();
+            foundation::shell::IInputManager* raw = surface != nullptr ? surface->Raw() : nullptr;
+            return ShiftHeldOver(Keyboard(), raw != nullptr ? raw->Keyboard() : nullptr, m_view->IsHovered());
         }
 
         /// The camera's frame: flown while the viewport has the input (`wheel` false leaves the

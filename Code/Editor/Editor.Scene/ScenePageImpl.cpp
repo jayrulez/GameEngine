@@ -289,10 +289,8 @@ namespace editor
         // A modal tool (a brush) owns Shift + wheel to size itself, so the camera leaves that wheel
         // to it; the bare wheel stays the camera's under a brush too.
         const bool modalTool = m_viewportTools.ActiveTool() != nullptr && m_viewportTools.ActiveTool() != m_selectTool;
-        foundation::shell::IKeyboard* keyboard = m_viewport->Keyboard();
-        const bool shift = keyboard != nullptr &&
-                           (keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift));
-        const bool active = m_viewport->UpdateCamera(dt, !(modalTool && shift));
+        // Its Shift read with the pointer: the brush's panel, just used, may have the keys.
+        const bool active = m_viewport->UpdateCamera(dt, !(modalTool && m_viewport->ShiftHeld()));
         if (active && m_viewport->ZoomedThisFrame() && m_hud)
             m_hud->Zoomed();
         if (m_editContext)
@@ -374,8 +372,8 @@ namespace editor
         if (keyboard != nullptr)
         {
             in.ctrl = keyboard->IsKeyDown(foundation::shell::KeyCode::LeftCtrl) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightCtrl);
-            in.shift = keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift);
         }
+        in.shift = m_viewport->ShiftHeld(); // with the pointer, focused or not (a brush's Shift + wheel)
         in.wheelDelta = mouse->ScrollY();
         // The tools' keys (the select tool's W/E/R/X) belong to the camera while it owns the input.
         in.keyboard = cameraOwnsMouse ? nullptr : keyboard;

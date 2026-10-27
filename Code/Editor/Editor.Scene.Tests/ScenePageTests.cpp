@@ -1479,3 +1479,33 @@ TEST_CASE("scene bar: Simulate, Pause and Stop are the page's actions, its state
     CHECK(bar->State().IsEmpty());
     page->OnClose();
 }
+
+namespace
+{
+    // A keyboard holding the keys it is given.
+    class HeldKeys final : public foundation::shell::IKeyboard
+    {
+    public:
+        foundation::shell::KeyCode held = foundation::shell::KeyCode::Unknown;
+        [[nodiscard]] bool IsKeyDown(foundation::shell::KeyCode key) const override { return key == held; }
+        [[nodiscard]] bool IsKeyPressed(foundation::shell::KeyCode) const override { return false; }
+        [[nodiscard]] bool IsKeyReleased(foundation::shell::KeyCode) const override { return false; }
+        [[nodiscard]] foundation::shell::KeyModifiers Modifiers() const override { return foundation::shell::KeyModifiers::None; }
+    };
+}
+
+TEST_CASE("scene viewport: Shift is read with the pointer, so a brush's Shift + wheel works while its panel has the keys")
+{
+    HeldKeys device;
+    device.held = foundation::shell::KeyCode::LeftShift;
+    HeldKeys focusedUp; // the view focused, Shift not held
+    // The view focused: its own keyboard says.
+    CHECK(editor::ShiftHeldOver(&device, &device, false));
+    CHECK_FALSE(editor::ShiftHeldOver(&focusedUp, &device, true));
+    // Not focused (the brush's panel has the keys): the device's Shift while the pointer is over it.
+    CHECK(editor::ShiftHeldOver(nullptr, &device, true));
+    CHECK_FALSE(editor::ShiftHeldOver(nullptr, &device, false)); // the pointer elsewhere
+    device.held = foundation::shell::KeyCode::RightShift;
+    CHECK(editor::ShiftHeldOver(nullptr, &device, true));
+    CHECK_FALSE(editor::ShiftHeldOver(nullptr, nullptr, true));
+}

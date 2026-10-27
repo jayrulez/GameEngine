@@ -4,7 +4,7 @@
 // The builtin Phong material (Specs/phong-material.md): what a model authored with Phong or Lambert
 // is drawn with, so it looks as it was made. Each light that reaches the pixel (its cluster's, or
 // every light) is shaded Blinn-Phong, in the units the PBR path uses so the two sit side by side:
-// the diffuse (DiffuseColor x DiffuseMap x the vertex colour) by N.L over pi, and the specular
+// the diffuse (BaseColor x AlbedoMap x the vertex colour) by N.L over pi, and the specular
 // (SpecularColor x SpecularMap) as a highlight normalised by its exponent, so a tight one is not
 // brighter overall than a broad one. The ambient is the scene's diffuse ambient alone (the sky's
 // irradiance where there is one, plus its flat ambient): Phong has no reflection of its
@@ -16,16 +16,16 @@
 #include "lighting.hlsli"
 #include "forward_ps.hlsli"
 cbuffer Material : register(b0, space2) {    // as CreatePhong lays it out (MaterialBuilder.cppm)
-    float4 DiffuseColor;
+    float4 BaseColor;          // the diffuse colour (PBR's and Unlit's name, so a switch keeps it)
     float4 SpecularColor;      // black: no highlight (a Lambert material)
     float4 EmissiveColor;      // rgb x EmissiveMap = emitted radiance, its intensity in w
     float  Shininess;          // the highlight's exponent (Phong's specular exponent)
     float  NormalScale;        // scales the tangent-space XY perturbation
     float  AlphaCutoff;        // ALPHA_TEST threshold
 };
-// Unset maps bind a neutral default (white for diffuse, specular and emissive, a flat normal), so
+// Unset maps bind a neutral default (white for the albedo, specular and emissive, a flat normal), so
 // a material's colours alone are what it shows.
-Texture2D    DiffuseMap  : register(t0, space2);
+Texture2D    AlbedoMap   : register(t0, space2);   // the diffuse map
 Texture2D    SpecularMap : register(t1, space2);
 Texture2D    NormalMap   : register(t2, space2);
 Texture2D    EmissiveMap : register(t3, space2);
@@ -80,9 +80,9 @@ float4 main(PSInput input) : SV_Target0 {
     }
     float3 V = ViewDirToCamera(input.worldPos);
 
-    float4 diffuseTex = DiffuseMap.Sample(MainSampler, input.uv);
-    float3 diffuse    = input.color.rgb * DiffuseColor.rgb * diffuseTex.rgb;
-    float  alpha      = saturate(input.color.a * DiffuseColor.a * diffuseTex.a);
+    float4 diffuseTex = AlbedoMap.Sample(MainSampler, input.uv);
+    float3 diffuse    = input.color.rgb * BaseColor.rgb * diffuseTex.rgb;
+    float  alpha      = saturate(input.color.a * BaseColor.a * diffuseTex.a);
 #ifdef ALPHA_TEST
     if (alpha < AlphaCutoff) { discard; }
 #endif

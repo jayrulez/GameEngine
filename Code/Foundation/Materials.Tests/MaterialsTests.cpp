@@ -121,7 +121,7 @@ TEST_CASE("material templates: the Phong builtin lays its cbuffer out as phong.p
         MaterialPropertyType type;
         u32 offset;
     } kUniforms[] = {
-        {u8"DiffuseColor", MaterialPropertyType::Color, 0u},
+        {u8"BaseColor", MaterialPropertyType::Color, 0u},
         {u8"SpecularColor", MaterialPropertyType::Color, 16u},
         {u8"EmissiveColor", MaterialPropertyType::ColorHdr, 32u},
         {u8"Shininess", MaterialPropertyType::Float, 48u},
@@ -136,7 +136,7 @@ TEST_CASE("material templates: the Phong builtin lays its cbuffer out as phong.p
         CHECK(found->offset == uniform.offset);
     }
     // Its maps in their slots, t0 to t3, then the sampler.
-    const StringView kMaps[] = {u8"DiffuseMap", u8"SpecularMap", u8"NormalMap", u8"EmissiveMap"};
+    const StringView kMaps[] = {u8"AlbedoMap", u8"SpecularMap", u8"NormalMap", u8"EmissiveMap"};
     for (const StringView map : kMaps)
     {
         REQUIRE(phong->FindProperty(map) != nullptr);

@@ -330,3 +330,41 @@ TEST_CASE("material editor: values carry onto another shader's layout by name, t
     CHECK(unlit.source.textureSlots[0] == u8"AlbedoMap");
     CHECK(unlit.source.textureIds[0] == albedo);
 }
+
+// Phong takes the names PBR gives the colour, its map, the emission and the normal map, so a PBR
+// material put on the built-in Phong keeps its look's makings; what Phong lacks (metal, roughness)
+// is dropped and its own (specular, shininess) start at their defaults.
+TEST_CASE("material editor: a PBR material put on the built-in Phong keeps its colour and its maps")
+{
+    MaterialAsset pbr;
+    MaterialImporter::Import(*CreatePBR(u8"m", Float4{0.2f, 0.4f, 0.6f, 1.0f}), Guid{}, pbr);
+    const Guid albedo{0x5ull, 0x6ull};
+    const Guid normal{0x7ull, 0x8ull};
+    const Guid packed{0x9ull, 0xAull};
+    pbr.source.textureSlots.PushBack(String(u8"AlbedoMap"));
+    pbr.source.textureIds.PushBack(albedo);
+    pbr.source.textureSlots.PushBack(String(u8"NormalMap"));
+    pbr.source.textureIds.PushBack(normal);
+    pbr.source.textureSlots.PushBack(String(u8"MetallicRoughnessMap")); // Phong has none
+    pbr.source.textureIds.PushBack(packed);
+
+    SetMaterialBuiltInShader(pbr.source, BuiltinShading::Phong);
+    CHECK(pbr.source.shaderName == u8"phong");
+    const auto offsetOf = [&](StringView name) -> isize
+    {
+        for (usize i = 0; i < pbr.source.propertyNames.Size(); ++i)
+            if (pbr.source.propertyNames[i].AsView() == name)
+                return static_cast<isize>(pbr.source.propertyOffsets[i]);
+        return -1;
+    };
+    REQUIRE(offsetOf(u8"BaseColor") >= 0);
+    CHECK(offsetOf(u8"Metallic") < 0);
+    Float4 carried{};
+    MemCopy(&carried, pbr.source.uniformDefaults.Data() + offsetOf(u8"BaseColor"), sizeof(carried));
+    CHECK(carried.y == doctest::Approx(0.4f));
+    REQUIRE(pbr.source.textureSlots.Size() == 2u);
+    CHECK(pbr.source.textureSlots[0] == u8"AlbedoMap");
+    CHECK(pbr.source.textureIds[0] == albedo);
+    CHECK(pbr.source.textureSlots[1] == u8"NormalMap");
+    CHECK(pbr.source.textureIds[1] == normal);
+}

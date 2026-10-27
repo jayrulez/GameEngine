@@ -243,12 +243,14 @@ export namespace foundation::materials
 
     // The standard PHONG material (the "phong" builtin shader, Specs/phong-material.md): what a
     // model authored with Phong or Lambert is made of. Each light shaded Blinn-Phong: the diffuse
-    // (DiffuseColor x DiffuseMap) by N.L, the specular (SpecularColor x SpecularMap, black: none)
-    // as a highlight as tight as Shininess, its exponent; the scene's diffuse ambient; the emission
-    // added. Same vertex path as forward, so it casts shadows and moves through the post stack
-    // normally. The order lays the cbuffer out in 64 bytes, as phong.ps.hlsl declares it.
+    // (BaseColor x AlbedoMap) by N.L, the specular (SpecularColor x SpecularMap, black: none) as a
+    // highlight as tight as Shininess, its exponent; the scene's diffuse ambient; the emission
+    // added. Its colour, map, emission, normal map and cutoff take the names PBR and Unlit give
+    // them, so a material moved between built-ins keeps them. Same vertex path as forward, so it
+    // casts shadows and moves through the post stack normally. The order lays the cbuffer out in
+    // 64 bytes, as phong.ps.hlsl declares it.
     [[nodiscard]] inline RefPtr<Material> CreatePhong(StringView name,
-                                                      Float4 diffuseColor = Float4{1, 1, 1, 1},
+                                                      Float4 baseColor = Float4{1, 1, 1, 1},
                                                       Float4 specularColor = Float4{0, 0, 0, 1},
                                                       f32 shininess = 20.0f,
                                                       StringView shaderName = u8"phong")
@@ -256,14 +258,14 @@ export namespace foundation::materials
         return MaterialBuilder(name)
             .Shader(shaderName)
             .VertexLayout(VertexLayoutType::Mesh)
-            .Color(u8"DiffuseColor", diffuseColor)
+            .Color(u8"BaseColor", baseColor)
             .Color(u8"SpecularColor", specularColor)
             // Black = none; rgb x EmissiveMap, times the intensity in w (glow above white).
             .ColorHdr(u8"EmissiveColor", Float4{0, 0, 0, 1})
             .Float(u8"Shininess", shininess)
             .Float(u8"NormalScale", 1.0f)
             .Float(u8"AlphaCutoff", 0.5f)
-            .Texture(u8"DiffuseMap")
+            .Texture(u8"AlbedoMap")
             .Texture(u8"SpecularMap")
             .Texture(u8"NormalMap")
             .Texture(u8"EmissiveMap")

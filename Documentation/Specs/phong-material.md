@@ -65,10 +65,12 @@ beside the other two.
   through the vertex path), and under GBUFFER the five targets every forward shader writes, so SSR,
   SSGI and the rest go on working (written as a rough dielectric: Phong has no metal, and its
   highlight is not a mirror).
-- **Its properties**, in this order (the cbuffer written to match, 64 bytes): `DiffuseColor`
-  (colour), `SpecularColor` (colour; black, no highlight), `EmissiveColor` (HDR colour),
-  `Shininess` (float, the highlight's exponent), `NormalScale`, `AlphaCutoff`; `DiffuseMap`,
-  `SpecularMap`, `NormalMap`, `EmissiveMap`; `MainSampler`. No wind properties, as Unlit has none:
+- **Its properties**, in this order (the cbuffer written to match, 64 bytes): `BaseColor` (the
+  diffuse colour), `SpecularColor` (colour; black, no highlight), `EmissiveColor` (HDR colour),
+  `Shininess` (float, the highlight's exponent), `NormalScale`, `AlphaCutoff`; `AlbedoMap` (the
+  diffuse map), `SpecularMap`, `NormalMap`, `EmissiveMap`; `MainSampler`. The colour, its map,
+  the emission, the normal map and the cutoff take the names PBR and Unlit give them, so a
+  material moved between built-ins keeps them (values carry by name). No wind properties, as Unlit has none:
   a Phong material never selects the swaying vertex variant.
 - **Where it is known by name.** `BuiltinMaterialTemplate` gains its branch; the built-in shader a
   material asset names becomes one of three (PBR, Unlit, Phong) in `SetMaterialBuiltInShader`, the
@@ -87,8 +89,8 @@ The information travels the one path there is:
    Unlit for `KHR_materials_unlit` (phase 3).
 2. **The cook picks the built-in.** The two copies become one function in ModelImporter, which
    makes each material by its shading model: PBR through `CreatePBR` with the maps it wires today,
-   Phong and Lambert (no specular) through `CreatePhong` with the diffuse, specular, normal and
-   emissive maps, Unlit through `CreateUnlit`.
+   Phong and Lambert (no specular) through `CreatePhong` with the albedo (diffuse), specular,
+   normal and emissive maps, Unlit through `CreateUnlit`.
 3. **What is imported already** keeps its PBR materials until it is imported again.
 
 ### glTF unlit (phase 3)

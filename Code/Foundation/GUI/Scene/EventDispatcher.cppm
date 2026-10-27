@@ -710,6 +710,8 @@ export namespace foundation::gui
         /// (an edit cancelled).
         void InjectPadButton(PadButton button)
         {
+            if (PadCaptured())
+                return;
             NoteInput();
             DropHiddenFocus();
             ApplyInputKind(InputKind::Pad);
@@ -1321,6 +1323,8 @@ export namespace foundation::gui
         // system's own key repeat.) The GUI's update (GUIContext::Update) ticks it.
         void PressDirection(NavDirection direction)
         {
+            if (PadCaptured())
+                return;
             NoteInput();
             ApplyInputKind(InputKind::Pad);
             m_holding = true;
@@ -1338,7 +1342,10 @@ export namespace foundation::gui
         /// A pad's right stick, each axis -1 to 1 (down and right positive): while it is pushed
         /// past its dead zone, Tick scrolls the nearest scroller around the focus (or, with no
         /// focus, under the pointer), faster the further it is pushed.
-        void SetScrollStick(core::Float2 value) noexcept { m_scrollStick = value; }
+        void SetScrollStick(core::Float2 value) noexcept { m_scrollStick = PadCaptured() ? core::Float2{0.0f, 0.0f} : value; }
+        /// A focus that captures every key (a game in a panel) takes the gamepad too: it reads the
+        /// pad itself, and the GUI neither moves focus, activates nor scrolls by it meanwhile.
+        [[nodiscard]] bool PadCaptured() const noexcept { return m_focusNode != nullptr && m_focusNode->GetCapturesAllKeys(); }
         [[nodiscard]] core::Float2 GetScrollStick() const noexcept { return m_scrollStick; }
         void Tick(f32 seconds)
         {
@@ -1355,6 +1362,8 @@ export namespace foundation::gui
                 if (m_pressHeld >= kLongPress)
                     LongPress();
             }
+            if (m_holding && PadCaptured())
+                m_holding = false; // held as the game took the focus: no further step is the GUI's
             if (!m_holding)
                 return;
             m_heldFor += seconds;

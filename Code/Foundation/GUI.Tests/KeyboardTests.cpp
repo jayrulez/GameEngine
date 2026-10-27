@@ -512,6 +512,40 @@ TEST_CASE("keyboard: a focus that captures every key takes Tab, Escape and bound
     CHECK(bed.Focused() == SV(u8"next"));
 }
 
+TEST_CASE("keyboard: a focus that captures every key takes the gamepad too: no focus move, activation or scroll")
+{
+    // A game in an editor's panel reads the pad itself; the editor's GUI must not act on it too.
+    Bed bed;
+    Button& game = bed.Add(u8"game");
+    bed.Add(u8"below").SetPosition(core::Float2{0.0f, 40.0f});
+    int clicks = 0;
+    (void)game.AddEventListener(EventType::MouseClick, [&clicks](const Event&) { ++clicks; });
+    game.RequestFocus();
+    bed.D().PressDirection(NavDirection::Down); // held from before the capture
+    CHECK(bed.Focused() == SV(u8"below"));
+    game.RequestFocus();
+    game.SetCapturesAllKeys(true);
+    bed.D().Tick(1.0f); // the held direction would repeat
+    CHECK(bed.Focused() == SV(u8"game"));
+    bed.D().ReleaseDirection(NavDirection::Down);
+
+    bed.D().PressDirection(NavDirection::Down);
+    bed.D().Tick(1.0f);
+    bed.D().InjectPadButton(PadButton::South);
+    bed.D().SetScrollStick(core::Float2{0.0f, 1.0f});
+    CHECK(bed.Focused() == SV(u8"game"));
+    CHECK(clicks == 0);
+    CHECK(bed.D().GetScrollStick() == core::Float2{0.0f, 0.0f});
+
+    // Released, the pad is the GUI's again.
+    bed.D().ReleaseDirection(NavDirection::Down);
+    game.SetCapturesAllKeys(false);
+    bed.D().InjectPadButton(PadButton::South);
+    CHECK(clicks == 1);
+    bed.D().PressDirection(NavDirection::Down);
+    CHECK(bed.Focused() == SV(u8"below"));
+}
+
 TEST_CASE("keyboard: a field's label (for) marks an access key, and Alt with it focuses the field")
 {
     Bed bed;

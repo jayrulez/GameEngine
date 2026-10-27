@@ -595,7 +595,12 @@ The layers:
       removes, never reorders, and a removal frees its weights as before. New splat weights are the
       bar's (a size from its menu), made beside the terrain; the cooked terrain's grid, world size
       and chunks are read-only rows. Each edit one undo step.
-   2. The vegetation mask page.
+   2. The vegetation mask page: the image pages' shape, a density plane at a time (none to full
+      as black to white, chosen in the channel's place, the pointer's density read out) beside the
+      mask's options. As its cook reads them (user 2026-10-27): a painted mask's width and height
+      are read only once anything is painted (a notice says why), its plane count edits (the cook
+      keeps the planes that remain, a new one empty); an imported mask's planes are its image's
+      channels and its options read only. Its painting stays the scene view's tool.
 8. The particle effect page (Particles): the systems a tree, the preview, the inspector with its
    curves and gradients on the grid's own editors (a gradient's stop recoloured, which nothing
    handled before).

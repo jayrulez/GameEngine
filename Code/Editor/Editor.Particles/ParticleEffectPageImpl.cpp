@@ -61,9 +61,35 @@ namespace editor
             return true;
         }
 
+        // The folder a list's row is in (an initializer's Initializers).
+        [[nodiscard]] ParticleRowKind FolderOf(ParticleRowKind kind)
+        {
+            switch (kind)
+            {
+            case ParticleRowKind::Initializer:
+                return ParticleRowKind::Initializers;
+            case ParticleRowKind::Behavior:
+                return ParticleRowKind::Behaviors;
+            case ParticleRowKind::SubEmitter:
+                return ParticleRowKind::SubEmitters;
+            default:
+                return kind;
+            }
+        }
+
+        // A sub-emitter as a line: what sets it off and where it spawns ("On death into Sparks").
+        [[nodiscard]] String LinkName(particles::ParticleEffect& effect, const particles::SubEmitterLink& link);
+
         [[nodiscard]] String SystemName(const particles::ParticleSystem& system, usize index)
         {
             return system.name.IsEmpty() ? Format(u8"System {}", index + 1) : String(system.name.AsView());
+        }
+
+        String LinkName(particles::ParticleEffect& effect, const particles::SubEmitterLink& link)
+        {
+            const particles::ParticleSystem* child = link.childSystemIndex >= 0 ? effect.GetSystem(link.childSystemIndex) : nullptr;
+            return Format(u8"{} into {}", link.trigger == particles::ParticleEventType::OnDeath ? StringView(u8"On death") : StringView(u8"On birth"),
+                          child != nullptr ? SystemName(*child, static_cast<usize>(link.childSystemIndex)).AsView() : StringView(u8"nothing"));
         }
 
         // The grid's place a tree row names in its system (empty: the system's top).
@@ -82,7 +108,9 @@ namespace editor
             case ParticleRowKind::Behavior:
                 return Format(u8"behaviors.{}", row.module);
             case ParticleRowKind::SubEmitters:
-                return String(u8"subEmitterLinks");
+                return String(u8"subEmitters");
+            case ParticleRowKind::SubEmitter:
+                return Format(u8"subEmitters.{}", row.module);
             case ParticleRowKind::System:
                 break;
             }
@@ -123,15 +151,46 @@ namespace editor
         m_values->SetTextFormat(&m_format);
         m_values->RegisterCurveType(u8"ParticleCurveFloat", gui::ReflectedCurveParts{String(u8"keys")});
         m_values->RegisterGradientType(u8"ParticleCurveColor", gui::ReflectedGradientParts{String(u8"colors"), String(u8"alphas"), String(u8"interpolation")});
-        m_values->SetOnDescribe([](StringView path, gui::PropertyInfo& info)
+        m_values->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
                                 {
                                     // A mesh's materials by its slots, the first doubling as the whole mesh's.
                                     constexpr StringView kMaterials = u8"materialRefs.";
-                                    if (!path.StartsWith(kMaterials))
+                                    if (path.StartsWith(kMaterials))
+                                    {
+                                        const Optional<i64> slot = ParseInt(path.SubStr(kMaterials.Size(), path.Size() - kMaterials.Size()));
+                                        if (slot.HasValue())
+                                            info.DisplayName = slot.Value() == 0 ? String(u8"Slot 1 (whole mesh)") : Format(u8"Slot {}", slot.Value() + 1);
                                         return;
-                                    const Optional<i64> slot = ParseInt(path.SubStr(kMaterials.Size(), path.Size() - kMaterials.Size()));
-                                    if (slot.HasValue())
-                                        info.DisplayName = slot.Value() == 0 ? String(u8"Slot 1 (whole mesh)") : Format(u8"Slot {}", slot.Value() + 1);
+                                    }
+                                    // A sub-emitter named by what sets it off and where it spawns; where, a
+                                    // choice of the other systems by name (its index alone says nothing).
+                                    constexpr StringView kLinks = u8"subEmitters.";
+                                    particles::ParticleEffect* effect = self->Effect();
+                                    particles::ParticleSystem* system = effect != nullptr ? effect->GetSystem(self->m_system) : nullptr;
+                                    if (system == nullptr || !path.StartsWith(kLinks))
+                                        return;
+                                    const StringView rest = path.SubStr(kLinks.Size(), path.Size() - kLinks.Size());
+                                    usize dot = 0;
+                                    while (dot < rest.Size() && rest[dot] != u8'.')
+                                        ++dot;
+                                    const Optional<i64> index = ParseInt(rest.SubStr(0, dot));
+                                    if (!index.HasValue() || index.Value() < 0 || static_cast<usize>(index.Value()) >= system->subEmitters.Size())
+                                        return;
+                                    if (dot == rest.Size())
+                                    {
+                                        info.DisplayName = LinkName(*effect, system->subEmitters[static_cast<usize>(index.Value())]);
+                                        return;
+                                    }
+                                    if (rest.SubStr(dot + 1, rest.Size() - dot - 1) != StringView(u8"childSystemIndex"))
+                                        return;
+                                    info.Kind = gui::PropertyKind::Enum;
+                                    info.HasRange = false;
+                                    info.Hint = String{};
+                                    info.Choices.Clear();
+                                    info.Choices.PushBack(gui::PropertyChoice{String(u8"Nothing"), -1});
+                                    for (i32 s = 0; s < effect->SystemCount(); ++s)
+                                        if (s != self->m_system) // never into itself
+                                            info.Choices.PushBack(gui::PropertyChoice{SystemName(*effect->GetSystem(s), static_cast<usize>(s)), s});
                                 });
         m_values->SetOnChange([self](const gui::ReflectedChange& change)
                               {
@@ -148,69 +207,7 @@ namespace editor
                                       EditorRootAllocator()));
                               });
 
-        // The effect's own rows: its sub-emitter links alone (its systems are the tree's), each
-        // named by what sets it off and the system it spawns into, that system a choice by name.
-        m_effectRows = MakeUnique<gui::ReflectedPropertySource>(Allocator(), Allocator());
-        m_effectRows->SetTextFormat(&m_format);
-        m_effectRows->SetOnDescribe([self](StringView path, gui::PropertyInfo& info)
-                                    {
-                                        const particles::ParticleEffect* effect = self->Effect();
-                                        if (effect == nullptr)
-                                            return;
-                                        if (path == StringView(u8"name") || path == StringView(u8"systems"))
-                                        {
-                                            info.Visible = false;
-                                            return;
-                                        }
-                                        constexpr StringView kLinks = u8"subEmitterLinks.";
-                                        if (!path.StartsWith(kLinks))
-                                            return;
-                                        StringView rest = path.SubStr(kLinks.Size(), path.Size() - kLinks.Size());
-                                        usize dot = 0;
-                                        while (dot < rest.Size() && rest[dot] != u8'.')
-                                            ++dot;
-                                        const Optional<i64> index = ParseInt(rest.SubStr(0, dot));
-                                        const Span<const particles::SubEmitterLink> links = effect->SubEmitterLinks();
-                                        if (!index.HasValue() || index.Value() < 0 || static_cast<usize>(index.Value()) >= links.Size())
-                                            return;
-                                        const particles::SubEmitterLink& link = links[static_cast<usize>(index.Value())];
-                                        auto* fx = const_cast<particles::ParticleEffect*>(effect);
-                                        const auto systemName = [fx](i32 system) -> String
-                                        {
-                                            const particles::ParticleSystem* child = fx->GetSystem(system);
-                                            return child != nullptr ? SystemName(*child, static_cast<usize>(system)) : String(u8"nothing");
-                                        };
-                                        if (dot == rest.Size())
-                                        {
-                                            info.DisplayName = Format(u8"{} into {}", link.trigger == particles::ParticleEventType::OnDeath ? StringView(u8"On death") : StringView(u8"On birth"),
-                                                                      systemName(link.childSystemIndex));
-                                            return;
-                                        }
-                                        if (rest.SubStr(dot + 1, rest.Size() - dot - 1) == StringView(u8"childSystemIndex"))
-                                        {
-                                            // The systems by name, as its index alone says nothing.
-                                            info.Kind = gui::PropertyKind::Enum;
-                                            info.HasRange = false;
-                                            info.Hint = String{};
-                                            info.Choices.Clear();
-                                            info.Choices.PushBack(gui::PropertyChoice{String(u8"Nothing"), -1});
-                                            for (i32 s = 0; s < fx->SystemCount(); ++s)
-                                                info.Choices.PushBack(gui::PropertyChoice{systemName(s), s});
-                                        }
-                                    });
-        m_effectRows->SetOnChange([self](const gui::ReflectedChange& change)
-                                  {
-                                      (void)self->Commands().Execute(UniquePtr<IEditorCommand>(
-                                          EditorRootAllocator().New<app::ReflectedEditCommand>(
-                                              TypeOf<particles::ParticleEffect>(), [self]() -> void* { return self->Effect(); }, change, self->m_format, u8"edit_particle",
-                                              [self]() { self->Changed(); }),
-                                          EditorRootAllocator()));
-                                  });
-        if (particles::ParticleEffect* effect = Effect())
-        {
-            const Instance target(effect, &TypeOf<particles::ParticleEffect>());
-            m_effectRows->SetObjects(Span<const Instance>(&target, 1u));
-        }
+        AddSection(kSystemSection, u8"System", *m_values);
 
         if (Content())
         {
@@ -258,11 +255,6 @@ namespace editor
         return *m_values;
     }
 
-    gui::IPropertySource& ParticleEffectEditorPage::EffectRows() noexcept
-    {
-        return *m_effectRows;
-    }
-
     // === The tree and the rows ===
 
     void ParticleEffectEditorPage::BindSystem()
@@ -282,66 +274,22 @@ namespace editor
     void ParticleEffectEditorPage::Choose(const ParticleTreeRow& row)
     {
         const particles::ParticleEffect* effect = Effect();
-        if (row.kind == ParticleRowKind::SubEmitters)
-            m_chosen = row; // the effect's: the system shown stays
-        else
-        {
-            m_system = effect != nullptr && row.system >= 0 && row.system < effect->SystemCount() ? row.system : -1;
-            m_chosen = m_system >= 0 ? row : ParticleTreeRow{};
-            BindSystem();
-        }
-        ShowSections();
-        // The place it names opened in place (a module's list, then it) and brought into view.
-        const StringView section = m_chosen.kind == ParticleRowKind::SubEmitters ? kEffectSection : kSystemSection;
+        m_system = effect != nullptr && row.system >= 0 && row.system < effect->SystemCount() ? row.system : -1;
+        m_chosen = m_system >= 0 ? row : ParticleTreeRow{};
+        BindSystem();
+        // The place it names opened in place (a list's row: its list, then it) and brought into view.
         const String place = PlaceOf(m_chosen);
         if (gui::PropertyGrid* grid = Grid(); grid != nullptr && !place.IsEmpty())
         {
             if (m_chosen.module >= 0)
-                grid->SetOpen(Sections().PathIn(kSystemSection, PlaceOf(ParticleTreeRow{m_chosen.kind == ParticleRowKind::Initializer ? ParticleRowKind::Initializers
-                                                                                                                                          : ParticleRowKind::Behaviors,
-                                                                                          m_chosen.system, -1})
-                                                                    .AsView())
-                                  .AsView(),
-                              true);
-            const String path = Sections().PathIn(section, place.AsView());
+                grid->SetOpen(Sections().PathIn(kSystemSection, PlaceOf(ParticleTreeRow{FolderOf(m_chosen.kind), m_chosen.system, -1}).AsView()).AsView(), true);
+            const String path = Sections().PathIn(kSystemSection, place.AsView());
             grid->SetOpen(path.AsView(), true);
             const i32 found = grid->FindRow(path.AsView());
             if (found >= 0)
                 grid->ScrollToItem(found, gui::ScrollAlign::Start);
         }
         ShowTree();
-    }
-
-    void ParticleEffectEditorPage::ShowSections()
-    {
-        // One thing at a time: the chosen system's rows, or the effect's links (they are the
-        // effect's, not any system's, so they never show under one).
-        const bool links = m_chosen.kind == ParticleRowKind::SubEmitters;
-        if (m_sectionsShown == static_cast<i32>(links))
-            return;
-        m_sectionsShown = static_cast<i32>(links);
-        ClearSections();
-        if (links)
-            AddSection(kEffectSection, u8"Sub-emitters", *m_effectRows);
-        else
-            AddSection(kSystemSection, u8"System", *m_values);
-    }
-
-    void ParticleEffectEditorPage::ShowSpawnedBy()
-    {
-        // A system the links spawn into says so: it shows what they spawn.
-        const particles::ParticleEffect* effect = Effect();
-        String names;
-        if (effect != nullptr && m_chosen.kind != ParticleRowKind::SubEmitters && m_system >= 0)
-            for (const particles::SubEmitterLink& link : effect->SubEmitterLinks())
-                if (link.childSystemIndex == m_system)
-                {
-                    if (!names.IsEmpty())
-                        names.Append(StringView(u8", "));
-                    names.Append(link.trigger == particles::ParticleEventType::OnDeath ? StringView(u8"on the others' deaths") : StringView(u8"on the others' births"));
-                }
-        SetNotice(u8"spawned", names.IsEmpty() ? StringView{}
-                                               : Format(u8"The effect's sub-emitters spawn into this system ({}); the tree's Sub-emitters row has them.", names).AsView());
     }
 
     String ParticleEffectEditorPage::Tree() const
@@ -352,11 +300,6 @@ namespace editor
         {
             if (!out.IsEmpty())
                 out += u8"\n";
-            if (row.kind == ParticleRowKind::SubEmitters)
-            {
-                out += u8"Sub-emitters";
-                continue;
-            }
             const particles::ParticleSystem* system = const_cast<particles::ParticleEffect*>(effect)->GetSystem(row.system);
             switch (row.kind)
             {
@@ -379,6 +322,10 @@ namespace editor
                 out += Format(u8"    {}", ModuleName(const_cast<particles::ParticleSystem*>(system)->GetBehavior(row.module))).AsView();
                 break;
             case ParticleRowKind::SubEmitters:
+                out += u8"  Sub-emitters";
+                break;
+            case ParticleRowKind::SubEmitter:
+                out += Format(u8"    {}", LinkName(*const_cast<particles::ParticleEffect*>(effect), system->subEmitters[static_cast<usize>(row.module)])).AsView();
                 break;
             }
         }
@@ -424,9 +371,11 @@ namespace editor
             m_model->SetIcon(behaviors, u8"Editor/Icons/folder.svg");
             for (i32 b = 0; b < system.BehaviorCount(); ++b)
                 (void)add(behaviors, ModuleName(system.GetBehavior(b)), ParticleTreeRow{ParticleRowKind::Behavior, s, b});
+            const i32 links = add(systemNode, u8"Sub-emitters", ParticleTreeRow{ParticleRowKind::SubEmitters, s, -1});
+            m_model->SetIcon(links, u8"Editor/Icons/hierarchy.svg");
+            for (usize l = 0; l < system.subEmitters.Size(); ++l)
+                (void)add(links, LinkName(*effect, system.subEmitters[l]).AsView(), ParticleTreeRow{ParticleRowKind::SubEmitter, s, static_cast<i32>(l)});
         }
-        const i32 links = add(gui::TreeModel::kRoot, u8"Sub-emitters", ParticleTreeRow{ParticleRowKind::SubEmitters, -1, -1});
-        m_model->SetIcon(links, u8"Editor/Icons/hierarchy.svg");
         if (m_tree != nullptr)
         {
             for (usize node = 0; node < m_rows.Size(); ++node)
@@ -444,7 +393,6 @@ namespace editor
             }
         }
         m_showing = false;
-        ShowSpawnedBy();
     }
 
     void ParticleEffectEditorPage::ShowFacts()
@@ -457,7 +405,6 @@ namespace editor
             budget += const_cast<particles::ParticleEffect*>(effect)->GetSystem(s)->MaxParticles();
         SetFact(u8"Systems", Format(u8"{}", effect->SystemCount()).AsView());
         SetFact(u8"Particle Budget", Format(u8"{}", budget).AsView());
-        SetFact(u8"Sub-emitters", Format(u8"{}", effect->SubEmitterLinks().Size()).AsView());
     }
 
     void ParticleEffectEditorPage::Changed()
@@ -465,16 +412,16 @@ namespace editor
         // A name, a module added or taken away, a render mode, a link: the tree, the facts, the
         // links' names, the preview.
         m_values->Refresh();
-        m_effectRows->Refresh();
         const particles::ParticleEffect* effect = Effect();
         if (effect != nullptr && m_chosen.module >= 0)
         {
             const particles::ParticleSystem* system = const_cast<particles::ParticleEffect*>(effect)->GetSystem(m_chosen.system);
             const i32 count = system == nullptr ? 0
-                                                : (m_chosen.kind == ParticleRowKind::Initializer ? system->InitializerCount() : system->BehaviorCount());
+                                                : (m_chosen.kind == ParticleRowKind::Initializer ? system->InitializerCount()
+                                                   : m_chosen.kind == ParticleRowKind::Behavior  ? system->BehaviorCount()
+                                                                                                  : static_cast<i32>(system->subEmitters.Size()));
             if (m_chosen.module >= count)
-                m_chosen = ParticleTreeRow{m_chosen.kind == ParticleRowKind::Initializer ? ParticleRowKind::Initializers : ParticleRowKind::Behaviors,
-                                           m_chosen.system, -1};
+                m_chosen = ParticleTreeRow{FolderOf(m_chosen.kind), m_chosen.system, -1};
         }
         ShowTree();
         ShowFacts();
@@ -490,14 +437,9 @@ namespace editor
         const i32 count = effect != nullptr ? effect->SystemCount() : 0;
         if (m_system >= count)
             m_system = count - 1;
-        if (m_chosen.kind != ParticleRowKind::SubEmitters && m_chosen.system != m_system)
+        if (m_chosen.system != m_system)
             m_chosen = ParticleTreeRow{ParticleRowKind::System, m_system, -1};
         BindSystem();
-        if (effect != nullptr)
-        {
-            const Instance target(effect, &TypeOf<particles::ParticleEffect>());
-            m_effectRows->SetObjects(Span<const Instance>(&target, 1u));
-        }
         Changed();
     }
 
@@ -521,11 +463,11 @@ namespace editor
             gui::ListEdit edit;
             edit.Kind = gui::ListEdit::Op::Remove;
             edit.Index = static_cast<usize>(row.module);
-            m_chosen = ParticleTreeRow{row.kind == ParticleRowKind::Initializer ? ParticleRowKind::Initializers : ParticleRowKind::Behaviors, row.system, -1};
-            return m_values->EditList(row.kind == ParticleRowKind::Initializer ? StringView(u8"initializers") : StringView(u8"behaviors"), edit);
+            m_chosen = ParticleTreeRow{FolderOf(row.kind), row.system, -1};
+            return m_values->EditList(PlaceOf(ParticleTreeRow{FolderOf(row.kind), row.system, -1}).AsView(), edit);
         }
         if (row.kind != ParticleRowKind::System || effect->SystemCount() < 2)
-            return false; // an effect keeps a system; the emitter, the lists and the links are its own rows'
+            return false; // an effect keeps a system; the emitter and the lists are the system's rows'
         const i32 index = row.system;
         EditWhole(u8"edit_particle", [index](ISerializable& object) { static_cast<pipeline::ParticleEffectAsset&>(object).Effect().RemoveSystem(index); });
         Choose(ParticleTreeRow{ParticleRowKind::System, Min(index, Effect()->SystemCount() - 1), -1});

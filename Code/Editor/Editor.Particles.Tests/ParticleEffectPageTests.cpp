@@ -6,7 +6,7 @@
 // systems and their modules a tree; the chosen system's rows from reflection, each shown where its
 // render mode uses it, its modules added by type from what derives from the list's base, a curve
 // one value; a module chosen opening in place; each edit, a system added and a module or a system
-// removed one undo step; the effect's sub-emitter links; the preview started again only when the
+// removed one undo step; a system's sub-emitters; the preview started again only when the
 // modules or the systems change.
 
 #include <doctest/doctest.h>
@@ -113,7 +113,7 @@ TEST_CASE("particle page: the systems and their modules a tree, the chosen syste
 {
     Bed bed;
     CHECK(bed.page->ChosenSystem() == 0);
-    CHECK(bed.page->Tree() == String(u8"Sparks\n  Emitter\n  Initializers\n    Lifetime\n    Velocity\n    Size\n    Color\n  Behaviors\n    Gravity\nSub-emitters"));
+    CHECK(bed.page->Tree() == String(u8"Sparks\n  Emitter\n  Initializers\n    Lifetime\n    Velocity\n    Size\n    Color\n  Behaviors\n    Gravity\n  Sub-emitters"));
     CHECK(bed.page->Fact(u8"Systems") == String(u8"1"));
     CHECK(bed.page->Fact(u8"Particle Budget") == String(u8"2000"));
 
@@ -177,7 +177,7 @@ TEST_CASE("particle page: a module chosen in the tree is removed as one step; a 
     bed.page->Choose(ParticleTreeRow{ParticleRowKind::Initializer, 0, 1}); // Velocity
     REQUIRE(bed.page->RemoveChosen());
     CHECK(bed.Effect().GetSystem(0)->InitializerCount() == 3);
-    CHECK(bed.page->Tree() == String(u8"Sparks\n  Emitter\n  Initializers\n    Lifetime\n    Size\n    Color\n  Behaviors\n    Gravity\nSub-emitters"));
+    CHECK(bed.page->Tree() == String(u8"Sparks\n  Emitter\n  Initializers\n    Lifetime\n    Size\n    Color\n  Behaviors\n    Gravity\n  Sub-emitters"));
     bed.page->Commands().Undo();
     CHECK(bed.Effect().GetSystem(0)->InitializerCount() == 4);
 
@@ -206,81 +206,48 @@ TEST_CASE("particle page: a module chosen in the tree is removed as one step; a 
     CHECK(bed.page->ChosenSystem() == 0);
 }
 
-namespace
-{
-    // The page's own section the grid shows ("system", "effect", "both"), besides its notices and facts.
-    String Shown(Bed& bed)
-    {
-        Array<gui::PropertyInfo> sections;
-        bed.page->Sections().GetProperties(StringView{}, sections);
-        bool system = false;
-        bool effect = false;
-        for (const gui::PropertyInfo& row : sections) // each "key/inner"
-        {
-            system = system || row.Name.AsView().StartsWith(StringView(u8"system/"));
-            effect = effect || row.Name.AsView().StartsWith(StringView(u8"effect/"));
-        }
-        return String(system ? (effect ? u8"both" : u8"system") : (effect ? u8"effect" : u8""));
-    }
-}
-
-TEST_CASE("particle page: the effect's sub-emitter links, each into a system chosen by name, named by what sets it off")
+TEST_CASE("particle page: a system's sub-emitters, each into another system chosen by name, in its rows and its tree")
 {
     Bed bed;
     bed.page->AddSystem();
     bed.Edit(u8"name", gui::Variant(StringView(u8"Smoke"))); // the system added, chosen
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::System, 0, -1}); // Sparks spawns into Smoke
     gui::ListEdit add;
     add.Kind = gui::ListEdit::Op::Insert;
     add.Index = 0;
-    REQUIRE(bed.page->EffectRows().EditList(u8"subEmitterLinks", add));
-    REQUIRE(bed.Effect().SubEmitterLinks().Size() == 1u);
-    CHECK(bed.page->Fact(u8"Sub-emitters") == String(u8"1"));
+    REQUIRE(bed.page->SystemRows().EditList(u8"subEmitters", add));
+    REQUIRE(bed.Effect().GetSystem(0)->subEmitters.Size() == 1u);
+    CHECK(bed.Effect().GetSystem(1)->subEmitters.IsEmpty()); // the other system has none
 
-    // Its system a choice by name; chosen, the link says it.
-    Array<gui::PropertyInfo> rows;
-    bed.page->EffectRows().GetProperties(u8"subEmitterLinks.0", rows);
-    const gui::PropertyInfo* into = nullptr;
-    for (const gui::PropertyInfo& info : rows)
-        if (info.Name == String(u8"childSystemIndex"))
-            into = &info;
-    REQUIRE(into != nullptr);
+    // Where it spawns: the other systems by name, never itself.
+    const Optional<gui::PropertyInfo> into = bed.Info(u8"subEmitters.0", u8"childSystemIndex");
+    REQUIRE(into.HasValue());
     CHECK(into->Kind == gui::PropertyKind::Enum);
-    REQUIRE(into->Choices.Size() == 3u);
+    REQUIRE(into->Choices.Size() == 2u);
     CHECK(into->Choices[0].Name == String(u8"Nothing"));
-    CHECK(into->Choices[2].Name == String(u8"Smoke"));
-    bed.page->EffectRows().BeginEdit(u8"subEmitterLinks.0.childSystemIndex");
-    bed.page->EffectRows().CommitEdit(u8"subEmitterLinks.0.childSystemIndex", gui::PropertyWrite{gui::Variant(static_cast<i64>(1))});
-    CHECK(bed.Effect().SubEmitterLinks()[0].childSystemIndex == 1);
-    Array<gui::PropertyInfo> links;
-    bed.page->EffectRows().GetProperties(u8"subEmitterLinks", links);
-    REQUIRE(links.Size() == 1u);
-    CHECK(links[0].DisplayName == String(u8"On death into Smoke"));
+    CHECK(into->Choices[1].Name == String(u8"Smoke"));
+    bed.Edit(u8"subEmitters.0.childSystemIndex", gui::Variant(static_cast<i64>(1)));
+    CHECK(bed.Effect().GetSystem(0)->subEmitters[0].childSystemIndex == 1);
+    const Optional<gui::PropertyInfo> link = bed.Info(u8"subEmitters", u8"0");
+    REQUIRE(link.HasValue());
+    CHECK(link->DisplayName == String(u8"On death into Smoke"));
+    // In the tree under the system that owns it, and chosen there, opened in place.
+    CHECK(bed.page->Tree().AsView().ContainsIgnoreCase(StringView(u8"  Sub-emitters\n    On death into Smoke\nSmoke")));
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitter, 0, 0});
+    CHECK(bed.page->ChosenSystem() == 0);
 
-    // The effect's name and systems are not its rows: the tree has the systems.
-    Array<gui::PropertyInfo> top;
-    bed.page->EffectRows().GetProperties(StringView{}, top);
-    for (const gui::PropertyInfo& info : top)
-        CHECK((info.Name == String(u8"subEmitterLinks") || !info.Visible));
-
-    // The system it spawns into removed: the link does nothing, until the removal is undone.
+    // The system it spawns into removed: it does nothing, until the removal is undone.
     bed.page->Choose(ParticleTreeRow{ParticleRowKind::System, 1, -1});
     REQUIRE(bed.page->RemoveChosen());
-    CHECK(bed.Effect().SubEmitterLinks()[0].childSystemIndex == -1);
+    CHECK(bed.Effect().GetSystem(0)->subEmitters[0].childSystemIndex == -1);
     bed.page->Commands().Undo();
     CHECK(bed.Effect().SystemCount() == 2);
-    CHECK(bed.Effect().SubEmitterLinks()[0].childSystemIndex == 1);
+    CHECK(bed.Effect().GetSystem(0)->subEmitters[0].childSystemIndex == 1);
 
-    // The system they spawn into says so; the other does not.
-    bed.page->Choose(ParticleTreeRow{ParticleRowKind::System, 1, -1});
-    CHECK_FALSE(bed.page->Notice(u8"spawned").IsEmpty());
-    bed.page->Choose(ParticleTreeRow{ParticleRowKind::System, 0, -1});
-    CHECK(bed.page->Notice(u8"spawned").IsEmpty());
-    CHECK(Shown(bed) == String(u8"system"));
-
-    // The links are the effect's: shown in the system's place, never under a system.
-    bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitters, -1, -1});
-    CHECK(bed.page->ChosenSystem() == 0); // the system chosen stays
-    CHECK(Shown(bed) == String(u8"effect"));
+    // Taken away from the tree, as a module is.
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitter, 0, 0});
+    REQUIRE(bed.page->RemoveChosen());
+    CHECK(bed.Effect().GetSystem(0)->subEmitters.IsEmpty());
 }
 
 TEST_CASE("particle page: the asset written outside it (an agent's write) shows on a clean page; unsaved edits are kept")
@@ -297,11 +264,11 @@ TEST_CASE("particle page: the asset written outside it (an agent's write) shows 
     CHECK(bed.page->Tree().AsView().StartsWith(StringView(u8"Shells\n")));
     CHECK(bed.page->Tree().AsView().ContainsIgnoreCase(StringView(u8"\nSparks\n")));
     CHECK(bed.page->Fact(u8"Systems") == String(u8"2"));
-    // The effect's rows are over the effect read, not the one it replaced.
+    // The rows are over the effect read, not the one it replaced.
     gui::ListEdit add;
     add.Kind = gui::ListEdit::Op::Insert;
-    REQUIRE(bed.page->EffectRows().EditList(u8"subEmitterLinks", add));
-    CHECK(bed.Effect().SubEmitterLinks().Size() == 1u);
+    REQUIRE(bed.page->SystemRows().EditList(u8"subEmitters", add));
+    CHECK(bed.Effect().GetSystem(0)->subEmitters.Size() == 1u);
 
     // With unsaved edits, another write leaves the page as it is.
     REQUIRE(bed.page->IsDirty());
@@ -310,7 +277,7 @@ TEST_CASE("particle page: the asset written outside it (an agent's write) shows 
     REQUIRE(bed.instance->WriteObject(again).IsOk());
     bed.page->OnAssetExternallyModified();
     CHECK(bed.Effect().SystemCount() == 2);
-    CHECK(bed.Effect().SubEmitterLinks().Size() == 1u);
+    CHECK(bed.Effect().GetSystem(0)->subEmitters.Size() == 1u);
 }
 
 TEST_CASE("particle page: a system folded in the tree stays folded when another row is chosen or the effect changes")
@@ -320,7 +287,7 @@ TEST_CASE("particle page: a system folded in the tree stays folded when another 
     REQUIRE(tree != nullptr);
     CHECK(tree->IsIdExpanded(0)); // a system opens the first time it shows
     tree->SetIdExpanded(0, false);
-    bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitters, -1, -1});
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::Emitter, 0, -1});
     CHECK_FALSE(tree->IsIdExpanded(0));
     bed.Edit(u8"emitter.spawnRate", gui::Variant(30.0)); // an edit rebuilds the tree
     CHECK_FALSE(tree->IsIdExpanded(0));

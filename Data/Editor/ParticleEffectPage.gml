@@ -1,15 +1,14 @@
 <!--
   The particle effect page (Documentation/Specs/editor-gui.md, 5.4, layer 8): the kit's bar (Save,
   Undo, Redo, Discard Changes, Cook and Rebuild this asset, each an action over the page; its kind
-  at the end) over three panes. The effect's systems as a tree, each its emitter, initializers and
-  behaviors, and its sub-emitter links after them; the tree's bar adds a system and removes the chosen system or module. The live preview
-  with its own bar: Frame, the kit's transport (Restart, Play, Stop, each an action over the page,
+  at the end) over three panes. The effect's systems as a tree, each its emitter, initializers,
+  behaviors and sub-emitters; the tree's bar adds a system and removes the chosen system, module
+  or sub-emitter. The live preview with its own bar: Frame, the kit's transport (Restart, Play, Stop, each an action over the page,
   Play showing Pause while it plays), the particles alive, and the preview's speed, which is the
   page's alone and not saved; the chosen system's emission shape is drawn over it. The grid shows
   the chosen system: its options, its emitter, its initializers and behaviors as lists (an add
-  chooses the module's type), a module chosen in the tree opening there. With the tree's
-  Sub-emitters row chosen it shows the effect's sub-emitter links instead, as they are the
-  effect's and no system's. An asset that did not read says so in place of the grid.
+  chooses the module's type) and its sub-emitters, a module or a sub-emitter chosen in the tree
+  opening there. An asset that did not read says so in place of the grid.
   Code puts the viewport in its stage and fills the tree and the grid.
 -->
 <Panel class="page preview-page particle-page">

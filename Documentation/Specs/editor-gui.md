@@ -240,7 +240,7 @@ to follow the same order.
 | Editor.Preview | In the build, on the GUI: the thumbnail stage (owned by the editor session per project, staged and rendered by the application, the scene editor's generators registered again); the preview viewport on GUI.Viewport, flown as the scene view is, F framing, one backdrop for every preview | X5 (layer 2), X6 (layer 3) |
 | Editor.Play | In the build, on the GUI: the resolutions a Game tab offers, the PIE instance seam, the PIE MCP tools; the Game tab from its markup on GUI.Viewport (the kit's transport, the resolution and the phone, the script debugger beside the game), registered by Tools.Editor; several instances side by side (the Game menu's Play and Play New Instance, the layout tools) and the PIE MCP tools on it | X5 (layer 7, parts 2 to 4) |
 | Editor.Animation, Editor.PropertyAnimation | Parked | |
-| Editor.Particles | In the build, on the GUI: the particle effect page from its markup (the systems a tree, each its emitter, initializers and behaviors, its bar adding a system and removing the chosen system or module; the live preview with the kit's transport, which never writes the effect, a speed of the page's own, the particles alive and the chosen system's emission shape; the chosen system's rows from reflection, each shown where its render mode, emission mode or shape uses it, its modules the grid's lists added by type, a module chosen in the tree opened there, its curves and gradients the toolkit's; the effect's sub-emitter links, new; each edit one undo step) | X6 (layer 8) |
+| Editor.Particles | In the build, on the GUI: the particle effect page from its markup (the systems a tree, each its emitter, initializers, behaviors and sub-emitters, its bar adding a system and removing the chosen system or module; the live preview with the kit's transport, which never writes the effect, a speed of the page's own, the particles alive and the chosen system's emission shape; the chosen system's rows from reflection, each shown where its render mode, emission mode or shape uses it, its modules the grid's lists added by type, a module chosen in the tree opened there, its curves and gradients the toolkit's; each system's sub-emitters, new; each edit one undo step) | X6 (layer 8) |
 | Editor.Generic | In the build, on the GUI: the fallback asset page (Discard Changes on its bar, as on every asset page and the scene page, where the old toolbar had it), its serialize-scanned fields a property bag on the grid (an array's fields a folded group, a guid one asset reference, a blob its size), from its markup; on Editor.App's shared asset page parts (the services a page asks for, the XML text format and the reflected edit's undo step, the scene's inspector on them too) | X6 (layer 1) |
 | Editor.Image, Editor.Texture, Editor.Heightfield, Editor.Fonts | In the build, on the GUI: the image pages from one markup, each the picture (zoom about the pointer, pan, fit, 1:1, a channel alone, the pixel under the pointer: a heightfield's in metres) beside the grid; on Editor.App's asset page base (the asset's reflected rows, the page's own sections, its facts read only, notices, one undo step an edit, a preset, a followed edit); the texture's presets on its bar, its usage setting its colour space; a font's ramp sizes a row of its own; their thumbnails registered with them | X6 (layer 2) |
 | Editor.Geometry, Editor.Physics | In the build, on the GUI: the preview pages from one markup, the preview beside the grid, the preview's own choices on its bar (Editor.App's PreviewPane); the mesh viewer (its stats read only, its preview material kept per mesh, a chain's level held); the collision shape (its outline, its source mesh a slot for what a mesh cooks to, each edit one undo step, no mesh a notice, no Cook now) | X6 (layer 3) |
@@ -611,11 +611,15 @@ The layers:
       as references to what they bind, its particle budget through its setter, its trail and
       flipbook), each row shown only where it does something (a render mode's sections, an emission
       mode's spawn fields, a shape's own measures, by `visibleWhen`), the measures that have one
-      ranged; the collision lists without their counts beside them; the effect's sub-emitter links
-      (a link names only the system it spawns into, every other system's births or deaths setting
-      it off, as Sedulous's). A system removed takes its links' places with it (one into it does
-      nothing, those after it move down), and an effect read over another replaces it (an undo of
-      the whole asset doubled its systems). A list of bare ids names what its elements point at by
+      ranged; the collision lists without their counts beside them; the sub-emitter links. A
+      system removed takes its links' places with it (one into it does nothing, those after it
+      move down), and an effect read over another replaces it (an undo of the whole asset doubled
+      its systems). Then each system owns its sub-emitters (user 2026-10-27; a divergence from
+      Sedulous, whose links are the effect's): a link was the effect's and named only the system
+      it spawns into, every other system's births or deaths setting it off, so no page could say
+      whose it was and a third system's deaths spawned into it too. A link is now a system's, from
+      its own births or deaths into another system; the authoring asset's data version 1 reads
+      version 0's effect links onto every system but the one each spawns into, as they behaved. A list of bare ids names what its elements point at by
       the list's `referenceType`, and four floats kept as a colour are one (GUI.Toolkit).
    2. The page (Editor.Particles): the preview pages' shape with a third pane, the systems a tree
       (each its emitter, initializers and behaviors; the tree's bar adds a system and removes the
@@ -623,12 +627,10 @@ The layers:
       its bar (the chosen system's emission shape drawn over it), and the grid the chosen system
       from reflection: its modules lists of the grid's own, added by type from what derives from
       the list's base (no list of module types in the page), each opening in place, a module
-      chosen in the tree opening there; curves and gradients the toolkit's. The effect's
-      sub-emitter links (none of the old page's) are the effect's and no system's, so the grid
-      shows them in the system's place when the tree's Sub-emitters row is chosen (user
-      2026-10-27: under every system they read as each system's), each into a system chosen by
-      name and named by what sets it off; a system they spawn into says so. A row the user
-      folds in the tree stays folded. Every edit one undo step. The preview's transport plays, pauses and clears the preview and never writes the
+      chosen in the tree opening there; curves and gradients the toolkit's. A system's
+      sub-emitters (none of the old page's) are a list of its rows and a folder of its tree, each
+      into another system chosen by name and named by what sets it off ("On death into Sparks").
+      A row the user folds in the tree stays folded. Every edit one undo step. The preview's transport plays, pauses and clears the preview and never writes the
       effect (the old Stop and Play set every system emitting, a sub-emitter's child too).
 9. The property animation panel under the scene page's viewport (PropertyAnimation): its clips'
    tracks on the Dopesheet, a track's curve on CurveView, its transport the kit's, its undo the

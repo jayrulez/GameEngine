@@ -110,7 +110,8 @@ namespace editor::app
                     return false;
                 }
                 at = Float2{static_cast<f32>(args.Get(u8"x").AsNumber()), static_cast<f32>(args.Get(u8"y").AsNumber())};
-                node = root.OverFind(at);
+                gui::EventDispatcher* dispatcher = root.GetEventDispatcher();
+                node = dispatcher != nullptr ? dispatcher->NodeAt(at) : root.OverFind(at); // a popup's first, as input
                 return true;
             }
             Array<gui::Node*> found;

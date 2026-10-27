@@ -397,6 +397,22 @@ export namespace foundation::gui
         [[nodiscard]] usize ObjectCount() const override { return m_objects; }
         void GetProperties(core::StringView parent, core::Array<PropertyInfo>& out) const override
         {
+            const usize first = out.Size();
+            ListProperties(parent, out);
+            // What the owner says of each (a list element named for what it holds, a closed group's
+            // line), as a reflected source's describe hook does: last.
+            if (m_onDescribe)
+                for (usize i = first; i < out.Size(); ++i)
+                    m_onDescribe(JoinPropertyPath(parent, out[i].Name.AsView()).AsView(), out[i]);
+        }
+        /// Told of each row as it is listed, its info to change: what the bag's entries cannot say
+        /// (a list element's name from its values, a closed group's line). The hook reads the
+        /// values through GetValue.
+        void SetOnDescribe(core::Function<void(core::StringView path, PropertyInfo& info)> onDescribe) { m_onDescribe = core::Move(onDescribe); }
+
+    private:
+        void ListProperties(core::StringView parent, core::Array<PropertyInfo>& out) const
+        {
             // A list's elements: as many as the fewest any object has.
             if (const Entry* list = Find(parent); list != nullptr && list->Info.Kind == PropertyKind::List)
             {
@@ -428,6 +444,8 @@ export namespace foundation::gui
                 if (ParentPropertyPath(entry.Path.AsView()) == parent)
                     out.PushBack(entry.Info);
         }
+
+    public:
         [[nodiscard]] Variant GetValue(core::StringView path, usize object) const override
         {
             if (const Entry* list = Find(path); list != nullptr && list->Info.Kind == PropertyKind::List)
@@ -792,6 +810,7 @@ export namespace foundation::gui
         core::Function<void(core::StringView)> m_onPreview;
         core::Function<void(core::StringView)> m_onCancel;
         core::Function<void(core::StringView, const ListEdit&)> m_onListEdited;
+        core::Function<void(core::StringView, PropertyInfo&)> m_onDescribe; // SetOnDescribe
         core::Function<void(core::StringView)> m_onReverted;
     };
 }

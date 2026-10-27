@@ -171,6 +171,35 @@ TEST_CASE("property source: a list's elements are its children by index, saying 
     CHECK_FALSE(bag.EditList(SV(u8"tags"), remove));
 }
 
+TEST_CASE("property source: a bag's describe hook names a list's elements and sums up a group, as it lists them")
+{
+    // An owner names an element from its values (a terrain's layers by channel, each by its albedo).
+    PropertyBag bag(core::DefaultAllocator());
+    PropertyInfo& list = bag.AddList(SV(u8"layers"), PropertyKind::Group, Variant{}, 2);
+    (void)list;
+    REQUIRE(bag.AddElementField(SV(u8"layers"), SV(u8"albedo"), PropertyKind::String, Variant(SV(u8"grass"))) != nullptr);
+    bag.SetValue(SV(u8"layers.1.albedo"), 0, Variant(SV(u8"rock")));
+    core::Array<core::String> seen(core::DefaultAllocator());
+    bag.SetOnDescribe([&bag, &seen](core::StringView path, PropertyInfo& info)
+                      {
+                          seen.PushBack(core::String(path));
+                          if (ParentPropertyPath(path) == SV(u8"layers"))
+                          {
+                              info.DisplayName = core::String(u8"Layer");
+                              info.Summary = core::String(bag.GetValue(JoinPropertyPath(path, SV(u8"albedo")).AsView(), 0).AsString());
+                          }
+                      });
+    core::Array<PropertyInfo> elements(core::DefaultAllocator());
+    bag.GetProperties(SV(u8"layers"), elements);
+    REQUIRE(elements.Size() == 2u);
+    CHECK(elements[0].ShownName() == SV(u8"Layer"));
+    CHECK(elements[1].Summary == core::String(u8"rock"));
+    core::Array<PropertyInfo> fields(core::DefaultAllocator());
+    bag.GetProperties(SV(u8"layers.0"), fields);
+    REQUIRE(fields.Size() == 1u);
+    CHECK(seen.Back() == core::String(u8"layers.0.albedo")); // every row it lists, by its full path
+}
+
 TEST_CASE("property source: each object's own default, and a revert of a path and what is under it")
 {
     PropertyBag bag(core::DefaultAllocator(), 2);

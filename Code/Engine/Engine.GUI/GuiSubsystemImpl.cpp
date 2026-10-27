@@ -711,6 +711,29 @@ namespace engine::gui
     }
     GuiSubsystem::~GuiSubsystem() = default;
 
+    const foundation::input::ActionRuntime* GuiSubsystem::PromptRuntime() const noexcept
+    {
+        return m_promptRuntime != nullptr ? m_promptRuntime : (m_input != nullptr ? &m_input->Runtime() : nullptr);
+    }
+
+    // The prompts on the runtime they should read, told again when its bindings may have changed.
+    void GuiSubsystem::SyncPrompts()
+    {
+        const foundation::input::ActionRuntime* runtime = PromptRuntime();
+        if (runtime != m_promptsRead)
+        {
+            m_promptsRead = runtime;
+            m_promptsVersion = runtime != nullptr ? runtime->BindingsVersion() : 0;
+            m_prompts.SetRuntime(runtime); // tells them
+            return;
+        }
+        if (runtime != nullptr && runtime->BindingsVersion() != m_promptsVersion)
+        {
+            m_promptsVersion = runtime->BindingsVersion();
+            m_prompts.NotifyBindingsChanged();
+        }
+    }
+
     foundation::fonts::IFontService* GuiSubsystem::Fonts() const noexcept { return m_projectFonts ? m_projectFonts.Get() : m_fonts.Get(); }
 
     void GuiSubsystem::SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others)
@@ -843,6 +866,8 @@ namespace engine::gui
         if (context == nullptr)
             return;
         m_input = context->GetSubsystem<engine::input::InputSubsystem>();
+        m_prompts.Install(*m_context); // every prompt in the game's GUI names its bindings through it
+        SyncPrompts();
         if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
         {
             scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
@@ -871,6 +896,9 @@ namespace engine::gui
                 scenes->UnregisterObserver(this);
         m_activeRoot = nullptr;
         m_pressRoot = nullptr;
+        InputPrompts::Uninstall(*m_context);
+        m_prompts.SetRuntime(nullptr);
+        m_promptsRead = nullptr;
         m_input = nullptr;
         m_sceneTiers.Clear();
         m_textureRoots.Clear();
@@ -897,6 +925,7 @@ namespace engine::gui
             m_render->Renderer->BeginFrame();
         if (m_resources->Poll())
             ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
+        SyncPrompts();
         for (const UniquePtr<TextureRoot>& root : m_textureRoots)
             root->Seen = false;
         for (SceneTier& tier : m_sceneTiers)

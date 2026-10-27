@@ -1290,3 +1290,48 @@ TEST_CASE("engine.gui: a game's text draws in the default family with no sheet n
     CHECK(ok->GetSize().y > 0.0f);
     CHECK(Cast<UINode>(title)->GetTextStyle().FontFamily.AsView() == engine.gui->Fonts()->DefaultFontFamily());
 }
+
+TEST_CASE("engine.gui: a prompt names the game's binding with no host wiring, and follows a rebinding and the runtime named")
+{
+    Engine engine;
+    const auto mapWith = [](u32 key)
+    {
+        foundation::input::InputMap map;
+        foundation::input::ActionSet set;
+        set.name = String(u8"Gameplay");
+        foundation::input::Action deliver;
+        deliver.name = String(u8"Deliver");
+        foundation::input::Binding binding;
+        binding.source = foundation::input::BindingSource::Key;
+        binding.code = key;
+        deliver.bindings.PushBack(binding);
+        set.actions.PushBack(deliver);
+        map.sets.PushBack(set);
+        return map;
+    };
+    // The input subsystem's runtime by default.
+    engine.input->SetMap(mapWith(static_cast<u32>(foundation::shell::KeyCode::E)));
+    RefPtr<Prompt> prompt = MakeRef<Prompt>(DefaultAllocator());
+    prompt->SetAction(String(u8"Deliver"));
+    engine.gui->ScreenRoot()->AddChild(prompt.Get());
+    engine.Frame();
+    (void)engine.gui->ScreenRoot()->UpdateLayout();
+    CHECK(engine.gui->PromptRuntime() == &engine.input->Runtime());
+    CHECK(prompt->GetText() == StringView(u8"E"));
+
+    // A rebinding (a map installed again) shows at the next frame.
+    engine.input->SetMap(mapWith(static_cast<u32>(foundation::shell::KeyCode::F)));
+    engine.Frame();
+    (void)engine.gui->ScreenRoot()->UpdateLayout();
+    CHECK(prompt->GetText() == StringView(u8"F"));
+
+    // The runtime the host names (a game instance's) instead.
+    foundation::input::ActionRuntime game;
+    game.SetMap(mapWith(static_cast<u32>(foundation::shell::KeyCode::G)));
+    engine.gui->SetPromptRuntime(&game);
+    engine.Frame();
+    (void)engine.gui->ScreenRoot()->UpdateLayout();
+    CHECK(prompt->GetText() == StringView(u8"G"));
+    engine.gui->SetPromptRuntime(nullptr);
+    engine.Frame();
+}

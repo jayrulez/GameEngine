@@ -447,6 +447,17 @@ export namespace engine::gui
         /// system menu), modal while it shows, unless it takes no pointer (`pointer-events: none`
         /// on its root: a watermark); the tree, to take off again, or null when it does not build.
         RefPtr<Node> PushOverlay(const GuiDocument& document);
+        /// `document`'s tree built in the GUI's context (its resources and fonts, its `{{values}}`
+        /// bound to the GUI's data), placed nowhere: a native host's screen to push on Screens().
+        /// Null when it does not build.
+        [[nodiscard]] RefPtr<Node> BuildDocument(const GuiDocument& document);
+        /// The action runtime the GUI's prompts (GUI.Gamekit's Prompt) name the bindings of: the game's
+        /// (the application's primary game instance's, as the default application sets it); null, the
+        /// input subsystem's own. Its bindings' changes (a map loaded, a rebinding, a set enabled) are
+        /// seen at the next frame and every prompt reads them again.
+        void SetPromptRuntime(const foundation::input::ActionRuntime* runtime) noexcept { m_promptRuntime = runtime; }
+        [[nodiscard]] const foundation::input::ActionRuntime* PromptRuntime() const noexcept;
+        [[nodiscard]] const InputPrompts& Prompts() const noexcept { return m_prompts; }
         /// A tree made in code shown on the overlay layer.
         void PushOverlay(Node& overlay);
         void RemoveOverlay(Node& overlay);
@@ -536,9 +547,8 @@ export namespace engine::gui
         void PlaceBillboards(SceneTier& tier, const render::SceneOverlayView& view);
         [[nodiscard]] static bool HasContent(const SceneTier& tier) noexcept;
         void SyncPanels(SceneTier& tier);
-        // A document's tree (null when it does not build), and a component's tree in line with its
-        // document and sheet: rebuilt when the document's product changes.
-        [[nodiscard]] RefPtr<Node> BuildDocument(const GuiDocument& document);
+        // A component's tree in line with its document and sheet: rebuilt when the document's
+        // product changes.
         template <typename Component>
         bool RebuildIfChanged(Component& c);
         template <typename Component>
@@ -618,6 +628,13 @@ export namespace engine::gui
         render::ISceneRenderer* m_sceneRenderer = nullptr; // the overlays' registration
         render::IScreenRenderer* m_screenRenderer = nullptr;
         engine::input::InputSubsystem* m_input = nullptr;
+        // The game kit's prompts, installed on the GUI's context: they read m_promptRuntime (else the
+        // input subsystem's), told again when its bindings' version moves.
+        InputPrompts m_prompts;
+        const foundation::input::ActionRuntime* m_promptRuntime = nullptr;
+        const foundation::input::ActionRuntime* m_promptsRead = nullptr;
+        u64 m_promptsVersion = 0;
+        void SyncPrompts();
         foundation::input::InputKindTracker m_inputKind;
         foundation::shell::IWindow* m_textInputTarget = nullptr;
         SceneRoot* m_activeRoot = nullptr; // the root input went to last

@@ -257,6 +257,8 @@ namespace engine::runtime
         // The engine's GUI beside it while both live: every game has it (its screen tier, its
         // components, `gui` in its scripts).
         m_gui = host.Ctx().AddSubsystem<engine::gui::GuiSubsystem>(host.Ctx().Allocator(), *m_dataFileSystem);
+        // Its prompts name the game's bindings: the primary instance's runtime, which the game runs on.
+        m_gui->SetPromptRuntime(&m_instance.InputRuntime());
 
         // Entity behaviors. Facade/backend registration is
         // batteries-included here (idempotent - entry points may register more);

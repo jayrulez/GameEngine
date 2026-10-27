@@ -239,7 +239,8 @@ to follow the same order.
 | Editor.Scene | In the build in parts: its UI-free half (the edit context and its commands, the gizmos and the select tool, the component gizmos, the grid, the view gizmo, the zoom readout, the view settings, the camera preview's sizing, the capture recorder, entity JSON, loading, settings profiles, the thumbnail generators, the page interface, the scene MCP tools, the actions on the keymap's keystrokes) and its services (the document types, the export's scene seams, a model import's prefab), registered by Tools.Editor; the scene page on the GUI in parts (the page, its viewport, its overlays, its view state, Simulate, the prefab flows, the registration), its bar on the actions, the hierarchy on the GUI's tree, the inspector on the property grid (its first part: the head, Active, Transform, the components' reflected rows, their verbs, Add Component, one undo step an edit, read only while simulating; its second: entity references, a slot over the scene's entities; its third: a component's extras asked of its type, the rigid body's notice, the zone's Bake, the script component's behaviours); the scene's settings and the picker dialogs out until their parts | X5 (layers 1 to 4, part 1) |
 | Editor.Preview | In the build, on the GUI: the thumbnail stage (owned by the editor session per project, staged and rendered by the application, the scene editor's generators registered again); the preview viewport on GUI.Viewport, flown as the scene view is, F framing, one backdrop for every preview | X5 (layer 2), X6 (layer 3) |
 | Editor.Play | In the build, on the GUI: the resolutions a Game tab offers, the PIE instance seam, the PIE MCP tools; the Game tab from its markup on GUI.Viewport (the kit's transport, the resolution and the phone, the script debugger beside the game), registered by Tools.Editor; several instances side by side (the Game menu's Play and Play New Instance, the layout tools) and the PIE MCP tools on it | X5 (layer 7, parts 2 to 4) |
-| Editor.Animation, Editor.PropertyAnimation | Parked | |
+| Editor.PropertyAnimation | In the build, on the GUI: the property animation panel under the scene page's viewport (its UI-free half: the clip document with its own history, the clip as the dopesheet's and the curve view's source, the track seeds, the preview, the transport's clock; the panel from its markup, its own Undo, Redo and Save, its keys its own while it holds the focus; on the scene page in a splitter, from the Scene menu and an animator's Edit Clip, its unsaved clip asked about apart from the scene) | X6 (layer 9) |
+| Editor.Animation | In the build in parts, on the GUI: what the pages' previews share (the bones drawn, the travelled path, the rig: a skeleton and a skinned mesh picked on the preview's bar); the clip page from its markup (the cooked clip played on the rig with the kit's transport and Travel, the ruler under it scrubbing, the events its markers; the clip's rows its own: Looping, the root motion, the events a list; its facts read only; each edit one undo step); the skeleton and graph pages out until their parts | X6 (layer 10, part 2) |
 | Editor.Particles | In the build, on the GUI: the particle effect page from its markup (the systems a tree, each its emitter, initializers, behaviors and sub-emitters, its bar adding a system and removing the chosen system or module; the live preview with the kit's transport, which never writes the effect, a speed of the page's own, the particles alive and the chosen system's emission shape; the chosen system's rows from reflection, each shown where its render mode, emission mode or shape uses it, its modules the grid's lists added by type, a module chosen in the tree opened there, its curves and gradients the toolkit's; each system's sub-emitters, new; each edit one undo step) | X6 (layer 8) |
 | Editor.Generic | In the build, on the GUI: the fallback asset page (Discard Changes on its bar, as on every asset page and the scene page, where the old toolbar had it), its serialize-scanned fields a property bag on the grid (an array's fields a folded group, a guid one asset reference, a blob its size), from its markup; on Editor.App's shared asset page parts (the services a page asks for, the XML text format and the reflected edit's undo step, the scene's inspector on them too) | X6 (layer 1) |
 | Editor.Image, Editor.Texture, Editor.Heightfield, Editor.Fonts | In the build, on the GUI: the image pages from one markup, each the picture (zoom about the pointer, pan, fit, 1:1, a channel alone, the pixel under the pointer: a heightfield's in metres) beside the grid; on Editor.App's asset page base (the asset's reflected rows, the page's own sections, its facts read only, notices, one undo step an edit, a preset, a followed edit); the texture's presets on its bar, its usage setting its colour space; a font's ramp sizes a row of its own; their thumbnails registered with them | X6 (layer 2) |
@@ -673,6 +674,35 @@ The layers:
 10. The animation pages (Animation): the clip (a preview, its events as markers on the time axis),
     the skeleton (the bone tree with a search beside the preview) and the graph (GraphView over the
     preview, its layers and parameters as lists).
+    In parts (surveyed 2026-10-27: the old pages built every row by hand, over parallel arrays and
+    kinds kept as numbers, nothing reflected; the graph view already takes node links, a state
+    machine's transitions, and draws them as straight arrows; the time ruler has no markers):
+    1. The ruler's markers (GUI.Toolkit): a time ruler shows a source's markers, each a time and a
+       label, as a flag at its time; a click chooses one, a drag moves it, one gesture through the
+       source (Escape cancels it), and a marker under the pointer names itself in full. The undo is
+       the application's, as every source's.
+    2. The clip page: the preview pages' shape with the ruler under the preview, on the clip's time:
+       the playhead the kit's transport's, the clip's events its markers (one dragged moves its
+       time, one step). The preview's own choices on its bar (the skeleton and skinned mesh it plays
+       on, kept per asset, and Travel, which had been among the clip's rows). The rows are the
+       page's own: the clip's facts read-only (its name, duration, tracks and keys), Looping, the
+       root motion's bone and axes, and its events a list, each a time and a name, a new one at the
+       playhead. Each edit one undo step. The skeleton drawn as bones and the path a clip travels
+       are Editor.Animation's, shared by its pages.
+    3. The skeleton page: the bones a tree with its search beside the bind pose, the chosen bone
+       drawn apart from the rest; the skeleton's facts (its bones, roots and depth) and the chosen
+       bone's (its index, parent and bind position, rotation and scale) read-only rows. A viewer:
+       nothing it shows edits.
+    4. The graph as a graph source (UI-free): a layer's states its nodes, and Any State, which only
+       begins a transition; its transitions node links; where each sits kept on the asset as
+       before. A state deleted takes its transitions with it and moves the indices after it down;
+       a layer's or a parameter's removal remaps what named it (a condition or a blend tree's
+       driver on a removed parameter cleared). Every change one undo step of the whole asset.
+    5. The graph page: the layers and the parameters as lists beside the graph view over the chosen
+       layer, the preview under it with the kit's transport, the state it plays lit on the graph;
+       the grid the chosen layer, parameter, state or transition (a transition's conditions a list,
+       a blend tree's entries a list, each a clip and its threshold or place); a new graph from
+       Create Asset, as before.
 
 ## 6. Tests
 

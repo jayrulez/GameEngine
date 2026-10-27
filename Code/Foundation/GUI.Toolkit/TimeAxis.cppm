@@ -13,6 +13,11 @@
 // times a power of ten, of seconds or of frames), labels, and the playhead. A drag on it scrubs the
 // playhead, the wheel zooms about the pointer and a middle drag pans. Time runs left to right in
 // either direction of the text, as a ruler's numbers do.
+//
+// A ruler may show a marker source's markers (a clip's events), each a time and a label, as a flag at
+// its time: a click chooses one, a drag moves it, one gesture through the source (begun, previewed,
+// committed once, Escape giving it up), and the one under the pointer names itself in full. The undo
+// is the source's, as every source's is.
 
 module;
 #include "Core/Prelude.h"
@@ -224,23 +229,85 @@ export namespace foundation::gui
         core::String Label;
     };
 
+    /// A marker of a ruler (a clip's event): where it is and what it is called.
+    struct TimeMarker
+    {
+        f32 Time = 0.0f;
+        core::String Label;
+    };
+
+    /// What a marker source tells the rulers showing it.
+    class ITimeMarkerSourceClient
+    {
+    public:
+        virtual ~ITimeMarkerSourceClient() = default;
+        /// The markers changed: read them again.
+        virtual void OnTimeMarkersChanged() = 0;
+    };
+
+    /// The markers a ruler shows, by their place in it; a move is a gesture as the other sources' are.
+    class ITimeMarkerSource
+    {
+    public:
+        virtual ~ITimeMarkerSource() = default;
+
+        [[nodiscard]] virtual usize MarkerCount() const = 0;
+        [[nodiscard]] virtual TimeMarker GetMarker(usize marker) const = 0;
+
+        /// A move begins: where the marker is now is what a cancel puts back.
+        virtual void BeginMarkerMove(usize marker) = 0;
+        /// The marker moved to `time`, live.
+        virtual void PreviewMarkerMove(usize marker, f32 time) = 0;
+        /// The move ends as last previewed: one change.
+        virtual void CommitMarkerMove() = 0;
+        /// The move is given up: the marker as it was.
+        virtual void CancelMarkerMove() = 0;
+
+        void AddMarkerClient(ITimeMarkerSourceClient* client) { m_markerClients.PushBack(client); }
+        void RemoveMarkerClient(ITimeMarkerSourceClient* client)
+        {
+            for (usize i = 0; i < m_markerClients.Size(); ++i)
+                if (m_markerClients[i] == client)
+                {
+                    m_markerClients.RemoveAt(i);
+                    return;
+                }
+        }
+
+    protected:
+        void NotifyTimeMarkersChanged()
+        {
+            for (usize i = 0; i < m_markerClients.Size(); ++i)
+                m_markerClients[i]->OnTimeMarkersChanged();
+        }
+
+    private:
+        core::Array<ITimeMarkerSourceClient*> m_markerClients; // non-owning: each ruler leaves as it goes
+    };
+
     /// The axis drawn: ticks, labels and the playhead; a drag scrubs, the wheel zooms, a middle drag pans.
-    class TimeRuler : public UIWidget, public ITimeAxisClient
+    class TimeRuler : public UIWidget, public ITimeAxisClient, public ITimeMarkerSourceClient
     {
         RTTI_OBJECT(TimeRuler, UIWidget)
     public:
         /// Labelled ticks at least this far apart (pixels).
         static constexpr f32 kMinLabelSpacing = 60.0f;
+        /// A marker is under the pointer this near its time (pixels).
+        static constexpr f32 kMarkerHitRadius = 5.0f;
+        static constexpr f32 kDragThreshold = 3.0f;
 
         TimeRuler()
         {
             SetTag(core::StringView(u8"timeruler"));
+            SetTabFocusable(true); // Escape reaches it during a marker's move
             EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(22.0f); });
         }
         ~TimeRuler() override
         {
             if (m_axis)
                 m_axis->Leave(this);
+            if (m_markers)
+                m_markers->RemoveMarkerClient(this);
         }
 
         void SetTimeAxis(core::RefPtr<TimeAxis> axis)
@@ -253,6 +320,70 @@ export namespace foundation::gui
             Invalidate();
         }
         [[nodiscard]] TimeAxis* GetTimeAxis() const noexcept { return m_axis.Get(); }
+
+        // === Markers ===
+        /// The markers it shows (not owned: the source outlives the ruler or is set to null first).
+        void SetMarkerSource(ITimeMarkerSource* source)
+        {
+            if (m_markers)
+                m_markers->RemoveMarkerClient(this);
+            m_markers = source;
+            if (m_markers)
+                m_markers->AddMarkerClient(this);
+            m_chosen = -1;
+            m_hover = -1;
+            m_hoverTip.Clear();
+            Invalidate();
+        }
+        [[nodiscard]] ITimeMarkerSource* GetMarkerSource() const noexcept { return m_markers; }
+        /// The marker chosen (-1: none).
+        [[nodiscard]] i32 GetChosenMarker() const noexcept { return m_chosen; }
+        /// Chooses `marker` (-1: none), as a click on it does, telling OnMarkerChosen.
+        void ChooseMarker(i32 marker)
+        {
+            if (!m_markers || marker < 0 || static_cast<usize>(marker) >= m_markers->MarkerCount())
+                marker = -1;
+            if (marker == m_chosen)
+                return;
+            m_chosen = marker;
+            Invalidate();
+            if (OnMarkerChosen)
+                OnMarkerChosen(m_chosen);
+        }
+        /// Told when the chosen marker changes (-1: none).
+        core::Function<void(i32)> OnMarkerChosen;
+        /// The marker at `x` from its content start, the nearest within the hit radius; -1: none.
+        [[nodiscard]] i32 MarkerAt(f32 x) const
+        {
+            if (!m_markers || !m_axis)
+                return -1;
+            i32 best = -1;
+            f32 nearest = kMarkerHitRadius;
+            for (usize i = 0; i < m_markers->MarkerCount(); ++i)
+            {
+                const f32 off = core::Abs(m_axis->TimeToOffset(m_markers->GetMarker(i).Time) - x);
+                if (off <= nearest)
+                {
+                    nearest = off;
+                    best = static_cast<i32>(i);
+                }
+            }
+            return best;
+        }
+
+        void OnTimeMarkersChanged() override
+        {
+            if (m_markers && m_chosen >= 0 && static_cast<usize>(m_chosen) >= m_markers->MarkerCount())
+                ChooseMarker(-1);
+            Invalidate();
+        }
+        /// The marker under the pointer named in full, else its own tooltip.
+        [[nodiscard]] core::StringView GetTooltipText() const override
+        {
+            if (!m_hoverTip.IsEmpty())
+                return m_hoverTip.AsView();
+            return UIWidget::GetTooltipText();
+        }
 
         /// The ticks across its width now: every minor tick, the major ones labelled.
         void GetTicks(core::Array<TimeTick>& out) const
@@ -291,6 +422,15 @@ export namespace foundation::gui
             if (event.Button == MouseButton::Left)
             {
                 event.Handled = true;
+                const f32 x = LocalX(event.Position);
+                if (const i32 marker = MarkerAt(x); marker >= 0)
+                {
+                    // A marker pressed is chosen; dragged past the threshold, it moves.
+                    ChooseMarker(marker);
+                    m_markerDrag = MarkerDrag::Pending;
+                    m_pressX = x;
+                    return;
+                }
                 m_scrubbing = true;
                 ScrubTo(event.Position);
             }
@@ -306,6 +446,19 @@ export namespace foundation::gui
         {
             if (!m_axis)
                 return;
+            const f32 x = LocalX(event.Position);
+            if (m_markerDrag == MarkerDrag::Pending && m_markers && m_chosen >= 0 && core::Abs(x - m_pressX) >= kDragThreshold)
+            {
+                m_markerDrag = MarkerDrag::Moving;
+                m_markers->BeginMarkerMove(static_cast<usize>(m_chosen));
+            }
+            if (m_markerDrag == MarkerDrag::Moving)
+            {
+                m_markers->PreviewMarkerMove(static_cast<usize>(m_chosen), core::Clamp(m_axis->Snap(m_axis->OffsetToTime(x)), 0.0f, m_axis->Duration()));
+                Invalidate();
+            }
+            else if (m_markerDrag == MarkerDrag::None && !m_scrubbing && !m_panning)
+                Hover(MarkerAt(x));
             if (m_scrubbing)
                 ScrubTo(event.Position);
             else if (m_panning)
@@ -313,6 +466,8 @@ export namespace foundation::gui
         }
         void OnMouseUp(const MouseEvent& event) override
         {
+            if (m_markerDrag != MarkerDrag::None && event.Button == MouseButton::Left)
+                EndMarkerDrag(true);
             if (m_scrubbing && event.Button == MouseButton::Left)
                 m_scrubbing = false;
             if (m_panning && event.Button == MouseButton::Middle)
@@ -320,8 +475,23 @@ export namespace foundation::gui
         }
         void OnPointerCancel(const MouseEvent&) override
         {
+            EndMarkerDrag(false);
             m_scrubbing = false;
             m_panning = false;
+        }
+        void OnMouseLeave(const MouseEvent& event) override
+        {
+            UIWidget::OnMouseLeave(event);
+            if (m_markerDrag == MarkerDrag::None)
+                Hover(-1);
+        }
+        void OnKeyDown(const KeyEvent& event) override
+        {
+            if (static_cast<KeyCode>(event.KeyCode) == KeyCode::Escape && m_markerDrag == MarkerDrag::Moving)
+            {
+                event.Handled = true;
+                EndMarkerDrag(false);
+            }
         }
         void OnMouseWheel(const WheelEvent& event) override
         {
@@ -363,6 +533,31 @@ export namespace foundation::gui
                     m_text.Draw(ctx, core::Float2{x + 3.0f, box.y + 1.0f});
                 }
             }
+            if (m_markers)
+            {
+                // Each a line down the ruler and a flag at its foot, the chosen one in its own colour.
+                const PartStyle& markerPart = GetPartStyle(u8"marker");
+                const PartStyle& chosenPart = GetPartStyle(u8"marker-chosen");
+                Color markerColor = markerPart.HasBackground ? markerPart.Box.BackgroundColor : GetTextColor();
+                markerColor.a *= markerPart.Opacity;
+                Color chosenColor = chosenPart.HasBackground ? chosenPart.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
+                chosenColor.a *= chosenPart.Opacity;
+                for (usize i = 0; i < m_markers->MarkerCount(); ++i)
+                {
+                    const f32 mx = box.x + m_axis->TimeToOffset(m_markers->GetMarker(i).Time);
+                    if (mx < box.x - 6.0f || mx > box.Right() + 6.0f)
+                        continue;
+                    const Color color = static_cast<i32>(i) == m_chosen ? chosenColor : markerColor;
+                    ctx.VG().FillRect(Rectangle{core::Floor(mx), box.y, 1.0f, box.height}, color);
+                    vg::PathBuilder flag;
+                    flag.MoveTo(mx, box.Bottom() - 9.0f);
+                    flag.LineTo(mx + 4.0f, box.Bottom() - 4.5f);
+                    flag.LineTo(mx, box.Bottom());
+                    flag.LineTo(mx - 4.0f, box.Bottom() - 4.5f);
+                    flag.Close();
+                    ctx.VG().FillPath(flag.ToPath(), color);
+                }
+            }
             const PartStyle& playheadPart = GetPartStyle(u8"playhead");
             Color playhead = playheadPart.HasBackground ? playheadPart.Box.BackgroundColor : Color{0.31f, 0.61f, 1.0f, 1.0f};
             playhead.a *= playheadPart.Opacity;
@@ -394,8 +589,47 @@ export namespace foundation::gui
             return m_axis->OffsetToTime(local.x - GetContentBounds().x);
         }
         void ScrubTo(core::Float2 screen) { m_axis->SetPlayhead(m_axis->Snap(TimeAt(screen))); }
+        [[nodiscard]] f32 LocalX(core::Float2 screen) const { return ConvertToNodeSpace(screen).x - GetContentBounds().x; }
+
+        void Hover(i32 marker)
+        {
+            if (marker == m_hover)
+                return;
+            m_hover = marker;
+            m_hoverTip.Clear();
+            if (m_markers && marker >= 0)
+            {
+                const TimeMarker shown = m_markers->GetMarker(static_cast<usize>(marker));
+                m_hoverTip = m_axis ? core::Format(u8"{} at {}", shown.Label, m_axis->FormatTime(shown.Time, 0.01f)) : core::String(shown.Label.AsView());
+            }
+        }
+        void EndMarkerDrag(bool commit)
+        {
+            const bool moving = m_markerDrag == MarkerDrag::Moving;
+            m_markerDrag = MarkerDrag::None;
+            if (!moving || !m_markers)
+                return;
+            if (commit)
+                m_markers->CommitMarkerMove();
+            else
+                m_markers->CancelMarkerMove();
+            Invalidate();
+        }
+
+        enum class MarkerDrag : u8
+        {
+            None,
+            Pending, // pressed, not yet past the threshold
+            Moving,
+        };
 
         core::RefPtr<TimeAxis> m_axis;
+        ITimeMarkerSource* m_markers = nullptr;
+        i32 m_chosen = -1;
+        i32 m_hover = -1;
+        core::String m_hoverTip;
+        MarkerDrag m_markerDrag = MarkerDrag::None;
+        f32 m_pressX = 0.0f;
         mutable Text m_text; // each label in turn
         bool m_scrubbing = false;
         bool m_panning = false;

@@ -1,6 +1,6 @@
 # Editor::Animation - `editor.animation`: the animation pages on the GUI (Documentation/Specs/
-# editor-gui.md, 5.4, layer 10): the clip and skeleton pages so far, and what the pages' previews
-# share. The graph page's old files stay out of the build until its part.
+# editor-gui.md, 5.4, layer 10): the clip and skeleton pages so far, what the pages' previews share,
+# and the graph as a graph view reads it. The graph page's old files stay out of the build until its part.
 util_add_engine_library(Editor.Animation ALIAS Editor::Animation)
 target_link_libraries(Editor.Animation PUBLIC
     Foundation::Core Foundation::Content Foundation::Resource Foundation::Settings
@@ -14,9 +14,11 @@ target_sources(Editor.Animation
         AnimationPreviewImpl.cpp
         AnimationClipPageImpl.cpp
         SkeletonPageImpl.cpp
+        AnimationGraphStatesImpl.cpp
     PUBLIC
         FILE_SET editor_animation_modules TYPE CXX_MODULES FILES
             AnimationPreview.cppm
             AnimationClipPage.cppm
             SkeletonPage.cppm
+            AnimationGraphStates.cppm
             EditorAnimationModule.cppm)

@@ -130,6 +130,7 @@ namespace
         void SetMarkersShown(bool) override {}
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return false; }
         void SetAnimationPanelShown(bool) override {}
+        void EditAnimationClip(const Guid&, const Guid&) override {}
         void CreatePrefabFromEntity(const Guid&) override {}
         void PickAndSpawnPrefab(const Guid&) override {}
         void ApplyInstanceToPrefab(const Guid&) override {}

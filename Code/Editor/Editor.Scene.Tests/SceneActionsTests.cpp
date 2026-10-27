@@ -99,6 +99,7 @@ namespace
         void SetMarkersShown(bool shown) override { markers = shown; }
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return animation; }
         void SetAnimationPanelShown(bool shown) override { animation = shown; }
+        void EditAnimationClip(const Guid&, const Guid&) override {}
         void CreatePrefabFromEntity(const Guid& entity) override { prefabFrom = entity; }
         void PickAndSpawnPrefab(const Guid& parent) override
         {

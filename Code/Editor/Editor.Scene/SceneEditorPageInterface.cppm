@@ -111,6 +111,9 @@ export namespace editor
         /// bottom dock takes no space at all.
         [[nodiscard]] virtual bool AnimationPanelShown() const noexcept = 0;
         virtual void SetAnimationPanelShown(bool shown) = 0;
+        /// The panel shown editing the clip `clip` (nil: the one it has) and animating `entity`
+        /// (nil: the one it binds), an unsaved clip asked about first (an animator's Edit Clip).
+        virtual void EditAnimationClip(const Guid& clip, const Guid& entity) = 0;
 
         /// The viewport's free-fly camera - the pose the scene is looked at from, which an agent
         /// moves to look from somewhere specific; null on a page without a viewport.

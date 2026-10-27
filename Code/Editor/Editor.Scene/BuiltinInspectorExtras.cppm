@@ -26,10 +26,12 @@ import foundation.scene;
 import foundation.physics;
 import engine.physics;
 import engine.navigation;
+import engine.animation; // PropertyAnimatorComponent (its Edit Clip)
 import editor.core;
 import editor.navigation;
 import :edit;
 import :inspector_extras;
+import :scene_page_interface; // the animation panel an animator's clip opens in
 import :script_behaviors_source;
 import :settings_extra_sources;
 import engine.script;
@@ -53,6 +55,7 @@ export namespace editor
             registry.Register(TypeOf<engine::script::ScriptComponent>(), [](InspectorExtras& extras) { AddBehaviors(extras); });
             registry.Register(TypeOf<engine::physics::PhysicsSceneSettings>(), [](InspectorExtras& extras) { AddCollisionGroups(extras); });
             registry.Register(TypeOf<engine::script::SceneScriptSettings>(), [](InspectorExtras& extras) { AddLevelProperties(extras); });
+            registry.Register(TypeOf<engine::animation::PropertyAnimatorComponent>(), [](InspectorExtras& extras) { AddEditClip(extras); });
         }
 
     private:
@@ -77,6 +80,27 @@ export namespace editor
             LevelScriptSource* raw = source.Get();
             extras.AddSection(Move(source), [raw]() { raw->Refresh(); });
         }
+        // An animator's clip in the page's animation panel, animating its entity (no clip: the panel
+        // bound to it, to make one).
+        static void AddEditClip(InspectorExtras& extras)
+        {
+            InspectorExtras* at = &extras;
+            extras.AddAction(u8"Animation", u8"Edit Clip", u8"Open the clip in the animation panel under the viewport, animating this entity",
+                             [at]()
+                             {
+                                 EditorContext* context = at->Context();
+                                 ISceneEditorPage* page = context != nullptr ? ServiceOf<ISceneEditorPage>(context->ActivePage()) : nullptr;
+                                 if (page == nullptr || at->Entities().IsEmpty())
+                                     return;
+                                 SceneEditContext& edit = at->Edit();
+                                 const Guid entity = at->Entities()[0];
+                                 auto* animators = edit.Scene().GetSystem<engine::animation::PropertyAnimatorComponentManager>();
+                                 const foundation::scene::EntityHandle handle = edit.Resolve(entity);
+                                 engine::animation::PropertyAnimatorComponent* animator = animators != nullptr && handle.IsAssigned() ? animators->Get(handle) : nullptr;
+                                 page->EditAnimationClip(animator != nullptr ? animator->clip.id : Guid{}, entity);
+                             });
+        }
+
         static void AddNoCollider(InspectorExtras& extras)
         {
             InspectorExtras* at = &extras;

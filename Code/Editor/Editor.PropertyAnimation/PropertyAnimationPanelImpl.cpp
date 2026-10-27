@@ -489,8 +489,9 @@ namespace editor
     {
         m_source.Refresh();
         m_axis->SetDuration(m_document.Length());
-        if (m_length != nullptr && static_cast<f32>(m_length->GetValue()) != m_document.Clip().duration)
-            m_length->SetValue(static_cast<f64>(Max(m_document.Clip().duration, m_document.Clip().ComputeDuration())));
+        // The length it plays over (a new clip's second, its last key's time when later).
+        if (m_length != nullptr && static_cast<f32>(m_length->GetValue()) != m_document.Length())
+            m_length->SetValue(static_cast<f64>(m_document.Length()));
         Pose(); // an edit, an undo: the entity shows the clip as it is now
         ShowBar();
     }

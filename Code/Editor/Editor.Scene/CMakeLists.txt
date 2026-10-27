@@ -28,7 +28,7 @@ target_link_libraries(Editor.Scene
         Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Engine::Script
         Foundation::Input Foundation::Input.Resource Engine::Input
         Engine::Composition # the full manager set for the export's scratch scenes
-        Editor::Core Editor::Camera Editor::ViewportTools Foundation::Policy
+        Editor::Core Editor::Camera Editor::ViewportTools Editor::PropertyAnimation Foundation::Policy
         Foundation::Mcp Foundation::Json # the scene editor's MCP tools
         Foundation::Xml Foundation::Xml.Serialization) # the inspector's text format (its undo)
 

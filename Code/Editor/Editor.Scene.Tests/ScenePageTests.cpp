@@ -6,7 +6,9 @@
 // opens its scene into a scene of its own with the viewport in its pane; its bar's Save follows its
 // own page; a scene that did not load says so on the page and is not saved over; a prefab is marked
 // and refused a second root; Simulate locks the edits and gives the scene back; where the scene was
-// left (the camera, the selection, the panes) comes back when it opens again. And the parts: the
+// left (the camera, the selection, the panes) comes back when it opens again; the animation panel
+// under the viewport (shown and hidden, an animator's clip opened in it, its clip asked about apart
+// from the scene, the scene saved as it is, not as the panel posed it). And the parts: the
 // panes' weights against the prefs' nested ratios, and a prefab's own instance refused.
 
 #include <doctest/doctest.h>
@@ -37,6 +39,9 @@ import editor.core;
 import editor.app;
 import editor.scene;
 import editor.viewporttools;
+import foundation.propertyanimation;
+import propertyanimation.pipeline;
+import editor.propertyanimation;
 
 using namespace foundation::core;
 using namespace editor;
@@ -190,6 +195,63 @@ TEST_CASE("scene page: its scene opened into a scene of its own, the viewport in
     CHECK(save->IsEnabled());
     CHECK(page->Save().IsOk());
     CHECK_FALSE(page->IsDirty());
+    page->OnClose();
+}
+
+TEST_CASE("scene page: the animation panel under the viewport, its clip its own, the scene saved as it is and not as posed")
+{
+    Bed bed;
+    pipeline::RegisterPropertyAnimationAssets();
+    foundation::content::Instance* clip = pipeline::CreatePropertyAnimationClip(bed.project->SourceDb().RootGroup(), u8"Bounce");
+    REQUIRE(clip != nullptr);
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    PropertyAnimationPanel* panel = page->AnimationPanel();
+    REQUIRE(panel != nullptr);
+    gui::Splitter* center = FindId<gui::Splitter>(*page->Content(), u8"scene-center");
+    REQUIRE(center != nullptr);
+    CHECK(center->GetPaneCount() == 1u); // hidden: the viewport takes it all
+    CHECK_FALSE(page->AnimationPanelShown());
+    page->SetAnimationPanelShown(true);
+    CHECK(center->GetPaneCount() == 2u);
+    page->SetAnimationPanelShown(false);
+    CHECK(center->GetPaneCount() == 1u);
+
+    // An animator's Edit Clip: shown, the clip opened, the entity bound.
+    page->EditAnimationClip(clip->Id(), bed.crate);
+    CHECK(page->AnimationPanelShown());
+    CHECK(panel->Document().ClipId() == clip->Id());
+    CHECK(panel->BoundEntity() == bed.crate);
+
+    // A track posing the crate at x 5: the clip unsaved, never the scene.
+    AnimatablePropertyInfo position;
+    for (const AnimatablePropertyInfo& seed : panel->OfferedTracks())
+        if (seed.propertyPath == String(u8"position"))
+            position = seed;
+    REQUIRE_FALSE(position.propertyPath.IsEmpty());
+    panel->AddTrack(position);
+    panel->Document().Edit(u8"test", [](foundation::propertyanimation::PropertyAnimationClip& c) { c.tracks[0].channels[0].Keys()[0].value = 5.0f; });
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const scene::EntityHandle crate = page->ScenePtr()->FindEntity(bed.crate);
+    CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(5.0f));
+    CHECK_FALSE(page->IsDirty());
+    CHECK(page->UnsavedBesides() == String(u8"the clip 'Bounce'"));
+    CHECK(page->HasUnsavedWork());
+
+    // Saved: the scene as it is (x 0), the crate posed again after.
+    (void)page->EditContext().CreateEntity(u8"Barrel");
+    REQUIRE(page->Save().IsOk());
+    CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(5.0f));
+    {
+        scene::Scene stored(DefaultAllocator(), u8"stored");
+        REQUIRE(scene::LoadScene(*bed.level, stored).IsOk());
+        CHECK(stored.GetLocalTransform(stored.FindEntity(bed.crate)).position.x == doctest::Approx(0.0f));
+    }
+    REQUIRE(page->SaveBesides().IsOk());
+    CHECK(page->UnsavedBesides().IsEmpty());
+
+    // Hidden: what it posed goes back.
+    page->SetAnimationPanelShown(false);
+    CHECK(page->ScenePtr()->GetLocalTransform(crate).position.x == doctest::Approx(0.0f));
     page->OnClose();
 }
 

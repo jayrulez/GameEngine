@@ -101,8 +101,10 @@ export namespace editor
         /// Once a frame from the page: the transport, the preview (stood down while `simulating`),
         /// the bar's state.
         void Update(f32 dt, bool simulating);
-        /// The preview put back (the page closing, a clip changing).
+        /// The preview put back (the page saving the scene, starting a simulation); Repose poses it
+        /// again where the playhead stands.
         void StopPreview() { m_preview.Stop(); }
+        void Repose() { Pose(); }
 
         // === For tests ===
         [[nodiscard]] ClipDocument& Document() noexcept { return m_document; }

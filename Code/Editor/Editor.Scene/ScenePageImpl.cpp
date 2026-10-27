@@ -30,6 +30,8 @@ import editor.core;
 import editor.app;
 import editor.camera;
 import editor.viewporttools;
+import editor.propertyanimation; // the animation panel under the viewport
+import propertyanimation.pipeline; // CreatePropertyAnimationClip (the panel's New)
 import :view_settings;
 import :view_gizmo;
 import :edit;
@@ -248,8 +250,141 @@ namespace editor
                 m_inspector = MakeUnique<SceneInspectorView>(Allocator(), Allocator(), *m_editContext, Move(inspector), *pane);
             }
 
+        BuildAnimationPanel(context);
         m_overlays.settings = SceneViewState::LoadOverlays(context.ProjectEditorSettings(), InstanceId(), m_overlays.settings);
         RestoreViewState();
+    }
+
+    void SceneEditorPage::BuildAnimationPanel(EditorContext& context)
+    {
+        // Under the viewport, its pane out of the splitter until shown (a pane that goes gives its
+        // share to the viewport).
+        m_animationPane = RefPtr<gui::Node>(Find<gui::Node>(u8"scene-animation"));
+        if (!m_animationPane || m_scene == nullptr || !m_editContext || !m_services.loadMarkup)
+            return;
+        RefPtr<gui::Node> content = m_services.loadMarkup(PropertyAnimationPanel::kPath);
+        if (!content)
+            return;
+        m_animationPane->AddChild(content.Get());
+        m_animation = MakeUnique<PropertyAnimationPanel>(Allocator(), context, *m_scene, content);
+        SceneEditorPage* self = this;
+        m_animation->SelectedEntity = [self]() -> Guid
+        {
+            const Guid* primary = self->m_editContext->EntitySelection().Primary();
+            return primary != nullptr ? *primary : Guid{};
+        };
+        m_animation->GuardUnsaved = [self](Function<void()> proceed) { self->AskAboutClip(Move(proceed)); };
+        if (m_services.refs != nullptr && m_services.refs->Pick)
+            m_animation->RequestOpenClip = [self]()
+            {
+                const String types[] = {String(u8"PropertyAnimationClipAsset")};
+                self->m_services.refs->Pick(Span<const String>(types, 1u), self->m_animation->Document().ClipId(),
+                                            [self](const Guid& picked)
+                                            {
+                                                if (!picked.IsNil())
+                                                    self->m_animation->RequestEditClip(picked, Guid{});
+                                            });
+            };
+        // A new clip in Animations, named for the entity it animates; renamed or moved in Assets.
+        m_animation->RequestNewClip = [self]()
+        {
+            self->AskAboutClip([self]()
+                               {
+                                   foundation::content::Group* top = self->m_context->Project() != nullptr ? self->m_context->Project()->SourceDb().RootGroup() : nullptr;
+                                   if (top == nullptr)
+                                       return;
+                                   foundation::content::Group* group = nullptr;
+                                   for (foundation::content::Group* child : top->Groups())
+                                       if (child->Name() == StringView(u8"Animations"))
+                                           group = child;
+                                   if (group == nullptr)
+                                       group = top->CreateGroup(u8"Animations");
+                                   const Guid entity = self->m_animation->BoundEntity();
+                                   const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : self->m_scene->FindEntity(entity);
+                                   const String name = handle.IsAssigned() ? Format(u8"{} Clip", self->m_scene->GetEntityName(handle)) : String(u8"Clip");
+                                   foundation::content::Instance* made = group != nullptr ? pipeline::CreatePropertyAnimationClip(group, name.AsView()) : nullptr;
+                                   if (made == nullptr)
+                                   {
+                                       self->m_context->Notify(NoticeKind::Warning, u8"The clip could not be made; the Console says why.");
+                                       return;
+                                   }
+                                   (void)self->m_animation->LoadClip(made->Id());
+                                   self->m_context->Notify(NoticeKind::Info, Format(u8"Made the clip '{}' in Animations.", made->Name()).AsView());
+                               });
+        };
+        m_animationPane->GetParent()->RemoveChild(m_animationPane.Get()); // hidden until shown
+    }
+
+    void SceneEditorPage::AskAboutClip(Function<void()> proceed)
+    {
+        if (!m_animation || !m_animation->Document().IsDirty())
+        {
+            proceed();
+            return;
+        }
+        gui::Node* root = m_content ? m_content->GetRootNode() : nullptr;
+        if (root == nullptr)
+            return; // nothing to ask over: the clip stays
+        auto box = MakeRef<gui::MessageBox>(Allocator());
+        box->Configure(u8"Unsaved clip", Format(u8"The clip '{}' has unsaved changes.", m_animation->Document().Name()).AsView(), gui::MessageBox::Buttons::Ok);
+        box->ClearButtons();
+        (void)box->AddButton(u8"Discard", u8"discard", gui::DialogRole::Destructive);
+        (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+        (void)box->AddButton(u8"Save", u8"save", gui::DialogRole::Primary);
+        SceneEditorPage* self = this;
+        gui::MessageBox* raw = box.Get();
+        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, proceed = Move(proceed)](const gui::Event&)
+                                    {
+                                        const StringView answer = raw->GetResultName().AsView();
+                                        if (answer == StringView(u8"save") && !self->m_animation->Save().IsOk())
+                                            return; // it said why
+                                        if (answer == StringView(u8"save") || answer == StringView(u8"discard"))
+                                            proceed();
+                                    });
+        box->OpenModal(*root);
+        m_confirm = box;
+    }
+
+    void SceneEditorPage::SetAnimationPanelShown(bool shown)
+    {
+        if (!m_animation || !m_animationPane || shown == m_animationShown)
+            return;
+        gui::Splitter* center = Find<gui::Splitter>(u8"scene-center");
+        if (center == nullptr)
+            return;
+        m_animationShown = shown;
+        if (shown)
+        {
+            center->AddChild(m_animationPane.Get());
+            const f32 weights[] = {0.68f, 0.32f};
+            center->SetWeights(Span<const f32>(weights, 2u));
+        }
+        else
+        {
+            m_animation->StopPreview(); // what it posed goes back with it
+            center->RemoveChild(m_animationPane.Get());
+        }
+    }
+
+    void SceneEditorPage::EditAnimationClip(const Guid& clip, const Guid& entity)
+    {
+        if (!m_animation)
+            return;
+        SetAnimationPanelShown(true);
+        if (!clip.IsNil())
+            m_animation->RequestEditClip(clip, entity);
+        else if (!entity.IsNil())
+            m_animation->BindEntity(entity);
+    }
+
+    String SceneEditorPage::UnsavedBesides() const
+    {
+        return m_animation && m_animation->Document().IsDirty() ? Format(u8"the clip '{}'", m_animation->Document().Name()) : String{};
+    }
+
+    Status SceneEditorPage::SaveBesides()
+    {
+        return m_animation ? m_animation->Save() : Status{};
     }
 
     void SceneEditorPage::BuildTools(EditorContext& context)
@@ -286,6 +421,8 @@ namespace editor
             }
         }
 
+        if (m_animation && m_animationShown)
+            m_animation->Update(dt, m_simulation.IsRunning());
         m_viewport->AdvanceScripted(dt); // a playtest's frame (viewport_run), before the view's input is read
         // A modal tool (a brush) owns Shift + wheel to size itself, so the camera leaves that wheel
         // to it; the bare wheel stays the camera's under a brush too.
@@ -415,6 +552,7 @@ namespace editor
 
     void SceneEditorPage::OnClose()
     {
+        m_animation.Reset(); // what its preview posed goes back while the scene is here
         m_entityPicker.Reset(); // it lets the scene's tree go before the scene does
         m_cameraPreview.Reset(); // its picture's targets go with the viewports, before the scene
         m_inspector.Reset(); // the grid lets its sources go before the scene does
@@ -455,7 +593,12 @@ namespace editor
                 return Status{ErrorCode::InvalidArgument};
             }
         }
+        // What the animation panel posed is not the scene's: saved as it is, posed again after.
+        if (m_animation)
+            m_animation->StopPreview();
         const Status saved = isPrefab ? scene::SavePrefab(*m_scene, *instance) : scene::SaveScene(*m_scene, *instance);
+        if (m_animation)
+            m_animation->Repose();
         if (!saved.IsOk())
             return saved;
         ClearDirty();
@@ -505,6 +648,10 @@ namespace editor
 
     void SceneEditorPage::StartSimulation()
     {
+        // The scene as it is, not as the animation panel posed it, is what the run starts from and
+        // what its end puts back.
+        if (m_animation)
+            m_animation->StopPreview();
         if (m_scene == nullptr || !m_simulation.Start(*m_scene, Commands()))
             return;
         // Modal edit tools (terrain sculpt) share runtime state with the simulation (the collider):
@@ -528,11 +675,6 @@ namespace editor
         SaveViewState();
     }
 
-    void SceneEditorPage::SetAnimationPanelShown(bool shown)
-    {
-        if (shown)
-            m_context->Notify(NoticeKind::Info, u8"The animation panel is not on the new editor yet: it comes with the property animation editor.");
-    }
 
     bool SceneEditorPage::FrameEntities(Span<const Guid> entities, bool ease)
     {

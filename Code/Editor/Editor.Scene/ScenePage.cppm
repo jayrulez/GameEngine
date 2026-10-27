@@ -39,6 +39,7 @@ import editor.core;
 import editor.app;
 import editor.camera;
 import editor.viewporttools;
+import editor.propertyanimation; // the animation panel under the viewport
 import :edit;
 import :gizmo;
 import :tools;
@@ -96,6 +97,9 @@ export namespace editor
 
         // === EditorPage ===
         [[nodiscard]] Status Save() override;
+        /// The clip its animation panel edits, while unsaved: asked about beside the scene.
+        [[nodiscard]] String UnsavedBesides() const override;
+        Status SaveBesides() override;
         void OnSavedAs(foundation::content::Instance& instance) override;
         /// The asset changed under this page (apply-to-prefab from another page): read again, its
         /// history gone; unsaved edits are never clobbered, the page warns instead.
@@ -113,9 +117,11 @@ export namespace editor
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return m_viewport->CameraOwnsInput(); }
         [[nodiscard]] bool MarkersShown() const noexcept override { return m_overlays.settings.showMarkers; }
         void SetMarkersShown(bool shown) override;
-        /// The property animation panel comes back with its editor (X6): never shown until then.
-        [[nodiscard]] bool AnimationPanelShown() const noexcept override { return false; }
+        /// The property animation panel under the viewport (X6 layer 9): a clip of its own, never
+        /// the scene's history or its unsaved mark.
+        [[nodiscard]] bool AnimationPanelShown() const noexcept override { return m_animationShown; }
         void SetAnimationPanelShown(bool shown) override;
+        void EditAnimationClip(const Guid& clip, const Guid& entity) override;
         [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return &m_viewport->Camera(); }
         bool FrameEntities(Span<const Guid> entities, bool ease) override;
         [[nodiscard]] Status RequestViewportCapture(StringView path) override { return m_viewport->RequestCapture(path, false); }
@@ -150,6 +156,7 @@ export namespace editor
         [[nodiscard]] SceneViewport& Viewport() noexcept { return *m_viewport; }
         [[nodiscard]] SceneHierarchyView* Hierarchy() noexcept { return m_hierarchy.Get(); }
         [[nodiscard]] SceneInspectorView* Inspector() noexcept { return m_inspector.Get(); }
+        [[nodiscard]] PropertyAnimationPanel* AnimationPanel() const noexcept { return m_animation.Get(); }
         /// Opens the entity picker over the page's GUI for `request` (made the first time); false
         /// with no markup, no edit context, or the page in no GUI.
         bool PickEntity(EntityPickRequest request);
@@ -169,6 +176,9 @@ export namespace editor
         [[nodiscard]] bool IsProjectDefaultScene() const;
         void Confirm(StringView title, StringView text, StringView verb, Function<void()> yes);
         void Later(Function<void()> work);
+        void BuildAnimationPanel(EditorContext& context);
+        // The page's prompt for the panel's unsaved clip: Save, Discard (as saved) or Cancel.
+        void AskAboutClip(Function<void()> proceed);
         template <typename T>
         [[nodiscard]] T* Find(StringView id) const;
 
@@ -200,6 +210,9 @@ export namespace editor
         UniquePtr<SceneHud> m_hud; // over the viewport
         UniquePtr<SceneCameraPreview> m_cameraPreview; // the HUD's bottom end: what a camera sees
         UniquePtr<SceneTools> m_tools; // the viewport tools on the bar, the active one's panel
+        UniquePtr<PropertyAnimationPanel> m_animation; // under the viewport (null: no markup)
+        RefPtr<foundation::gui::Node> m_animationPane; // held: out of the splitter while hidden, nothing else holds it
+        bool m_animationShown = false;
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once it settled
         // when there is none yet, and on every save of it.

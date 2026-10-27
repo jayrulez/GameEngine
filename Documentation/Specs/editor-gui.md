@@ -657,9 +657,13 @@ The layers:
       Save, Undo, Redo, the bound entity and Use Selected, Add Track, the kit's transport and
       Loop, the clip's length), the ruler, dopesheet and curve view on one axis, a state with no
       clip; the keys it binds handled on its root (the actions' commands), the rest let through.
-   3. On the scene page: under the viewport in a splitter, opened from the View menu and from an
-      animator's clip, its preview stood down while simulating, an unsaved clip asked about when
-      the page closes or another clip opens.
+   3. On the scene page: under the viewport in a splitter (its pane out of the splitter while
+      hidden, so the viewport has it all), shown from the Scene menu's Animation Panel and from an
+      animator's Edit Clip in the inspector, its preview stood down while simulating and put back
+      before a run starts and before the scene saves (what it posed is never the scene's); an
+      unsaved clip asked about apart from the scene when another clip opens, and beside the
+      scene's own changes when the page closes or the editor exits (a page's unsaved work besides
+      its asset, Editor.Core and Editor.App); New makes a clip in Animations named for the entity.
 10. The animation pages (Animation): the clip (a preview, its events as markers on the time axis),
     the skeleton (the bone tree with a search beside the preview) and the graph (GraphView over the
     preview, its layers and parameters as lists).

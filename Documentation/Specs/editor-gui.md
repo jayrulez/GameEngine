@@ -266,7 +266,7 @@ to follow the same order.
 | X4 | Shared editor parts: the asset picker slot, asset drag data, the reflected inspector on the GUI's property grid (the editor's editors registered by hint), the dialogs, the assets browser, console. |
 | X5 | The scene page: viewport, hierarchy (tree with reorder), inspector, tool panels, camera preview; play in editor (the Game tab). |
 | X6 | Asset pages, in groups: property pages (Generic, Texture, Fonts, Image, Heightfield, Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain); code pages (Script, Shaders, GUI on GUI.Code, with CSS highlighting); curve and timeline pages (Particles, PropertyAnimation, Animation); Preview. |
-| X7 | The profiler panel (foundation.profiler.ui onto the GUI). |
+| X7 | The profiler, a tab in the page area, on a new library Profiler.GUI (5.5). |
 | X8 | Parity check and the swap: every MCP tool, Integration.Mcp, the sample projects played in the new editor; the old editor deleted. |
 | X9 | Hot reload of user theme overrides, accessibility pass, the token reference in the docs. |
 
@@ -703,6 +703,107 @@ The layers:
        the grid the chosen layer, parameter, state or transition (a transition's conditions a list,
        a blend tree's entries a list, each a clip and its threshold or place); a new graph from
        Create Asset, as before.
+
+### 5.5 X7, the profiler, in layers
+
+Surveyed 2026-10-27, for the user's choices (a tab in the page area; a new library; survey and
+mock first). Today's panel (Editor.App's ProfilerPanel on Profiler.UI, Specs/profiler.md P5) is a
+tab docked with the Console: Record, Stop, Save, Open and Live; a frame strip (a click one frame, a
+drag a range); the timeline (a lane per thread, the GPU lane; the wheel zooms about the pointer, a
+drag pans, a hover names a bar); beside it the scope table (total, self, calls; sorted by a
+heading) over the counters; a name chosen in the table lit on the timeline. Profiler.UI's
+ProfileWindow (the frames chosen, their stats and totals) is UI-free already; its views are
+foundation.ui, and so is the in-game overlay Engine.DefaultApp hosts.
+
+What the references do, per concern (Godot, LumixEngine, traktor, ZeroEngine, LunarSong and ez
+from their source; Tracy from its manual; Unity, Unreal Insights and Superluminal from their
+documentation):
+- **Where it lives.** A bottom or debugger tab (Godot, Zero, LunarSong), a window of its own
+  (Lumix, traktor, every dedicated tool), or nothing in the editor (ez hands off to Tracy). Godot
+  and LunarSong split it into several panels (script, visual, monitors); the dedicated tools keep
+  one window with the frame strip on top driving everything under it.
+- **The frame strip.** Everywhere a ring of frames (Godot 60 to 10,000, Unity 300 to 2,000, Zero
+  512, LunarSong 600; ours 3,600). A click picks a frame, a drag or Shift and a click a range
+  (Tracy, Unreal, Unity's Profile Analyzer). Bars coloured against a budget with its lines (Tracy;
+  Godot and LunarSong a chosen target fps); the frames in the timeline's view boxed on the strip
+  (Tracy). Following the newest stops as soon as one is chosen (Tracy, Unity, LunarSong). Profile
+  Analyzer selects the longest or the median frame from a menu. Avoid: a fixed scale that clips a
+  spike (Zero), axes with no values (a Unity complaint), no zoom on a long strip (Godot).
+- **The timeline.** Threads as row groups with depth inside (Tracy, Lumix, traktor, Unity,
+  Unreal), collapsible, hideable; GPU passes drawn exactly as CPU scopes in their own rows
+  (Tracy); counters as plots under them with their min and max printed (Tracy, Lumix); the ruler
+  and the frames' row pinned on top. The wheel zooms about the pointer and a drag pans (all;
+  Lumix needs Ctrl, traktor Alt). One gesture zooms to a scope, a frame or a lane (Tracy's middle
+  click, Unity's F); one fits the frame (Unity's A, Lumix's reset). A scope too small to draw is
+  kept as a marked block with its count (Tracy), never dropped: names vanishing on zoom is a Unity
+  complaint. A name drawn only where it fits (Lumix). Colour by the scope's name, so a scope keeps
+  its colour across frames (Godot's hash; per-thread colour, traktor's, makes scopes hard to tell
+  apart).
+- **Selecting a scope.** A hover outlines every scope of that name (Tracy); a choice lights its
+  instances and dims the rest (Unreal; Lumix's filter, filled by a double-click), and shows its
+  share in the frame strip (Unity; Tracy plots its time per frame). Hovering a CPU scope lights the
+  GPU pass it recorded (Lumix's links).
+- **A range.** A drag across the timeline marks a span, shaded, its length read out; the tables
+  recompute for it (Tracy, Superluminal, Unreal).
+- **The table.** Name, count, inclusive and self (all), mean and max per call (Tracy, Unreal),
+  share of the frame (traktor, Godot); every heading sorts; a name filter (Tracy, Lumix, Superluminal).
+  LunarSong's default order is the call tree and any other sort flattens it to a hot list. Unreal's
+  "find instance" jumps to the longest one.
+- **One scope's detail.** Tracy's zone info: its parents, its children grouped by name, the
+  spread of its durations (a histogram, Tracy and Superluminal).
+- **Recording.** Record and stop (Godot, traktor), always on with pause (LunarSong, Tracy), or an
+  always-on ring snapped on demand and on a spike: Lumix stops itself when a frame passes N ms,
+  the most useful for catching a hitch.
+- **Comparing two captures.** Only the dedicated tools (Tracy's Compare, Profile Analyzer): two
+  sets' histograms overlaid, the difference coloured by size. None of the engines.
+- **Density.** Tracy's depth is praised and its gestures (each button, with Ctrl or Shift) and
+  floating windows are not; Unreal offers a compact mode and a depth limit per lane.
+
+The design (proposed; the mock is judged before anything is built):
+- **The page.** One Profiler tab in the page area, opened from View, Profiler as today, floated
+  like any page; its layout id stays `profiler`. Top to bottom: the page bar (Record and Stop,
+  Live, Open, Save; the source named; the budget, a choice of 30, 60, 120 fps or none; Stop on
+  spike over a time, Lumix's, off by default), the frame strip across the full width, the timeline
+  across the full width taking what is left, and under it a split: the scope table, with the
+  chosen scope's detail beside it. The full width is what the page area gives over today's panel:
+  the timeline no longer shares its width with the table.
+- **The frame strip.** Bars coloured against the budget with its line and a scale with values;
+  the timeline's view boxed; a click a frame, a drag a range; Longest and Median in its bar; the
+  chosen scope's time per frame drawn in each bar when a scope is chosen. Following the newest
+  stops at a choice and comes back with Live. The counters under it as plots over the same
+  frames, each with its range printed: a counter is set once a frame, so over the frames is where
+  it says something (Unity's charts), where a plot along one frame's timeline would be flat.
+- **The timeline.** The ruler and the frames' numbers pinned; a group per thread (its name, a
+  fold), depth inside; the GPU group. Wheel zooms,
+  drag pans, a double-click zooms to what is under the pointer (a scope, a frame on the ruler, a
+  lane's name), Fit in its corner. A drag on the ruler marks a range. Colours by name; a scope too
+  small to draw a hatched block with its count.
+- **Selection.** A hover outlines the name's other instances and names the bar with its duration;
+  a click chooses the name: its instances lit, the rest dimmed, its row chosen in the table, its
+  detail shown, its time per frame on the strip. The table's choice is the same choice.
+- **The table.** The tree (parents over their children) in its default order, a flat list sorted
+  by any other heading; columns Name, Calls, Total, Self, Mean, Max, % of frame; a filter; GPU
+  passes their own group in it. Over a marked range, the range's.
+- **The detail.** The chosen scope's parents, its children by name with their share, and its
+  durations' spread over the chosen frames, with Longest (the longest instance zoomed to).
+- **Not in X7:** comparing two captures, and the overlay's move (X8 deletes Profiler.UI with the
+  old UI once the overlay is on the GUI).
+- **Keys.** The docking ruling (mouse first; ask before adding default shortcuts) holds: every
+  gesture above is the mouse's, and the keys the references bind (fit, zoom to the chosen scope,
+  W A S D) wait for the user.
+
+The layers:
+0. The mock: `Data/Editor/Mock/profiler.gml` in the GUISandbox's editor mock, a static frame of
+   made-up data (the strip and two counters under it, a frame's timeline with its threads, a
+   folded group and the GPU, a range marked and a scope chosen, the table and the detail), dark
+   and light, for the user to judge.
+1. ProfileWindow moves down to Profiler (UI-free, read by both libraries while Profiler.UI lives).
+2. Profiler.GUI (`foundation.profiler.gui`), the frame strip: the model and the view, with tests.
+3. The timeline: groups, folds, zoom and pan, zoom to, the range, hatched blocks.
+4. The table and the detail, the shared choice.
+5. The editor's Profiler page on them, from its markup: Record, Live, Open, Save, the budget,
+   stop on spike; the MCP profiler and layout tools as before; the old panel's files deleted.
+   McpGuide in step where a tool's text changes.
 
 ## 6. Tests
 

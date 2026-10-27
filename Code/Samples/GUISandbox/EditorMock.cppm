@@ -329,6 +329,8 @@ export namespace sandbox
             sheet += m_host.Read(kDensities[m_density].Sheet).AsView();
             sheet += StringView(u8"\n");
             sheet += m_host.Read(u8"Editor/Mock/kit.css").AsView(); // the kit page's own layout
+            sheet += StringView(u8"\n");
+            sheet += m_host.Read(u8"Editor/Mock/profiler.css").AsView(); // the profiler page's, and its bars
             sheet += inputs.AsView();
             m_styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"Editor/editor.css")));
             m_context.SetColorScheme(m_dark);
@@ -360,6 +362,8 @@ export namespace sandbox
             Register(u8"input-split", u8"Input B: Tree and Grid", u8"Editor/Mock/input-split.gml");
             Register(u8"input-split-set", u8"Input B: Set Chosen", u8"Editor/Mock/input-split-set.gml");
             Register(u8"input-split-set-open", u8"Input B: Set, Actions Open", u8"Editor/Mock/input-split-set-open.gml");
+            // The profiler page (X7), a tab in the page area (the user, 2026-10-27).
+            Register(u8"profiler", u8"Profiler", u8"Editor/Mock/profiler.gml");
             Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.gml");
             Register(u8"console", u8"Console", u8"Editor/Mock/console.gml");
             Said(m_dock->Adopt(DefaultLayout(false)));
@@ -390,7 +394,8 @@ export namespace sandbox
             Said(layout.InsertTab(u8"input-split", central));
             Said(layout.InsertTab(u8"input-split-set", central));
             Said(layout.InsertTab(u8"input-split-set-open", central));
-            Said(layout.Activate(u8"scene"));
+            Said(layout.InsertTab(u8"profiler", central));
+            Said(layout.Activate(u8"profiler"));
             Said(layout.InsertBeside(u8"assets", central, gui::DockSide::Bottom, 0.28f));
             Said(layout.InsertTab(u8"console", layout.StackOf(u8"assets")));
             Said(layout.Activate(u8"assets"));
@@ -404,7 +409,7 @@ export namespace sandbox
             description.Title = String(title);
             description.Close = gui::DockClosePolicy::Hide;
             description.Closable = true;
-            description.Default.Central = id.StartsWith(StringView(u8"scene")) || id == StringView(u8"kit");
+            description.Default.Central = id.StartsWith(StringView(u8"scene")) || id == StringView(u8"kit") || id == StringView(u8"profiler");
             EditorMock* self = this;
             const String path(markup);
             const String panel(id);

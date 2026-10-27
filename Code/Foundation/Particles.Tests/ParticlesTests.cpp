@@ -786,9 +786,9 @@ TEST_CASE("particle reflection (batch 3): force + collision modules reflect thei
     Instance ai = Instance::From(&a);
     CHECK(GetProperty(*FindProperty(attractor, "strength"), ai).Get<f32>() == doctest::Approx(4.0f));
 
-    // CollisionBehavior: 3 BoundedArray shape lists + 3 counts + 4 response scalars.
+    // CollisionBehavior: 3 BoundedArray shape lists (their sizes the counts) + 4 response scalars.
     const TypeInfo& collision = CollisionBehavior::StaticType();
-    CHECK(PropertyCount(collision) == 10u);
+    CHECK(PropertyCount(collision) == 7u);
     CHECK(FindProperty(collision, "bounce") != nullptr);
     CHECK(FindProperty(collision, "planes") != nullptr); // now a BoundedArray container
 
@@ -992,6 +992,90 @@ TEST_CASE("particle reflection (batch 7): a whole effect traverses effect -> sys
     CHECK(ContainerSize(sysC, systemsInst) == 1u);
     CHECK(ContainerRemoveAt(sysC, systemsInst, 0).IsOk());
     CHECK(ContainerSize(sysC, systemsInst) == 0u);
+}
+
+TEST_CASE("particle reflection (batch 8): every authored field of a system, its modes named, each row where it acts")
+{
+    using namespace foundation::particles;
+    RegisterParticleModules();
+    const auto text = [](const PropertyInfo& property, const char* key) -> String
+    {
+        const Attribute* attribute = FindAttribute(property, StringView(reinterpret_cast<const char8_t*>(key)));
+        const String* value = attribute != nullptr ? attribute->value.TryGet<String>() : nullptr;
+        return value != nullptr ? *value : String{};
+    };
+
+    // The modes are named enums, so a row can offer them.
+    CHECK(IsEnum(TypeOf<ParticleRenderMode>()));
+    CHECK(Enumerators(TypeOf<ParticleRenderMode>()).Size() == 7u);
+    CHECK(IsEnum(TypeOf<ParticleBlendMode>()));
+    CHECK(IsEnum(TypeOf<SimulationMode>()));
+    CHECK(IsEnum(TypeOf<ParticleSpace>()));
+
+    // The references name what they bind; each shows where its render mode uses it.
+    const TypeInfo& system = TypeOf<ParticleSystem>();
+    const PropertyInfo* texture = FindProperty(system, "textureRef");
+    REQUIRE(texture != nullptr);
+    CHECK(text(*texture, "referenceType") == String(u8"Texture"));
+    CHECK(text(*texture, "visibleWhen") == String(u8"renderMode=0,1,2,3,5"));
+    const PropertyInfo* materials = FindProperty(system, "materialRefs");
+    REQUIRE(materials != nullptr);
+    REQUIRE(IsContainer(*materials->type));
+    CHECK(text(*materials, "referenceType") == String(u8"Material"));
+    CHECK(text(*FindProperty(system, "trail"), "visibleWhen") == String(u8"renderMode=5"));
+    CHECK(text(*FindProperty(system, "flipbook"), "visibleWhen") == String(u8"renderMode=0,1,2,3"));
+
+    // The budget goes through its setter (it reallocates the streams).
+    ParticleEffect effect(u8"Sparks");
+    ParticleSystem& sys = effect.AddSystem(256);
+    const PropertyInfo* budget = FindProperty(system, "maxParticles");
+    REQUIRE(budget != nullptr);
+    Instance sysInst = Instance::From(&sys);
+    CHECK(GetProperty(*budget, sysInst).Get<i32>() == 256);
+    CHECK(SetProperty(*budget, sysInst, Variant::From<i32>(64)).IsOk());
+    CHECK(sys.MaxParticles() == 64);
+
+    // A trail's colour and a colour range are colours; a shape's measures show for its shapes.
+    CHECK(FindAttribute(*FindProperty(TypeOf<TrailSettings>(), "trailColor"), StringView(u8"color")) != nullptr);
+    CHECK(FindAttribute(*FindProperty(TypeOf<RangeColor>(), "min"), StringView(u8"color")) != nullptr);
+    CHECK(text(*FindProperty(TypeOf<EmissionShape>(), "extents"), "visibleWhen") == String(u8"type=3"));
+    CHECK(text(*FindProperty(TypeOf<ParticleEmitter>(), "spawnRate"), "visibleWhen") == String(u8"mode=0,2"));
+
+    // The collision lists' sizes are their counts: no count rows beside them.
+    CHECK(FindProperty(CollisionBehavior::StaticType(), "planes") != nullptr);
+    CHECK(FindProperty(CollisionBehavior::StaticType(), "planeCount") == nullptr);
+
+    // The effect's sub-emitter links are a list of their own, each its fields.
+    SubEmitterLink link;
+    link.childSystemIndex = 0;
+    effect.AddSubEmitterLink(link);
+    const PropertyInfo* links = FindProperty(TypeOf<ParticleEffect>(), "subEmitterLinks");
+    REQUIRE(links != nullptr);
+    REQUIRE(IsContainer(*links->type));
+    Instance effectInst = Instance::From(&effect);
+    CHECK(ContainerSize(*links->type->container, Instance(links->address(effectInst), links->type)) == 1u);
+    CHECK(IsEnum(TypeOf<ParticleEventType>()));
+    CHECK(FindProperty(TypeOf<SubEmitterLink>(), "childSystemIndex") != nullptr);
+}
+
+TEST_CASE("ParticleEffect: a system removed, the links follow it")
+{
+    using namespace foundation::particles;
+    ParticleEffect effect(u8"Shells");
+    (void)effect.AddSystem(16);
+    (void)effect.AddSystem(16);
+    (void)effect.AddSystem(16);
+    SubEmitterLink intoSecond;
+    intoSecond.childSystemIndex = 1;
+    SubEmitterLink intoThird;
+    intoThird.childSystemIndex = 2;
+    effect.AddSubEmitterLink(intoSecond);
+    effect.AddSubEmitterLink(intoThird);
+
+    effect.RemoveSystem(1);
+    REQUIRE(effect.SubEmitterLinks().Size() == 2u);
+    CHECK(effect.SubEmitterLinks()[0].childSystemIndex == -1); // into the one removed: does nothing
+    CHECK(effect.SubEmitterLinks()[1].childSystemIndex == 1);  // the third is the second now
 }
 
 // A world-space system with nothing to place its particles bears them at the emitter, not at the

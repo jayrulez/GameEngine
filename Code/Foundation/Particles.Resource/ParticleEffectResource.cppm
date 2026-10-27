@@ -168,6 +168,10 @@ export namespace foundation::particles
     inline void SerializeEffect(ISerializer& ar, ParticleEffect& fx)
     {
         const bool reading = ar.Mode() == SerializeMode::Read;
+        if (reading)
+        {
+            fx.Clear(); // read over an effect (an editor's undo), not added to what it had
+        }
         core::Serialize(ar, "name", fx.name);
 
         u32 systemCount = reading ? 0u : static_cast<u32>(fx.SystemCount());

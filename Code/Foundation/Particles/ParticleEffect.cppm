@@ -777,11 +777,24 @@ export namespace foundation::particles
         void AddSubEmitterLink(SubEmitterLink link) { m_links.PushBack(link); }
 
         // Remove a system by index / drop everything (editor authoring + blob-restore rebuilds).
+        // The links follow: one into the removed system does nothing (-1), one into a system after
+        // it names that system's new place.
         void RemoveSystem(i32 index)
         {
             if (index >= 0 && static_cast<usize>(index) < m_systems.Size())
             {
                 m_systems.RemoveAt(static_cast<usize>(index));
+                for (SubEmitterLink& link : m_links)
+                {
+                    if (link.childSystemIndex == index)
+                    {
+                        link.childSystemIndex = -1;
+                    }
+                    else if (link.childSystemIndex > index)
+                    {
+                        --link.childSystemIndex;
+                    }
+                }
             }
         }
         void Clear()

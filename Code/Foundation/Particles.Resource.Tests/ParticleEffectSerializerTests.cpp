@@ -101,6 +101,22 @@ TEST_CASE("particles.serializer: a clean stream round-trips (control)")
     CHECK(dst.Effect().GetSystem(1)->MaxParticles() == 300);
 }
 
+TEST_CASE("particles.serializer: read over an effect, it replaces what the effect had (an editor's undo)")
+{
+    RegisterParticleEffectResource();
+    ParticleEffectResource src;
+    BuildEffect(src.Effect());
+    SubEmitterLink link;
+    link.childSystemIndex = 1;
+    src.Effect().AddSubEmitterLink(link);
+    const Array<u8> bytes = WriteEffect(src.Effect());
+
+    // The same effect read back over itself, as a whole-asset undo does: two systems, one link.
+    CHECK(ReadEffect(bytes, src.Effect()));
+    CHECK(src.Effect().SystemCount() == 2);
+    CHECK(src.Effect().SubEmitterLinks().Size() == 1u);
+}
+
 TEST_CASE("particles.serializer: a module type this build cannot construct refuses the payload")
 {
     RegisterParticleEffectResource();

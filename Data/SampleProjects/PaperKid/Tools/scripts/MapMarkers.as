@@ -5,6 +5,16 @@
 // The HUD has this many subscriber dots (map-sub-0 ...).
 const uint kDots = 8;
 
+// A HUD element: the top screen's first, then any (a HUD just replaced is still in the tree while it
+// leaves, with the same ids, and would be found first).
+Node@ hud(string id)
+{
+    ScreenStack@ stack = ScreenStack::of(gui::root().find("screens"));
+    Screen@ top = stack !is null ? stack.top() : null;
+    Node@ n = top !is null ? top.find(id) : null;
+    return n !is null ? n : gui::root().find(id);
+}
+
 class MapMarkers
 {
     private Entity@ self;
@@ -15,6 +25,7 @@ class MapMarkers
     [2, "The delivery zones' collision group"] int zoneGroup;
 
     private array<Entity@> m_zones;
+    private array<int> m_waiting; // each dot's state shown: 1 waiting, 0 delivered, -1 not yet shown
     private bool m_found = false;
 
     MapMarkers(Entity@ entity) { @self = entity; }
@@ -29,30 +40,34 @@ class MapMarkers
         }
         for (uint i = 0; i < m_zones.length(); i++)
         {
-            UIView@ dot = ui::find("map-sub-" + i);
-            if (dot is null || !dot.isValid())
+            Node@ dot = hud("map-sub-" + i);
+            if (dot is null)
             {
                 continue;
             }
             Entity@ marker = m_zones[i].findChildByName("Marker");
-            bool waiting = marker !is null && marker.isValid() && marker.active();
-            dot.setOpacity(waiting ? 1.0f : 0.3f);
+            int waiting = marker !is null && marker.isValid() && marker.active() ? 1 : 0;
+            if (waiting != m_waiting[i]) // the sheet's 0 until placed, then full or dimmed
+            {
+                m_waiting[i] = waiting;
+                dot.tween("opacity", waiting == 1 ? "1" : "0.3", 0.0f, "linear");
+            }
         }
         if (bike is null || !bike.isValid())
         {
             return;
         }
-        UIView@ arrow = ui::find("map-bike");
-        if (arrow is null || !arrow.isValid())
+        Node@ arrow = hud("map-bike");
+        if (arrow is null)
         {
             return;
         }
-        place(arrow, bike.position(), 10.0f, 16.0f);
         // The bike faces its local +Z; on the map that points (x, z) with z down the screen, and a
-        // view turns clockwise from up.
+        // view turns clockwise from up. Set every frame (a tween of no length replaces the last).
         Float3 f = Quaternion::RotateVector(bike.rotation(), Float3(0.0f, 0.0f, 1.0f));
-        arrow.setRotation(Math::RadiansToDegrees(Math::Atan2(f.x, -f.z)));
-        arrow.setVisible(true);
+        arrow.tween("transform", at(bike.position(), 10.0f, 16.0f) + " rotate(" + Math::RadiansToDegrees(Math::Atan2(f.x, -f.z)) + "deg)",
+                    0.0f, "linear");
+        arrow.tween("opacity", "1", 0.0f, "linear");
     }
 
     private void findZones()
@@ -68,21 +83,22 @@ class MapMarkers
         for (uint i = 0; i < zones.length() && i < kDots; i++)
         {
             m_zones.insertLast(zones[i]);
-            UIView@ dot = ui::find("map-sub-" + i);
-            if (dot !is null && dot.isValid())
+            m_waiting.insertLast(-1);
+            Node@ dot = hud("map-sub-" + i);
+            if (dot !is null)
             {
-                place(dot, zones[i].worldPosition(), 12.0f, 12.0f);
-                dot.setVisible(true);
+                dot.tween("transform", at(zones[i].worldPosition(), 12.0f, 12.0f), 0.0f, "linear");
             }
         }
     }
 
-    // Centre a marker of the given pixel size on a world position.
-    private void place(UIView@ marker, Float3 world, float width, float height)
+    // The move that centres a marker of the given pixel size on a world position, from the map's
+    // corner (a CSS transform).
+    private string at(Float3 world, float width, float height)
     {
         Float3 c = self.position();
         float u = ((world.x - c.x) / span + 0.5f) * mapSize;
         float v = ((world.z - c.z) / span + 0.5f) * mapSize;
-        marker.setTranslation(u - width * 0.5f, v - height * 0.5f);
+        return "translate(" + (u - width * 0.5f) + "px, " + (v - height * 0.5f) + "px)";
     }
 }

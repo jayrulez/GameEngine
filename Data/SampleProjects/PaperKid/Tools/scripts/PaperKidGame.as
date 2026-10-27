@@ -21,13 +21,14 @@
 // ending's music. Buttons click, and a delivery's points rise from under the score and fade. The
 // pad cheers a cleared block and slumps on a failed one (the bike and porches rumble their own).
 
-Guid kTitleDoc = Guid("{{Title}}");
-Guid kHudDoc = Guid("{{Hud}}");
-Guid kClearedDoc = Guid("{{Cleared}}");
-Guid kFailedDoc = Guid("{{Failed}}");
-Guid kGameOverDoc = Guid("{{GameOver}}");
-Guid kPauseDoc = Guid("{{Pause}}");
-Guid kSettingsDoc = Guid("{{Settings}}");
+// The screens, on the engine GUI's screen stack: their documents by asset id.
+const string kTitleDoc = "{{{Title}}}";
+const string kHudDoc = "{{{Hud}}}";
+const string kClearedDoc = "{{{Cleared}}}";
+const string kFailedDoc = "{{{Failed}}}";
+const string kGameOverDoc = "{{{GameOver}}}";
+const string kPauseDoc = "{{{Pause}}}";
+const string kSettingsDoc = "{{{Settings}}}";
 
 Guid kTitleMusic = Guid("{{MusicTitle}}");
 Guid kEndingMusic = Guid("{{MusicEnding}}");
@@ -49,6 +50,28 @@ const float kCelebrateSlowest = 0.12f;
 const float kCelebrateSeconds = 1.9f;
 const float kBannerDrop = 0.35f; // seconds for the banner to drop into place
 Guid kStart = Guid("{{Start}}");
+
+// A GUI event's handler (a button's click, a slider's move).
+funcdef bool EventHandler(GuiEvent e);
+
+ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
+// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
+// with the same ids, and would be found first.
+Node@ find(string id)
+{
+    Screen@ top = screens().top();
+    Node@ n = top !is null ? top.find(id) : null;
+    return n !is null ? n : gui::root().find(id);
+}
+void wire(string id, string event, EventHandler@ handler) { find(id).on(event, handler); } // `on*` names are the engine's handlers
+void setText(string id, string text)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        Label::of(n).text = text;
+    }
+}
 
 const int kStartLives = 3;
 const int kTimeBonusPerSecond = 5;
@@ -75,7 +98,6 @@ class Game
     private Phase m_settingsFrom = Phase::Title; // where Settings goes back to
     private array<Guid> m_blockMusic;
     private float m_endingIn = -1.0f; // seconds until the ending's music, after the final screen's voice
-    private float m_pop = 0.0f;       // seconds left of the points rising from the score
     private float m_celebrated = 0.0f; // seconds into a cleared block's celebration
     private int m_secondsLeft = 0;     // the clock when the block was cleared (its time bonus)
 
@@ -97,7 +119,6 @@ class Game
     // The Game tier ticks at time scale 0 too, so the Pause action is read here in every phase.
     void update(float dt)
     {
-        tickPop(dt);
         if (m_phase == Phase::Celebrating)
         {
             tickCelebration(dt);
@@ -120,11 +141,11 @@ class Game
         }
         else if (m_phase == Phase::Paused)
         {
-            onResume();
+            resume();
         }
         else if (m_phase == Phase::Settings)
         {
-            onSettingsBack();
+            settingsBack();
         }
     }
 
@@ -140,13 +161,16 @@ class Game
         }
         m_delivered += 1;
         m_score += points;
-        ui::findLabel("hud-score").setText("" + m_score);
-        UILabel@ pop = ui::findLabel("hud-pop");
-        pop.setText("+" + points);
-        pop.setOpacity(1.0f);
-        pop.setTranslation(kPopX, kPopY);
-        pop.setVisible(true);
-        m_pop = kPopSeconds;
+        setText("hud-score", "" + m_score);
+        // The points: up 36 px from under the score over the pop's time, fading out late.
+        Node@ pop = find("hud-pop");
+        if (pop !is null)
+        {
+            Label::of(pop).text = "+" + points;
+            pop.tween("transform", "translate(" + kPopX + "px, " + (kPopY - 36.0f) + "px)", kPopSeconds, "linear")
+                .from("translate(" + kPopX + "px, " + kPopY + "px)");
+            pop.tween("opacity", "0", kPopSeconds, "ease-in").from("1");
+        }
     }
 
     void onQuotaMet(int secondsLeft)
@@ -161,9 +185,10 @@ class Game
         Input::rumble(0.3f, 0.6f, 0.45f); // the cheer of a cleared block
         Audio::stopMusic(1.2f);
         Audio::playOneShot(kClearedFanfare, AudioBus::Music);
-        UILabel@ banner = ui::findLabel("hud-banner");
-        banner.setOpacity(0.0f);
-        banner.setVisible(true);
+        // The banner drops in over kBannerDrop, easing out.
+        Node@ banner = find("hud-banner");
+        banner.tween("opacity", "1", kBannerDrop, "ease-out").from("0");
+        banner.tween("transform", "translateY(0px)", kBannerDrop, "ease-out").from("translateY(-60px)");
     }
 
     // The block winds down under the banner, then its screen comes up and it freezes.
@@ -178,18 +203,9 @@ class Game
         eased = 1.0f - (1.0f - eased) * (1.0f - eased);
         run::setTimeScale(1.0f + (kCelebrateSlowest - 1.0f) * eased);
 
-        UILabel@ banner = ui::findLabel("hud-banner");
-        float drop = m_celebrated / kBannerDrop;
-        if (drop > 1.0f)
-        {
-            drop = 1.0f;
-        }
-        banner.setOpacity(drop);
-        banner.setTranslation(0.0f, -60.0f * (1.0f - drop) * (1.0f - drop));
-
         if (m_celebrated >= kCelebrateSeconds)
         {
-            banner.setVisible(false);
+            find("hud-banner").tween("opacity", "0", 0.0f, "linear");
             showCleared();
         }
     }
@@ -202,16 +218,14 @@ class Game
         int bonus = m_secondsLeft * kTimeBonusPerSecond;
         m_score += bonus;
         m_banked = m_score;
-        ui::findLabel("hud-score").setText("" + m_score);
-        UIScreen@ s = ui::push(kClearedDoc);
-        s.findLabel("cleared-summary").setText("" + m_delivered + " delivered, " + earned + " points + "
-                                               + bonus + " time bonus");
-        UIButton@ next = s.findButton("continue-btn");
+        setText("hud-score", "" + m_score);
+        screens().push(kClearedDoc);
+        setText("cleared-summary", "" + m_delivered + " delivered, " + earned + " points + " + bonus + " time bonus");
         if (m_level + 1 >= int(m_levels.length()))
         {
-            next.setText("Finish");
+            Button::of(find("continue-btn")).text = "Finish";
         }
-        next.onClick(Action(this.onContinue));
+        wire("continue-btn", "click", EventHandler(this.onContinue));
     }
 
     void onLevelFailed(int reason)
@@ -226,22 +240,31 @@ class Game
         Audio::stopMusic(0.3f);
         Audio::playOneShot(kFailedJingle, AudioBus::Music);
         m_lives -= 1;
-        ui::findLabel("hud-lives").setText("" + m_lives);
+        setText("hud-lives", "" + m_lives);
         if (m_lives <= 0)
         {
             showGameOver(false);
             return;
         }
-        UIScreen@ s = ui::push(kFailedDoc);
-        s.findLabel("failed-reason").setText(reason == 0 ? "Out of time" : "Out of papers");
-        s.findLabel("failed-lives").setText(m_lives == 1 ? "1 life left" : "" + m_lives + " lives left");
-        s.findButton("retry-btn").onClick(Action(this.onRetry));
-        s.findButton("menu-btn").onClick(Action(this.onToTitle));
+        screens().push(kFailedDoc);
+        setText("failed-reason", reason == 0 ? "Out of time" : "Out of papers");
+        setText("failed-lives", m_lives == 1 ? "1 life left" : "" + m_lives + " lives left");
+        wire("retry-btn", "click", EventHandler(this.onRetry));
+        wire("menu-btn", "click", EventHandler(this.onToTitle));
     }
 
     // ---- buttons ----
 
-    void onNewGame()
+    bool onNewGame(GuiEvent e) { newGame(); return true; }
+    bool onRetry(GuiEvent e) { retry(); return true; }
+    bool onContinue(GuiEvent e) { continueRun(); return true; }
+    bool onResume(GuiEvent e) { resume(); return true; }
+    bool onSettings(GuiEvent e) { settings(); return true; }
+    bool onSettingsBack(GuiEvent e) { settingsBack(); return true; }
+    bool onToTitle(GuiEvent e) { toTitle(); return true; }
+    bool onQuit(GuiEvent e) { quit(); return true; }
+
+    private void newGame()
     {
         click();
         m_level = 0;
@@ -251,69 +274,72 @@ class Game
         startLevel();
     }
 
-    void onRetry()
+    private void retry()
     {
         click();
         startLevel();
     }
 
-    void onContinue()
+    private void continueRun()
     {
         click();
         m_level += 1;
         if (m_level >= int(m_levels.length()))
         {
             m_level = int(m_levels.length()) - 1;
-            ui::pop(); // the Block cleared screen gives way to the summary
+            screens().pop(); // the Block cleared screen gives way to the summary
             showGameOver(true);
             return;
         }
         startLevel();
     }
 
-    void onResume()
+    private void resume()
     {
         click();
-        ui::pop(); // the pause menu
+        screens().pop(); // the pause menu
         run::setTimeScale(1.0f);
         m_phase = Phase::Playing;
     }
 
-    void onSettings()
+    private void settings()
     {
         click();
         m_settingsFrom = m_phase;
-        UIScreen@ s = ui::push(kSettingsDoc);
-        bindVolume(s, "master", AudioBus::Master, Action(this.onMasterChanged));
-        bindVolume(s, "music", AudioBus::Music, Action(this.onMusicChanged));
-        bindVolume(s, "effects", AudioBus::Effects, Action(this.onEffectsChanged));
-        s.findButton("settings-back-btn").onClick(Action(this.onSettingsBack));
+        screens().push(kSettingsDoc);
+        bindVolume("master", AudioBus::Master, EventHandler(this.onMasterChanged));
+        bindVolume("music", AudioBus::Music, EventHandler(this.onMusicChanged));
+        bindVolume("effects", AudioBus::Effects, EventHandler(this.onEffectsChanged));
+        wire("settings-back-btn", "click", EventHandler(this.onSettingsBack));
         m_phase = Phase::Settings;
     }
 
-    void onSettingsBack()
+    private void settingsBack()
     {
         click();
-        ui::pop(); // the settings screen; the title or the pause menu is under it
+        screens().pop(); // the settings screen; the title or the pause menu is under it
         m_phase = m_settingsFrom;
     }
 
-    void onMasterChanged()
+    bool onMasterChanged(GuiEvent e)
     {
         volumeChanged("master", AudioBus::Master);
+        return true;
     }
 
-    void onMusicChanged()
+    bool onMusicChanged(GuiEvent e)
     {
         volumeChanged("music", AudioBus::Music);
+        return true;
     }
 
-    void onEffectsChanged()
+    bool onEffectsChanged(GuiEvent e)
     {
         volumeChanged("effects", AudioBus::Effects);
+        return true;
     }
 
-    void onToTitle()
+    private void toTitle()
     {
         click();
         run::loadScene(kStart);
@@ -321,7 +347,7 @@ class Game
         showTitle();
     }
 
-    void onQuit()
+    private void quit()
     {
         click();
         run::requestExit(0);
@@ -334,11 +360,10 @@ class Game
     {
         m_score = m_banked;
         m_delivered = 0;
-        ui::clear();
-        ui::push(kHudDoc);
-        ui::findLabel("hud-score").setText("" + m_score);
-        ui::findLabel("hud-lives").setText("" + m_lives);
-        m_pop = 0.0f;
+        screens().clear();
+        screens().push(kHudDoc);
+        setText("hud-score", "" + m_score);
+        setText("hud-lives", "" + m_lives);
         m_endingIn = -1.0f;
         Audio::playMusic(m_blockMusic[m_level % int(m_blockMusic.length())], 0.8f, kMusicVolume);
         run::setTimeScale(1.0f);
@@ -349,11 +374,11 @@ class Game
     private void pause()
     {
         run::setTimeScale(0.0f);
-        UIScreen@ s = ui::push(kPauseDoc);
-        s.findButton("resume-btn").onClick(Action(this.onResume));
-        s.findButton("restart-btn").onClick(Action(this.onRetry));
-        s.findButton("settings-btn").onClick(Action(this.onSettings));
-        s.findButton("menu-btn").onClick(Action(this.onToTitle));
+        screens().push(kPauseDoc);
+        wire("resume-btn", "click", EventHandler(this.onResume));
+        wire("restart-btn", "click", EventHandler(this.onRetry));
+        wire("settings-btn", "click", EventHandler(this.onSettings));
+        wire("menu-btn", "click", EventHandler(this.onToTitle));
         m_phase = Phase::Paused;
     }
 
@@ -362,42 +387,18 @@ class Game
         Audio::playOneShot(kClickSound, AudioBus::Effects, 0.7f);
     }
 
-    // The delivery's points: up 36 px from under the score over the pop's time, fading out late.
-    private void tickPop(float dt)
-    {
-        if (m_pop <= 0.0f)
-        {
-            return;
-        }
-        m_pop -= dt;
-        UILabel@ pop = ui::findLabel("hud-pop");
-        if (pop is null || !pop.isValid())
-        {
-            m_pop = 0.0f;
-            return;
-        }
-        if (m_pop <= 0.0f)
-        {
-            pop.setVisible(false);
-            return;
-        }
-        float t = 1.0f - m_pop / kPopSeconds;
-        pop.setTranslation(kPopX, kPopY - 36.0f * t);
-        pop.setOpacity(1.0f - t * t);
-    }
-
     // A volume row: its slider at the bus's level, its readout, and the handler.
-    private void bindVolume(UIScreen@ s, string row, AudioBus bus, Action@ handler)
+    private void bindVolume(string row, AudioBus bus, EventHandler@ handler)
     {
-        UISlider@ slider = s.findSlider(row + "-slider");
-        slider.setValue(Audio::busVolume(bus));
-        showVolume(row, slider.value);
-        slider.onChanged(handler);
+        Slider@ slider = Slider::of(find(row + "-slider"));
+        slider.value = Audio::busVolume(bus);
+        showVolume(row, float(slider.value));
+        wire(row + "-slider", "input", handler); // each step as the slider moves
     }
 
     private void volumeChanged(string row, AudioBus bus)
     {
-        float level = ui::findSlider(row + "-slider").value;
+        float level = float(Slider::of(find(row + "-slider")).value);
         Audio::setBusVolume(bus, level);
         showVolume(row, level);
         Audio::playOneShot(kSliderSound, AudioBus::Effects, 0.6f); // hear the level being set
@@ -405,7 +406,7 @@ class Game
 
     private void showVolume(string row, float level)
     {
-        ui::findLabel(row + "-value").setText("" + int(level * 100.0f + 0.5f) + "%");
+        setText(row + "-value", "" + int(level * 100.0f + 0.5f) + "%");
     }
 
     private void showGameOver(bool won)
@@ -422,13 +423,12 @@ class Game
             Audio::playOneShot(kGameOverVoice, AudioBus::Effects);
         }
         m_endingIn = won ? 4.2f : 2.0f; // the ending's music once the fanfare or the voice is done
-        UIScreen@ s = ui::push(kGameOverDoc);
-        s.findLabel("over-title").setText(won ? "Route complete!" : "Game over");
-        s.findLabel("over-score").setText("Score " + m_score);
-        s.findLabel("over-reached").setText(won ? "Every block delivered"
-                                                : "Reached block " + (m_level + 1) + " of " + m_levels.length());
-        s.findButton("again-btn").onClick(Action(this.onNewGame));
-        s.findButton("menu-btn").onClick(Action(this.onToTitle));
+        screens().push(kGameOverDoc);
+        setText("over-title", won ? "Route complete!" : "Game over");
+        setText("over-score", "Score " + m_score);
+        setText("over-reached", won ? "Every block delivered" : "Reached block " + (m_level + 1) + " of " + m_levels.length());
+        wire("again-btn", "click", EventHandler(this.onNewGame));
+        wire("menu-btn", "click", EventHandler(this.onToTitle));
     }
 
     private void showTitle()
@@ -436,10 +436,10 @@ class Game
         m_phase = Phase::Title;
         m_endingIn = -1.0f;
         Audio::playMusic(kTitleMusic, 0.8f, kMusicVolume);
-        ui::clear();
-        UIScreen@ s = ui::push(kTitleDoc);
-        s.findButton("play-btn").onClick(Action(this.onNewGame));
-        s.findButton("settings-btn").onClick(Action(this.onSettings));
-        s.findButton("quit-btn").onClick(Action(this.onQuit));
+        screens().clear();
+        screens().push(kTitleDoc);
+        wire("play-btn", "click", EventHandler(this.onNewGame));
+        wire("settings-btn", "click", EventHandler(this.onSettings));
+        wire("quit-btn", "click", EventHandler(this.onQuit));
     }
 }

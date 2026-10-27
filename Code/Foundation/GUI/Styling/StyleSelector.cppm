@@ -255,6 +255,33 @@ export namespace foundation::gui
             }
         }
 
+        /// Calls `f(compound, states)` for each compound whose own states it reads through a
+        /// descendant or child step (`button.revert:hover` in `button.revert:hover > icon`): a
+        /// change of one of them restyles the subtree of a widget that compound could match, and
+        /// no other's. What nested selectors read (`:is()`, `:not()` and `:has()` in any
+        /// compound) cannot be placed on one widget, and goes into `unplaced`: a change of one of
+        /// those restyles any widget's subtree, as every ancestor read once did.
+        template <typename F>
+        void ForEachStateReadAbove(F&& f, u32& unplaced) const
+        {
+            for (usize i = 0; i < m_rules.Size(); ++i)
+            {
+                const StyleSelectorRule& rule = m_rules[i];
+                u32 nestedAncestor = 0, nestedSibling = 0;
+                rule.ForEachNested([&](const StyleSelector& s) { s.CollectRelationStates(nestedAncestor, nestedSibling, 1, false); });
+                if ((nestedAncestor | nestedSibling) != 0)
+                    unplaced |= nestedAncestor | nestedSibling | AllDynamic(rule);
+                if (i + 1 == m_rules.Size())
+                    continue;
+                const Combinator next = m_rules[i + 1].GetCombinator();
+                if (next == Combinator::Adjacent || next == Combinator::Sibling)
+                    continue; // a sibling's state: CollectRelationStates' sibling states restyle the later siblings
+                const u32 states = rule.GetPseudoClasses() & kDynamicPseudoClasses;
+                if (states != 0)
+                    f(rule, states);
+            }
+        }
+
         /// Whether it reads a widget's siblings anywhere (its position among them, or `+` and `~`),
         /// nested selectors included: then a change to the children's arrangement can change what
         /// it matches.

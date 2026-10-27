@@ -153,7 +153,7 @@ TEST_CASE("incremental: a changed custom property restyles the children that rea
     CHECK(button->GetAlpha() == doctest::Approx(0.3f));
 }
 
-TEST_CASE("incremental: a state restyles the subtree, or the later siblings, only when a rule reads it there")
+TEST_CASE("incremental: a state restyles the subtree, or the later siblings, only when a rule reads it there, in a compound the widget can match")
 {
     const auto run = [](const char8_t* css)
     {
@@ -183,6 +183,12 @@ TEST_CASE("incremental: a state restyles the subtree, or the later siblings, onl
     CHECK(run(u8"panel:hover + note { opacity: 0.5; }") == 2u);            // and the note after it
     CHECK(run(u8":is(panel:hover) > label { opacity: 0.5; }") == 5u);      // read inside :is() too
     CHECK(run(u8"label:not(:hover) { opacity: 0.5; }") == 1u);             // a subject's own state
+    // Read through an ancestor the panel cannot be: its subtree stays (a hover moves through every
+    // ancestor of the pointer, so `button:hover > icon` once restyled whole pages at every move).
+    CHECK(run(u8"button:hover > label { opacity: 0.5; }") == 1u);          // another tag
+    CHECK(run(u8"panel.open:hover label { opacity: 0.5; }") == 1u);        // a class it lacks
+    CHECK(run(u8"#menu:hover label { opacity: 0.5; }") == 1u);             // an id it lacks
+    CHECK(run(u8"panel:focus label { opacity: 0.5; }") == 1u);             // another state
 }
 
 // A popup, tooltip or window joining the root rearranges its children. Restyling each child's

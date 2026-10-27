@@ -276,7 +276,7 @@ export namespace foundation::gui
                     for (usize i = parent->GetChildIndex(&node) + 1; i < parent->ChildCount(); ++i)
                         parent->GetChildAt(i)->MarkStyleDirty(true);
             const bool self = forceSubtree || forceSelf || node.IsStyleDirty();
-            const bool subtree = forceSubtree || node.IsStyleSubtreeDirty() || (states & m_ancestorStates) != 0;
+            const bool subtree = forceSubtree || node.IsStyleSubtreeDirty() || RestylesBelow(node, states);
             // Its children came, went or moved: when a sheet reads siblings, each may match
             // differently, and what each holds only when a rule reads them through an ancestor;
             // else only the new ones restyle (marked so). (Restyling every child's subtree made each
@@ -311,6 +311,26 @@ export namespace foundation::gui
                     Visit(*child, subtree || (rearranged && HoldsSiblingReads(*child)), customsChanged || rearranged);
             if (above != nullptr)
                 m_ancestors.Pop();
+        }
+
+        // Whether a change of `states` on `node` can change what matches below it: a rule reads one
+        // of them through an ancestor in a compound `node` could match (or in a nested selector,
+        // which no one widget can be told by). A hover moves through every ancestor of the
+        // pointer, so restyling each one's subtree for any rule's ancestor hover (`button:hover >
+        // icon`) restyled whole pages at every move.
+        [[nodiscard]] bool RestylesBelow(const Node& node, u32 states) const
+        {
+            if ((states & m_ancestorStates) == 0)
+                return false;
+            if ((states & m_unplacedAncestorStates) != 0)
+                return true;
+            const UIWidget* widget = core::Cast<UIWidget>(&node);
+            if (widget == nullptr)
+                return true;
+            for (const AncestorStateRead& read : m_ancestorStateReads)
+                if ((read.States & states) != 0 && read.Compound.MatchesIdentity(*widget))
+                    return true;
+            return false;
         }
 
         // Whether a rearrangement of `child`'s siblings can change what matches inside it: a rule
@@ -922,6 +942,8 @@ export namespace foundation::gui
             m_siblingStates = 0;
             m_readsSiblings = false;
             m_siblingReadsAbove.Clear();
+            m_ancestorStateReads.Clear();
+            m_unplacedAncestorStates = 0;
             m_sheetsReadViewport = false;
             m_sizeQueries.Clear();
             const auto learn = [&](const StyleSheet& sheet)
@@ -935,6 +957,9 @@ export namespace foundation::gui
                     rule.Selector().CollectRelationStates(m_ancestorStates, m_siblingStates);
                     m_readsSiblings = m_readsSiblings || rule.Selector().ReadsSiblings();
                     rule.Selector().ForEachSiblingReadAbove([&](const StyleSelectorRule& compound) { m_siblingReadsAbove.PushBack(compound); });
+                    rule.Selector().ForEachStateReadAbove([&](const StyleSelectorRule& compound, u32 states)
+                                                          { m_ancestorStateReads.PushBack(AncestorStateRead{compound, states}); },
+                                                          m_unplacedAncestorStates);
                 }
             };
             learn(m_userAgent);
@@ -1008,6 +1033,14 @@ export namespace foundation::gui
         u32 m_lastRestyleCount = 0;
         bool m_readsSiblings = false; // some rule reads siblings: a rearrangement restyles them
         Array<StyleSelectorRule> m_siblingReadsAbove; // compounds reading siblings with a step below: what such a child holds restyles too
+        // A compound whose states a rule reads through a descendant or child step, and which.
+        struct AncestorStateRead
+        {
+            StyleSelectorRule Compound;
+            u32 States = 0;
+        };
+        Array<AncestorStateRead> m_ancestorStateReads;
+        u32 m_unplacedAncestorStates = 0; // read through an ancestor in a nested selector: any widget's change restyles below it
         AncestorFilter m_ancestors; // the names above the widget ApplyTree's walk is at
         bool m_filtering = false;   // inside that walk (a widget styled any other way has no filter)
     };

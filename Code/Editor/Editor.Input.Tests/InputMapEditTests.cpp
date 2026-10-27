@@ -354,6 +354,18 @@ TEST_CASE("input map page: a row's edit, an added set and a removed action each 
     CHECK(f.Map().sets[0].actions.Size() == 2u);
 }
 
+TEST_CASE("input map page: a set added and undone after a row's edit keeps that edit")
+{
+    // The whole edit's before is the map as it is, not as the base page's own last step left it.
+    PageFixture f;
+    f.Edit(u8"actions.1.name", gui::Variant(StringView(u8"Leap")));
+    f.page->AddSet();
+    REQUIRE(f.Map().sets.Size() == 3u);
+    f.page->Commands().Undo();
+    CHECK(f.Map().sets.Size() == 2u);
+    CHECK(f.Map().sets[0].actions[1].name == StringView(u8"Leap"));
+}
+
 TEST_CASE("input map page: a binding's input listened for and landed as one undo step, a four-key one by its key")
 {
     PageFixture f;

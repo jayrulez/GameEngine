@@ -322,7 +322,8 @@ export namespace editor::app
         {
             if (m_object.Get() == nullptr)
                 return;
-            Array<byte> before = m_baseline;
+            // The asset as it is (not the last step of the base's own: a page's own rows edit it too).
+            Array<byte> before = SnapshotObject(*m_object);
             mutate(*m_object);
             Array<byte> after = SnapshotObject(*m_object);
             AssetObjectPage* self = this;

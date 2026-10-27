@@ -672,6 +672,12 @@ export namespace foundation::gui
         /// Its `color`: what a part that is text draws in (a code editor's keyword, CSS's ::selection).
         Color TextColor{};
         bool HasColor = false;
+        /// Its `width` and `height` in pixels, where the sheet gives them: a part the widget sizes
+        /// itself (a slider's track thickness, its thumb) takes them over its own.
+        f32 Width = 0.0f;
+        f32 Height = 0.0f;
+        bool HasWidth = false;
+        bool HasHeight = false;
 
         /// `own` with the sheet's aspects over it.
         [[nodiscard]] NodeBox Over(NodeBox own) const

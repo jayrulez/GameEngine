@@ -1422,6 +1422,16 @@ export namespace foundation::gui
             out.TextColor = c->ColorValue;
             out.HasColor = true;
         }
+        if (const StyleValue* w = style.Value(u8"width"); w != nullptr && w->Kind == StyleValueKind::Length) // not auto
+        {
+            out.Width = Max(0.0f, detail::PixelsOf(w, lengths, 0.0f, 0.0f));
+            out.HasWidth = true;
+        }
+        if (const StyleValue* h = style.Value(u8"height"); h != nullptr && h->Kind == StyleValueKind::Length) // not auto
+        {
+            out.Height = Max(0.0f, detail::PixelsOf(h, lengths, 0.0f, 0.0f));
+            out.HasHeight = true;
+        }
         node.SetPartStyle(part, out);
     }
 }

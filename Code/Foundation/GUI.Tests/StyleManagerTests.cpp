@@ -8,6 +8,7 @@
 #include "Core/Prelude.h"
 import foundation.core;
 import foundation.gui;
+import foundation.vg;
 
 using namespace foundation::gui;
 namespace core = foundation::core;
@@ -353,6 +354,32 @@ TEST_CASE("style-manager: a part takes a box: background, border, radii, shadow 
     CHECK(thumb.Opacity == doctest::Approx(0.5f));
     CHECK(thumb.Box.Radii.topLeft == doctest::Approx(3.0f));
     CHECK_FALSE(slider->GetPartStyle(u8"track").HasBackground); // the track keeps its own
+}
+
+TEST_CASE("style-manager: a slider's track takes the sheet's height and its thumb the sheet's width")
+{
+    // A game's groove thicker than the 4 px line, its thumb smaller than the slider is tall.
+    auto root = NewRoot();
+    auto slider = Make<Slider>();
+    slider->SetSize(core::Float2{160.0f, 24.0f});
+    root->AddChild(slider.Get());
+    StyleManager styles(CSSParser::Parse(SV(u8"slider::track { height: 10px; } slider::thumb { width: 16px; } slider::fill { height: auto; }")));
+    styles.ApplyTree(*root.Get());
+    const PartStyle& track = slider->GetPartStyle(u8"track");
+    CHECK(track.HasHeight);
+    CHECK(track.Height == doctest::Approx(10.0f));
+    CHECK_FALSE(track.HasWidth);
+    CHECK(slider->GetPartStyle(u8"thumb").Width == doctest::Approx(16.0f));
+    CHECK_FALSE(slider->GetPartStyle(u8"fill").HasHeight); // auto is no size
+
+    foundation::vg::VGContext canvas;
+    canvas.SetAnalyticBoxes(true);
+    DrawContext dc{canvas};
+    slider->Draw(dc);
+    const auto& boxes = canvas.GetBatch().boxVertices;
+    REQUIRE(boxes.Size() >= 12u);
+    CHECK(boxes[0].halfSize.y == doctest::Approx(5.0f));                // the track, 10 px thick
+    CHECK(boxes[boxes.Size() - 1].halfSize.x == doctest::Approx(8.0f)); // the thumb, 16 px across
 }
 
 TEST_CASE("style-manager: a part's border-color alone recolours its own outline")

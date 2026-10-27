@@ -207,9 +207,11 @@ export namespace foundation::gui
             (void)localBounds;
             const Rect b = GetContentBounds();
             const bool vertical = m_orientation == Orientation::Vertical;
-            const f32 across = vertical ? b.width : b.height; // the thumb's diameter
-            const f32 handleR = across * 0.5f;
-            const f32 trackW = 4.0f;
+            const f32 handleR = HandleRadius(b);
+            // The track's thickness: the sheet's (slider::track { height }, a vertical one's width) or 4.
+            const PartStyle& trackStyle = GetPartStyle(u8"track");
+            const bool sized = vertical ? trackStyle.HasWidth : trackStyle.HasHeight;
+            const f32 trackW = sized ? (vertical ? trackStyle.Width : trackStyle.Height) : 4.0f;
             const f32 ratio = static_cast<f32>(GetRatio());
             const f32 lo = (vertical ? b.y : b.x) + handleR;
             const f32 hi = (vertical ? b.y + b.height : b.x + b.width) - handleR;
@@ -222,7 +224,7 @@ export namespace foundation::gui
 
             // Each part its own look with the sheet's over it (slider::track, ::fill, ::tick, ::thumb, ::focus).
             const Rect track = vertical ? Rect{mid - trackW * 0.5f, b.y, trackW, b.height} : Rect{b.x, mid - trackW * 0.5f, b.width, trackW};
-            GetPartStyle(u8"track").Draw(ctx, track, FilledBox(m_trackColor, round));
+            trackStyle.Draw(ctx, track, FilledBox(m_trackColor, round));
             const Rect fill = vertical   ? Rect{track.x, along, trackW, b.y + b.height - along}
                               : reversed ? Rect{along, track.y, b.x + b.width - along, trackW}
                                          : Rect{b.x, track.y, along - b.x, trackW};
@@ -259,11 +261,22 @@ export namespace foundation::gui
         /// A horizontal slider in right to left runs from the right.
         [[nodiscard]] bool Reversed() const { return m_orientation == Orientation::Horizontal && IsRightToLeft(); }
 
+        /// The thumb's radius: the sheet's size (slider::thumb { width }) across the slider, or as
+        /// wide as the slider is across; never past it.
+        [[nodiscard]] f32 HandleRadius(const Rect& b) const
+        {
+            const bool vertical = m_orientation == Orientation::Vertical;
+            const f32 across = vertical ? b.width : b.height;
+            const PartStyle& thumb = GetPartStyle(u8"thumb");
+            const f32 sized = thumb.HasWidth ? thumb.Width : thumb.HasHeight ? thumb.Height : across;
+            return Min(sized, across) * 0.5f;
+        }
+
         void UpdateFromEvent(const MouseEvent& event)
         {
             const Rect b = GetContentBounds();
             const bool vertical = m_orientation == Orientation::Vertical;
-            const f32 handleR = (vertical ? b.width : b.height) * 0.5f;
+            const f32 handleR = HandleRadius(b);
             const core::Float2 local = ConvertToNodeSpace(event.Position);
             const f32 lo = (vertical ? b.y : b.x) + handleR;
             const f32 hi = (vertical ? b.y + b.height : b.x + b.width) - handleR;

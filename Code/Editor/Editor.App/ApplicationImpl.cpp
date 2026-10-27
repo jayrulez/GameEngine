@@ -236,6 +236,9 @@ namespace editor::app
         mcp.deleteAsset = [self](const Guid& id) { return self->m_assetOps->DeleteOne(id); }; // the browser's own delete
         mcp.created = [self](const pipeline::AssetCreator& creator, foundation::content::Instance& instance)
         { self->m_creation.AfterCreate(creator, instance); };
+        // What follows an import, as the Import dialog's: the editor told (a model's prefab made).
+        mcp.imported = [self](foundation::content::Instance& primary, const pipeline::ImportOptions* options)
+        { self->m_context.NotifyImported(primary, options); };
         mcp.addTools = [self](foundation::mcp::McpServer& server)
         {
             RegisterLayoutTools(server, self->m_dock.Controller());

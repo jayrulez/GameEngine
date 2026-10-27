@@ -21,6 +21,7 @@ export module editor.scene:scene_page_interface;
 
 import foundation.core;
 import foundation.scene;
+import foundation.input; // ScriptedInputSource (viewport_run)
 import editor.core;
 import editor.camera;
 import editor.viewporttools;
@@ -130,6 +131,17 @@ export namespace editor
         [[nodiscard]] virtual Status RequestProjectThumbnail() = 0;
         /// The latest request's state, as it advances frame by frame.
         [[nodiscard]] virtual const ViewportCapture& LastViewportCapture() const noexcept = 0;
+
+        /// A playtest of the viewport (viewport_run): `source` stands for the devices over it from
+        /// now (its mouse in the viewport's render pixels, its keys as if the viewport had the
+        /// focus), advanced by each frame's time. False on a page without a viewport.
+        virtual bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) = 0;
+        /// Ends it: what is held is let go for a frame, then the devices are the viewport's again.
+        virtual void EndScriptedInput() = 0;
+        /// Seconds the playtest has run; negative when none does.
+        [[nodiscard]] virtual f64 ScriptedInputTime() const noexcept = 0;
+        /// The viewport's render size in pixels, the scripted mouse's space (0 x 0 without one).
+        [[nodiscard]] virtual Float2 ViewportPixels() const noexcept = 0;
 
         /// The prefab flows the page owns (they open the page's dialogs and write assets):
         /// a prefab asset from an entity subtree; an instance spawned under `parent` (nil =

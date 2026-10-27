@@ -11,6 +11,7 @@ import foundation.json;
 import foundation.mcp;
 import foundation.scene;
 import foundation.scene.resource;
+import foundation.input; // ScriptedInputSource, AddScriptedTimeline (viewport_run)
 import editor.core;
 import editor.camera;
 import editor.navigation; // BakeNavigationZone (navigation_bake)
@@ -602,6 +603,25 @@ namespace editor
             u32 serial = 0; // per host, so two captures of one page never share a default name
         };
         constexpr u32 kCapturePumpLimit = 600; // frames: ten seconds at 60 Hz, then the tool gives up
+
+        /// One viewport_run in flight: re-entered every pump until its run time is up, taking its
+        /// screenshots as their times come.
+        struct PendingRun
+        {
+            EditorPage* page = nullptr;
+            f64 duration = 0.0;
+            usize inputs = 0;
+            Array<f64> shotTimes;
+            usize nextShot = 0;
+            bool shooting = false; // a capture asked for and not yet written
+            f64 shotAt = 0.0;
+            String shotDir;
+            JsonValue shots;
+            u32 pumps = 0;
+            u32 serial = 0;
+        };
+        constexpr f64 kRunLongest = 600.0;  // run seconds one call takes
+        constexpr u32 kRunPumpLimit = 60000; // pumps, about ten minutes at 100 Hz: a run that stopped advancing gives up
     }
 
     Result<AddressedPage, String> ResolveScenePage(EditorContext& context, const JsonValue& args)
@@ -1444,6 +1464,161 @@ namespace editor
                 pendingPtr->page = page;
                 pendingPtr->path = Move(path);
                 pendingPtr->pumps = 0;
+                return foundation::mcp::ToolOutcome::NotFinished();
+            });
+
+        SchemaBuilder entry; // a timeline entry, as pie_run's (the pads' read by nothing in a scene view)
+        entry.Number(u8"at", u8"seconds since the run starts", true)
+            .Str(u8"key", u8"a KeyCode case name")
+            .Str(u8"mouseButton", u8"a MouseButton case name")
+            .Arr(u8"mouseMove", u8"number", u8"[x, y] in the viewport's render pixels")
+            .Arr(u8"wheel", u8"number", u8"[x, y]")
+            .Boolean(u8"down", u8"pressed (default true) or let go");
+        auto running = MakeUnique<PendingRun>(context.Allocator());
+        PendingRun* runPtr = running.Get();
+        server.RegisterTool(
+            u8"viewport_run",
+            u8"Plays a device-level input timeline into a scene page's viewport for `duration` seconds, "
+            u8"as a user's hands would over it: the mouse in the viewport's render pixels (the size "
+            u8"viewport_screenshot reports; the answer's width and height), its buttons and wheel, and "
+            u8"keys as if the viewport had the focus. So the scene's tools act as they do for a user: a "
+            u8"brush paints along a drag (pick its tool first, action_execute scene.tool.<id>), Shift + "
+            u8"wheel sizes it, the select tool picks and the gizmo drags, the camera orbits (Alt drag), "
+            u8"flies (right drag, WASD) and zooms (wheel). The timeline's entries are pie_run's: {at, "
+            u8"key, down} | {at, mouseButton, down} | {at, mouseMove: [x, y]} | {at, wheel: [x, y]}, `at` "
+            u8"in seconds since the run starts, `down` true by default. The user's own mouse and keys do "
+            u8"not reach the viewport meanwhile; what is held is let go when it ends. `screenshots` "
+            u8"writes the viewport at those times (in `screenshotDir`, an existing directory; default "
+            u8"<user-data>/screenshots). Brings the page to front. Returns {page, runTime, inputs, "
+            u8"width, height, screenshots: [{at, path}]}. Edits it makes are the page's, undone as the "
+            u8"user's are; nothing is saved.",
+            SchemaBuilder()
+                .Str(u8"page", kPageArgument)
+                .Number(u8"duration", u8"seconds to run, up to 600", true)
+                .ObjectArr(u8"input", entry, u8"the timeline: entries {at, key, down} | {at, mouseButton, down} | {at, mouseMove: [x, y]} | {at, wheel: [x, y]}")
+                .Arr(u8"screenshots", u8"number", u8"run seconds at which to write the viewport as a PNG")
+                .Str(u8"screenshotDir", u8"an existing directory for the screenshots")
+                .Build(),
+            ToolAnnotations::Creates(),
+            [ctx, runPtr, keep = Move(running)](const JsonValue& args) -> foundation::mcp::ToolOutcome
+            {
+                Result<AddressedPage, String> addressed = ResolveScenePage(*ctx, args);
+                if (!addressed.HasValue())
+                {
+                    if (runPtr->page != nullptr)
+                        runPtr->page = nullptr; // its page closed mid-run
+                    return Err(Move(addressed.Error()));
+                }
+                ISceneEditorPage* scene = addressed.Value().scene;
+                EditorPage* page = addressed.Value().page;
+                if (runPtr->page == page)
+                {
+                    // Re-entered: the same run, one pump later.
+                    ++runPtr->pumps;
+                    const f64 t = scene->ScriptedInputTime();
+                    const auto finish = [runPtr, scene, page](f64 at) -> foundation::mcp::ToolOutcome
+                    {
+                        scene->EndScriptedInput();
+                        JsonValue out = JsonValue::MakeObject();
+                        out.Set(u8"page", PageJson(*page));
+                        out.Set(u8"runTime", JsonValue::MakeNumber(at));
+                        out.Set(u8"inputs", JsonValue::MakeNumber(static_cast<f64>(runPtr->inputs)));
+                        const Float2 size = scene->ViewportPixels();
+                        out.Set(u8"width", JsonValue::MakeNumber(static_cast<f64>(size.x)));
+                        out.Set(u8"height", JsonValue::MakeNumber(static_cast<f64>(size.y)));
+                        out.Set(u8"screenshots", runPtr->shots);
+                        runPtr->page = nullptr;
+                        return out;
+                    };
+                    if (runPtr->shooting)
+                    {
+                        const ViewportCapture& capture = scene->LastViewportCapture();
+                        if (capture.state == ViewportCaptureState::Pending)
+                            return foundation::mcp::ToolOutcome::NotFinished();
+                        if (capture.state == ViewportCaptureState::Failed)
+                        {
+                            scene->EndScriptedInput();
+                            runPtr->page = nullptr;
+                            return Err(Format(u8"a screenshot of page '{}' failed (log_read, category Screenshot, says why)", page->Title()));
+                        }
+                        JsonValue shot = JsonValue::MakeObject();
+                        shot.Set(u8"at", JsonValue::MakeNumber(runPtr->shotAt));
+                        shot.Set(u8"path", JsonValue::MakeString(capture.path));
+                        runPtr->shots.Add(Move(shot));
+                        runPtr->shooting = false;
+                    }
+                    if (t < 0.0)
+                        return finish(runPtr->duration); // the run let go already (another run took the viewport)
+                    if (runPtr->nextShot < runPtr->shotTimes.Size() && runPtr->shotTimes[runPtr->nextShot] <= t)
+                    {
+                        ++runPtr->serial;
+                        const String path = PathJoin(runPtr->shotDir.AsView(),
+                                                     Format(u8"{}-{}-run-{}.png", FileStemOf(page->Title()).AsView(), ProcessId(), runPtr->serial).AsView());
+                        if (scene->RequestViewportCapture(path.AsView()).IsOk())
+                        {
+                            runPtr->shooting = true;
+                            runPtr->shotAt = t;
+                        }
+                        ++runPtr->nextShot;
+                        return foundation::mcp::ToolOutcome::NotFinished();
+                    }
+                    if (t >= runPtr->duration && runPtr->nextShot >= runPtr->shotTimes.Size())
+                        return finish(t);
+                    if (runPtr->pumps > kRunPumpLimit)
+                    {
+                        scene->EndScriptedInput();
+                        runPtr->page = nullptr;
+                        return Err(Format(u8"page '{}' stopped advancing the run - is its viewport visible?", page->Title()));
+                    }
+                    return foundation::mcp::ToolOutcome::NotFinished();
+                }
+                if (runPtr->page != nullptr)
+                    return Err(Format(u8"a viewport_run is already running on page '{}': one at a time", runPtr->page->Title()));
+                if (scene->ViewportCamera() == nullptr)
+                    return Err(Format(u8"page '{}' has no viewport", page->Title()));
+                const JsonValue durationArg = args.Get(u8"duration");
+                if (!durationArg.IsNumber() || durationArg.AsNumber() <= 0.0 || durationArg.AsNumber() > kRunLongest)
+                    return Err(Format(u8"`duration` takes seconds, above 0 and at most {}", kRunLongest));
+                const f64 duration = durationArg.AsNumber();
+                auto source = MakeUnique<foundation::input::ScriptedInputSource>(ctx->Allocator(), ctx->Allocator());
+                usize inputs = 0;
+                if (args.Has(u8"input"))
+                {
+                    Result<usize, String> added = foundation::input::AddScriptedTimeline(args.Get(u8"input"), duration, *source);
+                    if (!added.HasValue())
+                        return Err(Move(added.Error()));
+                    inputs = added.Value();
+                }
+                runPtr->shotTimes.Clear();
+                if (args.Has(u8"screenshots"))
+                {
+                    const JsonValue times = args.Get(u8"screenshots");
+                    for (i64 i = 0; times.IsArray() && i < times.Count(); ++i)
+                    {
+                        if (!times.At(i).IsNumber() || times.At(i).AsNumber() < 0.0 || times.At(i).AsNumber() > duration)
+                            return Err(Format(u8"screenshots[{}]: a run second from 0 to the duration", i));
+                        runPtr->shotTimes.PushBack(times.At(i).AsNumber());
+                    }
+                    runPtr->shotTimes.Sort([](f64 a, f64 b) { return a < b; });
+                }
+                String dir = args.Get(u8"screenshotDir").AsString();
+                if (dir.IsEmpty() && !runPtr->shotTimes.IsEmpty())
+                {
+                    dir = PathJoin(GetUserDataDirectory().AsView(), u8"screenshots");
+                    if (!CreateDirectories(dir.AsView()))
+                        return Err(Format(u8"could not create '{}'", dir.AsView()));
+                }
+                ctx->RevealPage(page); // to front: a background tab's viewport never renders or reads input
+                if (!scene->BeginScriptedInput(Move(source)))
+                    return Err(Format(u8"page '{}' has no viewport", page->Title()));
+                runPtr->page = page;
+                runPtr->duration = duration;
+                runPtr->inputs = inputs;
+                runPtr->nextShot = 0;
+                runPtr->shooting = false;
+                runPtr->shotDir = Move(dir);
+                runPtr->shots = JsonValue::MakeArray();
+                runPtr->pumps = 0;
                 return foundation::mcp::ToolOutcome::NotFinished();
             });
 

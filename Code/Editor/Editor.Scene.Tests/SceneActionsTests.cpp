@@ -11,6 +11,7 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
+import foundation.input;
 import foundation.gui;
 import foundation.scene;
 import editor.core;
@@ -90,6 +91,10 @@ namespace
         i32 thumbnailRequests = 0;
         [[nodiscard]] Status RequestViewportCapture(StringView) override { return Status{ErrorCode::NotSupported}; }
         [[nodiscard]] const ViewportCapture& LastViewportCapture() const noexcept override { return capture; }
+        bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource>) override { return false; }
+        void EndScriptedInput() override {}
+        [[nodiscard]] f64 ScriptedInputTime() const noexcept override { return -1.0; }
+        [[nodiscard]] Float2 ViewportPixels() const noexcept override { return Float2{}; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return markers; }
         void SetMarkersShown(bool shown) override { markers = shown; }
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return animation; }

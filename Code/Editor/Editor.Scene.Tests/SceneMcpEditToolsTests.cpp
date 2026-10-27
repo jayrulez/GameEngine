@@ -7,6 +7,7 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
+import foundation.input;
 import foundation.json;
 import foundation.mcp;
 import foundation.scene;
@@ -86,6 +87,10 @@ namespace
         {
             return m_capture;
         }
+        bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource>) override { return false; }
+        void EndScriptedInput() override {}
+        [[nodiscard]] f64 ScriptedInputTime() const noexcept override { return -1.0; }
+        [[nodiscard]] Float2 ViewportPixels() const noexcept override { return Float2{}; }
         void SetMarkersShown(bool) override {}
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return false; }
         void SetAnimationPanelShown(bool) override {}

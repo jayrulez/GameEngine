@@ -121,6 +121,17 @@ export namespace editor
         [[nodiscard]] Status RequestViewportCapture(StringView path) override { return m_viewport->RequestCapture(path, false); }
         [[nodiscard]] Status RequestProjectThumbnail() override;
         [[nodiscard]] const ViewportCapture& LastViewportCapture() const noexcept override { return m_viewport->LastCapture(); }
+        bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) override
+        {
+            m_viewport->BeginScripted(Move(source));
+            return true;
+        }
+        void EndScriptedInput() override { m_viewport->EndScripted(); }
+        [[nodiscard]] f64 ScriptedInputTime() const noexcept override { return m_viewport->ScriptedTime(); }
+        [[nodiscard]] Float2 ViewportPixels() const noexcept override
+        {
+            return Float2{static_cast<f32>(m_viewport->View().RenderWidth()), static_cast<f32>(m_viewport->View().RenderHeight())};
+        }
         void CreatePrefabFromEntity(const Guid& entity) override { m_prefabs->CreateFromEntity(entity); }
         void PickAndSpawnPrefab(const Guid& parent) override { m_prefabs->PickAndSpawn(parent); }
         void ApplyInstanceToPrefab(const Guid& root) override { m_prefabs->Apply(root); }

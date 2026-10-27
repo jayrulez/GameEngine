@@ -10,6 +10,8 @@
 #include "Core/Reflection/Reflect.h"
 
 import foundation.core;
+import foundation.input;
+import foundation.shell;
 import foundation.json;
 import foundation.mcp;
 import foundation.scene;
@@ -100,6 +102,27 @@ namespace
             capture.height = height;
         }
         void FailCapture() { capture.state = ViewportCaptureState::Failed; }
+        // A playtest of the pretended viewport: the test moves its clock (AdvanceRun).
+        bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) override
+        {
+            if (!hasViewport)
+                return false;
+            scripted = Move(source);
+            scriptedTime = 0.0;
+            runEnded = false;
+            return true;
+        }
+        void EndScriptedInput() override { runEnded = true; }
+        [[nodiscard]] f64 ScriptedInputTime() const noexcept override { return scripted ? scriptedTime : -1.0; }
+        [[nodiscard]] Float2 ViewportPixels() const noexcept override { return Float2{800.0f, 600.0f}; }
+        void AdvanceRun(f64 to)
+        {
+            scriptedTime = to;
+            scripted->Advance(to);
+        }
+        UniquePtr<foundation::input::ScriptedInputSource> scripted;
+        f64 scriptedTime = 0.0;
+        bool runEnded = false;
         bool hasViewport = false;
         EditorCamera camera;
         ViewportCapture capture;
@@ -219,7 +242,7 @@ TEST_CASE("scene-mcp-tools: page addressing, the selection round-trip, its refus
     McpServer server;
     RegisterSceneLiveTools(server, context);
     CHECK(server.ToolCount() == kSceneLiveToolCount);
-    CHECK(kSceneLiveToolCount == 19u); // a tripwire: bump deliberately when a live tool comes or goes
+    CHECK(kSceneLiveToolCount == 20u); // a tripwire: bump deliberately when a live tool comes or goes
     const String aGuid = GuidText(sceneA);
     const String lampGuid = GuidText(lamp);
     const String tableGuid = GuidText(table);
@@ -1163,4 +1186,59 @@ TEST_CASE("scene-mcp-tools: navigation_bake bakes a page's zone into its asset, 
     context.ClosePage(page);
     project.Reset();
     (void)RemoveDirectoryRecursive(dir);
+}
+
+TEST_CASE("scene-mcp-tools: viewport_run plays a timeline into a page's viewport, its screenshots taken as their times come")
+{
+    Random rng(11);
+    const Guid sceneGuid = Guid::Generate(rng);
+    EditorContext context{DefaultAllocator()};
+    auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
+        DefaultAllocator().New<HeadlessScenePage>(u8"meadow", sceneGuid), DefaultAllocator())));
+    page->hasViewport = true;
+    context.SetActivePage(page);
+    McpServer server;
+    RegisterSceneLiveTools(server, context);
+    utf8char text[37];
+    sceneGuid.ToChars(text);
+    const String args = Format(u8"{{\"page\":\"{}\",\"duration\":1,\"input\":[{{\"at\":0.1,\"mouseMove\":[100,50]}},"
+                               u8"{{\"at\":0.2,\"mouseButton\":\"Left\"}}],\"screenshots\":[0.5],\"screenshotDir\":\"/tmp\"}}",
+                               StringView(text, 36));
+
+    // Begun: the page holds the playtest's devices, and the call waits on its clock.
+    CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished);
+    REQUIRE(page->scripted.Get() != nullptr);
+    page->AdvanceRun(0.3);
+    CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished);
+    CHECK(page->scripted->Mouse()->X() == doctest::Approx(100.0f));
+    CHECK(page->scripted->Mouse()->IsButtonDown(foundation::shell::MouseButton::Left));
+
+    // Its screenshot's time came: asked for, waited on, kept.
+    page->AdvanceRun(0.6);
+    CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished);
+    CHECK(page->captureRequests == 1u);
+    CHECK(page->capture.path.AsView().StartsWith(u8"/tmp/"));
+    CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished); // not rendered yet
+    page->CompleteCapture(800, 600);
+    CHECK(Pump(server, u8"viewport_run", args.AsView()).state == LineState::NotFinished); // the run goes on
+
+    // Its time up: what is held let go, the answer.
+    page->AdvanceRun(1.0);
+    Answer got = AnswerOf(Pump(server, u8"viewport_run", args.AsView()));
+    REQUIRE(got.ok);
+    CHECK(page->runEnded);
+    CHECK(got.payload.Get(u8"inputs").AsNumber() == doctest::Approx(2.0));
+    CHECK(got.payload.Get(u8"width").AsNumber() == doctest::Approx(800.0));
+    REQUIRE(got.payload.Get(u8"screenshots").Count() == 1);
+    CHECK(got.payload.Get(u8"screenshots").At(0).Get(u8"at").AsNumber() == doctest::Approx(0.6));
+
+    // Refused: a wrong entry, a duration out of range, a page with no viewport.
+    got = AnswerOf(Pump(server, u8"viewport_run", Format(u8"{{\"page\":\"{}\",\"duration\":1,\"input\":[{{\"at\":0.1,\"key\":\"Nope\"}}]}}", StringView(text, 36)).AsView()));
+    CHECK_FALSE(got.ok);
+    CHECK(got.error.AsView().StartsWith(u8"input[0]: no key 'Nope'"));
+    got = AnswerOf(Pump(server, u8"viewport_run", Format(u8"{{\"page\":\"{}\",\"duration\":0}}", StringView(text, 36)).AsView()));
+    CHECK_FALSE(got.ok);
+    page->hasViewport = false;
+    got = AnswerOf(Pump(server, u8"viewport_run", Format(u8"{{\"page\":\"{}\",\"duration\":1}}", StringView(text, 36)).AsView()));
+    CHECK_FALSE(got.ok);
 }

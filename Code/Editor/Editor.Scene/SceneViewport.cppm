@@ -22,6 +22,7 @@ export module editor.scene:scene_viewport;
 import foundation.core;
 import foundation.rhi;
 import foundation.shell;
+import foundation.input; // ScriptedInputSource (a playtest of the view)
 import foundation.graphics;
 import foundation.runtime.client;
 import foundation.scene;
@@ -98,15 +99,19 @@ export namespace editor
         /// look drag, its pointer locked and hidden, may drift off it).
         [[nodiscard]] bool IsActive() const
         {
+            if (m_scripted)
+                return true; // a playtest of the view holds it
             const foundation::shell::InputSurface* surface = m_view->HostedSurface();
             return m_view->IsHovered() || m_view->IsFocused() || (surface != nullptr && surface->Captured());
         }
-        [[nodiscard]] bool IsHovered() const { return m_view->IsHovered(); }
+        [[nodiscard]] bool IsHovered() const { return m_scripted ? ScriptedPointerInside() : m_view->IsHovered(); }
         /// The mouse, in the targets' pixels.
-        [[nodiscard]] foundation::shell::IMouse* Mouse() const { return m_view->Mouse(); }
+        [[nodiscard]] foundation::shell::IMouse* Mouse() const { return m_scripted ? m_scripted->Mouse() : m_view->Mouse(); }
         /// The keyboard while it has the focus or holds a press; null otherwise.
         [[nodiscard]] foundation::shell::IKeyboard* Keyboard() const
         {
+            if (m_scripted)
+                return m_scripted->Keyboard(); // as if focused: the playtest's keys are the view's
             const foundation::shell::InputSurface* surface = m_view->HostedSurface();
             return m_view->IsFocused() || (surface != nullptr && surface->Captured()) ? m_view->Keyboard() : nullptr;
         }
@@ -116,6 +121,8 @@ export namespace editor
         /// elsewhere (the brush's own panel, picked a moment ago).
         [[nodiscard]] bool ShiftHeld() const
         {
+            if (m_scripted)
+                return ShiftHeldOver(m_scripted->Keyboard(), nullptr, true);
             const foundation::shell::InputSurface* surface = m_view->HostedSurface();
             foundation::shell::IInputManager* raw = surface != nullptr ? surface->Raw() : nullptr;
             return ShiftHeldOver(Keyboard(), raw != nullptr ? raw->Keyboard() : nullptr, m_view->IsHovered());
@@ -132,8 +139,8 @@ export namespace editor
             {
                 m_camera.Update(Keyboard(), Mouse(), deltaSeconds, wheel);
                 // An orbit, look or pan drag: the pointer locked meanwhile, granted by the router to
-                // this surface alone and ended with the press.
-                if (surface != nullptr)
+                // this surface alone and ended with the press (not the user's pointer for a playtest's).
+                if (surface != nullptr && !m_scripted)
                     surface->SetPointerLock(m_camera.WantsPointerLock());
             }
             else
@@ -149,6 +156,46 @@ export namespace editor
             return active;
         }
         [[nodiscard]] bool ZoomedThisFrame() const noexcept { return m_camera.zoomedThisUpdate; }
+
+        // === A playtest of the view (viewport_run) ===
+        /// `source` stands for the devices over the view from now: its mouse in the targets'
+        /// pixels, its keys as if the view had the focus, the pointer over the view while inside
+        /// it. Nothing real is merged in: where the user's mouse is must not change a playtest.
+        void BeginScripted(UniquePtr<foundation::input::ScriptedInputSource> source)
+        {
+            m_scripted = Move(source);
+            m_scriptedTime = 0.0;
+            m_scriptedEnding = false;
+            m_scriptedReleased = false;
+        }
+        /// Ends it: everything held is let go for a frame (a brush lifts, the camera stops), then
+        /// the devices are the view's again.
+        void EndScripted()
+        {
+            if (m_scripted)
+                m_scriptedEnding = true;
+        }
+        /// Once a frame, before the view's input is read: the playtest's next frame.
+        void AdvanceScripted(f32 deltaSeconds)
+        {
+            if (!m_scripted)
+                return;
+            if (!m_scriptedEnding)
+            {
+                m_scriptedTime += static_cast<f64>(deltaSeconds);
+                m_scripted->Advance(m_scriptedTime);
+                return;
+            }
+            if (!m_scriptedReleased)
+            {
+                m_scripted->ReleaseAll();
+                m_scriptedReleased = true;
+                return;
+            }
+            m_scripted.Reset();
+        }
+        /// Seconds the playtest has run; negative when none does.
+        [[nodiscard]] f64 ScriptedTime() const noexcept { return m_scripted ? m_scriptedTime : -1.0; }
 
         /// Alt orbit, right-button fly, or the Tab-captured fly (which owns WASD too).
         [[nodiscard]] bool CameraOwnsInput() const
@@ -319,6 +366,14 @@ export namespace editor
         }
 
     private:
+        // A playtest's pointer is over the view while it is inside its targets.
+        [[nodiscard]] bool ScriptedPointerInside() const
+        {
+            const foundation::shell::IMouse* mouse = m_scripted->Mouse();
+            return mouse->X() >= 0.0f && mouse->Y() >= 0.0f && mouse->X() < static_cast<f32>(m_view->RenderWidth()) &&
+                   mouse->Y() < static_cast<f32>(m_view->RenderHeight());
+        }
+
         // The GPU pick seam the tools see: the renderer's picks keyed by this viewport (the key its
         // RenderScene carries), hits decoded to entity handles.
         class ViewportPicker final : public IViewportPicker
@@ -353,6 +408,10 @@ export namespace editor
         Services m_services;
         RefPtr<foundation::gui::Viewport> m_view;
         EditorCamera m_camera;
+        UniquePtr<foundation::input::ScriptedInputSource> m_scripted; // a playtest's devices (BeginScripted)
+        f64 m_scriptedTime = 0.0;
+        bool m_scriptedEnding = false;
+        bool m_scriptedReleased = false;
         ViewportPicker m_picker;
         ViewportCaptureRecorder m_capture;
         bool m_cleanCapture = false;

@@ -286,6 +286,7 @@ namespace editor
             }
         }
 
+        m_viewport->AdvanceScripted(dt); // a playtest's frame (viewport_run), before the view's input is read
         // A modal tool (a brush) owns Shift + wheel to size itself, so the camera leaves that wheel
         // to it; the bare wheel stays the camera's under a brush too.
         const bool modalTool = m_viewportTools.ActiveTool() != nullptr && m_viewportTools.ActiveTool() != m_selectTool;

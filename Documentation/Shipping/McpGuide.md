@@ -43,7 +43,12 @@ focus; the height follows the zoom in either projection), editor state only; `vi
 path or guid; default the selection), each with everything under it, as the user's F does, the
 camera standing back until they fit and orbiting about them, at once so a screenshot after shows it; `viewport_screenshot` writes what the viewport
 shows to a PNG and returns its path and size, bringing the page to front first since a hidden
-viewport never renders - move the camera, shoot, read the file; `editor_screenshot` writes
+viewport never renders - move the camera, shoot, read the file; `viewport_run` plays a
+device-level input timeline (pie_run's entries: keys, mouse moves in the viewport's render
+pixels, buttons, the wheel) into a scene page's viewport for a `duration`, as a user's hands over
+it: pick a brush first (`action_execute scene.tool.<id>`) and a drag paints, Shift + wheel sizes
+it, a click selects and the gizmo drags; its `screenshots` are written as their times come, and
+what it edits is the page's, undone as the user's edits are, saved by nobody; `editor_screenshot` writes
 the whole editor window as the user sees it (panels, pages, menus, dialogs, toasts) the same
 way, `window: "all"` adding each floating window beside it, for checking the editor's own UI
 rather than a scene (the user's View > Screenshot Editor, F12, writes the same under
@@ -301,6 +306,12 @@ read the file before trusting it, and leave the judgement of how it looks to the
 - *A scene in the editor*: `viewport_frame` the entities (or `viewport_camera_set` a position and
   a `lookAt`), then `viewport_screenshot` (`<page>-<pid>-<n>.png`), which brings the page to
   front since a hidden viewport never renders.
+- *Painting in the scene view* (a terrain's sculpt, splat or holes, a vegetation mask): frame the
+  spot, `viewport_screenshot` to see where it lands in the view's pixels (its width and height
+  are the timeline's space), pick the tool with `action_execute scene.tool.<id>`, then
+  `viewport_run` a drag: a `mouseMove` to the start, the `mouseButton` Left down, `mouseMove`
+  entries along the stroke a few hundredths of a second apart, the button up; its `screenshots`
+  show the strokes. Save the page after (`file.save`), as a user would.
 - *The editor itself* (panels, dialogs, menus, toasts): `editor_screenshot`
   (`editor-<pid>-<n>.png`; `window: "all"` adds each floating window), as the user's F12 (View >
   Screenshot Editor) does. For a run with no MCP, `Tools.Editor <project> --screenshot <png>

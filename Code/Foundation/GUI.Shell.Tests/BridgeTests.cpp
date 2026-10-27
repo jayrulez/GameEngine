@@ -443,7 +443,43 @@ TEST_CASE("bridge: the d-pad and the left stick move focus; a button runs its bi
     (void)root->OnCommand(core::StringView(u8"back"), [&](CommandEvent&) { back = true; });
     REQUIRE(root->GetContext().GetKeymap().Bind(core::StringView(u8"pad-east"), core::StringView(u8"back")));
     CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::East)));
+    CHECK_FALSE(back); // on its release
+    CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::East)));
     CHECK(back);
+}
+
+TEST_CASE("bridge: a pad button acts on its release, and only where the focus was when it went down")
+{
+    // A game under the GUI reads the press: a Resume taken on it would hand the game that press.
+    auto root = MakeScene(core::Float2{200.0f, 200.0f});
+    auto top = core::MakeRef<Button>(core::DefaultAllocator());
+    auto bottom = core::MakeRef<Button>(core::DefaultAllocator());
+    top->SetSize(core::Float2{60.0f, 20.0f});
+    bottom->SetPosition(core::Float2{0.0f, 50.0f});
+    bottom->SetSize(core::Float2{60.0f, 20.0f});
+    root->AddChild(top.Get());
+    root->AddChild(bottom.Get());
+    int clicks = 0;
+    (void)top->AddEventListener(EventType::MouseClick, [&clicks](const Event&) { ++clicks; });
+    (void)bottom->AddEventListener(EventType::MouseClick, [&clicks](const Event&) { ++clicks; });
+    EventDispatcher& d = *root->GetEventDispatcher();
+    GuiInputBridge bridge{&d};
+    d.SetFocusNode(top.Get());
+
+    CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::South)));
+    CHECK(clicks == 0);
+    CHECK(bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::South)));
+    CHECK(clicks == 1);
+
+    // Pressed on one button and released after the focus moved: neither acts.
+    (void)bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonDown, shell::GamepadButton::South));
+    d.SetFocusNode(bottom.Get());
+    (void)bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::South));
+    CHECK(clicks == 1);
+
+    // A release with no press before it (held as the GUI came up) does nothing.
+    (void)bridge.Dispatch(Pad(shell::InputEventKind::GamepadButtonUp, shell::GamepadButton::South));
+    CHECK(clicks == 1);
 }
 
 TEST_CASE("bridge: the right stick is the dispatcher's scroll stick, each axis as it moves")

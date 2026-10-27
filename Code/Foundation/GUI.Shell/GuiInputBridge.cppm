@@ -553,6 +553,9 @@ export namespace foundation::gui
 
         // A gamepad (G7): the d-pad holds a direction (focus moves, then repeats); the face,
         // shoulder and menu buttons are keystrokes for the keymap (South activates when unbound).
+        // A button acts on its release, armed by its press with the focus unchanged since, as a
+        // click is: a game under the GUI reads the press, so a menu's Resume taken on the press
+        // would hand the game that same press (South a jump) the moment it resumes.
         bool DispatchPadButton(shell::GamepadButton button, bool down)
         {
             NavDirection direction = NavDirection::Up;
@@ -573,14 +576,25 @@ export namespace foundation::gui
                     m_dispatcher->ReleaseDirection(direction);
                 return true;
             }
-            if (!down)
-                return true;
             PadButton pad = PadButton::South;
             if (!MapPadButton(button, pad))
                 return false;
-            m_dispatcher->InjectPadButton(pad);
+            const u32 bit = 1u << static_cast<u32>(pad);
+            if (down)
+            {
+                if (m_padArmed == 0)
+                    m_padArmedOn = m_dispatcher->GetFocusNode(); // compared only, never followed
+                m_padArmed |= bit;
+                return true;
+            }
+            const bool armed = (m_padArmed & bit) != 0;
+            m_padArmed &= ~bit;
+            if (armed && m_dispatcher->GetFocusNode() == m_padArmedOn)
+                m_dispatcher->InjectPadButton(pad);
             return true;
         }
+        u32 m_padArmed = 0;               // the pad buttons pressed and not yet released (by PadButton)
+        const Node* m_padArmedOn = nullptr; // the focus when the first of them went down
 
         // The left stick as a d-pad: past half way it holds a direction, back under a third it lets
         // go (the gap keeps a stick resting near the threshold from chattering). The right stick

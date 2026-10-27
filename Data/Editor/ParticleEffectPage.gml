@@ -7,9 +7,9 @@
   Play showing Pause while it plays), the particles alive, and the preview's speed, which is the
   page's alone and not saved; the chosen system's emission shape is drawn over it. The grid shows
   the chosen system: its options, its emitter, its initializers and behaviors as lists (an add
-  chooses the module's type), a module chosen in the tree opening there; under them the effect's
-  sub-emitter links, which the tree's Sub-emitters row opens. An asset that did not read says so in
-  place of the grid.
+  chooses the module's type), a module chosen in the tree opening there. With the tree's
+  Sub-emitters row chosen it shows the effect's sub-emitter links instead, as they are the
+  effect's and no system's. An asset that did not read says so in place of the grid.
   Code puts the viewport in its stage and fills the tree and the grid.
 -->
 <Panel class="page preview-page particle-page">

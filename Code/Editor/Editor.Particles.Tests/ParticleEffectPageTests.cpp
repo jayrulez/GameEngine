@@ -206,6 +206,24 @@ TEST_CASE("particle page: a module chosen in the tree is removed as one step; a 
     CHECK(bed.page->ChosenSystem() == 0);
 }
 
+namespace
+{
+    // The page's own section the grid shows ("system", "effect", "both"), besides its notices and facts.
+    String Shown(Bed& bed)
+    {
+        Array<gui::PropertyInfo> sections;
+        bed.page->Sections().GetProperties(StringView{}, sections);
+        bool system = false;
+        bool effect = false;
+        for (const gui::PropertyInfo& row : sections) // each "key/inner"
+        {
+            system = system || row.Name.AsView().StartsWith(StringView(u8"system/"));
+            effect = effect || row.Name.AsView().StartsWith(StringView(u8"effect/"));
+        }
+        return String(system ? (effect ? u8"both" : u8"system") : (effect ? u8"effect" : u8""));
+    }
+}
+
 TEST_CASE("particle page: the effect's sub-emitter links, each into a system chosen by name, named by what sets it off")
 {
     Bed bed;
@@ -252,8 +270,17 @@ TEST_CASE("particle page: the effect's sub-emitter links, each into a system cho
     CHECK(bed.Effect().SystemCount() == 2);
     CHECK(bed.Effect().SubEmitterLinks()[0].childSystemIndex == 1);
 
+    // The system they spawn into says so; the other does not.
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::System, 1, -1});
+    CHECK_FALSE(bed.page->Notice(u8"spawned").IsEmpty());
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::System, 0, -1});
+    CHECK(bed.page->Notice(u8"spawned").IsEmpty());
+    CHECK(Shown(bed) == String(u8"system"));
+
+    // The links are the effect's: shown in the system's place, never under a system.
     bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitters, -1, -1});
-    CHECK(bed.page->ChosenSystem() == 0); // the system shown stays
+    CHECK(bed.page->ChosenSystem() == 0); // the system chosen stays
+    CHECK(Shown(bed) == String(u8"effect"));
 }
 
 TEST_CASE("particle page: the asset written outside it (an agent's write) shows on a clean page; unsaved edits are kept")
@@ -284,6 +311,27 @@ TEST_CASE("particle page: the asset written outside it (an agent's write) shows 
     bed.page->OnAssetExternallyModified();
     CHECK(bed.Effect().SystemCount() == 2);
     CHECK(bed.Effect().SubEmitterLinks().Size() == 1u);
+}
+
+TEST_CASE("particle page: a system folded in the tree stays folded when another row is chosen or the effect changes")
+{
+    Bed bed;
+    auto* tree = app::FindById<gui::TreeView>(*bed.page->Content(), u8"particle-tree");
+    REQUIRE(tree != nullptr);
+    CHECK(tree->IsIdExpanded(0)); // a system opens the first time it shows
+    tree->SetIdExpanded(0, false);
+    bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitters, -1, -1});
+    CHECK_FALSE(tree->IsIdExpanded(0));
+    bed.Edit(u8"emitter.spawnRate", gui::Variant(30.0)); // an edit rebuilds the tree
+    CHECK_FALSE(tree->IsIdExpanded(0));
+    bed.page->AddSystem();
+    CHECK_FALSE(tree->IsIdExpanded(0));
+    // The new system's row opens.
+    usize added = 0;
+    for (usize node = 0; node < 64 && added == 0; ++node)
+        if (node > 0 && tree->IsIdExpanded(static_cast<gui::ItemId>(node)))
+            added = node;
+    CHECK(added > 0);
 }
 
 TEST_CASE("particle page: without a preview the transport has nothing to play")

@@ -10,10 +10,11 @@
 // options, each shown where its render mode uses it, its emitter, and its modules as the grid's lists,
 // an add choosing the module's type among those deriving from the list's base, so the page names no
 // module type. A module chosen in the tree opens in place there. Curves and gradients are the
-// toolkit's editors over the particle curve types, registered with the rows. Under the systems the
-// effect's sub-emitter links (the old page had none): each spawns into the system it names (a
-// choice of the systems by name) on every other system's births or deaths, named in a line by
-// what sets it off and where it spawns; the tree's Sub-emitters row opens them. The tree's bar adds a
+// toolkit's editors over the particle curve types, registered with the rows. After the systems the
+// effect's sub-emitter links (the old page had none), the tree's Sub-emitters row showing them in
+// the grid in the system's place, as they are the effect's and no system's: each spawns into the
+// system it names (a choice of the systems by name) on every other system's births or deaths,
+// named in a line by what sets it off and where it spawns. A system they spawn into says so. The tree's bar adds a
 // system and removes the chosen system (while another remains) or module. Every edit is one undo
 // step: the grid's through the reflected rows, a system added or removed the whole asset.
 //
@@ -118,6 +119,9 @@ export namespace editor
 
     private:
         void BindSystem();
+        /// The grid's section for what is chosen: the system's rows, or the effect's links.
+        void ShowSections();
+        void ShowSpawnedBy();
         void ShowTree();
         void ShowFacts();
         /// The preview follows the effect: started again when its modules or systems changed, what
@@ -141,6 +145,7 @@ export namespace editor
         i32 m_system = -1;
         ParticleTreeRow m_chosen;
         bool m_showing = false; // choosing from code: not the user's
+        i32 m_sectionsShown = -1; // 0 the system's, 1 the links (-1: none yet)
 
         UniquePtr<app::PreviewPane> m_pane;
         foundation::scene::EntityHandle m_emitter;

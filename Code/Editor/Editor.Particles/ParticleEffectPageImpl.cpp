@@ -147,7 +147,6 @@ namespace editor
                                           change, self->m_format, u8"edit_particle", [self]() { self->Changed(); }),
                                       EditorRootAllocator()));
                               });
-        AddSection(kSystemSection, u8"System", *m_values);
 
         // The effect's own rows: its sub-emitter links alone (its systems are the tree's), each
         // named by what sets it off and the system it spawns into, that system a choice by name.
@@ -212,7 +211,6 @@ namespace editor
             const Instance target(effect, &TypeOf<particles::ParticleEffect>());
             m_effectRows->SetObjects(Span<const Instance>(&target, 1u));
         }
-        AddSection(kEffectSection, u8"Effect", *m_effectRows);
 
         if (Content())
         {
@@ -292,6 +290,7 @@ namespace editor
             m_chosen = m_system >= 0 ? row : ParticleTreeRow{};
             BindSystem();
         }
+        ShowSections();
         // The place it names opened in place (a module's list, then it) and brought into view.
         const StringView section = m_chosen.kind == ParticleRowKind::SubEmitters ? kEffectSection : kSystemSection;
         const String place = PlaceOf(m_chosen);
@@ -311,6 +310,38 @@ namespace editor
                 grid->ScrollToItem(found, gui::ScrollAlign::Start);
         }
         ShowTree();
+    }
+
+    void ParticleEffectEditorPage::ShowSections()
+    {
+        // One thing at a time: the chosen system's rows, or the effect's links (they are the
+        // effect's, not any system's, so they never show under one).
+        const bool links = m_chosen.kind == ParticleRowKind::SubEmitters;
+        if (m_sectionsShown == static_cast<i32>(links))
+            return;
+        m_sectionsShown = static_cast<i32>(links);
+        ClearSections();
+        if (links)
+            AddSection(kEffectSection, u8"Sub-emitters", *m_effectRows);
+        else
+            AddSection(kSystemSection, u8"System", *m_values);
+    }
+
+    void ParticleEffectEditorPage::ShowSpawnedBy()
+    {
+        // A system the links spawn into says so: it shows what they spawn.
+        const particles::ParticleEffect* effect = Effect();
+        String names;
+        if (effect != nullptr && m_chosen.kind != ParticleRowKind::SubEmitters && m_system >= 0)
+            for (const particles::SubEmitterLink& link : effect->SubEmitterLinks())
+                if (link.childSystemIndex == m_system)
+                {
+                    if (!names.IsEmpty())
+                        names.Append(StringView(u8", "));
+                    names.Append(link.trigger == particles::ParticleEventType::OnDeath ? StringView(u8"on the others' deaths") : StringView(u8"on the others' births"));
+                }
+        SetNotice(u8"spawned", names.IsEmpty() ? StringView{}
+                                               : Format(u8"The effect's sub-emitters spawn into this system ({}); the tree's Sub-emitters row has them.", names).AsView());
     }
 
     String ParticleEffectEditorPage::Tree() const
@@ -360,6 +391,13 @@ namespace editor
         if (effect == nullptr)
             return;
         m_showing = true;
+        // What the user folded stays folded through the rebuild (a choice, an edit); a row new to
+        // the tree opens.
+        Array<ParticleTreeRow> folded(Allocator());
+        if (m_tree != nullptr)
+            for (usize node = 0; node < m_rows.Size(); ++node)
+                if (m_rows[node].module < 0 && !m_tree->IsIdExpanded(static_cast<gui::ItemId>(node)))
+                    folded.PushBack(m_rows[node]);
         m_model->Clear();
         m_rows.Clear();
         i32 chosen = -1;
@@ -393,7 +431,12 @@ namespace editor
         {
             for (usize node = 0; node < m_rows.Size(); ++node)
                 if (m_rows[node].module < 0)
-                    m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
+                {
+                    bool wasFolded = false;
+                    for (const ParticleTreeRow& row : folded)
+                        wasFolded = wasFolded || row == m_rows[node];
+                    m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), !wasFolded);
+                }
             if (chosen >= 0)
             {
                 const gui::ItemId id = static_cast<gui::ItemId>(chosen);
@@ -401,6 +444,7 @@ namespace editor
             }
         }
         m_showing = false;
+        ShowSpawnedBy();
     }
 
     void ParticleEffectEditorPage::ShowFacts()

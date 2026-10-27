@@ -623,10 +623,12 @@ The layers:
       its bar (the chosen system's emission shape drawn over it), and the grid the chosen system
       from reflection: its modules lists of the grid's own, added by type from what derives from
       the list's base (no list of module types in the page), each opening in place, a module
-      chosen in the tree opening there; curves and gradients the toolkit's; under them the
-      effect's sub-emitter links (none of the old page's), each into a system chosen by name and
-      named by what sets it off, opened from the tree's Sub-emitters row. Every edit one undo
-      step. The preview's transport plays, pauses and clears the preview and never writes the
+      chosen in the tree opening there; curves and gradients the toolkit's. The effect's
+      sub-emitter links (none of the old page's) are the effect's and no system's, so the grid
+      shows them in the system's place when the tree's Sub-emitters row is chosen (user
+      2026-10-27: under every system they read as each system's), each into a system chosen by
+      name and named by what sets it off; a system they spawn into says so. A row the user
+      folds in the tree stays folded. Every edit one undo step. The preview's transport plays, pauses and clears the preview and never writes the
       effect (the old Stop and Play set every system emitting, a sub-emitter's child too).
 9. The property animation panel under the scene page's viewport (PropertyAnimation): its clips'
    tracks on the Dopesheet, a track's curve on CurveView, its transport the kit's, its undo the

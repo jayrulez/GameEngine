@@ -1,0 +1,298 @@
+<root>
+	<string name="guid">38dc5399-3e9d-4863-b7af-b61c991a4875</string>
+	<string name="typeNamespace">rtti::pipeline::particles</string>
+	<string name="typeName">ParticleEffectAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">15440632563532191078</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName"/>
+		<string name="name">Fireworks</string>
+		<array name="systems" count="2">
+			<object>
+				<i32 name="maxParticles">16</i32>
+				<u64 name="seed">11400714819323198485</u64>
+				<string name="name">Shells</string>
+				<u8 name="desiredMode">0</u8>
+				<u8 name="simSpace">0</u8>
+				<u8 name="blend">1</u8>
+				<u8 name="render">0</u8>
+				<string name="textureRef">00000000-0000-0000-0000-000000000000</string>
+				<string name="meshRef">00000000-0000-0000-0000-000000000000</string>
+				<f32 name="meshScale">1</f32>
+				<array name="materialRefs" count="0"/>
+				<bool name="sort">false</bool>
+				<bool name="soft">true</bool>
+				<f32 name="softDistance">0.6</f32>
+				<bool name="enabled">false</bool>
+				<i32 name="maxPoints">16</i32>
+				<f32 name="recordInterval">0.033</f32>
+				<f32 name="lifetime">1</f32>
+				<f32 name="widthStart">0.15</f32>
+				<f32 name="widthEnd">0</f32>
+				<f32 name="minVertexDistance">0.05</f32>
+				<bool name="useParticleColor">true</bool>
+				<object name="trailColor">
+					<f32 name="x">1</f32>
+					<f32 name="y">1</f32>
+					<f32 name="z">1</f32>
+					<f32 name="w">1</f32>
+				</object>
+				<bool name="enabled">false</bool>
+				<i32 name="columns">1</i32>
+				<i32 name="rows">1</i32>
+				<f32 name="fps">0</f32>
+				<bool name="overLifetime">true</bool>
+				<i32 name="startFrame">0</i32>
+				<f32 name="prewarm">0</f32>
+				<f32 name="lodStart">0</f32>
+				<f32 name="lodCull">0</f32>
+				<f32 name="lodMinRate">0.1</f32>
+				<object name="emitter">
+					<u8 name="mode">1</u8>
+					<f32 name="spawnRate">0</f32>
+					<i32 name="burstCount">1</i32>
+					<f32 name="burstInterval">0.7</f32>
+					<i32 name="burstCycles">0</i32>
+					<bool name="isEmitting">true</bool>
+					<f32 name="duration">0</f32>
+					<bool name="looping">true</bool>
+				</object>
+				<array name="initializers" count="4">
+					<object>
+						<u64 name="type">16519406638104976092</u64>
+						<f32 name="min">1</f32>
+						<f32 name="max">1.3</f32>
+					</object>
+					<object>
+						<u64 name="type">3790526557606362416</u64>
+						<object name="baseVelocity">
+							<f32 name="x">0</f32>
+							<f32 name="y">6.5</f32>
+							<f32 name="z">0</f32>
+						</object>
+						<object name="randomness">
+							<f32 name="x">1.5</f32>
+							<f32 name="y">1</f32>
+							<f32 name="z">1.5</f32>
+						</object>
+						<f32 name="shapeDirectionSpeed">0</f32>
+						<f32 name="velocityInheritance">0</f32>
+						<u8 name="type">0</u8>
+						<f32 name="radius">0.05</f32>
+						<object name="extents">
+							<f32 name="x">1</f32>
+							<f32 name="y">1</f32>
+							<f32 name="z">1</f32>
+						</object>
+						<f32 name="angle">0.7853982</f32>
+						<f32 name="arc">1</f32>
+						<bool name="shell">true</bool>
+					</object>
+					<object>
+						<u64 name="type">6684866203796316086</u64>
+						<object name="min">
+							<f32 name="x">0.18</f32>
+							<f32 name="y">0.18</f32>
+						</object>
+						<object name="max">
+							<f32 name="x">0.22</f32>
+							<f32 name="y">0.22</f32>
+						</object>
+					</object>
+					<object>
+						<u64 name="type">7966942192583230902</u64>
+						<object name="min">
+							<f32 name="x">1</f32>
+							<f32 name="y">0.35</f32>
+							<f32 name="z">0.2</f32>
+							<f32 name="w">1</f32>
+						</object>
+						<object name="max">
+							<f32 name="x">0.3</f32>
+							<f32 name="y">0.6</f32>
+							<f32 name="z">1</f32>
+							<f32 name="w">1</f32>
+						</object>
+					</object>
+				</array>
+				<array name="behaviors" count="1">
+					<object>
+						<u64 name="type">10189587693295634597</u64>
+						<f32 name="multiplier">1</f32>
+						<object name="direction">
+							<f32 name="x">0</f32>
+							<f32 name="y">-1</f32>
+							<f32 name="z">0</f32>
+						</object>
+					</object>
+				</array>
+			</object>
+			<object>
+				<i32 name="maxParticles">2000</i32>
+				<u64 name="seed">11400714819323198485</u64>
+				<string name="name">Sparks</string>
+				<u8 name="desiredMode">0</u8>
+				<u8 name="simSpace">0</u8>
+				<u8 name="blend">1</u8>
+				<u8 name="render">0</u8>
+				<string name="textureRef">00000000-0000-0000-0000-000000000000</string>
+				<string name="meshRef">00000000-0000-0000-0000-000000000000</string>
+				<f32 name="meshScale">1</f32>
+				<array name="materialRefs" count="0"/>
+				<bool name="sort">false</bool>
+				<bool name="soft">true</bool>
+				<f32 name="softDistance">0.6</f32>
+				<bool name="enabled">false</bool>
+				<i32 name="maxPoints">16</i32>
+				<f32 name="recordInterval">0.033</f32>
+				<f32 name="lifetime">1</f32>
+				<f32 name="widthStart">0.15</f32>
+				<f32 name="widthEnd">0</f32>
+				<f32 name="minVertexDistance">0.05</f32>
+				<bool name="useParticleColor">true</bool>
+				<object name="trailColor">
+					<f32 name="x">1</f32>
+					<f32 name="y">1</f32>
+					<f32 name="z">1</f32>
+					<f32 name="w">1</f32>
+				</object>
+				<bool name="enabled">false</bool>
+				<i32 name="columns">1</i32>
+				<i32 name="rows">1</i32>
+				<f32 name="fps">0</f32>
+				<bool name="overLifetime">true</bool>
+				<i32 name="startFrame">0</i32>
+				<f32 name="prewarm">0</f32>
+				<f32 name="lodStart">0</f32>
+				<f32 name="lodCull">0</f32>
+				<f32 name="lodMinRate">0.1</f32>
+				<object name="emitter">
+					<u8 name="mode">0</u8>
+					<f32 name="spawnRate">0</f32>
+					<i32 name="burstCount">0</i32>
+					<f32 name="burstInterval">0</f32>
+					<i32 name="burstCycles">0</i32>
+					<bool name="isEmitting">false</bool>
+					<f32 name="duration">0</f32>
+					<bool name="looping">true</bool>
+				</object>
+				<array name="initializers" count="4">
+					<object>
+						<u64 name="type">16519406638104976092</u64>
+						<f32 name="min">0.9</f32>
+						<f32 name="max">1.6</f32>
+					</object>
+					<object>
+						<u64 name="type">3790526557606362416</u64>
+						<object name="baseVelocity">
+							<f32 name="x">0</f32>
+							<f32 name="y">0</f32>
+							<f32 name="z">0</f32>
+						</object>
+						<object name="randomness">
+							<f32 name="x">0.5</f32>
+							<f32 name="y">0.5</f32>
+							<f32 name="z">0.5</f32>
+						</object>
+						<f32 name="shapeDirectionSpeed">3.5</f32>
+						<f32 name="velocityInheritance">0</f32>
+						<u8 name="type">1</u8>
+						<f32 name="radius">0.05</f32>
+						<object name="extents">
+							<f32 name="x">1</f32>
+							<f32 name="y">1</f32>
+							<f32 name="z">1</f32>
+						</object>
+						<f32 name="angle">0.7853982</f32>
+						<f32 name="arc">1</f32>
+						<bool name="shell">true</bool>
+					</object>
+					<object>
+						<u64 name="type">6684866203796316086</u64>
+						<object name="min">
+							<f32 name="x">0.1</f32>
+							<f32 name="y">0.1</f32>
+						</object>
+						<object name="max">
+							<f32 name="x">0.16</f32>
+							<f32 name="y">0.16</f32>
+						</object>
+					</object>
+					<object>
+						<u64 name="type">7966942192583230902</u64>
+						<object name="min">
+							<f32 name="x">1</f32>
+							<f32 name="y">1</f32>
+							<f32 name="z">1</f32>
+							<f32 name="w">1</f32>
+						</object>
+						<object name="max">
+							<f32 name="x">1</f32>
+							<f32 name="y">1</f32>
+							<f32 name="z">1</f32>
+							<f32 name="w">1</f32>
+						</object>
+					</object>
+				</array>
+				<array name="behaviors" count="3">
+					<object>
+						<u64 name="type">10189587693295634597</u64>
+						<f32 name="multiplier">0.35</f32>
+						<object name="direction">
+							<f32 name="x">0</f32>
+							<f32 name="y">-1</f32>
+							<f32 name="z">0</f32>
+						</object>
+					</object>
+					<object>
+						<u64 name="type">4799654217106926835</u64>
+						<f32 name="drag">1.2</f32>
+					</object>
+					<object>
+						<u64 name="type">16278390947254812782</u64>
+						<i32 name="keyCount">3</i32>
+						<object name="key">
+							<f32 name="t">0</f32>
+							<f32 name="v">1</f32>
+							<f32 name="in">0</f32>
+							<f32 name="out">0</f32>
+							<u8 name="interp">1</u8>
+							<u8 name="mode">0</u8>
+						</object>
+						<object name="key">
+							<f32 name="t">0.6</f32>
+							<f32 name="v">1</f32>
+							<f32 name="in">0</f32>
+							<f32 name="out">0</f32>
+							<u8 name="interp">1</u8>
+							<u8 name="mode">0</u8>
+						</object>
+						<object name="key">
+							<f32 name="t">1</f32>
+							<f32 name="v">0</f32>
+							<f32 name="in">0</f32>
+							<f32 name="out">0</f32>
+							<u8 name="interp">1</u8>
+							<u8 name="mode">0</u8>
+						</object>
+					</object>
+				</array>
+			</object>
+		</array>
+		<array name="links" count="1">
+			<object>
+				<u8 name="trigger">1</u8>
+				<i32 name="child">1</i32>
+				<i32 name="spawnCount">40</i32>
+				<f32 name="probability">1</f32>
+				<bool name="inheritPosition">true</bool>
+				<bool name="inheritVelocity">true</bool>
+				<f32 name="velInheritFactor">0.2</f32>
+				<bool name="inheritColor">true</bool>
+			</object>
+		</array>
+		<array name="texturePaths" count="0"/>
+	</object>
+</root>

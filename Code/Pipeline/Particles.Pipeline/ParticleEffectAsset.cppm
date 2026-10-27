@@ -61,7 +61,8 @@ export namespace pipeline{
         void Serialize(ISerializer& ar) override
         {
             pipeline::Asset::Serialize(ar); // fileName (unused for authored effects)
-            SerializeEffect(ar, m_effect);          // the authored effect graph
+            // the authored effect graph; a version 0 asset's effect-level links read onto its systems
+            SerializeEffect(ar, m_effect, ar.Mode() == SerializeMode::Read && ar.Version() < 1);
             core::Serialize(ar, "texturePaths", m_systemTexturePaths); // edit-time soft refs
         }
 
@@ -87,8 +88,9 @@ export namespace pipeline{
         // v4 (2026-08-18): materialRef -> materialRefs list (per-submesh, slot 0 = whole-mesh material).
         // v5 (2026-10-21): curves of Core's keys and gradients; size over lifetime is `size`,
         // `separateAxes` and `sizeY` (the cooked resource's data version 1).
+        // v6 (2026-10-27): each system its sub-emitters (the cooked resource's data version 2).
         // Bumped so stale products re-cook with the new format (the strict reader needs the new keys).
-        [[nodiscard]] u32 Version() const override { return 5; }
+        [[nodiscard]] u32 Version() const override { return 6; }
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {
@@ -131,6 +133,8 @@ export namespace pipeline{
 
     // Data version 0: the curve layout of 2026-10-21 (Core's keys, gradients, size as one curve)
     // moved by re-saving every sample through Tools.Mcp, version 0 having no legacy floor to keep.
+    // Data version 1 (2026-10-27): each system owns its sub-emitters; version 0's effect-level
+    // links are read onto the systems (the legacy reader, SerializeEffect's effectLinks).
 
     /// A new effect's content: one continuous fountain system.
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& effect);

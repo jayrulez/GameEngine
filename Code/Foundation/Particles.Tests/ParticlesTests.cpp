@@ -453,7 +453,7 @@ TEST_CASE("Sub-emitter: parent death spawns into the child system")
     link.childSystemIndex = 1;
     link.spawnCount = 10;
     link.probability = 1.0f;
-    fx.AddSubEmitterLink(link);
+    rockets.subEmitters.PushBack(link); // the rockets' sub-emitter
 
     particles::ParticleEffectInstance inst(fx);
     inst.Update(0.016f); // rockets burst (4), still alive
@@ -1045,37 +1045,69 @@ TEST_CASE("particle reflection (batch 8): every authored field of a system, its 
     CHECK(FindProperty(CollisionBehavior::StaticType(), "planes") != nullptr);
     CHECK(FindProperty(CollisionBehavior::StaticType(), "planeCount") == nullptr);
 
-    // The effect's sub-emitter links are a list of their own, each its fields.
+    // A system's sub-emitters are a list of its own, each its fields.
     SubEmitterLink link;
     link.childSystemIndex = 0;
-    effect.AddSubEmitterLink(link);
-    const PropertyInfo* links = FindProperty(TypeOf<ParticleEffect>(), "subEmitterLinks");
+    sys.subEmitters.PushBack(link);
+    const PropertyInfo* links = FindProperty(system, "subEmitters");
     REQUIRE(links != nullptr);
     REQUIRE(IsContainer(*links->type));
-    Instance effectInst = Instance::From(&effect);
-    CHECK(ContainerSize(*links->type->container, Instance(links->address(effectInst), links->type)) == 1u);
+    CHECK(ContainerSize(*links->type->container, Instance(links->address(sysInst), links->type)) == 1u);
+    CHECK(FindProperty(TypeOf<ParticleEffect>(), "subEmitterLinks") == nullptr); // no effect-level links
     CHECK(IsEnum(TypeOf<ParticleEventType>()));
     CHECK(FindProperty(TypeOf<SubEmitterLink>(), "childSystemIndex") != nullptr);
 }
 
-TEST_CASE("ParticleEffect: a system removed, the links follow it")
+TEST_CASE("ParticleEffect: a system removed, the sub-emitters follow it")
 {
     using namespace foundation::particles;
     ParticleEffect effect(u8"Shells");
-    (void)effect.AddSystem(16);
+    ParticleSystem& first = effect.AddSystem(16);
     (void)effect.AddSystem(16);
     (void)effect.AddSystem(16);
     SubEmitterLink intoSecond;
     intoSecond.childSystemIndex = 1;
     SubEmitterLink intoThird;
     intoThird.childSystemIndex = 2;
-    effect.AddSubEmitterLink(intoSecond);
-    effect.AddSubEmitterLink(intoThird);
+    first.subEmitters.PushBack(intoSecond);
+    first.subEmitters.PushBack(intoThird);
 
     effect.RemoveSystem(1);
-    REQUIRE(effect.SubEmitterLinks().Size() == 2u);
-    CHECK(effect.SubEmitterLinks()[0].childSystemIndex == -1); // into the one removed: does nothing
-    CHECK(effect.SubEmitterLinks()[1].childSystemIndex == 1);  // the third is the second now
+    REQUIRE(first.subEmitters.Size() == 2u);
+    CHECK(first.subEmitters[0].childSystemIndex == -1); // into the one removed: does nothing
+    CHECK(first.subEmitters[1].childSystemIndex == 1);  // the third is the second now
+}
+
+TEST_CASE("ParticleEffectInstance: a sub-emitter spawns from its own system's deaths only")
+{
+    using namespace foundation::particles;
+    ParticleEffect fx(u8"Shells");
+    // Two systems dying at once (shells and smoke), one spawned (sparks): only the shells burst.
+    ParticleSystem& shells = fx.AddSystem(16);
+    ParticleSystem& smoke = fx.AddSystem(16);
+    ParticleSystem* const dyingOnes[] = {&shells, &smoke};
+    for (ParticleSystem* dying : dyingOnes)
+    {
+        dying->AddInitializer<LifetimeInitializer>().lifetime = RangeFloat(0.05f, 0.05f);
+        dying->emitter.mode = EmissionMode::Burst;
+        dying->emitter.burstCount = 2;
+    }
+    ParticleSystem& sparks = fx.AddSystem(1000);
+    sparks.AddInitializer<LifetimeInitializer>().lifetime = RangeFloat(1.0f, 1.0f);
+    sparks.emitter.isEmitting = false;
+    SubEmitterLink link;
+    link.childSystemIndex = 2;
+    link.spawnCount = 5;
+    shells.subEmitters.PushBack(link);
+    SubEmitterLink self;
+    self.childSystemIndex = 0; // into itself: does nothing
+    shells.subEmitters.PushBack(self);
+
+    ParticleEffectInstance inst(fx);
+    inst.Update(0.016f);
+    inst.Update(0.1f); // both die: only the shells' deaths spawn sparks
+    CHECK(sparks.AliveCount() == 10);
+    CHECK(shells.AliveCount() == 0);
 }
 
 // A world-space system with nothing to place its particles bears them at the emitter, not at the

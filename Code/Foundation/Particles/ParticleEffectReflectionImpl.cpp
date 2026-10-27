@@ -67,12 +67,12 @@ namespace foundation::particles
         builder.Value("OnDeath", ParticleEventType::OnDeath);
     }
 
-    // A link spawns into its child system on every other system's births or deaths.
+    // A system's sub-emitter: on its particles' births or deaths, spawns into the system it names.
     REFLECT_VALUE(SubEmitterLink, "rtti::particles")
     {
         builder.Attribute("displayName", String(u8"Sub-emitter"));
         builder.Property<&SubEmitterLink::trigger>("trigger")
-            .PropAttribute("description", String(u8"Whose particles spawn it: the other systems' as they are born, or as they die"))
+            .PropAttribute("description", String(u8"When this system's particles spawn it: as they are born, or as they die"))
             .Property<&SubEmitterLink::childSystemIndex>("childSystemIndex")
             .PropAttribute("displayName", String(u8"Into"))
             .PropAttribute("description", String(u8"The system it spawns into (with Emits off, that system shows only what is spawned)"))
@@ -214,7 +214,9 @@ namespace foundation::particles
             .PropAttribute("visibleWhen", String(u8"renderMode=5"))
             .Nested<&ParticleSystem::emitter>("emitter")
             .Nested<&ParticleSystem::m_initializers>("initializers") // polymorphic container
-            .Nested<&ParticleSystem::m_behaviors>("behaviors");      // polymorphic container
+            .Nested<&ParticleSystem::m_behaviors>("behaviors")       // polymorphic container
+            .Nested<&ParticleSystem::subEmitters>("subEmitters")
+            .PropAttribute("displayName", String(u8"Sub-emitters"));
     }
     REFLECT_VALUE(ParticleSystem, "rtti::particles")
     {
@@ -225,9 +227,7 @@ namespace foundation::particles
     void ParticleEffect::BuildReflection(TypeBuilder<ParticleEffect>& builder)
     {
         builder.Property<&ParticleEffect::name>("name")
-            .Nested<&ParticleEffect::m_systems>("systems") // Array<UniquePtr<ParticleSystem>>
-            .Nested<&ParticleEffect::m_links>("subEmitterLinks")
-            .PropAttribute("displayName", String(u8"Sub-emitters"));
+            .Nested<&ParticleEffect::m_systems>("systems"); // Array<UniquePtr<ParticleSystem>>
     }
     REFLECT_VALUE(ParticleEffect, "rtti::particles")
     {
@@ -252,7 +252,7 @@ namespace foundation::particles
         RttiRegisterValue_FlipbookSettings();
         RttiRegisterEnum_ParticleEventType();
         RttiRegisterValue_SubEmitterLink();
-        RegisterArrayType<SubEmitterLink>(); // the effect's links
+        RegisterArrayType<SubEmitterLink>(); // a system's sub-emitters
         RegisterArrayType<Guid>(); // a mesh system's materials
         RttiRegisterValue_ParticleSystem();
         RttiRegisterValue_ParticleEffect();

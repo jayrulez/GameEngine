@@ -58,7 +58,7 @@ namespace
         link.trigger = ParticleEventType::OnDeath;
         link.childSystemIndex = 1;
         link.spawnCount = 12;
-        fx.AddSubEmitterLink(link);
+        fx.GetSystem(0)->subEmitters.PushBack(link);
     }
 }
 
@@ -96,7 +96,9 @@ TEST_CASE("particles.pipeline: code effect -> cook -> Bind reconstructs an equiv
 
     // Structure survived the round trip.
     REQUIRE(fx.SystemCount() == 2);
-    CHECK(fx.SubEmitterLinks().Size() == 1);
+    REQUIRE(fx.GetSystem(0)->subEmitters.Size() == 1);
+    CHECK(fx.GetSystem(0)->subEmitters[0].childSystemIndex == 1);
+    CHECK(fx.GetSystem(1)->subEmitters.IsEmpty());
 
     ParticleSystem* fountain = fx.GetSystem(0);
     REQUIRE(fountain != nullptr);

@@ -64,6 +64,7 @@ namespace pipeline
     // The asset types' reflection: their display names (the editor shows them as the asset's kind).
     REFLECT_MEMBERS(ParticleEffectAsset, "rtti::pipeline::particles")
     {
-        builder.Attribute("displayName", String(u8"Particle Effect"));
+        // v1 (2026-10-27): each system its sub-emitters; v0's effect-level links read onto them.
+        builder.DataVersion(1).ReadsDataVersionsFrom(0).Attribute("displayName", String(u8"Particle Effect"));
     }
 }

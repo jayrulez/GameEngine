@@ -2,10 +2,11 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // A profile source of hand-made frames on a millisecond clock (a tick is a millisecond), so a
-// test's numbers come out exact. Included after the module imports.
+// test's numbers come out exact. Included after the module imports; the viewers' suites
+// (Profiler.UI.Tests, Profiler.GUI.Tests) include it from here.
 #pragma once
 
-namespace profiler_ui_tests
+namespace profiler_tests
 {
     using namespace foundation::core;
     using namespace foundation::profiler;

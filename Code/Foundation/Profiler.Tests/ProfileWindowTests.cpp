@@ -10,14 +10,12 @@
 
 import foundation.core;
 import foundation.profiler;
-import foundation.profiler.ui;
 
 #include "KnownSource.h"
 
 using namespace foundation::core;
 using namespace foundation::profiler;
-using namespace foundation::profiler::ui;
-using profiler_ui_tests::KnownSource;
+using profiler_tests::KnownSource;
 
 TEST_CASE("profiler window: the newest frames' times and statistics")
 {

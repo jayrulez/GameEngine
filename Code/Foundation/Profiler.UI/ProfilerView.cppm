@@ -18,7 +18,6 @@ import foundation.vg;
 import foundation.fonts;
 import foundation.ui;
 import foundation.profiler;
-import :window;
 
 using namespace foundation::core;
 namespace fonts = foundation::fonts;

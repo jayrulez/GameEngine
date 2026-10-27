@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-/// Foundation::Profiler.UI - :window partition.
+/// Foundation::Profiler - :window partition.
 ///
-/// What the views show, computed from a source and nothing drawn: the frame times of the last
-/// frames, their statistics, the scopes or GPU passes that took longest over them, and the
-/// counters' values. Views call these as they draw; tests call them on a source of known frames.
+/// What a profiler's views show, computed from a source and nothing drawn: the frame times of the
+/// last frames, their statistics, the scopes or GPU passes that took longest over them, and the
+/// counters' values. Here, under every viewer, so the overlay's views (Profiler.UI) and the
+/// editor's (Profiler.GUI) read the same numbers; tests call them on a source of known frames.
 
 module;
 #include "Core/Prelude.h"
 
-export module foundation.profiler.ui:window;
+export module foundation.profiler:window;
 
 import foundation.core;
-import foundation.profiler;
+import :store;
+import :source;
 
 using namespace foundation::core;
 
-export namespace foundation::profiler::ui
+export namespace foundation::profiler
 {
     /// One frame's times. The GPU time is the span of its passes, from the first to start to the
     /// last to end; it is missing for the newest frames, whose passes have not arrived yet.

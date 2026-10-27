@@ -16,7 +16,6 @@ import foundation.vg;
 import foundation.fonts;
 import foundation.ui;
 import foundation.profiler;
-import :window;
 import :view;
 
 using namespace foundation::core;

@@ -261,6 +261,15 @@ export namespace foundation::profiler::gui
             return UIWidget::GetTooltipText();
         }
 
+        /// The parts it draws, which the sheet styles as `tag::part`.
+        void CollectStyleParts(Array<StringView>& out) const override
+        {
+            ProfilerWidget::CollectStyleParts(out);
+            out.PushBack(StringView(u8"plot"));
+            out.PushBack(StringView(u8"chosen-box"));
+            out.PushBack(StringView(u8"chosen-fill"));
+        }
+
         void OnFrameAxisChanged() override { Invalidate(); }
         void OnProfileSourceChanged() override
         {
@@ -492,6 +501,20 @@ export namespace foundation::profiler::gui
             }
         }
 
+        /// The parts it draws, which the sheet styles as `tag::part`.
+        void CollectStyleParts(Array<StringView>& out) const override
+        {
+            FrameAxisView::CollectStyleParts(out);
+            out.PushBack(StringView(u8"scale"));
+            out.PushBack(StringView(u8"on-time"));
+            out.PushBack(StringView(u8"over"));
+            out.PushBack(StringView(u8"far-over"));
+            out.PushBack(StringView(u8"clipped"));
+            out.PushBack(StringView(u8"chosen"));
+            out.PushBack(StringView(u8"share"));
+            out.PushBack(StringView(u8"budget"));
+        }
+
         void OnProfileChoiceChanged() override { Invalidate(); }
 
     protected:
@@ -610,6 +633,17 @@ export namespace foundation::profiler::gui
             Invalidate();
         }
 
+        /// The parts it draws, which the sheet styles as `tag::part`.
+        void CollectStyleParts(Array<StringView>& out) const override
+        {
+            FrameAxisView::CollectStyleParts(out);
+            out.PushBack(StringView(u8"name"));
+            out.PushBack(StringView(u8"bar"));
+            out.PushBack(StringView(u8"chosen"));
+            out.PushBack(StringView(u8"range"));
+            out.PushBack(StringView(u8"range-backing"));
+        }
+
         /// A column's value: the most of its frames' (false when none of them set it).
         [[nodiscard]] bool ColumnValue(const FrameColumn& column, f64& value) const
         {
@@ -693,8 +727,11 @@ export namespace foundation::profiler::gui
             ctx.PopClip();
             const String range = Format(u8"{} to {}", FormatCounter(least, info.unit, MemoryAllocator()).AsView(),
                                         FormatCounter(most, info.unit, MemoryAllocator()).AsView());
-            DrawLabel(ctx, range.AsView(), Rect{plot.x + 4.0f, plot.y, plot.width - 8.0f, plot.height}, PartTextColor(u8"range"),
-                      TextHAlign::End);
+            // On a backing of the plot's colour at its end, so the bars under it never hide it.
+            const f32 width = Min(LabelWidth(range.AsView()) + 8.0f, plot.width);
+            const Rect backing{plot.Right() - width, plot.y + 2.0f, width, plot.height - 4.0f};
+            ctx.VG().FillRoundedRect(backing.ToRectangle(), 3.0f, PartColor(u8"range-backing", Color{0.1f, 0.1f, 0.12f, 0.85f}));
+            DrawLabel(ctx, range.AsView(), Rect{backing.x + 4.0f, plot.y, width - 8.0f, plot.height}, PartTextColor(u8"range"), TextHAlign::End);
         }
 
     private:

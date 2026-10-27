@@ -62,6 +62,16 @@ export namespace foundation::profiler::gui
             return hash % kHueCount;
         }
 
+        /// The parts every view draws: a name's hues. Each view adds its own; a part the sheet is
+        /// to style must be named here, or the sheet never reaches it.
+        void CollectStyleParts(Array<StringView>& out) const override
+        {
+            static constexpr const char8_t* kHues[kHueCount] = {u8"hue-0", u8"hue-1", u8"hue-2", u8"hue-3",
+                                                               u8"hue-4", u8"hue-5", u8"hue-6", u8"hue-7"};
+            for (const char8_t* hue : kHues)
+                out.PushBack(StringView(hue));
+        }
+
         void OnProfileSourceChanged() override { Invalidate(); }
         void OnProfileFramesChanged() override { Invalidate(); }
         void OnProfileChoiceChanged() override { Invalidate(); }

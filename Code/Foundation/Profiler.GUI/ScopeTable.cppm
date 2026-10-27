@@ -351,6 +351,19 @@ export namespace foundation::profiler::gui
             }
         }
 
+        /// The parts it draws, which the sheet styles as `tag::part`.
+        void CollectStyleParts(Array<StringView>& out) const override
+        {
+            ProfilerWidget::CollectStyleParts(out);
+            out.PushBack(StringView(u8"heading"));
+            out.PushBack(StringView(u8"sorted"));
+            out.PushBack(StringView(u8"separator"));
+            out.PushBack(StringView(u8"group"));
+            out.PushBack(StringView(u8"fold"));
+            out.PushBack(StringView(u8"chosen"));
+            out.PushBack(StringView(u8"hover"));
+        }
+
         void OnProfileSourceChanged() override { Dirty(); }
         void OnProfileFramesChanged() override { Dirty(); }
         void OnProfileChoiceChanged() override

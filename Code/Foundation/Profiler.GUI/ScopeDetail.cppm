@@ -85,6 +85,20 @@ export namespace foundation::profiler::gui
             return true;
         }
 
+        /// The parts it draws, which the sheet styles as `tag::part`.
+        void CollectStyleParts(Array<StringView>& out) const override
+        {
+            ProfilerWidget::CollectStyleParts(out);
+            out.PushBack(StringView(u8"title"));
+            out.PushBack(StringView(u8"heading"));
+            out.PushBack(StringView(u8"note"));
+            out.PushBack(StringView(u8"track"));
+            out.PushBack(StringView(u8"self"));
+            out.PushBack(StringView(u8"plot"));
+            out.PushBack(StringView(u8"bar"));
+            out.PushBack(StringView(u8"lit"));
+        }
+
         void OnProfileSourceChanged() override { Dirty(); }
         void OnProfileFramesChanged() override { Dirty(); }
         void OnProfileChoiceChanged() override { Dirty(); }
@@ -113,7 +127,8 @@ export namespace foundation::profiler::gui
             ctx.VG().FillRoundedRect(Rectangle{box.x, y + kLineHeight * 0.5f - 5.0f, 10.0f, 10.0f}, 2.0f, NameColor(name));
             DrawLabel(ctx, name, Rect{box.x + 16.0f, y, box.width - 16.0f, kLineHeight + 4.0f}, PartTextColor(u8"title"));
             y += kLineHeight + 6.0f;
-            const String stats = Format(u8"{} calls on {}   total {}   mean {}   max {} ms", summary.calls, summary.lanes.AsView(),
+            const String stats = Format(u8"{} {} on {}   total {}   mean {}   max {} ms", summary.calls,
+                                        summary.calls == 1 ? StringView(u8"call") : StringView(u8"calls"), summary.lanes.AsView(),
                                         FormatFixed(TicksToMs(summary.totalTicks, frequency), 2).AsView(),
                                         FormatFixed(summary.calls > 0 ? TicksToMs(summary.totalTicks, frequency) / static_cast<f32>(summary.calls) : 0.0f, 2).AsView(),
                                         FormatFixed(TicksToMs(summary.maxTicks, frequency), 2).AsView());

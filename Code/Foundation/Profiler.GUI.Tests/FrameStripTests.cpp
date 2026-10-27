@@ -225,3 +225,32 @@ TEST_CASE("CounterPlot: a counter's value each frame, the most of a column's; th
     bed.Click(over);
     CHECK(bed.focus->Frames().first == 3u);
 }
+
+TEST_CASE("Profiler.GUI's sheet reaches the parts every view names, a name's hues among them")
+{
+    Bed bed;
+    RefPtr<ProfileTimeline> timeline = MakeRef<ProfileTimeline>(DefaultAllocator());
+    RefPtr<ScopeTable> table = MakeRef<ScopeTable>(DefaultAllocator());
+    RefPtr<ScopeDetail> detail = MakeRef<ScopeDetail>(DefaultAllocator());
+    bed.root->AddChild(timeline.Get());
+    bed.root->AddChild(table.Get());
+    bed.root->AddChild(detail.Get());
+    fgui::StyleManager styles;
+    const String theme = Format(u8"{}\n{}", fgui::DefaultThemeCSS(), ProfilerSheetCSS()); // its tokens under it, as in the editor
+    styles.SetUserAgentSheet(fgui::CSSParser::Parse(theme.AsView()));
+    styles.ApplyTree(*bed.root.Get());
+    CHECK(bed.strip->GetPartStyle(u8"on-time").HasBackground);
+    CHECK(bed.strip->GetPartStyle(u8"far-over").HasBackground);
+    CHECK(bed.plot->GetPartStyle(u8"bar").HasBackground);
+    CHECK(timeline->GetPartStyle(u8"bar").HasColor);
+    CHECK(timeline->GetPartStyle(u8"hatch").HasBackground);
+    CHECK(table->GetPartStyle(u8"heading").HasBackground);
+    CHECK(detail->GetPartStyle(u8"lit").HasBackground);
+    // A name's hue: each of the eight, on every view.
+    for (const char8_t* hue : {u8"hue-0", u8"hue-3", u8"hue-7"})
+    {
+        CHECK(timeline->GetPartStyle(StringView(hue)).HasBackground);
+        CHECK(table->GetPartStyle(StringView(hue)).HasBackground);
+        CHECK(detail->GetPartStyle(StringView(hue)).HasBackground);
+    }
+}

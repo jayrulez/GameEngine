@@ -34,6 +34,7 @@ export namespace foundation::profiler::gui
             framestrip::chosen-fill, counterplot::chosen-fill { background-color: var(--profiler-chosen-fill, var(--accent-subtle)); opacity: 0.5; }
             framestrip::scale, counterplot::range { color: var(--text-dim); }
             counterplot::name { color: var(--text); }
+            counterplot::range-backing { background-color: var(--surface); opacity: 0.85; }
             counterplot::bar { background-color: var(--profiler-counter, #6f86b8); }
             profiletimeline { color: var(--text); font-size: var(--font-small); }
             profiletimeline::ruler, profiletimeline::header { background-color: var(--profiler-ruler, var(--surface-header)); }

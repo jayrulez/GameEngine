@@ -56,8 +56,18 @@ namespace
             if (closed != nullptr)
                 ++*closed;
         }
+        // Work it holds besides its asset (a scene page's clip).
+        [[nodiscard]] String UnsavedBesides() const override { return besides; }
+        Status SaveBesides() override
+        {
+            ++besidesSaves;
+            besides = String{};
+            return Status{};
+        }
         int saves = 0;
         int* closed = nullptr;
+        String besides;
+        int besidesSaves = 0;
 
     private:
         String m_title;
@@ -263,6 +273,37 @@ TEST_CASE("editor pages: a clean page closes at the next frame with its panel; o
     bed.Frame();
     CHECK(bed.pages->Count() == 0u);
     CHECK(bed.closed == 3);
+}
+
+TEST_CASE("editor pages: a page holding unsaved work besides its asset is asked about on close and at exit, that work saved with it")
+{
+    Bed bed;
+    auto* page = static_cast<TestPage*>(bed.pages->Open(*bed.one));
+    REQUIRE(page != nullptr);
+    page->besides = String(u8"the clip 'Bounce'");
+    CHECK_FALSE(page->IsDirty()); // its own mark says nothing of the clip
+    bed.pages->RequestClose(page);
+    (void)bed.root->UpdateLayout();
+    gui::MessageBox* box = FindBox(*bed.root);
+    REQUIRE(box != nullptr);
+    CHECK(ButtonNamed(*box, u8"Save")->HandleActivate());
+    CHECK(page->besidesSaves == 1);
+    CHECK(page->saves == 0); // nothing of its own to save
+    bed.Frame();
+    CHECK(bed.pages->Count() == 0u);
+
+    // The exit gate counts it, and Save All saves it.
+    page = static_cast<TestPage*>(bed.pages->Open(*bed.two));
+    REQUIRE(page != nullptr);
+    page->besides = String(u8"the clip 'Spin'");
+    int proceeded = 0;
+    CHECK_FALSE(bed.pages->ConfirmUnsavedThen(u8"Save All and Exit", u8"Exit Without Saving", [&proceeded]() { ++proceeded; }));
+    (void)bed.root->UpdateLayout();
+    box = FindBox(*bed.root);
+    REQUIRE(box != nullptr);
+    CHECK(ButtonNamed(*box, u8"Save All and Exit")->HandleActivate());
+    CHECK(page->besidesSaves == 1);
+    CHECK(proceeded == 1);
 }
 
 TEST_CASE("editor pages: the active page follows the dock's active panel; another panel leaves it; reveal brings a tab forward")

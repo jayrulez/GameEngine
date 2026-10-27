@@ -238,8 +238,12 @@ export namespace editor::app
         {
             bool all = true;
             for (const OpenPage& open : m_open)
+            {
                 if (open.page->IsDirty() && !open.page->Save().IsOk())
                     all = false;
+                if (!open.page->UnsavedBesides().IsEmpty() && !open.page->SaveBesides().IsOk())
+                    all = false; // a clip its panel edits
+            }
             return all;
         }
 
@@ -393,12 +397,12 @@ export namespace editor::app
             id.ToChars(text);
             return String(StringView(text, 36));
         }
-        /// How many pages have unsaved changes.
+        /// How many pages have unsaved changes, or hold unsaved work of their own (a clip).
         [[nodiscard]] usize DirtyCount() const
         {
             usize count = 0;
             for (const OpenPage& open : m_open)
-                if (open.page->IsDirty())
+                if (open.page->HasUnsavedWork())
                     ++count;
             return count;
         }
@@ -440,7 +444,7 @@ export namespace editor::app
 
         void AskToClose(UIEditorPage* page)
         {
-            if (!page->IsDirty())
+            if (!page->HasUnsavedWork())
             {
                 Close(page);
                 return;
@@ -449,7 +453,12 @@ export namespace editor::app
             if (root == nullptr)
                 return; // nothing to ask over: it stays open
             auto box = MakeRef<gui::MessageBox>(m_allocator);
-            box->Configure(u8"Unsaved changes", Format(u8"'{}' has unsaved changes.", page->Title()).AsView(), gui::MessageBox::Buttons::Ok);
+            // The page's own changes, the work it holds besides (a clip), or both.
+            const String besides = page->UnsavedBesides();
+            const String text = besides.IsEmpty()     ? Format(u8"'{}' has unsaved changes.", page->Title())
+                                : !page->IsDirty()   ? Format(u8"{} has unsaved changes.", besides)
+                                                     : Format(u8"'{}' and {} have unsaved changes.", page->Title(), besides);
+            box->Configure(u8"Unsaved changes", text.AsView(), gui::MessageBox::Buttons::Ok);
             box->ClearButtons();
             (void)box->AddButton(u8"Discard", u8"discard", gui::DialogRole::Destructive);
             (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
@@ -465,7 +474,7 @@ export namespace editor::app
                 return; // closed meanwhile
             if (answer == StringView(u8"save"))
             {
-                if (!page->Save().IsOk())
+                if ((page->IsDirty() && !page->Save().IsOk()) || (!page->UnsavedBesides().IsEmpty() && !page->SaveBesides().IsOk()))
                 {
                     m_services.context->Notify(editor::NoticeKind::Error, u8"Save FAILED (see Console) - the page stays open.");
                     return;

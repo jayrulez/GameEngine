@@ -2303,3 +2303,85 @@ TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and 
     CHECK(run->source.rootMotion.horizontal);
     CHECK(run->source.rootMotion.yaw);
 }
+
+// Each material made on the built-in its shading model names, as its file authored it
+// (Specs/phong-material.md), by the one function both cooks make materials with.
+TEST_CASE("model import: a material is made on the built-in its shading model names, its maps wired")
+{
+    model::Model mdl;
+    const auto add = [&](model::ShadingModel shading) -> model::ModelMaterial&
+    {
+        auto* material = new model::ModelMaterial();
+        material->shadingModel = shading;
+        material->baseColorTextureIndex = 0;
+        material->normalTextureIndex = 1;
+        (void)mdl.addMaterial(material);
+        return *material;
+    };
+    model::ModelMaterial& phong = add(model::ShadingModel::Phong);
+    phong.specularColor = Float3{0.5f, 0.25f, 0.125f};
+    phong.specularTextureIndex = 2;
+    phong.shininess = 32.0f;
+    model::ModelMaterial& lambert = add(model::ShadingModel::Lambert);
+    lambert.specularColor = Float3{0.5f, 0.5f, 0.5f}; // a Lambert material has no highlight, whatever it says
+    lambert.specularTextureIndex = 2;
+    (void)add(model::ShadingModel::Unlit);
+    model::ModelMaterial& pbr = add(model::ShadingModel::Pbr);
+    pbr.separateRoughnessTextureIndex = 3;
+    pbr.occlusionTextureIndex = 4;
+
+    Array<Guid> textures;
+    for (u64 t = 1; t <= 5; ++t)
+        textures.PushBack(Guid{t, t});
+    i32 bakes = 0;
+    const Function<Guid(i32, i32)> packed = [&](i32, i32)
+    {
+        ++bakes;
+        return Guid{9ull, 9ull};
+    };
+    const auto build = [&](usize i, pipeline::MaterialAsset& asset) { pipeline::BuildModelMaterial(mdl, *mdl.materials()[i], u8"m", textures, packed, asset); };
+    const auto slots = [](const pipeline::MaterialAsset& asset)
+    {
+        String out;
+        for (const String& slot : asset.source.textureSlots)
+        {
+            if (!out.IsEmpty())
+                out += u8" ";
+            out += slot.AsView();
+        }
+        return out;
+    };
+    const auto uniform = [](const pipeline::MaterialAsset& asset, StringView name) -> Float4
+    {
+        Float4 value{};
+        for (usize i = 0; i < asset.source.propertyNames.Size(); ++i)
+            if (asset.source.propertyNames[i].AsView() == name)
+                MemCopy(&value, asset.source.uniformDefaults.Data() + asset.source.propertyOffsets[i],
+                        Min<usize>(sizeof(value), asset.source.propertySizes[i]));
+        return value;
+    };
+
+    pipeline::MaterialAsset onPhong;
+    build(0, onPhong);
+    CHECK(onPhong.source.shaderName == u8"phong");
+    CHECK(slots(onPhong) == String(u8"AlbedoMap NormalMap SpecularMap"));
+    CHECK(uniform(onPhong, u8"SpecularColor").y == doctest::Approx(0.25f));
+    CHECK(uniform(onPhong, u8"Shininess").x == doctest::Approx(32.0f));
+
+    pipeline::MaterialAsset onLambert;
+    build(1, onLambert);
+    CHECK(onLambert.source.shaderName == u8"phong");
+    CHECK(slots(onLambert) == String(u8"AlbedoMap NormalMap")); // no highlight, so no specular map
+    CHECK(uniform(onLambert, u8"SpecularColor").x == 0.0f);
+
+    pipeline::MaterialAsset onUnlit;
+    build(2, onUnlit);
+    CHECK(onUnlit.source.shaderName == u8"unlit");
+    CHECK(slots(onUnlit) == String(u8"AlbedoMap"));
+
+    pipeline::MaterialAsset onPbr;
+    build(3, onPbr);
+    CHECK(onPbr.source.shaderName == u8"forward");
+    CHECK(slots(onPbr) == String(u8"AlbedoMap NormalMap OcclusionMap MetallicRoughnessMap"));
+    CHECK(bakes == 1); // its separate rough map baked into the packed one by the caller
+}

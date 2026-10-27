@@ -917,7 +917,6 @@ export namespace pipeline
             }
         }
 
-        // PBR factors -> MaterialAsset instances (builtin "forward" shader by name).
         // Bake-once cache for FBX separate metal/rough pairs (materials often share maps).
         static Guid GetOrBakePackedMR(const foundation::model::Model& model, content::Group& group,
                                       HashMap<u64, Guid>& cache, i32 roughIdx, i32 metalIdx,
@@ -997,73 +996,14 @@ export namespace pipeline
                     manifest.materialAlbedo.PushBack(Guid{});
                     continue;
                 }
-                RefPtr<foundation::materials::Material> built = foundation::materials::CreatePBR(
-                    ImportedAssetName(m.name(), u8"mat", i).AsView(), m.baseColorFactor,
-                    m.metallicFactor, m.roughnessFactor);
-                built->SetDefaultColor(
-                    u8"EmissiveColor",
-                    Float4{m.emissiveFactor.x, m.emissiveFactor.y, m.emissiveFactor.z,
-                           m.emissiveIntensity}); // a ColorHdr: sRGB colour, intensity in w
-                built->SetDefaultFloat(u8"OcclusionStrength", m.occlusionStrength);
-                built->SetDefaultFloat(u8"NormalScale", m.normalScale);
-                built->SetDefaultFloat(u8"AlphaCutoff", m.alphaCutoff);
+                // On the built-in its shading model names, every texture it reads wired in
+                // (Cook's BuildModelMaterial, shared with the direct cook); FBX's separate metal
+                // and rough maps baked into one packed texture asset here, once a pair.
                 pipeline::MaterialAsset asset;
-                pipeline::MaterialImporter::Import(*built, Guid{}, asset);
-                asset.source.shaderName = String(u8"forward");
-                MaterialSamplerModes(model, m, asset.source.samplerU, asset.source.samplerV);
-
-                // Wire EVERY authored texture INTO the material source (self-contained cooked
-                // material - a directly-picked material renders fully textured, not just via
-                // the model-spawn composite). Previously only the albedo made it across.
-                const auto wire = [&](i32 texIdx, StringView slot)
-                {
-                    if (texIdx >= 0 && static_cast<usize>(texIdx) < textureGuids.Size() &&
-                        !textureGuids[static_cast<usize>(texIdx)].IsNil())
-                    {
-                        asset.source.textureSlots.PushBack(String(slot));
-                        asset.source.textureIds.PushBack(textureGuids[static_cast<usize>(texIdx)]);
-                    }
-                };
-                wire(m.baseColorTextureIndex, u8"AlbedoMap");
-                wire(m.normalTextureIndex, u8"NormalMap");
-                wire(m.occlusionTextureIndex, u8"OcclusionMap");
-                wire(m.emissiveTextureIndex, u8"EmissiveMap");
-                // Metallic-roughness: glTF's packed texture wires directly; FBX's separate
-                // grayscale maps BAKE into a packed one (G=rough, B=metal) - feeding either
-                // into the packed slot directly would bleed across channels.
-                if (m.metallicRoughnessTextureIndex >= 0)
-                {
-                    wire(m.metallicRoughnessTextureIndex, u8"MetallicRoughnessMap");
-                }
-                else if (m.separateRoughnessTextureIndex >= 0 ||
-                         m.separateMetalnessTextureIndex >= 0)
-                {
-                    const Guid packed =
-                        GetOrBakePackedMR(model, group, bakedMR, m.separateRoughnessTextureIndex,
-                                          m.separateMetalnessTextureIndex, claimed, deferredWrites);
-                    if (!packed.IsNil())
-                    {
-                        asset.source.textureSlots.PushBack(String(u8"MetallicRoughnessMap"));
-                        asset.source.textureIds.PushBack(packed);
-                    }
-                }
-                // Authored pipeline state: alpha mode -> blend (Mask = alpha-tested cutout w/ holey
-                // shadows; Blend = transparent pass) and double-sided -> no culling.
-                if (m.alphaMode == foundation::model::AlphaMode::Mask)
-                {
-                    asset.source.blendMode =
-                        foundation::materials::BlendMode::Masked;
-                }
-                else if (m.alphaMode == foundation::model::AlphaMode::Blend)
-                {
-                    asset.source.blendMode =
-                        foundation::materials::BlendMode::AlphaBlend;
-                }
-                if (m.doubleSided)
-                {
-                    asset.source.cullMode =
-                        foundation::materials::CullModeConfig::None;
-                }
+                BuildModelMaterial(model, m, matBase.AsView(), textureGuids,
+                                   [&](i32 roughIndex, i32 metalIndex)
+                                   { return GetOrBakePackedMR(model, group, bakedMR, roughIndex, metalIndex, claimed, deferredWrites); },
+                                   asset);
 
                 content::Instance* inst = ClaimInstance(
                     group,

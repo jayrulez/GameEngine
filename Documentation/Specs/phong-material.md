@@ -1,6 +1,6 @@
 # The Phong material - a built-in for models authored with Phong, made by the import
 
-> Status: phase 1 DONE 2026-10-27 (the built-in); proposed 2026-10-27 (user: "it makes sense to have a builtin phong shader, and
+> Status: phases 1 and 2 DONE 2026-10-27 (the built-in; the import makes it); proposed 2026-10-27 (user: "it makes sense to have a builtin phong shader, and
 > investigate how our import pipeline could detect and create the right material"; "like how we
 > have unlit"). Not built.
 > Mirror: Sedulous ports each phase after it lands (told 2026-10-27).

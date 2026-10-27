@@ -147,8 +147,95 @@ export namespace pipeline
         }
     }
 
-    // Cook the model's materials into outDb (as MaterialSource via CreatePBR + the editor cook).
-    // Records, per material, its cooked Guid + the albedo texture Guid (resolved from textureGuids).
+    // A model's material as a material asset on the built-in its shading model names
+    // (Specs/phong-material.md), as its file authored it: PBR its factors and its five maps (FBX's
+    // separate metal and rough maps baked into one packed map by `packedMetallicRoughness`, the
+    // caller's, as each cook makes textures its own way); Phong its diffuse and highlight, Lambert
+    // its diffuse alone, each with its normal and emissive maps; Unlit its colour and map. Then
+    // the authored pipeline state and the samplers. Every texture the material reads is wired into
+    // its source, so a material picked on its own draws fully textured. Both cooks (the file
+    // import's and the direct one) make their materials here.
+    inline void BuildModelMaterial(const model::Model& model, const model::ModelMaterial& m, StringView name,
+                                   const Array<Guid>& textureGuids,
+                                   const Function<Guid(i32 roughIndex, i32 metalIndex)>& packedMetallicRoughness,
+                                   pipeline::MaterialAsset& asset)
+    {
+        RefPtr<materials::Material> built;
+        switch (m.shadingModel)
+        {
+        case model::ShadingModel::Phong:
+        case model::ShadingModel::Lambert:
+        {
+            const bool highlight = m.shadingModel == model::ShadingModel::Phong;
+            const Float4 specular = highlight ? Float4{m.specularColor.x, m.specularColor.y, m.specularColor.z, 1.0f} : Float4{0.0f, 0.0f, 0.0f, 1.0f};
+            built = materials::CreatePhong(name, m.baseColorFactor, specular, m.shininess);
+            break;
+        }
+        case model::ShadingModel::Unlit:
+            built = materials::CreateUnlit(name, m.baseColorFactor);
+            break;
+        case model::ShadingModel::Pbr:
+        default:
+            built = materials::CreatePBR(name, m.baseColorFactor, m.metallicFactor, m.roughnessFactor);
+            built->SetDefaultFloat(u8"OcclusionStrength", m.occlusionStrength);
+            break;
+        }
+        // What the built-ins share by name (a property a built-in lacks is passed by).
+        built->SetDefaultColor(u8"EmissiveColor", Float4{m.emissiveFactor.x, m.emissiveFactor.y, m.emissiveFactor.z,
+                                                         m.emissiveIntensity}); // a ColorHdr: sRGB colour, intensity in w
+        built->SetDefaultFloat(u8"NormalScale", m.normalScale);
+        built->SetDefaultFloat(u8"AlphaCutoff", m.alphaCutoff);
+        pipeline::MaterialImporter::Import(*built, Guid{}, asset); // nil shaderId: the built-in by name
+        asset.source.shaderName = String(built->shaderName.AsView());
+
+        const auto wire = [&](i32 texIdx, StringView slot)
+        {
+            if (texIdx >= 0 && static_cast<usize>(texIdx) < textureGuids.Size() && !textureGuids[static_cast<usize>(texIdx)].IsNil())
+            {
+                asset.source.textureSlots.PushBack(String(slot));
+                asset.source.textureIds.PushBack(textureGuids[static_cast<usize>(texIdx)]);
+            }
+        };
+        wire(m.baseColorTextureIndex, u8"AlbedoMap");
+        if (m.shadingModel != model::ShadingModel::Unlit)
+        {
+            wire(m.normalTextureIndex, u8"NormalMap");
+            wire(m.emissiveTextureIndex, u8"EmissiveMap");
+        }
+        if (m.shadingModel == model::ShadingModel::Phong)
+            wire(m.specularTextureIndex, u8"SpecularMap");
+        if (m.shadingModel == model::ShadingModel::Pbr)
+        {
+            wire(m.occlusionTextureIndex, u8"OcclusionMap");
+            // Metallic-roughness: glTF's packed texture wires directly; FBX's separate grayscale
+            // maps bake into a packed one (G = rough, B = metal): feeding either into the packed
+            // slot directly would bleed across channels.
+            if (m.metallicRoughnessTextureIndex >= 0)
+                wire(m.metallicRoughnessTextureIndex, u8"MetallicRoughnessMap");
+            else if ((m.separateRoughnessTextureIndex >= 0 || m.separateMetalnessTextureIndex >= 0) && packedMetallicRoughness)
+            {
+                const Guid packed = packedMetallicRoughness(m.separateRoughnessTextureIndex, m.separateMetalnessTextureIndex);
+                if (!packed.IsNil())
+                {
+                    asset.source.textureSlots.PushBack(String(u8"MetallicRoughnessMap"));
+                    asset.source.textureIds.PushBack(packed);
+                }
+            }
+        }
+        // Authored pipeline state: alpha mode -> blend (Mask = alpha-tested cutout with holey
+        // shadows; Blend = the transparent pass) and double-sided -> no culling.
+        if (m.alphaMode == model::AlphaMode::Mask)
+            asset.source.blendMode = materials::BlendMode::Masked;
+        else if (m.alphaMode == model::AlphaMode::Blend)
+            asset.source.blendMode = materials::BlendMode::AlphaBlend;
+        if (m.doubleSided)
+            asset.source.cullMode = materials::CullModeConfig::None;
+        MaterialSamplerModes(model, m, asset.source.samplerU, asset.source.samplerV);
+    }
+
+    // Cook the model's materials into outDb (each on its built-in, BuildModelMaterial, then the
+    // editor cook). Records, per material, its cooked Guid + the albedo texture Guid (resolved
+    // from textureGuids).
     inline void CookMaterials(IAllocator& allocator, const model::Model& model,
                               content::Group* root, StringView namePrefix,
                               const Array<Guid>& textureGuids, Array<Guid>& outMatGuids,
@@ -156,116 +243,39 @@ export namespace pipeline
     {
         pipeline::MaterialAssetBuilder builder;
         HashMap<u64, Guid> bakedMR; // per-pair bake cache (materials often share maps)
+        // FBX's separate metal and rough maps baked into one packed texture product, once a pair.
+        const Function<Guid(i32, i32)> packedMR = [&](i32 roughIndex, i32 metalIndex) -> Guid
+        {
+            const u64 key = (static_cast<u64>(static_cast<u32>(roughIndex)) << 32) | static_cast<u64>(static_cast<u32>(metalIndex));
+            if (const Guid* hit = bakedMR.Find(key))
+                return *hit;
+            Guid packed;
+            u32 w = 0, h = 0;
+            Array<u8> pixels = BakePackedMetallicRoughness(model, roughIndex, metalIndex, w, h);
+            if (!pixels.IsEmpty())
+            {
+                texture::TextureResource res;
+                res.width = w;
+                res.height = h;
+                res.format = rhi::TextureFormat::RGBA8Unorm; // data map: linear
+                res.mipLevels = 1;
+                res.generateMipmaps = false;
+                const String texName = Format(u8"{}.mr.packed.{}.{}", namePrefix, roughIndex, metalIndex);
+                content::Instance* texInst = root->CreateInstance(texName.AsView(), texture::TextureResource::StaticType());
+                if (texInst != nullptr && texInst->WriteObject(res).IsOk() &&
+                    texInst->WriteData(u8"data", Span<const byte>{reinterpret_cast<const byte*>(pixels.Data()), pixels.Size()}).IsOk())
+                    packed = texInst->Id();
+            }
+            bakedMR.InsertOrAssign(key, packed);
+            return packed;
+        };
         const Span<model::ModelMaterial* const> materials = model.materials();
         for (usize i = 0; i < materials.Size(); ++i)
         {
             const model::ModelMaterial& m = *materials[i];
-
-            // Build a standard PBR material carrying the model's factors, capture it into a source that
-            // names the builtin "forward" shader (no cooked ShaderResource needed).
-            RefPtr<materials::Material> built = materials::CreatePBR(
-                Format(u8"{}.{}", namePrefix, ImportedAssetName(m.name(), u8"mat", i)).AsView(),
-                m.baseColorFactor, m.metallicFactor, m.roughnessFactor);
-            built->SetDefaultColor(u8"EmissiveColor", Float4{m.emissiveFactor.x, m.emissiveFactor.y,
-                                                             m.emissiveFactor.z,
-                                                             m.emissiveIntensity});
-            built->SetDefaultFloat(u8"OcclusionStrength", m.occlusionStrength);
-            built->SetDefaultFloat(u8"NormalScale", m.normalScale);
-            built->SetDefaultFloat(u8"AlphaCutoff", m.alphaCutoff);
             pipeline::MaterialAsset asset;
-            pipeline::MaterialImporter::Import(*built, Guid{},
-                                                asset); // nil shaderId -> use shaderName
-            asset.source.shaderName = String(u8"forward");
-            // Wire every authored texture (see FileImport::ImportMaterials - same self-contained rule).
-            {
-                const auto wire = [&](i32 texIdx, core::StringView slot)
-                {
-                    if (texIdx >= 0 && static_cast<usize>(texIdx) < textureGuids.Size() &&
-                        !textureGuids[static_cast<usize>(texIdx)].IsNil())
-                    {
-                        asset.source.textureSlots.PushBack(String(slot));
-                        asset.source.textureIds.PushBack(textureGuids[static_cast<usize>(texIdx)]);
-                    }
-                };
-                wire(m.baseColorTextureIndex, u8"AlbedoMap");
-                wire(m.normalTextureIndex, u8"NormalMap");
-                wire(m.occlusionTextureIndex, u8"OcclusionMap");
-                wire(m.emissiveTextureIndex, u8"EmissiveMap");
-                // Metallic-roughness: glTF's packed texture wires directly; FBX's separate maps
-                // bake into a packed product (see FileImport - same rule, product-side here).
-                if (m.metallicRoughnessTextureIndex >= 0)
-                {
-                    wire(m.metallicRoughnessTextureIndex, u8"MetallicRoughnessMap");
-                }
-                else if (m.separateRoughnessTextureIndex >= 0 ||
-                         m.separateMetalnessTextureIndex >= 0)
-                {
-                    const u64 key =
-                        (static_cast<u64>(static_cast<u32>(m.separateRoughnessTextureIndex))
-                         << 32) |
-                        static_cast<u64>(static_cast<u32>(m.separateMetalnessTextureIndex));
-                    Guid packed;
-                    if (const Guid* hit = bakedMR.Find(key))
-                    {
-                        packed = *hit;
-                    }
-                    else
-                    {
-                        u32 w = 0, h = 0;
-                        Array<u8> pixels =
-                            BakePackedMetallicRoughness(model, m.separateRoughnessTextureIndex,
-                                                        m.separateMetalnessTextureIndex, w, h);
-                        if (!pixels.IsEmpty())
-                        {
-                            texture::TextureResource res;
-                            res.width = w;
-                            res.height = h;
-                            res.format = rhi::TextureFormat::RGBA8Unorm; // data map: linear
-                            res.mipLevels = 1;
-                            res.generateMipmaps = false;
-                            const String texName = Format(u8"{}.mr.packed.{}.{}", namePrefix,
-                                                          m.separateRoughnessTextureIndex,
-                                                          m.separateMetalnessTextureIndex);
-                            content::Instance* texInst = root->CreateInstance(
-                                texName.AsView(), texture::TextureResource::StaticType());
-                            if (texInst != nullptr && texInst->WriteObject(res).IsOk() &&
-                                texInst
-                                    ->WriteData(u8"data",
-                                                Span<const byte>{
-                                                    reinterpret_cast<const byte*>(pixels.Data()),
-                                                    pixels.Size()})
-                                    .IsOk())
-                            {
-                                packed = texInst->Id();
-                            }
-                        }
-                        bakedMR.InsertOrAssign(key, packed);
-                    }
-                    if (!packed.IsNil())
-                    {
-                        asset.source.textureSlots.PushBack(String(u8"MetallicRoughnessMap"));
-                        asset.source.textureIds.PushBack(packed);
-                    }
-                }
-                // Authored pipeline state: alpha mode -> blend (Mask = alpha-tested cutout w/ holey
-                // shadows; Blend = transparent pass) and double-sided -> no culling.
-                if (m.alphaMode == foundation::model::AlphaMode::Mask)
-                {
-                    asset.source.blendMode =
-                        foundation::materials::BlendMode::Masked;
-                }
-                else if (m.alphaMode == foundation::model::AlphaMode::Blend)
-                {
-                    asset.source.blendMode =
-                        foundation::materials::BlendMode::AlphaBlend;
-                }
-                if (m.doubleSided)
-                {
-                    asset.source.cullMode =
-                        foundation::materials::CullModeConfig::None;
-                }
-                MaterialSamplerModes(model, m, asset.source.samplerU, asset.source.samplerV);
-            }
+            BuildModelMaterial(model, m, Format(u8"{}.{}", namePrefix, ImportedAssetName(m.name(), u8"mat", i)).AsView(), textureGuids,
+                               packedMR, asset);
 
             const String name = root->UniqueInstanceName(
                 Format(u8"{}.{}", namePrefix, ImportedAssetName(m.name(), u8"mat", i)).AsView());

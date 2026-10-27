@@ -222,7 +222,7 @@ namespace pipeline
             outV = 0;
             const i32 texIndices[] = {mat.baseColorTextureIndex, mat.normalTextureIndex,
                                       mat.metallicRoughnessTextureIndex, mat.emissiveTextureIndex,
-                                      mat.occlusionTextureIndex};
+                                      mat.occlusionTextureIndex, mat.specularTextureIndex};
             const Span<const model::TextureSampler> samplers = mdl.samplers();
             for (i32 t : texIndices)
             {

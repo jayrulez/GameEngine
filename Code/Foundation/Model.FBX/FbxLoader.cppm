@@ -323,7 +323,30 @@ export namespace foundation::model::fbx
                 }
                 else
                 {
-                    // Legacy FBX (Lambert/Phong): map to PBR.
+                    // Legacy FBX (Lambert, Phong) and a classic OBJ .mtl: imported as authored
+                    // (Specs/phong-material.md). Phong and the .mtl's Kd/Ks/Ns keep their highlight,
+                    // Lambert has none; a legacy material of another kind (a shader the engine has
+                    // no built-in for) stays the PBR approximation below. Blender's exports are
+                    // their own kind (it labels every material Phong) and take the PBR branch above.
+                    const bool phong = mat->shader_type == UFBX_SHADER_FBX_PHONG || mat->shader_type == UFBX_SHADER_WAVEFRONT_MTL;
+                    if (phong || mat->shader_type == UFBX_SHADER_FBX_LAMBERT)
+                        material->shadingModel = phong ? ShadingModel::Phong : ShadingModel::Lambert;
+                    if (phong)
+                    {
+                        if (mat->fbx.specular_color.has_value)
+                        {
+                            // The colour times its factor, as the file lights it, then as sRGB.
+                            const auto c = mat->fbx.specular_color.value_vec4;
+                            const f64 factor = mat->fbx.specular_factor.has_value ? mat->fbx.specular_factor.value_real : 1.0;
+                            const Float4 specular = SrgbColor(c.x * factor, c.y * factor, c.z * factor, 1.0);
+                            material->specularColor = Float3(specular.x, specular.y, specular.z);
+                        }
+                        if (mat->fbx.specular_color.texture)
+                            material->specularTextureIndex = getOrCreateTextureIndex(mat->fbx.specular_color.texture, model);
+                        if (mat->fbx.specular_exponent.has_value)
+                            material->shininess = static_cast<f32>(mat->fbx.specular_exponent.value_real);
+                    }
+
                     if (mat->fbx.diffuse_color.has_value)
                     {
                         // The colour alone: DiffuseFactor is ignored, as glTF has none. Blender
@@ -363,7 +386,7 @@ export namespace foundation::model::fbx
                         material->emissiveTextureIndex =
                             getOrCreateTextureIndex(mat->fbx.emission_color.texture, model);
 
-                    // Non-PBR defaults.
+                    // The PBR approximation's (what a legacy material of another kind is drawn as).
                     material->metallicFactor = 0.0f;
                     material->roughnessFactor = 0.8f;
                 }

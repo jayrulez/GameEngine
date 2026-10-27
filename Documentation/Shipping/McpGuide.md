@@ -193,7 +193,9 @@ is normal - clear it with `asset_cook`.
 checkboxes by label (`{"Generate collision": true}` gives an imported model's prefab colliders);
 an unknown one is refused with the importer's list, and the result lists every toggle's value.
 An imported model gets its prefab, the `Prefab` asset beside its manifest, in both hosts (and
-a scene with `Generate scene`).
+a scene with `Generate scene`). Its materials come in as authored: an FBX Phong or Lambert
+material and a classic OBJ `.mtl` on the built-in Phong, everything else (glTF, Blender's FBX, an
+`.mtl` with PBR keys) on PBR; to draw one another way, `material_set_shader` after the import.
 `asset_list`/`asset_info` to inspect either database. `asset_delete` removes a source asset as the
 Assets browser does (the next cook sweeps its product; the original file under Sources/ stays); it
 is refused while anything uses it - the refusal names the users, as `asset_uses` would - unless

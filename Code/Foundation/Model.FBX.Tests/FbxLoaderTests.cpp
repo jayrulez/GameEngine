@@ -161,3 +161,117 @@ TEST_CASE("fbx.obj: a missing .mtl is not an error")
     CHECK(model.meshes().Size() == 1u);
     std::remove("scratch_fbx_nomtl.obj");
 }
+
+// Imported as authored (Specs/phong-material.md): an FBX Phong material keeps its highlight (its
+// specular colour times its factor, as sRGB, and its exponent), a Lambert one has none; both are
+// told apart from PBR by the shading model the file names.
+TEST_CASE("fbx: a Phong material keeps its highlight, a Lambert one is diffuse alone")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	Material: 1000, "Material::Shiny", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",1,1,1
+			P: "SpecularColor", "Color", "", "A",0.2140,0.2140,0.2140
+			P: "SpecularFactor", "Number", "", "A",1
+			P: "ShininessExponent", "Number", "", "A",32
+		}
+	}
+	Material: 1001, "Material::Matte", "" {
+		Version: 102
+		ShadingModel: "lambert"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.2140,0.2140,0.2140
+		}
+	}
+}
+Connections:  {
+}
+)";
+    WriteText("scratch_fbx_phong.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_phong.fbx")), model) == ModelLoadResult::Ok);
+    const ModelMaterial* shiny = nullptr;
+    const ModelMaterial* matte = nullptr;
+    for (const ModelMaterial* m : model.materials())
+    {
+        if (m->name() == StringView{u8"Shiny"})
+            shiny = m;
+        if (m->name() == StringView{u8"Matte"})
+            matte = m;
+    }
+    REQUIRE(shiny != nullptr);
+    REQUIRE(matte != nullptr);
+    CHECK(shiny->shadingModel == ShadingModel::Phong);
+    CHECK(shiny->specularColor.x == doctest::Approx(0.5f).epsilon(0.002)); // linear 0.2140 is sRGB 0.5
+    CHECK(shiny->shininess == doctest::Approx(32.0f));
+    CHECK(matte->shadingModel == ShadingModel::Lambert);
+    CHECK(matte->specularColor.x == 0.0f);
+    CHECK(matte->baseColorFactor.x == doctest::Approx(0.5f).epsilon(0.002));
+    std::remove("scratch_fbx_phong.fbx");
+}
+
+TEST_CASE("fbx.obj: a classic .mtl (Kd, Ks, Ns) is Phong; one with PBR keys stays PBR")
+{
+    WriteText("scratch_fbx_classic.obj", kQuadObj);
+    WriteText("welded.mtl", "newmtl red\nKd 1 0 0\nKs 0.2140 0.2140 0.2140\nNs 50\n");
+    {
+        Model model;
+        fbx::FbxLoader loader;
+        REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_classic.obj")), model) == ModelLoadResult::Ok);
+        REQUIRE(model.materials().Size() >= 1u);
+        const ModelMaterial* red = model.materials()[0];
+        CHECK(red->shadingModel == ShadingModel::Phong);
+        CHECK(red->specularColor.x == doctest::Approx(0.5f).epsilon(0.002));
+        CHECK(red->shininess == doctest::Approx(50.0f));
+    }
+    WriteText("welded.mtl", "newmtl red\nKd 1 0 0\nPr 0.4\nPm 0.0\n");
+    {
+        Model model;
+        fbx::FbxLoader loader;
+        REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_classic.obj")), model) == ModelLoadResult::Ok);
+        REQUIRE(model.materials().Size() >= 1u);
+        CHECK(model.materials()[0]->shadingModel == ShadingModel::Pbr);
+    }
+    std::remove("scratch_fbx_classic.obj");
+    std::remove("welded.mtl");
+}
+
+TEST_CASE("fbx: Blender's export stays PBR, though it names every material Phong")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "Blender (stable FBX IO) - 4.2.0 - 5.12.3"
+}
+Creator: "Blender (stable FBX IO) - 4.2.0 - 5.12.3"
+Objects:  {
+	Material: 1000, "Material::Painted", "" {
+		Version: 102
+		ShadingModel: "Phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.8,0.8,0.8
+			P: "SpecularColor", "Color", "", "A",0.8,0.8,0.8
+			P: "ShininessExponent", "Number", "", "A",25
+		}
+	}
+}
+Connections:  {
+}
+)";
+    WriteText("scratch_fbx_blender.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_blender.fbx")), model) == ModelLoadResult::Ok);
+    REQUIRE(model.materials().Size() >= 1u);
+    CHECK(model.materials()[0]->shadingModel == ShadingModel::Pbr);
+    std::remove("scratch_fbx_blender.fbx");
+}

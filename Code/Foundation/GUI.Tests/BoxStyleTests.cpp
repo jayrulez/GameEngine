@@ -233,3 +233,26 @@ TEST_CASE("box-style: a sharp outer ring paints only outside the box, so a box w
     CHECK(ringTriangles > 0u);
     CHECK(inside == 0u);
 }
+
+TEST_CASE("box-style: a background under a solid border is one box with it, so no background shows past a rounded corner")
+{
+    // Two shapes smoothed along one outer curve leave the background's colour outside the border.
+    auto w = Styled(u8"box { background-color: #ff0000; border: 3px solid #000000; border-radius: 6px; }");
+    vg::VGContext canvas;
+    canvas.SetAnalyticBoxes(true);
+    DrawContext dc{canvas};
+    w->Draw(dc);
+    const vg::VGBatch& batch = canvas.GetBatch();
+    REQUIRE(batch.boxVertices.Size() == 6u); // one quad
+    CHECK(batch.boxVertices[0].fill.r == doctest::Approx(1.0f));
+    CHECK(batch.boxVertices[0].borderTop.a == doctest::Approx(1.0f));
+
+    // A dashed border is drawn apart, over the background.
+    auto dashed = Styled(u8"box { background-color: #ff0000; border: 3px dashed #000000; border-radius: 6px; }");
+    vg::VGContext other;
+    other.SetAnalyticBoxes(true);
+    DrawContext odc{other};
+    dashed->Draw(odc);
+    CHECK(other.GetBatch().boxVertices.Size() == 6u); // the background alone
+    CHECK(other.GetBatch().boxVertices[0].borderTop.a == doctest::Approx(0.0f));
+}

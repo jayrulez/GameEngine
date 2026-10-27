@@ -262,6 +262,20 @@ export namespace foundation::gui
             // The backdrop blurs inside the box's shape, under its (translucent) background.
             if (withBackdrop)
                 DrawBackdrop(ctx, box);
+            // A background straight under a solid border is one box with it: drawn apart, both are
+            // smoothed along the same outer curve, and the background shows outside the border at a
+            // rounded corner. One box takes fill and border from one edge.
+            const bool bordered = !Skin.HasPicture() && !BorderWidths.IsZero() && !BorderColors.IsTransparent();
+            const bool solid = BorderLines[0] == BorderLine::Solid && BorderLines[1] == BorderLine::Solid &&
+                               BorderLines[2] == BorderLine::Solid && BorderLines[3] == BorderLine::Solid;
+            bool insetShadows = false;
+            for (const BoxShadow& shadow : Shadows)
+                insetShadows = insetShadows || shadow.Inset;
+            if (bordered && solid && BackgroundColor.a > 0.0f && Layers.IsEmpty() && !insetShadows)
+            {
+                canvas.DrawBox(rect, Radii, BackgroundColor, BorderWidths, BorderColors);
+                return;
+            }
             if (BackgroundColor.a > 0.0f)
                 canvas.DrawBox(rect, Radii, BackgroundColor);
             for (usize i = Layers.Size(); i-- > 0;)
@@ -276,10 +290,8 @@ export namespace foundation::gui
             }
             if (Skin.HasPicture())
                 DrawSkin(ctx, rect); // a border image stands in for the border (CSS)
-            else if (!BorderWidths.IsZero() && !BorderColors.IsTransparent())
+            else if (bordered)
             {
-                const bool solid = BorderLines[0] == BorderLine::Solid && BorderLines[1] == BorderLine::Solid &&
-                                   BorderLines[2] == BorderLine::Solid && BorderLines[3] == BorderLine::Solid;
                 if (solid)
                     canvas.DrawBox(rect, Radii, Color{0.0f, 0.0f, 0.0f, 0.0f}, BorderWidths, BorderColors);
                 else

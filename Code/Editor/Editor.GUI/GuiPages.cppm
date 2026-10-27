@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::GUI - the `editor.gui` module: the editor's pages for the engine GUI's assets (E10 of
-// Specs/gui-lab-evolution-3.md).
+// Editor::GUI - the `editor.gui` module: the editor's pages for the engine GUI's assets.
 //
-// GuiAssetEditorPage edits a `.gml` document or a `.css` sheet, its text in the linked Sources/
-// file, beside a live preview the RUNTIME context's GuiSubsystem draws into the page's offscreen
-// target (GuiSubsystem::CreatePreview / RenderPreview): the game's fonts, theme and sheets, so
-// what shows is what the game will show. A sheet's page previews it over markup of its own (a
-// second editor, kept on the asset as editor-only previewMarkup, never cooked; "Preview
-// Document..." copies a document's markup in), the sheet applied to that tree alone, never to the
-// game's GUI. Edits rebuild the preview after a short pause; what the cook would report (the
-// loader's and the parser's diagnostics) marks the lines; a document that does not build keeps
-// the last good preview. Save writes the source and the asset, then asks for the validating cook.
-// The pages are foundation.ui's, as the editor is, until the editor's own move.
+// GuiAssetEditorPage edits a `.gml` document or a `.css` sheet on the GUI from its markup
+// (Data/Editor/GuiPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 6, part 5), on the code
+// pages' base (the source file, the shared XML or CSS colours, one history, the problems list): its
+// check is what the cook would report (the loader's and the parser's diagnostics), and beside the
+// code a live preview the RUNTIME context's GuiSubsystem draws into a viewport of the page
+// (GuiSubsystem::CreatePreview / RenderPreview): the game's fonts, theme and sheets, so what shows is
+// what the game will show. A sheet is previewed over markup of the page's own (edited above the
+// preview, "Preview Over a Document" copying a document's in), kept for the sheet in the project's
+// editor settings: never an edit of the asset (the old page wrote it into the asset and dirtied it),
+// its problems in the list under its own name. Markup that does not build keeps the last good
+// preview, and says so.
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h"
+#include "Core/Reflection/Reflect.h"
 
 export module editor.gui;
 
@@ -26,11 +26,10 @@ import foundation.content;
 import foundation.runtime.client;
 import foundation.graphics;
 import foundation.rhi;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
 import foundation.gui;
+import foundation.gui.code;
+import foundation.gui.viewport;
+import gui.pipeline;
 import engine.gui;
 import editor.core;
 import editor.app;
@@ -39,11 +38,6 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    namespace runtime = foundation::runtime;
-    namespace ui = foundation::ui;
-    namespace rhi = foundation::rhi;
-    namespace gui = foundation::gui;
-
     namespace gui_pages
     {
         /// What a sheet is previewed over with nothing chosen yet: a little of everything a sheet
@@ -55,106 +49,123 @@ export namespace editor
                                                           u8"    <CheckBox text=\"Check box\"/>\n"
                                                           u8"    <Slider/>\n"
                                                           u8"</Panel>\n";
+        /// How the problems list names the preview markup's problems (a sheet's page).
+        inline constexpr StringView kPreviewMarkupName = u8"preview markup";
 
-        /// The cook's diagnostics on `editor`'s lines, as its margin marks them (from 0; a
-        /// diagnostic with no line on the first).
-        inline void MarkLines(ui::toolkit::CodeEditView& editor, const Array<gui::GuiDiagnostic>& found)
+        /// The cook's diagnostics as the page's problems, `file` the code they are in (empty: the page's own).
+        inline void AddProblems(Span<const foundation::gui::GuiDiagnostic> found, StringView file, Array<app::CodeProblem>& out)
         {
-            Array<ui::toolkit::CodeDiagnostic> marks;
-            for (const gui::GuiDiagnostic& diagnostic : found)
+            for (const foundation::gui::GuiDiagnostic& d : found)
             {
-                ui::toolkit::CodeDiagnostic mark;
-                mark.isError = diagnostic.Level == gui::GuiDiagnostic::Severity::Error;
-                mark.line = diagnostic.Line > 0 ? static_cast<i32>(diagnostic.Line) - 1 : 0;
-                mark.message = diagnostic.Message;
-                marks.PushBack(Move(mark));
+                app::CodeProblem p;
+                p.severity = d.Level == foundation::gui::GuiDiagnostic::Severity::Error ? foundation::gui::CodeSeverity::Error : foundation::gui::CodeSeverity::Warning;
+                p.message = d.Message;
+                p.file = String(file);
+                p.line = d.Line > 0 ? d.Line - 1 : 0;
+                p.atColumn = false; // the cook names lines
+                out.PushBack(Move(p));
             }
-            editor.Document().SetDiagnostics(Move(marks));
-            editor.Invalidate();
         }
     }
 
-    class GuiAssetEditorPage final : public app::UIEditorPage
+    /// A sheet's preview markup, kept per sheet in the project's editor settings (never cooked).
+    struct GuiSheetPreview
+    {
+        Guid asset;
+        String markup;
+
+        void Serialize(ISerializer& ar)
+        {
+            ar.Key("asset");
+            ar.GuidValue(asset);
+            foundation::core::Serialize(ar, "markup", markup);
+        }
+    };
+    inline void Serialize(ISerializer& ar, GuiSheetPreview& p)
+    {
+        ar.BeginObject();
+        p.Serialize(ar);
+        ar.EndObject();
+    }
+    class GuiSheetPreviewSettings final : public ISerializable
+    {
+        RTTI_OBJECT(GuiSheetPreviewSettings, ISerializable)
+    public:
+        Array<GuiSheetPreview> sheets;
+
+        void Serialize(ISerializer& ar) override { foundation::core::Serialize(ar, "sheets", sheets); }
+    };
+
+    class GuiAssetEditorPage final : public app::CodeAssetPage
     {
     public:
+        static constexpr StringView kPath = u8"Editor/GuiPage.gml";
+
         /// What the page edits: a document (its markup, previewed as it is) or a sheet (its CSS,
-        /// previewed over markup of its own).
+        /// previewed over markup of the page's own).
         enum class Kind : u8
         {
             Document,
             StyleSheet,
         };
 
-        GuiAssetEditorPage(EditorContext& context, runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost,
-                           foundation::content::Instance& instance, Kind kind);
+        GuiAssetEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance, Kind kind);
+        ~GuiAssetEditorPage() override;
 
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] Status Save() override;
-        void OnUpdate(runtime::IApplicationHost&, f32 dt) override;
-        void OnAfterSceneRender(runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
-        /// What the preview shows now (null before one built), and the text it was built from: for
-        /// a test, and a tool.
-        [[nodiscard]] gui::SceneRoot* PreviewRoot() const noexcept { return m_previewRoot.Get(); }
-        [[nodiscard]] StringView Text() const noexcept { return m_text.AsView(); }
-        [[nodiscard]] StringView StatusText() const noexcept { return m_statusText.AsView(); }
-        /// The text as if typed, the preview rebuilt now (no pause): a test's and a tool's.
-        void SetText(StringView text);
+        /// A sheet's preview over a copy of document `id`'s markup (the page's from then on).
+        void PreviewOverDocument(const Guid& id);
+
+        // === For tests ===
+        [[nodiscard]] Kind GetKind() const noexcept { return m_kind; }
+        /// What the preview shows now (null before one built, or without the runtime's GUI).
+        [[nodiscard]] foundation::gui::SceneRoot* PreviewRoot() const noexcept { return m_previewRoot.Get(); }
+        /// Whether the preview shows an older version than the code (the code does not build).
+        [[nodiscard]] bool PreviewStale() const noexcept { return m_stale; }
+        /// A sheet's preview markup (empty on a document's page).
+        [[nodiscard]] String PreviewMarkup() const;
+        [[nodiscard]] foundation::gui::CodeEditor* PreviewMarkupEditor() const noexcept { return m_markup; }
+
+    protected:
+        [[nodiscard]] Array<app::CodeProblem> CheckCode(StringView text) override;
 
     private:
-        void EnsureViewportBound();
-        void RebuildPreview();
-        void PickPreviewDocument();
-        [[nodiscard]] String ReadSource(StringView fileName) const;
-        void SetStatus(StringView text);
+        void RebuildPreview(StringView text, bool builds);
+        void ShowPreviewState();
+        void KeepPreviewMarkup();
 
-        EditorContext* m_context = nullptr;
-        runtime::IApplicationHost* m_host = nullptr;
-        ui::runtime::UIHost* m_uiHost = nullptr;
-        engine::gui::GuiSubsystem* m_gui = nullptr; // the RUNTIME context's
-        foundation::graphics::RenderWindow* m_hostWindow = nullptr;
         Kind m_kind;
-        String m_title;
-        String m_text;          // the asset's: the document's markup, or the sheet's CSS
-        String m_previewMarkup; // a sheet's: what it is previewed over (editor-only, on the asset)
-        f32 m_previewDelay = 0.0f;
-        RefPtr<ui::View> m_content;
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<ui::toolkit::CodeEditView> m_editor;
-        RefPtr<ui::toolkit::CodeEditView> m_previewEditor; // a sheet's
-        RefPtr<ui::Label> m_status;
-        String m_statusText;
-        RefPtr<ui::viewport::ViewportView> m_viewport;
-        RefPtr<gui::SceneRoot> m_previewRoot; // in the RUNTIME context's GUI
+        engine::gui::GuiSubsystem* m_gui = nullptr; // the RUNTIME context's
+        RefPtr<foundation::gui::Viewport> m_viewport;
+        RefPtr<foundation::gui::SceneRoot> m_previewRoot; // in the RUNTIME context's GUI
+        foundation::gui::CodeEditor* m_markup = nullptr;  // a sheet's preview markup (the markup's)
+        u32 m_markupListener = 0;
+        bool m_stale = false;
     };
 
     /// The page for one of the GUI's asset types.
     class GuiAssetPageFactory final : public IEditorPageFactory
     {
     public:
-        GuiAssetPageFactory(runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost, GuiAssetEditorPage::Kind kind)
-            : m_host(&host), m_uiHost(&uiHost), m_kind(kind)
-        {
-        }
+        GuiAssetPageFactory(const app::AssetPageServicesSource& services, GuiAssetEditorPage::Kind kind) : m_services(&services), m_kind(kind) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
         [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        runtime::IApplicationHost* m_host;
-        ui::runtime::UIHost* m_uiHost;
+        const app::AssetPageServicesSource* m_services = nullptr;
         GuiAssetEditorPage::Kind m_kind;
     };
 
-    /// The editor executable's entry point for the GUI's pages.
-    inline void RegisterGuiEditor(EditorContext& context, runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost)
+    /// The GUI's pages (from the editor's assembly), and the section a sheet's preview markup is
+    /// kept in (registered before the app loads the per-project store).
+    inline void RegisterGuiEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
+        GlobalTypeRegistry().Register(GuiSheetPreviewSettings::StaticType(), TypeDomain(u8"Editor"));
+        RegisterSerializable<GuiSheetPreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<GuiAssetPageFactory>(host, uiHost, GuiAssetEditorPage::Kind::Document),
-            editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<GuiAssetPageFactory>(services, GuiAssetEditorPage::Kind::Document), editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<GuiAssetPageFactory>(host, uiHost, GuiAssetEditorPage::Kind::StyleSheet),
-            editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<GuiAssetPageFactory>(services, GuiAssetEditorPage::Kind::StyleSheet), editor::EditorRootAllocator()));
     }
 }

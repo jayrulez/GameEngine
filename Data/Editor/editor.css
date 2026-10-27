@@ -269,6 +269,8 @@ waveform::playhead { background-color: var(--warning); }
 .page-code { font-family: var(--mono-font); font-size: var(--font-code); min-height: 0; }
 .page-problems { min-height: 0; }
 .preview-stale { color: var(--warning); font-size: var(--font-small); }
+.gui-markup-pane { flex-direction: column; }
+.gui-markup-pane > .page-code { flex-grow: 1; }
 .api-pane { flex-direction: column; }
 .api-pane > .search-row { flex-direction: row; padding: var(--space-s); }
 .api-tree { flex-grow: 1; min-height: 0; }

@@ -1,11 +1,9 @@
-# Editor::GUI - `editor.gui`: the editor's pages for the engine GUI's assets (E10 of
-# Specs/gui-lab-evolution-3.md): a .gml document and a .css sheet, each its text with a live
-# preview drawn by the engine GUI. Built only with the GUI.
+# Editor::GUI - `editor.gui`: the editor's pages for the engine GUI's assets on the GUI's code pages:
+# a .gml document and a .css sheet, each its code with a live preview drawn by the runtime's GUI.
 util_add_engine_library(Editor.GUI ALIAS Editor::GUI)
 target_link_libraries(Editor.GUI PUBLIC
-    Foundation::Core Foundation::Content Foundation::Runtime.Client Foundation::UI Foundation::UI.Toolkit
-    Foundation::UI.Runtime Foundation::UI.Viewport Foundation::Graphics Foundation::RHI Foundation::VG.Renderer
-    Foundation::GUI Pipeline::GUI Pipeline::Core Engine::GUI
+    Foundation::Core Foundation::Content Foundation::Runtime.Client Foundation::Settings Foundation::Graphics Foundation::RHI
+    Foundation::GUI Foundation::GUI.Code Foundation::GUI.Viewport Pipeline::GUI Pipeline::Core Engine::GUI
     Editor::Core Editor::App Foundation::Policy)
 target_sources(Editor.GUI
     PRIVATE GuiPagesImpl.cpp

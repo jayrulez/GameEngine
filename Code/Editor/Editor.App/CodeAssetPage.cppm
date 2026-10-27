@@ -205,6 +205,9 @@ export namespace editor::app
         /// After each check (a status, a preview following the code).
         virtual void OnCodeChecked() {}
         [[nodiscard]] StringView SourcePath() const noexcept { return m_sourcePath.AsView(); }
+        /// A check a moment from now, as after an edit (a page's other code changed: a sheet's
+        /// preview markup).
+        void CheckSoon() noexcept { m_checkIn = kCheckDelay; }
 
     private:
         static constexpr usize kUndoLimit = 100000;

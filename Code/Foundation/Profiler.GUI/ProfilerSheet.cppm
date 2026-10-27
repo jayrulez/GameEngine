@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026-Present Robert Campbell
+
+// Foundation::Profiler.GUI - :sheet partition
+//
+// The profiler views' default sheet, written against the theme's tokens as the toolkit's is, so
+// they follow dark, light and contrast; a theme restyles them by setting `--profiler-*` over it.
+// A name's eight hues are light enough for dark text on them in either scheme.
+
+module;
+#include "Core/Prelude.h"
+
+export module foundation.profiler.gui:sheet;
+
+import foundation.core;
+
+namespace core = foundation::core;
+
+export namespace foundation::profiler::gui
+{
+    /// The views' sheet (an application puts it after the theme in its user agent sheet).
+    [[nodiscard]] inline core::StringView ProfilerSheetCSS() noexcept
+    {
+        return core::StringView(u8R"(
+            framestrip, counterplot { color: var(--text-dim); font-size: var(--font-small); }
+            framestrip::plot, counterplot::plot { background-color: var(--profiler-plot, var(--surface-sunken)); }
+            framestrip::on-time { background-color: var(--profiler-on-time, #3f9c6b); }
+            framestrip::over { background-color: var(--profiler-over, #c99a2e); }
+            framestrip::far-over, framestrip::clipped { background-color: var(--profiler-far-over, #c8503f); }
+            framestrip::chosen, counterplot::chosen { background-color: var(--profiler-chosen, var(--accent)); }
+            framestrip::share { background-color: var(--profiler-share, #00000066); }
+            framestrip::budget { background-color: var(--profiler-budget, var(--text-dim)); }
+            framestrip::chosen-box, counterplot::chosen-box { background-color: var(--profiler-chosen-box, var(--accent-strong)); }
+            framestrip::chosen-fill, counterplot::chosen-fill { background-color: var(--profiler-chosen-fill, var(--accent-subtle)); opacity: 0.5; }
+            framestrip::scale, counterplot::range { color: var(--text-dim); }
+            counterplot::name { color: var(--text); }
+            counterplot::bar { background-color: var(--profiler-counter, #6f86b8); }
+            framestrip::hue-0, counterplot::hue-0 { background-color: var(--profiler-hue-0, #e0a458); }
+            framestrip::hue-1, counterplot::hue-1 { background-color: var(--profiler-hue-1, #7fc8a9); }
+            framestrip::hue-2, counterplot::hue-2 { background-color: var(--profiler-hue-2, #8fb0e8); }
+            framestrip::hue-3, counterplot::hue-3 { background-color: var(--profiler-hue-3, #d98fb0); }
+            framestrip::hue-4, counterplot::hue-4 { background-color: var(--profiler-hue-4, #b8c96f); }
+            framestrip::hue-5, counterplot::hue-5 { background-color: var(--profiler-hue-5, #c6a6e8); }
+            framestrip::hue-6, counterplot::hue-6 { background-color: var(--profiler-hue-6, #6fc4d1); }
+            framestrip::hue-7, counterplot::hue-7 { background-color: var(--profiler-hue-7, #e88f7f); }
+        )");
+    }
+}

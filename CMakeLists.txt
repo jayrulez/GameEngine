@@ -524,6 +524,7 @@ add_subdirectory(Code/Foundation/GUI.Docking)   # docking, floating panels as OS
 add_subdirectory(Code/Foundation/GUI.Toolkit)   # editor widgets
 add_subdirectory(Code/Foundation/GUI.Code)      # the code editor
 add_subdirectory(Code/Foundation/GUI.Gamekit)   # a game's screens
+add_subdirectory(Code/Foundation/Profiler.GUI)  # the profiler's views on the GUI (the editor's Profiler page)
 add_subdirectory(Code/Foundation/GUI.Resources) # cooked documents and themes
 if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Pipeline/GUI.Pipeline) # cooking them (tools only)
@@ -746,6 +747,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Foundation/GUI.Toolkit.Tests             Foundation::GUI.Toolkit)
     util_test_suite(Code/Foundation/GUI.Code.Tests                Foundation::GUI.Code)
     util_test_suite(Code/Foundation/GUI.Gamekit.Tests             Foundation::GUI.Gamekit)
+    util_test_suite(Code/Foundation/Profiler.GUI.Tests            Foundation::Profiler.GUI)
     util_test_suite(Code/Foundation/GUI.Resources.Tests           Foundation::GUI.Resources)
     if(OPTION_BUILD_TOOLS)
         util_test_suite(Code/Pipeline/GUI.Pipeline.Tests        Pipeline::GUI)

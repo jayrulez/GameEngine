@@ -10,7 +10,10 @@
 // GENERATED from Tools/scripts/Gallery.as.in by Tools/ui.py, which fills in the lessons' handlers
 // from Tools/lessons.py: edit the template and the table, not the generated copy.
 const float kPi = 3.14159265f;
-Guid kGalleryDoc = Guid("{{UI:Gallery}}");
+const string kGalleryDoc = "{{{GUI:Gallery}}}"; // the lesson list's document, by its asset id
+
+// A GUI event's handler (a row's click).
+funcdef bool EventHandler(GuiEvent e);
 
 // Smooth start and stop for the glide: 0 to 1 over t in 0 to 1.
 float SmoothGlide(float t)
@@ -51,7 +54,10 @@ class Gallery
     {
         m_yaw = startYaw;
         m_pitch = startPitch;
-        Screen@ s = ui::push(kGalleryDoc);
+        // The lesson list on the GUI's screen stack, over the hall (its document says it blocks none
+        // of the hall's input).
+        ScreenStack::of(gui::root().find("screens")).push(kGalleryDoc);
+        gui::root().find("gallery-caption").visible = false; // until a lesson is picked
 {{WIRE}}
         place(self.worldPosition());
     }
@@ -62,8 +68,8 @@ class Gallery
         if (Input::wasPressed("TogglePanel"))
         {
             m_panelShown = !m_panelShown;
-            ui::find("gallery-panel").setVisible(m_panelShown);
-            ui::find("gallery-caption").setVisible(m_panelShown && m_captioned);
+            gui::root().find("gallery-panel").visible = m_panelShown;
+            gui::root().find("gallery-caption").visible = m_panelShown && m_captioned;
         }
 
         // Looking: the mouse while its right button is held, or the right stick.
@@ -119,11 +125,11 @@ class Gallery
         string id = (n < 10 ? "0" : "") + n;
         Entity@ view = self.scene.find("View" + id);
         Entity@ exhibit = self.scene.find("Lesson" + id);
-        ui::findLabel("gallery-title").setText(n + ". " + title);
-        ui::findLabel("gallery-about").setText(summary);
-        ui::findLabel("gallery-file").setText(file);
+        Label::of(gui::root().find("gallery-title")).text = n + ". " + title;
+        Label::of(gui::root().find("gallery-about")).text = summary;
+        Label::of(gui::root().find("gallery-file")).text = file;
         m_captioned = true;
-        ui::find("gallery-caption").setVisible(m_panelShown);
+        gui::root().find("gallery-caption").visible = m_panelShown;
         if (view is null || !view.isValid() || exhibit is null || !exhibit.isValid())
         {
             return;

@@ -25,4 +25,8 @@
 	<u8 name="windowMode">0</u8>
 	<bool name="windowResizable">true</bool>
 	<i32 name="orientation">0</i32>
+	<array name="guiStyleSheetIds" count="1">
+		<string>b66f898c-77f9-42d3-b8d2-3c7d1ca4b544</string>
+	</array>
+	<string name="guiLoadingDocumentId">00000000-0000-0000-0000-000000000000</string>
 </root>

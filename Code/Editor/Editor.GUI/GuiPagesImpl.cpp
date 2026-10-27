@@ -87,7 +87,7 @@ namespace editor
 
         // The preview: a viewport of the page's, the runtime's GUI drawing into it each frame.
         m_viewport = MakeRef<gui::Viewport>(Allocator());
-        m_viewport->AddClass(u8"gui-preview");
+        m_viewport->AddClass(u8"preview-view"); // fills its stage, as the preview pages' viewports do
         m_viewport->ClearColor = Color{0.313f, 0.332f, 0.366f, 1.0f};
         m_viewport->OnRender = [self](gui::Viewport& view, rhi::CommandEncoder& encoder, i32 frameIndex)
         {

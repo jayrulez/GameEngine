@@ -74,6 +74,30 @@ namespace editor
         draw.DrawWireSphere(now.translation, 0.04f, path, 10, true);
     }
 
+    bool FrameBones(app::PreviewPane& pane, Span<const Float4x4> world)
+    {
+        PreviewViewport* preview = pane.Viewport();
+        if (preview == nullptr || world.IsEmpty())
+            return false;
+        Float3 low{world[0].m[3][0], world[0].m[3][1], world[0].m[3][2]};
+        Float3 high = low;
+        for (const Float4x4& bone : world)
+        {
+            const Float3 at{bone.m[3][0], bone.m[3][1], bone.m[3][2]};
+            low = Float3{Min(low.x, at.x), Min(low.y, at.y), Min(low.z, at.z)};
+            high = Float3{Max(high.x, at.x), Max(high.y, at.y), Max(high.z, at.z)};
+        }
+        // From the front and a little above, far enough that the tallest side fills about two thirds.
+        const Float3 middle = (low + high) * 0.5f;
+        const f32 size = Max(Max(high.x - low.x, high.y - low.y), Max(high.z - low.z, 0.01f));
+        const f32 distance = size * 1.6f;
+        preview->Camera().position = middle + Normalized(Float3{0.35f, 0.3f, 1.0f}) * distance;
+        preview->Camera().LookAt(middle);
+        preview->Camera().nearZ = Min(preview->Camera().nearZ, distance * 0.05f);
+        preview->Camera().farZ = Max(preview->Camera().farZ, distance * 4.0f);
+        return true;
+    }
+
     Float4x4 RootMotionPlacement(const animation::AnimationClip& clip, f32 time)
     {
         if (clip.rootMotion.IsEmpty())
@@ -210,26 +234,7 @@ namespace editor
 
     bool AnimationPreviewRig::Frame()
     {
-        PreviewViewport* preview = m_pane->Viewport();
-        if (preview == nullptr || m_world.IsEmpty())
-            return false;
-        Float3 low{m_world[0].m[3][0], m_world[0].m[3][1], m_world[0].m[3][2]};
-        Float3 high = low;
-        for (const Float4x4& bone : m_world)
-        {
-            const Float3 at{bone.m[3][0], bone.m[3][1], bone.m[3][2]};
-            low = Float3{Min(low.x, at.x), Min(low.y, at.y), Min(low.z, at.z)};
-            high = Float3{Max(high.x, at.x), Max(high.y, at.y), Max(high.z, at.z)};
-        }
-        // From the front and a little above, far enough that the tallest side fills about two thirds.
-        const Float3 middle = (low + high) * 0.5f;
-        const f32 size = Max(Max(high.x - low.x, high.y - low.y), Max(high.z - low.z, 0.01f));
-        const f32 distance = size * 1.6f;
-        preview->Camera().position = middle + Normalized(Float3{0.35f, 0.3f, 1.0f}) * distance;
-        preview->Camera().LookAt(middle);
-        preview->Camera().nearZ = Min(preview->Camera().nearZ, distance * 0.05f);
-        preview->Camera().farZ = Max(preview->Camera().farZ, distance * 4.0f);
-        return true;
+        return FrameBones(*m_pane, m_world.AsSpan());
     }
 
     void AnimationPreviewRig::Show(Span<const animation::BoneTransform> pose, const Float4x4& base, i32 chosen)

@@ -1,6 +1,6 @@
 # Editor::Animation tests: the animation pages over their markup and a scratch project (the clip
-# page so far; the graph page's old tests come back with its part).
-add_executable(Editor.Animation.Tests TestsMain.cpp AnimationClipPageTests.cpp)
+# and skeleton pages so far; the graph page's old tests come back with its part).
+add_executable(Editor.Animation.Tests TestsMain.cpp AnimationClipPageTests.cpp SkeletonPageTests.cpp)
 target_link_libraries(Editor.Animation.Tests PRIVATE
     Editor::Animation Editor::App Editor::Core Foundation::Content Foundation::Animation
     Foundation::Animation.Resource Pipeline::Animation Pipeline::Core

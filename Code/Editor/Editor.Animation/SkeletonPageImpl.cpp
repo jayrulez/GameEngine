@@ -1,419 +1,357 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Animation - :skeleton_page partition (implementation).
+// Editor::Animation - the `:skeleton_page` partition (implementation).
 
 module;
+#include <cmath> // std::acos (a rotation's angle)
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h"
 
 module editor.animation;
 
 import foundation.core;
 import foundation.content;
-import foundation.rhi;
 import foundation.graphics;
-import foundation.shell;
 import foundation.runtime;
-import foundation.runtime.client;
-import foundation.scene;
-import engine.scene;
 import foundation.animation;
 import foundation.animation.resource;
 import animation.pipeline;
-import foundation.resource;
-import foundation.render;
-import engine.render;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import editor.preview;
-import :graph_page; // DrawSkeletonWireframe (shared preview helper, impl-only)
 
 using namespace foundation::core;
-namespace animation = foundation::animation;
-namespace render = foundation::render;
-namespace rhi = foundation::rhi;
-namespace runtime = foundation::runtime;
-namespace ui = foundation::ui;
-namespace vg = foundation::vg;
 
 namespace editor
 {
-    // ============================ Tree adapter ==============================================
+    namespace gui = foundation::gui;
+    namespace animation = foundation::animation;
 
-    i32 SkeletonTreeAdapter::RootCount() const { return static_cast<i32>(m_owner->m_roots.Size()); }
-    i32 SkeletonTreeAdapter::GetChildCount(i32 nodeId) const
+    namespace
     {
-        if (nodeId == -1)
+        // Three decimals, a trailing zero dropped: what a bind pose's numbers need, and no more.
+        [[nodiscard]] String Short(f32 value)
         {
-            return RootCount();
+            const f64 rounded = static_cast<f64>(static_cast<i64>(static_cast<f64>(value) * 1000.0 + (value < 0.0f ? -0.5 : 0.5))) / 1000.0;
+            return Format(u8"{}", rounded == 0.0 ? 0.0 : rounded);
         }
-        if (nodeId < 0 || nodeId >= static_cast<i32>(m_owner->m_nodes.Size()))
+        [[nodiscard]] String Describe(Float3 v)
         {
-            return 0;
+            return Format(u8"{}, {}, {}", Short(v.x), Short(v.y), Short(v.z));
         }
-        return static_cast<i32>(m_owner->m_nodes[static_cast<usize>(nodeId)].children.Size());
-    }
-    i32 SkeletonTreeAdapter::GetChildId(i32 parentId, i32 childIndex) const
-    {
-        if (parentId == -1)
+
+        void AddFact(gui::PropertyBag& rows, StringView path, StringView shown)
         {
-            return (childIndex >= 0 && childIndex < RootCount())
-                       ? m_owner->m_roots[static_cast<usize>(childIndex)]
-                       : -1;
+            gui::PropertyInfo& info = rows.Add(path, gui::PropertyKind::String, gui::Variant(StringView{}));
+            info.DisplayName = String(shown);
+            info.ReadOnly = true;
         }
-        if (parentId < 0 || parentId >= static_cast<i32>(m_owner->m_nodes.Size()))
+    }
+
+    SkeletonFacts FactsOf(const animation::Skeleton& skeleton)
+    {
+        SkeletonFacts facts;
+        facts.bones = skeleton.BoneCount();
+        for (i32 i = 0; i < skeleton.BoneCount(); ++i)
         {
-            return -1;
+            const animation::Bone* bone = skeleton.GetBone(i);
+            if (bone == nullptr)
+                continue;
+            if (bone->parentIndex < 0)
+                ++facts.roots;
+            i32 depth = 0;
+            for (const animation::Bone* walk = bone; walk != nullptr && walk->parentIndex >= 0 && depth < skeleton.BoneCount();
+                 walk = skeleton.GetBone(walk->parentIndex))
+                ++depth;
+            facts.depth = Max(facts.depth, depth);
         }
-        const Array<i32>& kids = m_owner->m_nodes[static_cast<usize>(parentId)].children;
-        return (childIndex >= 0 && childIndex < static_cast<i32>(kids.Size()))
-                   ? kids[static_cast<usize>(childIndex)]
-                   : -1;
+        return facts;
     }
-    i32 SkeletonTreeAdapter::GetDepth(i32 nodeId) const
+
+    String DescribeRotation(const Quaternion& rotation)
     {
-        return (nodeId >= 0 && nodeId < static_cast<i32>(m_owner->m_nodes.Size()))
-                   ? m_owner->m_nodes[static_cast<usize>(nodeId)].depth
-                   : 0;
+        Quaternion q = rotation;
+        const f32 length = Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+        if (length < 1e-6f)
+            return String(u8"None");
+        q = Quaternion{q.x / length, q.y / length, q.z / length, q.w / length};
+        if (q.w < -1e-5f) // the shorter way round (a half turn, w about 0, either way)
+            q = Quaternion{-q.x, -q.y, -q.z, -q.w};
+        const f32 angle = 2.0f * static_cast<f32>(std::acos(static_cast<f64>(Clamp(q.w, -1.0f, 1.0f))));
+        const f32 degrees = angle * 180.0f / kPi;
+        const f32 s = Sqrt(Max(1.0f - q.w * q.w, 0.0f));
+        if (degrees < 0.05f || s < 1e-5f)
+            return String(u8"None");
+        return Format(u8"{}° about {}", Short(degrees), Describe(Float3{q.x / s, q.y / s, q.z / s}));
     }
-    bool SkeletonTreeAdapter::HasChildren(i32 nodeId) const { return GetChildCount(nodeId) > 0; }
-    RefPtr<ui::View> SkeletonTreeAdapter::CreateView(i32)
+
+    SkeletonEditorPage::SkeletonEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::SkeletonAsset::StaticType(), kPath)
     {
-        auto row = MakeRef<ui::EditableLabel>(editor::EditorRootAllocator());
-        row->FontSize.SetValue(Optional<f32>{12.0f});
-        row->Ellipsis.SetValue(true);
-        row->DoubleClickToEdit.SetValue(false);
-        row->SlowClickToEdit.SetValue(false);
-        return RefPtr<ui::View>(row.Get());
-    }
-    void SkeletonTreeAdapter::BindView(ui::View* view, i32 nodeId, i32 depth, bool)
-    {
-        animation::Skeleton* skeleton = m_owner->m_skeleton.Get();
-        if (skeleton == nullptr || nodeId < 0 ||
-            nodeId >= static_cast<i32>(m_owner->m_nodes.Size()))
+        HideAssetRows(); // its source is its import's: the rows are what it is, read only
+        SkeletonEditorPage* self = this;
+        m_model = MakeUnique<gui::TreeModel>(Allocator());
+        m_tree = Find<gui::TreeView>(u8"skeleton-tree");
+        if (m_tree != nullptr)
         {
+            m_tree->SetModel(m_model.Get());
+            m_tree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                          {
+                                              if (self->m_showing || !index.IsValid())
+                                                  return;
+                                              const usize node = static_cast<usize>(index.InternalId);
+                                              if (node < self->m_rows.Size())
+                                                  self->ChooseBone(self->m_rows[node]);
+                                          });
+        }
+        if (auto* search = Find<gui::TextField>(u8"skeleton-search"))
+            search->SetOnTextChanging([self](StringView text) { self->Search(text); });
+
+        m_boneRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        AddFact(*m_boneRows, u8"name", u8"Name");
+        AddFact(*m_boneRows, u8"index", u8"Index");
+        AddFact(*m_boneRows, u8"parent", u8"Parent");
+        AddFact(*m_boneRows, u8"children", u8"Children");
+        AddFact(*m_boneRows, u8"position", u8"Bind position");
+        AddFact(*m_boneRows, u8"rotation", u8"Bind rotation");
+        AddFact(*m_boneRows, u8"scale", u8"Bind scale");
+        AddSection(u8"bone", u8"Bone", *m_boneRows);
+
+        if (Content())
+        {
+            m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"skeleton.preview");
+            m_pane->OnFrame = [self]() { self->FramePreview(); };
+        }
+        BuildSkeleton();
+        ChooseBone(m_skeleton && m_skeleton->BoneCount() > 0 ? 0 : -1);
+    }
+
+    SkeletonEditorPage::~SkeletonEditorPage()
+    {
+        if (m_tree != nullptr)
+            m_tree->SetModel(nullptr);
+    }
+
+    void SkeletonEditorPage::BuildSkeleton()
+    {
+        const auto* asset = ObjectAs<pipeline::SkeletonAsset>();
+        m_skeleton = MakeRef<animation::Skeleton>(Allocator());
+        if (asset != nullptr)
+            asset->source.FillSkeleton(*m_skeleton);
+        m_framed = false;
+        ShowTree();
+        ShowFacts();
+    }
+
+    void SkeletonEditorPage::OnObjectChanged()
+    {
+        // Read again from its source (a page_reload, a re-import): its bones may be others now.
+        BuildSkeleton();
+        ChooseBone(m_chosen < (m_skeleton ? m_skeleton->BoneCount() : 0) ? m_chosen : -1);
+    }
+
+    void SkeletonEditorPage::ShowFacts()
+    {
+        if (!m_skeleton)
             return;
-        }
-        const i32 boneIndex = m_owner->m_nodes[static_cast<usize>(nodeId)].boneIndex;
-        const animation::Bone* bone = skeleton->GetBone(boneIndex);
-        auto* row = static_cast<ui::EditableLabel*>(view);
-        row->SetText(bone != nullptr ? bone->name.AsView() : StringView(u8"?"));
-        row->TextOffsetX.SetValue(m_owner->m_tree->ContentInset(depth));
+        const SkeletonFacts facts = FactsOf(*m_skeleton);
+        SetFact(u8"Bones", Format(u8"{}", facts.bones).AsView());
+        SetFact(u8"Roots", Format(u8"{}", facts.roots).AsView());
+        SetFact(u8"Deepest chain", Format(u8"{} below its root", facts.depth).AsView());
     }
 
-    // ============================ Construction ==============================================
-
-    SkeletonEditorPage::SkeletonEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                                           ui::runtime::UIHost& uiHost,
-                                           foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_host(&host), m_uiHost(&uiHost), m_title(instance.Name())
+    void SkeletonEditorPage::Search(StringView text)
     {
-        // Shared preview substrate (viewport + preview scene + orbit camera + render loop).
-        m_preview =
-            MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"skeleton.preview");
-        m_preview->SetClearColor(Color{0.248f, 0.248f, 0.293f, 1.0f});
-        m_preview->Camera().position = Float3{0.0f, 1.4f, 3.2f};
-        m_preview->Camera().LookAt(Float3{0.0f, 0.9f, 0.0f});
-
-        SetInstanceId(instance.Id());
-        if (m_context->Resources() != nullptr)
-        {
-            m_skeleton = m_context->Resources()->Bind<animation::Skeleton>(InstanceId());
-        }
-
-        // Left: the bone tree under a stats line.
-        m_adapter = MakeUnique<SkeletonTreeAdapter>(Allocator(), *this);
-        m_tree = MakeRef<ui::toolkit::DraggableTreeView>(Allocator());
-        m_tree->SetItemHeight(22.0f);
-        m_tree->SetDragEnabled(false);
-        m_tree->SetAdapter(m_adapter.Get());
-        {
-            SkeletonEditorPage* self = this;
-            m_tree->InternalTreeView()->OnItemClick.Add(
-                [self](ui::TreeView::ItemClickInfo info)
-                {
-                    if (info.NodeId >= 0 && info.NodeId < static_cast<i32>(self->m_nodes.Size()))
-                    {
-                        self->m_selectedBone =
-                            self->m_nodes[static_cast<usize>(info.NodeId)].boneIndex;
-                        ui::UIContext* ctx = self->Ctx();
-                        if (ctx != nullptr)
-                        {
-                            ctx->MutationQueueRef().QueueAction(
-                                Function<void()>{[self]() { self->RebuildInfoPane(); }});
-                        }
-                        else
-                        {
-                            self->RebuildInfoPane();
-                        }
-                    }
-                });
-        }
-        m_statsLabel = MakeRef<ui::Label>(Allocator());
-        m_statsLabel->FontSize.SetValue(Optional<f32>{12.0f});
-        auto leftColumn = MakeRef<ui::FlexLayout>(Allocator());
-        leftColumn->Direction = ui::Orientation::Vertical;
-        leftColumn->Spacing = 4.0f;
-        leftColumn->Padding = ui::Thickness{6, 4};
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            leftColumn->AddView(m_statsLabel.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            leftColumn->AddView(m_tree.Get(), grow);
-        }
-
-        // Right: read-only info for the selected bone.
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-
-        auto centerSplit = MakeRef<ui::toolkit::SplitView>(Allocator());
-        centerSplit->SetSplitRatio(0.26f);
-        centerSplit->SetPanes(leftColumn.Get(), m_preview->View());
-        auto outerSplit = MakeRef<ui::toolkit::SplitView>(Allocator());
-        outerSplit->SetSplitRatio(0.78f);
-        outerSplit->SetPanes(centerSplit.Get(), m_grid.Get());
-        m_content = outerSplit;
-
-        RebuildTree();
-        RebuildInfoPane();
+        m_search = String(Trim(text));
+        ShowTree();
     }
 
-    // ============================ Model / panes =============================================
-
-    void SkeletonEditorPage::RebuildTree()
+    void SkeletonEditorPage::ShowTree()
     {
-        m_nodes.Clear();
-        m_roots.Clear();
-        animation::Skeleton* skeleton = m_skeleton.Get();
-        if (skeleton != nullptr)
+        if (!m_skeleton)
+            return;
+        m_showing = true;
+        const i32 count = m_skeleton->BoneCount();
+        // A bone the user folded stays folded through the rebuild (a search, a reload).
+        Array<i32> folded(Allocator());
+        if (m_tree != nullptr)
+            for (usize node = 0; node < m_rows.Size(); ++node)
+                if (!m_tree->IsIdExpanded(static_cast<gui::ItemId>(node)))
+                    folded.PushBack(m_rows[node]);
+        // A search keeps the bones whose names hold it, and every bone above one (where it hangs).
+        Array<bool> kept;
+        kept.Resize(static_cast<usize>(count), m_search.IsEmpty());
+        if (!m_search.IsEmpty())
+            for (i32 b = 0; b < count; ++b)
+                if (m_skeleton->GetBone(b)->name.AsView().ContainsIgnoreCase(m_search.AsView()))
+                    for (i32 walk = b; walk >= 0 && walk < count && !kept[static_cast<usize>(walk)]; walk = m_skeleton->GetBone(walk)->parentIndex)
+                        kept[static_cast<usize>(walk)] = true;
+        m_model->Clear();
+        m_rows.Clear();
+        i32 chosen = -1;
+        // Each bone under its parent, in the skeleton's order among its siblings.
+        const Function<void(i32, i32)> add = [&](i32 bone, i32 parentNode)
         {
-            const i32 boneCount = skeleton->BoneCount();
-            m_nodes.Resize(static_cast<usize>(boneCount));
-            // Node id == bone index; children + depth from the parent links (parents are
-            // guaranteed to precede children in import order, so one pass suffices).
-            for (i32 i = 0; i < boneCount; ++i)
-            {
-                BoneNode& node = m_nodes[static_cast<usize>(i)];
-                node.boneIndex = i;
-                const animation::Bone* bone = skeleton->GetBone(i);
-                const i32 parent = (bone != nullptr) ? bone->parentIndex : -1;
-                if (parent >= 0 && parent < boneCount)
-                {
-                    node.depth = m_nodes[static_cast<usize>(parent)].depth + 1;
-                    m_nodes[static_cast<usize>(parent)].children.PushBack(i);
-                }
-                else
-                {
-                    node.depth = 0;
-                    m_roots.PushBack(i);
-                }
-            }
-            const Array<String> stats = SkeletonStatLines(*skeleton);
-            String text;
-            for (usize i = 0; i < stats.Size(); ++i)
-            {
-                if (i > 0)
-                {
-                    text.Append(u8"  |  ");
-                }
-                text.Append(stats[i].AsView());
-            }
-            m_statsLabel->SetText(text.AsView());
-        }
-        else
+            const animation::Bone* data = m_skeleton->GetBone(bone);
+            const i32 node = m_model->AddNode(parentNode, data->name.IsEmpty() ? Format(u8"Bone {}", bone).AsView() : data->name.AsView());
+            m_model->SetIcon(node, u8"Editor/Icons/Types/SkeletonAsset.svg", u8"cat-animation");
+            m_rows.PushBack(bone);
+            if (bone == m_chosen)
+                chosen = node;
+            for (i32 child = 0; child < count; ++child)
+                if (m_skeleton->GetBone(child)->parentIndex == bone && kept[static_cast<usize>(child)])
+                    add(child, node);
+        };
+        for (i32 b = 0; b < count; ++b)
         {
-            m_statsLabel->SetText(u8"(skeleton not cooked yet)");
+            const i32 parent = m_skeleton->GetBone(b)->parentIndex;
+            if ((parent < 0 || parent >= count) && kept[static_cast<usize>(b)])
+                add(b, gui::TreeModel::kRoot);
         }
-        m_tree->SetAdapter(m_adapter.Get());
-        if (ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter())
+        if (m_tree != nullptr)
         {
-            HashSet<i32> expanded;
-            for (i32 i = 0; i < static_cast<i32>(m_nodes.Size()); ++i)
+            for (usize node = 0; node < m_rows.Size(); ++node)
             {
-                expanded.Insert(i);
+                bool wasFolded = false;
+                for (const i32 bone : folded)
+                    wasFolded = wasFolded || bone == m_rows[node];
+                m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), !wasFolded || !m_search.IsEmpty()); // a search opens what it found
             }
-            flat->SetExpandedNodes(expanded);
+            if (chosen >= 0)
+            {
+                const gui::ItemId id = static_cast<gui::ItemId>(chosen);
+                m_tree->SetSelectedIds(Span<const gui::ItemId>(&id, 1u));
+            }
         }
-        m_tree->InternalTreeView()->InternalListView()->NotifyDataChanged();
+        m_showing = false;
     }
 
-    void SkeletonEditorPage::RebuildInfoPane()
+    void SkeletonEditorPage::ChooseBone(i32 bone)
     {
-        m_grid->Clear();
-        animation::Skeleton* skeleton = m_skeleton.Get();
-        const animation::Bone* bone =
-            (skeleton != nullptr) ? skeleton->GetBone(m_selectedBone) : nullptr;
+        m_chosen = m_skeleton && bone >= 0 && bone < m_skeleton->BoneCount() ? bone : -1;
+        ShowBone();
+        if (m_tree == nullptr)
+            return;
+        m_showing = true;
+        for (usize node = 0; node < m_rows.Size(); ++node)
+            if (m_rows[node] == m_chosen)
+            {
+                const gui::ItemId id = static_cast<gui::ItemId>(node);
+                m_tree->SetSelectedIds(Span<const gui::ItemId>(&id, 1u));
+            }
+        m_showing = false;
+    }
+
+    void SkeletonEditorPage::ShowBone()
+    {
+        const animation::Bone* bone = m_chosen >= 0 ? m_skeleton->GetBone(m_chosen) : nullptr;
+        const auto set = [this](StringView path, StringView value)
+        {
+            if (m_boneRows->GetValue(path, 0).AsString() != value)
+                m_boneRows->SetValue(path, 0, gui::Variant(value));
+        };
         if (bone == nullptr)
         {
+            constexpr StringView kRows[] = {u8"index", u8"parent", u8"children", u8"position", u8"rotation", u8"scale"};
+            set(u8"name", u8"None chosen");
+            for (const StringView path : kRows)
+                set(path, StringView{});
             return;
         }
-        const StringView cat = u8"Bone";
-        auto stat = [&](StringView name, String value)
-        {
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::StringEditor>(Allocator(), name, value.AsView(),
-                                                   Function<void(StringView)>{}, cat)
-                    .Get()));
-        };
-        stat(u8"Name", String(bone->name.AsView()));
-        stat(u8"Index", Format(u8"{}", bone->index));
-        const animation::Bone* parent =
-            (bone->parentIndex >= 0) ? skeleton->GetBone(bone->parentIndex) : nullptr;
-        stat(u8"Parent", parent != nullptr ? String(parent->name.AsView()) : String(u8"(root)"));
-        stat(u8"Children", Format(u8"{}", bone->children.Size()));
-        const animation::BoneTransform& bind = bone->localBindPose;
-        stat(u8"Bind Position",
-             Format(u8"{}, {}, {}", bind.position.x, bind.position.y, bind.position.z));
-        stat(u8"Bind Rotation", Format(u8"{}, {}, {}, {}", bind.rotation.x, bind.rotation.y,
-                                       bind.rotation.z, bind.rotation.w));
-        stat(u8"Bind Scale", Format(u8"{}, {}, {}", bind.scale.x, bind.scale.y, bind.scale.z));
+        const animation::Bone* parent = bone->parentIndex >= 0 ? m_skeleton->GetBone(bone->parentIndex) : nullptr;
+        i32 children = 0;
+        for (i32 b = 0; b < m_skeleton->BoneCount(); ++b)
+            children += m_skeleton->GetBone(b)->parentIndex == m_chosen ? 1 : 0;
+        set(u8"name", bone->name.AsView());
+        set(u8"index", Format(u8"{}", m_chosen).AsView());
+        set(u8"parent", parent != nullptr ? parent->name.AsView() : StringView(u8"None: a root"));
+        set(u8"children", Format(u8"{}", children).AsView());
+        set(u8"position", Describe(bone->localBindPose.position).AsView());
+        set(u8"rotation", DescribeRotation(bone->localBindPose.rotation).AsView());
+        set(u8"scale", Describe(bone->localBindPose.scale).AsView());
     }
 
-    // ============================ Preview ===================================================
-
-    void SkeletonEditorPage::UpdatePreview()
+    String SkeletonEditorPage::Tree() const
     {
-        animation::Skeleton* skeleton = m_skeleton.Get();
-        if (skeleton == nullptr || skeleton->BoneCount() <= 0 || m_preview.Get() == nullptr ||
-            !m_preview->IsValid())
+        String out;
+        // The rows in the model's order, each indented by its depth among the rows shown.
+        for (const i32 bone : m_rows)
         {
+            i32 depth = 0;
+            for (i32 walk = m_skeleton->GetBone(bone)->parentIndex; walk >= 0; walk = m_skeleton->GetBone(walk)->parentIndex)
+                ++depth;
+            if (!out.IsEmpty())
+                out += u8"\n";
+            for (i32 i = 0; i < depth; ++i)
+                out += u8"  ";
+            out += m_skeleton->GetBone(bone)->name.AsView();
+        }
+        return out;
+    }
+
+    // === The preview ===
+
+    void SkeletonEditorPage::FramePreview()
+    {
+        if (m_pane)
+            (void)FrameBones(*m_pane, m_world.AsSpan());
+    }
+
+    void SkeletonEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
+    {
+        app::AssetObjectPage::OnUpdate(host, dt);
+        if (!m_pane)
             return;
-        }
-        const usize boneCount = static_cast<usize>(skeleton->BoneCount());
-        // Local poses = the BIND pose (this page shows the skeleton at rest).
-        m_poseScratch.Resize(boneCount);
-        for (usize b = 0; b < boneCount; ++b)
+        PreviewViewport* preview = m_pane->Viewport();
+        const i32 count = m_skeleton ? m_skeleton->BoneCount() : 0;
+        if (count <= 0)
+            m_pane->ShowEmpty(u8"No bones", u8"This skeleton has none to show.");
+        else
+            m_pane->Show();
+        if (preview != nullptr && preview->IsValid() && count > 0)
         {
-            const animation::Bone* bone = skeleton->GetBone(static_cast<i32>(b));
-            m_poseScratch[b] = (bone != nullptr) ? bone->localBindPose : animation::BoneTransform{};
+            auto& draw = preview->SceneDebugDraw();
+            draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
+            m_bind.Resize(static_cast<usize>(count));
+            for (i32 b = 0; b < count; ++b)
+                m_bind[static_cast<usize>(b)] = m_skeleton->GetBone(b)->localBindPose;
+            DrawSkeletonBones(draw, *m_skeleton, m_bind.AsSpan(), m_world, Float4x4::Identity(), m_chosen);
+            if (!m_framed)
+                m_framed = FrameBones(*m_pane, m_world.AsSpan());
         }
-        auto& draw = m_preview->SceneDebugDraw();
-        draw.DrawGrid(Float3{0.0f, 0.0f, 0.0f}, 4.0f, 8, Color{0.25f, 0.25f, 0.28f, 1.0f});
-        DrawSkeletonWireframe(draw, *skeleton,
-                              Span<const animation::BoneTransform>{m_poseScratch.Data(), boneCount},
-                              m_worldScratch);
-
-        // Selected-bone emphasis: the wireframe filled m_worldScratch, so read its position back.
-        if (m_selectedBone >= 0 && static_cast<usize>(m_selectedBone) < m_worldScratch.Size())
-        {
-            const Float4x4& world = m_worldScratch[static_cast<usize>(m_selectedBone)];
-            const Float3 pos{world.m[3][0], world.m[3][1], world.m[3][2]};
-            draw.DrawCross(pos, 0.06f, Color{1.0f, 0.65f, 0.2f, 1.0f});
-            draw.DrawWireSphere(pos, 0.03f, Color{1.0f, 0.65f, 0.2f, 1.0f}, 12);
-        }
+        m_pane->Update(dt);
     }
 
-    // ============================ Frame / close =============================================
-
-    ui::UIContext* SkeletonEditorPage::Ctx() const
+    void SkeletonEditorPage::OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        return (m_tree.Get() != nullptr && m_tree->InternalTreeView() != nullptr)
-                   ? m_tree->InternalTreeView()->Context
-                   : nullptr;
-    }
-
-    void SkeletonEditorPage::OnUpdate(runtime::IApplicationHost&, f32 dt)
-    {
-        // Product resolve / hot-reload watchdog (pointer identity, like the graph page).
-        if (m_skeleton.Get() != m_lastSkeleton)
-        {
-            m_lastSkeleton = m_skeleton.Get();
-            m_selectedBone = -1;
-            RebuildTree();
-            RebuildInfoPane();
-        }
-        UpdatePreview();
-
-        if (m_preview)
-        {
-            m_preview->Update(dt);
-        }
-    }
-
-    void SkeletonEditorPage::OnRenderWindow(runtime::IApplicationHost&,
-                                            foundation::graphics::FrameContext& frame)
-    {
-        if (m_preview)
-        {
-            m_preview->RenderFrame(frame);
-        }
+        if (m_pane)
+            m_pane->Render(frame);
     }
 
     void SkeletonEditorPage::OnClose()
     {
-        if (m_tree.Get() != nullptr)
-        {
-            m_tree->SetAdapter(nullptr);
-        }
-        if (m_preview)
-        {
-            m_preview->Shutdown();
-        }
+        if (m_pane)
+            m_pane->Close();
     }
 
-    // ============================ Factory / stats ===========================================
+    // === The factory ===
 
     const TypeInfo* SkeletonPageFactory::PrimaryType() const
     {
         return &pipeline::SkeletonAsset::StaticType();
     }
 
-    UniquePtr<EditorPage> SkeletonPageFactory::CreatePage(EditorContext& context,
-                                                          foundation::content::Instance& instance)
+    UniquePtr<EditorPage> SkeletonPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page =
-            editor::EditorRootAllocator().New<SkeletonEditorPage>(context, *m_host, *m_uiHost, instance);
+        auto* page = editor::EditorRootAllocator().New<SkeletonEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    Array<String> SkeletonStatLines(const animation::Skeleton& skeleton)
+    void RegisterSkeletonEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
-        Array<String> lines;
-        if (!skeleton.Name().IsEmpty())
-        {
-            lines.PushBack(String(skeleton.Name().AsView()));
-        }
-        lines.PushBack(Format(u8"{} bones", skeleton.BoneCount()));
-        i32 roots = 0;
-        i32 maxDepth = 0;
-        for (i32 i = 0; i < skeleton.BoneCount(); ++i)
-        {
-            const animation::Bone* bone = skeleton.GetBone(i);
-            if (bone == nullptr)
-            {
-                continue;
-            }
-            if (bone->parentIndex < 0)
-            {
-                ++roots;
-            }
-            i32 depth = 0;
-            for (const animation::Bone* walk = bone;
-                 walk != nullptr && walk->parentIndex >= 0 && depth < skeleton.BoneCount();
-                 walk = skeleton.GetBone(walk->parentIndex))
-            {
-                ++depth;
-            }
-            maxDepth = Max(maxDepth, depth);
-        }
-        lines.PushBack(Format(u8"{} roots", roots));
-        lines.PushBack(Format(u8"depth {}", maxDepth));
-        return lines;
-    }
-
-    void RegisterSkeletonEditor(EditorContext& context, runtime::IApplicationHost& host,
-                                ui::runtime::UIHost& uiHost)
-    {
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<SkeletonPageFactory>(host, uiHost), editor::EditorRootAllocator()));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(editor::EditorRootAllocator().New<SkeletonPageFactory>(services),
+                                                               editor::EditorRootAllocator()));
     }
 }

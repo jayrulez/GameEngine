@@ -41,6 +41,11 @@ export namespace editor
     /// its height), and where the clip is along it at `time`. Nothing for a clip without one.
     void DrawRootMotionPath(foundation::render::debug::DebugDraw& draw, const animation::AnimationClip& clip, f32 time);
 
+    /// `pane`'s camera put where the bones at `world` (their model-space matrices, as
+    /// DrawSkeletonBones leaves them) fill the view: a skeleton may be a few centimetres tall or a
+    /// hundred metres. False without a preview or bones.
+    bool FrameBones(app::PreviewPane& pane, Span<const Float4x4> world);
+
     /// Where the rig stands at `time` when it travels by `clip`'s root motion from its start.
     [[nodiscard]] Float4x4 RootMotionPlacement(const animation::AnimationClip& clip, f32 time);
 

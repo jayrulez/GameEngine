@@ -1,12 +1,12 @@
 <root>
-	<string name="guid">2c758b72-4a6a-49d9-a13b-c2646c166f04</string>
-	<string name="typeNamespace">rtti::pipeline::ui</string>
-	<string name="typeName">UIDocumentAsset</string>
+	<string name="guid">e183e431-f835-4289-a1eb-88d33b67db46</string>
+	<string name="typeNamespace">rtti::pipeline::gui</string>
+	<string name="typeName">GuiDocumentAsset</string>
 	<array name="dataVersions" count="1">
-		<u64 name="type">6477862957065698361</u64>
-		<u32 name="version">2</u32>
+		<u64 name="type">4454064819806775415</u64>
+		<u32 name="version">0</u32>
 	</array>
 	<object name="payload">
-		<string name="fileName">Hud.sml</string>
+		<string name="fileName">Hud.gml</string>
 	</object>
 </root>

@@ -11,10 +11,11 @@
 // ("best.Palace", "best.Canal", "best.Gardens").
 
 const float kControlsShown = 7.0f; // how long the controls show as a round starts (s)
-Guid kTitleDoc = Guid("{{UI:Title}}");
-Guid kHudDoc = Guid("{{UI:Hud}}");
-Guid kPauseDoc = Guid("{{UI:Pause}}");
-Guid kResultsDoc = Guid("{{UI:Results}}");
+// The screens, on the engine GUI's screen stack (pushed by their documents' ids).
+const string kTitleDoc = "{{{GUI:Title}}}";
+const string kHudDoc = "{{{GUI:Hud}}}";
+const string kPauseDoc = "{{{GUI:Pause}}}";
+const string kResultsDoc = "{{{GUI:Results}}}";
 Guid kPalace = Guid("{{Scene:Palace}}");
 Guid kCanal = Guid("{{Scene:Canal}}");
 Guid kGardens = Guid("{{Scene:Gardens}}");
@@ -38,6 +39,22 @@ const int kAlone = 0;
 const int kHosting = 1;
 const int kJoining = 2;
 
+// A GUI event's handler (a button's click).
+funcdef bool EventHandler(GuiEvent e);
+
+// The GUI's screen stack, and a node of the screens by its id.
+ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
+// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
+// with the same ids, and would be found first.
+Node@ find(string id)
+{
+    Screen@ top = screens().top();
+    Node@ n = top !is null ? top.find(id) : null;
+    return n !is null ? n : gui::root().find(id);
+}
+void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // `on*` names are the engine's handlers
+void setText(string id, string text) { Label::of(find(id)).text = text; }
+
 class Game
 {
     private bool m_inRound = false;
@@ -60,33 +77,33 @@ class Game
         m_inRound = false;
         m_paused = false;
         run::setTimeScale(0.0f); // whatever is behind the title holds still
-        ui::clear();
-        UIScreen@ s = ui::push(kTitleDoc);
-        s.findButton("play-btn").onClick(Action(this.onPalace));
-        s.findButton("canal-btn").onClick(Action(this.onCanal));
-        s.findButton("solo-btn").onClick(Action(this.onSolo));
-        s.findButton("host-btn").onClick(Action(this.onHost));
-        s.findButton("join-btn").onClick(Action(this.onJoin));
-        s.findLabel("map-choice").setText("The map: " + mapTitle(m_map));
-        s.findLabel("net-status").setText("");
-        s.findButton("canal-btn").setEnabled(!kCanal.IsNil());
-        s.findButton("gardens-btn").onClick(Action(this.onGardens));
-        s.findButton("gardens-btn").setEnabled(!kGardens.IsNil());
-        s.findButton("quit-btn").onClick(Action(this.onQuit));
-        s.findLabel("palace-best").setText(bestLine(0));
-        s.findLabel("canal-best").setText(bestLine(1));
-        s.findLabel("gardens-best").setText(bestLine(2));
+        screens().clear();
+        screens().push(kTitleDoc);
+        wire("play-btn", EventHandler(this.onPalace));
+        wire("canal-btn", EventHandler(this.onCanal));
+        wire("solo-btn", EventHandler(this.onSolo));
+        wire("host-btn", EventHandler(this.onHost));
+        wire("join-btn", EventHandler(this.onJoin));
+        setText("map-choice", "The map: " + mapTitle(m_map));
+        setText("net-status", "");
+        find("canal-btn").enabled = !kCanal.IsNil();
+        wire("gardens-btn", EventHandler(this.onGardens));
+        find("gardens-btn").enabled = !kGardens.IsNil();
+        wire("quit-btn", EventHandler(this.onQuit));
+        setText("palace-best", bestLine(0));
+        setText("canal-best", bestLine(1));
+        setText("gardens-best", bestLine(2));
     }
 
-    private void onPalace() { choose(0); }
-    private void onCanal() { choose(1); }
-    private void onGardens() { choose(2); }
+    private bool onPalace(GuiEvent e) { choose(0); return true; }
+    private bool onCanal(GuiEvent e) { choose(1); return true; }
+    private bool onGardens(GuiEvent e) { choose(2); return true; }
 
     private void choose(int map)
     {
         sound(kClick);
         m_map = map;
-        ui::findLabel("map-choice").setText("The map: " + mapTitle(map));
+        setText("map-choice", "The map: " + mapTitle(map));
     }
 
     private string mapTitle(int map)
@@ -94,33 +111,36 @@ class Game
         return map == 0 ? "the Palace" : (map == 1 ? "the Canal" : "the Gardens");
     }
 
-    private void onSolo()
+    private bool onSolo(GuiEvent e)
     {
         sound(kClick);
         m_mode = kAlone;
         startRound();
+        return true;
     }
 
-    private void onHost()
+    private bool onHost(GuiEvent e)
     {
         sound(kClick);
         if (!Net::startServer(kPort))
         {
-            ui::findLabel("net-status").setText("Could not host on port " + kPort);
-            return;
+            setText("net-status", "Could not host on port " + kPort);
+            return true;
         }
         m_mode = kHosting;
         startRound();
+        return true;
     }
 
-    private void onJoin()
+    private bool onJoin(GuiEvent e)
     {
         sound(kClick);
-        UITextBox@ box = ui::findTextBox("address");
-        m_address = (box !is null && box.text.length() > 0) ? box.text : "127.0.0.1";
+        string typed = TextField::of(find("address")).text;
+        m_address = typed.length() > 0 ? typed : "127.0.0.1";
         m_mode = kJoining;
         startRound();
         m_connectIn = 0.2f; // once the map has loaded
+        return true;
     }
 
     private string mapName(int map) { return map == 0 ? "Palace" : (map == 1 ? "Canal" : "Gardens"); }
@@ -130,10 +150,11 @@ class Game
         int best = Save::getInt("best." + mapName(map), -100000);
         return best == -100000 ? "No round played yet" : "Best round: " + best + " points";
     }
-    private void onQuit()
+    private bool onQuit(GuiEvent e)
     {
         sound(kClick);
         run::requestExit(0);
+        return true;
     }
 
     // ---- a round ----
@@ -142,14 +163,11 @@ class Game
         m_paused = false;
         m_inRound = true;
         m_note = 0.0f;
-        ui::clear();
-        ui::push(kHudDoc);
-        ui::findLabel("hud-target").setText("");
-        ui::findLabel("hud-score").setText("Points 0");
-        UIView@ controls = ui::find("hud-controls");
-        controls.setVisible(true);
-        controls.setOpacity(0.0f);
-        controls.fadeTo(1.0f, 0.3f);
+        screens().clear();
+        screens().push(kHudDoc);
+        setText("hud-target", "");
+        setText("hud-score", "Points 0");
+        find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the sheet's 0
         m_controlsShow = kControlsShown;
         run::setTimeScale(1.0f);
         run::loadScene(m_map == 0 ? kPalace : (m_map == 1 ? kCanal : kGardens));
@@ -173,7 +191,7 @@ class Game
         {
             if (m_paused)
             {
-                onResume();
+                resume();
             }
             else
             {
@@ -190,7 +208,7 @@ class Game
             m_controlsShow -= dt;
             if (m_controlsShow <= 0.0f)
             {
-                ui::find("hud-controls").fadeTo(0.0f, 0.6f);
+                find("hud-controls").tween("opacity", "0", 0.6f, "ease");
             }
         }
         if (m_note > 0.0f)
@@ -198,7 +216,7 @@ class Game
             m_note -= dt;
             if (m_note <= 0.0f)
             {
-                ui::find("hud-note").fadeTo(0.0f, 0.5f);
+                find("hud-note").tween("opacity", "0", 0.5f, "ease");
             }
         }
     }
@@ -210,12 +228,18 @@ class Game
         {
             return;
         }
-        UILabel@ mark = ui::findLabel("hud-target");
-        mark.setText(costumeName(int(hud.z)));
-        mark.setTextColor(costumeColour(int(hud.z)));
-        ui::findLabel("hud-score").setText("Points " + int(hud.x));
-        ui::findLabel("hud-time").setText(clock(hud.y));
-        ui::findLabel("hud-rank").setText(place(int(hud.w)) + " of 4");
+        int costume = int(hud.z);
+        setText("hud-target", costumeName(costume));
+        // In its colour: the sheet's class for the costume.
+        UIWidget@ mark = UIWidget::of(find("hud-target"));
+        for (int c = 0; c < 6; ++c)
+        {
+            mark.removeClass("costume-" + c);
+        }
+        mark.addClass("costume-" + costume);
+        setText("hud-score", "Points " + int(hud.x));
+        setText("hud-time", clock(hud.y));
+        setText("hud-rank", place(int(hud.w)) + " of 4");
     }
 
     void onNote(int what)
@@ -278,17 +302,17 @@ class Game
         if (scores.y > scores.x) ++place;
         if (scores.z > scores.x) ++place;
         if (scores.w > scores.x) ++place;
-        UIScreen@ s = ui::push(kResultsDoc);
-        s.findLabel("res-title").setText(place == 1 ? "The ball is yours" : "The music stops");
-        s.findLabel("res-you").setText("You came " + this.place(place) + " with " + you + " points");
-        s.findLabel("res-0").setText("You        " + you);
-        s.findLabel("res-1").setText("Hunter 1   " + int(scores.y));
-        s.findLabel("res-2").setText("Hunter 2   " + int(scores.z));
-        s.findLabel("res-3").setText("Hunter 3   " + int(scores.w));
-        s.findLabel("res-best").setText(record ? "Your best round yet" : "Your best: " + best + " points");
-        s.findButton("again-btn").onClick(Action(this.onAgain));
-        s.findButton("again-btn").setVisible(m_mode != kJoining); // the host starts the next round
-        s.findButton("title-btn").onClick(Action(this.onTitle));
+        screens().push(kResultsDoc);
+        setText("res-title", place == 1 ? "The ball is yours" : "The music stops");
+        setText("res-you", "You came " + this.place(place) + " with " + you + " points");
+        setText("res-0", "You        " + you);
+        setText("res-1", "Hunter 1   " + int(scores.y));
+        setText("res-2", "Hunter 2   " + int(scores.z));
+        setText("res-3", "Hunter 3   " + int(scores.w));
+        setText("res-best", record ? "Your best round yet" : "Your best: " + best + " points");
+        wire("again-btn", EventHandler(this.onAgain));
+        find("again-btn").visible = m_mode != kJoining; // the host starts the next round
+        wire("title-btn", EventHandler(this.onTitle));
     }
 
     // The host started another round in the same scene: a joiner leaves its results for it.
@@ -307,38 +331,45 @@ class Game
         m_paused = true;
         holdStill();
         m_controlsShow = 0.0f;
-        ui::find("hud-controls").setVisible(false); // the menu shows them itself
-        UIScreen@ s = ui::push(kPauseDoc);
-        s.findButton("resume-btn").onClick(Action(this.onResume));
-        s.findButton("restart-btn").onClick(Action(this.onAgain));
-        s.findButton("restart-btn").setVisible(m_mode != kJoining); // the host's to start over
-        s.findButton("title-btn").onClick(Action(this.onTitle));
+        find("hud-controls").tween("opacity", "0", 0.0f, "ease"); // the menu shows them itself
+        screens().push(kPauseDoc);
+        wire("resume-btn", EventHandler(this.onResume));
+        wire("restart-btn", EventHandler(this.onAgain));
+        find("restart-btn").visible = m_mode != kJoining; // the host's to start over
+        wire("title-btn", EventHandler(this.onTitle));
     }
 
-    private void onResume()
+    private bool onResume(GuiEvent e)
+    {
+        resume();
+        return true;
+    }
+
+    private void resume()
     {
         if (!m_paused)
         {
             return;
         }
         m_paused = false;
-        ui::pop();
+        screens().pop();
         sound(kClick);
         letGo();
     }
 
     // Another round: alone, the map afresh; hosting, the same scene goes on (the players' hunters
     // with it) and the Ball starts over ("Restart").
-    private void onAgain()
+    private bool onAgain(GuiEvent e)
     {
         sound(kClick);
         if (m_mode == kHosting)
         {
             enterRound();
             run::currentScene().events.emit("Restart", 0); // Ball.as starts over
-            return;
+            return true;
         }
         startRound();
+        return true;
     }
 
     // Alone, the scene stops behind a menu. In a networked round it goes on (the host runs the
@@ -368,15 +399,15 @@ class Game
     // The HUD over the scene that is already running.
     private void enterRound()
     {
-        ui::clear();
-        ui::push(kHudDoc);
+        screens().clear();
+        screens().push(kHudDoc);
         m_inRound = true;
         m_paused = false;
         m_note = 0.0f;
         letGo();
     }
 
-    private void onTitle()
+    private bool onTitle(GuiEvent e)
     {
         sound(kClick);
         if (m_mode != kAlone)
@@ -386,6 +417,7 @@ class Game
         }
         m_connectIn = -1.0f;
         showTitle();
+        return true;
     }
 
     private void sound(Guid clip)
@@ -395,10 +427,8 @@ class Game
 
     private void note(string text)
     {
-        UILabel@ label = ui::findLabel("hud-note");
-        label.setText(text);
-        label.setOpacity(1.0f);
-        label.setVisible(true);
+        setText("hud-note", text);
+        find("hud-note").tween("opacity", "1", 0.15f, "ease"); // from the sheet's 0, or a fade going
         m_note = 3.0f;
     }
 
@@ -411,18 +441,6 @@ class Game
         if (costume == 3) return "a black coat";
         if (costume == 4) return "a plum coat";
         return "an ivory coat";
-    }
-
-    // Each costume's colour, lightened enough to read on the HUD's night blue (the black coat as
-    // a silver grey).
-    private Color costumeColour(int costume)
-    {
-        if (costume == 0) return Color(0.95f, 0.45f, 0.55f, 1.0f);
-        if (costume == 1) return Color(0.35f, 0.85f, 0.85f, 1.0f);
-        if (costume == 2) return Color(0.98f, 0.80f, 0.35f, 1.0f);
-        if (costume == 3) return Color(0.78f, 0.80f, 0.86f, 1.0f);
-        if (costume == 4) return Color(0.85f, 0.55f, 0.90f, 1.0f);
-        return Color(1.0f, 0.96f, 0.86f, 1.0f);
     }
 
     private string place(int p)

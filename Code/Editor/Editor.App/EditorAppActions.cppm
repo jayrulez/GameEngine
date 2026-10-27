@@ -264,7 +264,7 @@ export namespace editor::app
         {
             EditorActionDeclaration d = detail::Declare(
                 u8"view.profiler", u8"Profiler",
-                u8"Show the Profiler tab beside the Console: record the editor process, open a player's capture", u8"View/Profiler", 200);
+                u8"Show the Profiler page: record the editor process, open a player's capture", u8"View/Profiler", 200);
             d.readOnly = true; // shows a panel; nothing in the project changes
             detail::Add(actions, Move(d), Move(run.profiler));
         }
@@ -272,7 +272,7 @@ export namespace editor::app
         {
             EditorActionDeclaration d = detail::Declare(
                 u8"profiler.record", u8"Profiler Record",
-                u8"Record the editor process in the Profiler tab (every page, preview and Play-in-editor run), or stop", u8"View/Profiler Record", 201);
+                u8"Record the editor process in the Profiler page (every page, preview and Play-in-editor run), or stop", u8"View/Profiler Record", 201);
             d.kind = EditorActionKind::Toggle;
             d.readOnly = true; // the profiler's state, not the project's
             d.checked = [recording = Move(run.profilerRecording)](EditorPage*) { return recording && recording(); };

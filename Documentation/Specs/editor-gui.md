@@ -706,6 +706,12 @@ The layers:
 
 ### 5.5 X7, the profiler, in layers
 
+Built 2026-10-27, layers 0 to 5 (the look the user's to judge). Running the page found the views'
+sheet parts unstyled (a part the sheet styles must be named by the widget's CollectStyleParts),
+fixed in Profiler.GUI; the engine registers a dozen counters, so their plots stand three high and
+scroll. The Profiler is closed in the default layout and opens in the page area from View >
+Profiler (or Profiler Record); a layout saved before it shows it once.
+
 Surveyed 2026-10-27, for the user's choices (a tab in the page area; a new library; survey and
 mock first). Today's panel (Editor.App's ProfilerPanel on Profiler.UI, Specs/profiler.md P5) is a
 tab docked with the Console: Record, Stop, Save, Open and Live; a frame strip (a click one frame, a

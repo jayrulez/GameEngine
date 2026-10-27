@@ -31,6 +31,7 @@ export import :project_picture;
 export import :project_home;
 export import :project_manager_view;
 export import :log_view;
+export import :profiler_panel;
 export import :asset_drag_data;
 export import :asset_picker_slot;
 export import :resource_ref_editor;

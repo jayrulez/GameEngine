@@ -6,9 +6,10 @@
 // EditorDock: the editor's dock (Documentation/Specs/editor-gui.md, 5.1, layer 4). A GUI.Docking
 // controller with its area in the frame's `frame-dock`, its floats in OS windows of their own where
 // the GUI's host opens them (else over the main window), and the panels every project shares: the
-// Project panel (the open project's page, or the welcome without one), Assets and Console. Their
-// ids are the ones saved layouts and the MCP layout tools name: `welcome` (the Project panel kept
-// the id it had as the Welcome panel), `assets`, `console`. Pages come through it in layer 6.
+// Project panel (the open project's page, or the welcome without one), Assets, Console and the
+// Profiler (X7: a tab in the page area, not in the default layout until shown). Their ids are the
+// ones saved layouts and the MCP layout tools name: `welcome` (the Project panel kept the id it had
+// as the Welcome panel), `assets`, `console`, `profiler`. Pages come through it in layer 6.
 module;
 #include "Core/Prelude.h"
 
@@ -28,6 +29,7 @@ export namespace editor::app
     inline constexpr StringView kPanelProject = u8"welcome";
     inline constexpr StringView kPanelAssets = u8"assets";
     inline constexpr StringView kPanelConsole = u8"console";
+    inline constexpr StringView kPanelProfiler = u8"profiler";
 
     class EditorDock
     {
@@ -38,6 +40,7 @@ export namespace editor::app
             Function<RefPtr<gui::Node>()> welcome; ///< the Project panel without a project
             Function<RefPtr<gui::Node>()> assets;
             Function<RefPtr<gui::Node>()> console;
+            Function<RefPtr<gui::Node>()> profiler;
         };
 
         explicit EditorDock(IAllocator& allocator) : m_allocator(allocator), m_controller(allocator) {}
@@ -55,7 +58,8 @@ export namespace editor::app
             RegisterPanel(kPanelProject, u8"Project", false, [self]() { return self->Holder(); });
             RegisterPanel(kPanelAssets, u8"Assets", true, [self]() { return self->Make(self->m_contents.assets); });
             RegisterPanel(kPanelConsole, u8"Console", true, [self]() { return self->Make(self->m_contents.console); });
-            (void)m_controller.Adopt(DefaultLayout());
+            RegisterPanel(kPanelProfiler, u8"Profiler", true, [self]() { return self->Make(self->m_contents.profiler); });
+            AdoptDefault();
             m_area = MakeRef<gui::DockArea>(m_allocator);
             into.AddChild(m_area.Get());
             m_area->Show(m_controller);
@@ -92,7 +96,13 @@ export namespace editor::app
             return layout;
         }
         /// The default layout taken again (View > Reset Layout).
-        void ResetLayout() { (void)m_controller.Adopt(DefaultLayout()); }
+        void ResetLayout() { AdoptDefault(); }
+        /// A panel to the front: shown at its default place when it is closed, else its tab chosen.
+        void Present(StringView panel)
+        {
+            if (!m_controller.Show(panel).Ok())
+                (void)m_controller.Edit([panel](gui::DockLayout& layout) { return layout.Activate(panel); });
+        }
 
         /// The Project panel's content: the open project's page, or the welcome when null. The
         /// panel's own content is a holder of it, so it shows wherever the panel is docked.
@@ -110,6 +120,14 @@ export namespace editor::app
 
     private:
         static constexpr f32 kPaneShare = 0.3f;
+
+        // The default layout, the Profiler closed in it: adopting places every registered panel,
+        // and the Profiler is a page shown when asked (View > Profiler), where it was last.
+        void AdoptDefault()
+        {
+            (void)m_controller.Adopt(DefaultLayout());
+            (void)m_controller.Close(kPanelProfiler);
+        }
         static constexpr f32 kConsoleShare = 0.35f;
 
         void RegisterPanel(StringView id, StringView title, bool closable, Function<RefPtr<gui::Node>()> factory)
@@ -120,7 +138,7 @@ export namespace editor::app
             description.Id = String(id);
             description.Title = String(title);
             description.Closable = closable;
-            description.Default.Central = id == kPanelProject;
+            description.Default.Central = id == kPanelProject || id == kPanelProfiler; // the Profiler is a page
             description.Default.Side = gui::DockSide::Bottom;
             description.Factory = Move(factory);
             (void)m_controller.Register(Move(description));

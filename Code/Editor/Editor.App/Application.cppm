@@ -47,6 +47,7 @@ import :export_dialog;
 import :project_home;
 import :project_manager_view;
 import :log_view;
+import :profiler_panel;
 import :assets_view;
 import :asset_operations;
 import :asset_import;
@@ -255,6 +256,7 @@ export namespace editor::app
         UniquePtr<ProjectHomeView> m_home; // the Project panel while a project is open
         UniquePtr<ProjectManagerView> m_manager; // the window's screen while no project is open
         UniquePtr<LogView> m_console;            // the Console panel's content
+        UniquePtr<ProfilerPanel> m_profiler;     // the Profiler page's content
         UniquePtr<AssetOperations> m_assetOps;   // rename, duplicate, delete, cook: the browser's and an agent's
         UniquePtr<AssetsView> m_assets;          // the Assets panel's content
         UniquePtr<AssetImport> m_assetImport;    // files into the project (a drop, Import...)

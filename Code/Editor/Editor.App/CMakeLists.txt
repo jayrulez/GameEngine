@@ -11,7 +11,7 @@ target_link_libraries(Editor.App
         Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Resource Foundation::Fonts.DistanceField.Baker
         Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi # the GUI's shaping and reordering
         Foundation::Image Foundation::Image.IO Foundation::RHI.Capture
-        Foundation::Profiler Foundation::Profiler.Capture
+        Foundation::Profiler Foundation::Profiler.Capture Foundation::Profiler.GUI
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
         Foundation::GUI.Testing # the input tools aim as the GUI's tests do
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
@@ -57,6 +57,7 @@ target_sources(Editor.App
             ProjectHome.cppm
             ProjectManagerView.cppm
             LogView.cppm
+            ProfilerPanel.cppm
             AssetDragData.cppm
             AssetPickerSlot.cppm
             Picker.cppm

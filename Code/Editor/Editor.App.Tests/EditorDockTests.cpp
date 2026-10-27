@@ -3,7 +3,8 @@
 
 // Editor::App - EditorDock: the shared panels by the ids saved layouts and the MCP tools name, the
 // default layout (Project central, Assets and Console under it side by side), the Project panel's
-// content the open project's page or the welcome wherever the panel shows, and Reset Layout.
+// content the open project's page or the welcome wherever the panel shows, Reset Layout, and the
+// Profiler page presented in the page area.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -102,4 +103,24 @@ TEST_CASE("editor dock: Reset Layout takes the default again, a closed panel sho
     bed.dock.ResetLayout();
     CHECK(bed.Layout().StackOf(editor::app::kPanelConsole) != gui::kNoDock);
     CHECK(bed.Layout().StackOf(editor::app::kPanelProject) == bed.Layout().CentralStack());
+}
+
+TEST_CASE("editor dock: the Profiler is a page, out of the default layout until presented, then in the page area and to the front")
+{
+    Bed bed;
+    const gui::DockPanelDescription* profiler = bed.dock.Controller().Describe(editor::app::kPanelProfiler);
+    REQUIRE(profiler != nullptr);
+    CHECK(profiler->Title == String(u8"Profiler"));
+    CHECK(profiler->Default.Central);
+    CHECK(bed.Layout().StackOf(editor::app::kPanelProfiler) == gui::kNoDock);
+
+    bed.dock.Present(editor::app::kPanelProfiler);
+    CHECK(bed.Layout().StackOf(editor::app::kPanelProfiler) == bed.Layout().CentralStack());
+
+    // Presented again behind the Project panel's tab: to the front.
+    REQUIRE(bed.dock.Controller().Edit([](gui::DockLayout& layout) { return layout.Activate(editor::app::kPanelProject); }).Ok());
+    bed.dock.Present(editor::app::kPanelProfiler);
+    const gui::DockNode* central = bed.Layout().FindNode(bed.Layout().CentralStack());
+    REQUIRE(central != nullptr);
+    CHECK(central->Panels[central->Active] == String(editor::app::kPanelProfiler));
 }

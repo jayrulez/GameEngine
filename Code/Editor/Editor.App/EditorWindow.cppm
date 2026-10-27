@@ -31,6 +31,7 @@ import foundation.gui.hosting;
 import foundation.gui.docking; // its sheet
 import foundation.gui.toolkit; // its sheet and elements
 import foundation.gui.code;    // its sheet and elements
+import foundation.profiler.gui; // its sheet and elements
 import editor.core;
 import :status_bar;
 
@@ -143,6 +144,7 @@ export namespace editor::app
             gui::RegisterGuiElements();
             gui::RegisterToolkitElements();
             gui::RegisterCodeElements();
+            foundation::profiler::gui::RegisterProfilerElements();
             // Shaped by HarfBuzz and reordered by the bidirectional algorithm, installed before a
             // font loads so its atlas takes what shaping reaches.
             fonts::HarfBuzzShaping::Install();
@@ -164,8 +166,8 @@ export namespace editor::app
             m_host->Context().SetResourceProvider(m_resources.Get());
             EditorWindow* self = this;
             styles.SetFontFaceLoader([self](StringView face, StringView source) { return self->LoadFontFace(face, source); });
-            const String theme = Format(u8"{}\n{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS(),
-                                        gui::CodeSheetCSS()); // the satellites' over the widgets'
+            const String theme = Format(u8"{}\n{}\n{}\n{}\n{}", gui::DefaultThemeCSS(), gui::DockingSheetCSS(), gui::ToolkitSheetCSS(),
+                                        gui::CodeSheetCSS(), foundation::profiler::gui::ProfilerSheetCSS()); // the satellites' over the widgets'
             styles.SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
 
             m_root = MakeRef<gui::SceneRoot>(m_allocator, m_host->ContextRef());

@@ -28,6 +28,8 @@ import engine.gui;
 import editor.core;
 import editor.preview; // ThumbnailStage: staged each frame, rendered in the scene bracket
 import foundation.mcp; // McpServer (the layout tools added to the host)
+import foundation.profiler;         // the process's store the Profiler page records
+import foundation.profiler.capture; // the process's recorder (a saved capture's platform and build)
 import engine.project; // ProjectSettings (a folder probed for a project)
 
 using namespace foundation::core;
@@ -369,6 +371,15 @@ namespace editor::app
                                    self->ShowToast(editor::NoticeKind::Info, text.AsView());
                                });
         contents.console = [self]() { return self->m_console->Content(); };
+        {
+            ProfilerPanelSeams seams;
+            seams.store = &foundation::profiler::Profiler::Get();
+            seams.recorder = &foundation::profiler::CaptureRecorder::Get();
+            seams.folder = []() { return PathJoin(GetUserDataDirectory().AsView(), u8"profiles"); };
+            seams.pick = [self](PickerRequest request) { self->ShowPicker(Move(request)); };
+            m_profiler = MakeUnique<ProfilerPanel>(m_editorAllocator, m_editorAllocator, Move(seams), m_window.LoadMarkup(ProfilerPanel::kPath));
+        }
+        contents.profiler = [self]() { return self->m_profiler->Content(); };
         m_dock.Open(*into, m_window.Host(), Move(contents));
     }
 
@@ -901,6 +912,15 @@ namespace editor::app
 
         ViewActions view;
         view.resetLayout = [self]() { self->m_dock.ResetLayout(); };
+        view.profiler = [self]() { self->m_dock.Present(kPanelProfiler); };
+        view.profilerRecording = [self]() { return self->m_profiler && self->m_profiler->IsRecording(); };
+        view.profilerRecord = [self]()
+        {
+            if (!self->m_profiler)
+                return;
+            self->m_dock.Present(kPanelProfiler);
+            self->m_profiler->IsRecording() ? self->m_profiler->Stop() : self->m_profiler->Start();
+        };
         view.screenshot = [self]() { self->TakeEditorScreenshot(); };
         view.commandPalette = [self]() { self->OpenCommandPalette(); };
         RegisterViewActions(actions, Move(view));
@@ -996,6 +1016,8 @@ namespace editor::app
             resources->CollectGarbage(); // products a hot reload replaced go
         }
         DrainLog();
+        if (m_profiler)
+            m_profiler->Update(); // the frames recorded since, while recording
         if (m_assets)
             m_assets->Refresh();
         // Files dropped on the window: imported into the group the Assets panel shows.
@@ -1173,6 +1195,7 @@ namespace editor::app
         m_shortcuts.Reset();
         m_dock.Close(); // its floats' windows, then the GUI before the device goes
         m_console.Reset();
+        m_profiler.Reset();
         m_window.Close();
     }
 }

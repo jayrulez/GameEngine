@@ -137,6 +137,11 @@ export namespace editor::app
         void ShowPicker(PickerRequest request);
         /// Opens the asset picker (its groups beside what each holds) over the window for `request`.
         void ShowAssetPicker(AssetPickRequest request);
+        /// Opens Create Asset over the window, titled `title` ("New Clip"), the group `group` (null:
+        /// the project's top) and the name `suggested` to start; `create` is told the group and the
+        /// name chosen (the caller makes the asset).
+        void ShowCreateAsset(StringView title, StringView suggested, foundation::content::Group* group,
+                             Function<void(foundation::content::Group&, StringView)> create);
         /// A type's icon, asked of the type (made the first time, with the slots' table).
         [[nodiscard]] editor::EditorIcons& TypeIcons()
         {
@@ -241,6 +246,7 @@ export namespace editor::app
         UniquePtr<editor::EditorIcons> m_typeIcons; // a type's icon, asked of the type
         UniquePtr<Picker> m_picker;                 // the one picker (paths, groups, components), made the first time
         UniquePtr<AssetPickerWindow> m_assetPicker; // an asset slot's picker, made the first time
+        RefPtr<foundation::gui::Window> m_createAsset; // Create Asset, while open
         ResourceRefServices m_refs;                 // what an asset slot asks of the editor
         UniquePtr<ProjectSettingsDialog> m_projectSettings; // Project > Project Settings
         UniquePtr<TemplatesDialog> m_templates;             // Edit > Export Templates

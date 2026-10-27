@@ -48,6 +48,7 @@ namespace
         UniquePtr<EditorProject> project;
         EditorContext context{DefaultAllocator()};
         UniquePtr<ParticleEffectEditorPage> page;
+        foundation::content::Instance* instance = nullptr;
 
         Bed()
         {
@@ -57,7 +58,7 @@ namespace
             project = EditorProject::Open(DefaultAllocator(), dir.AsView());
             REQUIRE(static_cast<bool>(project));
             context.SetProject(project.Get());
-            foundation::content::Instance* instance = project->SourceDb().RootGroup()->CreateInstance(u8"Fountain", pipeline::ParticleEffectAsset::StaticType());
+            instance = project->SourceDb().RootGroup()->CreateInstance(u8"Fountain", pipeline::ParticleEffectAsset::StaticType());
             REQUIRE(instance != nullptr);
             pipeline::ParticleEffectAsset asset;
             pipeline::SeedDefaultParticleEffect(asset.Effect());
@@ -253,6 +254,36 @@ TEST_CASE("particle page: the effect's sub-emitter links, each into a system cho
 
     bed.page->Choose(ParticleTreeRow{ParticleRowKind::SubEmitters, -1, -1});
     CHECK(bed.page->ChosenSystem() == 0); // the system shown stays
+}
+
+TEST_CASE("particle page: the asset written outside it (an agent's write) shows on a clean page; unsaved edits are kept")
+{
+    Bed bed;
+    // Written from outside: a second system, named.
+    pipeline::ParticleEffectAsset written;
+    pipeline::SeedDefaultParticleEffect(written.Effect());
+    written.Effect().GetSystem(0)->name = String(u8"Shells");
+    pipeline::AddDefaultParticleSystem(written.Effect()).name = String(u8"Sparks");
+    REQUIRE(bed.instance->WriteObject(written).IsOk());
+    bed.page->OnAssetExternallyModified();
+    CHECK(bed.Effect().SystemCount() == 2);
+    CHECK(bed.page->Tree().AsView().StartsWith(StringView(u8"Shells\n")));
+    CHECK(bed.page->Tree().AsView().ContainsIgnoreCase(StringView(u8"\nSparks\n")));
+    CHECK(bed.page->Fact(u8"Systems") == String(u8"2"));
+    // The effect's rows are over the effect read, not the one it replaced.
+    gui::ListEdit add;
+    add.Kind = gui::ListEdit::Op::Insert;
+    REQUIRE(bed.page->EffectRows().EditList(u8"subEmitterLinks", add));
+    CHECK(bed.Effect().SubEmitterLinks().Size() == 1u);
+
+    // With unsaved edits, another write leaves the page as it is.
+    REQUIRE(bed.page->IsDirty());
+    pipeline::ParticleEffectAsset again;
+    pipeline::SeedDefaultParticleEffect(again.Effect());
+    REQUIRE(bed.instance->WriteObject(again).IsOk());
+    bed.page->OnAssetExternallyModified();
+    CHECK(bed.Effect().SystemCount() == 2);
+    CHECK(bed.Effect().SubEmitterLinks().Size() == 1u);
 }
 
 TEST_CASE("particle page: without a preview the transport has nothing to play")

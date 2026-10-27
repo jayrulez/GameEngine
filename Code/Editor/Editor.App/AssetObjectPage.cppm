@@ -144,6 +144,18 @@ export namespace editor::app
         [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
         [[nodiscard]] RefPtr<gui::Node> Content() override { return m_content; }
         void OnUpdate(foundation::runtime::IApplicationHost&, f32) override { Refresh(); }
+        /// The asset written outside the page (an agent's asset_data_write, page_reload): a clean
+        /// page shows what is stored now, its undo let go; one with unsaved edits keeps them and
+        /// says so, as the scene page does.
+        void OnAssetExternallyModified() override
+        {
+            if (IsDirty())
+            {
+                m_context->Notify(NoticeKind::Warning, Format(u8"'{}' changed on disk but has unsaved edits here - not refreshed.", m_title).AsView());
+                return;
+            }
+            (void)ReadAgain();
+        }
 
         [[nodiscard]] Status Save() override
         {

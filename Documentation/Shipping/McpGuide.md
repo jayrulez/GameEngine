@@ -58,7 +58,7 @@ zone, as the inspector's Bake Navigation button does: the static geometry inside
 box (static, non-trigger rigid bodies and terrain; render meshes are not read, so a floor or
 an obstacle agents should respect needs a static body, and what moves never bakes) into the
 zone's Navigation Zone asset, which must be assigned first, the scene itself unchanged - cook
-for the game to see it). A `scene_write` / `prefab_write` over an asset the user has open
+for the game to see it). A `scene_write` / `prefab_write` / `asset_data_write` over an asset the user has open
 reaches its page at once: a clean page reloads in place, a page with unsaved edits keeps
 them and warns the user - ask before `page_reload` with `force`, which discards them.
 

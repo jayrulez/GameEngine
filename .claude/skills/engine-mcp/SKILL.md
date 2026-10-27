@@ -71,7 +71,7 @@ token), or for one run: `Tools.Editor <project> --mcp [--mcp-port <n>]`. The def
   a clean shot). To
   look at something: `viewport_camera_set` with `lookAt`, then `viewport_screenshot`, then
   read the file. A
-  `scene_write` / `prefab_write` over an asset the user has open reaches its page at once: a
+  `scene_write` / `prefab_write` / `asset_data_write` over an asset the user has open reaches its page at once: a
   clean page reloads in place, a page with unsaved edits keeps them and warns the user -
   never write over it again hoping to win; ask, or `page_reload` with `force` only when the
   user said to discard.

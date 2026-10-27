@@ -439,14 +439,21 @@ namespace editor
 
     void ParticleEffectEditorPage::OnObjectChanged()
     {
-        // A whole edit, or its undo: the system may be gone, and its address moved.
-        const particles::ParticleEffect* effect = Effect();
+        // A whole edit, or its undo: the system may be gone, and its address moved; the asset read
+        // again (written outside the page): the effect itself is another. The system's rows are
+        // bound first: binding the effect's has the grid list every section, the system's too.
+        particles::ParticleEffect* effect = Effect();
         const i32 count = effect != nullptr ? effect->SystemCount() : 0;
         if (m_system >= count)
             m_system = count - 1;
         if (m_chosen.kind != ParticleRowKind::SubEmitters && m_chosen.system != m_system)
             m_chosen = ParticleTreeRow{ParticleRowKind::System, m_system, -1};
         BindSystem();
+        if (effect != nullptr)
+        {
+            const Instance target(effect, &TypeOf<particles::ParticleEffect>());
+            m_effectRows->SetObjects(Span<const Instance>(&target, 1u));
+        }
         Changed();
     }
 

@@ -82,6 +82,7 @@ slider::fill { background-color: #C8372D; border-radius: 4px; }
 slider::thumb { background-color: #F4ECD8; border: 2px solid #2A251F; border-radius: 12px; width: 24px; }
 slider:hover::thumb { background-color: #FFF7E4; border: 3px solid #C8372D; }
 slider:focus-visible::thumb { background-color: #FFD23F; border: 3px solid #2A251F; }
+slider::focus { opacity: 0; } /* the focused thumb is marked by its colour, as every focused control is: no ring as well */
 button.back { width: 240px; margin-top: 28px; }
 .settings-hint { font-size: 23px; margin-top: 14px; }
 

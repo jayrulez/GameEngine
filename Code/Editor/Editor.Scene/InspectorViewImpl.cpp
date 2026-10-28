@@ -21,6 +21,7 @@ import :edit;
 import :inspector;
 import :entity_ref_editor;
 import :bone_name_editor;
+import :collision_matrix_editor;
 import :inspector_extras;
 import :scene_settings_source;
 import :settings_profiles;
@@ -249,6 +250,7 @@ namespace editor
                 m_entityRefs.pick = [self](EntityPickRequest request) { self->m_services.pickEntity(Move(request)); };
             EntityRefEditor::Register(m_grid->GetEditors(), m_entityRefs);
             BoneNameEditor::Register(m_grid->GetEditors(), m_edit);
+            CollisionMatrixEditor::Register(m_grid->GetEditors()); // the physics block's groups, a grid
             app::PropertyExtras::Register(m_grid->GetEditors()); // a component's notices and actions
             m_grid->SetSource(&m_sections);
             m_grid->SetOnRowMenu([self](gui::Menu& menu, const gui::PropertyRow& row) { self->HeaderMenu(menu, row); });

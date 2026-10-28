@@ -155,6 +155,14 @@ namespace editor
             list.ListOps = gui::PropertyListAdd | gui::PropertyListRemove;
             list.MaxCount = foundation::physics::kCollisionGroupCount;
             out.PushBack(Move(list));
+            // Which pairs collide, a grid of the groups (the old editor's matrix).
+            gui::PropertyInfo matrix;
+            matrix.Name = String(u8"matrix");
+            matrix.DisplayName = String(u8"Collides");
+            matrix.Description = String(u8"Where a group's row and another's column meet: whether the two collide (both ways).");
+            matrix.Kind = gui::PropertyKind::Group;
+            matrix.Hint = String(u8"CollisionMatrix");
+            out.PushBack(Move(matrix));
             return;
         }
         const Where where = Parse(parent);
@@ -172,25 +180,20 @@ namespace editor
         }
         if (where.group < 0 || static_cast<usize>(where.group) >= count || !where.row.IsEmpty())
             return;
+        // A group's row: its name (which pairs collide is the matrix's grid, read and written
+        // through each group's `collides`, a hidden row).
         gui::PropertyInfo name;
         name.Name = String(u8"name");
         name.DisplayName = String(u8"Name");
         name.Kind = gui::PropertyKind::String;
         out.PushBack(Move(name));
-        gui::PropertyInfo collides;
-        collides.Name = String(u8"collides");
-        collides.DisplayName = String(u8"Collides With");
-        collides.Kind = gui::PropertyKind::Flags;
-        for (usize j = 0; j < count; ++j)
-            collides.Choices.PushBack(gui::PropertyChoice{NameOf(j), static_cast<i64>(u64{1} << j)});
-        out.PushBack(Move(collides));
     }
 
     gui::Variant CollisionGroupsSource::GetValue(StringView path, usize object) const
     {
         (void)object;
         const Where where = Parse(path);
-        if (where.list)
+        if (where.list || path == StringView(u8"matrix"))
             return gui::Variant(static_cast<i64>(Count()));
         if (where.group < 0 || static_cast<usize>(where.group) >= Count())
             return gui::Variant{};

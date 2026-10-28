@@ -82,6 +82,7 @@ target_sources(Editor.Scene
             EntityPickerWindow.cppm
             EntityRefEditor.cppm
             BoneNameEditor.cppm
+            CollisionMatrixEditor.cppm
             InspectorExtras.cppm
             ScriptBehaviorsSource.cppm
             SceneSettingsSource.cppm

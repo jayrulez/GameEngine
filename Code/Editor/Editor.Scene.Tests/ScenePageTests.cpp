@@ -1149,10 +1149,32 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     CHECK(groups->GetValue(u8"groups.1.collides", 0).AsInt() == 3);
     Array<gui::PropertyInfo> rows;
     groups->GetProperties(u8"groups.1", rows);
+    REQUIRE(rows.Size() == 1u); // its name; which pairs collide is the matrix's
+    CHECK(rows[0].Name == String(u8"name"));
+    rows.Clear();
+    groups->GetProperties(StringView{}, rows);
     REQUIRE(rows.Size() == 2u);
-    CHECK(rows[1].Kind == gui::PropertyKind::Flags);
-    REQUIRE(rows[1].Choices.Size() == 2u);
-    CHECK(rows[1].Choices[1].Name == String(u8"Group 1"));
+    CHECK(rows[1].Hint == String(u8"CollisionMatrix"));
+    CHECK(groups->GetValue(u8"matrix", 0).AsInt() == 2);
+
+    // The grid: a row and a column a group, a box at each pair; a click is the pair's write.
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const String matrixPath = inspector->PathOf(u8"Physics", u8"matrix");
+    REQUIRE_FALSE(matrixPath.IsEmpty());
+    REQUIRE(inspector->Grid()->FindRow(matrixPath.AsView()) >= 0);
+    inspector->Grid()->ScrollToItem(inspector->Grid()->FindRow(matrixPath.AsView())); // under the fold
+    (void)shown.root->UpdateLayout();
+    auto* matrix = Cast<CollisionMatrixEditor>(inspector->Grid()->FindEditor(matrixPath.AsView()));
+    REQUIRE(matrix != nullptr);
+    CHECK(matrix->Count() == 2u);
+    REQUIRE(matrix->Box(1, 0) != nullptr);
+    CHECK(matrix->Box(0, 1) == nullptr); // above the diagonal: the same pair as (1, 0)
+    CHECK(matrix->Box(1, 0)->IsChecked());
+    CHECK(matrix->Box(1, 0)->HandleActivate()); // off: both ways
+    CHECK((settings()->groupCollides[1] & 1u) == 0u);
+    CHECK((settings()->groupCollides[0] & 2u) == 0u);
+    page->Commands().Undo();
+    CHECK((settings()->groupCollides[1] & 1u) != 0u);
 
     // Group 1 no longer collides with Default: both rows say so.
     gui::PropertyWrite off;
@@ -1182,6 +1204,15 @@ TEST_CASE("inspector: the physics block's collision groups: Default first, a new
     CHECK_FALSE(groups->EditList(u8"groups", remove)); // Default stays
     page->Commands().Undo(); // the remove
     CHECK(groups->GetValue(u8"groups", 0).AsInt() == 2);
+
+    // The physics world's cap: the list says its most, and an add past it is refused.
+    rows.Clear();
+    groups->GetProperties(StringView{}, rows);
+    CHECK(rows[0].MaxCount == foundation::physics::kCollisionGroupCount);
+    while (static_cast<u32>(groups->GetValue(u8"groups", 0).AsInt()) < foundation::physics::kCollisionGroupCount)
+        REQUIRE(groups->EditList(u8"groups", add));
+    CHECK_FALSE(groups->EditList(u8"groups", add));
+    CHECK(groups->GetValue(u8"groups", 0).AsInt() == static_cast<i64>(foundation::physics::kCollisionGroupCount));
     page->OnClose();
 }
 

@@ -187,6 +187,12 @@ export namespace foundation::net
                 {
                     m_rpc.Dispatch(ev.peer, ev.payload.AsSpan());
                 }
+                else if (ev.kind == NetEventKind::Received && ev.channel == kReplicationChannel && m_session.IsServer())
+                {
+                    // The one message a client sends on this channel: it is ready (its scene is the
+                    // host's, loaded). Its state starts now, from a full snapshot.
+                    ReleasePeer(ev.peer);
+                }
                 else if (ev.kind == NetEventKind::Received && ev.channel == kReplicationChannel)
                 {
                     if (m_scene != nullptr)
@@ -204,6 +210,11 @@ export namespace foundation::net
                     if (ev.kind == NetEventKind::Disconnected)
                     {
                         m_replication.ForgetPeer(ev.peer);
+                        (void)m_held.Remove(ev.peer);
+                    }
+                    else if (ev.kind == NetEventKind::Connected && m_session.IsServer() && m_waitForReady)
+                    {
+                        m_held.Insert(ev.peer); // no state until it says it is ready
                     }
                     ReportPlayer(ev);
                     if (onEvent)
@@ -221,6 +232,26 @@ export namespace foundation::net
                     m_playerEvents(true, m_session.LocalPeer());
                 }
             }
+        }
+
+        /// Host: whether a client that joins waits for its ready (SendReady) before it hears any state:
+        /// a game whose joiner loads the host's map after connecting holds the state off until the
+        /// map's networked entities are there to take it. Off by default (state flows at once). RPCs
+        /// are never held: the host's welcome (naming its map, say) reaches a held joiner.
+        void SetWaitForReady(bool wait) noexcept { m_waitForReady = wait; }
+        [[nodiscard]] bool WaitsForReady() const noexcept { return m_waitForReady; }
+        /// Host: whether a client is held (joined, not yet ready).
+        [[nodiscard]] bool IsHeld(PeerId peer) const { return m_held.Contains(peer); }
+        /// Client: tell the host this end is ready for state (its scene loaded). The host forgets
+        /// what it last sent it, so the state starts from a full snapshot. Harmless to a host that
+        /// does not wait (its baseline restarts: one full snapshot more).
+        void SendReady()
+        {
+            if (!m_session.IsClient())
+                return;
+            const byte ready[1] = {byte{1}};
+            for (const NetPeer& peer : m_session.Peers())
+                m_session.Send(peer.id, kReplicationChannel, Span<const byte>(ready, 1), Reliability::ReliableOrdered);
         }
 
         /// Players joining and leaving, by player id (0 = the host, else a client's PeerId on the
@@ -245,6 +276,8 @@ export namespace foundation::net
                 MemCopy(&bits, &now, sizeof(bits));
                 for (const NetPeer& peer : m_session.Peers())
                 {
+                    if (m_held.Contains(peer.id))
+                        continue; // joined, not ready: its scene is not the host's yet
                     BitWriter writer;
                     writer.WriteU64(bits); // server capture time, ahead of the delta
                     if (m_replication.CaptureDelta(*m_scene, peer.id, writer) > 0)
@@ -315,6 +348,13 @@ export namespace foundation::net
         core::UniquePtr<IDatagramSocket> m_ownedSocket;
         NetSession m_session;
         // The player a session event is about, to SetPlayerEvents' handler (see there).
+        // A held client said it is ready: its baseline goes, so its first delta is everything.
+        void ReleasePeer(PeerId peer)
+        {
+            (void)m_held.Remove(peer);
+            m_replication.ForgetPeer(peer);
+        }
+
         void ReportPlayer(const NetEvent& ev)
         {
             if (!m_playerEvents)
@@ -338,6 +378,8 @@ export namespace foundation::net
         RpcTable m_rpc;
         Function<void(bool joined, u32 player)> m_playerEvents;
         bool m_welcomed = false; // client: the welcome has been reported
+        bool m_waitForReady = false; // host: joiners wait for their ready before any state
+        HashSet<PeerId> m_held;      // host: joined, not yet ready
         StateReplication m_replication;
         InterpolationBuffer m_interp;    // client-side smoothing of received states
         scene::Scene* m_scene = nullptr; // the replicated world (null = no replication)
@@ -420,6 +462,18 @@ export namespace foundation::net
         {
             INetworkController* c = Controller();
             return c != nullptr && c->Connect(host.AsView(), static_cast<u16>(port));
+        }
+        /// Host: joiners wait for `ready` before they hear any state (see SetWaitForReady).
+        static void waitForReady(bool wait)
+        {
+            if (NetworkManager* m = Endpoint())
+                m->SetWaitForReady(wait);
+        }
+        /// Client: its scene is the host's, loaded; the host's state starts, from a full snapshot.
+        static void ready()
+        {
+            if (NetworkManager* m = Endpoint())
+                m->SendReady();
         }
         static void disconnect()
         {

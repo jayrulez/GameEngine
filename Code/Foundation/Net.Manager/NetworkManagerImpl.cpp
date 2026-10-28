@@ -32,6 +32,8 @@ namespace foundation::net
         builder.Method<&Net::startDedicatedServer>("startDedicatedServer");
         builder.Method<&Net::connect>("connect");
         builder.Method<&Net::disconnect>("disconnect");
+        builder.Method<&Net::waitForReady>("waitForReady", {"wait"}); // host: joiners wait for ready()
+        builder.Method<&Net::ready>("ready");                         // client: its scene is the host's
         builder.Method<&Net::rpc>("rpc");
         builder.Method<&Net::rpcNumber>("rpcNumber");
         builder.Method<&Net::rpcText>("rpcText");

@@ -60,6 +60,11 @@ Mark component fields `Replicated` (a reflection attribute) and the model does t
 - the server builds a snapshot and a PER-PEER delta (reflection-driven field codec);
 - **prefab net-spawn** replicates spawned entities; a joining client gets a full-snapshot
   **late-join** sync (first-class for this target - reconnect brings full state);
+- **a joiner may wait for its map** (`NetworkManager::SetWaitForReady`, `Net.waitForReady(true)` on
+  the host): a client that loads the host's map after connecting hears no state, only RPCs (the
+  host's welcome naming the map), until it says it is ready (`SendReady`, `Net.ready()`, a byte on
+  the replication channel, the one thing a client sends there); the host then forgets its
+  baseline, so its first delta is the full snapshot. Off by default: state flows at once;
 - clients **interpolate** replicated state for smoothness;
 - **per-peer relevancy / fog-of-war** filters what each client sees - interest management is a
   SECURITY requirement here (a client never receives what it should not see), not just bandwidth.

@@ -245,3 +245,96 @@ TEST_CASE("net-manager: a shared authored scene matches by stable id (no duplica
     CHECK(ct.position.x == doctest::Approx(4.0f));
     CHECK(ct.position.z == doctest::Approx(6.0f));
 }
+
+// A joiner that loads the host's map after connecting (Masquerade: the host's map comes in its
+// welcome): with the host waiting for ready, the joiner hears RPCs but no state until it says it is
+// ready, and then gets everything from a full snapshot, an entity made before its ready included.
+TEST_CASE("net-manager: a held joiner hears no state until its ready, then all of it")
+{
+    RttiRegisterValue_RepMover();
+    foundation::net::RegisterReplicationComponents();
+
+    net::SimConditions sim;
+    sim.latencyMs = 15.0f;
+    sim.seed = 11;
+    net::SimDatagramNetwork network(foundation::core::DefaultAllocator(), sim);
+    net::IDatagramSocket* sv = network.CreateSocket();
+    net::NetworkManager server(*sv);
+    net::NetworkManager client(*network.CreateSocket());
+    server.SetWaitForReady(true);
+
+    scene::Scene serverScene{DefaultAllocator()};
+    serverScene.AddSystem<net::NetworkComponentManager>();
+    RepMoverManager* serverMovers = serverScene.AddSystem<RepMoverManager>();
+    server.SetReplicatedScene(&serverScene);
+    scene::Scene clientScene{DefaultAllocator()};
+    clientScene.AddSystem<net::NetworkComponentManager>();
+    clientScene.AddSystem<RepMoverManager>();
+    client.SetReplicatedScene(&clientScene);
+
+    bool welcomed = false;
+    client.Rpc().On(u8"map", [&welcomed](net::PeerId, net::BitReader&) { welcomed = true; });
+    server.StartServer(/*dedicated=*/true);
+    (void)client.ConnectTo(sv->LocalEndpoint());
+    const auto tick = [&](int frames)
+    {
+        for (int i = 0; i < frames; ++i)
+        {
+            network.Advance(10.0f);
+            server.Update(10.0f);
+            client.Update(10.0f);
+        }
+    };
+    for (int i = 0; i < 60 && server.Session().PeerCount() == 0u; ++i)
+        tick(1);
+    REQUIRE(server.Session().PeerCount() == 1u);
+    const net::PeerId joiner = server.Session().Peers()[0].id;
+    CHECK(server.IsHeld(joiner));
+
+    // State on the host while the joiner is held: none of it reaches the joiner, an RPC does.
+    const scene::EntityHandle e = serverScene.CreateEntity(u8"Unit");
+    RepMover& m = serverMovers->Add(e);
+    m.health = 42;
+    const net::NetworkId id = server.Replication().AssignNetworkId(serverScene, e);
+    REQUIRE(id.IsValid());
+    server.Rpc().Call(server.Session(), joiner, u8"map");
+    tick(60);
+    CHECK(welcomed);
+    CHECK_FALSE(clientScene.IsValid(client.Replication().FindEntity(id)));
+
+    // Ready: the host lets it go, and the next state is the whole of it.
+    client.SendReady();
+    scene::EntityHandle ce = scene::EntityHandle::Invalid();
+    for (int i = 0; i < 200 && !clientScene.IsValid(ce); ++i)
+    {
+        tick(1);
+        ce = client.Replication().FindEntity(id);
+    }
+    CHECK_FALSE(server.IsHeld(joiner));
+    REQUIRE(clientScene.IsValid(ce));
+    const RepMover* rc = clientScene.GetSystem<RepMoverManager>()->Get(ce);
+    REQUIRE(rc != nullptr);
+    CHECK(rc->health == 42);
+}
+
+// The default: a host that does not wait sends state at once, as before.
+TEST_CASE("net-manager: a host that does not wait for ready holds no joiner")
+{
+    net::SimConditions sim;
+    net::SimDatagramNetwork network(foundation::core::DefaultAllocator(), sim);
+    net::IDatagramSocket* sv = network.CreateSocket();
+    net::NetworkManager server(*sv);
+    net::NetworkManager client(*network.CreateSocket());
+    CHECK_FALSE(server.WaitsForReady());
+    server.StartServer(/*dedicated=*/true);
+    (void)client.ConnectTo(sv->LocalEndpoint());
+    for (int i = 0; i < 60 && server.Session().PeerCount() == 0u; ++i)
+    {
+        network.Advance(10.0f);
+        server.Update(10.0f);
+        client.Update(10.0f);
+    }
+    REQUIRE(server.Session().PeerCount() == 1u);
+    CHECK_FALSE(server.IsHeld(server.Session().Peers()[0].id));
+}
+

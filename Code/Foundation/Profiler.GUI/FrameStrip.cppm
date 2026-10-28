@@ -612,7 +612,7 @@ export namespace foundation::profiler::gui
     };
 
     /// A counter's value each frame, on the strip's axis: its name in the gutter, the least and
-    /// the most shown printed over the plot.
+    /// the most shown printed over the plot, and its mean over the frames chosen.
     class CounterPlot final : public FrameAxisView
     {
         RTTI_OBJECT(CounterPlot, FrameAxisView)
@@ -658,6 +658,42 @@ export namespace foundation::profiler::gui
                             any = true;
                         }
             return any;
+        }
+
+        /// Its mean over the frames chosen that set it (false: none chosen, or none of them did).
+        [[nodiscard]] bool ChosenMean(f64& mean) const
+        {
+            const IProfileSource* source = Source();
+            const FrameRange chosen = m_focus ? m_focus->Frames() : FrameRange{};
+            if (source == nullptr || chosen.empty)
+                return false;
+            f64 sum = 0.0;
+            u32 count = 0;
+            for (u64 n = chosen.first; n <= chosen.last; ++n)
+                if (const FrameRecord* frame = source->Frame(n))
+                    for (const CounterValue& v : frame->counters)
+                        if (v.counter == m_counter)
+                        {
+                            sum += v.value;
+                            ++count;
+                        }
+            if (count == 0)
+                return false;
+            mean = sum / static_cast<f64>(count);
+            return true;
+        }
+        /// What it prints over its plot: the least and the most shown, the chosen frames' mean.
+        [[nodiscard]] String RangeText(f64 least, f64 most) const
+        {
+            const IProfileSource* source = Source();
+            if (source == nullptr || m_counter >= source->Counters().Size())
+                return String();
+            const CounterUnit unit = source->Counters()[m_counter].unit;
+            String text = Format(u8"{} to {}", FormatCounter(least, unit, MemoryAllocator()).AsView(), FormatCounter(most, unit, MemoryAllocator()).AsView());
+            f64 mean = 0.0;
+            if (ChosenMean(mean))
+                text += Format(u8", mean {}", FormatCounter(mean, unit, MemoryAllocator()).AsView()).AsView();
+            return text;
         }
 
     protected:
@@ -725,8 +761,7 @@ export namespace foundation::profiler::gui
                 ctx.VG().FillRect(Rectangle{plot.x + column.x, plot.Bottom() - h, Max(column.width, 1.0f), h}, isChosen ? chosenColor : bar);
             }
             ctx.PopClip();
-            const String range = Format(u8"{} to {}", FormatCounter(least, info.unit, MemoryAllocator()).AsView(),
-                                        FormatCounter(most, info.unit, MemoryAllocator()).AsView());
+            const String range = RangeText(least, most);
             // On a backing of the plot's colour at its end, so the bars under it never hide it.
             const f32 width = Min(LabelWidth(range.AsView()) + 8.0f, plot.width);
             const Rect backing{plot.Right() - width, plot.y + 2.0f, width, plot.height - 4.0f};

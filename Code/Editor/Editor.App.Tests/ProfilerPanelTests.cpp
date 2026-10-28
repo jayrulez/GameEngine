@@ -6,7 +6,8 @@
 // the page's recording, following the newest until a frame is chosen, Live following again; Stop
 // lets the store go and keeps the frames; another viewer's arm and the store's history are left
 // alone; Stop on spike ends the recording at the first frame over its time; a plot per counter;
-// Longest and Median; Save writes a capture that Open shows, and Live goes back.
+// Longest and Median; Save writes a capture that Open shows, and Live goes back; Clear drops the
+// frames, a recording going on.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -241,4 +242,26 @@ TEST_CASE("profiler page: recording while closing lets the store go")
         CHECK(store.Armed());
     }
     CHECK_FALSE(store.Armed());
+}
+
+TEST_CASE("profiler page: Clear drops the frames recorded; a recording goes on from the next")
+{
+    Bed bed;
+    bed.panel->Start();
+    RunFrames(bed.store, 10);
+    bed.panel->Update();
+    REQUIRE(bed.panel->Recording().HasFrames());
+    bed.Find<gui::ToolButton>(u8"profiler-clear")->HandleActivate();
+    CHECK_FALSE(bed.panel->Recording().HasFrames());
+    CHECK(bed.panel->IsRecording());
+    CHECK(bed.panel->Focus().Frames().empty);
+    RunFrames(bed.store, 8);
+    bed.panel->Update();
+    REQUIRE(bed.panel->Recording().HasFrames());
+    CHECK(bed.panel->Recording().OldestFrame() == 6u); // none it had: the next to settle on
+    CHECK(bed.panel->IsFollowing());
+    bed.panel->Stop();
+    bed.panel->Clear();
+    CHECK_FALSE(bed.panel->Recording().HasFrames());
+    CHECK_FALSE(bed.panel->IsRecording());
 }

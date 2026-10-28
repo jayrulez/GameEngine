@@ -94,6 +94,8 @@ export namespace editor::app
                 m_liveButton->SetOnToggled([self](bool on) { on ? self->ShowLive() : self->SetFollowing(false); });
             if (auto* open = Find<gui::ToolButton>(u8"profiler-open"))
                 open->SetOnClick([self]() { self->PickCapture(); });
+            if (auto* clear = Find<gui::ToolButton>(u8"profiler-clear"))
+                clear->SetOnClick([self]() { self->Clear(); });
             m_save = Find<gui::ToolButton>(u8"profiler-save");
             if (m_save != nullptr)
                 m_save->SetOnClick([self]() { (void)self->SaveRecording(); });
@@ -163,6 +165,22 @@ export namespace editor::app
             Refresh();
         }
         [[nodiscard]] bool IsRecording() const noexcept { return m_recordingNow; }
+        /// Drops the frames recorded; a recording goes on from the next frame (the old panel's
+        /// Clear). The page shows the recording again, nothing chosen.
+        void Clear()
+        {
+            m_recording.Clear();
+            if (m_capture.Get() != nullptr)
+            {
+                m_capture = nullptr;
+                m_capturePath = String(m_allocator);
+                SetSource(&m_recording);
+            }
+            m_focus->SetFrames(profiler::FrameRange{});
+            m_axis->Fit(0, 0);
+            SetFollowing(m_recordingNow);
+            Refresh();
+        }
         [[nodiscard]] bool IsFollowing() const noexcept { return m_following; }
 
         /// Each frame: the store's newly settled frames taken while recording; Stop on spike

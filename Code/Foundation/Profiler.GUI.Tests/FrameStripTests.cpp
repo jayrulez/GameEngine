@@ -224,6 +224,19 @@ TEST_CASE("CounterPlot: a counter's value each frame, the most of a column's; th
     // A click on the plot chooses as the strip's does.
     bed.Click(over);
     CHECK(bed.focus->Frames().first == 3u);
+
+    // The mean over the frames chosen, printed after the range.
+    FrameRange chosen;
+    chosen.first = 3;
+    chosen.last = 6;
+    chosen.empty = false;
+    bed.focus->SetFrames(chosen);
+    f64 mean = 0.0;
+    REQUIRE(bed.plot->ChosenMean(mean));
+    CHECK(mean == doctest::Approx(104.5));
+    CHECK(bed.plot->RangeText(100.0, 110.0).AsView().ContainsIgnoreCase(u8", mean "));
+    bed.plot->SetCounter(5);
+    CHECK_FALSE(bed.plot->ChosenMean(mean));
 }
 
 TEST_CASE("Profiler.GUI's sheet reaches the parts every view names, a name's hues among them")

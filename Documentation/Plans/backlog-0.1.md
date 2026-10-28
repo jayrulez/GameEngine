@@ -57,6 +57,14 @@
   reduced motion honoured everywhere. The keyboard and focus parts are testable; the looks are the
   user's.
 
+- **The profiler page lays its labels out again every frame** (user 2026-10-28: backlog): with the
+  page open and recording, GUI.Draw took 5.8 ms a frame in Debug, 5.0 ms of it the profiler views'
+  own drawing and 2.4 ms of that text layouts the cache did not hold, 103 a frame (the scopes of
+  87be72361 showed it). Every view draws its labels through one `Text` (ProfilerWidget::DrawLabel),
+  changing its string per label, so each label is shaped and broken again. Keep laid-out labels by
+  their text (a small cache in the views) so an unchanged one is reused; then measure the timeline's
+  bars, the rest of the views' 2.6 ms.
+
 ## Engine
 
 - **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script

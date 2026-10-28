@@ -46,11 +46,15 @@ export namespace editor
     namespace runtime = foundation::runtime;
     namespace audio = foundation::audio;
 
+    /// AudioClipEditorPage::kPeakBuckets, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr usize kAudioClipEditorPagePeakBuckets = 256;
+
     class AudioClipEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
         static constexpr StringView kPath = u8"Editor/AudioClipPage.xml";
-        static constexpr usize kPeakBuckets = 256;
+        static constexpr usize kPeakBuckets = kAudioClipEditorPagePeakBuckets;
 
         AudioClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~AudioClipEditorPage() override;

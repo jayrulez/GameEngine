@@ -110,7 +110,7 @@ TEST_CASE("audio clip page: the source read into its waveform and facts; the tra
     CHECK(page->Clip()->sampleRate == 8000u);
     CHECK(page->Clip()->frameCount == 4000u);
     REQUIRE(page->Waveform() != nullptr);
-    CHECK(page->Waveform()->Peaks().Size() == AudioClipEditorPage::kPeakBuckets);
+    CHECK(page->Waveform()->Peaks().Size() == kAudioClipEditorPagePeakBuckets);
     CHECK(page->Waveform()->Peaks()[0] > 0.5f); // a loud tone throughout
     CHECK(page->Fact(u8"Channels") == StringView(u8"Stereo"));
     CHECK(page->Fact(u8"Sample Rate") == StringView(u8"8000 Hz"));

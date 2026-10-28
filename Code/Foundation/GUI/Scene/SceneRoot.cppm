@@ -426,9 +426,12 @@ export namespace foundation::gui
             ctx.SetDamageRecorder(&m_lastDamage);
             // The window bounds the drawing, so what lies outside it is culled (E8b); only the
             // drawing: navigation and hit testing still reach a node past it.
+            // The clip is pushed outside the root's own transform, so it is the root's size in the
+            // device pixels it draws to (its layout size times its display scale), not its layout
+            // size: on a scaled display the latter cut the drawing to a corner (1/1.75 of it at 175%).
             const bool sized = GetSize().x > 0.0f && GetSize().y > 0.0f;
             if (sized)
-                ctx.PushClip(Rect{GetPosition().x, GetPosition().y, GetSize().x, GetSize().y});
+                ctx.PushClip(Rect{GetPosition().x, GetPosition().y, GetSize().x * m_displayScale, GetSize().y * m_displayScale});
             Draw(ctx);
             if (sized)
                 ctx.PopClip();

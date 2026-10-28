@@ -143,3 +143,22 @@ TEST_CASE("frame-stats: a profiled frame times the draw's phases apart: the box,
     CHECK(widgets == 2u);
 #endif
 }
+
+TEST_CASE("frame-stats: at a display scale the window's clip is the root's device pixels, so the whole window is drawn")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetDisplayScale(1.75f);
+    root->SetViewportSize(core::Float2{1400.0f, 1050.0f}); // device pixels: 800 x 600 laid out
+    CHECK(root->GetSize().x == doctest::Approx(800.0f));
+    Box(*root, u8"filled")->SetInlineStyle(SV(u8"background-color"), SV(u8"red")); // something drawn
+    StyleManager styles;
+    vg::VGContext canvas;
+    (void)Frame(*root, styles, canvas);
+    const vg::VGBatch& batch = canvas.GetBatch();
+    REQUIRE_FALSE(batch.commands.IsEmpty());
+    for (const vg::VGCommand& command : batch.commands)
+    {
+        CHECK(command.clipRect.width >= 1400.0f - 0.5f); // never the 800 of its layout
+        CHECK(command.clipRect.height >= 1050.0f - 0.5f);
+    }
+}

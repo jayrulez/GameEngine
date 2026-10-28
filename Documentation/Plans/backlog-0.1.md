@@ -39,6 +39,21 @@
   payload read, the spawn, the scene load) or times out waiting on meshes, or whether the private
   scene renders empty. Their failures log nothing today: a warning on a failed thumbnail would
   have shown which.
+- **The assets browser's slow-click rename and a typed guid selecting** (X8 parity check, gap 8;
+  user 2026-10-27: evaluate later): the old browser started a rename on a slow second click
+  (AssetsView.cppm:330 at 4fe177db2) and selected the asset a whole typed guid names, so Enter or
+  a double click opened it (AssetsViewImpl.cpp:733); the new one renames by F2 or the menu (GUI
+  ItemView begins an edit only on F2 or BeginEdit) and only filters by the guid. Decide whether
+  either comes back.
+- **An asset or entity dropped on a list appends to it** (X8 parity check, gap 3; tabled by the
+  user 2026-10-27): the old ContainerListEditor (ContainerListEditorImpl.cpp:26-76 at 4fe177db2)
+  took a drop on a list of references (mesh materials, reflected lists, project fonts, particle
+  materials, behaviours) as a new element, a wrong type refused with the types it takes. GUI.Toolkit's
+  ListPropertyEditor appends only by Add. Needs a design: the list asking its element's editor
+  whether it takes the payload, and the insert and the write as one undo step.
+- **Curves and gradients edited in a popup, not on the row** (X8 parity check; user 2026-10-27:
+  discuss later): the old particle page edited a curve or a gradient on its row; the toolkit shows
+  a preview row that opens an editor in a popup (where a stop's colour can now be edited too).
 
 ## Engine
 

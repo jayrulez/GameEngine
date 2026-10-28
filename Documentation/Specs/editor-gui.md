@@ -876,12 +876,15 @@ the user's.
   the tree's keys moving the selection, a new scene's sun, a profile's edits and Copy Into Scene,
   Make Profile, the scene's bounds, the render components' attributes).
 
-**For the user to rule**: the last collision group removed now sets its bit in every mask where
-the old cleared it (deliberate in the new code, its test says the old); a material takes an
-uncooked shader with a notice where the old refused it; the cue's variants are packed where the
-old kept fixed slots; composite keys as rows, not a keyboard cross; curves and gradients edited in
-a popup, not on the row; "grid as lines" dropped; what GameUI's pages did (the .sml and .sss
-source, their live preview, tag completion on "<") is gone with them.
+**The user's rulings (2026-10-27)**: gaps 2, 6, 7 and 9 to 20 are fixed; 3 (a drop on a list) and
+8 (the browser's slow-click rename and guid select) wait in the 0.1 backlog, and so does editing
+curves and gradients in a popup rather than on the row. A material refuses an uncooked shader, as
+the old one did. The collision groups are edited as a grid of rows and columns, a group a row and
+a column, a cell the pair's flag (the old matrix). "Grid as lines" stays dropped; GameUI's pages go
+with what they did. Open: the last group removed sets its bit in the masks left (the runtime's
+default, everything colliding, and what a group added there later gets) where the old cleared it;
+the cue's variants packed where the old kept fixed slots (the runtime resolves a list, an empty
+slot only skipped); a Composite 2D binding's four keys as rows where the old drew them as a cross.
 
 **Found on the way, not the editor's**: a particle effect names its texture by a string
 (`textureRef`), so the scene page's first cook, of the scene's closure, leaves it out and the
@@ -895,6 +898,7 @@ The layers:
 4. The scene page (9 to 11).
 5. The pages (12 to 19).
 6. The old tests' behaviours (20).
+7. The collision groups as a grid; a material refusing an uncooked shader.
 
 ## 6. Tests
 

@@ -59,6 +59,12 @@
   over left, down and right, each a keycap that captured its own key (InputMapPageImpl.cpp:872-890
   at 4fe177db2); the new page shows them as four rows. Decide which reads better.
 
+- **The editor's accessibility pass** (editor-gui X9; user 2026-10-28: backlog): every control
+  reached by the keyboard in a sensible order, focus always shown, every icon-only button named
+  (a tooltip at least), the token pairs' contrast checked in both schemes and high contrast, and
+  reduced motion honoured everywhere. The keyboard and focus parts are testable; the looks are the
+  user's.
+
 ## Engine
 
 - **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script

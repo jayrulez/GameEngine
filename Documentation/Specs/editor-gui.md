@@ -269,7 +269,7 @@ to follow the same order.
 | X6 | Asset pages, in groups: property pages (Generic, Texture, Fonts, Image, Heightfield, Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain); code pages (Script, Shaders, GUI on GUI.Code, with CSS highlighting); curve and timeline pages (Particles, PropertyAnimation, Animation); Preview. |
 | X7 | The profiler, a tab in the page area, on a new library Profiler.GUI (5.5). |
 | X8 | Parity check and the swap: every MCP tool, Integration.Mcp, the sample projects played in the new editor; the old editor deleted. |
-| X9 | Hot reload of user theme overrides, accessibility pass, the token reference in the docs. |
+| X9 | Hot reload of user theme overrides and the token reference in the docs (5.7); the accessibility pass is in the 0.1 backlog. |
 
 Each phase is one or more layers, one commit each with tests; the editor is run and screenshotted
 over MCP before each is reported, and the look is the user's to judge.
@@ -910,6 +910,24 @@ asked the context's open interceptors after the shell moved (a clip's open into 
 them). The particle effect's references (found on the way) are declared by its builder, as every
 builder declares its own, so a cook of the effect cooks its texture, mesh and materials, and
 asset_uses and the export see them.
+
+### 5.7 X9, the user's theme and the token reference
+
+The accessibility pass waits in the 0.1 backlog (user, 2026-10-28). The rest, in layers:
+
+1. **The user's theme overrides, reloaded as they change.** One file, `theme/overrides.css` in the
+   user's data folder (`~/.local/share/gameengine/theme/` on Linux), applied after the editor's
+   sheets and the Preferences inputs, so a `:root` block there sets any token (an input such as
+   `--accent-input`, or a semantic one such as `--surface`) and a rule there restyles anything.
+   The folder is made when the editor opens, so the file has a place to go. The window sweeps it
+   with the editor's own files (about once a second): a change applies the sheet again and the
+   Console says the overrides were applied; a file removed takes them away. A light-only
+   override goes under `@media (prefers-color-scheme: light)`, as in `tokens.css`.
+2. **The token reference.** `Documentation/Systems/editor-theme.md`: the three layers, every input
+   and semantic token with its dark and light values and what reads it, the density's sizes,
+   each text and icon pair's WCAG contrast ratio on the surface it sits on, and how to override.
+   A test reads `tokens.css` and the density sheets and fails on a token the reference does not
+   name, so the two stay in step.
 
 ## 6. Tests
 

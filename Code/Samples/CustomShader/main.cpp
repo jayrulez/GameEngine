@@ -338,7 +338,7 @@ namespace
         {
             const core::String outputDir = vfs::DataPath(DataRoot(), u8"Output/CustomShader");
             const core::String foxPath =
-                vfs::DataPath(DataRoot(), u8"Assets/models/Fox/glTF/Fox.gltf");
+                vfs::DataPath(DataRoot(), u8"Samples/Models/Fox/glTF/Fox.gltf");
             m_contentFs =
                 core::MakeUnique<vfs::NativeFileSystem>(AppRoot(), outputDir.AsView(), AppRoot());
             m_contentDb = core::MakeUnique<content::ContentDatabase>(

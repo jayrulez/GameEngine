@@ -485,7 +485,7 @@ namespace
             const core::String outputDirStorage =
                 foundation::vfs::DataPath(DataRoot(), u8"Output/Sandbox");
             const core::String modelDirStorage =
-                foundation::vfs::DataPath(DataRoot(), u8"Assets/models");
+                foundation::vfs::DataPath(DataRoot(), u8"Samples/Models");
             const core::StringView outputDir = outputDirStorage.AsView();
             const core::StringView modelDir = modelDirStorage.AsView();
             if (outputDir.IsEmpty() || modelDir.IsEmpty())

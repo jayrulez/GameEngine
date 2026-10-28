@@ -910,7 +910,7 @@ TEST_CASE("integration.mcp: a headless model import generates its prefab")
 {
     const String dataRoot = foundation::vfs::FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
-    const String duck = PathJoin(dataRoot.AsView(), u8"Assets/models/Duck/glTF/Duck.gltf");
+    const String duck = PathJoin(dataRoot.AsView(), u8"Samples/Models/Duck/glTF/Duck.gltf");
     pipeline::RegisterPipelineTypes();
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     pipeline::ImporterRegistry importers{DefaultAllocator()};

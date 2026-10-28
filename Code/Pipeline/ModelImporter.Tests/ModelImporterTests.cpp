@@ -59,8 +59,8 @@ namespace
         REQUIRE_FALSE(root.IsEmpty());
         return vfs::DataPath(root.AsView(), relative);
     }
-    String MiDuck() { return MiPath(u8"Assets/models/Duck/glTF/Duck.gltf"); }
-    String MiFox() { return MiPath(u8"Assets/models/Fox/glTF/Fox.gltf"); }
+    String MiDuck() { return MiPath(u8"Samples/Models/Duck/glTF/Duck.gltf"); }
+    String MiFox() { return MiPath(u8"Samples/Models/Fox/glTF/Fox.gltf"); }
     String MiFoxNested() { return MiPath(u8"Tests/Models/FoxNested/glTF/Fox.gltf"); }
     String MiGlb()
     {
@@ -1147,7 +1147,7 @@ TEST_CASE("mesh lod: _LODn suffix parsing (case-insensitive; _LOD0 and non-suffi
 // mesh's slots is, the list an entity drawing the mesh binds.
 TEST_CASE("model resource: each mesh keeps its material slots, the materials its submeshes index")
 {
-    const String characterStorage = MiPath(u8"Assets/models/QuaterniusCharacter/glTF/Character.gltf");
+    const String characterStorage = MiPath(u8"Samples/Models/QuaterniusCharacter/glTF/Character.gltf");
     const StringView character = characterStorage.AsView();
     if (character.IsEmpty())
     {

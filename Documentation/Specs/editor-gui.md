@@ -884,8 +884,8 @@ a column, a cell the pair's flag (the old matrix). "Grid as lines" stays dropped
 with what they did. The last group removed sets its bit in the masks left (ruled 2026-10-28: the
 runtime's default, everything colliding, and what a group added there later gets) where the old
 cleared it. The cue's variants are packed where the old kept fixed slots (ruled 2026-10-28: the
-runtime resolves a list, an empty slot only skipped). Open: a Composite 2D binding's four keys as
-rows where the old drew them as a cross.
+runtime resolves a list, an empty slot only skipped). A Composite 2D binding's four keys show as
+rows where the old drew them as a cross; which to keep waits in the 0.1 backlog (2026-10-28).
 
 **Found on the way, not the editor's**: a particle effect names its texture by a string
 (`textureRef`), so the scene page's first cook, of the scene's closure, leaves it out and the

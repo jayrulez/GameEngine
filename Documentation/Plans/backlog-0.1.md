@@ -54,6 +54,10 @@
 - **Curves and gradients edited in a popup, not on the row** (X8 parity check; user 2026-10-27:
   discuss later): the old particle page edited a curve or a gradient on its row; the toolkit shows
   a preview row that opens an editor in a popup (where a stop's colour can now be edited too).
+- **A Composite 2D binding's four keys as a keyboard cross, not rows** (X8 parity check; user
+  2026-10-28: backlog): the old input map page drew the four keys as they sit on a keyboard, up
+  over left, down and right, each a keycap that captured its own key (InputMapPageImpl.cpp:872-890
+  at 4fe177db2); the new page shows them as four rows. Decide which reads better.
 
 ## Engine
 

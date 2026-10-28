@@ -14,7 +14,7 @@
 //   foundation.scene, engine.scene, foundation.scene.resource,
 //   foundation.render, foundation.script, foundation.script.resource,
 //   foundation.input, foundation.audio, foundation.audio.resource, foundation.ui.resource,
-//   engine.ui, foundation.settings, foundation.project, foundation.xml.serialization
+//   engine.gui, foundation.settings, foundation.project, foundation.xml.serialization
 // The two entry points add only the PLATFORM trio (shell + runner + graphics) on top.
 
 #ifndef ENGINE_PLAYER_PLAYERAPPLICATION_H

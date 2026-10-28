@@ -7,8 +7,8 @@
 The retained-mode UI framework itself - box model, focus, styling/theming, and the frame
 pipeline. Ported from Sedulous.UI and then taken "good to great" by the 2026-08 core audit
 (P0 focus correctness, P1 perf caches + damage gate, P2 border-box model, theme migration
-to `.sss` text). The runtime tiers that HOST this framework (game canvases, editor UIHost)
-are documented in `game-ui.md`; this doc covers the framework contract.
+to `.sss` text). The runtime tiers that HOST this framework (the UISandbox's UIHost; the
+game tier that once did is in `Archive/game-ui-history.md`); this doc covers the framework contract.
 
 ## Modules
 
@@ -20,7 +20,7 @@ are documented in `game-ui.md`; this doc covers the framework contract.
 - **`foundation.ui.runtime`** - `UIHost`: window attachment, per-frame Update/Draw, the
   damage gate, theme-icon baking, DPI/UI-scale.
 - Sibling libs: `.viewport` (3D-in-UI), `.shell` (input bridge), `.application`,
-  `.vfs`, `.resource` + `ui.pipeline` (cooked documents/themes - see `game-ui.md`).
+  `.vfs`, `.resource` + `ui.pipeline` (cooked documents/themes).
 
 ## Box model (border-box; Specs/ui-box-model.md)
 

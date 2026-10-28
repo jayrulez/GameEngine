@@ -16,7 +16,7 @@ Related: [[game-instance]], [[runtime-host]], [[scripting]] (the one-context rul
 
 The design is shipped end-to-end and green across every affected test suite (`Scene.Tests`,
 `Engine.Scene.Tests`, `Engine.Navigation.Tests`, `Engine.Physics.Tests`, `Engine.Audio.Tests`,
-`Engine.Script.Tests`, `Engine.UI.Tests`, `Engine.GameInstance.Tests`, `Engine.Render.Tests`,
+`Engine.Script.Tests`, `Engine.GUI.Tests`, `Engine.GameInstance.Tests`, `Engine.Render.Tests`,
 `Engine.SceneSurface.Tests` (today `Engine.Composition.Tests`), `Engine.Net.Tests`, `Engine.DefaultApp.Tests`, `Integration.Mcp` — zero
 failures):
 

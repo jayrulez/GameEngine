@@ -223,7 +223,8 @@ and replaced by the default where it does not (a version bump).
 Integration.Mcp green, the user's playthrough of the sample projects in it), the ledger has
 nothing parked but Editor.GameUI, which is deleted, and `editor-gui` is merged when the user says.
 Removing foundation.ui and Engine.UI after that is a separate decision for the user (the
-coexistence ruling stands).
+coexistence ruling stands). Engine.UI went on 2026-10-28 (Specs/engine-ui-removal.md); foundation.ui
+stays for the UISandbox.
 
 ### 4.1 The ledger
 

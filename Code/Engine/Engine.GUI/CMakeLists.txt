@@ -1,7 +1,6 @@
 # Engine::GUI - `engine.gui`: the engine's GUI on foundation.gui (E5 of Specs/gui-lab-evolution-3.md):
 # one GUI for the application, a screen tier and a scene tier, drawn into the engine's overlay
-# passes; the resource provider answering asset guids; the domain. Engine.UI's counterpart, beside
-# it while both live.
+# passes; the resource provider answering asset guids; the domain.
 util_add_engine_library(Engine.GUI ALIAS Engine::GUI)
 target_link_libraries(Engine.GUI
     PUBLIC Foundation::Core Foundation::Runtime Foundation::Scene Engine::Scene Engine::Domain

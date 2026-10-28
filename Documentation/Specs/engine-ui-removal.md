@@ -1,6 +1,6 @@
 # Removing Engine.UI
 
-> Status: PLANNED (2026-10-28)
+> Status: DONE (2026-10-28)
 
 The editor and all six sample games are on the engine's GUI (Engine.GUI over foundation.gui), so
 the old game UI tier, Engine.UI (`engine.ui`) and its script surface Engine.UI.Script

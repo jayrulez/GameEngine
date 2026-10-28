@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Engine::GUI - the `engine.gui` module: the engine's GUI on foundation.gui (E5 of
-// Specs/gui-lab-evolution-3.md), Engine.UI's counterpart, beside it while both live.
+// Specs/gui-lab-evolution-3.md).
 //
 // GuiResourceProvider answers the GUI's resource requests by asset guid ("{guid}" or the bare
 // guid), as every other reference in the engine: a document's markup and a sheet's CSS from their
@@ -14,8 +14,7 @@
 // under the game's sheets (a list, in order, each an @import of its guid), the fonts; a screen tier
 // (a root holding the gamekit's screen stack and an overlay layer above it, outside any scene, so
 // it survives a scene swap) and a scene tier (a root per scene, drawn wherever the scene renders);
-// both drawn into the engine's overlay passes through GUI.Hosting's GuiPassRenderer, above
-// Engine.UI's. A sheet or document whose cooked product changes restyles the GUI (hot reload). The
+// both drawn into the engine's overlay passes through GUI.Hosting's GuiPassRenderer. A sheet or document whose cooked product changes restyles the GUI (hot reload). The
 // GUI ticks on unscaled time (menus move while the game is paused), so its work is in BeginFrame.
 //
 // Input (E6): the engine's active input source (the player's window, an editor Game tab's view)
@@ -23,9 +22,9 @@
 // occupied overlay layer is modal; else the root whose GUI is under the pointer (the screen tier
 // first); else the screen tier while it holds a screen; else the first scene root with content. A
 // press stays with its root until every button is up. Which scenes input may reach follows the input
-// subsystem's binding, as Engine.UI's does. The action layer is told what the GUI took (the pointer
+// subsystem's binding. The action layer is told what the GUI took (the pointer
 // over GUI that takes it, or a press that began there; the keys while text is being edited), added
-// to what Engine.UI claims; the GUI tracks the input kind from the same source.
+// to what an earlier subsystem in the lane claims; the GUI tracks the input kind from the same source.
 //
 // Components (E7): `gui.Canvas` shows a document (with a sheet of its own over the game's) in its
 // scene's root, ordered among the scene's canvases, at the target's pixels or scaled from a
@@ -46,7 +45,7 @@
 //
 // The game's screen (E9c): the screen tier lays out at the game's render resolution and draws, at
 // the target's own, into the rectangle that size is fitted into, turned when the game's orientation
-// is not the target's, as the game's image is (Engine.UI's placement); its pointer arrives in render
+// is not the target's, as the game's image is; its pointer arrives in render
 // space and is taken to its pixels. With run screens on (the editor), each run (a Game tab's game)
 // has a screen tier of its own: drawn for its tab (SetRenderRun), the input of the scene it is
 // bound to, the `gui` root of its scripts; the overlay layer stays on the shared tier above it.
@@ -276,8 +275,7 @@ export namespace engine::gui
     [[nodiscard]] Float2 WorldPanelPixels(const GuiWorldPanelComponent& panel) noexcept;
 
     /// The world ray under `pointer` (pixels) on a view of `viewSize` through `camera` (unjittered),
-    /// from the near plane, between the engine's NDC depths. (Engine.UI keeps the same math for its
-    /// panels while it lives.)
+    /// from the near plane, between the engine's NDC depths.
     void GuiPointerRay(const render::ViewCamera& camera, Float2 pointer, Float2 viewSize, Float3& origin, Float3& direction) noexcept;
 
     struct GuiPanelHit
@@ -319,7 +317,7 @@ export namespace engine::gui
         scene.AddSystem<GuiWorldPanelComponentManager>();
     }
 
-    /// Where a screen tier draws on its target (Engine.UI's ScreenPlacement): not fitted, the plain
+    /// Where a screen tier draws on its target: not fitted, the plain
     /// draw at the target's own size over all of it; fitted, the root lays out at `DrawSize` over
     /// its display scale `DpiScale` and draws into `Rect` of the target through `Transform`, which
     /// turns the root's pixels onto the rectangle's (identity unless the orientation turns it).
@@ -438,7 +436,7 @@ export namespace engine::gui
         GuiSubsystem(IAllocator& allocator, foundation::vfs::IFileSystem& dataFileSystem);
         ~GuiSubsystem() override;
 
-        /// After Engine.UI's (-650), so a game's GUI sees the same frame; all work in BeginFrame.
+        /// Early in the frame, so a game's update sees the GUI's input; all work in BeginFrame.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -640; }
 
         [[nodiscard]] GUIContext& Context() noexcept { return *m_context; }
@@ -449,7 +447,7 @@ export namespace engine::gui
         /// The fonts the GUI's text draws with.
         [[nodiscard]] foundation::fonts::IFontService* Fonts() const noexcept;
 
-        /// The project's fonts, which it shares with Engine.UI (defaultUiFontId, uiFontIds): the
+        /// The project's fonts (defaultUiFontId, uiFontIds): the
         /// default and the others, each a family a label picks by `font-family`. Without a default
         /// the built-in font serves (the others wait for one). The products are held.
         void SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others);
@@ -530,7 +528,7 @@ export namespace engine::gui
         void OnShutdown() override;
         void BeginFrame(f32 deltaTime) override;
         /// The action layer's pointer and keyboard claims cleared after the frame read them: the
-        /// next frame's BeginFrame lane republishes them (Engine.UI's, then the GUI's added).
+        /// next frame's BeginFrame lane republishes them (an earlier claim, then the GUI's added).
         void EndFrame() override;
 
         // ---- scripts ----
@@ -553,7 +551,7 @@ export namespace engine::gui
         void OnDestroying(scene::Scene& scene) override;
 
         // ---- the overlay roles ----
-        /// Above Engine.UI's (0) while both draw.
+        /// Above an overlay at the default order (0).
         [[nodiscard]] i32 OverlayOrder() const noexcept override { return 10; }
         /// The scene tier: the view's scene root, laid out at the view's viewport and drawn there.
         void Render(rhi::RenderPassEncoder& encoder, const render::SceneOverlayView& view) override;

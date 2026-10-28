@@ -1,8 +1,11 @@
-# Game UI
+# Game UI (archived)
 
-> Status: CURRENT
-> Verified: 2026-08-12 @ 3364be29
+> Status: ARCHIVED (2026-10-28)
+> Superseded by: Documentation/Systems/gui-port.md (the engine's GUI, Engine.GUI)
 > Track: [[game-ui-subsystem]] / [[game-ui-p1-progress]]
+
+NON-AUTHORITATIVE. Engine.UI and Engine.UI.Script were deleted (Specs/engine-ui-removal.md); the
+games, the samples and the editor are on the engine's GUI. Kept for the history of the design.
 
 The game-facing UI runtime: `foundation.ui`'s retained-mode control framework driven as an engine
 subsystem, showing UI three ways (screen HUD/menus, world-anchored billboards, world-space panels) as

@@ -1,7 +1,7 @@
 # Game UI - design history (archived)
 
 > Status: ARCHIVED
-> Superseded by: Documentation/Systems/game-ui.md
+> Superseded by: Documentation/Archive/game-ui-history.md
 > Track: [[game-ui-subsystem]]
 
 NON-AUTHORITATIVE. The reference survey, the Sedulous.Engine.UI deep-read, and the locked-decision

@@ -67,7 +67,7 @@ The roles, in dependency order (lower layers never know about higher ones):
   `Net`, and their `.Resource` (cooked-format) siblings.
 - **Engine/** - the runtime that composes Foundation into a game: subsystems
   (`Engine.Render`, `Engine.Physics`, `Engine.Audio`, `Engine.Script`,
-  `Engine.UI`, `Engine.Animation`, ...), `Engine.Scene`, `Engine.GameInstance`
+  `Engine.GUI`, `Engine.Animation`, ...), `Engine.Scene`, `Engine.GameInstance`
   (a running game as a first-class object), `Engine.DefaultApp` (the standard
   application that both the player and the editor's embedded runtime use), and
   `Engine.Player` (the shipped game executable).
@@ -128,7 +128,7 @@ from (engine-composition.md).
 
 Drill-down: every subsystem has a doc in `Documentation/Systems/` (35 and
 counting) - `renderer.md`, `scripting.md`, `physics.md`, `audio.md`,
-`game-ui.md`, `networking.md`, `web-platform.md`, `editor.md`, ...
+`gui-port.md`, `networking.md`, `web-platform.md`, `editor.md`, ...
 
 ## Building
 

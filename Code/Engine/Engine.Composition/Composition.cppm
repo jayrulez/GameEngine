@@ -95,5 +95,7 @@ export namespace engine
     // 43 = + InstanceMemberComponent: an entity drawn as an instance of an instanced mesh, its clip.
     // 47 = + `gui` and its three components (GuiCanvasComponent, GuiBillboardComponent,
     // GuiWorldPanelComponent), the GUI domain's.
-    inline constexpr usize kSubsystemFacadeNameCount = 47;
+    // 43 = - `ui` and its three components (UICanvasComponent, UIBillboardComponent,
+    // UIWorldPanelComponent): Engine.UI deleted.
+    inline constexpr usize kSubsystemFacadeNameCount = 43;
 }

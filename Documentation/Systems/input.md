@@ -47,9 +47,9 @@ Fed per frame from the shell event stream + polled device facades:
 
 ## UI-vs-game arbitration
 
-`ActionRuntime::SetConsumptionMask` is driven each frame by `Engine.UI`'s `UISubsystem`: the game-UI
-reports which input CLASSES (pointer / keyboard / text) it consumed, and matching binding sources are
-masked for that frame (wired by construction - both live in the runtime tick, UI first). An exclusive
+`ActionRuntime::SetConsumptionMask` is driven each frame by `Engine.GUI`'s `GuiSubsystem`: the GUI
+reports which input CLASSES (pointer / keyboard / text) it took, and matching binding sources are
+masked for that frame (wired by construction - both live in the runtime tick, the GUI first). An exclusive
 set handles modal states; `WantsTextInput` additionally suppresses ALL key bindings while an EditText
 has focus.
 

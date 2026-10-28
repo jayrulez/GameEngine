@@ -1518,8 +1518,8 @@ namespace engine::gui
         bridge->SyncInputKind(); // a pad or keys with no event this frame still count
 
         // What the action layer is told the GUI took: the pointer over GUI that takes it, or a press
-        // that began there while it is held; the keys while text is edited. Added to Engine.UI's
-        // claim (its pump runs first in this lane); EndFrame clears them after the frame read them.
+        // that began there while it is held; the keys while text is edited. Added to any claim
+        // made earlier in this lane; EndFrame clears them after the frame read them.
         m_pointerTaken = pointer && (held ? m_pressTaken : target.Panel || root->GetEventDispatcher()->IsPointerOver(target.Point));
         const bool keys = root->GetEventDispatcher()->WantsTextInput();
         m_textWanted = keys;

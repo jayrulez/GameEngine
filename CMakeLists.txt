@@ -429,7 +429,6 @@ add_subdirectory(Code/Foundation/Materials.PipelineCache)
 add_subdirectory(Code/Foundation/Materials.Resource)
 add_subdirectory(Code/Foundation/Model.Resource) # cooked model manifest + runtime composite (runtime side; no tooling deps)
 add_subdirectory(Code/Foundation/UI.Resource)   # cooked UI documents + themes (game-ui; UI-framework-free records)
-add_subdirectory(Code/Engine/Engine.UI)  # game screen tier: canvases + overlay render + consumption
 add_subdirectory(Code/Foundation/VG)        # 2D vector-graphics core over Core + Image
 add_subdirectory(Code/Foundation/VG.SVG)
 add_subdirectory(Code/Foundation/VG.Resource) # cooked vector images (validated SVG; renderer- and UI-free records)
@@ -530,7 +529,6 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Pipeline/GUI.Pipeline) # cooking them (tools only)
 endif()
 add_subdirectory(Code/Engine/Engine.GameInstance)
-add_subdirectory(Code/Engine/Engine.UI.Script)  # UI script surface: reflected view handles + `ui` screen-tier facade (over UI.Gamekit)
 # The script-surface composition root: links every subsystem facade above and exposes
 # RegisterAllScriptFacades() for surface-describing hosts (MCP). Must come after all the subsystem
 # libs + Net.Manager/Replication it aggregates.
@@ -726,8 +724,6 @@ if(OPTION_BUILD_TESTS)
     if(OPTION_ENABLE_ANGELSCRIPT AND OPTION_ENABLE_LUAU)
         util_test_suite(Code/Engine/Engine.Script.Tests Engine::Script)
     endif()
-    util_test_suite(Code/Engine/Engine.UI.Tests                     Engine::UI)
-    util_test_suite(Code/Engine/Engine.UI.Script.Tests              Engine::UI.Script)
     util_test_suite(Code/Foundation/GUI.Shell.Tests               Foundation::GUI.Shell)
     util_test_suite(Code/Foundation/GUI.Inspector.Tests           Foundation::GUI.Inspector)
     util_test_suite(Code/Foundation/GUI.Testing.Tests             Foundation::GUI.Testing)
@@ -861,10 +857,10 @@ if(OPTION_BUILD_TESTS)
     if(OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU)
         util_test_suite(Code/Integration/Integration.Script            Foundation::Script)
     endif()
-    # Subsystem script FACADES (Net.*/Ui.* on angelscript + luau) - relocated here so the subsystem
+    # Subsystem script FACADES (Net.*/Audio.* on angelscript + luau) - relocated here so the subsystem
     # unit suites stay backend-neutral. Each backend leg is #ifdef-guarded; build if either is on.
     if(OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU)
-        util_test_suite(Code/Integration/Integration.ScriptFacades     Engine::UI)
+        util_test_suite(Code/Integration/Integration.ScriptFacades     Engine::Audio)
     endif()
     # The GUI (foundation.gui) and its satellites from scripts, the engine's GUI among them.
     if(OPTION_ENABLE_ANGELSCRIPT OR OPTION_ENABLE_LUAU)

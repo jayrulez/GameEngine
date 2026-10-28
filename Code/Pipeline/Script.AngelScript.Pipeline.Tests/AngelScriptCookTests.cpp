@@ -359,13 +359,13 @@ TEST_CASE("as.cook: the cook stores loadable bytecode in the pack (the player pa
 // compiles a script against whatever sits in the GLOBAL type registry (RegisterReflectedTypes copies
 // it into the cook's fresh compile manager). The cook's own registration installs ONLY the
 // foundation facades (Log/Time/Entity/Scene), so a script that calls an ENGINE-level facade (run::,
-// ui::, physics::, ...) would fail to cook. The cooking TOOLS cure this by calling
+// gui::, physics::, ...) would fail to cook. The cooking TOOLS cure this by calling
 // engine::RegisterAllScriptFacades() ONCE at startup, completing the global registry before any cook
 // runs (metadata-only, no device/GPU/world, idempotent). This test mirrors that startup step: with
-// the full surface registered, a Game class driving run:: and ui:: cooks clean. WITHOUT the call the
-// global registry lacks run/ui and this same cook FAILS with "No matching symbol" - which is exactly
+// the full surface registered, a Game class driving run:: and gui:: cooks clean. WITHOUT the call the
+// global registry lacks run/gui and this same cook FAILS with "No matching symbol" - which is exactly
 // what games hit at cook/live-validation time before the tool fix.
-TEST_CASE("as.cook: with the full engine surface registered, a Game using run:: / ui:: cooks clean")
+TEST_CASE("as.cook: with the full engine surface registered, a Game using run:: / gui:: cooks clean")
 {
     engine::RegisterAllScriptFacades(); // the tools' one-time startup registration - the whole fix
     IScriptLanguageCook* cook = AngelScriptCook();
@@ -378,7 +378,7 @@ TEST_CASE("as.cook: with the full engine surface registered, a Game using run:: 
                                u8"    void launch()\n"
                                u8"    {\n"
                                u8"        run::loadScene(Guid(1, 2));\n"
-                               u8"        ui::clear();\n"
+                               u8"        Node@ root = gui::root();\n"
                                u8"    }\n"
                                u8"    void update(float dt) {}\n"
                                u8"    void exit() {}\n"

@@ -27,11 +27,9 @@ import engine.vegetation;
 import engine.navigation;
 import engine.audio;
 import engine.script;
-import engine.ui;
 import engine.net;
 import engine.spline;
 import engine.input;
-import engine.ui.script;
 import engine.gameinstance;
 import engine.gui; // the engine's GUI on foundation.gui, beside the UI domain while both live
 
@@ -58,10 +56,9 @@ namespace
         &engine::particles::ParticleDomain(),    &engine::physics::PhysicsDomain(),
         &engine::terrain::TerrainDomain(),       &engine::vegetation::VegetationDomain(),
         &engine::navigation::NavigationDomain(), &engine::audio::AudioDomain(),
-        &engine::script::ScriptDomain(),         &engine::ui::UiDomain(),
-        &engine::net::NetDomain(),               &engine::spline::SplineDomain(),
-        &kPrefabsDomain,                         &engine::input::InputDomain(),
-        &engine::uiscript::UiScriptDomain(),     &engine::runtime::RunDomain(),
+        &engine::script::ScriptDomain(),         &engine::net::NetDomain(),
+        &engine::spline::SplineDomain(),         &kPrefabsDomain,
+        &engine::input::InputDomain(),           &engine::runtime::RunDomain(),
         &engine::gui::GuiDomain(),
     };
 }

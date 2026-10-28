@@ -53,7 +53,7 @@ below it knows where the root is - only what it reads relative to it:
 
 - `DefaultApplication::Configure`: `ResolveDataRoot(m_dataRootOverride)` (preset via
   `SetDataRoot` - `PlayerMain` fills it from `--data-root`), owns the mount, exposes
-  `DataRoot()` / `DataFileSystem()`, and hands the mount to `RenderSubsystem`, `UISubsystem`
+  `DataRoot()` / `DataFileSystem()`, and hands the mount to `RenderSubsystem`, `GuiSubsystem`
   (constructor arguments). Missing root: error + `host.RequestExit(1)`; the mount still points at
   `<exeDir>/Data` so every miss on the way out names the place a dist would need. The
   application host now honors an exit requested during `Configure`/`OnStartup` (it used to be
@@ -83,7 +83,7 @@ Consumers take `vfs::IFileSystem&` (the data mount), never a path:
   handler in `foundation.shaders`; `CompileOptions::includeResolver` replaces the native `-I`
   paths, so a pak-backed mount works too). A first-level include arrives bare and is looked up
   in the folder; nested includes carry the includer's directory.
-- `UISubsystem`: VG shaders via the host + the built-in default font read from
+- `GuiSubsystem`: the built-in default font read from
   `Engine/Fonts/roboto/Roboto-Regular.ttf` (bytes -> `LoadFontFromMemory`); a dist without it
   logs once and relies on the project's cooked default font, as before.
 - `ImguiSubsystem(device, framesInFlight, dataFileSystem)`, `UIHost(..., dataFileSystem)`.

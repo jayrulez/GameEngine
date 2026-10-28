@@ -8,8 +8,8 @@
 text, Core's reflection for scripts), designed concern by concern from a survey of eepp, RmlUi,
 Godot, browsers and others rather than ported from one. It began as an experimental lab
 (`Code/Experimental`, 2026-10) and moved into Foundation once the engine hosted it. It lives beside
-foundation.ui (the Sedulous-derived framework the editor and Engine.UI still use) until the games,
-samples and editor have moved onto it.
+foundation.ui (the Sedulous-derived framework the UISandbox still uses); the games, the samples and
+the editor are on it, and Engine.UI is gone (Specs/engine-ui-removal.md).
 
 ## Where it is
 

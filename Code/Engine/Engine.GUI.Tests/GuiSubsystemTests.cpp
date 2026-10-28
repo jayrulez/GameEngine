@@ -237,7 +237,7 @@ namespace
         }
     };
 
-    // What Engine.UI does in the same lane before the GUI: claims the pointer, when told to.
+    // A subsystem earlier in the same lane than the GUI: claims the pointer, when told to.
     class ClaimingSubsystem final : public runtime::Subsystem
     {
     public:
@@ -554,7 +554,7 @@ TEST_CASE("engine.gui: input goes to the root whose GUI is under the pointer, a 
     engine.context.EndFrame();
     CHECK_FALSE(engine.PointerClaimed());
 
-    // Engine.UI's claim (made first in the lane) stands though the GUI takes nothing.
+    // An earlier claim (made first in the lane) stands though the GUI takes nothing.
     engine.claiming->Claims = true;
     engine.devices.mouse.x = 500.0f;
     engine.Frame();

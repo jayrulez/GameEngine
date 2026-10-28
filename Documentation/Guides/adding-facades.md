@@ -1,7 +1,7 @@
 # Adding a script facade
 
 A *facade* is a reflected class scripts call as a static surface (`Scene.spawn(...)`,
-`Net.startServer(...)`, `Ui.pushOverlay(...)`). Both backends (Wren, AngelScript) bind
+`Net.startServer(...)`). Both backends (Wren, AngelScript) bind
 facades by reflection, so one C++ definition serves both languages.
 
 There are **two homes** for a facade. Pick by what the facade is *about*.
@@ -27,7 +27,6 @@ shape**. Reference implementations:
 | Facade        | Home module                    | Service key            | Binding payload            | Wiring shape |
 |---------------|--------------------------------|------------------------|----------------------------|--------------|
 | `Net`         | `draconic.net.manager`         | `net.runtime`          | controller interface ptr   | Install/Clear helpers |
-| `Ui`          | `draconic.engine.ui`           | `ui.runtime`           | host-filled function ptrs  | Install/Clear helpers |
 | `SceneLoader` | `draconic.engine.gameinstance` | `sceneloader.runtime`  | host-filled function ptrs  | Install/Clear helpers |
 | `Physics`     | `draconic.engine.physics`      | `physics.runtime`      | binding struct (subsystem) | subsystem `ExposeToScript` |
 | `Audio`       | `draconic.engine.audio`        | `audio.runtime`        | binding struct (+resources)| subsystem `ExposeToScript` |
@@ -205,8 +204,8 @@ Wren `"main"` module and registers it with the AngelScript engine. Then:
 ## Testing (required)
 
 Battery lives in the **owner's** test project, raw-context Net-style, on **BOTH** backends
-(`Draconic.Net.Manager.Tests/FacadeScriptTests.cpp`, `Draconic.Engine.UI.Tests/
-UiFacadeScriptTests.cpp`, and the `SceneLoader` cases in `Draconic.Engine.GameInstance.Tests`
+(`Draconic.Net.Manager.Tests/FacadeScriptTests.cpp`, `Integration.ScriptFacades/
+AudioFacadeScriptTests.cpp`, and the `SceneLoader` cases in `Draconic.Engine.GameInstance.Tests`
 are the templates):
 
 ```cpp

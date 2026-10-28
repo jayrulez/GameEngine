@@ -19,7 +19,6 @@ Code/Engine/Engine.Player/PlayerMain.cpp
 Code/Engine/Engine.Player/WebMain.cpp
 Code/Engine/Engine.Script/ScriptSubsystem.cppm
 Code/Engine/Engine.Terrain/TerrainSubsystem.cppm
-Code/Engine/Engine.UI.Script/UiScriptImpl.cpp
 Code/Extensions/Imgui/ImguiSubsystem.cppm
 Code/Foundation/Animation/AnimationClip.cppm
 Code/Foundation/Core/Containers/Array.cppm

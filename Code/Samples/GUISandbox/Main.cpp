@@ -725,7 +725,7 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
         return;
     }
 
-    // Mixed-direction text reorders by the Unicode bidirectional algorithm (E9c), as Engine.UI's does.
+    // Mixed-direction text reorders by the Unicode bidirectional algorithm (E9c).
     fonts::BidiAlgorithm::Install();
     // Shaped by HarfBuzz (E9e): Arabic joins its letters. Installed before any font loads, so each
     // one's atlas takes the joined forms its shaping reaches.

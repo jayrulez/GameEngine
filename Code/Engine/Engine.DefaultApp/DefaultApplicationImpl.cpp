@@ -141,13 +141,13 @@ namespace engine::runtime
                 LOG_INFO(u8"Profiler", u8"capturing five seconds to {}", folder);
             }
         }
-        if (kb != nullptr && kb->IsKeyPressed(KeyCode::F3) && m_ui != nullptr)
+        if (kb != nullptr && kb->IsKeyPressed(KeyCode::F3) && m_gui != nullptr)
         {
-            ProfilerOverlay().Toggle(*m_ui); // F3: the profiler overlay on and off
+            ProfilerOverlay().Toggle(*m_gui); // F3: the profiler overlay on and off
         }
         if (m_profilerOverlay.Get() != nullptr)
         {
-            m_profilerOverlay->Refresh(); // the frames that ended since, before the UI draws
+            m_profilerOverlay->Refresh(); // the frames that ended since, before the GUI draws
         }
         if (kb == nullptr || !kb->IsKeyPressed(KeyCode::P))
         {
@@ -609,13 +609,13 @@ namespace engine::runtime
         // Shipping the host shows nothing and the profiler is unavailable; the call stays valid.
         gi.RunBinding().setProfilerOverlay = core::Function<void(bool)>{[this](bool shown)
         {
-            if (m_ui == nullptr)
+            if (m_gui == nullptr)
             {
                 return;
             }
             if (shown)
             {
-                ProfilerOverlay().Show(*m_ui);
+                ProfilerOverlay().Show(*m_gui);
             }
             else if (m_profilerOverlay.Get() != nullptr)
             {
@@ -623,7 +623,7 @@ namespace engine::runtime
             }
         }};
         gi.RunBinding().profilerAvailable =
-            core::Function<bool()>{[this]() -> bool { return BUILD_PROFILING != 0 && m_ui != nullptr; }};
+            core::Function<bool()>{[this]() -> bool { return BUILD_PROFILING != 0 && m_gui != nullptr; }};
     }
 
     engine::physics::PhysicsSubsystem* DefaultApplication::Physics() const noexcept
@@ -706,10 +706,10 @@ namespace engine::runtime
         if (m_ui != nullptr)
         {
             m_ui->SetResourceManager(resources); // the game UI's images bind through it
-            if (m_profilerOverlayAtStart)
-            {
-                ProfilerOverlay().Show(*m_ui);
-            }
+        }
+        if (m_gui != nullptr && m_profilerOverlayAtStart)
+        {
+            ProfilerOverlay().Show(*m_gui);
         }
         if (m_gui != nullptr)
         {
@@ -770,7 +770,7 @@ namespace engine::runtime
         }
         if (m_profilerOverlay.Get() != nullptr)
         {
-            m_profilerOverlay->Hide(); // off the UI's overlay layer while the UI is alive
+            m_profilerOverlay->Hide(); // off the GUI's overlay layer while the GUI is alive
         }
         m_scenes->UnregisterObserver(this); // the observer is this app; scenes may still compose below
         // Destroy the run's scenes while the aware subsystems are still alive (they get
@@ -835,7 +835,7 @@ namespace engine::runtime
         {
             if (core::StringView(reinterpret_cast<const core::utf8char*>(argv[i])) == core::StringView(u8"--profile-overlay"))
             {
-                m_profilerOverlayAtStart = true; // shown once the UI is up (OnStartup)
+                m_profilerOverlayAtStart = true; // shown once the GUI is up (OnStartup)
             }
         }
     }

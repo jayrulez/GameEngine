@@ -201,10 +201,10 @@ export namespace engine::runtime
         /// S seconds, optionally exit once written. OnCommandLine reads them for every app.
         void SetScreenshotOptions(foundation::rhi::ScreenshotOptions options) { m_screenshotOptions = core::Move(options); }
         void OnCommandLine(int argc, char** argv) override; // --screenshot ..., --profile-overlay
-        /// Show the profiler overlay once the UI is up (`--profile-overlay`; the web player's
+        /// Show the profiler overlay once the GUI is up (`--profile-overlay`; the web player's
         /// `?profile-overlay`). F3 toggles it at any time.
         void SetProfilerOverlayAtStart(bool shown) noexcept { m_profilerOverlayAtStart = shown; }
-        /// The overlay host, made on first use; it shows on this app's UI.
+        /// The overlay host, made on first use; it shows on this app's GUI.
         [[nodiscard]] ProfilerOverlayHost& ProfilerOverlay();
         /// Exit the host after this many seconds of updates (0 = never). The player's --exit-after.
         void SetExitAfterSeconds(core::f32 seconds) noexcept { m_exitAfterSeconds = seconds; }

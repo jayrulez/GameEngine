@@ -39,6 +39,10 @@ namespace foundation::profiler::gui
     {
         builder.Creator();
     }
+    REFLECT_MEMBERS(ProfilerOverlay, "rtti::profiler::gui")
+    {
+        builder.Creator();
+    }
 
     void RegisterProfilerElements()
     {

@@ -212,6 +212,74 @@ From a survey of the code (2026-10-14):
   its colour; `Tools/sounds.py` generates the three pieces and the sounds, the Crowd plays the
   murmur, `Orchestra.as` the cue's piece and `Masquerade.as` the rest. The HUD names the mark's
   costume in its colour rather than a swatch: a script can colour a label's text, not a panel.
+- **P5b The screens, redesigned** (APPROVED 2026-10-28; the user chose the portraits as pictures and
+  the engine's ready step): the user, back on
+  the sample after its GUI port: "masquerade UI did not look good". Seen in the editor's Game tab
+  on 2026-10-28: the title is one tall panel doing five jobs (the three maps as buttons whose choice
+  is a lit border, a line repeating the choice, Play alone, Host, an unstyled address field, Join,
+  Quit, and the controls table) and runs to the window's top edge; the controls table, small type
+  with the pad's buttons written as text ("A", "LB / RB"), shows on the title, over the HUD as a
+  round starts, and in the pause card; the pause card sits on the busy floor, which is neither
+  dimmed nor blurred; the results are a list of sentences; nothing marks your own guest. And a
+  joiner picks a map that is only a guess at the host's: it loads its choice, connects, and leaves
+  again on the host's "another map" note.
+  - **The title, a small flow** on the stack: Play alone, Host, Join, Controls, Quit. Play alone
+    and Host go on to the map page: three cards (the map's name, its line, its best round), one
+    chosen, then Start. Join goes to the address page: the address (a field styled as the rest), then
+    Join; the map is the host's, the status saying it ("Joining the Canal...").
+  - **The join follows the host's map.** It connects first; the host's welcome names its map; the
+    joiner loads it; then the round. The snapshot must not reach a joiner whose map is not loaded
+    (its scene's networked entities are not there yet), so either the engine's replication gains a
+    client's "ready" (the host holds a joiner's snapshots until it says it has loaded; a general
+    feature, as any game that loads a level on joining needs it), or the sample re-joins: connect,
+    hear the map, leave, load it, connect again (no engine change, but the host sees a join and a
+    leave, a bot's seat taken and given back). The user's ruling: the engine's ready step.
+  - **One Controls page**, from the title and from pause: each action with its `Prompt` (the key or
+    the pad's button the project's map binds, for the device in hand, following a rebinding), so no
+    binding is written as text. The HUD keeps the short-lived hint as a round starts, as prompts
+    only (Tag, Dance, Sprint), and shows Tag's prompt while a guest stands in front of you.
+  - **Pause** over the ball dimmed and blurred (`backdrop-filter`), its card: Resume, Controls,
+    Start the round over, Leave to the title.
+  - **Results** as a ranked table: the place, the hunter's colour, its points, your row lit; the
+    title saying who won; the best round under it; Another round and Leave to the title.
+  - **Your guest marked**: a ring of your hunter's colour under your own guest, and a quiet word at
+    the HUD's edge when your hunter is close (as the flare is told today).
+  - The look stays the ball's: gold on a deep night blue, in MasqueradeSheet.css; the backdrop camera
+    on the title framed so the floor fills the window.
+  - **A menu holds the player's input, alone too** (the user, 2026-10-28: pressing a pad's button
+    on Resume resumed and tagged a guest). Alone, a menu only sets the time scale to 0; the "Menu"
+    event that stills the player is sent in a networked round only (Masquerade.as `holdStill`), so
+    Player.as still reads `wasPressed("Tag")` under the pause card, and the South press that armed
+    Resume (the GUI acts on the pad's release) was a Tag too. Every menu, alone or not, holds the
+    player's input: the input map's exclusive menu set while one is up (the engine's own way to
+    keep a modal screen's presses from the game), not a scene event.
+  - **The HUD's cards, redrawn** (the user, 2026-10-28: the target, the points and the timer could
+    all look better; icons for the targets). Today: two small corner cards of plain lines ("Your
+    mark wears a rose gown", "Points 0"; "3:56", "1st of 4").
+    - *Your mark*: a portrait of the costume beside "Your mark" and its name in its colour, larger
+      than today's line. The portraits are pictures, one per costume (six: the coats and the
+      gowns), rendered in Blender by a sibling of `Tools/blender/guest.py` from the same models
+      (three-quarter view, the ball's light, a transparent ground), imported as textures and shown
+      by `<Image src="{guid}">`; the results table uses them too. A live portrait (a camera on a
+      hidden stage drawing a guest into a render texture the HUD shows) was weighed: it costs a
+      pass a frame, a stage in every map, and a GUI image showing a camera's render texture, which
+      the GUI's image provider is believed not to do (unchecked); for six fixed costumes the
+      pictures serve better (the user's ruling: pictures).
+    - *Points*: the number large, "points" small under it, and each change floating up beside it
+      for a moment ("+100" in gold, "-50" a muted red); your place ("2nd of 4") with them rather
+      than under the clock.
+    - *The clock*: a card of its own at the top centre, the time large over a thin bar of the
+      round's time left; warm and gently pulsing in the last 30
+      seconds.
+  - **The HUD's word reads over any floor** (the user: "the tagged message sometimes fights with
+    the scene"): "Tagged!", "Missed" and the flare's word drawn bare over the ball's busy floor and
+    costumes. On a backing of its own (the cards' night blue, translucent) or with a text outline,
+    as the corner cards already are.
+  Layers: (0) the menu's input hold, with a playtest that a press on a menu button tags nobody;
+  (1) the engine's ready step and the join, with its test; (2) the title flow and the map and
+  address pages; (3) the Controls page with prompts, the HUD's hints; (4) pause and results; (5) the
+  marker and the hunter's warning. Each built through the MCP tools, as the sample is, and played in
+  two Game tabs where it touches the network.
 - **P6 Ship**: web, Steam Deck, README pictures, the website's card, a docs page.
 - **P7 `wss://`** (gap 8): the client's choice of `wss://`, and a docs page on putting a TLS
   reverse proxy (Caddy, nginx) in front of a dedicated host, so the site's demo can join a hosted

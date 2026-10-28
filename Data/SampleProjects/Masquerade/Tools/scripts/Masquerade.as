@@ -1,9 +1,10 @@
 // Masquerade - the game's orchestrator (the reserved class Game): the title, a round at the ball
 // under its HUD, the pause menu, and the results.
 //
-// The title picks a map, then plays it alone, hosts it (the server on `kPort`, then the map) or
-// joins a host (the map first, then the connection, so the map's networked entities are in place
-// for the host's first snapshot). The round itself is the scene's (Ball.as): this hears it. "Hud" (four times a second: your
+// The title picks a map, then plays it alone or hosts it (the server on `kPort`, waiting for each
+// joiner's ready, then the map); or joins a host: the connection first, from the title, then the
+// host's map (named in its welcome) loads, and the joiner says it is ready, so the map's networked
+// entities are in place for the host's first snapshot. The round itself is the scene's (Ball.as): this hears it. "Hud" (four times a second: your
 // points, the seconds left, your target's costume, your place), "Note" (something happened to
 // you, or a mask flared), "RoundOver" (everyone's points) and "RoundStart" (the host began another
 // round). Pause (Escape or Start) shows the pause menu, holding the round still when playing alone
@@ -32,10 +33,10 @@ const int kNoteGotTarget = 1;
 const int kNoteMissed = 2;
 const int kNoteTagged = 3;
 const int kNoteFlare = 4;
-const int kNoteWrongMap = 5;
 const int kNoteFull = 6;
 const int kPort = 7777;
 const int kAlone = 0;
+const float kJoinSeconds = 8.0f; // how long a joiner waits for the host's welcome
 const int kHosting = 1;
 const int kJoining = 2;
 
@@ -60,14 +61,20 @@ class Game
     private bool m_inRound = false;
     private bool m_paused = false;
     private float m_note = 0.0f;         // how long the HUD's word shows yet
+    private bool m_inputHeld = false;    // the "Menu" set pushed (holdInput)
     private float m_controlsShow = 0.0f; // how long the controls panel shows yet
     private int m_map = 0;               // 0 the Palace, 1 the Canal, 2 the Gardens
     private int m_mode = kAlone;
     private string m_address = "127.0.0.1";
-    private float m_connectIn = -1.0f;   // a joiner: until it connects, once its map has loaded
+    private float m_readyIn = -1.0f;     // a joiner: until it tells the host it is ready, once the host's map has loaded
+    private float m_joinWait = -1.0f;    // a joiner on the title: how long until it gives up on the host
 
     void launch()
     {
+        // A joiner hears the host's map in its welcome (Ball.as's onJoined), here rather than in a
+        // scene's behaviour, as it arrives while the title's scene is the one loaded.
+        NetTextHandler@ map = NetTextHandler(this.onHostMap);
+        Net::on("map", map);
         showTitle();
     }
 
@@ -77,6 +84,7 @@ class Game
         m_inRound = false;
         m_paused = false;
         run::setTimeScale(0.0f); // whatever is behind the title holds still
+        holdInput();
         screens().clear();
         screens().push(kTitleDoc);
         wire("play-btn", EventHandler(this.onPalace));
@@ -128,6 +136,7 @@ class Game
             return true;
         }
         m_mode = kHosting;
+        Net::waitForReady(true); // a joiner hears no state until it has loaded this map
         startRound();
         return true;
     }
@@ -137,10 +146,30 @@ class Game
         sound(kClick);
         string typed = TextField::of(find("address")).text;
         m_address = typed.length() > 0 ? typed : "127.0.0.1";
+        // Connect from the title; the host's welcome names its map, which then loads (onHostMap).
+        if (!Net::connect(m_address, kPort))
+        {
+            setText("net-status", "Could not reach " + m_address);
+            return true;
+        }
         m_mode = kJoining;
-        startRound();
-        m_connectIn = 0.2f; // once the map has loaded
+        m_joinWait = kJoinSeconds;
+        setText("net-status", "Joining " + m_address + "...");
         return true;
+    }
+
+    // A joiner: the host's map. It loads, and once it is ready the host's state begins.
+    void onHostMap(int sender, const string &in name)
+    {
+        if (!Net::isClient() || m_mode != kJoining || m_joinWait < 0.0f)
+        {
+            return;
+        }
+        m_joinWait = -1.0f;
+        m_map = name == "Canal" ? 1 : (name == "Gardens" ? 2 : 0);
+        setText("net-status", "Joining " + mapTitle(m_map) + "...");
+        startRound();
+        m_readyIn = 0.2f; // once the map has loaded, a moment more for its first frame
     }
 
     private string mapName(int map) { return map == 0 ? "Palace" : (map == 1 ? "Canal" : "Gardens"); }
@@ -169,22 +198,33 @@ class Game
         setText("hud-score", "Points 0");
         find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the sheet's 0
         m_controlsShow = kControlsShown;
-        run::setTimeScale(1.0f);
+        letGo(); // time again, and the player's input: a round may start from any menu
         run::loadScene(m_map == 0 ? kPalace : (m_map == 1 ? kCanal : kGardens));
     }
 
     void update(float dt)
     {
+        // A joiner on the title, waiting for the host's welcome.
+        if (m_joinWait >= 0.0f)
+        {
+            m_joinWait -= dt;
+            if (m_joinWait < 0.0f)
+            {
+                Net::disconnect();
+                m_mode = kAlone;
+                setText("net-status", "Could not reach " + m_address);
+            }
+        }
         if (!m_inRound)
         {
             return;
         }
-        if (m_connectIn >= 0.0f && run::sceneReady())
+        if (m_readyIn >= 0.0f && run::sceneReady())
         {
-            m_connectIn -= dt; // a moment more, for the scene's first frame
-            if (m_connectIn < 0.0f && !Net::connect(m_address, kPort))
+            m_readyIn -= dt;
+            if (m_readyIn < 0.0f)
             {
-                note("Could not reach " + m_address);
+                Net::ready();
             }
         }
         if (Input::wasPressed("Pause"))
@@ -267,11 +307,6 @@ class Game
         {
             sound(kFlareSound);
             note("A mask flares: a hunter, there");
-        }
-        else if (what == kNoteWrongMap)
-        {
-            sound(kChimeSound);
-            note("The host is at another map: choose it and join again");
         }
         else if (what == kNoteFull)
         {
@@ -372,28 +407,43 @@ class Game
         return true;
     }
 
-    // Alone, the scene stops behind a menu. In a networked round it goes on (the host runs the
-    // world for everyone, and a joiner's scene must keep hearing the host: a new round, say), so
-    // the player hears "Menu" instead and stands still under it.
+    // Under any menu the player's actions read released: the input map's "Menu" set (Pause alone)
+    // is pushed as the only one in effect, and a press already held when it opens or closes stays
+    // latched until let go, so the press that works a menu's button is never a Tag. Once, however
+    // many menus ask.
+    private void holdInput()
+    {
+        if (!m_inputHeld)
+        {
+            Input::pushSet("Menu");
+            m_inputHeld = true;
+        }
+    }
+
+    private void releaseInput()
+    {
+        if (m_inputHeld)
+        {
+            Input::popSet();
+            m_inputHeld = false;
+        }
+    }
+
+    // Alone, the scene stops behind a menu too. In a networked round it goes on (the host runs the
+    // world for everyone, and a joiner's scene must keep hearing the host: a new round, say).
     private void holdStill()
     {
+        holdInput();
         if (m_mode == kAlone)
         {
             run::setTimeScale(0.0f);
-        }
-        else
-        {
-            run::currentScene().events.emit("Menu", 1);
         }
     }
 
     private void letGo()
     {
         run::setTimeScale(1.0f);
-        if (m_mode != kAlone)
-        {
-            run::currentScene().events.emit("Menu", 0);
-        }
+        releaseInput();
     }
 
     // The HUD over the scene that is already running.
@@ -415,7 +465,8 @@ class Game
             Net::disconnect();
             m_mode = kAlone;
         }
-        m_connectIn = -1.0f;
+        m_readyIn = -1.0f;
+        m_joinWait = -1.0f;
         showTitle();
         return true;
     }

@@ -392,4 +392,10 @@ namespace editor
         auto* page = editor::EditorRootAllocator().New<FontEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
+
+    Span<const String> FontEditorPage::SourceExtensions() const
+    {
+        static const String kFonts[] = {String(u8".ttf"), String(u8".otf"), String(u8".ttc")};
+        return Span<const String>(kFonts, 3u);
+    }
 }

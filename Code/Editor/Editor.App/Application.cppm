@@ -161,6 +161,8 @@ export namespace editor::app
             services.host = m_embeddedHost.Get(); // the runtime's, with its scenes and renderer (the scene page's too)
             services.gui = m_window.Host();
             services.languages = &m_codeLanguages;
+            EditorApplication* self = this;
+            services.pick = [self](PickerRequest request) { self->ShowPicker(Move(request)); };
             return services;
         }
         /// The one source every page factory asks for PageServices (the registrations take it by

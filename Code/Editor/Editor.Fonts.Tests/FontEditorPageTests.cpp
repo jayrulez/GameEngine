@@ -77,10 +77,12 @@ namespace
             project.Reset();
             (void)RemoveDirectoryRecursive(dir.AsView());
         }
+        app::PickerRequest picked; // what the page last asked the picker to show
         UniquePtr<FontEditorPage> Open()
         {
             app::AssetPageServices services;
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
+            services.pick = [this](app::PickerRequest request) { picked = Move(request); };
             return MakeUnique<FontEditorPage>(DefaultAllocator(), context, Move(services), *roboto);
         }
     };
@@ -131,4 +133,27 @@ TEST_CASE("font page: its atlas baked and shown with its facts; the ramp's sizes
     CHECK_FALSE(page->Ramp().FindInfo(u8"sizes")->Visible);
     page->Commands().Undo();
     CHECK(page->Ramp().FindInfo(u8"sizes")->Visible);
+}
+
+TEST_CASE("font page: Browse on the source row picks another font file of the project's; the relink is one undo step")
+{
+    Bed bed;
+    const String other = PathJoin(bed.project->SourcesRoot().AsView(), u8"faces/bold.otf");
+    (void)CreateDirectories(PathParent(other.AsView()));
+    const char8_t notAFont[] = u8"x";
+    REQUIRE(WriteFile(other.AsView(), Span<const byte>(reinterpret_cast<const byte*>(notAFont), 1u)).IsOk());
+    REQUIRE(WriteFile(PathJoin(bed.project->SourcesRoot().AsView(), u8"readme.txt").AsView(), Span<const byte>(reinterpret_cast<const byte*>(notAFont), 1u)).IsOk());
+    UniquePtr<FontEditorPage> page = bed.Open();
+    REQUIRE_FALSE(page->LoadFailed());
+    page->BrowseSource();
+    REQUIRE(bed.picked.OnPicked);
+    CHECK(bed.picked.Current == String(u8"roboto.ttf"));
+    REQUIRE(bed.picked.Items.Size() == 2u); // the font files, not the text
+    CHECK(bed.picked.Items[0].Key == String(u8"faces/bold.otf"));
+    CHECK(bed.picked.Items[1].Key == String(u8"roboto.ttf"));
+    bed.picked.OnPicked(u8"faces/bold.otf");
+    CHECK(page->SourceFile() == StringView(u8"faces/bold.otf"));
+    REQUIRE(page->Commands().CanUndo());
+    page->Commands().Undo();
+    CHECK(page->SourceFile() == StringView(u8"roboto.ttf"));
 }

@@ -46,6 +46,8 @@ export namespace editor
         /// Sets the raster ramp's sizes from text ("10, 12.5 24"), one undo step; false, with the
         /// row put back and a notice saying why, when it is not a list of sizes from 1 to 512.
         bool SetSizes(StringView text);
+        /// A font's source relinks to another font file of the project's (Browse on its row).
+        [[nodiscard]] Span<const String> SourceExtensions() const override;
 
         // === For tests ===
         [[nodiscard]] app::ImagePreview* Preview() const noexcept { return m_preview.Get(); }

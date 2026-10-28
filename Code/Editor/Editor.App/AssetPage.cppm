@@ -32,6 +32,7 @@ import foundation.gui.hosting; // GuiHost
 import editor.core;
 import :resource_ref_editor;
 import :code_languages;
+import :picker; // PickerRequest
 
 using namespace foundation::core;
 
@@ -51,6 +52,8 @@ export namespace editor::app
         gui::GuiHost* gui = nullptr;
         /// The code editors' languages by id (null: none, a test; code shows uncoloured).
         CodeLanguages* languages = nullptr;
+        /// Opens the editor's picker for `request` (a source file's Browse); unset: none.
+        Function<void(PickerRequest request)> pick;
     };
 
     /// Where every page factory gets the services a page is made with: one, owned by the editor's

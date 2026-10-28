@@ -32,6 +32,7 @@ import foundation.runtime.client;
 import foundation.gui;
 import foundation.gui.toolkit;
 import pipeline.core; // Asset: its source file
+import foundation.vfs; // SourcePath: a relinked source
 import editor.core;
 import :ui_page;
 import :page_action_bar;
@@ -39,34 +40,74 @@ import :property_sections;
 import :property_extras;
 import :resource_ref_editor;
 import :asset_page;
+import :path_picker_dialog;
+import :picker;
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    /// An asset's source file as its row shows it: read only, the path as the asset names it
-    /// (reflection has no text for a SourcePath, so the page that holds the asset says it).
-    class SourcePathEditor final : public gui::SingleControlEditor
+    /// An asset's source file as its row shows it: the path as the asset names it (reflection has
+    /// no text for a SourcePath, so the page that holds the asset says it), never typed (a typo
+    /// would cook a dangling reference); with `browse`, a Browse button picking another file of
+    /// the project's (a font's source, relinked).
+    class SourcePathEditor final : public gui::PropertyEditor
     {
-        RTTI_OBJECT(SourcePathEditor, gui::SingleControlEditor)
+        RTTI_OBJECT(SourcePathEditor, gui::PropertyEditor)
     public:
         static constexpr StringView kHint = u8"SourcePath";
 
-        explicit SourcePathEditor(Function<String()> path) : m_path(foundation::core::Move(path)) // a widget's own Move would move it
+        explicit SourcePathEditor(Function<String()> path, Function<void()> browse = {})
+            : m_path(foundation::core::Move(path)), m_browse(foundation::core::Move(browse)) // a widget's own Move would move it
         {
             AddClass(u8"source-path");
+            EditLayoutStyle([](gui::LayoutStyle& s)
+            {
+                s.Direction = gui::FlexDirection::Row;
+                s.AlignItems = gui::Align::Center;
+                s.ColumnGap = 6.0f;
+            });
             m_text = MakeRef<gui::Label>(MemoryAllocator());
             m_text->AddClass(u8"source-path-text");
-            Hold(*m_text);
+            m_text->EditLayoutStyle([](gui::LayoutStyle& s)
+            {
+                s.Grow = 1.0f;
+                s.Shrink = 1.0f;
+            });
+            AddChild(m_text.Get());
+            m_button = MakeRef<gui::Button>(MemoryAllocator());
+            m_button->AddClass(u8"source-path-browse");
+            m_button->SetText(u8"Browse...");
+            m_button->SetTooltip(u8"Pick another file of the project's as its source");
+            SourcePathEditor* self = this;
+            m_button->SetOnClick([self]()
+                                 {
+                                     if (self->m_browse)
+                                         self->m_browse();
+                                 });
+            m_button->SetDisplayed(static_cast<bool>(m_browse));
+            AddChild(m_button.Get());
         }
         [[nodiscard]] StringView Text() const { return m_text->GetText(); }
+        [[nodiscard]] gui::Button* BrowseButton() const noexcept { return m_browse ? m_button.Get() : nullptr; }
 
     protected:
-        void OnBind(const gui::PropertyInfo&, const gui::PropertyValue&) override { m_text->SetText(m_path ? m_path().AsView() : StringView{}); }
+        void OnBind(const gui::PropertyInfo&, const gui::PropertyValue&) override
+        {
+            m_text->SetText(m_path ? m_path().AsView() : StringView{});
+            m_button->SetEnabled(!IsReadOnly());
+        }
+        void OnTextStyleChange() override
+        {
+            ShareTextStyle(*m_text);
+            ShareTextStyle(*m_button);
+        }
 
     private:
         Function<String()> m_path;
+        Function<void()> m_browse;
         RefPtr<gui::Label> m_text;
+        RefPtr<gui::Button> m_button;
     };
 
     RTTI_DEFINE_OBJECT(SourcePathEditor, "rtti::editor::editor::app")
@@ -129,7 +170,12 @@ export namespace editor::app
                     ResourceRefEditor::Register(m_grid->GetEditors(), *m_services.refs);
                 PropertyExtras::Register(m_grid->GetEditors()); // the notices
                 m_grid->GetEditors().RegisterHint(SourcePathEditor::kHint, [self](IAllocator& allocator) -> RefPtr<gui::PropertyEditor>
-                                                  { return MakeRef<SourcePathEditor>(allocator, [self]() { return self->SourceFile(); }); });
+                                                  {
+                                                      Function<void()> browse;
+                                                      if (!self->SourceExtensions().IsEmpty() && self->m_services.pick)
+                                                          browse = [self]() { self->BrowseSource(); };
+                                                      return MakeRef<SourcePathEditor>(allocator, [self]() { return self->SourceFile(); }, Move(browse));
+                                                  });
                 m_grid->SetSource(m_sections.Get());
             }
         }
@@ -193,6 +239,34 @@ export namespace editor::app
         {
             const auto* asset = Cast<pipeline::Asset>(m_object.Get());
             return asset != nullptr && !asset->fileName.IsEmpty() ? String(asset->fileName.View()) : String(u8"Not set");
+        }
+        /// The kinds of file its source may be relinked to (".ttf"); none: its source row only says
+        /// it (the default).
+        [[nodiscard]] virtual Span<const String> SourceExtensions() const { return {}; }
+        /// The source row's Browse: the files under the project's sources of those kinds, the
+        /// current one checked; a pick relinks it.
+        void BrowseSource()
+        {
+            const auto* asset = Cast<pipeline::Asset>(m_object.Get());
+            if (asset == nullptr || !m_services.pick || Context().Project() == nullptr)
+                return;
+            PickerRequest request = PathPicker::Request(Allocator(), Context().Project()->SourcesRoot().AsView(), SourceExtensions(), asset->fileName.View());
+            AssetObjectPage* self = this;
+            request.OnPicked = [self](StringView picked) { self->RelinkSource(picked); };
+            m_services.pick(Move(request));
+        }
+        /// Names `path` (under the project's sources) as the asset's source, one undo step; the
+        /// page's rows read it again.
+        void RelinkSource(StringView path)
+        {
+            if (Cast<pipeline::Asset>(m_object.Get()) == nullptr || path.IsEmpty())
+                return;
+            const String file(path);
+            EditWhole(u8"asset_page.source", [file](ISerializable& object)
+                      {
+                          if (auto* asset = Cast<pipeline::Asset>(&object))
+                              asset->fileName = foundation::vfs::SourcePath(file.AsView());
+                      });
         }
         /// What the notice `key` says ("" when it is not shown).
         [[nodiscard]] String Notice(StringView key) const

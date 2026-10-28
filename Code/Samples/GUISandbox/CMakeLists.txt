@@ -25,13 +25,15 @@ endforeach()
 
 # The sweep (E10 of Specs/gui-lab-evolution-2.md): every page's widgets clicked and right-clicked,
 # every page walked by keys and the pad, the game menu opened, on each backend; it fails when
-# anything warns or errs while it runs, and is skipped (77) without a device.
+# anything warns or errs while it runs, and is skipped (77) without a device. A software adapter
+# (Windows CI's WebGPU runs on the CPU) takes about ten minutes for its 702 steps, past ctest's
+# default 300 s, so the sweeps have 1200.
 foreach(backend vulkan webgpu)
     add_test(NAME GUI.Sweep.${backend} COMMAND GUISandbox --${backend} --sweep)
-    set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")
+    set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1200 ENVIRONMENT "${_sandbox_test_env}")
     # The same in Arabic, right to left (E17a of Specs/gui-lab-evolution-2.md).
     add_test(NAME GUI.Sweep.${backend}.ar COMMAND GUISandbox --${backend} --sweep --lang ar)
-    set_tests_properties(GUI.Sweep.${backend}.ar PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_sandbox_test_env}")
+    set_tests_properties(GUI.Sweep.${backend}.ar PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1200 ENVIRONMENT "${_sandbox_test_env}")
 endforeach()
 
 # The mirror audit (E17a): every page laid out both ways, every widget where the mirror of its left-to-

@@ -169,7 +169,7 @@ TEST_CASE("editor-project: settings changes persist through SaveSettings")
         REQUIRE(Guid::TryParse(u8"6ba7b810-9dad-11d1-80b4-00c04fd430c8",
                                project->Settings().defaultSceneId));
         REQUIRE(Guid::TryParse(u8"6ba7b811-9dad-11d1-80b4-00c04fd430c8",
-                               project->Settings().defaultUiThemeId));
+                               project->Settings().guiLoadingDocumentId));
         REQUIRE(Guid::TryParse(u8"6ba7b812-9dad-11d1-80b4-00c04fd430c8",
                                project->Settings().defaultInputMapId));
         project->Settings().defaultScene = String(u8"scenes/main");
@@ -184,9 +184,9 @@ TEST_CASE("editor-project: settings changes persist through SaveSettings")
         REQUIRE(static_cast<bool>(project));
         CHECK(project->Settings().defaultScene == u8"scenes/main");
         CHECK(project->Settings().defaultSceneId == savedId); // guid is authoritative
-        Guid themeId;
-        REQUIRE(Guid::TryParse(u8"6ba7b811-9dad-11d1-80b4-00c04fd430c8", themeId));
-        CHECK(project->Settings().defaultUiThemeId == themeId); // v5 field round-trips
+        Guid loadingId;
+        REQUIRE(Guid::TryParse(u8"6ba7b811-9dad-11d1-80b4-00c04fd430c8", loadingId));
+        CHECK(project->Settings().guiLoadingDocumentId == loadingId); // an appended field round-trips
         Guid mapId;
         REQUIRE(Guid::TryParse(u8"6ba7b812-9dad-11d1-80b4-00c04fd430c8", mapId));
         // Open's per-field settings move must not DROP defaultInputMapId (silent data loss).
@@ -325,13 +325,69 @@ TEST_CASE("project: manifests carry the engine version stamp; a stale-version ma
     (void)RemoveDirectory(dir);
 }
 
+// A version 9 manifest (every sample's before Engine.UI went) still opens: the old UI's theme
+// and loading document are read and dropped, the fields after them land where they were.
+TEST_CASE("project: a version 9 manifest opens without the old UI's two settings")
+{
+    const StringView dir = u8"scratch_project_v9_manifest";
+    (void)FileDelete(PathJoin(dir, u8"Project.xml"));
+    (void)RemoveDirectory(dir);
+    const String text = Format(
+        u8"<root>\n"
+        u8"<array name=\"dataVersions\" count=\"1\"><u64 name=\"type\">{}</u64><u32 name=\"version\">9</u32></array>\n"
+        u8"<string name=\"name\">Old</string>\n"
+        u8"<string name=\"engineVersion\">0.1.0</string>\n"
+        u8"<string name=\"defaultSceneId\">00000000-0000-0000-0000-000000000000</string>\n"
+        u8"<string name=\"defaultScene\"/>\n"
+        u8"<string name=\"startupScript\"/>\n"
+        u8"<string name=\"nativeModule\"/>\n"
+        u8"<string name=\"defaultInputMapId\">00000000-0000-0000-0000-000000000000</string>\n"
+        u8"<string name=\"defaultBusLayoutId\">00000000-0000-0000-0000-000000000000</string>\n"
+        u8"<string name=\"defaultUiThemeId\">6ba7b811-9dad-11d1-80b4-00c04fd430c8</string>\n"
+        u8"<string name=\"startupScriptId\">00000000-0000-0000-0000-000000000000</string>\n"
+        u8"<string name=\"defaultUiFontId\">6ba7b813-9dad-11d1-80b4-00c04fd430c8</string>\n"
+        u8"<string name=\"loadingDocumentId\">6ba7b812-9dad-11d1-80b4-00c04fd430c8</string>\n"
+        u8"<u32 name=\"renderMsaaSamples\">4</u32>\n"
+        u8"</root>\n",
+        engine::project::ProjectSettings::StaticType().id);
+    {
+        foundation::vfs::NativeFileSystem root(dir, foundation::core::DefaultAllocator());
+        REQUIRE(root.AsWritable()->Save(u8"Project.xml", Span<const byte>(reinterpret_cast<const byte*>(text.CStr()), text.Size())).IsOk());
+    }
+    {
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        CHECK(project->Settings().name == u8"Old");
+        Guid fontId;
+        REQUIRE(Guid::TryParse(u8"6ba7b813-9dad-11d1-80b4-00c04fd430c8", fontId));
+        CHECK(project->Settings().defaultUiFontId == fontId); // read past the dropped theme
+        CHECK(project->Settings().renderMsaaSamples == 4u);   // and past the dropped document
+        CHECK(project->Settings().guiLoadingDocumentId.IsNil());
+        REQUIRE(project->SaveSettings().IsOk()); // saved at the current version, without them
+    }
+    {
+        const String manifest = PathJoin(dir, u8"Project.xml");
+        const Result<Array<byte>> saved = ReadFile(manifest.AsView());
+        REQUIRE(saved.HasValue());
+        const StringView savedText(reinterpret_cast<const utf8char*>(saved.Value().Data()), saved.Value().Size());
+        CHECK_FALSE(savedText.ContainsIgnoreCase(u8"\"defaultUiThemeId\""));
+        CHECK_FALSE(savedText.ContainsIgnoreCase(u8"\"loadingDocumentId\"")); // guiLoadingDocumentId stays
+        UniquePtr<EditorProject> project = EditorProject::Open(DefaultAllocator(), dir);
+        REQUIRE(static_cast<bool>(project));
+        CHECK(project->Settings().renderMsaaSamples == 4u);
+    }
+    (void)FileDelete(PathJoin(dir, u8"Project.xml"));
+    (void)RemoveDirectory(dir);
+}
+
 // Sedulous 3de51786 (reflected here, not a list): the settings the Project Settings dialog and
 // project_settings_set edit are the type's own description - every asset setting a Guid naming
 // the asset type it takes, every setting labelled - and the path mirrors follow their guids.
 TEST_CASE("editor-project: the settings describe themselves, and the path mirrors follow the guids")
 {
     const TypeInfo& type = engine::project::ProjectSettings::StaticType();
-    CHECK(type.dataVersion == 9u); // the manifest layout is unchanged
+    CHECK(type.dataVersion == 10u); // 10: the old UI's theme and loading document gone
+    CHECK(type.minReadDataVersion == 9u); // a version 9 manifest still reads
     u32 assets = 0;
     u32 lists = 0;
     for (const PropertyInfo& property : Properties(type))
@@ -349,7 +405,7 @@ TEST_CASE("editor-project: the settings describe themselves, and the path mirror
             CHECK(engine::project::SettingAttribute(property, engine::project::kSettingEmptyTextAttribute) != nullptr);
         }
     }
-    CHECK(assets == 8u); // + guiLoadingDocumentId
+    CHECK(assets == 6u); // scene, script, input map, bus layout, UI font, GUI loading screen
     CHECK(lists == 2u); // uiFontIds, guiStyleSheetIds
     const PropertyInfo* scene = FindProperty(type, "defaultSceneId");
     REQUIRE(scene != nullptr);

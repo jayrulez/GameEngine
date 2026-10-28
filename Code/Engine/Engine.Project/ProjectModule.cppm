@@ -100,12 +100,8 @@ export namespace engine::project
         String nativeModule;    // RESERVED: optional native game module (tagged for later planning)
         Guid defaultInputMapId; // the input map the player binds at startup (nil = none; v4)
         Guid defaultBusLayoutId; // the audio mixer layout applied at startup (nil = built-in; v5)
-        Guid
-            defaultUiThemeId; // the cooked UITheme the game UI defaults to (nil = built-in GameTheme; v5)
         Guid defaultUiFontId; // the cooked FontResource the game UI defaults to (nil = the dev
                               // TTF fallback path; v7 - the fonts-triad manifest hook)
-        Guid loadingDocumentId; // the cooked UIDocument shown as the boot splash while the default
-                                // scene loads (nil = the built-in default splash; v8, task #123)
         u32 renderMsaaSamples = 1; // scene-pass MSAA sample count (1 = off, 2, 4); the player and
                                    // play-in-editor apply it, capability-clamped at runtime (v9).
                                    // Default 1 keeps existing projects byte-identical.
@@ -118,7 +114,7 @@ export namespace engine::project
         // Appended: a manifest saved before it reads none. Its fonts are the UI's (above).
         Array<Guid> guiStyleSheetIds;
         // The cooked GuiDocument the player's boot splash shows through the engine GUI while the
-        // default scene loads (nil = the UI's loading screen, loadingDocumentId); its load progress
+        // default scene loads (nil = the engine's own loading screen); its load progress
         // the GUI's data value `bootProgress` (0 to 1). Appended. (E9d)
         Guid guiLoadingDocumentId;
 
@@ -152,10 +148,14 @@ export namespace engine::project
             startupScript = startupScriptId.IsNil() ? String() : pathOf(startupScriptId);
         }
 
-        // One layout: the current data version (REFLECT_MEMBERS' DataVersion). A manifest
-        // written under another version is refused by the versioned-payload reader.
+        // The current data version's layout (REFLECT_MEMBERS' DataVersion, 10). A version 9
+        // manifest still reads: it carries the old UI's theme and loading document (Engine.UI,
+        // deleted), read and dropped. Older versions are refused by the versioned-payload reader;
+        // outside a payload (CopyProjectSettings) the version reads 0, the current layout.
         void Serialize(ISerializer& ar) override
         {
+            const bool v9 = ar.Mode() == SerializeMode::Read && ar.Version() == 9;
+            Guid dropped;
             foundation::core::Serialize(ar, "name", name);
             foundation::core::Serialize(ar, "engineVersion", engineVersion);
             ar.Key("defaultSceneId");
@@ -167,14 +167,20 @@ export namespace engine::project
             ar.GuidValue(defaultInputMapId);
             ar.Key("defaultBusLayoutId");
             ar.GuidValue(defaultBusLayoutId);
-            ar.Key("defaultUiThemeId");
-            ar.GuidValue(defaultUiThemeId);
+            if (v9)
+            {
+                ar.Key("defaultUiThemeId");
+                ar.GuidValue(dropped);
+            }
             ar.Key("startupScriptId");
             ar.GuidValue(startupScriptId);
             ar.Key("defaultUiFontId");
             ar.GuidValue(defaultUiFontId);
-            ar.Key("loadingDocumentId");
-            ar.GuidValue(loadingDocumentId);
+            if (v9)
+            {
+                ar.Key("loadingDocumentId");
+                ar.GuidValue(dropped);
+            }
             foundation::core::Serialize(ar, "renderMsaaSamples", renderMsaaSamples);
             SerializeAppended(ar, "uiFontIds", uiFontIds);
             SerializeAppended(ar, "renderWidth", renderWidth);
@@ -289,7 +295,7 @@ export namespace engine::project
 
     /// The one copy of a manifest (a ProjectSettings is serializable, so it has no copy): through
     /// its own Serialize body, so every field written there is copied. The project open and the
-    /// dist manifest each kept a hand list of fields, and both drifted (loadingDocumentId and
+    /// dist manifest each kept a hand list of fields, and both drifted (the loading document and
     /// renderMsaaSamples were dropped by one, then the other).
     [[nodiscard]] inline Status CopyProjectSettings(const ProjectSettings& from, ProjectSettings& to)
     {

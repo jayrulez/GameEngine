@@ -26,7 +26,7 @@ namespace engine::project
 
     REFLECT_MEMBERS(ProjectSettings, "rtti::engine::project")
     {
-        builder.DataVersion(9);
+        builder.DataVersion(10).ReadsDataVersionsFrom(9); // 9 carried the old UI's two settings
         // The enums the display settings take (their enumerators name the dialog's and the MCP
         // tools' choices): FitMode is the core's.
         RegisterCoreTypes();
@@ -58,12 +58,6 @@ namespace engine::project
         // The cooked mixer applied at startup; nil = the built-in neutral four-bus layout.
         builder.Property<&ProjectSettings::defaultBusLayoutId>("defaultBusLayoutId");
         asset(u8"Default bus layout", u8"AudioBusLayoutAsset", u8"(built-in)", u8"Audio");
-        // The cooked UITheme the game UI defaults to; nil = the built-in GameTheme.
-        builder.Property<&ProjectSettings::defaultUiThemeId>("defaultUiThemeId");
-        asset(u8"Default UI theme", u8"UIThemeAsset", u8"(built-in)", u8"UI");
-        // The cooked UIDocument shown as the boot splash while the default scene streams.
-        builder.Property<&ProjectSettings::loadingDocumentId>("loadingDocumentId");
-        asset(u8"Loading screen", u8"UIDocumentAsset", u8"(built-in)", u8"Startup");
         // The cooked font the game UI falls back to when a document names none.
         builder.Property<&ProjectSettings::defaultUiFontId>("defaultUiFontId");
         asset(u8"Default UI font", u8"FontAsset", u8"(built-in)", u8"UI");
@@ -78,9 +72,9 @@ namespace engine::project
         // The engine GUI's sheets, in order over its theme (its fonts are the UI's above).
         builder.Property<&ProjectSettings::guiStyleSheetIds>("guiStyleSheetIds");
         asset(u8"GUI sheets", u8"GuiStyleSheetAsset", u8"(none)", u8"UI");
-        // The engine GUI's boot splash (its document binds `bootProgress`); nil = the UI's.
+        // The engine GUI's boot splash (its document binds `bootProgress`); nil = the engine's own.
         builder.Property<&ProjectSettings::guiLoadingDocumentId>("guiLoadingDocumentId");
-        asset(u8"GUI loading screen", u8"GuiDocumentAsset", u8"(the UI's)", u8"Startup");
+        asset(u8"Loading screen", u8"GuiDocumentAsset", u8"(built-in)", u8"Startup");
         // The display: the render resolution (0 x 0 is the output's size) and its fit, then the
         // player's window. An export preset may override either per platform.
         const Float4 renderSize{0.0f, 16384.0f, 1.0f, 0.0f};

@@ -1,7 +1,7 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">9</u32>
+		<u32 name="version">10</u32>
 	</array>
 	<string name="name">Masquerade</string>
 	<string name="engineVersion">0.1.0</string>
@@ -11,10 +11,8 @@
 	<string name="nativeModule"/>
 	<string name="defaultInputMapId">ae9c2367-82f0-4ff7-924f-c9b1e73acb2c</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
-	<string name="defaultUiThemeId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">f61c25d2-80ca-4a8c-9e05-706e479c8c0f</string>
 	<string name="defaultUiFontId">9e135dcf-fa34-4d1d-92f9-5e020e473353</string>
-	<string name="loadingDocumentId">00000000-0000-0000-0000-000000000000</string>
 	<u32 name="renderMsaaSamples">1</u32>
 	<array name="uiFontIds" count="0"/>
 	<u32 name="renderWidth">0</u32>

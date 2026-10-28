@@ -1,7 +1,7 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">9</u32>
+		<u32 name="version">10</u32>
 	</array>
 	<string name="name">Shader Gallery</string>
 	<string name="engineVersion">0.1.0</string>
@@ -11,10 +11,8 @@
 	<string name="nativeModule"/>
 	<string name="defaultInputMapId">1e34ba29-51f5-4c53-8836-43b2d8af63b1</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
-	<string name="defaultUiThemeId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">00000000-0000-0000-0000-000000000000</string>
 	<string name="defaultUiFontId">75a7ad85-5b16-456f-aa1e-0cf910df2d09</string>
-	<string name="loadingDocumentId">00000000-0000-0000-0000-000000000000</string>
 	<u32 name="renderMsaaSamples">1</u32>
 	<array name="uiFontIds" count="0"/>
 	<u32 name="renderWidth">0</u32>

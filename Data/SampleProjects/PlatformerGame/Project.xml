@@ -1,7 +1,7 @@
 <root>
 	<array name="dataVersions" count="1">
 		<u64 name="type">3041078812905029385</u64>
-		<u32 name="version">9</u32>
+		<u32 name="version">10</u32>
 	</array>
 	<string name="name">Sky Hopper</string>
 	<string name="engineVersion">0.1.0</string>
@@ -11,10 +11,8 @@
 	<string name="nativeModule"/>
 	<string name="defaultInputMapId">1355798c-5464-445e-9d1a-080da9df3f94</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
-	<string name="defaultUiThemeId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">a0fc4c0d-73bd-471f-8357-ae28b52393ef</string>
 	<string name="defaultUiFontId">251f1cd5-5bbf-4c9f-9511-1b5bb77e0b1d</string>
-	<string name="loadingDocumentId">00000000-0000-0000-0000-000000000000</string>
 	<u32 name="renderMsaaSamples">4</u32>
 	<array name="uiFontIds" count="1">
 		<string>4f16b397-b309-403d-a58d-a2875253051b</string>

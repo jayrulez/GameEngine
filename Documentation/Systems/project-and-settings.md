@@ -12,7 +12,7 @@ into three concrete stores and how projects open/close.
 
 | Store | File | Owner module | Holds |
 |---|---|---|---|
-| Shared project manifest | `<project>/Project.xml` | `engine.project` | name, engineVersion stamp, default scene/script/input-map/bus-layout/UI-theme refs. The SAME payload ships as `player.xml` in a dist (minus editor concerns). Versioned (`ProjectSettings`, data v8) with `ar.Version()` migration branches; every save re-stamps `engineVersion` to the running engine. |
+| Shared project manifest | `<project>/Project.xml` | `engine.project` | name, engineVersion stamp, default scene/script/input-map/bus-layout refs, the GUI's sheets and loading screen. The SAME payload ships as `player.xml` in a dist (minus editor concerns). Versioned (`ProjectSettings`, data v10; a v9 manifest still reads, its old UI theme and loading document dropped); every save re-stamps `engineVersion` to the running engine. |
 | Per-user editor settings | `<user-data>/draconic/editor.settings.xml` (`~/.local/share` on Linux, `%LOCALAPPDATA%` on Windows) | `editor.core` | machine-wide state: `EditorExportSettings` (templates root), `RecentProjectsSettings` (the project-manager registry). |
 | Per-project editor state | `<project>/Editor/editor.project.settings.xml` | `editor.app` (+ contributor modules) | `EditorDockLayoutSettings`, `EditorFavoritesSettings`, `EditorOpenPagesSettings`, `MaterialPreviewSettings` (from the material page), ... |
 

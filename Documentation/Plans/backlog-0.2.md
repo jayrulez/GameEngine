@@ -52,65 +52,65 @@ panel shows that player's frames as it shows the editor's, as Traktor's target c
 ezInspector do. The capture store is UI-free already; this is a transport (the engine's reliable
 UDP), a player-side server armed by a flag, and the panel choosing its source.
 
-## The GUI lab after E9: stability first, then the decision (user 2026-10-17)
+## The GUI: what its stability campaign and its phases left (reframed 2026-10-28)
 
-The lab's evolution is built through E17 (`Specs/gui-lab-evolution.md`, E1 to E9, and
-`Specs/gui-lab-evolution-2.md`, E10 to E17); round three, its satellite libraries (hosting, the
-viewport, docking), is `Specs/gui-lab-evolution-3.md`. Before anyone thinks about
-it replacing foundation.ui, it has to be shown as stable as foundation.ui is (the user,
-2026-10-17: "a lot of testing"). In order:
+The campaign of 2026-10-17 (stability before the GUI could replace foundation.ui) is past its
+decision: the editor and every sample are on the GUI, Engine.UI is deleted and foundation.ui is
+in `Code/Deprecated`. Its steps done: the user's pass over every sandbox page, `--sweep` over every
+page on both backends and in Arabic (GUISandbox's CMakeLists), the five fuzz targets
+(GUI.Fuzz.Tests), real screens (the editor, the six samples), and the toolkit and gamekit. Checked
+against the code on 2026-10-28; what is still open:
 
-1. **Stability.** The user's visual pass over every sandbox page (most are unchecked: Text,
-   Layout, Styling, Effects, Motion, Data binding, Navigation, Language and direction, the game
-   menu, and the desk fixes' re-checks); the full lanes (gcc, clang-shared, wasm, ASAN) green on
-   the lab and kept so; `--sweep` over every page on both backends; the markup and CSS parsers
-   and the input dispatcher fed malformed and random input; long soak runs watching memory and
-   frame time (in RelWithDebInfo); and a real screen or two built on it (a game's menus and HUD)
-   to find what the sandbox does not. Bugs found go in as they come.
-2. **The decision.** Only then: whether the lab replaces foundation.ui's core (the editor and the
-   samples moving over) or pieces move across one at a time (the spec's "end state").
-3. **Then** the toolkit and gamekit on whichever core that leaves.
-
-Gaps the phases left, by area (each phase's own notes say more):
-
-- **Text.** A font fallback list in the lab's text (the Language page draws everything in DejaVu
-  Sans Mono because Roboto has no Arabic); `direction: auto` / `unicode-bidi: plaintext` for typed
-  text; word moves, deletes and Home and End logical in mixed-direction text, and a selection
-  collapsing to its logical end; a right-to-left line's clamp ellipsis on its right; full UAX #29
-  (Hangul jamo, Indic conjuncts) and words from the shaper; a password taking no composition; a
-  link with no pointer cursor; HarfBuzz as the lab's default shaper outside the sandbox.
-- **Accessibility.** The platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to
-  speech are host work; a table's cells are not nodes of their own.
-- **Layout.** A container's baseline is its content box's bottom, not its first child's; grid and
-  stack place `baseline` as start; text is not snapped to the pixel grid; no `calc()`; a node
-  scrolling on both axes gives `fr` columns their content's width.
-- **Keyboard.** A menu's arrows, Return and Escape are handled in widget code, so a player cannot
-  rebind them through the keymap; there is no way to capture the next key before the keymap sees
-  it (a rebinding screen); no punctuation or keypad key codes, tab index or Tab passing through.
-- **Styling.** The built-in themes write their colours directly, not through a palette of custom
-  properties (E3's design); parts take no motion and no text properties; `inherit` on a non-inherited property
-  takes the parent's cascaded value, not its live one; attribute selectors read reflected
-  properties only; a reflected property code set before the sheet first styled the node loses
-  to the sheet.
-- **Overlays.** No OS popup windows (a popup never leaves its root), modality per root;
-  type-ahead by first letter only; a shrunk menu clips rather than scrolls; tooltips for the
-  pointer only, never interactive; no Alt mnemonics; scripts cannot build a menu.
-- **Press, drag and release in menus (to evaluate; user 2026-10-19).** The lab's menus, combo
-  boxes and menu buttons open on a click, as the web-style toolkits do (RmlUi, gpui, aui), so a
-  menu bar cannot be pressed, dragged onto an item and released, as native desktop menus can
-  (Godot and eepp do it; foundation.ui opens on press but picks on press too). Skipped for now; weigh
-  it, for the menu bar only, when the editor moves onto the lab. Godot's design is the reference:
-  the title opens on press, items take the release, a release within 400 ms of opening is ignored
-  (a quick click leaves the menu open), touch keeps opening on a tap's release.
-- **Controls.** The range is a base class (a progress bar carries a page it hides); every radio
-  and every tab is a tab stop; type-ahead reads keys, not text input; a tree resets on every
-  model range.
-- **Drag and drop.** One drag within one root (none between windows); a script answers a query
-  by taking it; the scroll band and hover delay are dispatcher settings, not styles; an OS file
-  shows nothing while dragged over; the pad's d-pad moves focus during a keyboard drag inside a
-  list; a tree takes a drop as a reset; a copy of a tree's own nodes is not taken.
-- **Events and the rest.** Escape closing a popup is the dispatcher's special case; the stress
-  page's turning boxes keep drawing out of view (a rotation about the centre could be bounded).
+- **Stability.** The full lanes (gcc, clang-shared, wasm, ASAN) kept green: last all run
+  2026-10-24. A soak run in RelWithDebInfo (`--soak` exists, none recorded; resident memory reads 0
+  off Linux, backlog-0.1). The input fuzzer's streams are long, and a failure capture saves no
+  screenshot.
+- **Text.** Full UAX #29 (Hangul jamo, Indic conjuncts; common ranges only, by ruling) and words
+  from the shaper (a character-class scan, TextSegmentation.cppm); `unicode-bidi: plaintext` by
+  name (the behaviour is `direction: auto`'s); GUI and GUI.Hosting install no shaper of their own,
+  so a new host must install HarfBuzz; a bold or italic run falls back to regular faces, no generic
+  family maps to a bundled font, and a font with no shaper draws its fallback stretches in the
+  run's own face.
+- **Accessibility.** The platform adapters (UI Automation, NSAccessibility, AT-SPI) and real speech
+  are host work (ruled out of scope for now); a table's cells are no nodes (a row reads as its
+  first column); items without nodes are counted, not listed; the narrator speaks a root that is
+  off screen.
+- **Layout.** A container's baseline is its content box's bottom (only text widgets give one); grid
+  and stack place `baseline` as start; text is not snapped to the pixel grid (boxes are); a node
+  scrolling on both axes sizes `fr` columns to their content.
+- **Keyboard.** Asking for text input over a list would raise an on-screen keyboard on touch;
+  Ctrl+Tab from a Tab-capturing widget inside a tab view switches tabs before moving focus.
+- **Styling.** Parts take no motion and no text properties (ApplyPartStyle); `inherit` takes the
+  parent's resolved style, not its live value; attribute selectors read id, class and reflected
+  properties only; a reflected property set in code before the first styling loses to the sheet;
+  `@icon` is not read; a background with no `background-size` fills its box rather than its
+  natural size; `@import` resolves from the data root, not the importing sheet; the token list is
+  not generated into a document, nor shown beside a part in the inspector.
+- **Motion.** A sheet property's tween shows only after a StyleManager pass; groups do not
+  ping-pong; a spring retargeted across shadows, transforms or gradients keeps its speed in
+  progress, not the value's units; a node's own scale is not reflected.
+- **Overlays.** Modality is per dispatcher, not per root (GuiHost has none); a tooltip's content is
+  its text alone. Popups stay inside their root and the menu bar opens on release (no
+  press-drag-release), both by ruling (editor-gui.md ruling 8, the 2026-10-19 ruling).
+- **Controls.** The range is a base class, so a progress bar carries a page it hides; a tree resets
+  on any change to its model, a moved or dropped node included (TreeModel::MoveNode).
+- **Drag and drop.** A drag crosses the roots and windows of one GUI, not between GUIs or out to the
+  OS; a script accepts a drop by taking it, never choosing the effect or refusing; the scroll band
+  and hover delay are dispatcher settings, not styles; an OS file shows nothing while dragged over;
+  a copy of a tree's own nodes is not taken; whether the pad's d-pad moves focus in a keyboard drag
+  inside a list is untested (StepDirection does not ask the drop again).
+- **Rendering.** No host presents part of a frame (damage is unused); a node's drawing is
+  tessellated again every frame it draws; the stress page's 3000 animating out-of-view children
+  still have their reach read each frame; the GPU-and-wait time growing with load is unexplained.
+- **Scripts.** `gui.trCount` ignores a script's format arguments.
+- **Direction.** The mirror audit skips docks, point popups, recycled rows and the Stress and Motion
+  pages; transforms stay physical; no Arabic speaker has checked the Arabic.
+- **Touch.** A third finger is ignored; the second finger has no capture of its own; no trackpad
+  rotation.
+- **Docking.** A float's whole surface cannot be dragged back into the dock; Shift-drag over a
+  float's window asks for no float; a restored layout's floats are not kept on screen; Move to is a
+  list of places, not a map.
+- **Web.** The engine's GUI has never run in a browser (wasm builds it).
 
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 

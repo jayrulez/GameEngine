@@ -1252,7 +1252,7 @@ That is decided then.
 
 Ruling (user, 2026-10-17, after E9): not before a testing campaign shows the lab as stable as
 foundation.ui. The campaign, the decision and every gap the phases left are in
-`Plans/backlog-0.2.md` ("The GUI lab after E9").
+`Plans/backlog-0.2.md` ("The GUI: what its stability campaign and its phases left").
 
 ## Open questions
 

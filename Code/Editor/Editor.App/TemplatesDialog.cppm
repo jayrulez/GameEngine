@@ -89,11 +89,15 @@ export namespace editor::app
         RefPtr<gui::Image> m_warning;
     };
 
+    /// TemplatesDialog::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kTemplatesDialogPath = u8"Editor/Templates.xml";
+
     class TemplatesDialog
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Templates.xml";
+        static constexpr const char8_t* kPath = kTemplatesDialogPath;
 
         TemplatesDialog(IAllocator& allocator, editor::EditorContext& context, TemplatesDialogSeams seams, RefPtr<gui::Node> body)
             : m_allocator(allocator), m_context(&context), m_seams(Move(seams)), m_body(Move(body)), m_icons(allocator),

@@ -30,7 +30,7 @@ namespace
 {
     RefPtr<gui::Node> LoadPage()
     {
-        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(ProfilerPanel::kPath));
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(kProfilerPanelPath));
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         gui::RegisterGuiElements();

@@ -218,11 +218,15 @@ export namespace editor::app
         String m_badgeClass;
     };
 
+    /// AssetsView::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kAssetsViewPath = u8"Editor/Assets.xml";
+
     class AssetsView
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Assets.xml";
+        static constexpr const char8_t* kPath = kAssetsViewPath;
         static constexpr StringView kTopGroup = u8"Content";
         /// What an asset type (by name) is called to the user: its displayName, else its name. The
         /// asset picker's rows say it as the browser's do.

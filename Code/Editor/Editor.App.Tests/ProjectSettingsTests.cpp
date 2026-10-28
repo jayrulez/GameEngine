@@ -30,7 +30,7 @@ namespace
 {
     RefPtr<gui::Node> LoadSettings()
     {
-        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(ProjectSettingsDialog::kPath));
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(editor::app::kProjectSettingsDialogPath));
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         gui::RegisterGuiElements();
@@ -114,12 +114,12 @@ TEST_CASE("project settings: the labelled settings as rows in their categories; 
     CHECK(bag.ElementCount(u8"uiFontIds", 0) == 1u);
     CHECK(bag.GetValue(u8"uiFontIds.0", 0).AsString() == Text(bed.font).AsView());
 
-    const gui::PropertyInfo* msaa = bag.FindInfo(ProjectSettingsDialog::kMsaaSetting);
+    const gui::PropertyInfo* msaa = bag.FindInfo(editor::app::kProjectSettingsDialogMsaaSetting);
     REQUIRE(msaa != nullptr);
     CHECK(msaa->Kind == gui::PropertyKind::Enum);
     REQUIRE(msaa->Choices.Size() == 3u);
     CHECK(msaa->Choices[2].Name == String(u8"4x"));
-    CHECK(bag.GetValue(ProjectSettingsDialog::kMsaaSetting, 0).AsInt() == 4);
+    CHECK(bag.GetValue(editor::app::kProjectSettingsDialogMsaaSetting, 0).AsInt() == 4);
 
     const gui::PropertyInfo* mode = bag.FindInfo(u8"windowMode");
     REQUIRE(mode != nullptr);
@@ -131,7 +131,7 @@ TEST_CASE("project settings: the labelled settings as rows in their categories; 
     CHECK(width->HasRange);
     CHECK(width->Min == doctest::Approx(1.0));
 
-    const gui::PropertyInfo* version = bag.FindInfo(ProjectSettingsDialog::kEngineVersionRow);
+    const gui::PropertyInfo* version = bag.FindInfo(editor::app::kProjectSettingsDialogEngineVersionRow);
     REQUIRE(version != nullptr);
     CHECK(version->ReadOnly);
 }
@@ -149,7 +149,7 @@ TEST_CASE("project settings: Save writes the rows back, a list's empty and repea
     CHECK(bed.Bag().GetValue(u8"name", 0).AsString() == StringView(u8"Settings")); // the rows again, from the manifest
     bed.Edit(u8"name", gui::Variant(StringView(u8"Renamed")));
     bed.Edit(u8"defaultSceneId", gui::Variant(StringView{}));
-    bed.Edit(ProjectSettingsDialog::kMsaaSetting, gui::Variant(i64{2}));
+    bed.Edit(editor::app::kProjectSettingsDialogMsaaSetting, gui::Variant(i64{2}));
     bed.Bag().ResizeList(u8"uiFontIds", 0, 3);
     bed.Bag().SetValue(u8"uiFontIds.1", 0, gui::Variant(Text(bed.font).AsView()));
     REQUIRE(bed.dialog->Save());

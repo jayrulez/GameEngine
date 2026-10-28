@@ -35,11 +35,15 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
+    /// ProjectManagerView::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kProjectManagerViewPath = u8"Editor/ProjectManager.xml";
+
     class ProjectManagerView
     {
     public:
         /// Its frames, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/ProjectManager.xml";
+        static constexpr const char8_t* kPath = kProjectManagerViewPath;
         static constexpr const char8_t* kNewProjectPath = u8"Editor/NewProject.xml";
 
         struct Services

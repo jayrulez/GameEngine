@@ -67,7 +67,7 @@ TEST_CASE("editor window: the user's theme overrides come last, so they win, and
     (void)RemoveDirectoryRecursive(folder.AsView());
     REQUIRE(CreateDirectories(folder.AsView()));
     editor::EditorResources theme(DefaultAllocator(), folder.AsView()); // empty, as on a first run
-    const String overrides = PathJoin(u8"user-theme", StringView(editor::app::EditorWindow::kThemeOverridesPath));
+    const String overrides = PathJoin(u8"user-theme", StringView(editor::app::kEditorWindowThemeOverridesPath));
 
     editor::app::EditorLook look;
     String sheet;

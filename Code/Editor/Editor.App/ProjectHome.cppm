@@ -35,11 +35,15 @@ export namespace editor::app
     namespace gui = foundation::gui;
     namespace content = foundation::content;
 
+    /// ProjectHomeView::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kProjectHomeViewPath = u8"Editor/ProjectHome.xml";
+
     class ProjectHomeView
     {
     public:
         /// Its frame under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/ProjectHome.xml";
+        static constexpr const char8_t* kPath = kProjectHomeViewPath;
 
         /// Over `context`'s project, its frame `content` (the markup's); `cook` (nullable) says
         /// when the project's assets changed.

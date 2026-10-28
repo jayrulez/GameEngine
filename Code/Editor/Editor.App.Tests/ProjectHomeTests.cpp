@@ -34,7 +34,7 @@ namespace
     RefPtr<foundation::gui::Node> LoadHome()
     {
         const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(),
-                                     StringView(app::ProjectHomeView::kPath));
+                                     StringView(app::kProjectHomeViewPath));
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         foundation::gui::RegisterGuiElements();

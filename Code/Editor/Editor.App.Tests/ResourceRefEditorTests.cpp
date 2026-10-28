@@ -150,7 +150,7 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     CHECK(slot.ShownName() == StringView(u8"Not set"));
     CHECK(slot.PickButton()->IsDisplayed());
     CHECK_FALSE(slot.ClearButton()->IsDisplayed());
-    CHECK(bed.Editor(u8"other").Slot()->ShownName() == ResourceRefEditor::kMissingText); // dangling: still cleared
+    CHECK(bed.Editor(u8"other").Slot()->ShownName() == editor::app::kResourceRefEditorMissingText); // dangling: still cleared
     CHECK(bed.Editor(u8"other").Slot()->ClearButton()->IsDisplayed());
 
     // A pick: over the row's types, one write, the slot showing the asset.

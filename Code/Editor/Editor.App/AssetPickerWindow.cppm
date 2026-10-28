@@ -42,11 +42,15 @@ export namespace editor::app
         Function<void(const Guid&)> chosen; // a pick (nil: None)
     };
 
+    /// AssetPickerWindow::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kAssetPickerWindowPath = u8"Editor/AssetPicker.xml";
+
     class AssetPickerWindow
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/AssetPicker.xml";
+        static constexpr const char8_t* kPath = kAssetPickerWindowPath;
 
         /// What it works over.
         struct Services

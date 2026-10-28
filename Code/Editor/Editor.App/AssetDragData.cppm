@@ -20,11 +20,14 @@ using namespace foundation::core;
 
 export namespace editor::app
 {
+    /// AssetDrag::kType, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr StringView kAssetDragType = u8"asset/instance";
     // A struct of static functions rather than functions: gcc 15 cannot read back a module whose
     // partition has an inline function at namespace scope that instantiates a template.
     struct AssetDrag
     {
-        static constexpr StringView kType = u8"asset/instance";
+        static constexpr StringView kType = kAssetDragType;
 
         Guid Id;
         String TypeName;

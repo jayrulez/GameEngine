@@ -120,11 +120,15 @@ export namespace editor::app
         }
     };
 
+    /// ResourceRefEditor::kMissingText, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr StringView kResourceRefEditorMissingText = u8"(missing)";
+
     class ResourceRefEditor final : public gui::SingleControlEditor
     {
         RTTI_OBJECT(ResourceRefEditor, gui::SingleControlEditor)
     public:
-        static constexpr StringView kMissingText = u8"(missing)";
+        static constexpr StringView kMissingText = kResourceRefEditorMissingText;
 
         /// `services` outlives the editor (the registrar's).
         explicit ResourceRefEditor(const ResourceRefServices& services) : m_services(&services)

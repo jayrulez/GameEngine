@@ -84,8 +84,8 @@ TEST_CASE("graph states: the states and Any State are the nodes, the transitions
     Array<gui::GraphId> nodes;
     bed.states->GetNodes(nodes);
     REQUIRE(nodes.Size() == 4u);
-    CHECK(nodes[0] == AnimationGraphStates::kAnyState);
-    const gui::GraphNodeInfo* any = bed.states->GetNode(AnimationGraphStates::kAnyState);
+    CHECK(nodes[0] == kAnimationGraphStatesAnyState);
+    const gui::GraphNodeInfo* any = bed.states->GetNode(kAnimationGraphStatesAnyState);
     REQUIRE(any != nullptr);
     CHECK(any->Title == String(u8"Any State"));
     CHECK_FALSE(any->Deletable);
@@ -102,7 +102,7 @@ TEST_CASE("graph states: the states and Any State are the nodes, the transitions
     CHECK(links[0].Kind == gui::GraphLinkKind::Nodes);
     CHECK(links[0].FromNode == bed.states->StateId(0));
     CHECK(links[0].ToNode == bed.states->StateId(1));
-    CHECK(links[2].FromNode == AnimationGraphStates::kAnyState);
+    CHECK(links[2].FromNode == kAnimationGraphStatesAnyState);
     CHECK(links[2].ToNode == bed.states->StateId(2));
 }
 
@@ -112,8 +112,8 @@ TEST_CASE("graph states: a transition into Any State or into its own state is re
     const gui::GraphId die = bed.states->StateId(2);
     const gui::GraphId attack = bed.states->StateId(1);
     CHECK(bed.states->CheckLink(bed.NodeLink(die, 0)).Allowed); // one may begin at a state
-    CHECK(bed.states->CheckLink(bed.NodeLink(AnimationGraphStates::kAnyState, 0)).Allowed);
-    CHECK_FALSE(bed.states->CheckLink(bed.NodeLink(die, AnimationGraphStates::kAnyState)).Allowed);
+    CHECK(bed.states->CheckLink(bed.NodeLink(kAnimationGraphStatesAnyState, 0)).Allowed);
+    CHECK_FALSE(bed.states->CheckLink(bed.NodeLink(die, kAnimationGraphStatesAnyState)).Allowed);
     CHECK_FALSE(bed.states->CheckLink(bed.NodeLink(die, die)).Allowed);
     CHECK(bed.states->Connect(bed.NodeLink(die, die)) == 0);
     CHECK(bed.edits == 0);
@@ -163,7 +163,7 @@ TEST_CASE("graph states: a state deleted takes its transitions and moves those a
     CHECK(bed.asset.layerStatePositions[0][1].x == doctest::Approx(60.0f));
 
     // Any State is never deleted; nor is a layer's last state.
-    const gui::GraphId everything[] = {AnimationGraphStates::kAnyState, locomotion, die};
+    const gui::GraphId everything[] = {kAnimationGraphStatesAnyState, locomotion, die};
     CHECK(bed.states->DeleteNodes(Span<const gui::GraphId>(everything, 3u)));
     REQUIRE(bed.Layer().states.Size() == 1u);
     CHECK(bed.Layer().states[0].name == String(u8"Locomotion"));
@@ -176,7 +176,7 @@ TEST_CASE("graph states: a move is one step, a cancelled one none; a new state n
 {
     Bed bed;
     const gui::GraphId attack = bed.states->StateId(1);
-    const gui::GraphId moving[] = {attack, AnimationGraphStates::kAnyState};
+    const gui::GraphId moving[] = {attack, kAnimationGraphStatesAnyState};
     bed.states->BeginMove();
     bed.states->PreviewMove(Span<const gui::GraphId>(moving, 2u), Span<const gui::GraphId>{}, Float2{10.0f, 5.0f});
     bed.states->PreviewMove(Span<const gui::GraphId>(moving, 2u), Span<const gui::GraphId>{}, Float2{20.0f, 15.0f});

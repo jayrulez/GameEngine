@@ -19,7 +19,7 @@ TEST_CASE("asset drag: the payload carries the asset's guid, type and name, and 
 {
     const Guid id{0xabcdu, 0x1234u};
     const gui::DragPayload payload = AssetDrag::Payload(id, u8"MaterialAsset", u8"Wood");
-    CHECK(payload.Type == String(AssetDrag::kType));
+    CHECK(payload.Type == String(editor::app::kAssetDragType));
     CHECK(payload.Label == String(u8"Wood"));
 
     AssetDrag read;

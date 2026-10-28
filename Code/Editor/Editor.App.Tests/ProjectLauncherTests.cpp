@@ -95,7 +95,7 @@ namespace
             services.storeChanged = [self]() { ++self->saves; };
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
             scene->SetSize(Float2{1280.0f, 800.0f});
-            view = MakeUnique<app::ProjectManagerView>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadMarkup(app::ProjectManagerView::kPath));
+            view = MakeUnique<app::ProjectManagerView>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadMarkup(app::kProjectManagerViewPath));
             REQUIRE(view->Content().Get() != nullptr);
             scene->AddChild(view->Content().Get());
         }

@@ -124,6 +124,10 @@ export namespace editor::app
         return desc;
     }
 
+    /// EditorWindow::kThemeOverridesPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kEditorWindowThemeOverridesPath = u8"overrides.css";
+
     class EditorWindow
     {
     public:
@@ -132,7 +136,7 @@ export namespace editor::app
         static constexpr const char8_t* kSheetPath = u8"Editor/editor.css";
         /// The user's theme overrides: the folder under their data folder, and the file in it.
         static constexpr const char8_t* kThemeFolder = u8"theme";
-        static constexpr const char8_t* kThemeOverridesPath = u8"overrides.css";
+        static constexpr const char8_t* kThemeOverridesPath = kEditorWindowThemeOverridesPath;
 
         explicit EditorWindow(IAllocator& allocator) : m_allocator(allocator) {}
         EditorWindow(const EditorWindow&) = delete;

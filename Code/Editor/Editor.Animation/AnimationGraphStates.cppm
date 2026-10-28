@@ -66,11 +66,15 @@ export namespace editor
         bool RemoveLayer(pipeline::AnimationGraphAsset& asset, i32 layer);
     }
 
+    /// AnimationGraphStates::kAnyState, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr foundation::gui::GraphId kAnimationGraphStatesAnyState = 1;
+
     class AnimationGraphStates final : public foundation::gui::IGraphSource
     {
     public:
         /// Any State's node id, in every layer.
-        static constexpr foundation::gui::GraphId kAnyState = 1;
+        static constexpr foundation::gui::GraphId kAnyState = kAnimationGraphStatesAnyState;
         /// How it changes the asset: `mutate` applied as one undo step named `typeId`.
         using EditFunction = Function<void(StringView typeId, const Function<void(pipeline::AnimationGraphAsset&)>& mutate)>;
 

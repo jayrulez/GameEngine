@@ -26,7 +26,7 @@ namespace
     RefPtr<gui::Node> LoadMarkup()
     {
         const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(),
-                                     StringView(EditorPreferencesDialog::kPath));
+                                     StringView(editor::app::kEditorPreferencesDialogPath));
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         gui::RegisterGuiElements();

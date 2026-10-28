@@ -31,11 +31,15 @@ export namespace editor::app
     namespace gui = foundation::gui;
     namespace content = foundation::content;
 
+    /// ImportWindow::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kImportWindowPath = u8"Editor/Import.xml";
+
     class ImportWindow
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Import.xml";
+        static constexpr const char8_t* kPath = kImportWindowPath;
 
         struct Services
         {

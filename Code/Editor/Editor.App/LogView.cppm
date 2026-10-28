@@ -26,11 +26,19 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
+    /// LogView::kMaxEntries, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr usize kLogViewMaxEntries = 1000;
+
+    /// LogView::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kLogViewPath = u8"Editor/Console.xml";
+
     class LogView
     {
     public:
         /// Its frame, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Console.xml";
+        static constexpr const char8_t* kPath = kLogViewPath;
 
         /// The chips' levels: Debug holds trace and debug lines; Error holds fatal ones.
         enum class Bucket : u8
@@ -58,7 +66,7 @@ export namespace editor::app
         }
 
         /// Cap on the lines kept (the oldest trimmed).
-        static constexpr usize kMaxEntries = 1000;
+        static constexpr usize kMaxEntries = kLogViewMaxEntries;
 
         LogView(IAllocator& allocator, RefPtr<gui::Node> content)
             : m_allocator(allocator), m_content(Move(content)), m_entries(allocator), m_shown(allocator), m_model(*this)

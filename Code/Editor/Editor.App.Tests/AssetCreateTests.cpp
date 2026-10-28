@@ -137,7 +137,7 @@ TEST_CASE("create asset: the groups a tree in it, a click choosing one; Create w
     content::Group* madeIn = nullptr;
     String madeName;
     RefPtr<gui::Window> window =
-        AssetCreate::Open(DefaultAllocator(), *root, Load(StringView(AssetCreate::kPath)), bed.Sources(), *bed.top, u8"New Asset", u8"Crate",
+        AssetCreate::Open(DefaultAllocator(), *root, Load(StringView(editor::app::kAssetCreatePath)), bed.Sources(), *bed.top, u8"New Asset", u8"Crate",
                           [&madeIn, &madeName](content::Group& group, StringView name)
                           {
                               madeIn = &group;

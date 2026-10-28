@@ -22,7 +22,7 @@ namespace
 {
     RefPtr<gui::Node> LoadConsole()
     {
-        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(LogView::kPath));
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(kLogViewPath));
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         gui::RegisterGuiElements();
@@ -129,12 +129,12 @@ TEST_CASE("console: a chip hides and shows its lines, in their order; the search
 TEST_CASE("console: the cap trims the oldest, a selection kept by entry; Clear empties it")
 {
     Bed bed;
-    for (usize i = 0; i < LogView::kMaxEntries; ++i)
+    for (usize i = 0; i < kLogViewMaxEntries; ++i)
         bed.view->AddEntry(LogLevel::Info, u8"N", Format(u8"line {}", i).AsView());
     gui::ListView& list = *bed.view->List();
     list.SetSelectedItem(10); // "line 10"
     bed.view->AddEntry(LogLevel::Info, u8"N", u8"one more");
-    CHECK(bed.view->EntryCount() == LogView::kMaxEntries);
+    CHECK(bed.view->EntryCount() == kLogViewMaxEntries);
     CHECK(bed.view->ShownText(0) == StringView(u8"[N] line 1"));
     CHECK(list.IsItemSelected(9)); // the same line, one up
     CHECK(bed.view->SelectedText() == StringView(u8"[N] line 10"));

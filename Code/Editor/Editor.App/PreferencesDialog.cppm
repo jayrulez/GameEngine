@@ -34,11 +34,15 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
+    /// EditorPreferencesDialog::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kEditorPreferencesDialogPath = u8"Editor/Preferences.xml";
+
     class EditorPreferencesDialog
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Preferences.xml";
+        static constexpr const char8_t* kPath = kEditorPreferencesDialogPath;
 
         /// What it works over.
         struct Services

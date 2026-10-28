@@ -52,11 +52,15 @@ export namespace editor::app
         Function<void(editor::NoticeKind, StringView message, StringView folder)> notify;
     };
 
+    /// ProfilerPanel::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kProfilerPanelPath = u8"Editor/Profiler.xml";
+
     class ProfilerPanel final : public pgui::IProfileFocusClient
     {
     public:
         /// Its frame, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Profiler.xml";
+        static constexpr const char8_t* kPath = kProfilerPanelPath;
         /// The budget's choices, the combo's order: 30, 60 and 120 fps, then none.
         static constexpr f32 kBudgets[] = {1000.0f / 30.0f, 1000.0f / 60.0f, 1000.0f / 120.0f, 0.0f};
         /// Stop on spike's times, the combo's order.

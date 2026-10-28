@@ -35,11 +35,23 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
+    /// ProjectSettingsDialog::kEngineVersionRow, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr StringView kProjectSettingsDialogEngineVersionRow = u8"engineVersion";
+
+    /// ProjectSettingsDialog::kMsaaSetting, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr StringView kProjectSettingsDialogMsaaSetting = u8"renderMsaaSamples";
+
+    /// ProjectSettingsDialog::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kProjectSettingsDialogPath = u8"Editor/ProjectSettings.xml";
+
     class ProjectSettingsDialog
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/ProjectSettings.xml";
+        static constexpr const char8_t* kPath = kProjectSettingsDialogPath;
 
         /// Over `context`'s project; `refs` (the asset slots') outlives it.
         ProjectSettingsDialog(IAllocator& allocator, editor::EditorContext& context, const ResourceRefServices& refs, RefPtr<gui::Node> body)
@@ -124,9 +136,9 @@ export namespace editor::app
         [[nodiscard]] gui::Window* Window() const noexcept { return m_window.Get(); }
 
         /// The path of the read-only row showing the engine version the project was saved with.
-        static constexpr StringView kEngineVersionRow = u8"engineVersion";
+        static constexpr StringView kEngineVersionRow = kProjectSettingsDialogEngineVersionRow;
         /// The MSAA setting, whose choices are the render subsystem's levels.
-        static constexpr StringView kMsaaSetting = u8"renderMsaaSamples";
+        static constexpr StringView kMsaaSetting = kProjectSettingsDialogMsaaSetting;
 
     private:
         static constexpr f32 kWidth = 620.0f;

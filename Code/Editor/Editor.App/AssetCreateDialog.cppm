@@ -48,10 +48,14 @@ export namespace editor::app
         }
     };
 
+    /// AssetCreate::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kAssetCreatePath = u8"Editor/AssetCreate.xml";
+
     class AssetCreate
     {
     public:
-        static constexpr const char8_t* kPath = u8"Editor/AssetCreate.xml";
+        static constexpr const char8_t* kPath = kAssetCreatePath;
         static constexpr f32 kWidth = 440.0f;
         static constexpr f32 kHeight = 420.0f;
 

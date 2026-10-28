@@ -129,10 +129,14 @@ export namespace editor::app
         String m_glyphClass;
     };
 
+    /// Picker::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kPickerPath = u8"Editor/Picker.xml";
+
     class Picker
     {
     public:
-        static constexpr const char8_t* kPath = u8"Editor/Picker.xml";
+        static constexpr const char8_t* kPath = kPickerPath;
         static constexpr StringView kFavourites = u8"Favourites";
 
         /// The picker in `content` (the markup's: `picker-search`, `picker-list`, `picker-state` and

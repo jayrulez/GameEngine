@@ -55,11 +55,15 @@ export namespace editor::app
         String outputRoot;
     };
 
+    /// ExportDialog::kPath, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr const char8_t* kExportDialogPath = u8"Editor/Export.xml";
+
     class ExportDialog
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Export.xml";
+        static constexpr const char8_t* kPath = kExportDialogPath;
 
         ExportDialog(IAllocator& allocator, editor::ExportPresetsController& presets, ExportDialogSeams seams,
                      RefPtr<gui::Node> body)

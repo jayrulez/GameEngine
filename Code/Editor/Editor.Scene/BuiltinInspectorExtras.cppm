@@ -40,13 +40,17 @@ using namespace foundation::core;
 
 export namespace editor
 {
+    /// BuiltinInspectorExtras::kNoColliderText, at namespace scope for another library to read (MSVC
+    /// exports no class's static constexpr member from a shared library).
+    inline constexpr StringView kBuiltinInspectorExtrasNoColliderText =
+        u8"Shape is Cooked but no collision shape is set - this body has no collider. Assign one (import a mesh with Generate "
+        u8"collision, or create a Collision Shape asset).";
+
     // A struct of static functions rather than a function: gcc 15 cannot read back a module whose
     // partition has an inline function at namespace scope that instantiates a template.
     struct BuiltinInspectorExtras
     {
-        static constexpr StringView kNoColliderText =
-            u8"Shape is Cooked but no collision shape is set - this body has no collider. Assign one (import a mesh with Generate "
-            u8"collision, or create a Collision Shape asset).";
+        static constexpr StringView kNoColliderText = kBuiltinInspectorExtrasNoColliderText;
 
         static void Register(InspectorExtrasRegistry& registry)
         {

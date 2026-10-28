@@ -1007,7 +1007,7 @@ TEST_CASE("inspector: a component's extras under its header: a rigid body's noti
     REQUIRE(bodies != nullptr);
     bodies->Get(page->ScenePtr()->FindEntity(bed.crate))->shape = foundation::physics::ShapeKind::Cooked;
     page->OnUpdate(bed.host, 1.0f / 60.0f);
-    CHECK(inspector->ExtraText(title.AsView(), u8"Collision") == String(BuiltinInspectorExtras::kNoColliderText));
+    CHECK(inspector->ExtraText(title.AsView(), u8"Collision") == String(kBuiltinInspectorExtrasNoColliderText));
     bodies->Get(page->ScenePtr()->FindEntity(bed.crate))->shape = foundation::physics::ShapeKind::Box;
     page->OnUpdate(bed.host, 1.0f / 60.0f);
     CHECK(inspector->ExtraText(title.AsView(), u8"Collision").IsEmpty());

@@ -286,3 +286,23 @@ TEST_CASE("material page: a gesture's previews reach the source as they go, one 
     CHECK(SourceFloat(*page->Source(), u8"Roughness") == doctest::Approx(before));
     CHECK_FALSE(page->Commands().CanUndo());
 }
+
+TEST_CASE("material page: a shader that has not cooked is refused, saying so; the material keeps its own")
+{
+    Bed bed;
+    // A shader asset with no cooked product yet (never saved, or broken).
+    foundation::content::Instance* shader = bed.project->SourceDb().RootGroup()->CreateInstance(u8"Glow", pipeline::MaterialAsset::StaticType());
+    REQUIRE(shader != nullptr);
+    Array<String> notices;
+    bed.context.OnNotice = [&notices](editor::NoticeKind, StringView message) { notices.PushBack(String(message)); };
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    utf8char text[37];
+    shader->Id().ToChars(text);
+    page->EditRow(page->MaterialRows(), u8"shader", gui::Variant(StringView(text, 36)));
+    page->Refresh();
+    CHECK(page->Source()->shaderId.IsNil()); // refused: still the built-in PBR
+    CHECK_FALSE(page->Commands().CanUndo());
+    REQUIRE(notices.Size() == 1u);
+    CHECK(notices[0].AsView().ContainsIgnoreCase(u8"has not cooked"));
+    bed.context.OnNotice = {};
+}

@@ -57,11 +57,11 @@ type, texture compression (BC7, ASTC), and an export that packages a project for
 player, the web or the Steam Deck from per-target presets and player templates; headless tools
 do all of it from the command line.
 
-**UI.** A retained view tree with flex, dock, grid and flow layouts, `.sml` markup and `.sss`
-stylesheets with a cascade, transitions and themes, keyboard and gamepad navigation, a game UI
-kit (menus, bars, prompts, toasts), a vector graphics layer with SVG, distance field and coverage
-fonts, and an editor toolkit (docking, property grids, colour pickers, curve and gradient
-editors, a node graph canvas).
+**UI.** A retained-mode GUI with flex, grid and stack layouts, `.xml` markup and CSS sheets
+with a cascade, variables, transitions, animations and media queries, shaped and bidirectional
+text, keyboard and gamepad navigation, data binding, a game kit (screens and prompts), a vector
+graphics layer with SVG, distance field and coverage fonts, and an editor toolkit (docking,
+property grids, a code editor), every widget reachable from scripts.
 
 **Agent tooling.** An MCP host (`Tools.Mcp`) exposes the engine's reflection, the script API and
 project operations (import, cook, scene validation, export, health checks); the editor serves

@@ -14,8 +14,6 @@ module pipeline.registration;
 
 import foundation.core;
 import foundation.script.facades; // RegisterScriptFacadeReflection (the script cooks' surface)
-import foundation.ui;             // MarkupLoader (the UI document cook validates markup)
-import foundation.ui.gamekit;     // RegisterGamekitMarkup (<screen>)
 import foundation.content;
 import foundation.animation;
 import foundation.particles;
@@ -50,8 +48,6 @@ import render.pipeline;
 import engine.render; // the render profiles' cooked records and products
 import foundation.navigation.resource;
 import navigation.pipeline;
-import foundation.ui.resource;
-import ui.pipeline;
 import foundation.vg.resource;
 import vg.pipeline;
 import foundation.gui.resources; // the GUI's documents and sheets (gui-lab-evolution-3.md E3)
@@ -101,8 +97,6 @@ namespace pipeline
         // worker first-registers is still a race. After this, the builders' own calls are no-ops.
         foundation::core::RegisterCoreTypes();
         foundation::script::RegisterScriptFacadeReflection();
-        foundation::ui::MarkupLoader::Initialize();
-        foundation::ui::gamekit::RegisterGamekitMarkup();
 
         RegisterAssetReflection(); // base Asset::fileName + SourcePath
         RegisterTextureAsset();
@@ -135,8 +129,6 @@ namespace pipeline
         engine::render::RegisterRenderProfileResources();
         RegisterNavigationZoneAsset();
         foundation::navigation::RegisterNavigationResource();
-        RegisterUIAssets();
-        foundation::ui::RegisterUIResource();
         RegisterVGAssets();
         foundation::vg::RegisterVGResource();
         RegisterGuiAssets();
@@ -192,8 +184,6 @@ namespace pipeline
         AddBuilder<EnvironmentProfileAssetBuilder>(registry);
         AddBuilder<PostProcessProfileAssetBuilder>(registry);
         AddBuilder<NavigationZoneAssetBuilder>(registry);
-        AddBuilder<UIDocumentAssetBuilder>(registry);
-        AddBuilder<UIThemeAssetBuilder>(registry);
         AddBuilder<VectorImageAssetBuilder>(registry);
         AddBuilder<GuiDocumentAssetBuilder>(registry);
         AddBuilder<GuiStyleSheetAssetBuilder>(registry);
@@ -207,7 +197,6 @@ namespace pipeline
     {
         AddImporter<TextureFileImporter>(registry);
         AddImporter<ModelFileImporter>(registry);
-        AddImporter<UIFileImporter>(registry);
         AddImporter<VectorImageFileImporter>(registry);
         AddImporter<GuiFileImporter>(registry);
         AddImporter<AudioFileImporter>(registry);
@@ -241,7 +230,6 @@ namespace pipeline
         RegisterPhysicsCreators(registry);
         RegisterRenderCreators(registry);
         RegisterAudioCreators(registry);
-        RegisterUICreators(registry);
         RegisterGuiCreators(registry);
         RegisterHeightfieldCreators(registry);
         RegisterTerrainCreators(registry);

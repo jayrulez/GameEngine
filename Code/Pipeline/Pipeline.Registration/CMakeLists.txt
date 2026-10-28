@@ -6,7 +6,7 @@
 util_add_engine_library(Pipeline.Registration ALIAS Pipeline::Registration)
 target_link_libraries(Pipeline.Registration PUBLIC
     Foundation::Core Foundation::Content Foundation::VFS
-    Foundation::Script.Facades Foundation::UI Foundation::UI.Gamekit
+    Foundation::Script.Facades
     Foundation::Scene Foundation::Scene.Resource
     Pipeline::Core Pipeline::Importer Pipeline::VG Foundation::VG.Resource
     Pipeline::Texture Pipeline::Fonts Pipeline::Image Pipeline::Heightfield Pipeline::Terrain Pipeline::Vegetation Pipeline::Geometry
@@ -20,7 +20,6 @@ target_link_libraries(Pipeline.Registration PUBLIC
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT} ${SCRIPTLIB_LUAU}
     Foundation::Script.Resource Foundation::Script.Facades
     Pipeline::Script ${SCRIPTLIB_ANGELSCRIPT_PIPELINE} ${SCRIPTLIB_LUAU_PIPELINE}
-    Foundation::UI.Resource Pipeline::UI
     Pipeline::Scene
     Foundation::Policy)
 

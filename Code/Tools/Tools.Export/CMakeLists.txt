@@ -18,7 +18,7 @@ target_link_libraries(Tools.Export PRIVATE
     # so export cooks scripts of either language (angelscript | luau) without naming a backend here.
     Foundation::Script Foundation::Script.Resource Foundation::Script.Facades
     Pipeline::Script
-    Foundation::UI.Resource Pipeline::UI)
+)
 
 
 # The command line parses: --data-root (named in the usage and the no-data-root error) is accepted,

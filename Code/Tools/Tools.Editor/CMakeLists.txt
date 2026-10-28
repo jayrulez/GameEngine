@@ -39,7 +39,7 @@ target_link_libraries(Tools.Editor PRIVATE
     Pipeline::Animation Pipeline::Materials Pipeline::Shaders
     Pipeline::Particles Foundation::Input Foundation::Input.Resource Pipeline::Input Engine::Input Foundation::Physics Foundation::Physics.Resource Pipeline::Physics Engine::Physics Pipeline::Navigation Engine::Navigation Foundation::Navigation.Resource Foundation::Audio Foundation::Audio.Resource Pipeline::Audio Engine::Audio
     # Script backends + cooks (angelscript | luau) come transitively from Pipeline::Registration.
-    Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Pipeline::Script Engine::Script Foundation::UI.Resource Pipeline::UI Pipeline::ModelImporter Foundation::Image.Resource
+    Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Pipeline::Script Engine::Script Pipeline::ModelImporter Foundation::Image.Resource
     Foundation::Animation.Resource)
 # Stage the editor's runtime deps beside it + emit Tools.Editor.runtime-libs (the editor packaging
 # script reads that list for its sidecars). SDL3 rides in as EXTRA (a no-op when unset, e.g. Linux).

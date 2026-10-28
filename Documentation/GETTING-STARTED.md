@@ -121,10 +121,11 @@ from (engine-composition.md).
   (AngelScript, Luau) emits its bindings from it. Behaviors attach to
   entities; a scene-level script tier exists; capability flags gate per-backend
   features. The AngelScript and Luau backends have in-editor debuggers.
-- **UI**: `foundation.ui` is the retained-mode framework (border-box layout,
-  `.sss` stylesheets, themes, virtualization); `UI.Toolkit` adds editor-grade
-  widgets (docking, property grid, curve editor, code editor). The editor AND
-  in-game UI use the same framework. See `Systems/ui-framework.md`.
+- **UI**: `foundation.gui` is the retained-mode GUI (`.xml` markup, CSS
+  sheets, layout, text, events, the `gui` script surface), with satellites for
+  the editor's widgets, docking, the code editor and a game's screens
+  (`GUI.Gamekit`). The editor AND in-game UI use it. See `Systems/gui-port.md`.
+  The older `foundation.ui` remains for the UISandbox (`Systems/ui-framework.md`).
 
 Drill-down: every subsystem has a doc in `Documentation/Systems/` (35 and
 counting) - `renderer.md`, `scripting.md`, `physics.md`, `audio.md`,

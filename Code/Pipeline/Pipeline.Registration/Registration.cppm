@@ -67,8 +67,9 @@ export namespace pipeline
     // "the build checks the one copy is complete".
     /// The GUI's (a document and a style sheet), when the GUI is built (gui-lab-evolution-3.md E3).
     inline constexpr usize kGuiAssetKinds = 2;
-    inline constexpr usize kBuilderCount = 31 + kGuiAssetKinds;
-    inline constexpr usize kImporterCount = 13;
+    // 29 and 12: the old UI's document and theme builders and its importer gone with it.
+    inline constexpr usize kBuilderCount = 29 + kGuiAssetKinds;
+    inline constexpr usize kImporterCount = 12;
     /// The creators every build has; the scripts add three per language with a cook on top.
-    inline constexpr usize kCreatorCount = 32 + kGuiAssetKinds; // 32: the Phong Material (phong-material.md)
+    inline constexpr usize kCreatorCount = 30 + kGuiAssetKinds; // 30: the old UI's document and theme gone
 }

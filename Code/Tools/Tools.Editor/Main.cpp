@@ -99,8 +99,6 @@ import foundation.physics.resource;
 import physics.pipeline;
 import navigation.pipeline;
 import editor.navigation; // RegisterNavigationEditorSettings* (domain-contributed prefs)
-import foundation.ui.resource;
-import ui.pipeline;
 import engine.physics;
 import modelimporter;
 import foundation.audio;

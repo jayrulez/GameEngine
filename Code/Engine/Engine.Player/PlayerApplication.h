@@ -13,7 +13,7 @@
 //   foundation.runtime, foundation.runtime.client, engine.defaultapp,
 //   foundation.scene, engine.scene, foundation.scene.resource,
 //   foundation.render, foundation.script, foundation.script.resource,
-//   foundation.input, foundation.audio, foundation.audio.resource, foundation.ui.resource,
+//   foundation.input, foundation.audio, foundation.audio.resource, foundation.gui.resources,
 //   engine.gui, foundation.settings, foundation.project, foundation.xml.serialization
 // The two entry points add only the PLATFORM trio (shell + runner + graphics) on top.
 

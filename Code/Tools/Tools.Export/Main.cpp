@@ -53,8 +53,6 @@ import engine.composition; // AddAllSceneManagers + RegisterAllSceneComponentRef
 import foundation.physics;
 import foundation.physics.resource;
 import physics.pipeline;
-import foundation.ui.resource;
-import ui.pipeline;
 import foundation.audio;
 import foundation.audio.resource;
 import audio.pipeline;

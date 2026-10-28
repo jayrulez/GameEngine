@@ -17,6 +17,7 @@ import foundation.gui.toolkit;
 import foundation.profiler;
 import foundation.profiler.capture;
 import foundation.profiler.gui;
+import editor.core;
 import editor.app;
 
 using namespace foundation::core;
@@ -76,12 +77,21 @@ namespace
         profiler::Profiler store{DefaultAllocator()};
         profiler::CaptureRecorder recorder{DefaultAllocator()};
         UniquePtr<ProfilerPanel> panel;
+        struct Notice
+        {
+            editor::NoticeKind kind{};
+            String message;
+            String folder;
+        };
+        Array<Notice> notices; // what the panel told the user, in order
         Bed()
         {
             ProfilerPanelSeams seams;
             seams.store = &store;
             seams.recorder = &recorder;
             seams.folder = []() { return String(u8"scratch_profiler_panel"); };
+            seams.notify = [this](editor::NoticeKind kind, StringView message, StringView folder)
+            { notices.PushBack(Notice{kind, String(message), String(folder)}); };
             panel = MakeUnique<ProfilerPanel>(DefaultAllocator(), DefaultAllocator(), Move(seams), LoadPage());
             REQUIRE(panel->Content().Get() != nullptr);
         }
@@ -199,6 +209,9 @@ TEST_CASE("profiler page: Save writes a capture; Open shows it; Live goes back")
     Bed bed;
     bed.recorder.SetBuild(StringView(u8"Linux64"), StringView(u8"test-build"));
     CHECK(bed.panel->SaveRecording().IsEmpty()); // nothing recorded yet
+    REQUIRE(bed.notices.Size() == 1u);
+    CHECK(bed.notices[0].kind == editor::NoticeKind::Info);
+    CHECK(bed.notices[0].folder.IsEmpty());
 
     bed.panel->Start();
     RunFrames(bed.store, 8);
@@ -207,7 +220,12 @@ TEST_CASE("profiler page: Save writes a capture; Open shows it; Live goes back")
     REQUIRE_FALSE(path.IsEmpty());
     CHECK(path.AsView().EndsWith(u8".aeprofile"));
     CHECK(path.AsView().ContainsIgnoreCase(u8"scratch_profiler_panel/Editor-"));
-    CHECK(bed.panel->StatusText().ContainsIgnoreCase(u8"Saved 8 frames"));
+    // Told once, with the folder to open; the bar's label still says what is shown.
+    REQUIRE(bed.notices.Size() == 2u);
+    CHECK(bed.notices[1].kind == editor::NoticeKind::Success);
+    CHECK(bed.notices[1].message == StringView(u8"Saved 8 frames"));
+    CHECK(bed.notices[1].folder == StringView(u8"scratch_profiler_panel"));
+    CHECK(bed.panel->StatusText().ContainsIgnoreCase(u8"The editor process: 8 frames"));
 
     REQUIRE(bed.panel->OpenCapture(path.AsView()));
     CHECK(bed.panel->ViewingCapture());
@@ -224,7 +242,9 @@ TEST_CASE("profiler page: Save writes a capture; Open shows it; Live goes back")
     CHECK(bed.panel->Focus().Source() == &bed.panel->Recording());
 
     CHECK_FALSE(bed.panel->OpenCapture(u8"scratch_profiler_panel/not-there.aeprofile"));
-    CHECK(bed.panel->StatusText().ContainsIgnoreCase(u8"Could not read"));
+    REQUIRE_FALSE(bed.notices.IsEmpty());
+    CHECK(bed.notices.Back().kind == editor::NoticeKind::Error); // said once, as an error
+    CHECK(bed.notices.Back().message.AsView().StartsWith(u8"Could not read"));
     CHECK_FALSE(bed.panel->ViewingCapture());
 }
 

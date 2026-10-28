@@ -27,6 +27,7 @@ import foundation.gui.toolkit;
 import foundation.profiler;
 import foundation.profiler.gui;
 import foundation.profiler.capture;
+import editor.core; // NoticeKind
 import :picker;
 import :path_picker_dialog;
 
@@ -39,13 +40,16 @@ export namespace editor::app
     namespace pgui = foundation::profiler::gui;
 
     /// What the panel records and where its captures go: the process's store and recorder (a
-    /// test's own), the folder (made when missing) and the picker it opens a capture through.
+    /// test's own), the folder (made when missing), the picker it opens a capture through, and who
+    /// tells the user how a save or an open went (the editor's toasts; `folder`, when not empty, the
+    /// one a save went to, for the toast to open).
     struct ProfilerPanelSeams
     {
         profiler::Profiler* store = nullptr;
         profiler::CaptureRecorder* recorder = nullptr; // the platform and build a saved capture names
         Function<String()> folder;
         Function<void(PickerRequest)> pick;
+        Function<void(editor::NoticeKind, StringView message, StringView folder)> notify;
     };
 
     class ProfilerPanel final : public pgui::IProfileFocusClient
@@ -218,7 +222,7 @@ export namespace editor::app
         {
             if (m_capture.Get() != nullptr || !m_recording.HasFrames())
             {
-                SetStatus(u8"Nothing to save: record first");
+                Notify(editor::NoticeKind::Info, u8"Nothing to save: record first");
                 return String(m_allocator);
             }
             const String folder = m_seams.folder();
@@ -235,10 +239,10 @@ export namespace editor::app
             String path = profiler::WriteCaptureFiles(m_allocator, m_recording, m_recording.OldestFrame(), m_recording.NewestFrame(),
                                                       base.AsView(), header);
             if (path.IsEmpty())
-                SetStatus(Format(u8"Could not save to {} (see the Console)", folder.AsView()).AsView());
+                Notify(editor::NoticeKind::Error, Format(u8"Could not save the recording to {} (see the Console)", folder.AsView()).AsView());
             else
             {
-                SetStatus(Format(u8"Saved {} frames to {}", m_recording.FrameCount(), path.AsView()).AsView());
+                Notify(editor::NoticeKind::Success, Format(u8"Saved {} frames", m_recording.FrameCount()).AsView(), folder.AsView());
                 LOG_INFO(u8"Profiler", u8"saved the editor's recording to {}", path.AsView());
             }
             return path;
@@ -252,7 +256,7 @@ export namespace editor::app
             auto capture = MakeUnique<profiler::ProfileCapture>(m_allocator, m_allocator);
             if (!file.IsValid() || !capture->Read(file))
             {
-                SetStatus(Format(u8"Could not read {}", path).AsView());
+                Notify(editor::NoticeKind::Error, Format(u8"Could not read {}", path).AsView());
                 return false;
             }
             Stop();
@@ -424,6 +428,13 @@ export namespace editor::app
             else
                 text = String(u8"The editor process (every page, preview and Play-in-editor run): Record to start");
             SetStatus(text.AsView());
+        }
+        // How a save or an open went, said once (a toast), not left in the bar: the bar's label
+        // says what is shown, and stays short.
+        void Notify(editor::NoticeKind kind, StringView message, StringView folder = {})
+        {
+            if (m_seams.notify)
+                m_seams.notify(kind, message, folder);
         }
         void SetStatus(StringView text)
         {

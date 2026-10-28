@@ -386,6 +386,21 @@ namespace editor::app
             seams.recorder = &foundation::profiler::CaptureRecorder::Get();
             seams.folder = []() { return PathJoin(GetUserDataDirectory().AsView(), u8"profiles"); };
             seams.pick = [self](PickerRequest request) { self->ShowPicker(Move(request)); };
+            // A save's toast stays with Open Folder, as an export's does.
+            seams.notify = [self](editor::NoticeKind kind, StringView message, StringView folder)
+            {
+                if (folder.IsEmpty())
+                {
+                    self->ShowToast(kind, message);
+                    return;
+                }
+                const String where(folder);
+                self->ShowToast(kind, message, u8"Open Folder", [self, where]()
+                                {
+                                    if (foundation::shell::IDialogService* dialogs = self->ShellDialogs())
+                                        dialogs->OpenPath(where.AsView());
+                                });
+            };
             m_profiler = MakeUnique<ProfilerPanel>(m_editorAllocator, m_editorAllocator, Move(seams), m_window.LoadMarkup(ProfilerPanel::kPath));
         }
         contents.profiler = [self]() { return self->m_profiler->Content(); };

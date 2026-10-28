@@ -31,6 +31,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Log/Log.h"
 
 export module foundation.gui.hosting:gui_host;
 
@@ -90,6 +91,7 @@ export namespace foundation::gui
         bool Encoded = false; ///< blends encoded values, through the backbuffer's UNORM view
         rhi::TextureFormat DrawFormat = rhi::TextureFormat::Undefined;
         bool NeedsFrame = true; ///< Update's verdict: the panes draw this frame, else the last batch is encoded
+        u32 LoggedWidth = 0, LoggedHeight = 0; ///< the frame size its sizes were last logged at
 
         [[nodiscard]] SceneRoot* Root() const noexcept { return Panes.IsEmpty() ? nullptr : Panes[0]->Root.Get(); }
     };
@@ -538,6 +540,21 @@ export namespace foundation::gui
             for (const Hosted& hosted : m_contents)
                 if (hosted.Window == frame.window && hosted.Content->HostedNode()->IsTreeVisible())
                     hosted.Content->Record(*frame.encoder, static_cast<i32>(frame.frameIndex));
+            // Every size a window's drawing depends on, once per frame size: on a scaled display the
+            // window's units, its pixels, the swapchain and the root's viewport must agree to fill it.
+            if (frame.width != data->LoggedWidth || frame.height != data->LoggedHeight)
+            {
+                data->LoggedWidth = frame.width;
+                data->LoggedHeight = frame.height;
+                const shell::IWindow& os = frame.window->Window();
+                const SceneRoot* root = data->Root();
+                LOG_INFO(u8"GUI", u8"window {}: {}x{} units, {}x{} pixels, content scale {}; frame {}x{}; swapchain {}x{}; root viewport {}x{}, size {}x{}, display scale {}",
+                         os.Id(), os.Width(), os.Height(), os.PixelWidth(), os.PixelHeight(), os.ContentScale(), frame.width, frame.height,
+                         frame.window->Swap() != nullptr ? frame.window->Swap()->Width() : 0u, frame.window->Swap() != nullptr ? frame.window->Swap()->Height() : 0u,
+                         root != nullptr ? root->GetViewportSize().x : 0.0f, root != nullptr ? root->GetViewportSize().y : 0.0f,
+                         root != nullptr ? root->GetSize().x : 0.0f, root != nullptr ? root->GetSize().y : 0.0f,
+                         root != nullptr ? root->GetDisplayScale() : 0.0f);
+            }
             vg::VGBatch& batch = data->Canvas->GetBatch();
             const i32 slot = static_cast<i32>(frame.frameIndex);
             data->Renderer.BeginFrame(slot);

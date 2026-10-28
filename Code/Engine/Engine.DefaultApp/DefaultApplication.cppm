@@ -159,7 +159,7 @@ export namespace engine::runtime
         /// The resolved data-root directory (valid after Configure; empty = not found).
         [[nodiscard]] core::StringView DataRoot() const noexcept { return m_dataRoot.AsView(); }
         /// The mount over the data root (valid after Configure). Subsystems and samples read
-        /// engine data through it by data-relative path ("Assets/fonts/...", "Shaders/...").
+        /// engine data through it by data-relative path ("Engine/Fonts/...", "Engine/Shaders/...").
         [[nodiscard]] foundation::vfs::IFileSystem& DataFileSystem() noexcept
         {
             return *m_dataFileSystem;

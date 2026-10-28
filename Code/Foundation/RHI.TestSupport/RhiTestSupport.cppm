@@ -43,7 +43,7 @@ export namespace foundation::rhi::testsupport
         return fs;
     }
 
-    // A data-relative path resolved against the root ("Assets/fonts/x.ttf" -> absolute).
+    // A data-relative path resolved against the root ("Engine/Fonts/x.ttf" -> absolute).
     [[nodiscard]] inline String DataPath(StringView relative)
     {
         return foundation::vfs::DataPath(DataRoot(), relative);

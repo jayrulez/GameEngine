@@ -13,7 +13,7 @@
 //
 // The application resolves the root ONCE at startup (ResolveDataRoot), mounts a
 // NativeFileSystem over it, and hands that IFileSystem to whatever reads engine data (the
-// shader host reads "Shaders/...", the UI its default font under "Assets/fonts/..."). Nothing
+// shader host reads "Engine/Shaders/...", the GUI its default font under "Engine/Fonts/..."). Nothing
 // below the application knows where the root is - only what it reads relative to it.
 //
 module;

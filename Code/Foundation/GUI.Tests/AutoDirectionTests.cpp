@@ -28,7 +28,7 @@ namespace
         {
             fonts::TrueTypeFonts::Initialize();
             const String root = foundation::vfs::FindDataRoot();
-            REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+            REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
                     fonts::FontLoadResult::Success);
         }
     };

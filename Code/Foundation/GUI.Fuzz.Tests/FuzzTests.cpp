@@ -118,7 +118,7 @@ TEST_CASE("fuzz: the string table reader takes any XML")
     std::vector<std::string> seeds;
     const core::String root = foundation::vfs::FindDataRoot();
     seeds.push_back(ReadBytes(std::filesystem::path(std::string(reinterpret_cast<const char*>(root.CStr()))) /
-                              "Assets/ui/sandbox/i18n/sandbox.strings.xml"));
+                              "Samples/UI/sandbox/i18n/sandbox.strings.xml"));
     REQUIRE_FALSE(seeds[0].empty());
     for (std::string& found : FoundSeeds("strings"))
         seeds.push_back(std::move(found)); // cells-not-one-a-locale: an entry short of the locales' cells

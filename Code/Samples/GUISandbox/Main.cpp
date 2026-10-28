@@ -2,12 +2,12 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // GUI Sandbox - foundation.gui's demo (Documentation/Specs/vg-and-gui-lab.md), built from the GUI
-// itself. A shell (Data/Assets/ui/sandbox/shell.xml: a header, a sidebar of pages, the page on
+// itself. A shell (Data/Samples/UI/sandbox/shell.xml: a header, a sidebar of pages, the page on
 // show) whose sidebar buttons run page.<id> commands; each page is pages/<id>.xml with an optional
 // pages/<id>.css and pages/<id>.as, so a new page is a button and its files. This host only sizes
 // the shell, fills the few hosts that need native models or widgets (the data views, the menu bar,
 // the context menu, the floating window, the message box, an image, anchors), and
-// switches the theme. The game menu (Data/Assets/ui/showcase) is a second root of the same GUI:
+// switches the theme. The game menu (Data/Samples/UI/showcase) is a second root of the same GUI:
 // it shares the data, and its Leave brings the player back here.
 //
 // Drawn through VG with everything it has (analytic boxes, layers and blurs, the MSAA and stencil
@@ -109,11 +109,11 @@ namespace
     }
 
     constexpr StringView kRoboto = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
-    constexpr StringView kLilita = u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf";
-    constexpr StringView kDejaVu = u8"Assets/fonts/dejavu/DejaVuSansMono.ttf"; // Arabic, which Roboto has not
-    constexpr StringView kStrings = u8"Assets/ui/sandbox/i18n/sandbox.strings.xml";
-    constexpr StringView kSandboxDir = u8"Assets/ui/sandbox/";
-    constexpr StringView kMenuDir = u8"Assets/ui/showcase/";
+    constexpr StringView kLilita = u8"Samples/Fonts/lilita-one/LilitaOne-Regular.ttf";
+    constexpr StringView kDejaVu = u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf"; // Arabic, which Roboto has not
+    constexpr StringView kStrings = u8"Samples/UI/sandbox/i18n/sandbox.strings.xml";
+    constexpr StringView kSandboxDir = u8"Samples/UI/sandbox/";
+    constexpr StringView kMenuDir = u8"Samples/UI/showcase/";
     constexpr StringView kPageCommand = u8"page.";
 
     constexpr f32 kHeaderHeight = 60.0f;

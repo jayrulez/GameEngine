@@ -3,7 +3,7 @@
 
 // GUI.Fuzz - a libFuzzer entry for one target (GUI_FUZZ_TARGET: 1 CSS, 2 markup, 3 keymap, 4 string
 // table, 5 input on the Controls page), for long runs with -fsanitize=fuzzer,address
-// (OPTION_GUI_LIBFUZZER). Seed it with the sandbox's files: `GUI.Fuzz.Css Data/Assets/ui/sandbox`.
+// (OPTION_GUI_LIBFUZZER). Seed it with the sandbox's files: `GUI.Fuzz.Css Data/Samples/UI/sandbox`.
 #include "Core/Prelude.h"
 #include <algorithm>
 #include <cstdint>

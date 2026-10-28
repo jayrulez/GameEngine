@@ -120,7 +120,7 @@ namespace guifuzz
         std::vector<std::string> seeds;
         const core::String root = foundation::vfs::FindDataRoot();
         const std::filesystem::path base =
-            std::filesystem::path(std::string(reinterpret_cast<const char*>(root.CStr()))) / "Assets/ui/sandbox";
+            std::filesystem::path(std::string(reinterpret_cast<const char*>(root.CStr()))) / "Samples/UI/sandbox";
         std::error_code ec;
         const std::filesystem::path dirs[2] = {base, base / "pages"};
         for (const std::filesystem::path& dir : dirs)

@@ -7,34 +7,34 @@
         <Label class="section-title" text="Tool bars and a status bar"/>
         <Panel id="toolkit-frame" class="toolkit-frame" key-context="toolkit">
             <ToolBar id="toolkit-bar">
-                <ToolButton command="toolkit.new" icon="Assets/ui/sandbox/icons/new.svg"/>
-                <ToolButton command="toolkit.open" icon="Assets/ui/sandbox/icons/open.svg"/>
-                <ToolButton command="toolkit.save" icon="Assets/ui/sandbox/icons/save.svg"/>
+                <ToolButton command="toolkit.new" icon="Samples/UI/sandbox/icons/new.svg"/>
+                <ToolButton command="toolkit.open" icon="Samples/UI/sandbox/icons/open.svg"/>
+                <ToolButton command="toolkit.save" icon="Samples/UI/sandbox/icons/save.svg"/>
                 <Separator/>
-                <ToolButton command="toolkit.undo" icon="Assets/ui/sandbox/icons/undo.svg"/>
-                <ToolButton command="toolkit.redo" icon="Assets/ui/sandbox/icons/redo.svg"/>
+                <ToolButton command="toolkit.undo" icon="Samples/UI/sandbox/icons/undo.svg"/>
+                <ToolButton command="toolkit.redo" icon="Samples/UI/sandbox/icons/redo.svg"/>
                 <Separator/>
-                <ToolButton command="toolkit.grid" toggle="true" icon="Assets/ui/sandbox/icons/grid.svg" overflow-priority="1"/>
-                <ToolButton command="toolkit.snap" toggle="true" icon="Assets/ui/sandbox/icons/snap.svg"/>
+                <ToolButton command="toolkit.grid" toggle="true" icon="Samples/UI/sandbox/icons/grid.svg" overflow-priority="1"/>
+                <ToolButton command="toolkit.snap" toggle="true" icon="Samples/UI/sandbox/icons/snap.svg"/>
                 <Separator/>
-                <ToolMenuButton command="toolkit.play" split="true" shows-text="true" icon="Assets/ui/sandbox/icons/play.svg" overflow-priority="2">
+                <ToolMenuButton command="toolkit.play" split="true" shows-text="true" icon="Samples/UI/sandbox/icons/play.svg" overflow-priority="2">
                     <MenuItem command="toolkit.play-here"/>
                     <MenuItem command="toolkit.play-window"/>
                 </ToolMenuButton>
-                <ToolMenuButton text="Add" shows-text="true" icon="Assets/ui/sandbox/icons/add.svg">
+                <ToolMenuButton text="Add" shows-text="true" icon="Samples/UI/sandbox/icons/add.svg">
                     <MenuItem command="toolkit.add-cube"/>
                     <MenuItem command="toolkit.add-sphere"/>
                     <MenuItem command="toolkit.add-light"/>
                 </ToolMenuButton>
                 <Spacer/>
-                <ToolButton command="toolkit.settings" icon="Assets/ui/sandbox/icons/settings.svg" overflow-priority="3"/>
+                <ToolButton command="toolkit.settings" icon="Samples/UI/sandbox/icons/settings.svg" overflow-priority="3"/>
             </ToolBar>
             <Panel class="toolkit-middle" flex-direction="row">
                 <ToolBar id="toolkit-tools" orientation="vertical">
-                    <ToolButton name="toolkit-tool" toggle="true" checked="true" icon="Assets/ui/sandbox/icons/select.svg" tooltip="Select"/>
-                    <ToolButton name="toolkit-tool" toggle="true" icon="Assets/ui/sandbox/icons/move.svg" tooltip="Move"/>
-                    <ToolButton name="toolkit-tool" toggle="true" icon="Assets/ui/sandbox/icons/rotate.svg" tooltip="Rotate"/>
-                    <ToolButton name="toolkit-tool" toggle="true" icon="Assets/ui/sandbox/icons/scale.svg" tooltip="Scale"/>
+                    <ToolButton name="toolkit-tool" toggle="true" checked="true" icon="Samples/UI/sandbox/icons/select.svg" tooltip="Select"/>
+                    <ToolButton name="toolkit-tool" toggle="true" icon="Samples/UI/sandbox/icons/move.svg" tooltip="Move"/>
+                    <ToolButton name="toolkit-tool" toggle="true" icon="Samples/UI/sandbox/icons/rotate.svg" tooltip="Rotate"/>
+                    <ToolButton name="toolkit-tool" toggle="true" icon="Samples/UI/sandbox/icons/scale.svg" tooltip="Scale"/>
                 </ToolBar>
                 <Panel id="toolkit-canvas" class="toolkit-canvas">
                     <Label class="toolkit-note" white-space="normal"

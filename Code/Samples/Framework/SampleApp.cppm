@@ -78,7 +78,7 @@ export namespace samples::framework
         // through these, never from a compiled-in path.
         [[nodiscard]] StringView DataRoot() const noexcept { return m_dataRoot.AsView(); }
         [[nodiscard]] vfs::IFileSystem& DataFileSystem() noexcept { return *m_dataFileSystem; }
-        // A data-relative path resolved against the root ("Assets/fonts/x.ttf" -> absolute).
+        // A data-relative path resolved against the root ("Engine/Fonts/x.ttf" -> absolute).
         [[nodiscard]] String DataPath(StringView relative) const
         {
             return vfs::DataPath(m_dataRoot.AsView(), relative);

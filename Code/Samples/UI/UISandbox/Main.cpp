@@ -751,7 +751,7 @@ private:
     UniquePtr<fonts::TrueTypeFontService> m_fontService;
 
     // VFS-backed resource provider for loading the pause-menu .sml (foundation.ui.vfs over a NativeFileSystem
-    // rooted at Data/Assets/ui). Kept alive for the app's lifetime (Sedulous keeps mGuiResourceProvider).
+    // rooted at Data/Samples/UI). Kept alive for the app's lifetime (Sedulous keeps mGuiResourceProvider).
     UniquePtr<vfs::NativeFileSystem> m_uiFs;
     UniquePtr<ui::vfs::VfsResourceProvider> m_resProvider;
 
@@ -856,8 +856,8 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
         // Chewy Apache 2.0).
         // GetFont falls back to Roboto if a family is missing, so the demo still renders if these
         // fail to load.
-        const String titlePath = DataPath(u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf");
-        const String playfulPath = DataPath(u8"Assets/fonts/chewy/Chewy-Regular.ttf");
+        const String titlePath = DataPath(u8"Samples/Fonts/lilita-one/LilitaOne-Regular.ttf");
+        const String playfulPath = DataPath(u8"Samples/Fonts/chewy/Chewy-Regular.ttf");
         const f32 decorativeSizes[] = {14.0f, 18.0f, 24.0f, 32.0f};
         for (f32 s : decorativeSizes)
         {
@@ -1095,7 +1095,7 @@ void UISandbox::ApplyTheme()
 // Load a .sss theme file through the VFS-backed resource provider (mirrors Sedulous LoadSSSTheme): a
 // StyleSheetLoader with the provider + palette + the built-in SVG icons registered, fed the .sss text.
 // Falls back to DarkTheme if the file can't be read.
-// Create the VFS-backed resource provider once, rooted at <data root>/Assets/ui (shared by the .sss
+// Create the VFS-backed resource provider once, rooted at <data root>/Samples/UI (shared by the .sss
 // theme loader and the pause-menu .sml tab). No-op if already created or if there is no data root.
 void UISandbox::EnsureResourceProvider()
 {
@@ -1107,7 +1107,7 @@ void UISandbox::EnsureResourceProvider()
     {
         return;
     }
-    const String uiRoot = DataPath(u8"Assets/ui");
+    const String uiRoot = DataPath(u8"Samples/UI");
     m_uiFs = MakeUnique<vfs::NativeFileSystem>(AppRoot(), uiRoot.AsView(), AppRoot());
     m_resProvider = MakeUnique<ui::vfs::VfsResourceProvider>(AppRoot(), m_uiFs.Get());
 }
@@ -1311,7 +1311,7 @@ RefPtr<ui::StyleSheet> UISandbox::CreateTexturedTheme()
 }
 
 // === Tab 10: Pause Menu (.sml) - loads a screen from disk through a VFS-backed resource provider ===
-// Faithful port of Sedulous UISandboxApp's pause-menu demo: a NativeFileSystem rooted at Data/Assets/ui is
+// Faithful port of Sedulous UISandboxApp's pause-menu demo: a NativeFileSystem rooted at Data/Samples/UI is
 // wrapped in a VfsResourceProvider (foundation.ui.vfs); we read the .sml text through it and hand it to
 // === Docking demo (foundation.ui.application) ===
 // A DockManager wired to the RuntimeDockableWindowHost: 5 panels laid out IDE-style (Scene center,

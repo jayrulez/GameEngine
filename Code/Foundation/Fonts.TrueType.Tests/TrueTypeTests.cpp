@@ -3,7 +3,7 @@
 
 // Ported from Sedulous.Fonts.Tests TTF suites (loader/font/atlas/shaper).
 // Sedulous loaded system fonts from C:/Windows/Fonts; the engine bundles the
-// Roboto asset (copied from Sedulous/Assets) under the data root's Assets/fonts.
+// Roboto asset (copied from Sedulous/Assets) under the data root's Engine/Fonts.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"

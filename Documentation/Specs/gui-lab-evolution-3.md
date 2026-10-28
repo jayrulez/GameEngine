@@ -991,7 +991,7 @@ Each a layer with its tests.
 - **K7 The sandbox's game menu on the gamekit.** The showcase's hand-built stack, Back, fades,
   pause and host plumbing replaced by the gamekit; a HUD under a pause screen; prompts that follow
   the device. Built (vg, 2026-10-23): the frame (backdrop, title, `<Screens>`) and a document per
-  screen in Data/Assets/ui/showcase/screens/, each pushed fresh and wired as it is pushed;
+  screen in Data/Samples/UI/showcase/screens/, each pushed fresh and wired as it is pushed;
   entrances and exits in the sheet; Back the stack's, the HUD's own opening the pause screen;
   the game stops while the stack reports a pause; the score counts up through a data tween in
   whole numbers (`whole`, as a script's numbers arrive as fractions); the HUD's pause prompt

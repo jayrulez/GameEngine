@@ -12,7 +12,7 @@ funcdef string TextExpression();
 funcdef bool CommandHandler();
 funcdef bool EventHandler(GuiEvent e);
 
-const string kScreens = "Assets/ui/showcase/screens/";
+const string kScreens = "Samples/UI/showcase/screens/";
 
 ScreenStack@ stack; // the game's screens
 Node@ stage;        // the title over the menu's pages

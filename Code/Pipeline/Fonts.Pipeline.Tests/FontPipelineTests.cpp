@@ -49,7 +49,7 @@ namespace
         const String root = FindDataRoot();
         REQUIRE_FALSE(root.IsEmpty());
         return FileCopyPreserving(
-            DataPath(root.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView(),
+            DataPath(root.AsView(), u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf").AsView(),
             kSourceFont);
     }
 }

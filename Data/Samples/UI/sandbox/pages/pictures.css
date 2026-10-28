@@ -8,7 +8,7 @@
               border-image: url("data:image/svg+xml,<svg width='24' height='24'><rect x='1' y='1' width='22' height='22' rx='7' fill='%23314a7a' stroke='%2360c0f0' stroke-width='2'/></svg>") 8 fill / 8px stretch; }
 .svg-button:hover { border-image: url("data:image/svg+xml,<svg width='24' height='24'><rect x='1' y='1' width='22' height='22' rx='7' fill='%233d5c96' stroke='%23a0e0ff' stroke-width='2'/></svg>") 8 fill / 8px stretch; }
 .framed { width: 240px; height: 64px; padding: 16px; font-family: Roboto; font-size: 13px; color: #f4f7fb; vertical-align: middle;
-          border-width: 16px; border-image: url(Assets/ui/sandbox/pictures/frame.svg) 16 fill / 16px stretch; }
+          border-width: 16px; border-image: url(Samples/UI/sandbox/pictures/frame.svg) 16 fill / 16px stretch; }
 .tiles { width: 620px; }
 .tile { width: 64px; height: 64px; font-family: Roboto; font-size: 14px; color: #f6d77a; text-align: center; vertical-align: middle;
-        border-width: 16px; border-image: url(Assets/ui/sandbox/pictures/frame.svg) 16 fill / 16px round; }
+        border-width: 16px; border-image: url(Samples/UI/sandbox/pictures/frame.svg) 16 fill / 16px round; }

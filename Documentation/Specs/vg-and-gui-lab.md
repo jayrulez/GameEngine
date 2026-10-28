@@ -343,7 +343,7 @@ phases and gotchas hold; F1 to F3 are its P0 to P2, re-cut.
   shadows, gradients, blur and animated states, written in AngelScript), the proof that it looks
   the part.
   As built on `vg`: `GUISandbox --showcase` (a6fe2508f) shows a main menu from
-  `Data/Assets/ui/showcase`: markup for the widgets, a sheet for every look (a radial background,
+  `Data/Samples/UI/showcase`: markup for the widgets, a sheet for every look (a radial background,
   drifting orbs under blur filters, a distance-field title with a breathing glow, gradient buttons
   that lean in on hover and give on a press; the title fixed in the upper third with one slot under
   it that the main menu and the frosted settings take in turn, loading as a screen of its own, and

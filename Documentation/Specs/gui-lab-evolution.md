@@ -1162,7 +1162,7 @@ Design (approved 2026-10-17, with the rulings below), in layers:
   inspector gets an Accessibility section (role, name, actions) and an audit (focusable controls
   without a name, relations to no node).
 - **E9e The sandbox's page.** A Language and direction page: a language picker over string tables
-  in `Data/Assets/ui/sandbox/i18n` (English, pseudolocalized English, and a right-to-left one), a direction
+  in `Data/Samples/UI/sandbox/i18n` (English, pseudolocalized English, and a right-to-left one), a direction
   toggle, mixed-direction text and a text field to edit it, and `--narrate`, a bridge that prints
   each focus change and announcement as a screen reader would speak it (the console stands in
   for text to speech). Image tests gain the page in a right-to-left language.

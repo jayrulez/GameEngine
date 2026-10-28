@@ -29,7 +29,7 @@ namespace
             const String root = foundation::vfs::FindDataRoot();
             REQUIRE(service.LoadFont(u8"Roboto", foundation::vfs::DataPath(root.AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView()) ==
                     fonts::FontLoadResult::Success);
-            REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+            REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
                     fonts::FontLoadResult::Success);
         }
         fonts::CachedFont* Roboto() { return service.GetFont(u8"Roboto", 16.0f); }

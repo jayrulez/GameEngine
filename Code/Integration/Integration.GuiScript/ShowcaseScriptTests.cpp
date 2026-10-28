@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The GUI's game menu (the sandbox's showcase, K7 of Specs/gui-lab-evolution-3.md) played
-// end to end from its real files: Data/Assets/ui/showcase's frame, sheet and screen documents, and
+// end to end from its real files: Data/Samples/UI/showcase's frame, sheet and screen documents, and
 // its AngelScript, on the gamekit's stack. A player's keys and pad drive it: pages and Back, the
 // quit question, loading into the game, the HUD's prompt following the device, the score counting
 // up in whole numbers, pause from Escape and Start stopping the game, back to the menu, and leaving.
@@ -120,13 +120,13 @@ namespace
             static const gui::ElementSet elements = gui::ElementSet::All();
             gui::MarkupLoader loader(elements, core::DefaultAllocator(), &files);
             loader.SetDataModel(root->GetContext().GetDataRef());
-            frame = loader.LoadFromString(ReadData(SV(u8"Assets/ui/showcase/menu.xml")).AsView());
+            frame = loader.LoadFromString(ReadData(SV(u8"Samples/UI/showcase/menu.xml")).AsView());
             REQUIRE(frame);
             root->AddChild(frame.Get());
             frame->SetSize(root->GetSize());
             for (core::usize i = 0; i < frame->ChildCount(); ++i)
                 frame->GetChildAt(i)->SetSize(root->GetSize());
-            (void)styles.SetSubtreeSheet(*frame, gui::CSSParser::Parse(ReadData(SV(u8"Assets/ui/showcase/menu.css")).AsView()));
+            (void)styles.SetSubtreeSheet(*frame, gui::CSSParser::Parse(ReadData(SV(u8"Samples/UI/showcase/menu.css")).AsView()));
             styles.ApplyTree(*root);
             stack = FindStack(*frame);
             REQUIRE(stack != nullptr);
@@ -137,7 +137,7 @@ namespace
             context = manager->CreateContext();
             context->SetErrorHandler(&errors);
             gui::InstallGuiScriptService(*context, binding);
-            const core::Status loaded = context->Load(ReadData(SV(u8"Assets/ui/showcase/menu.as")).AsView(), SV(u8"menu.as"));
+            const core::Status loaded = context->Load(ReadData(SV(u8"Samples/UI/showcase/menu.as")).AsView(), SV(u8"menu.as"));
             INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
             REQUIRE(loaded.IsOk());
             Frame(0.0);

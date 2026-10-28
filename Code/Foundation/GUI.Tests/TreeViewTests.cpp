@@ -352,7 +352,7 @@ TEST_CASE("tree-view: a long name bound before the row had a font widens the row
     fonts::TrueTypeFonts::Initialize();
     fonts::TrueTypeFontService service{core::DefaultAllocator()};
     const core::String data = foundation::vfs::FindDataRoot();
-    REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+    REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(data.AsView(), u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
             fonts::FontLoadResult::Success);
     tree->SetFont(service.GetFont(u8"DejaVu", 13.0f)); // as the sheet gives it, after the bind
     (void)root->UpdateLayout();

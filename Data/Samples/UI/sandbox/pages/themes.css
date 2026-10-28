@@ -17,13 +17,13 @@
     --accent: #c2652a; --on-accent: #fff1de; --accent-strong: #e0873c; --selection: #7a3b17; --focus-ring: #ffb35c;
     --control: #120c08; --track: #3b2616; --outline: #b37a3c; --text: #f1dcc0; --text-strong: #fff1de;
     --button-background: transparent; --field-background: transparent; --combobox-background: transparent;
-    --button-skin: url(Assets/ui/sandbox/themes/ember/button.png) 8 fill / 8px stretch;
-    --button-hover-skin: url(Assets/ui/sandbox/themes/ember/button-hover.png) 8 fill / 8px stretch;
-    --field-skin: url(Assets/ui/sandbox/themes/ember/field.png) 5 fill / 5px stretch;
+    --button-skin: url(Samples/UI/sandbox/themes/ember/button.png) 8 fill / 8px stretch;
+    --button-hover-skin: url(Samples/UI/sandbox/themes/ember/button-hover.png) 8 fill / 8px stretch;
+    --field-skin: url(Samples/UI/sandbox/themes/ember/field.png) 5 fill / 5px stretch;
     --button-radius: 6px; --field-radius: 4px; /* as round as the art: focus rings follow */
     --slider-thumb: #f1dcc0;
     background-color: transparent; border-width: 0;
-    border-image: url(Assets/ui/sandbox/themes/ember/panel.png) 16 fill / 16px stretch;
+    border-image: url(Samples/UI/sandbox/themes/ember/panel.png) 16 fill / 16px stretch;
 }
 .ember .theme-title { font-family: Lilita; font-size: 24px; color: #ffcf8a; text-shadow: 0 2px 2px rgba(0, 0, 0, 0.6); }
 

@@ -6,12 +6,12 @@
     <Panel class="section" gap="12">
         <Label class="section-title" text="As content"/>
         <Panel flex-direction="row" align-items="center" gap="16">
-            <Image class="emblem" src="Assets/ui/sandbox/pictures/emblem.svg" tooltip="An SVG file as an Image's src"/>
-            <Image class="emblem large" src="Assets/ui/sandbox/pictures/emblem.svg" tooltip="The same file twice the size, still crisp"/>
+            <Image class="emblem" src="Samples/UI/sandbox/pictures/emblem.svg" tooltip="An SVG file as an Image's src"/>
+            <Image class="emblem large" src="Samples/UI/sandbox/pictures/emblem.svg" tooltip="The same file twice the size, still crisp"/>
             <Image class="inline-dot" tooltip="An SVG written inline in the markup"
                    src="data:image/svg+xml,&lt;svg width='32' height='32'&gt;&lt;circle cx='16' cy='16' r='14' fill='%2360c0f0' stroke='%23f4f7fb' stroke-width='3'/&gt;&lt;/svg&gt;"/>
             <RichText class="rich" white-space="normal"
-                      text="Rated [icon=Assets/ui/sandbox/pictures/star.svg][icon=Assets/ui/sandbox/pictures/star.svg][icon=Assets/ui/sandbox/pictures/star.svg] by [b]rich text[/b] icons"/>
+                      text="Rated [icon=Samples/UI/sandbox/pictures/star.svg][icon=Samples/UI/sandbox/pictures/star.svg][icon=Samples/UI/sandbox/pictures/star.svg] by [b]rich text[/b] icons"/>
         </Panel>
         <Label class="caption" text="Image src from a .svg file and from a data: URL; [icon=] in rich text."/>
     </Panel>

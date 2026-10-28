@@ -813,7 +813,7 @@ TEST_CASE("menu: a shortcut or text an item takes after the menu measured widens
     fonts::TrueTypeFonts::Initialize();
     fonts::TrueTypeFontService service{core::DefaultAllocator()};
     const core::String root = foundation::vfs::FindDataRoot();
-    REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
+    REQUIRE(service.LoadFont(u8"DejaVu", foundation::vfs::DataPath(root.AsView(), u8"Samples/Fonts/dejavu/DejaVuSansMono.ttf").AsView()) ==
             fonts::FontLoadResult::Success);
     auto menu = Make<Menu>();
     MenuItem* item = menu->AddItem(core::StringView(u8"Command Palette"), [] {});

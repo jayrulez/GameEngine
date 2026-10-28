@@ -80,7 +80,7 @@ TEST_CASE("harfbuzz: fi is one glyph over two characters, and hits and carets go
 
 TEST_CASE("harfbuzz: Arabic joins, so it has fewer glyphs than characters, and reads right to left")
 {
-    IFont* font = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
+    IFont* font = Load("/Samples/Fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(font != nullptr);
     Shaper s;
     Array<GlyphPosition> glyphs;
@@ -294,7 +294,7 @@ TEST_CASE("harfbuzz: through a font service, every glyph of shaped text has its 
 TEST_CASE("harfbuzz: a character no font before has takes the next font in the list")
 {
     IFont* roboto = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
-    IFont* dejavu = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
+    IFont* dejavu = Load("/Samples/Fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(roboto != nullptr);
     REQUIRE(dejavu != nullptr);
     IFont* const fonts[2] = {roboto, dejavu};
@@ -326,7 +326,7 @@ TEST_CASE("harfbuzz: a character no font before has takes the next font in the l
 TEST_CASE("harfbuzz: a right-to-left request reads right to left, and a language picks its forms")
 {
     IFont* roboto = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
-    IFont* dejavu = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
+    IFont* dejavu = Load("/Samples/Fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(roboto != nullptr);
     REQUIRE(dejavu != nullptr);
     Shaper s;
@@ -371,7 +371,7 @@ TEST_CASE("harfbuzz: a right-to-left request reads right to left, and a language
 TEST_CASE("harfbuzz: the basic shaper takes the same request: fallback by font, and a mirrored line")
 {
     IFont* roboto = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
-    IFont* dejavu = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
+    IFont* dejavu = Load("/Samples/Fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(roboto != nullptr);
     REQUIRE(dejavu != nullptr);
     IFont* const fonts[2] = {roboto, dejavu};
@@ -421,7 +421,7 @@ TEST_CASE("bidi: the resolver gives Arabic odd levels and finds a paragraph's di
 
 TEST_CASE("bidi: a right-to-left paragraph with Latin inside reads right to left and hit tests")
 {
-    IFont* font = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
+    IFont* font = Load("/Samples/Fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(font != nullptr);
     BidiAlgorithm::Install();
     Shaper s;
@@ -466,7 +466,7 @@ TEST_CASE("bidi: a right-to-left paragraph with Latin inside reads right to left
 
 TEST_CASE("bidi: a wrapped right-to-left paragraph reorders each line, its first words on the right of the first")
 {
-    IFont* font = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf", 20.0f);
+    IFont* font = Load("/Samples/Fonts/dejavu/DejaVuSansMono.ttf", 20.0f);
     REQUIRE(font != nullptr);
     BidiAlgorithm::Install();
     Shaper s;

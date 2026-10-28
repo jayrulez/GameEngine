@@ -27,10 +27,58 @@ namespace editor::app
         constexpr Color kAccent{0xF5 / 255.0f, 0x8F / 255.0f, 0x42 / 255.0f, 1.0f};
         constexpr Color kText{0.78f, 0.79f, 0.81f, 1.0f};
         constexpr Color kDim{0.50f, 0.51f, 0.53f, 1.0f};
+        // The layout at 100%; Scaled takes each to the splash's scale.
         constexpr i32 kMargin = 40;
+        constexpr i32 kLogoY = 84;
         constexpr i32 kStatusBaseline = 236;
         constexpr i32 kBarY = 254;
         constexpr i32 kBarHeight = 4;
+        constexpr i32 kVersionFromBottom = 18;
+        constexpr f32 kFontSize = 15.0f;
+        constexpr u32 kLogoWidth = 440; // the 1x picture's width
+        constexpr u32 kLogoHeight = 95;
+
+        // `src` (sw x sh straight RGBA) resampled to dw x dh: bilinear, in premultiplied alpha so
+        // the logo's edges do not take the colour of its transparent pixels. From the 2x picture
+        // to anything between 1x and 2x, so no step skips a source pixel.
+        [[nodiscard]] foundation::image::Image Resampled(Span<const u8> src, u32 sw, u32 sh, u32 dw, u32 dh)
+        {
+            Array<u8> out;
+            out.Resize(static_cast<usize>(dw) * dh * 4);
+            const auto texel = [&](i32 x, i32 y, i32 c) -> f32
+            {
+                x = Clamp(x, 0, static_cast<i32>(sw) - 1);
+                y = Clamp(y, 0, static_cast<i32>(sh) - 1);
+                const u8* p = &src[(static_cast<usize>(y) * sw + static_cast<usize>(x)) * 4];
+                const f32 alpha = p[3] / 255.0f;
+                return c == 3 ? alpha : (p[c] / 255.0f) * alpha;
+            };
+            for (u32 y = 0; y < dh; ++y)
+            {
+                const f32 fy = (static_cast<f32>(y) + 0.5f) * static_cast<f32>(sh) / static_cast<f32>(dh) - 0.5f;
+                const i32 y0 = static_cast<i32>(Floor(fy));
+                const f32 ty = fy - static_cast<f32>(y0);
+                for (u32 x = 0; x < dw; ++x)
+                {
+                    const f32 fx = (static_cast<f32>(x) + 0.5f) * static_cast<f32>(sw) / static_cast<f32>(dw) - 0.5f;
+                    const i32 x0 = static_cast<i32>(Floor(fx));
+                    const f32 tx = fx - static_cast<f32>(x0);
+                    f32 value[4];
+                    for (i32 c = 0; c < 4; ++c)
+                    {
+                        const f32 top = texel(x0, y0, c) * (1.0f - tx) + texel(x0 + 1, y0, c) * tx;
+                        const f32 bottom = texel(x0, y0 + 1, c) * (1.0f - tx) + texel(x0 + 1, y0 + 1, c) * tx;
+                        value[c] = top * (1.0f - ty) + bottom * ty;
+                    }
+                    u8* q = &out[(static_cast<usize>(y) * dw + x) * 4];
+                    const f32 alpha = value[3];
+                    for (i32 c = 0; c < 3; ++c)
+                        q[c] = static_cast<u8>(Clamp(alpha > 0.0f ? value[c] / alpha : 0.0f, 0.0f, 1.0f) * 255.0f + 0.5f);
+                    q[3] = static_cast<u8>(Clamp(alpha, 0.0f, 1.0f) * 255.0f + 0.5f);
+                }
+            }
+            return foundation::image::Image(dw, dh, foundation::image::PixelFormat::RGBA8, Span<const u8>(out.Data(), out.Size()));
+        }
 
         [[nodiscard]] u32 DecodeOne(StringView text, usize& i)
         {
@@ -62,9 +110,11 @@ namespace editor::app
     }
 
     EditorSplash::EditorSplash(shell::IShell* shellRef, shell::IWindow* window, Span<const u8> logoRgba, u32 logoWidth,
-                               u32 logoHeight, Array<u8> fontData, StringView version)
-        : m_shell(shellRef), m_window(window), m_version(version)
+                               u32 logoHeight, Array<u8> fontData, StringView version, f32 scale)
+        : m_shell(shellRef), m_window(window), m_version(version), m_scale(Max(scale, 1.0f))
     {
+        m_width = static_cast<u32>(static_cast<f32>(kWidth) * m_scale + 0.5f);
+        m_height = static_cast<u32>(static_cast<f32>(kHeight) * m_scale + 0.5f);
         if (logoRgba.Size() >= static_cast<usize>(logoWidth) * logoHeight * 4 && logoWidth > 0 && logoHeight > 0)
         {
             m_logo.Resize(static_cast<usize>(logoWidth) * logoHeight * 4);
@@ -77,9 +127,9 @@ namespace editor::app
         }
         if (!fontData.IsEmpty())
         {
-            m_hasFont = m_font.Initialize(Move(fontData), 15.0f) == foundation::fonts::FontLoadResult::Success;
+            m_hasFont = m_font.Initialize(Move(fontData), kFontSize * m_scale) == foundation::fonts::FontLoadResult::Success;
         }
-        m_pixels.Resize(static_cast<usize>(kWidth) * kHeight * 4);
+        m_pixels.Resize(static_cast<usize>(m_width) * m_height * 4);
         Render();
     }
 
@@ -90,7 +140,7 @@ namespace editor::app
         Render();
         if (m_window != nullptr)
         {
-            (void)m_window->PresentPixels(Pixels(), kWidth, kHeight);
+            (void)m_window->PresentPixels(Pixels(), m_width, m_height);
         }
         // Startup holds the main thread: pump the window events here so the desktop does not
         // take the editor for hung while it starts.
@@ -140,10 +190,27 @@ namespace editor::app
         shell::IWindow* window = opened.Value();
         (void)ApplyEditorWindowIcon(*window, dataRoot);
 
+        // The display's scale (1.75 at 175%): the splash draws at it, and the window takes the size
+        // that shows it pixel for pixel. A window already counted in units larger than its pixels
+        // (macOS, Wayland) grows by the rest of the scale only; one that cannot say draws at 100%.
+        const f32 scale = Max(window->ContentScale(), 1.0f);
+        if (scale > 1.0f && window->Width() > 0)
+        {
+            const f32 density = static_cast<f32>(window->PixelWidth()) / static_cast<f32>(window->Width());
+            const f32 units = scale / Max(density, 1.0f);
+            if (units > 1.0f)
+            {
+                const u32 width = static_cast<u32>(static_cast<f32>(EditorSplash::kWidth) * units + 0.5f);
+                const u32 height = static_cast<u32>(static_cast<f32>(EditorSplash::kHeight) * units + 0.5f);
+                // Grown about its middle, so it stays where the shell centred it.
+                window->SetPosition(window->X() - static_cast<i32>(width - window->Width()) / 2,
+                                    window->Y() - static_cast<i32>(height - window->Height()) / 2);
+                window->SetSize(width, height);
+            }
+        }
+
         foundation::image::Image logo;
-        const String logoPath = PathJoin(dataRoot, u8"Branding/assiduous-logo-splash.png");
-        const bool hasLogo = foundation::image::io::LoadImage(logoPath.AsView(), logo).IsOk() &&
-                             logo.Format() == foundation::image::PixelFormat::RGBA8;
+        const bool hasLogo = LoadEditorSplashLogo(dataRoot, scale, logo);
         Array<u8> font;
         if (Result<Array<byte>> read = ReadFile(fontPath); read.HasValue())
         {
@@ -162,7 +229,28 @@ namespace editor::app
         }
         return MakeUnique<EditorSplash>(allocator, &shellRef, window,
                                         hasLogo ? logo.PixelData() : Span<const u8>{}, hasLogo ? logo.Width() : 0u,
-                                        hasLogo ? logo.Height() : 0u, Move(font), version);
+                                        hasLogo ? logo.Height() : 0u, Move(font), version, scale);
+    }
+
+    bool LoadEditorSplashLogo(StringView dataRoot, f32 scale, foundation::image::Image& out)
+    {
+        scale = Max(scale, 1.0f);
+        const bool large = scale > 1.0f;
+        foundation::image::Image picture;
+        const String path = PathJoin(dataRoot, large ? u8"Branding/assiduous-logo-splash@2x.png" : u8"Branding/assiduous-logo-splash.png");
+        if (!foundation::image::io::LoadImage(path.AsView(), picture).IsOk() || picture.Format() != foundation::image::PixelFormat::RGBA8)
+            return false;
+        const u32 width = static_cast<u32>(static_cast<f32>(kLogoWidth) * scale + 0.5f);
+        const u32 height = static_cast<u32>(static_cast<f32>(kLogoHeight) * scale + 0.5f);
+        out = (picture.Width() == width && picture.Height() == height)
+                  ? Move(picture)
+                  : Resampled(picture.PixelData(), picture.Width(), picture.Height(), width, height);
+        return true;
+    }
+
+    i32 EditorSplash::Scaled(i32 length) const noexcept
+    {
+        return static_cast<i32>(static_cast<f32>(length) * m_scale + 0.5f);
     }
 
     bool ApplyEditorWindowIcon(shell::IWindow& window, StringView dataRoot)
@@ -194,16 +282,17 @@ namespace editor::app
 
     void EditorSplash::Render()
     {
-        const i32 w = static_cast<i32>(kWidth);
-        const i32 h = static_cast<i32>(kHeight);
+        const i32 w = static_cast<i32>(m_width);
+        const i32 h = static_cast<i32>(m_height);
+        const i32 border = Max(1, Scaled(1));
         Fill(0, 0, w, h, kBorder);
-        Fill(1, 1, w - 2, h - 2, kBackground);
+        Fill(border, border, w - 2 * border, h - 2 * border, kBackground);
 
         // The logo, centred in the upper part.
         if (!m_logo.IsEmpty())
         {
             const i32 x0 = (w - static_cast<i32>(m_logoWidth)) / 2;
-            const i32 y0 = 84;
+            const i32 y0 = Scaled(kLogoY);
             for (u32 y = 0; y < m_logoHeight; ++y)
             {
                 for (u32 x = 0; x < m_logoWidth; ++x)
@@ -219,20 +308,23 @@ namespace editor::app
         }
 
         // What startup is doing, the bar under it, and the version.
-        DrawText(m_status.AsView(), kMargin, kStatusBaseline, kText);
-        const i32 barWidth = w - 2 * kMargin;
-        Fill(kMargin, kBarY, barWidth, kBarHeight, kTrack);
-        Fill(kMargin, kBarY, static_cast<i32>(static_cast<f32>(barWidth) * m_progress + 0.5f), kBarHeight, kAccent);
-        DrawText(m_version.AsView(), w - kMargin, h - 18, kDim, /*alignRight*/ true);
+        const i32 margin = Scaled(kMargin);
+        const i32 barY = Scaled(kBarY);
+        const i32 barHeight = Max(1, Scaled(kBarHeight));
+        DrawText(m_status.AsView(), margin, Scaled(kStatusBaseline), kText);
+        const i32 barWidth = w - 2 * margin;
+        Fill(margin, barY, barWidth, barHeight, kTrack);
+        Fill(margin, barY, static_cast<i32>(static_cast<f32>(barWidth) * m_progress + 0.5f), barHeight, kAccent);
+        DrawText(m_version.AsView(), w - margin, h - Scaled(kVersionFromBottom), kDim, /*alignRight*/ true);
     }
 
     void EditorSplash::Fill(i32 x, i32 y, i32 w, i32 h, Color color)
     {
-        for (i32 row = Max(0, y); row < Min(static_cast<i32>(kHeight), y + h); ++row)
+        for (i32 row = Max(0, y); row < Min(static_cast<i32>(m_height), y + h); ++row)
         {
-            for (i32 col = Max(0, x); col < Min(static_cast<i32>(kWidth), x + w); ++col)
+            for (i32 col = Max(0, x); col < Min(static_cast<i32>(m_width), x + w); ++col)
             {
-                u8* p = &m_pixels[(static_cast<usize>(row) * kWidth + static_cast<usize>(col)) * 4];
+                u8* p = &m_pixels[(static_cast<usize>(row) * m_width + static_cast<usize>(col)) * 4];
                 p[0] = static_cast<u8>(color.r * 255.0f + 0.5f);
                 p[1] = static_cast<u8>(color.g * 255.0f + 0.5f);
                 p[2] = static_cast<u8>(color.b * 255.0f + 0.5f);
@@ -243,11 +335,11 @@ namespace editor::app
 
     void EditorSplash::Blend(i32 x, i32 y, Color color, f32 alpha)
     {
-        if (x < 0 || y < 0 || x >= static_cast<i32>(kWidth) || y >= static_cast<i32>(kHeight))
+        if (x < 0 || y < 0 || x >= static_cast<i32>(m_width) || y >= static_cast<i32>(m_height))
         {
             return;
         }
-        u8* p = &m_pixels[(static_cast<usize>(y) * kWidth + static_cast<usize>(x)) * 4];
+        u8* p = &m_pixels[(static_cast<usize>(y) * m_width + static_cast<usize>(x)) * 4];
         const auto mix = [alpha](u8 under, f32 over)
         { return static_cast<u8>(static_cast<f32>(under) * (1.0f - alpha) + over * 255.0f * alpha + 0.5f); };
         p[0] = mix(p[0], color.r);

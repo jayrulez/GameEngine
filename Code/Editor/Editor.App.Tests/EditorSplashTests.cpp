@@ -8,6 +8,7 @@
 
 import foundation.core;
 import foundation.shell;
+import foundation.image;
 import editor.app;
 
 using namespace foundation::core;
@@ -41,7 +42,7 @@ namespace
     };
     [[nodiscard]] Pixel At(const app::EditorSplash& splash, u32 x, u32 y)
     {
-        const u8* p = &splash.Pixels()[(static_cast<usize>(y) * app::kEditorSplashWidth + x) * 4];
+        const u8* p = &splash.Pixels()[(static_cast<usize>(y) * splash.Width() + x) * 4];
         return Pixel{p[0], p[1], p[2]};
     }
 
@@ -95,7 +96,7 @@ TEST_CASE("splash: the logo, the status line and the progress bar, drawn on the 
         logo.PushBack(255);
     }
     app::EditorSplash splash(nullptr, nullptr, Span<const u8>(logo.Data(), logo.Size()), 20, 10, RobotoBytes(),
-                             u8"Version 0.1.0");
+                             u8"Version 0.1.0", 1.0f);
     REQUIRE(splash.Pixels().Size() == static_cast<usize>(app::kEditorSplashWidth) * app::kEditorSplashHeight * 4);
     const Pixel background = At(splash, app::kEditorSplashWidth / 2, 20);
 
@@ -128,6 +129,65 @@ TEST_CASE("splash: the logo, the status line and the progress bar, drawn on the 
     splash.Step(u8"Ready", 2.0f); // clamped
     CHECK(splash.Progress() == doctest::Approx(1.0f));
     CHECK(At(splash, 40 + 470, barY).r == 0xF5);
+}
+
+// On a scaled display the splash is drawn at the scale (the user's 175% monitor showed it small):
+// twice the size at 200%, its layout and its text with it.
+TEST_CASE("splash: at a display scale it is that much larger, its layout and text with it")
+{
+    Array<u8> logo; // the logo at the scale's size: an opaque red block, 40 x 20
+    for (u32 i = 0; i < 40 * 20; ++i)
+    {
+        logo.PushBack(255);
+        logo.PushBack(0);
+        logo.PushBack(0);
+        logo.PushBack(255);
+    }
+    app::EditorSplash splash(nullptr, nullptr, Span<const u8>(logo.Data(), logo.Size()), 40, 20, RobotoBytes(),
+                             u8"Version 0.1.0", 2.0f);
+    CHECK(splash.Width() == app::kEditorSplashWidth * 2);
+    CHECK(splash.Height() == app::kEditorSplashHeight * 2);
+    REQUIRE(splash.Pixels().Size() == static_cast<usize>(splash.Width()) * splash.Height() * 4);
+    const Pixel background = At(splash, splash.Width() / 2, 40);
+    CHECK(At(splash, splash.Width() / 2, 178).r == 255); // the logo, at twice its 100% place (89)
+
+    splash.Step(u8"Opening Level1", 0.5f);
+    const u32 barY = 255 * 2;
+    CHECK(At(splash, 80 + 240, barY).r == 0xF5); // filled to half of the doubled bar
+    CHECK(At(splash, 80 + 720, barY).r == 0x2E); // the track after
+    // The status text drew on its doubled line, and its glyphs are the larger face's: ink reaches
+    // higher above the baseline than the 100% face's 15 px could.
+    i32 top = -1;
+    for (u32 y = 440; y < 480 && top < 0; ++y)
+        for (u32 x = 80; x < 400 && top < 0; ++x)
+            if (At(splash, x, y).r > background.r + 40)
+                top = static_cast<i32>(y);
+    REQUIRE(top >= 0);
+    CHECK(472 - top > 15);
+}
+
+// The logo for a scale: the 1x picture at 100%, the 2x one resampled above it.
+TEST_CASE("splash: its logo loads at the size the scale asks for")
+{
+    foundation::image::Image one;
+    REQUIRE(app::LoadEditorSplashLogo(DataRoot().AsView(), 1.0f, one));
+    CHECK(one.Width() == 440u);
+    CHECK(one.Height() == 95u);
+    foundation::image::Image two;
+    REQUIRE(app::LoadEditorSplashLogo(DataRoot().AsView(), 2.0f, two));
+    CHECK(two.Width() == 880u);
+    CHECK(two.Height() == 190u);
+    foundation::image::Image between;
+    REQUIRE(app::LoadEditorSplashLogo(DataRoot().AsView(), 1.75f, between));
+    CHECK(between.Width() == 770u);
+    CHECK(between.Height() == 166u);
+    // Resampled, not emptied: the mark's ink is still there, opaque somewhere.
+    bool opaque = false;
+    for (usize i = 3; i < between.PixelData().Size() && !opaque; i += 4)
+        opaque = between.PixelData()[i] == 255;
+    CHECK(opaque);
+    foundation::image::Image none;
+    CHECK_FALSE(app::LoadEditorSplashLogo(u8"/nowhere", 1.0f, none));
 }
 
 TEST_CASE("splash: the editor's logo and window icon load from the branding files")

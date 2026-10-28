@@ -77,12 +77,6 @@
   the root's clip fix). Decide whether every window asks, and check the 3D views' cost at the higher
   resolution.
 
-- **The editor's splash at the display's scale** (user 2026-10-28, on Windows at 175%: the splash is
-  small): EditorSplash draws its own fixed picture in software (kWidth x kHeight, 15 px text, a fixed
-  PNG logo, a 4 px bar) and presents it to a window of that size, reading no scale. Draw it at the
-  content scale: the window sized by it, the font rasterized at the scaled size, the logo from the
-  SVG at the size needed, the bar and margins scaled.
-
 - **Images that share a texture draw in one call** (user 2026-10-28, from a RenderDoc capture of
   the editor: every icon is its own draw): VG's DrawImagePremultiplied closes the open command
   before every image (Context.cppm), even the next one on the same atlas page with the same clip,

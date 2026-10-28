@@ -315,3 +315,65 @@ TEST_CASE("graph page: parameters added by type and removed, layers added and re
     CHECK(bed.page->LayerList() == String(u8"Base"));
     CHECK_FALSE(bed.page->RemoveLayer()); // the last stays
 }
+
+TEST_CASE("graph page: a layer's or a parameter's row menu deletes it; the preview's Bones and Mesh hide either, the pick kept")
+{
+    Bed bed;
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{1200.0f, 800.0f});
+    root->AddChild(bed.page->Content().Get());
+    (void)root->UpdateLayout();
+    const auto item = [](gui::Node& menu, StringView text) -> gui::MenuItem*
+    {
+        Array<gui::Node*> pending;
+        pending.PushBack(&menu);
+        while (!pending.IsEmpty())
+        {
+            gui::Node* node = pending.Back();
+            pending.PopBack();
+            if (auto* found = Cast<gui::MenuItem>(node); found != nullptr && found->GetText() == text)
+                return found;
+            for (usize i = 0; i < node->ChildCount(); ++i)
+                pending.PushBack(node->GetChildAt(i));
+        }
+        return nullptr;
+    };
+
+    // The last layer is never deleted: its Delete is off.
+    bed.page->ShowListMenu(true, 0, *bed.page->Content(), Float2{20.0f, 60.0f});
+    REQUIRE(bed.page->ListMenu() != nullptr);
+    gui::MenuItem* deleteLayer = item(*bed.page->ListMenu(), u8"Delete Layer");
+    REQUIRE(deleteLayer != nullptr);
+    CHECK_FALSE(deleteLayer->IsEnabled());
+    bed.page->ListMenu()->Close();
+    bed.page->AddLayer();
+    bed.page->ShowListMenu(true, 1, *bed.page->Content(), Float2{20.0f, 60.0f});
+    REQUIRE(bed.page->ListMenu() != nullptr);
+    deleteLayer = item(*bed.page->ListMenu(), u8"Delete Layer");
+    REQUIRE(deleteLayer != nullptr);
+    CHECK(deleteLayer->HandleActivate());
+    CHECK(bed.page->LayerList() == String(u8"Base"));
+
+    bed.page->ShowListMenu(false, 0, *bed.page->Content(), Float2{20.0f, 300.0f});
+    CHECK(bed.page->Chosen().kind == GraphChoiceKind::Parameter); // the row chosen first
+    REQUIRE(bed.page->ListMenu() != nullptr);
+    gui::MenuItem* deleteParameter = item(*bed.page->ListMenu(), u8"Delete Parameter");
+    REQUIRE(deleteParameter != nullptr);
+    CHECK(deleteParameter->HandleActivate());
+    CHECK(bed.page->ParameterList().IsEmpty());
+
+    AnimationPreviewRig* rig = bed.page->Rig();
+    REQUIRE(rig != nullptr);
+    REQUIRE(rig->BonesButton() != nullptr);
+    REQUIRE(rig->MeshButton() != nullptr);
+    CHECK(rig->BonesShown());
+    CHECK(rig->MeshShown());
+    CHECK(rig->BonesButton()->HandleActivate()); // a click
+    CHECK_FALSE(rig->BonesShown());
+    const Guid mesh{0x5u, 0x6u};
+    rig->SetMesh(mesh);
+    CHECK(rig->MeshButton()->HandleActivate());
+    CHECK_FALSE(rig->MeshShown());
+    CHECK(rig->MeshId() == mesh); // hidden, its pick kept
+    root->RemoveChild(bed.page->Content().Get());
+}

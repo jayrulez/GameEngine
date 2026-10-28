@@ -18,6 +18,7 @@ import foundation.resource;
 import foundation.render;
 import engine.render;
 import foundation.gui;
+import foundation.gui.toolkit; // ToolButton (Bones, Mesh)
 import geometry.pipeline;
 import editor.core;
 import editor.app;
@@ -128,6 +129,23 @@ namespace editor
         };
         labelled(u8"Skeleton", *m_skeletonSlot);
         labelled(u8"Mesh", *m_meshSlot);
+        // What shows of it: the bones, the mesh (hidden, its pick kept), each this page's alone.
+        AnimationPreviewRig* self = this;
+        const auto toggle = [&](StringView id, StringView text, StringView tooltip, Function<void(bool)> set) -> RefPtr<gui::ToolButton>
+        {
+            RefPtr<gui::ToolButton> button = MakeRef<gui::ToolButton>(EditorRootAllocator());
+            button->SetId(id);
+            button->SetToggle(true);
+            button->SetChecked(true);
+            button->SetText(text);
+            button->SetShowsText(true);
+            button->SetTooltip(tooltip);
+            button->SetOnToggled(Move(set));
+            pane.AddControl(*button);
+            return button;
+        };
+        m_bonesButton = toggle(u8"preview-bones", u8"Bones", u8"Draw the skeleton's bones over the preview", [self](bool on) { self->SetBonesShown(on); });
+        m_meshButton = toggle(u8"preview-mesh-shown", u8"Mesh", u8"Draw the skinned mesh (off: hidden, its pick kept)", [self](bool on) { self->SetMeshShown(on); });
 
         scene::Scene* scenePtr = pane.Viewport() != nullptr ? pane.Viewport()->Scene() : nullptr;
         if (scenePtr == nullptr)
@@ -261,7 +279,14 @@ namespace editor
                 m_bind[b] = skeleton->Bones()[b].localBindPose;
             pose = m_bind.AsSpan();
         }
-        DrawSkeletonBones(draw, *skeleton, pose, m_world, base, chosen);
+        // Hidden bones are still placed (the framing and the mesh read them), drawn where nothing shows.
+        if (m_bonesShown)
+            DrawSkeletonBones(draw, *skeleton, pose, m_world, base, chosen);
+        else
+        {
+            m_unshown.Clear();
+            DrawSkeletonBones(m_unshown, *skeleton, pose, m_world, base, chosen);
+        }
         if (skeleton != m_framedFor && !m_world.IsEmpty())
         {
             m_framedFor = skeleton;
@@ -274,6 +299,7 @@ namespace editor
         engine::render::MeshComponent* component = components != nullptr ? components->Get(m_meshEntity) : nullptr;
         if (component == nullptr || mesh == nullptr)
             return;
+        component->visible = m_meshShown;
         // Skinned with the pose, placed where the bones are (borrowed for this frame's drawing).
         m_skinning.Resize(boneCount);
         skeleton->ComputeSkinningMatrices(pose, Span<Float4x4>{m_skinning.Data(), boneCount});
@@ -283,5 +309,23 @@ namespace editor
         placed.position = Float3{base.m[3][0], base.m[3][1], base.m[3][2]};
         placed.rotation = QuaternionFromRotationMatrix(base);
         scenePtr->SetLocalTransform(m_meshEntity, placed);
+    }
+
+    void AnimationPreviewRig::SetBonesShown(bool shown)
+    {
+        m_bonesShown = shown;
+        if (m_bonesButton && m_bonesButton->IsChecked() != shown)
+            m_bonesButton->SetChecked(shown);
+    }
+
+    void AnimationPreviewRig::SetMeshShown(bool shown)
+    {
+        m_meshShown = shown;
+        if (m_meshButton && m_meshButton->IsChecked() != shown)
+            m_meshButton->SetChecked(shown);
+        scene::Scene* scenePtr = m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
+        auto* components = scenePtr != nullptr ? scenePtr->GetSystem<engine::render::MeshComponentManager>() : nullptr;
+        if (engine::render::MeshComponent* component = components != nullptr ? components->Get(m_meshEntity) : nullptr)
+            component->visible = shown;
     }
 }

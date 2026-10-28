@@ -91,6 +91,11 @@ export namespace editor
         bool RemoveLayer();
         void AddParameter(foundation::animation::AnimationParameterType type);
         bool RemoveParameter();
+        /// A layer's (`layers`) or a parameter's row menu at `at` over `owner` (its list): the row
+        /// chosen, then Delete.
+        void ShowListMenu(bool layers, i32 index, foundation::gui::Node& owner, Float2 at);
+        /// That menu, while it is open.
+        [[nodiscard]] foundation::gui::Menu* ListMenu() const noexcept { return m_listMenu && m_listMenu->IsOpen() ? m_listMenu.Get() : nullptr; }
 
         /// A preview parameter's value, by the parameter's index (a trigger fires): the page's alone.
         void SetLive(i32 parameter, f64 value);
@@ -146,6 +151,7 @@ export namespace editor
 
         foundation::gui::GraphView* m_view = nullptr;
         foundation::gui::TreeView* m_layerTree = nullptr;
+        RefPtr<foundation::gui::Menu> m_listMenu; // a list row's
         foundation::gui::TreeView* m_parameterTree = nullptr;
         UniquePtr<foundation::gui::TreeModel> m_layerModel;
         UniquePtr<foundation::gui::TreeModel> m_parameterModel;

@@ -173,6 +173,23 @@ namespace editor
                                                            self->Choose(GraphChoice{GraphChoiceKind::Parameter, static_cast<i32>(index.InternalId)});
                                                    });
         }
+        // A row's menu: the row chosen, then Delete (the old page's; the bars' trash does the same).
+        const auto rowMenu = [self](gui::TreeView* tree, bool layers)
+        {
+            if (tree == nullptr)
+                return;
+            (void)tree->AddEventListener(gui::EventType::ContextMenu, [self, tree, layers](const gui::Event& e)
+                                         {
+                                             const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                             const i32 item = tree->ItemAt(at);
+                                             if (item < 0)
+                                                 return;
+                                             self->ShowListMenu(layers, static_cast<i32>(tree->GetItemIndex(item).InternalId), *tree, at);
+                                             e.Handled = true;
+                                         });
+        };
+        rowMenu(m_layerTree, true);
+        rowMenu(m_parameterTree, false);
         if (auto* add = Find<gui::ButtonBase>(u8"graph-add-layer"))
             add->SetOnClick([self]() { self->AddLayer(); });
         if (auto* remove = Find<gui::ButtonBase>(u8"graph-remove-layer"))
@@ -1276,4 +1293,24 @@ namespace editor
     }
 
     RTTI_DEFINE_OBJECT_VERSIONED(GraphPreviewSettings, "rtti::editor::editor.graph", 1)
+
+    void AnimationGraphEditorPage::ShowListMenu(bool layers, i32 index, gui::Node& owner, Float2 at)
+    {
+        if (layers)
+            ChooseLayer(index);
+        else
+            Choose(GraphChoice{GraphChoiceKind::Parameter, index});
+        AnimationGraphEditorPage* self = this;
+        m_listMenu = MakeRef<gui::Menu>(Allocator());
+        gui::MenuItem* remove = m_listMenu->AddItem(layers ? StringView(u8"Delete Layer") : StringView(u8"Delete Parameter"), [self, layers]()
+                                                    {
+                                                        if (layers)
+                                                            (void)self->RemoveLayer();
+                                                        else
+                                                            (void)self->RemoveParameter();
+                                                    });
+        const pipeline::AnimationGraphAsset* graph = Graph();
+        remove->SetEnabled(!layers || (graph != nullptr && graph->source.layers.Size() > 1)); // the last layer stays
+        m_listMenu->Open(owner, at);
+    }
 }

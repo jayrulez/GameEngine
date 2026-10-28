@@ -8,7 +8,7 @@
 // apart from the rest when chosen), the path a clip's root motion travels drawn on the ground, and
 // the rig a pose is shown on (AnimationPreviewRig): the skeleton and the skinned mesh the preview
 // plays on, picked on the preview's bar, each optional (no mesh: the bones alone), the mesh skinned
-// with the pose each frame.
+// with the pose each frame. Bones and Mesh on the bar hide either, the mesh's pick kept.
 
 module;
 #include "Core/Prelude.h"
@@ -22,6 +22,7 @@ import foundation.geometry;
 import foundation.resource;
 import foundation.render;
 import foundation.gui;
+import foundation.gui.toolkit; // ToolButton (Bones, Mesh)
 import editor.core;
 import editor.app;
 
@@ -79,10 +80,18 @@ export namespace editor
         bool Frame();
         /// Told once, the first time a skeleton shows (the page frames it).
         Function<void()> OnFirstShown;
+        /// Whether its bones are drawn, and its mesh (hidden, its pick kept): the bar's Bones
+        /// and Mesh, the page's alone.
+        void SetBonesShown(bool shown);
+        void SetMeshShown(bool shown);
+        [[nodiscard]] bool BonesShown() const noexcept { return m_bonesShown; }
+        [[nodiscard]] bool MeshShown() const noexcept { return m_meshShown; }
 
         // === For tests ===
         [[nodiscard]] app::AssetPickerSlot* SkeletonSlot() const noexcept { return m_skeletonSlot.Get(); }
         [[nodiscard]] app::AssetPickerSlot* MeshSlot() const noexcept { return m_meshSlot.Get(); }
+        [[nodiscard]] foundation::gui::ToolButton* BonesButton() const noexcept { return m_bonesButton.Get(); }
+        [[nodiscard]] foundation::gui::ToolButton* MeshButton() const noexcept { return m_meshButton.Get(); }
 
     private:
         [[nodiscard]] RefPtr<app::AssetPickerSlot> MakeSlot(StringView id, StringView tooltip, Array<String> types, bool skeleton);
@@ -94,6 +103,11 @@ export namespace editor
         app::PreviewPane* m_pane;
         RefPtr<app::AssetPickerSlot> m_skeletonSlot;
         RefPtr<app::AssetPickerSlot> m_meshSlot;
+        RefPtr<foundation::gui::ToolButton> m_bonesButton;
+        RefPtr<foundation::gui::ToolButton> m_meshButton;
+        bool m_bonesShown = true;
+        bool m_meshShown = true;
+        foundation::render::debug::DebugDraw m_unshown; // where hidden bones are placed, never drawn
         Guid m_skeletonId;
         Guid m_meshId;
         foundation::resource::Proxy<animation::Skeleton> m_skeleton;

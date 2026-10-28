@@ -128,7 +128,13 @@ export namespace foundation::gui
                 return nullptr;
             if (!screen)
             {
+                // Made for it: the content fills it, as a document's root fills the screen (a
+                // menu's scrim covers the game, not only its card).
                 screen = core::MakeRef<Screen>(MemoryAllocator());
+                {
+                    StyleWriteScope defaults(*screen);
+                    screen->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
+                }
                 screen->AddChild(&content);
             }
             if (screen->GetParent() == this && screen->IsLeaving())

@@ -421,3 +421,22 @@ TEST_CASE("screens: a pop during an entrance leaves from where it is; the screen
     CHECK(options->GetParent() == nullptr);
     CHECK(log.Heard.IsEmpty());
 }
+
+TEST_CASE("screens: content pushed without a Screen of its own fills the screen made for it, as a menu's scrim must")
+{
+    Bed bed;
+    auto scrim = core::MakeRef<UIWidget>(core::DefaultAllocator()); // a panel sized by nothing of its own
+    auto card = core::MakeRef<UIWidget>(core::DefaultAllocator());
+    card->EditLayoutStyle([](LayoutStyle& s)
+    {
+        s.Width = LayoutLength::Px(120.0f);
+        s.Height = LayoutLength::Px(60.0f);
+    });
+    scrim->AddChild(card.Get());
+    Screen* screen = bed.stack->Push(*scrim);
+    REQUIRE(screen != nullptr);
+    bed.Layout();
+    CHECK(scrim->GetSize().x == doctest::Approx(400.0f));
+    CHECK(scrim->GetSize().y == doctest::Approx(300.0f));
+    CHECK(card->GetSize().x == doctest::Approx(120.0f)); // what it holds keeps its own size
+}

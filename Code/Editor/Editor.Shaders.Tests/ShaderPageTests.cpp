@@ -77,6 +77,13 @@ namespace
             REQUIRE(static_cast<bool>(project));
             context.SetProject(project.Get());
             REQUIRE(ReadData(u8"SampleProjects/ShaderGallery/Sources/01_UnlitColour.hlsl", source));
+            // Line feeds alone, as the page's code document holds a file's text: a Windows checkout
+            // gives the sample CRLF endings.
+            String feeds;
+            for (const char8_t c : source.AsView())
+                if (c != u8'\r')
+                    feeds.Append(StringView(&c, 1));
+            source = Move(feeds);
             REQUIRE(WriteFile(PathJoin(project->SourcesRoot().AsView(), u8"Colour.hlsl").AsView(),
                               Span<const byte>(reinterpret_cast<const byte*>(source.Data()), source.Size())).IsOk());
             colour = project->SourceDb().RootGroup()->CreateInstance(u8"Colour", pipeline::ShaderAsset::StaticType());

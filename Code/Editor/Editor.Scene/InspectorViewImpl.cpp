@@ -20,6 +20,7 @@ import editor.app;
 import :edit;
 import :inspector;
 import :entity_ref_editor;
+import :bone_name_editor;
 import :inspector_extras;
 import :scene_settings_source;
 import :settings_profiles;
@@ -35,11 +36,12 @@ namespace editor
         constexpr StringView kActiveKey = u8"e";
 
         // A component's source as the inspector reads it, and an undo writes it back: its text
-        // format, EntityRef a reference by its id.
+        // format, EntityRef a reference by its id, a bone name its own row.
         void ConfigureComponentSource(gui::ReflectedPropertySource& source, gui::IPropertyTextFormat& format)
         {
             source.SetTextFormat(&format);
             source.RegisterReferenceType(EntityRefEditor::kHint, gui::ReflectedReferenceParts{String(u8"id")});
+            source.RegisterHintAttribute(BoneNameEditor::kHint);
         }
         constexpr StringView kTransformKey = u8"t";
 
@@ -246,6 +248,7 @@ namespace editor
             if (m_services.pickEntity)
                 m_entityRefs.pick = [self](EntityPickRequest request) { self->m_services.pickEntity(Move(request)); };
             EntityRefEditor::Register(m_grid->GetEditors(), m_entityRefs);
+            BoneNameEditor::Register(m_grid->GetEditors(), m_edit);
             app::PropertyExtras::Register(m_grid->GetEditors()); // a component's notices and actions
             m_grid->SetSource(&m_sections);
             m_grid->SetOnRowMenu([self](gui::Menu& menu, const gui::PropertyRow& row) { self->HeaderMenu(menu, row); });

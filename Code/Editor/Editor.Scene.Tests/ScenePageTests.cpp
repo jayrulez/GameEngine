@@ -30,6 +30,7 @@ import engine.composition; // FullSceneComposition
 import engine.physics;
 import engine.navigation;
 import engine.animation;
+import foundation.animation; // Skeleton (a bone name's choices)
 import foundation.physics;
 import engine.script;
 import foundation.script.resource;
@@ -793,6 +794,74 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     const gui::DragPayload dragged = EntityDrag::Payload(Span<const Guid>(&bed.crate, 1u), u8"Crate");
     CHECK(slot->Take(dragged));
     CHECK(member()->instancedMesh.id == bed.crate);
+    page->OnClose();
+}
+
+TEST_CASE("inspector: a bone name picks from the skeleton of the animator above, a name it lacks said so; with none, text")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    SceneEditContext& edit = page->EditContext();
+    scene::Scene& scene = *page->ScenePtr();
+    RefPtr<foundation::animation::Skeleton> skeleton = MakeRef<foundation::animation::Skeleton>(DefaultAllocator(), 3);
+    {
+        Array<foundation::animation::Bone>& bones = skeleton->Bones();
+        const char8_t* names[] = {u8"Thigh", u8"Shin", u8"Foot"};
+        for (i32 i = 0; i < 3; ++i)
+        {
+            bones[static_cast<usize>(i)].index = i;
+            bones[static_cast<usize>(i)].name = String(names[i]);
+            bones[static_cast<usize>(i)].parentIndex = i - 1;
+        }
+        skeleton->BuildNameMap();
+    }
+    const Guid rider = edit.CreateEntity(u8"Rider");
+    const Guid leg = edit.CreateEntity(u8"LegIk", rider);
+    auto* clips = scene.GetSystem<engine::animation::SkeletalAnimationComponentManager>();
+    auto* legs = scene.GetSystem<engine::animation::TwoBoneIkComponentManager>();
+    REQUIRE(clips != nullptr);
+    REQUIRE(legs != nullptr);
+    clips->Add(scene.FindEntity(rider)).skeleton.SetDirect(skeleton);
+    legs->Add(scene.FindEntity(leg)).midBone = String(u8"Knee");
+    const auto live = [&]() -> engine::animation::TwoBoneIkComponent& { return *legs->Get(scene.FindEntity(leg)); };
+
+    edit.EntitySelection().Set(leg);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    Shown shown(*page);
+    const String startPath = inspector->PathOf(u8"Two Bone IK", u8"startBone");
+    REQUIRE_FALSE(startPath.IsEmpty());
+    auto* start = Cast<BoneNameEditor>(inspector->Grid()->FindEditor(startPath.AsView()));
+    REQUIRE(start != nullptr);
+    CHECK(start->ListsBones());
+    gui::ComboBox& choices = *start->GetComboBox();
+    REQUIRE(choices.ItemCount() == 4u);
+    CHECK(choices.GetItemsText() == String(u8"(none)|Thigh|Shin|Foot"));
+    CHECK(choices.GetSelectedIndex() == 0);
+    const i64 before = page->Commands().UndoIndex();
+    choices.SelectByUser(1);
+    CHECK(live().startBone == String(u8"Thigh"));
+    CHECK(page->Commands().UndoIndex() == before + 1); // one step
+    page->Commands().Undo();
+    CHECK(live().startBone.IsEmpty());
+
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    auto* mid = Cast<BoneNameEditor>(inspector->Grid()->FindEditor(inspector->PathOf(u8"Two Bone IK", u8"midBone").AsView()));
+    REQUIRE(mid != nullptr);
+    REQUIRE(mid->GetComboBox()->ItemCount() == 5u);
+    CHECK(mid->GetComboBox()->GetItemsText().AsView().EndsWith(u8"|Knee (not in the skeleton)"));
+    CHECK(mid->GetComboBox()->GetSelectedIndex() == 4);
+
+    // With no animator above, the text field.
+    const Guid stray = edit.CreateEntity(u8"Stray");
+    legs->Add(scene.FindEntity(stray));
+    edit.EntitySelection().Set(stray);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    (void)shown.root->UpdateLayout();
+    auto* text = Cast<BoneNameEditor>(inspector->Grid()->FindEditor(inspector->PathOf(u8"Two Bone IK", u8"startBone").AsView()));
+    REQUIRE(text != nullptr);
+    CHECK_FALSE(text->ListsBones());
     page->OnClose();
 }
 

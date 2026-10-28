@@ -838,8 +838,8 @@ the user's.
   3. An asset or entity dropped on a list appends to it, a wrong type refused with the types it
      takes (Editor.App/ContainerListEditorImpl.cpp:26-76): materials, reflected lists, project
      fonts, particle materials, behaviours.
-  4. A component with no reflection shows as a section under its serialization id
-     (InspectorViewImpl.cpp:1063); it is skipped now.
+  4. (Not a gap, read again: the old inspector skipped a manager with no component type as the
+     new one does, and the new one shows a section for every type it has.)
   5. A `visibleWhen` with no name or no value is refused, as the old parser did.
 - The frame:
   6. The Export finished toast stays, with Open Folder (Editor.App/ApplicationImpl.cpp:1544).

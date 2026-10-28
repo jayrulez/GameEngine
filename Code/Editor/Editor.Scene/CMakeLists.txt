@@ -81,6 +81,7 @@ target_sources(Editor.Scene
             HierarchyView.cppm
             EntityPickerWindow.cppm
             EntityRefEditor.cppm
+            BoneNameEditor.cppm
             InspectorExtras.cppm
             ScriptBehaviorsSource.cppm
             SceneSettingsSource.cppm

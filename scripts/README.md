@@ -55,7 +55,7 @@ Bin/RelWithDebInfo/Linux64-Clang/Tools.Export --template list
 ## build-editor-dist.{sh,ps1} - package the editor for download
 
 Assemble a portable, unzip-and-run **editor** distribution: `Tools.Editor` + its runtime
-sidecars (DXC - the editor cooks/recompiles shaders) + the `Data` root (`Assets`, the editor's
+sidecars (DXC - the editor cooks/recompiles shaders) + the `Data` root (`Engine`, `Branding`, `Templates`, the editor's
 interface under `Editor` (its sheets, page markup and icons; the GUISandbox's `Editor/Mock` is
 left out) and the `.dataroot` marker) beside the exe. `Data/Engine/Shaders` holds the cooked pack (`shaders.dpak`, the path the runtime
 opens through the data mount), the shader sources (an export cooks the game's pack from them) and

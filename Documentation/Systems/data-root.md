@@ -9,17 +9,28 @@
 A **data root** is a directory named `Data` that holds a `.dataroot` marker file. Everything an
 executable needs at runtime that is not a project asset lives under it, at fixed relative paths:
 
-    Data/.dataroot                    the marker (foundation.vfs kDataRootMarker)
-    Data/Engine/Shaders/*.hlsl, *.hlsli      the engine shader corpus (dev: compiled on demand)
-    Data/Engine/Shaders/shaders.dpak         the cooked pack (dist/web: no compiler)
-    Data/Assets/fonts/...             built-in fonts (the game UI's default Roboto, the editor's)
-    Data/Assets/...                   models, environment maps, images, ui themes, audio (samples)
-    Data/Output/<Sample>              per-sample cooked-output databases (written, not shipped)
+    Data/.dataroot                         the marker (foundation.vfs kDataRootMarker)
+    Data/Engine/Shaders/*.hlsl, *.hlsli    the engine shader corpus (dev: compiled on demand)
+    Data/Engine/Shaders/shaders.dpak       the cooked pack (dist/web: no compiler)
+    Data/Engine/Fonts/roboto               the GUI's built-in default font
+    Data/Editor/...                        the editor's pages, sheets, icons, fonts (Fonts) and code
+                                           languages (Code)
+    Data/Branding                          the engine's logo, splash and window icons
+    Data/Templates                         what a new project starts with (its sky)
+    Data/Samples/...                       the code samples' content, by kind (Models, Environment,
+                                           Audio, Images, Shaders, UI, Fonts)
+    Data/Tests/...                         test fixtures and the files only tests read
+    Data/SampleProjects/<Project>          the sample games (projects, opened like any other)
+    Data/Output/<Sample>                   per-sample cooked-output databases (written, not shipped)
+
+The folders say who reads them (Specs/data-layout.md): an editor distribution copies Engine,
+Editor (less its design mock), Branding and Templates whole; an exported game stages only its
+shader pack; Samples, Tests, SampleProjects and Output ship nowhere.
 
 The source tree's `Data/` IS a data root. A shipped dist stages one beside the player (see below).
 The paths under it are spelled in exactly one place each: `foundation.shaders.system` exports
-`kShaderFolder` / `kShaderPackFile` / `kShaderPackPath` ("Shaders/shaders.dpak"); the game UI's
-default font is the one constant in `UISubsystem::OnInit`.
+`kShaderFolder` / `kShaderPackFile` / `kShaderPackPath` ("Engine/Shaders/shaders.dpak"); the GUI's
+default font is the one constant in `GuiSubsystem::OnInit` (`kDefaultFont`).
 
 ## Discovery (`foundation.vfs`, `DataRoot.cppm`)
 

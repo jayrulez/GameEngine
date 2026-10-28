@@ -91,28 +91,26 @@ objcopy --only-keep-debug "$DIST/Tools.Editor" "$SYMBOLS/Tools.Editor.debug"
 strip --strip-debug "$DIST/Tools.Editor"
 objcopy --add-gnu-debuglink="$SYMBOLS/Tools.Editor.debug" "$DIST/Tools.Editor"
 
-# 4. Data/Engine/Shaders: the pack INTO the dist's data root (Data/Engine/Shaders/shaders.dpak is the one path
-#    the runtime opens; a pack beside the exe is never found); the sources beside it, for an
-#    export to cook a game's pack from; and the marker that makes this editor start from the pack.
-log "Cooking Data/Engine/Shaders/shaders.dpak ($FORMATS)"
-mkdir -p "$DIST/Data/Engine/Shaders"
-"$BIN/Tools.ShaderPack" "Data/Engine/Shaders" "$DIST/Data/Engine/Shaders/shaders.dpak" $FORMATS
-SHADERS_OUT="$(cd "$DIST/Data/Engine/Shaders" && pwd)"
-( cd Data/Engine/Shaders && find . -type f \( -name '*.hlsl' -o -name '*.hlsli' \) -print0 |
-    xargs -0 -I{} cp --parents {} "$SHADERS_OUT/" )
-echo "An editor distribution: start from shaders.dpak; the sources are for cooking." \
-    > "$DIST/Data/Engine/Shaders/.pack-first"
-
-# 5. Stage the rest of the Data root: Assets, the editor's interface (Data/Editor: its sheets,
-#    page markup and icons, read at startup; without its frame the editor runs with no interface) + the
-#    marker. Skip Data/Output (build output) and Data/Editor/Mock (the GUISandbox's design mock).
-cp -r "Data/Assets" "$DIST/Data/Assets"
+# 4. The data the editor reads, whole folders (Specs/data-layout.md): Engine (what the runtime
+#    reads: the shader sources an export cooks a game's pack from, the GUI's font), Editor (its
+#    sheets, page markup, icons, fonts and code languages; without its frame the editor runs with no
+#    interface), Branding (the splash, the logo and the window icons) and Templates (what a new
+#    project starts with), and the marker. Not Samples, Tests, SampleProjects or Output, and not
+#    the GUISandbox's design mock under Editor.
+cp -r "Data/Engine" "$DIST/Data/Engine"
 cp -r "Data/Editor" "$DIST/Data/Editor"
-cp -r "Data/Branding" "$DIST/Data/Branding" # the splash, the logo and the window icons
-cp -r "Data/Engine/Fonts" "$DIST/Data/Engine/Fonts" # the GUI's built-in font
-cp -r "Data/Templates" "$DIST/Data/Templates" # what a new project starts with
+cp -r "Data/Branding" "$DIST/Data/Branding"
+cp -r "Data/Templates" "$DIST/Data/Templates"
 rm -rf "$DIST/Data/Editor/Mock"
 cp "Data/.dataroot" "$DIST/Data/.dataroot"
+
+# 5. Data/Engine/Shaders: the pack INTO the dist's data root (Data/Engine/Shaders/shaders.dpak is the
+#    one path the runtime opens; a pack beside the exe is never found), and the marker that makes
+#    this editor start from the pack (the sources beside it came with Data/Engine).
+log "Cooking Data/Engine/Shaders/shaders.dpak ($FORMATS)"
+"$BIN/Tools.ShaderPack" "Data/Engine/Shaders" "$DIST/Data/Engine/Shaders/shaders.dpak" $FORMATS
+echo "An editor distribution: start from shaders.dpak; the sources are for cooking." \
+    > "$DIST/Data/Engine/Shaders/.pack-first"
 
 # 6. A short run note next to the binary.
 cat > "$DIST/README.txt" <<'EOF'

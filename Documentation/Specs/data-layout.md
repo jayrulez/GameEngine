@@ -1,6 +1,6 @@
 # The data root's layout
 
-> Status: IN PROGRESS (2026-10-28)
+> Status: DONE (2026-10-28)
 
 `Data/` held everything under one `Assets` folder: what the engine reads at run time, the editor's
 own files, the code samples' models and sounds, test fixtures and the files a new project starts

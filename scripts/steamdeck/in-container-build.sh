@@ -71,8 +71,16 @@ log "Stage $DIST/Editor"
 cp "$BIN/Tools.Editor" "$DIST/Editor/"
 cp "$WGPU" "$DIST/Editor/"
 cp "$DXC1" "$DXC2" "$DIST/Editor/"           # editor cooks shaders (see glibc note below)
-cp "/tmp/shaders.dpak" "$DIST/Editor/shaders.dpak"
-cp -r "Data/Assets" "$DIST/Editor/Data/Assets"
+# The data the editor reads, as the desktop distribution stages it (Specs/data-layout.md): Engine,
+# Editor (less the sandbox's mock), Branding and Templates; the pack INTO Data/Engine/Shaders, the one
+# path the runtime opens, with the marker that makes the editor start from it.
+for folder in Engine Editor Branding Templates; do
+    cp -r "Data/$folder" "$DIST/Editor/Data/$folder"
+done
+rm -rf "$DIST/Editor/Data/Editor/Mock"
+cp "/tmp/shaders.dpak" "$DIST/Editor/Data/Engine/Shaders/shaders.dpak"
+echo "An editor distribution: start from shaders.dpak; the sources are for cooking." \
+    > "$DIST/Editor/Data/Engine/Shaders/.pack-first"
 cp "Data/.dataroot" "$DIST/Editor/Data/.dataroot"
 strip "$DIST/Editor/Tools.Editor" 2>/dev/null || true
 

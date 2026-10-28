@@ -99,31 +99,25 @@ if (-not (Test-Path (Join-Path $Symbols "Tools.Editor.pdb"))) {
     Write-Warning "no Tools.Editor.pdb in $Bin - a crash in this dist cannot be resolved"
 }
 
-# Data\Engine\Shaders: the pack goes INTO the dist's data root (Data\Engine\Shaders\shaders.dpak is the one path
-# the runtime opens), cooked for both Windows backends; the sources beside it, for an export to cook
-# a game's pack from; and the marker that makes this editor start from the pack.
+# The data the editor reads, whole folders (Specs/data-layout.md): Engine (what the runtime reads: the
+# shader sources an export cooks a game's pack from, the GUI's font), Editor (its sheets, page markup,
+# icons, fonts and code languages), Branding (the splash, the logo and the window icons) and Templates
+# (what a new project starts with), and the marker. Not Samples, Tests, SampleProjects or Output, and
+# not the GUISandbox's design mock under Editor.
+foreach ($folder in @("Engine", "Editor", "Branding", "Templates")) {
+    Copy-Item -Recurse (Join-Path "Data" $folder) (Join-Path $Out (Join-Path "Data" $folder))
+}
+Remove-Item -Recurse -Force (Join-Path $Out "Data\Editor\Mock")
+Copy-Item "Data\.dataroot" (Join-Path $Out "Data\.dataroot")
+
+# Data\Engine\Shaders: the pack goes INTO the dist's data root (Data\Engine\Shaders\shaders.dpak is the one
+# path the runtime opens), cooked for both Windows backends, and the marker that makes this editor start
+# from the pack (the sources beside it came with Data\Engine).
 Write-Host "== Cooking Data\Engine\Shaders\shaders.dpak ($Formats) =="
 $Shaders = Join-Path $Out "Data\Engine\Shaders"
-New-Item -ItemType Directory -Force -Path $Shaders | Out-Null
 & (Join-Path $Bin "Tools.ShaderPack.exe") "Data\Engine\Shaders" (Join-Path $Shaders "shaders.dpak") $Formats.Split(" ")
 if ($LASTEXITCODE -ne 0) { throw "cooking the shader pack failed" }
-Get-ChildItem "Data\Engine\Shaders" -Recurse -File -Include *.hlsl, *.hlsli | ForEach-Object {
-    $relative = $_.FullName.Substring((Resolve-Path "Data\Engine\Shaders").Path.Length + 1)
-    $target = Join-Path $Shaders $relative
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
-    Copy-Item $_.FullName $target
-}
 Set-Content (Join-Path $Shaders ".pack-first") "An editor distribution: start from shaders.dpak; the sources are for cooking."
-
-Copy-Item -Recurse "Data\Assets"   (Join-Path $Out "Data\Assets")
-# The editor's interface (its sheets, page markup and icons, read at startup), less the GUISandbox's
-# design mock.
-Copy-Item -Recurse "Data\Editor"   (Join-Path $Out "Data\Editor")
-Copy-Item -Recurse "Data\Branding" (Join-Path $Out "Data\Branding") # the splash, the logo and the window icons
-Copy-Item -Recurse "Data\Engine\Fonts" (Join-Path $Out "Data\Engine\Fonts") # the GUI's built-in font
-Copy-Item -Recurse "Data\Templates" (Join-Path $Out "Data\Templates") # what a new project starts with
-Remove-Item -Recurse -Force (Join-Path $Out "Data\Editor\Mock")
-Copy-Item          "Data\.dataroot" (Join-Path $Out "Data\.dataroot")
 
 @"
 Editor (Windows x64)

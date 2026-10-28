@@ -41,6 +41,26 @@ namespace editor
 
     namespace
     {
+        // The tree's model: a system's row renamed in place (F2, or Rename on its menu).
+        class ParticleTreeModel final : public gui::TreeModel
+        {
+        public:
+            ParticleTreeModel(Function<bool(i32 node)> editable, Function<bool(i32 node, StringView name)> rename)
+                : m_editable(foundation::core::Move(editable)), m_rename(foundation::core::Move(rename))
+            {
+            }
+            [[nodiscard]] bool IsEditable(const gui::ModelIndex& index) const override { return m_editable && m_editable(static_cast<i32>(index.InternalId)); }
+            bool SetData(const gui::ModelIndex& index, const gui::Variant& value) override
+            {
+                const String name = value.ToString();
+                return m_rename && !name.IsEmpty() && m_rename(static_cast<i32>(index.InternalId), name.AsView());
+            }
+
+        private:
+            Function<bool(i32)> m_editable;
+            Function<bool(i32, StringView)> m_rename;
+        };
+
         // A module as the tree names it: its type's display name.
         [[nodiscard]] StringView ModuleName(const ISerializable* module)
         {
@@ -126,7 +146,12 @@ namespace editor
         Provide<IPlaybackPage>(*this);
         ParticleEffectEditorPage* self = this;
 
-        m_model = MakeUnique<gui::TreeModel>(Allocator());
+        m_model = MakeUnique<ParticleTreeModel>(
+            Allocator(), [self](i32 node) { return node >= 0 && static_cast<usize>(node) < self->m_rows.Size() && self->m_rows[static_cast<usize>(node)].kind == ParticleRowKind::System; },
+            [self](i32 node, StringView name)
+            {
+                return node >= 0 && static_cast<usize>(node) < self->m_rows.Size() && self->RenameSystem(self->m_rows[static_cast<usize>(node)].system, name);
+            });
         m_tree = Find<gui::TreeView>(u8"particle-tree");
         if (auto* add = Find<gui::ButtonBase>(u8"particle-add-system"))
             add->SetOnClick([self]() { self->AddSystem(); });
@@ -143,6 +168,17 @@ namespace editor
                                               if (node < self->m_rows.Size())
                                                   self->Choose(self->m_rows[node]);
                                           });
+            // A row's menu (the old page's): what adds, moves, renames or removes there.
+            (void)m_tree->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
+                                           {
+                                               const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                               const i32 item = self->m_tree->ItemAt(at);
+                                               const usize node = item >= 0 ? static_cast<usize>(self->m_tree->GetItemIndex(item).InternalId) : self->m_rows.Size();
+                                               if (node >= self->m_rows.Size())
+                                                   return;
+                                               self->ShowRowMenu(self->m_rows[node], *self->m_tree, at);
+                                               e.Handled = true;
+                                           });
         }
 
         // The chosen system's rows: reflection's, its curves and gradients the toolkit's, each edit
@@ -472,6 +508,133 @@ namespace editor
         EditWhole(u8"edit_particle", [index](ISerializable& object) { static_cast<pipeline::ParticleEffectAsset&>(object).Effect().RemoveSystem(index); });
         Choose(ParticleTreeRow{ParticleRowKind::System, Min(index, Effect()->SystemCount() - 1), -1});
         return true;
+    }
+
+    bool ParticleEffectEditorPage::RenameSystem(i32 system, StringView name)
+    {
+        particles::ParticleEffect* effect = Effect();
+        if (effect == nullptr || system < 0 || system >= effect->SystemCount() || name.IsEmpty())
+            return false;
+        Choose(ParticleTreeRow{ParticleRowKind::System, system, -1});
+        m_values->BeginEdit(u8"name");
+        m_values->CommitEdit(u8"name", gui::PropertyWrite{gui::Variant(name)}); // one step, as the grid's Name row
+        return true;
+    }
+
+    bool ParticleEffectEditorPage::BeginRename(i32 system)
+    {
+        if (m_tree == nullptr)
+            return false;
+        for (i32 item = 0; item < static_cast<i32>(m_tree->GetItemCount()); ++item)
+        {
+            const usize node = static_cast<usize>(m_tree->GetItemIndex(item).InternalId);
+            if (node < m_rows.Size() && m_rows[node].kind == ParticleRowKind::System && m_rows[node].system == system)
+                return m_tree->BeginEdit(item);
+        }
+        return false;
+    }
+
+    Array<String> ParticleEffectEditorPage::ModuleTypes(ParticleRowKind folder)
+    {
+        Array<String> types;
+        if (folder != ParticleRowKind::Initializers && folder != ParticleRowKind::Behaviors)
+            return types;
+        const StringView list = folder == ParticleRowKind::Initializers ? StringView(u8"initializers") : StringView(u8"behaviors");
+        Array<gui::PropertyInfo> rows(Allocator());
+        m_values->GetProperties(StringView{}, rows);
+        for (const gui::PropertyInfo& info : rows)
+            if (info.Name.AsView() == list)
+                types = info.ElementTypes;
+        return types;
+    }
+
+    bool ParticleEffectEditorPage::AddModule(const ParticleTreeRow& folder, StringView type)
+    {
+        if (folder.kind != ParticleRowKind::Initializers && folder.kind != ParticleRowKind::Behaviors)
+            return false;
+        Choose(folder);
+        const particles::ParticleSystem* system = Effect() != nullptr ? Effect()->GetSystem(folder.system) : nullptr;
+        if (system == nullptr)
+            return false;
+        gui::ListEdit edit;
+        edit.Kind = gui::ListEdit::Op::Insert;
+        edit.Index = static_cast<usize>(folder.kind == ParticleRowKind::Initializers ? system->InitializerCount() : system->BehaviorCount());
+        edit.ElementType = String(type);
+        const ParticleRowKind kind = folder.kind == ParticleRowKind::Initializers ? ParticleRowKind::Initializer : ParticleRowKind::Behavior;
+        const ParticleTreeRow made{kind, folder.system, static_cast<i32>(edit.Index)};
+        if (!m_values->EditList(PlaceOf(folder).AsView(), edit))
+            return false;
+        Choose(made); // the new module opened
+        return true;
+    }
+
+    bool ParticleEffectEditorPage::MoveModule(const ParticleTreeRow& row, i32 by)
+    {
+        if (row.module < 0 || row.kind == ParticleRowKind::System)
+            return false;
+        const particles::ParticleSystem* system = Effect() != nullptr ? Effect()->GetSystem(row.system) : nullptr;
+        if (system == nullptr)
+            return false;
+        const i32 count = row.kind == ParticleRowKind::Initializer ? system->InitializerCount()
+                          : row.kind == ParticleRowKind::Behavior  ? system->BehaviorCount()
+                                                                   : static_cast<i32>(system->subEmitters.Size());
+        const i32 to = row.module + by;
+        if (to < 0 || to >= count)
+            return false;
+        Choose(row);
+        gui::ListEdit edit;
+        edit.Kind = gui::ListEdit::Op::Move;
+        edit.Index = static_cast<usize>(row.module);
+        edit.To = static_cast<usize>(to);
+        if (!m_values->EditList(PlaceOf(ParticleTreeRow{FolderOf(row.kind), row.system, -1}).AsView(), edit))
+            return false;
+        Choose(ParticleTreeRow{row.kind, row.system, to}); // it stays chosen where it went
+        return true;
+    }
+
+    void ParticleEffectEditorPage::ShowRowMenu(const ParticleTreeRow& row, gui::Node& owner, Float2 at)
+    {
+        ParticleEffectEditorPage* self = this;
+        m_rowMenu = MakeRef<gui::Menu>(Allocator());
+        const particles::ParticleEffect* effect = Effect();
+        const i32 systems = effect != nullptr ? effect->SystemCount() : 0;
+        switch (row.kind)
+        {
+        case ParticleRowKind::System:
+            (void)m_rowMenu->AddItem(u8"Add System", [self]() { self->AddSystem(); });
+            (void)m_rowMenu->AddItem(u8"Rename", [self, row]() { (void)self->BeginRename(row.system); })->SetShortcut(u8"F2");
+            m_rowMenu->AddSeparator();
+            m_rowMenu->AddItem(u8"Delete System", [self, row]()
+                               {
+                                   self->Choose(row);
+                                   (void)self->RemoveChosen();
+                               })
+                ->SetEnabled(systems > 1); // an effect keeps a system
+            break;
+        case ParticleRowKind::Initializers:
+        case ParticleRowKind::Behaviors:
+            for (const String& type : ModuleTypes(row.kind))
+                (void)m_rowMenu->AddItem(Format(u8"Add {}", type).AsView(), [self, row, type]() { (void)self->AddModule(row, type.AsView()); });
+            break;
+        case ParticleRowKind::Initializer:
+        case ParticleRowKind::Behavior:
+        case ParticleRowKind::SubEmitter:
+        {
+            (void)m_rowMenu->AddItem(u8"Move Up", [self, row]() { (void)self->MoveModule(row, -1); });
+            (void)m_rowMenu->AddItem(u8"Move Down", [self, row]() { (void)self->MoveModule(row, 1); });
+            m_rowMenu->AddSeparator();
+            (void)m_rowMenu->AddItem(u8"Delete", [self, row]()
+                                     {
+                                         self->Choose(row);
+                                         (void)self->RemoveChosen();
+                                     });
+            break;
+        }
+        case ParticleRowKind::Emitter:
+        case ParticleRowKind::SubEmitters:
+            return; // the emitter is the system's own; a link is added in the grid, where its child is chosen
+        }
+        m_rowMenu->Open(owner, at);
     }
 
     // === The preview ===

@@ -101,6 +101,20 @@ export namespace editor
         void AddSystem();
         /// The tree's chosen row taken out: a module, or a system while another remains.
         bool RemoveChosen();
+        /// A system's name, one undo step (its tree row renamed in place, or its Name row).
+        bool RenameSystem(i32 system, StringView name);
+        /// Its tree row's name to type (F2; Rename on its menu).
+        bool BeginRename(i32 system);
+        /// What the Initializers' or Behaviors' folder adds, by type name.
+        [[nodiscard]] Array<String> ModuleTypes(ParticleRowKind folder);
+        /// A module of `type` added at the end of `folder`'s list, chosen; one step.
+        bool AddModule(const ParticleTreeRow& folder, StringView type);
+        /// A module, or a sub-emitter link, moved `by` places in its list, still chosen; one step.
+        bool MoveModule(const ParticleTreeRow& row, i32 by);
+        /// The tree row's menu at `at` over `owner`: a system's Add System, Rename and Delete; a
+        /// folder's modules to add by type; a module's Move Up, Move Down and Delete.
+        void ShowRowMenu(const ParticleTreeRow& row, foundation::gui::Node& owner, Float2 at);
+        [[nodiscard]] foundation::gui::Menu* RowMenu() const noexcept { return m_rowMenu && m_rowMenu->IsOpen() ? m_rowMenu.Get() : nullptr; }
 
         // === For tests ===
         /// The tree's rows, indented ("Sparks\n  Emitter\n  Initializers\n    Lifetime").
@@ -137,6 +151,7 @@ export namespace editor
         i32 m_system = -1;
         ParticleTreeRow m_chosen;
         bool m_showing = false; // choosing from code: not the user's
+        RefPtr<foundation::gui::Menu> m_rowMenu; // a tree row's
 
         UniquePtr<app::PreviewPane> m_pane;
         foundation::scene::EntityHandle m_emitter;

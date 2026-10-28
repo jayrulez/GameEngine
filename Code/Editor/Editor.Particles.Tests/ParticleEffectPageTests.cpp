@@ -308,3 +308,70 @@ TEST_CASE("particle page: without a preview the transport has nothing to play")
     bed.page->Stop(); // nothing to stop: the effect untouched
     CHECK(bed.Effect().GetSystem(0)->emitter.isEmitting);
 }
+
+TEST_CASE("particle page: a tree row's menu adds a module by type, moves one, deletes it; a system renamed in place")
+{
+    Bed bed;
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{1200.0f, 800.0f});
+    root->AddChild(bed.page->Content().Get());
+    (void)root->UpdateLayout();
+    const auto item = [](gui::Node& menu, StringView text) -> gui::MenuItem*
+    {
+        Array<gui::Node*> pending;
+        pending.PushBack(&menu);
+        while (!pending.IsEmpty())
+        {
+            gui::Node* node = pending.Back();
+            pending.PopBack();
+            if (auto* found = Cast<gui::MenuItem>(node); found != nullptr && found->GetText() == text)
+                return found;
+            for (usize i = 0; i < node->ChildCount(); ++i)
+                pending.PushBack(node->GetChildAt(i));
+        }
+        return nullptr;
+    };
+    gui::Node& owner = *bed.page->Content();
+
+    // A module's: Move Down, one step, still chosen where it went.
+    bed.page->ShowRowMenu(ParticleTreeRow{ParticleRowKind::Initializer, 0, 0}, owner, Float2{40.0f, 80.0f}); // Lifetime
+    REQUIRE(bed.page->RowMenu() != nullptr);
+    gui::MenuItem* down = item(*bed.page->RowMenu(), u8"Move Down");
+    REQUIRE(down != nullptr);
+    CHECK(down->HandleActivate());
+    CHECK(bed.page->Tree() == String(u8"Sparks\n  Emitter\n  Initializers\n    Velocity\n    Lifetime\n    Size\n    Color\n  Behaviors\n    Gravity\n  Sub-emitters"));
+    bed.page->Commands().Undo();
+    CHECK(bed.page->Tree().AsView().ContainsIgnoreCase(StringView(u8"Initializers\n    Lifetime\n    Velocity")));
+    CHECK_FALSE(bed.page->MoveModule(ParticleTreeRow{ParticleRowKind::Initializer, 0, 0}, -1)); // the first goes no higher
+
+    // A folder's: its modules by type; one added at the end, chosen.
+    bed.page->ShowRowMenu(ParticleTreeRow{ParticleRowKind::Behaviors, 0, -1}, owner, Float2{40.0f, 80.0f});
+    REQUIRE(bed.page->RowMenu() != nullptr);
+    gui::MenuItem* add = item(*bed.page->RowMenu(), u8"Add Size over Lifetime");
+    REQUIRE(add != nullptr);
+    CHECK(add->HandleActivate());
+    REQUIRE(bed.Effect().GetSystem(0)->BehaviorCount() == 2);
+    CHECK(Cast<particles::SizeOverLifetimeBehavior>(bed.Effect().GetSystem(0)->GetBehavior(1)) != nullptr);
+
+    // Delete on a module's menu.
+    bed.page->ShowRowMenu(ParticleTreeRow{ParticleRowKind::Behavior, 0, 1}, owner, Float2{40.0f, 80.0f});
+    REQUIRE(bed.page->RowMenu() != nullptr);
+    gui::MenuItem* remove = item(*bed.page->RowMenu(), u8"Delete");
+    REQUIRE(remove != nullptr);
+    CHECK(remove->HandleActivate());
+    CHECK(bed.Effect().GetSystem(0)->BehaviorCount() == 1);
+
+    // A system's: Delete off while it is the only one; renamed in place, one step.
+    bed.page->ShowRowMenu(ParticleTreeRow{ParticleRowKind::System, 0, -1}, owner, Float2{40.0f, 80.0f});
+    REQUIRE(bed.page->RowMenu() != nullptr);
+    REQUIRE(item(*bed.page->RowMenu(), u8"Delete System") != nullptr);
+    CHECK_FALSE(item(*bed.page->RowMenu(), u8"Delete System")->IsEnabled());
+    bed.page->RowMenu()->Close();
+    CHECK(bed.page->BeginRename(0));
+    REQUIRE(bed.page->RenameSystem(0, u8"Embers"));
+    CHECK(bed.Effect().GetSystem(0)->name == String(u8"Embers"));
+    CHECK(bed.page->Tree().AsView().StartsWith(u8"Embers\n"));
+    bed.page->Commands().Undo();
+    CHECK(bed.Effect().GetSystem(0)->name == String(u8"Sparks"));
+    root->RemoveChild(bed.page->Content().Get());
+}

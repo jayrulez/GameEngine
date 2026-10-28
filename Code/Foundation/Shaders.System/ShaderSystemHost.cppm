@@ -53,11 +53,11 @@ export namespace foundation::shaders
 
     /// The engine shader layout under the data root - the ONE place it is spelled. The cook
     /// tools and the export stage write to the same names.
-    inline constexpr StringView kShaderFolder = u8"Shaders";
+    inline constexpr StringView kShaderFolder = u8"Engine/Shaders";
     inline constexpr StringView kShaderPackFile = u8"shaders.dpak";
-    inline constexpr StringView kShaderPackPath = u8"Shaders/shaders.dpak";
+    inline constexpr StringView kShaderPackPath = u8"Engine/Shaders/shaders.dpak";
     // A data root that ships sources AND a pack and wants the pack (an editor distribution).
-    inline constexpr StringView kShaderPackFirstMarker = u8"Shaders/.pack-first";
+    inline constexpr StringView kShaderPackFirstMarker = u8"Engine/Shaders/.pack-first";
 
     class ShaderSystemHost
     {
@@ -87,7 +87,7 @@ export namespace foundation::shaders
             }
 
             // "Sources present" means stage files, not the folder: a dist stages ONLY the cooked
-            // pack under Shaders/ (Data/Shaders/shaders.dpak), and an editor dist ships DXC too -
+            // pack under Engine/Shaders/ (Data/Engine/Shaders/shaders.dpak), and an editor dist ships DXC too -
             // judging by the folder alone put that dist in dev mode over an empty corpus.
             const bool haveSources = HasShaderSources(dataFileSystem);
             const bool devPossible = m_compiler != nullptr && haveSources;
@@ -132,7 +132,7 @@ export namespace foundation::shaders
                 if (wantPack)
                 {
                     rhi::LogErrorf("ShaderSystemHost: pack mode requested but no usable "
-                                   "Shaders/shaders.dpak in the data root - falling back to dev "
+                                   "Engine/Shaders/shaders.dpak in the data root - falling back to dev "
                                    "compilation");
                 }
                 m_provider = MakeUnique<FileShaderSourceProvider>(*m_allocator, *m_allocator);

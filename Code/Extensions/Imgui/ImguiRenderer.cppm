@@ -30,7 +30,7 @@ export namespace extensions::imgui
 
     // The ImGui VS/PS ship in the engine shader corpus (imgui.vs / imgui.ps) and are resolved via
     // ShaderSystem::GetVariant("imgui", ...) - cooked WGSL from the pack on web, dev-compiled from
-    // Data/Shaders on desktop - so no inline HLSL / RegisterSource here.
+    // Data/Engine/Shaders on desktop - so no inline HLSL / RegisterSource here.
     class ImguiRenderer
     {
     public:

@@ -654,7 +654,7 @@ export namespace editor
     // cooking through its CookService (so the cook, which mutates the DB the UI reads, never runs on a
     // background job). The CLI leaves it true (cook + content in one shot).
     // `dataRoot` = the engine data root (the caller's resolved one): the engine shaders are cooked
-    // from <dataRoot>/Shaders into the dist's own Data/Shaders/shaders.dpak (+ Data/.dataroot),
+    // from <dataRoot>/Shaders into the dist's own Data/Engine/Shaders/shaders.dpak (+ Data/.dataroot),
     // so the player finds them with the same discovery walk every executable uses.
     [[nodiscard]] Status ExportOne(EditorProject& project, const ExportPreset& preset,
                                    const TemplateRegistry& templates, BuilderRegistry& builders,

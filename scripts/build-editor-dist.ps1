@@ -9,7 +9,7 @@
   The Windows counterpart of build-editor-dist.sh. Produces an unzip-and-run folder:
   Tools.Editor.exe + its runtime DLLs (dxcompiler.dll, SDL3.dll - staged by the build's
   util_copy_runtime_deps into Bin\...\ and listed in Tools.Editor.runtime-libs), and the Data root
-  (Assets, the editor's interface under Editor, and .dataroot) beside the exe. Data\Shaders holds the cooked shader pack (shaders.dpak, the
+  (Assets, the editor's interface under Editor, and .dataroot) beside the exe. Data\Engine\Shaders holds the cooked shader pack (shaders.dpak, the
   path the runtime opens), the shader SOURCES (an export cooks the game's pack from them) and the
   .pack-first marker, so this editor starts from the pack and not by compiling the sources.
   FindDataRoot() discovers Data\ beside the exe; Windows searches the exe directory for bare DLLs.
@@ -99,16 +99,16 @@ if (-not (Test-Path (Join-Path $Symbols "Tools.Editor.pdb"))) {
     Write-Warning "no Tools.Editor.pdb in $Bin - a crash in this dist cannot be resolved"
 }
 
-# Data\Shaders: the pack goes INTO the dist's data root (Data\Shaders\shaders.dpak is the one path
+# Data\Engine\Shaders: the pack goes INTO the dist's data root (Data\Engine\Shaders\shaders.dpak is the one path
 # the runtime opens), cooked for both Windows backends; the sources beside it, for an export to cook
 # a game's pack from; and the marker that makes this editor start from the pack.
-Write-Host "== Cooking Data\Shaders\shaders.dpak ($Formats) =="
-$Shaders = Join-Path $Out "Data\Shaders"
+Write-Host "== Cooking Data\Engine\Shaders\shaders.dpak ($Formats) =="
+$Shaders = Join-Path $Out "Data\Engine\Shaders"
 New-Item -ItemType Directory -Force -Path $Shaders | Out-Null
-& (Join-Path $Bin "Tools.ShaderPack.exe") "Data\Shaders" (Join-Path $Shaders "shaders.dpak") $Formats.Split(" ")
+& (Join-Path $Bin "Tools.ShaderPack.exe") "Data\Engine\Shaders" (Join-Path $Shaders "shaders.dpak") $Formats.Split(" ")
 if ($LASTEXITCODE -ne 0) { throw "cooking the shader pack failed" }
-Get-ChildItem "Data\Shaders" -Recurse -File -Include *.hlsl, *.hlsli | ForEach-Object {
-    $relative = $_.FullName.Substring((Resolve-Path "Data\Shaders").Path.Length + 1)
+Get-ChildItem "Data\Engine\Shaders" -Recurse -File -Include *.hlsl, *.hlsli | ForEach-Object {
+    $relative = $_.FullName.Substring((Resolve-Path "Data\Engine\Shaders").Path.Length + 1)
     $target = Join-Path $Shaders $relative
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
     Copy-Item $_.FullName $target

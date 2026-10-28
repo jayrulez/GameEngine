@@ -64,7 +64,7 @@ TEST_CASE("integration.mcp: shader_validate - the starter checks clean; a broken
     }
     const String dataRoot = foundation::vfs::FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
-    const String library = foundation::vfs::DataPath(dataRoot.AsView(), u8"Shaders");
+    const String library = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
     McpServer server;
     editor::mcp::RegisterShaderValidateTool(server, library.AsView());
 

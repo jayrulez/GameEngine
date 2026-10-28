@@ -6,7 +6,7 @@
 // trio (web shell + WebGPU + the requestAnimationFrame runner, via APP_MAIN's web body)
 // and in how the game reaches it: the browser has no argv, so the player FETCHES the dist from
 // the SERVING FOLDER at startup - player.xml + Content.pak (the export output) and the Data/
-// tree (Data/.dataroot + Data/Shaders/shaders.dpak, the same layout a desktop dist stages)
+// tree (Data/.dataroot + Data/Engine/Shaders/shaders.dpak, the same layout a desktop dist stages)
 // (the export-cooked WGSL engine pack; browsers have no shader compiler) - into the MEMFS root,
 // then runs with projectDir ".". Nothing is baked at link time, which is what makes this binary
 // a reusable EXPORT TEMPLATE: export any project, drop the files next to the player, serve the
@@ -278,7 +278,7 @@ namespace
         {
             // Fetch BEFORE the app boots: the project loader reads player.xml/Content.pak
             // during Initialize, and the app resolves its data root (Data/.dataroot) in
-            // Configure, then the render subsystem loads Data/Shaders/shaders.dpak on device init.
+            // Configure, then the render subsystem loads Data/Engine/Shaders/shaders.dpak on device init.
             MountUserData(); // before the player reads the user's settings or a game its save
             FetchDistFile("player.xml");
             // Content: pick the variant pak by the browser's compressed-texture family (BC vs ASTC)
@@ -286,9 +286,9 @@ namespace
             SelectAndFetchContentPak();
             // The data tree, at the SAME layout a desktop dist stages beside the player, so the
             // one discovery walk (cwd "/" -> "/Data") finds it in the browser too.
-            (void)CreateDirectories(u8"Data/Shaders");
+            (void)CreateDirectories(u8"Data/Engine/Shaders");
             FetchDistFile("Data/.dataroot");
-            FetchDistFile("Data/Shaders/shaders.dpak");
+            FetchDistFile("Data/Engine/Shaders/shaders.dpak");
             engine::player::PlayerOptions options;
             options.projectDir = String(u8".");
 #if defined(ENGINE_SHIP_NATIVE_GAME)

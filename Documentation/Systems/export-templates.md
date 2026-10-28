@@ -65,7 +65,7 @@ required runtime-lib.
   platform's built-in desktop, windows, linux or web icon) and `template.xml`. Two modes:
   install into the templates root (usable immediately) or export to a folder (for zip + distribution).
   A Web build synthesizes a "Web" template (the player is the `.html`, sidecars from the manifest, and
-  export stages page + sidecars + `Content.pak` + `player.xml` + the WGSL `Data/Shaders/shaders.dpak`
+  export stages page + sidecars + `Content.pak` + `player.xml` + the WGSL `Data/Engine/Shaders/shaders.dpak`
   with its `Data/.dataroot` marker). `scripts/build-export-templates.sh web` makes two: `web-release`
   from the `wasm-shipping` preset (smallest, no profiler; the samples' Web presets and the published
   demos use it) and `web-profile` from the `wasm-release` preset (Release with the profiler, its
@@ -78,7 +78,7 @@ required runtime-lib.
 
 The shaders-out-of-C++ track shipped, so the player boots against a COOKED shader pack, not baked-in
 HLSL: engine shaders are `.hlsl` source cooked by `foundation.shaders`' `ShaderPackCooker`, and export
-stages `Data/Shaders/shaders.dpak` (+ `Data/.dataroot`) beside the player for the preset's platform
+stages `Data/Engine/Shaders/shaders.dpak` (+ `Data/.dataroot`) beside the player for the preset's platform
 (`StageShaderPack`, cooked from the resolved data root's `Shaders/`) so the dist renders with no external
 dependency (Web stages the WGSL variant) - the same `Data/` layout every executable discovers
 (`Documentation/Systems/data-root.md`). This baseline runtime content is

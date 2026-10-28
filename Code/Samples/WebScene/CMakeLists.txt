@@ -42,16 +42,16 @@ if(EMSCRIPTEN)
     endif()
 
     # Cook the WGSL shader pack with the NATIVE tool (the browser has no compiler) and bundle it
-    # into the virtual FS at /Data/Shaders/shaders.dpak, where the shader host finds it. Tools.ShaderPack
+    # into the virtual FS at /Data/Engine/Shaders/shaders.dpak, where the shader host finds it. Tools.ShaderPack
     # must be built first by any desktop preset (a native authoring tool, never built for wasm).
     set(_web_shader_pack "${CMAKE_CURRENT_BINARY_DIR}/shaders.dpak")
     set(_cook_tool
         "${BUILDSYSTEM_HOST_BIN_DIR}/${BUILDSYSTEM_SHADERPACKCOOK_BASENAME}${BUILDSYSTEM_HOST_EXE_SUFFIX}")
     file(GLOB _engine_shader_sources CONFIGURE_DEPENDS
-        "${CMAKE_SOURCE_DIR}/Data/Shaders/*.hlsl" "${CMAKE_SOURCE_DIR}/Data/Shaders/*.hlsli")
+        "${CMAKE_SOURCE_DIR}/Data/Engine/Shaders/*.hlsl" "${CMAKE_SOURCE_DIR}/Data/Engine/Shaders/*.hlsli")
     add_custom_command(
         OUTPUT "${_web_shader_pack}"
-        COMMAND "${_cook_tool}" "${CMAKE_SOURCE_DIR}/Data/Shaders" "${_web_shader_pack}" wgsl
+        COMMAND "${_cook_tool}" "${CMAKE_SOURCE_DIR}/Data/Engine/Shaders" "${_web_shader_pack}" wgsl
         DEPENDS ${_engine_shader_sources} "${_cook_tool}"
         COMMENT "WebScene: cooking WGSL shaders.dpak (native Tools.ShaderPack)"
         VERBATIM)
@@ -75,9 +75,9 @@ if(EMSCRIPTEN)
         "-sASSERTIONS=1"
         "-lwebsocket.js"          # the browser WS client socket (JoinServer on web)
         # The data tree at the layout every executable discovers (Data/.dataroot at "/Data"):
-        # the cooked WGSL pack under Data/Shaders, exactly where a dist stages it.
+        # the cooked WGSL pack under Data/Engine/Shaders, exactly where a dist stages it.
         "--preload-file=${CMAKE_SOURCE_DIR}/Data/.dataroot@Data/.dataroot"
-        "--preload-file=${_web_shader_pack}@Data/Shaders/shaders.dpak"
+        "--preload-file=${_web_shader_pack}@Data/Engine/Shaders/shaders.dpak"
         # The game-UI default font, at the exact dev-tree path the UI subsystem probes -
         # without it the HUD renders shapes but no text (the startup warning).
         "--preload-file=${CMAKE_SOURCE_DIR}/Data/Assets/fonts/roboto/Roboto-Regular.ttf@Data/Assets/fonts/roboto/Roboto-Regular.ttf")

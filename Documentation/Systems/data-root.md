@@ -10,8 +10,8 @@ A **data root** is a directory named `Data` that holds a `.dataroot` marker file
 executable needs at runtime that is not a project asset lives under it, at fixed relative paths:
 
     Data/.dataroot                    the marker (foundation.vfs kDataRootMarker)
-    Data/Shaders/*.hlsl, *.hlsli      the engine shader corpus (dev: compiled on demand)
-    Data/Shaders/shaders.dpak         the cooked pack (dist/web: no compiler)
+    Data/Engine/Shaders/*.hlsl, *.hlsli      the engine shader corpus (dev: compiled on demand)
+    Data/Engine/Shaders/shaders.dpak         the cooked pack (dist/web: no compiler)
     Data/Assets/fonts/...             built-in fonts (the game UI's default Roboto, the editor's)
     Data/Assets/...                   models, environment maps, images, ui themes, audio (samples)
     Data/Output/<Sample>              per-sample cooked-output databases (written, not shipped)
@@ -80,11 +80,11 @@ Consumers take `vfs::IFileSystem&` (the data mount), never a path:
 ## Shipped layouts
 
 - Desktop dist (`StageShaderPack` in `Editor.Core` export): `<out>/Engine.Player`, sidecars,
-  `Content.pak`, `player.xml`, `Data/.dataroot`, `Data/Shaders/shaders.dpak` (cooked from
+  `Content.pak`, `player.xml`, `Data/.dataroot`, `Data/Engine/Shaders/shaders.dpak` (cooked from
   `<dataRoot>/Shaders` for the preset's platform). `FindDataRoot()` from the player's directory
   finds `<out>/Data`.
 - Web dist: the same tree in the serving folder. `WebMain` fetches `Data/.dataroot` and
-  `Data/Shaders/shaders.dpak` into MEMFS (after `player.xml` / the content pak), so the walk
+  `Data/Engine/Shaders/shaders.dpak` into MEMFS (after `player.xml` / the content pak), so the walk
   from `/` finds `/Data`. The sample web builds (`WebScene`, `TerrainPlayground`) preload the
   repo's `Data/.dataroot` + the cooked pack at the same paths.
 

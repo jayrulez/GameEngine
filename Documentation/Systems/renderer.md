@@ -306,7 +306,7 @@ It lives in three places, kept in step:
   state, sampler compare and depth clear in the engine names one of these - `PipelineConfig`,
   the render-graph defaults, mesh/terrain/sprite/particle/debug/sky/MSAA passes, the shadow
   samplers, the samples.
-- `Data/Shaders/depth.hlsli`: `kDepthNear`/`kDepthFar`, `IsBackgroundDepth`, `IsNearerDepth`,
+- `Data/Engine/Shaders/depth.hlsli`: `kDepthNear`/`kDepthFar`, `IsBackgroundDepth`, `IsNearerDepth`,
   `FarthestDepth`/`NearerOf` (closest-in-neighborhood searches), `BiasTowardViewer` /
   `BiasClipTowardViewer` (shadow receiver bias, debug-line pull), `LinearizeDepth`. The sky
   sits AT `kDepthFar` with `NearerOrEqual`, so only a cleared pixel passes.
@@ -317,7 +317,7 @@ matrix (`IsOrthographic`, `NearZ`, `FarZ`, `OrthoHeight`, through `projection::N
 `FarPlane`). The TAA jitter is the same NDC shift in both: `projection::ApplyJitter` puts it in
 row 2 for a perspective projection and row 3 for an orthographic one (where row 2 would shift by
 depth), and passes read it back with `projection::JitterOf`. A pass working in view space
-includes `Data/Shaders/projection.hlsli` (`ProjectionDivide`, `ViewToNdcXY`, `ViewDirToViewer`,
+includes `Data/Engine/Shaders/projection.hlsli` (`ProjectionDivide`, `ViewToNdcXY`, `ViewDirToViewer`,
 `LinearViewDepth`) with its view's orthographic flag rather than assume an eye: AO, TAA, SSR
 and SSGI do.
 The forward and surface shaders take their view vector from `view.hlsli`'s

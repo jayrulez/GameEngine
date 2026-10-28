@@ -138,7 +138,7 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
     // The corpus is found the way every executable finds engine data: the discovered data root.
     const String dataRoot = foundation::vfs::FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
-    const String shaderDir = foundation::vfs::DataPath(dataRoot.AsView(), u8"Shaders");
+    const String shaderDir = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
 
     // SPIR-V only: in-process (no naga/tint spawns), so this stays fast while still exercising
     // enumeration + the drift-lint + every shader compiling. The WGSL path is covered above.
@@ -206,7 +206,7 @@ TEST_CASE("cook: a one-file project shader cooks both stages into the pack")
     }
     const String dataRoot = foundation::vfs::FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
-    const String shaderDir = foundation::vfs::DataPath(dataRoot.AsView(), u8"Shaders");
+    const String shaderDir = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
     const Result<Array<byte>> bytes = ReadFile(
         foundation::vfs::DataPath(dataRoot.AsView(), u8"Assets/shaders/toon/toon.hlsl").AsView());
     REQUIRE(bytes.HasValue());

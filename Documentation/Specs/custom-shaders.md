@@ -37,13 +37,13 @@ What does not exist is everything between that and a user of the editor or a shi
   and pipeline are already gone, so the mesh vanishes. The hot-reload doc's "keep the old on
   failure" is not what the code does.
 - **Exported games cannot run one.** A dist ships no DXC; a registered source logs "cannot be
-  compiled in compiler-free pack mode" and draws nothing. Only the engine corpus (`Data/Shaders`)
+  compiled in compiler-free pack mode" and draws nothing. Only the engine corpus (`Data/Engine/Shaders`)
   is precompiled, to SPIR-V, DXIL and WGSL (DXC, then naga and tint for the web).
 - **Depth, shadow and pick passes use built-in shaders.** A custom vertex shader's displacement
   never reaches them, and masked shadows assume `AlbedoMap` at t0.
 - **The material page** has a read-only Shader row, and its preview ignores `shaderId`.
 - **No include asset exists** (the backlog says there is one). Includes resolve against
-  `Data/Shaders` in dev builds only (the toon shader includes `forward_vs.hlsli` that way).
+  `Data/Engine/Shaders` in dev builds only (the toon shader includes `forward_vs.hlsli` that way).
 - The engine's own depth and shadow pipelines draw with Vulkan validation warnings ("Vertex
   attribute at location 1..4 not consumed by vertex shader"), in every sample with shadows: a
   position-only shader on the full mesh layout. Harmless, but noise to fix on the way.

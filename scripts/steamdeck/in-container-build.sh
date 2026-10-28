@@ -52,7 +52,7 @@ if [ -f "build/steamdeck-shaders.dpak" ]; then
     cp "build/steamdeck-shaders.dpak" "/tmp/shaders.dpak"
 else
     log "Cook shaders.dpak ($FORMATS)"
-    "$BIN/Tools.ShaderPack" "Data/Shaders" "/tmp/shaders.dpak" $FORMATS
+    "$BIN/Tools.ShaderPack" "Data/Engine/Shaders" "/tmp/shaders.dpak" $FORMATS
 fi
 
 # --- 4. stage runnable bundles ---------------------------------------------------------------

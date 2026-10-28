@@ -156,7 +156,7 @@ namespace editor
 
         // Cook the built-in shaders (from <dataRoot>/Shaders) and the project's custom shaders the
         // dist ships (`projectShaders`, their cooked ShaderSource products) for `platform`, and
-        // write the dist's Data/Shaders/shaders.dpak plus its Data/.dataroot marker - the layout the
+        // write the dist's Data/Engine/Shaders/shaders.dpak plus its Data/.dataroot marker - the layout the
         // player's data-root discovery finds beside the executable. The dist renders from this pack
         // with no runtime compiler (see the ShaderSystem cooked path). Returns the variant count via
         // `outVariants`; Status carries any cook/compile failure.
@@ -1392,7 +1392,7 @@ namespace editor
             }
         }
 
-        // Cooked engine shaders: Data/Shaders/shaders.dpak (+ Data/.dataroot) beside the player so
+        // Cooked engine shaders: Data/Engine/Shaders/shaders.dpak (+ Data/.dataroot) beside the player so
         // the dist renders with no runtime compiler, found by the same data-root discovery every
         // executable uses. A cook failure is fatal - a dist without shaders cannot render.
         if (onProgress)

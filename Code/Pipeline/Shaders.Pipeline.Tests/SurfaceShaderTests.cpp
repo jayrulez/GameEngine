@@ -80,7 +80,7 @@ namespace
 
     ShaderCheckOptions LibraryOptions(String& library)
     {
-        library = foundation::vfs::DataPath(foundation::vfs::FindDataRoot().AsView(), u8"Shaders");
+        library = foundation::vfs::DataPath(foundation::vfs::FindDataRoot().AsView(), u8"Engine/Shaders");
         ShaderCheckOptions options;
         options.shaderLibrary = library.AsView();
         return options;

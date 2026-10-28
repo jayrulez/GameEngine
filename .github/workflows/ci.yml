@@ -118,7 +118,7 @@ jobs:
       # this a shader that only breaks at cook time is first seen at export. The pack goes to
       # the runner's temp dir - never into Data/ (the dev tree compiles sources).
       - name: Cook the shader pack
-        run: Bin/Debug/Linux64-Clang/Tools.ShaderPack Data/Shaders "$RUNNER_TEMP/shaders.dpak" wgsl spirv
+        run: Bin/Debug/Linux64-Clang/Tools.ShaderPack Data/Engine/Shaders "$RUNNER_TEMP/shaders.dpak" wgsl spirv
 
   # The SHARED-ENGINE lane (Documentation/Specs/shared-libraries.md): the same clang
   # battery with ENGINE_SHARED_LIBS=ON - 179 .so files, and the suites (incl. the

@@ -298,25 +298,25 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
     namespace vfs = foundation::vfs;
     rhi::null::NullDevice device{DefaultAllocator()};
 
-    // A scratch DATA ROOT in the production shape: Shaders/<sources> + Shaders/shaders.dpak.
+    // A scratch DATA ROOT in the production shape: Engine/Shaders/<sources> + Engine/Shaders/shaders.dpak.
     const std::filesystem::path root = "host_data_root";
     std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "Shaders");
+    std::filesystem::create_directories(root / "Engine" / "Shaders");
     {
         CookedShaderPack pack;
         const byte blob[] = {byte{1}};
         pack.Add(u8"x", ShaderStage::Vertex, ShaderFlags::None, CookedShaderFormat::SpirV,
                  Span<const byte>(blob, 1));
-        FileStream out(u8"host_data_root/Shaders/shaders.dpak", FileMode::Write);
+        FileStream out(u8"host_data_root/Engine/Shaders/shaders.dpak", FileMode::Write);
         REQUIRE(out.IsValid());
         REQUIRE(pack.Write(out).IsOk());
     }
     {
-        std::ofstream f(root / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
+        std::ofstream f(root / "Engine" / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
         f << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
     }
     vfs::NativeFileSystem dataFs(u8"host_data_root", DefaultAllocator());
-    CHECK(kShaderPackPath == u8"Shaders/shaders.dpak"); // the layout every writer targets
+    CHECK(kShaderPackPath == u8"Engine/Shaders/shaders.dpak"); // the layout every writer targets
 
     {
         // Automatic: dev is possible (DXC + Shaders/), so the pack must NOT take over.
@@ -333,13 +333,13 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         // A distribution marks itself (Shaders/.pack-first): Automatic then starts from the pack
         // although the sources and DXC are there; the sources stay for whoever cooks from them.
         {
-            std::ofstream marker(root / "Shaders" / ".pack-first", std::ios::binary);
+            std::ofstream marker(root / "Engine" / "Shaders" / ".pack-first", std::ios::binary);
         }
         ShaderSystemHost host{DefaultAllocator()};
         REQUIRE(host.Initialize(device, dataFs));
         CHECK(host.UsingPack());
         CHECK(host.PackVariantCount() == 1u);
-        std::filesystem::remove(root / "Shaders" / ".pack-first");
+        std::filesystem::remove(root / "Engine" / "Shaders" / ".pack-first");
     }
     {
         // Explicit opt-in: ForcePack loads Shaders/shaders.dpak from the data root - and ONLY
@@ -374,19 +374,19 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
     namespace vfs = foundation::vfs;
     rhi::null::NullDevice device{DefaultAllocator()};
 
-    // The layout every dist stages (export + the editor dist scripts): Data/Shaders/ holds the
+    // The layout every dist stages (export + the editor dist scripts): Data/Engine/Shaders/ holds the
     // cooked pack and nothing else - no .hlsl sources. With DXC present (the editor dist ships
     // it) the folder's existence must not read as "sources present": that put the shipped
     // editor in dev mode over an empty corpus (2026-09-21).
     const std::filesystem::path root = "host_dist_root";
     std::filesystem::remove_all(root);
-    std::filesystem::create_directories(root / "Shaders");
+    std::filesystem::create_directories(root / "Engine" / "Shaders");
     {
         CookedShaderPack pack;
         const byte blob[] = {byte{1}};
         pack.Add(u8"x", ShaderStage::Vertex, ShaderFlags::None, CookedShaderFormat::SpirV,
                  Span<const byte>(blob, 1));
-        FileStream out(u8"host_dist_root/Shaders/shaders.dpak", FileMode::Write);
+        FileStream out(u8"host_dist_root/Engine/Shaders/shaders.dpak", FileMode::Write);
         REQUIRE(out.IsValid());
         REQUIRE(pack.Write(out).IsOk());
     }
@@ -412,7 +412,7 @@ TEST_CASE("shader system host: a dist data root with ONLY the pack under Shaders
     {
         // A stage file beside the pack is a corpus again: dev-first (with a compiler), else the
         // pack still serves.
-        std::ofstream f(root / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
+        std::ofstream f(root / "Engine" / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
         f << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
         f.close();
         ShaderSystemHost host{DefaultAllocator()};

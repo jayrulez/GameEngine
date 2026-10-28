@@ -60,7 +60,7 @@ fi
 [[ -n "$SHADERPACK" ]] || { echo "!! no host Tools.ShaderPack; build it (or set SHADERPACK)" >&2; exit 1; }
 echo "== cooking shaders.dpak on the host ($SHADERPACK) =="
 mkdir -p build
-"$SHADERPACK" "Data/Shaders" "build/steamdeck-shaders.dpak" spirv
+"$SHADERPACK" "Data/Engine/Shaders" "build/steamdeck-shaders.dpak" spirv
 
 echo "== building the engine inside the container =="
 USER_ARGS=()

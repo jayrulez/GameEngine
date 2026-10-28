@@ -391,13 +391,13 @@ below is code-verified + test-covered; these are the on-screen confirmations.
       the emulated push-constant path).
 
 ### Shaders pack/dev policy (review)
-- [ ] DEV-FIRST: with a cooked Data/Shaders/shaders.dpak present (the ONLY place the host
-      looks since 2026-09-15 - no exe-dir/cwd probing), run Sandbox, edit any Data/Shaders
+- [ ] DEV-FIRST: with a cooked Data/Engine/Shaders/shaders.dpak present (the ONLY place the host
+      looks since 2026-09-15 - no exe-dir/cwd probing), run Sandbox, edit any Data/Engine/Shaders
       file -> hot reload still works (log says "runtime shader compiler", NOT "cooked shader
       pack").
 - [ ] OPT-IN PACK MODE: `DRACONIC_USE_SHADER_PACK=1 ./Bin/.../Sandbox --vulkan` and
       `--webgpu` -> renders identically off the cooked pack (re-cook first if shaders
-      changed: `Tools.ShaderPack Data/Shaders Data/Shaders/shaders.dpak spirv`). The webgpu run previously PANICKED on a desktop-cooked pack (vulkan1.3).
+      changed: `Tools.ShaderPack Data/Engine/Shaders Data/Engine/Shaders/shaders.dpak spirv`). The webgpu run previously PANICKED on a desktop-cooked pack (vulkan1.3).
 
 ### VG gradient-LUT cache rework (the review blocker) + Opus's per-pixel gradients
 - [ ] VGSandbox: gradients (linear/radial/conic) render with correct, stable colors across
@@ -418,12 +418,12 @@ below is code-verified + test-covered; these are the on-screen confirmations.
 
 ### WEB EXPORT PIPELINE (new - the export-template flow for the browser)
 The web player no longer bakes any content; it FETCHES player.xml + Content.pak +
-Data/.dataroot + Data/Shaders/shaders.dpak from the serving folder. The wasm build is a reusable export template
+Data/.dataroot + Data/Engine/Shaders/shaders.dpak from the serving folder. The wasm build is a reusable export template
 (already created + installed on this machine as 'draconic-web-debug-0.1.0').
 
 - [ ] Editor flow: create an export preset with platform "Web" in the project's export
       settings -> Export. The output folder contains: Draconic.Engine.Player.html/.js/
-      .wasm, serve.py, Content.pak, player.xml, Data/.dataroot, Data/Shaders/shaders.dpak (WGSL).
+      .wasm, serve.py, Content.pak, player.xml, Data/.dataroot, Data/Engine/Shaders/shaders.dpak (WGSL).
       (CLI equivalent: `Draconic.Tools.Export <projectDir> --preset <name>`.)
 - [ ] Serve + browse: `cd <exportOut> && python3 serve.py` ->
       http://localhost:8000/Draconic.Engine.Player.html in Chromium -> the exported
@@ -470,7 +470,7 @@ stages (raw/tonemap/tonemap+TAA/plane-only/cube-only) byte-identical between
 Vulkan and WebGPU on BOTH shader paths.
 
 IMPORTANT: old WGSL packs bake the adjustment - re-cook before testing
-(`Tools.ShaderPack Data/Shaders Data/Shaders/shaders.dpak wgsl spirv`; the
+(`Tools.ShaderPack Data/Engine/Shaders Data/Engine/Shaders/shaders.dpak wgsl spirv`; the
 clang + gcc bins and build/wasm bundles are already re-cooked/rebuilt).
 
 - [ ] Browser WebScene (re-exported/re-served from the rebuilt Emscripten-Clang):

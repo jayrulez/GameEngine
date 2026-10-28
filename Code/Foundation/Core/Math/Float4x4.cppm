@@ -147,7 +147,7 @@ export namespace foundation::core
     // The near plane maps to NDC depth 1, the far plane to 0, a cleared (background) depth is 0,
     // and "nearer" is the LARGER value. Everything that would otherwise hard-code 0/1 or a
     // compare direction names these instead (rhi::depth:: maps them to compare functions and
-    // rasterizer bias signs; Data/Shaders/depth.hlsli is the shader-side twin - keep the three
+    // rasterizer bias signs; Data/Engine/Shaders/depth.hlsli is the shader-side twin - keep the three
     // in step). A consumer that reconstructs position through an inverse projection matrix is
     // convention-free and needs none of this.
     namespace projection

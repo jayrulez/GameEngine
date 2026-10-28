@@ -114,7 +114,7 @@
   (the pipeline applies the jitter where `post.taaEnabled`), with a test that a debug view's
   projection carries no jitter.
 - **Smoother shadow edges** (user 2026-10-12; found checking the toon's shadows): a directional
-  shadow is filtered by a fixed 3x3 PCF grid (`SampleCascade` in `Data/Shaders/lighting.hlsli`),
+  shadow is filtered by a fixed 3x3 PCF grid (`SampleCascade` in `Data/Engine/Shaders/lighting.hlsli`),
   at 1024 texels per cascade (`kShadowResolution`, `ShadowSystem.cppm`). Soft shading hides the
   grid; a hard edge (a toon's) traces it as a wavy outline. Filter with a disk of 12 to 16 taps
   rotated per pixel, and make the resolution a render setting (1024, 2048, 4096); local-light

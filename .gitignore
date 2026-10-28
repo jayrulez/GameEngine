@@ -39,4 +39,4 @@ Documentation/Parity/
 /dist/
 
 # The cooked engine shader pack in the data root (Tools.ShaderPack output; a build product).
-/Data/Shaders/shaders.dpak
+/Data/Engine/Shaders/shaders.dpak

@@ -7,7 +7,7 @@
 #
 # The result is an unzip-and-run folder: the Tools.Editor executable, its runtime sidecars
 # (DXC - the editor cooks/recompiles shaders), the Data root (Assets, the editor's own interface
-# under Editor, and the .dataroot marker) beside the exe. Data/Shaders holds the cooked engine shader pack (shaders.dpak, the path the
+# under Editor, and the .dataroot marker) beside the exe. Data/Engine/Shaders holds the cooked engine shader pack (shaders.dpak, the path the
 # ShaderSystemHost opens), the shader SOURCES (an export cooks the game's pack from them) and the
 # .pack-first marker, so this editor starts from the pack and not by compiling the sources.
 # FindDataRoot() discovers Data/ beside the exe, and $ORIGIN on the exe's RUNPATH finds the
@@ -91,17 +91,17 @@ objcopy --only-keep-debug "$DIST/Tools.Editor" "$SYMBOLS/Tools.Editor.debug"
 strip --strip-debug "$DIST/Tools.Editor"
 objcopy --add-gnu-debuglink="$SYMBOLS/Tools.Editor.debug" "$DIST/Tools.Editor"
 
-# 4. Data/Shaders: the pack INTO the dist's data root (Data/Shaders/shaders.dpak is the one path
+# 4. Data/Engine/Shaders: the pack INTO the dist's data root (Data/Engine/Shaders/shaders.dpak is the one path
 #    the runtime opens; a pack beside the exe is never found); the sources beside it, for an
 #    export to cook a game's pack from; and the marker that makes this editor start from the pack.
-log "Cooking Data/Shaders/shaders.dpak ($FORMATS)"
-mkdir -p "$DIST/Data/Shaders"
-"$BIN/Tools.ShaderPack" "Data/Shaders" "$DIST/Data/Shaders/shaders.dpak" $FORMATS
-SHADERS_OUT="$(cd "$DIST/Data/Shaders" && pwd)"
-( cd Data/Shaders && find . -type f \( -name '*.hlsl' -o -name '*.hlsli' \) -print0 |
+log "Cooking Data/Engine/Shaders/shaders.dpak ($FORMATS)"
+mkdir -p "$DIST/Data/Engine/Shaders"
+"$BIN/Tools.ShaderPack" "Data/Engine/Shaders" "$DIST/Data/Engine/Shaders/shaders.dpak" $FORMATS
+SHADERS_OUT="$(cd "$DIST/Data/Engine/Shaders" && pwd)"
+( cd Data/Engine/Shaders && find . -type f \( -name '*.hlsl' -o -name '*.hlsli' \) -print0 |
     xargs -0 -I{} cp --parents {} "$SHADERS_OUT/" )
 echo "An editor distribution: start from shaders.dpak; the sources are for cooking." \
-    > "$DIST/Data/Shaders/.pack-first"
+    > "$DIST/Data/Engine/Shaders/.pack-first"
 
 # 5. Stage the rest of the Data root: Assets, the editor's interface (Data/Editor: its sheets,
 #    page markup and icons, read at startup; without its frame the editor runs with no interface) + the

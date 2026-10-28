@@ -28,7 +28,7 @@ export namespace foundation::shaders
 {
     struct ShaderCookOptions
     {
-        StringView shaderDir;                    // source + #include root (e.g. Data/Shaders)
+        StringView shaderDir;                    // source + #include root (e.g. Data/Engine/Shaders)
         StringView scratchDir;                   // WgslTranslator intermediates (must exist)
         Span<const CookedShaderFormat> formats;  // which backend blobs to emit
         bool validateWgsl = true;                // run tint over the WGSL

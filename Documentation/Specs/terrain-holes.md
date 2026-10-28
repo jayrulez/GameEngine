@@ -45,7 +45,7 @@ effect, and erosion (its own seed; it shares the sculpt spine but nothing here).
 - **Chunk geometry** (`Foundation/Terrain/Terrain.cppm`): ONE shared 65x65 grid vertex buffer
   and ONE shared index buffer per LOD 0..6 (`BuildChunkGridVertices/Indices`: surface prefix
   of `ChunkLodSurfaceIndexCount(lod)` triangles, then a double-sided skirt around the four
-  edges). Every chunk draws the same buffers; the vertex shader (`Data/Shaders/terrain.vs.hlsl`)
+  edges). Every chunk draws the same buffers; the vertex shader (`Data/Engine/Shaders/terrain.vs.hlsl`)
   reads `Texture2D<uint> HeightTex` (R16Uint, `Engine.Terrain/HeightTexture.cppm`, rebuilt in
   place on a version change). There is no per-chunk mesh to drop a triangle from.
 - **Renderer** (`Engine.Terrain/TerrainRenderer.cppm`): `LodMesh {indexBuffer, indexCount,

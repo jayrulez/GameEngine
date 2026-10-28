@@ -15,7 +15,7 @@ building block and hit walls everywhere else. The inventory (2026-09-26):
   (CameraFacing / CameraFacingY / WorldAligned / EntityOriented), additive, postTonemap,
   visible. Extracted in `ExtractImpl.cpp`, drawn instanced and batched by the
   `SpriteRenderer` (`Code/Foundation/Render/SpriteRenderer.cppm`), unlit
-  (`Data/Shaders/sprite.ps.hlsl`), alpha or additive, depth-tested, no depth write. The
+  (`Data/Engine/Shaders/sprite.ps.hlsl`), alpha or additive, depth-tested, no depth write. The
   script facade `SpriteComponent.of(e)` reaches texture, size, uvRect, tint, orientation,
   additive, visible.
 - **Sprite bugs and gaps.** The sampler is hard-coded Linear (`SpriteRendererImpl.cpp:69`),

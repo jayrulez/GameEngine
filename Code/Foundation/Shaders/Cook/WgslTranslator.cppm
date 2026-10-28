@@ -99,7 +99,7 @@ export namespace foundation::shaders
             // Browsers have no push constants and REJECT WGSL var<push_constant>. Compile the
             // PUSH_CONSTANT blocks as ordinary cbuffers (register(b0, spaceN)) so naga emits a
             // @group(spaceN) @binding(0) var<uniform> the browser accepts; the WebGPU backend feeds
-            // it per-draw via its push-constant emulation (see Data/Shaders/push_constant.hlsli).
+            // it per-draw via its push-constant emulation (see Data/Engine/Shaders/push_constant.hlsli).
             defines.PushBack(ShaderDefine{u8"PUSH_CONSTANT_AS_CBUFFER", u8"1"});
             CompileOptions opts{};
             opts.shaderModel = u8"6_0";

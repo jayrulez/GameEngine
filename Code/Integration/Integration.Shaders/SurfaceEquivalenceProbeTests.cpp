@@ -60,7 +60,7 @@ namespace
     {
         SurfacePrograms out;
         const String dataRoot = foundation::vfs::FindDataRoot();
-        const String library = foundation::vfs::DataPath(dataRoot.AsView(), u8"Shaders");
+        const String library = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
         const Result<Array<byte>> text = ReadFile(
             foundation::vfs::DataPath(dataRoot.AsView(), u8"Assets/shaders/surface_pbr/surface_pbr.hlsl")
                 .AsView());

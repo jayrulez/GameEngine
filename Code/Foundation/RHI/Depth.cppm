@@ -6,7 +6,7 @@
 // says what that means for a pipeline: which compare function is "nearer", what a depth clear
 // is, and which way a rasterizer bias pushes. Every depth-stencil state, sampler compare and
 // clear in the engine names one of these rather than a literal, so the convention lives in one
-// place (three, with the shader twin Data/Shaders/depth.hlsli).
+// place (three, with the shader twin Data/Engine/Shaders/depth.hlsli).
 export module foundation.rhi:depth;
 
 import foundation.core;

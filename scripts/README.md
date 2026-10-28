@@ -57,7 +57,7 @@ Bin/RelWithDebInfo/Linux64-Clang/Tools.Export --template list
 Assemble a portable, unzip-and-run **editor** distribution: `Tools.Editor` + its runtime
 sidecars (DXC - the editor cooks/recompiles shaders) + the `Data` root (`Assets`, the editor's
 interface under `Editor` (its sheets, page markup and icons; the GUISandbox's `Editor/Mock` is
-left out) and the `.dataroot` marker) beside the exe. `Data/Shaders` holds the cooked pack (`shaders.dpak`, the path the runtime
+left out) and the `.dataroot` marker) beside the exe. `Data/Engine/Shaders` holds the cooked pack (`shaders.dpak`, the path the runtime
 opens through the data mount), the shader sources (an export cooks the game's pack from them) and
 the `.pack-first` marker, which makes the distributed editor start from the pack rather than
 compiling the sources (a dev tree, without the marker, keeps compiling them, with hot reload).

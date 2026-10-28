@@ -18,7 +18,7 @@ diffuse a texture (`300024.png`), specular 0.2 grey, shininess (exponent) 20, am
 emission. A classic OBJ `.mtl` (Kd, Ks, Ns, no PBR keys) takes the same branch and loses the same.
 
 Nothing else in the engine can stand in: a surface shader only feeds PBR inputs to the fixed
-lighting (`Data/Shaders/surface/forward.hlsli`, `lighting.hlsli`'s `EvaluateLight`), and a
+lighting (`Data/Engine/Shaders/surface/forward.hlsli`, `lighting.hlsli`'s `EvaluateLight`), and a
 low-level custom shader, which can own its lighting, is the project's to write, not the import's
 to make.
 
@@ -27,7 +27,7 @@ to make.
 - **Unlit, the built-in this one follows.** Its creator (`Pipeline/Materials.Pipeline/
   MaterialsCreatorsImpl.cpp`, "Unlit Material" beside "PBR Material"), its property table in C++
   (`Foundation/Materials/MaterialBuilder.cppm`, `CreateUnlit`: shader `unlit`, `BaseColor`,
-  `AlbedoMap`, `MainSampler`), its HLSL in `Data/Shaders/unlit.*.hlsl` (the forward vertex path; its
+  `AlbedoMap`, `MainSampler`), its HLSL in `Data/Engine/Shaders/unlit.*.hlsl` (the forward vertex path; its
   cbuffer written by hand to match the table), precompiled into the shader pack. The places that
   know a built-in by name: `BuiltinMaterialTemplate` (MaterialBuilder), `SetMaterialBuiltInShader`
   (`Materials.Pipeline/MaterialAsset.cppm`, a bool), the MCP material tool
@@ -52,7 +52,7 @@ to make.
 
 ### The material (phase 1)
 
-A built-in named `phong`, as Unlit is: its HLSL `Data/Shaders/phong.vs.hlsl` (the forward vertex
+A built-in named `phong`, as Unlit is: its HLSL `Data/Engine/Shaders/phong.vs.hlsl` (the forward vertex
 path) and `phong.ps.hlsl`, its table `CreatePhong` in MaterialBuilder, a creator "Phong Material"
 beside the other two.
 

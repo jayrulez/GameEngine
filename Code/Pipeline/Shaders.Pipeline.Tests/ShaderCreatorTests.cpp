@@ -52,7 +52,7 @@ TEST_CASE("shader creator: the starter compiles, every variant, against the engi
         MESSAGE("DXC unavailable; skipping");
         return;
     }
-    const String library = DataPath(dataRoot.AsView(), u8"Shaders");
+    const String library = DataPath(dataRoot.AsView(), u8"Engine/Shaders");
     ShaderCheckOptions options;
     options.shaderLibrary = library.AsView();
     const ShaderCheck check = CheckShaderSource(kShaderStarter, u8"Shader.hlsl", options);
@@ -164,7 +164,7 @@ TEST_CASE("shader creator: the surface starters compile as surface shaders")
         MESSAGE("DXC unavailable; skipping");
         return;
     }
-    const String library = DataPath(FindDataRoot().AsView(), u8"Shaders");
+    const String library = DataPath(FindDataRoot().AsView(), u8"Engine/Shaders");
     ShaderCheckOptions options;
     options.shaderLibrary = library.AsView();
     const struct

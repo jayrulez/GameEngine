@@ -64,7 +64,7 @@ Grepped before commissioning anything below; all of this is reused rather than r
   registry, type-erased on reflection instances, drawn through debug-draw. This is where face
   handles hang.
 - **NO triplanar or world-projected surface shading exists.** The only box projection in
-  `Data/Shaders` is the reflection-probe parallax correction (`forward.ps.hlsl:446-449`), which
+  `Data/Engine/Shaders` is the reflection-probe parallax correction (`forward.ps.hlsl:446-449`), which
   is a cubemap ray, not a surface UV. Decision 4 commissions this, and it is the one genuinely
   new piece of rendering work in the spec.
 
@@ -219,7 +219,7 @@ A blockout whose grid texture stretches when a block is resized is unreadable: j
 proportion at a glance is the entire point of the exercise, and stretched texels destroy it. Both
 prior engines solve this and neither uses the mesh's own UVs.
 
-`Data/Shaders` has no triplanar path today (checked: the only box projection is the
+`Data/Engine/Shaders` has no triplanar path today (checked: the only box projection is the
 reflection-probe parallax at `forward.ps.hlsl:446`), so this commissions one: a DEDICATED
 `whitebox` material shader (`whitebox.ps.hlsl` over the shared forward vertex path and the
 forward includes; a material names it with `MaterialBuilder(...).Shader(u8"whitebox")`, the
@@ -272,7 +272,7 @@ engine.whitebox         WhiteboxShape enum {Box, RampX/Y(+/-), Column, StairsX/Y
                           ColliderComponent on a parameter change and on scene start;
                           UpdateOrder before MeshComponentManager
 
-Data/Shaders            + whitebox.ps.hlsl (a dedicated material shader over the shared
+Data/Engine/Shaders            + whitebox.ps.hlsl (a dedicated material shader over the shared
                           forward vertex path): world-projected triplanar sampling at
                           fixed tiling
 Data/Materials          + Whitebox.ezMaterialAsset equivalent + a grid texture

@@ -1,5 +1,5 @@
 # Foundation::VG.Renderer - `foundation.vg.renderer` (VGBatch -> RHI).
-# Ported from Sedulous.VG.Renderer. Shader source lives in Data/Shaders (vg.vs, vg.ps, vg_df.ps,
+# Ported from Sedulous.VG.Renderer. Shader source lives in Data/Engine/Shaders (vg.vs, vg.ps, vg_df.ps,
 # vg_grad_radial.ps, vg_grad_conic.ps .hlsl), resolved by name through the shader file provider.
 # (compile via foundation.shaders and pass the modules to VGRenderer::Initialize).
 

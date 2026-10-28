@@ -6,7 +6,7 @@
 /// Where a device has no immediates path (browsers - Dawn/emdawnwebgpu - or the fallback
 /// forced for testing on wgpu-native), push constants are emulated: the block is bound as an
 /// ordinary uniform buffer at the pipeline's @group(space) @binding(0) (the shape the web WGSL
-/// cook emits, see Data/Shaders/push_constant.hlsli). This helper is shared by the pass
+/// cook emits, see Data/Engine/Shaders/push_constant.hlsli). This helper is shared by the pass
 /// encoders. It keeps a CPU shadow of the block, and before each draw uploads a FRESH uniform
 /// buffer (so consecutive draws never alias the same memory) and binds it. Every buffer/bind
 /// group created this way lives until the pass ends, then Release() frees them - the recorded

@@ -854,9 +854,9 @@ TEST_CASE("export: ExportOne stages the resolved template's player + sidecars al
     CHECK(distFs.Exists(u8"Content.pak"));
     CHECK(distFs.Exists(u8"player.xml"));
     // The engine data tree the player's data-root discovery finds beside it: the marker + the
-    // cooked pack at the one layout every executable reads (Data/Shaders/shaders.dpak).
+    // cooked pack at the one layout every executable reads (Data/Engine/Shaders/shaders.dpak).
     CHECK(distFs.Exists(u8"Data/.dataroot"));
-    CHECK(distFs.Exists(u8"Data/Shaders/shaders.dpak"));
+    CHECK(distFs.Exists(u8"Data/Engine/Shaders/shaders.dpak"));
     CHECK(foundation::vfs::IsDataRoot(PathJoin(result.outputDir.AsView(), u8"Data").AsView()));
     CHECK(result.filesStaged == 4u); // player + pack + marker + one sidecar (no additionalFiles)
     // The host template is stamped with this build's engine version, so no soft-mismatch warning.
@@ -934,7 +934,7 @@ TEST_CASE("export: a surface shader ships its depth and pick programs in the dis
     CHECK(result.content.cookFailed == 0u);
 
     foundation::shaders::CookedShaderPack pack;
-    FileStream in(PathJoin(result.outputDir.AsView(), u8"Data/Shaders/shaders.dpak").AsView(),
+    FileStream in(PathJoin(result.outputDir.AsView(), u8"Data/Engine/Shaders/shaders.dpak").AsView(),
                   FileMode::Read);
     REQUIRE(in.IsValid());
     REQUIRE(pack.Read(in).IsOk());
@@ -1042,7 +1042,7 @@ TEST_CASE("export: a custom shader ships as bytecode in the dist pack, its sourc
     const String stripped = exportWith(false, u8"stripped");
     {
         foundation::shaders::CookedShaderPack pack;
-        FileStream in(PathJoin(stripped.AsView(), u8"Data/Shaders/shaders.dpak").AsView(),
+        FileStream in(PathJoin(stripped.AsView(), u8"Data/Engine/Shaders/shaders.dpak").AsView(),
                       FileMode::Read);
         REQUIRE(in.IsValid());
         REQUIRE(pack.Read(in).IsOk());
@@ -2327,14 +2327,14 @@ TEST_CASE("export: a Web preset stages the browser player + a WGSL shader pack")
     CHECK_FALSE(distFs.Exists(u8"Content.pak"));
     CHECK(distFs.Exists(u8"player.xml"));
     // Single shader pack (platform-keyed, compression-orthogonal) at the same Data/ layout a desktop
-    // dist stages - the web player fetches Data/.dataroot + Data/Shaders/shaders.dpak into MEMFS.
+    // dist stages - the web player fetches Data/.dataroot + Data/Engine/Shaders/shaders.dpak into MEMFS.
     CHECK(distFs.Exists(u8"Data/.dataroot"));
-    CHECK(distFs.Exists(u8"Data/Shaders/shaders.dpak"));
+    CHECK(distFs.Exists(u8"Data/Engine/Shaders/shaders.dpak"));
     CHECK_FALSE(distFs.Exists(u8"shaders.dpak")); // never at the serving-folder root any more
 
     // The pack is WGSL-format (the Web platform's runtime format), not SPIR-V/DXIL.
     {
-        UniquePtr<IStream> packStream = distFs.Open(u8"Data/Shaders/shaders.dpak", FileMode::Read);
+        UniquePtr<IStream> packStream = distFs.Open(u8"Data/Engine/Shaders/shaders.dpak", FileMode::Read);
         REQUIRE(static_cast<bool>(packStream));
         foundation::shaders::CookedShaderPack pack;
         REQUIRE(pack.Read(*packStream).IsOk());

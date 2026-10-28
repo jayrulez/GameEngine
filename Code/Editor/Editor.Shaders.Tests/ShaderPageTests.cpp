@@ -97,7 +97,7 @@ namespace
             app::AssetPageServices services;
             services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
             services.languages = &languages;
-            return MakeUnique<ShaderEditorPage>(DefaultAllocator(), context, Move(services), *colour, DataPath(u8"Shaders").AsView());
+            return MakeUnique<ShaderEditorPage>(DefaultAllocator(), context, Move(services), *colour, DataPath(u8"Engine/Shaders").AsView());
         }
     };
 }
@@ -106,7 +106,7 @@ TEST_CASE("shader page: registered for the shader asset")
 {
     const app::AssetPageServicesSource none;
     EditorContext context{DefaultAllocator()};
-    RegisterShaderEditor(context, none, u8"Shaders");
+    RegisterShaderEditor(context, none, u8"Engine/Shaders");
     IEditorPageFactory* found = context.Pages().FindFactory(pipeline::ShaderAsset::StaticType());
     REQUIRE(found != nullptr);
     CHECK(found->PrimaryType() == &pipeline::ShaderAsset::StaticType());

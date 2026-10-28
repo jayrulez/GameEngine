@@ -318,6 +318,76 @@ TEST_CASE("input: exclusive sets - priority resolution, suppression, and held la
     CHECK(runtime.WasPressed(jump));
 }
 
+// A menu set repeating an action of the game's (Masquerade: Pause in Gameplay and in Menu, the
+// menu's set pushed exclusive while a menu is up): the query answers from the set in effect, not
+// the first enabled one, so Escape still closes the menu it opened.
+TEST_CASE("input: an action two sets share answers from the exclusive set while it is pushed")
+{
+    InputMap map;
+    const auto pause = []()
+    {
+        Action action;
+        action.name = String(u8"Pause");
+        action.kind = ActionKind::Button;
+        Binding key;
+        key.source = BindingSource::Key;
+        key.code = static_cast<u32>(shell::KeyCode::Escape);
+        action.bindings.PushBack(key);
+        return action;
+    };
+    ActionSet gameplay;
+    gameplay.name = String(u8"Gameplay");
+    gameplay.actions.PushBack(pause());
+    {
+        Action tag;
+        tag.name = String(u8"Tag");
+        tag.kind = ActionKind::Button;
+        Binding key;
+        key.source = BindingSource::Key;
+        key.code = static_cast<u32>(shell::KeyCode::F);
+        tag.bindings.PushBack(key);
+        gameplay.actions.PushBack(static_cast<Action&&>(tag));
+    }
+    map.sets.PushBack(static_cast<ActionSet&&>(gameplay));
+    ActionSet menu;
+    menu.name = String(u8"Menu"); // the same priority as Gameplay, after it
+    menu.actions.PushBack(pause());
+    map.sets.PushBack(static_cast<ActionSet&&>(menu));
+
+    ActionRuntime runtime;
+    runtime.SetMap(map);
+    FakeDevices devices;
+    const ActionRef pauseRef = runtime.Resolve(u8"Pause");
+    const ActionRef tagRef = runtime.Resolve(u8"Tag");
+
+    // In play, Escape pauses (the game's Pause).
+    devices.keyboard.Set(shell::KeyCode::Escape, true);
+    runtime.Update(devices, 1.0f / 60.0f);
+    CHECK(runtime.WasPressed(pauseRef));
+    devices.keyboard.Set(shell::KeyCode::Escape, false);
+    runtime.Update(devices, 1.0f / 60.0f);
+
+    // The menu is up: Tag reads released, and Escape is the menu's Pause, pressed.
+    runtime.PushExclusiveSet(u8"Menu");
+    devices.keyboard.Set(shell::KeyCode::F, true);
+    runtime.Update(devices, 1.0f / 60.0f);
+    CHECK_FALSE(runtime.WasPressed(tagRef));
+    CHECK_FALSE(runtime.IsDown(tagRef));
+    devices.keyboard.Set(shell::KeyCode::F, false);
+    devices.keyboard.Set(shell::KeyCode::Escape, true);
+    runtime.Update(devices, 1.0f / 60.0f);
+    CHECK(runtime.WasPressed(pauseRef)); // was the Gameplay copy: suppressed, never pressed
+    devices.keyboard.Set(shell::KeyCode::Escape, false);
+    runtime.Update(devices, 1.0f / 60.0f);
+
+    // Closed: the game's own again.
+    runtime.PopExclusiveSet();
+    runtime.Update(devices, 1.0f / 60.0f);
+    devices.keyboard.Set(shell::KeyCode::F, true);
+    runtime.Update(devices, 1.0f / 60.0f);
+    CHECK(runtime.WasPressed(tagRef));
+}
+
 TEST_CASE("input: rebind overlay - apply over a pristine copy, clear restores, persists")
 {
     RegisterInputTypes();

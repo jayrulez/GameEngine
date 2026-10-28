@@ -235,6 +235,7 @@ export namespace foundation::input
             m_states.Clear();
             m_setEnabled.Clear();
             m_exclusiveStack.Clear();
+            m_exclusiveTop = -1;
             m_refs.Clear();
             usize actionTotal = 0;
             for (const ActionSet& set : m_map.sets)
@@ -288,6 +289,7 @@ export namespace foundation::input
         void PushExclusiveSet(StringView name)
         {
             m_exclusiveStack.PushBack(String(name));
+            m_exclusiveTop = ExclusiveTopSet();
             m_latchHeldOnce = true;
             ++m_bindingsVersion;
         }
@@ -296,6 +298,7 @@ export namespace foundation::input
             if (!m_exclusiveStack.IsEmpty())
             {
                 m_exclusiveStack.PopBack();
+                m_exclusiveTop = ExclusiveTopSet();
                 m_latchHeldOnce = true;
                 ++m_bindingsVersion;
             }
@@ -604,14 +607,21 @@ export namespace foundation::input
                 return nullptr;
             }
             const RefEntry& entry = m_refs[ref.index];
+            // The first set in effect: enabled, and the exclusive top while one is pushed. An
+            // enabled set under an exclusive one only reads released, so an action a menu set
+            // repeats (Pause in Gameplay and in Menu) answers from the menu's while it is up.
+            const i32 exclusiveTop = m_exclusiveTop;
+            const ActionState* suppressed = nullptr;
             for (const Candidate& candidate : entry.candidates)
             {
-                if (m_setEnabled[candidate.set] != 0u)
-                {
+                if (m_setEnabled[candidate.set] == 0u)
+                    continue;
+                if (exclusiveTop < 0 || static_cast<i32>(candidate.set) == exclusiveTop)
                     return &m_states[candidate.flatIndex];
-                }
+                if (suppressed == nullptr)
+                    suppressed = &m_states[candidate.flatIndex]; // released, as every set under it
             }
-            return nullptr;
+            return suppressed;
         }
 
         [[nodiscard]] static f32 ApplyDeadZone(f32 v, f32 deadZone)
@@ -1097,6 +1107,7 @@ export namespace foundation::input
         Array<ActionState> m_states; // flat, parallel to (set, action) in map order
         Array<u8> m_setEnabled;
         Array<String> m_exclusiveStack;
+        i32 m_exclusiveTop = -1; // ExclusiveTopSet, kept as the stack changes (queries compare no names)
         Array<RefEntry> m_refs;
         u64 m_frame = 0;
         f32 m_timeScale = 1.0f;

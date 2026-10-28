@@ -572,7 +572,7 @@ TEST_CASE("assets: assets dropped on a group's row or a group in the tree move i
     CHECK(why == String(u8"Barrel is already in Models"));
 }
 
-TEST_CASE("assets: a tile shows its type's glyph until its thumbnail is ready, then the thumbnail")
+TEST_CASE("assets: a tile shows its type's glyph until its thumbnail is ready, then the thumbnail; a row, small")
 {
     Bed bed;
     CHECK(bed.view->ShowsTiles());
@@ -586,6 +586,12 @@ TEST_CASE("assets: a tile shows its type's glyph until its thumbnail is ready, t
     crate = bed.Cell(bed.RowOf(u8"Crate"));
     REQUIRE(crate != nullptr);
     CHECK(crate->ShowsPicture());
+    bed.view->SetTiles(false);
+    (void)bed.root->UpdateLayout();
+    crate = bed.Cell(bed.RowOf(u8"Crate"));
+    REQUIRE(crate != nullptr);
+    CHECK_FALSE(crate->IsTile());
+    CHECK(crate->ShowsPicture()); // in its icon's place
 }
 
 TEST_CASE("assets: a right click on a group in the tree opens its menu; a browser with no verbs opens none (a crash, 2026-10-25)")

@@ -70,6 +70,7 @@ namespace
         content::Instance* bucket = nullptr;
         Array<Guid> chosen;
         usize saves = 0;
+        RefPtr<gui::Drawable> picture; // the crate's thumbnail, once "generated"
 
         Bed()
         {
@@ -97,6 +98,7 @@ namespace
             root->SetSize(Float2{900.0f, 600.0f});
             AssetPickerWindow::Services services;
             services.context = &context;
+            services.picture = [self](const Guid& id) { return id == self->crate->Id() ? self->picture : RefPtr<gui::Drawable>{}; };
             picker = MakeUnique<AssetPickerWindow>(DefaultAllocator(), DefaultAllocator(), Move(services), LoadAssetPicker());
         }
         ~Bed()
@@ -138,6 +140,21 @@ namespace
             return nullptr;
         }
     };
+}
+
+namespace
+{
+    gui::MenuItem* ItemNamed(gui::Node& menu, StringView text)
+    {
+        for (usize i = 0; i < menu.ChildCount(); ++i)
+        {
+            if (auto* item = Cast<gui::MenuItem>(menu.GetChildAt(i)); item != nullptr && item->GetText() == text)
+                return item;
+            if (gui::MenuItem* found = ItemNamed(*menu.GetChildAt(i), text))
+                return found;
+        }
+        return nullptr;
+    }
 }
 
 RTTI_DEFINE_OBJECT(PickerMesh, "rtti::tests::assetpicker")
@@ -189,6 +206,65 @@ TEST_CASE("asset picker: Favourites holds the starred assets it takes")
     bed.Open(Guid{});
     REQUIRE(bed.picker->ChooseSource(u8"Favourites"));
     CHECK(bed.picker->Rows() == String(u8"Bucket"));
+}
+
+TEST_CASE("asset picker: a row's menu pins it as a favourite, or unpins it")
+{
+    Bed bed;
+    bed.Open(Guid{});
+    REQUIRE(bed.picker->ChooseSource(u8"Favourites"));
+    CHECK(bed.picker->Rows().IsEmpty());
+    REQUIRE(bed.picker->ChooseSource(u8"All PickerMeshes"));
+    bed.picker->ShowRowMenu(0, Float2{20.0f, 10.0f}); // Crate
+    gui::Menu* menu = bed.picker->RowMenu();
+    REQUIRE(menu != nullptr);
+    gui::MenuItem* pin = ItemNamed(*menu, u8"Pin as Favourite");
+    REQUIRE(pin != nullptr);
+    CHECK(pin->HandleActivate());
+    CHECK(bed.context.IsFavorite(bed.crate->Id()));
+    REQUIRE(bed.picker->ChooseSource(u8"Favourites"));
+    CHECK(bed.picker->Rows() == String(u8"Crate"));
+    bed.picker->ShowRowMenu(0, Float2{20.0f, 10.0f});
+    menu = bed.picker->RowMenu();
+    REQUIRE(menu != nullptr);
+    gui::MenuItem* unpin = ItemNamed(*menu, u8"Unpin Favourite");
+    REQUIRE(unpin != nullptr);
+    CHECK(unpin->HandleActivate());
+    CHECK_FALSE(bed.context.IsFavorite(bed.crate->Id()));
+    CHECK(bed.picker->Rows().IsEmpty()); // it left the Favourites shown
+}
+
+TEST_CASE("asset picker: a whole guid of an asset the slot does not take says what it is")
+{
+    Bed bed;
+    bed.Open(Guid{});
+    content::Instance* bell = nullptr;
+    for (content::Instance* instance : bed.barrel->OwningGroup().Instances())
+        if (instance->Name() == StringView(u8"Bell"))
+            bell = instance;
+    REQUIRE(bell != nullptr);
+    utf8char text[37];
+    bell->Id().ToChars(text);
+    bed.picker->Search(StringView(text, 36));
+    CHECK(bed.picker->Rows().IsEmpty());
+    CHECK(bed.picker->State() == StringView(u8"'Bell' is a PickerSound, which this slot does not take."));
+    bed.picker->Search(u8"nothing like it");
+    CHECK(bed.picker->State() == StringView(u8"No pickermeshes match \"nothing like it\"."));
+}
+
+TEST_CASE("asset picker: a row shows the asset's thumbnail small in its icon's place, as a tile does")
+{
+    Bed bed;
+    bed.picture = RefPtr<gui::Drawable>(gui::SvgDrawable::FromText(DefaultAllocator(), u8"<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8'/></svg>").Get());
+    bed.Open(Guid{});
+    REQUIRE(bed.picker->ChooseSource(u8"All PickerMeshes"));
+    CHECK_FALSE(bed.picker->ShowsTiles());
+    AssetCell* crate = bed.Cell(0);
+    REQUIRE(crate != nullptr);
+    CHECK(crate->ShowsPicture());
+    AssetCell* barrel = bed.Cell(1);
+    REQUIRE(barrel != nullptr);
+    CHECK_FALSE(barrel->ShowsPicture()); // none yet: its glyph
 }
 
 TEST_CASE("asset picker: tiles or a list, kept with the project for the next pick")

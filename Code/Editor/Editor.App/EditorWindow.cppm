@@ -228,11 +228,24 @@ export namespace editor::app
         }
 
         /// A toast over the dock, its severity the notice's; the same message again counts on the
-        /// one shown. An error stays until it is dismissed.
-        void ShowToast(editor::NoticeKind kind, StringView message)
+        /// one shown. An error stays until it is dismissed, and so does one with an action (Open
+        /// Folder on an export), its button running `action`.
+        void ShowToast(editor::NoticeKind kind, StringView message, StringView actionText = {}, Function<void()> action = {})
         {
             if (!m_toasts)
                 return;
+            gui::ToastRequest request = MakeToast(kind, message, actionText);
+            if (!action)
+            {
+                (void)m_toasts->Post(Move(request));
+                return;
+            }
+            (void)m_toasts->Post(Move(request), [action = Move(action)](const gui::ToastAction&) { action(); });
+        }
+        /// The toast a notice shows: its severity, the message as its title and its key; with an
+        /// action's text, a button and no time out.
+        [[nodiscard]] static gui::ToastRequest MakeToast(editor::NoticeKind kind, StringView message, StringView actionText = {})
+        {
             gui::ToastRequest request;
             request.Severity = kind == editor::NoticeKind::Success  ? gui::ToastSeverity::Success
                                : kind == editor::NoticeKind::Warning ? gui::ToastSeverity::Warning
@@ -240,7 +253,12 @@ export namespace editor::app
                                                                      : gui::ToastSeverity::Info;
             request.Title = String(message);
             request.Key = String(message);
-            (void)m_toasts->Post(Move(request));
+            if (!actionText.IsEmpty())
+            {
+                request.AddAction(String(u8"action"), String(actionText), String{});
+                request.Duration = 0.0f; // until closed: its button is there to be used
+            }
+            return request;
         }
         /// The status bar's message.
         void SetStatus(StringView message)

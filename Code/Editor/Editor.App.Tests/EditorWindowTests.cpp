@@ -2,11 +2,13 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // Editor::App - EditorWindow's look: the sheet a look makes from the editor's files, the
-// density's sheet after the editor's so its sizes win, the user's accent as an input after both.
+// density's sheet after the editor's so its sizes win, the user's accent as an input after both;
+// a notice's toast, staying with its button when it has an action.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
@@ -96,4 +98,19 @@ TEST_CASE("editor window: the look from the user's settings, the defaults for wh
     CHECK(stored.reduceMotion);
     CHECK(stored.uiScale == doctest::Approx(1.25f));
     CHECK_FALSE(stored.autoOrthographic); // kept
+}
+
+TEST_CASE("editor window: a notice's toast times out; one with an action (Open Folder) stays with its button")
+{
+    using editor::app::EditorWindow;
+    const foundation::gui::ToastRequest plain = EditorWindow::MakeToast(editor::NoticeKind::Success, u8"Cook finished");
+    CHECK(plain.Severity == foundation::gui::ToastSeverity::Success);
+    CHECK(plain.Title == String(u8"Cook finished"));
+    CHECK(plain.Duration < 0.0f); // the severity's default
+    CHECK(plain.Actions.IsEmpty());
+
+    const foundation::gui::ToastRequest exported = EditorWindow::MakeToast(editor::NoticeKind::Success, u8"Exported to Dist/Linux64", u8"Open Folder");
+    CHECK(exported.Duration == 0.0f); // until closed
+    REQUIRE(exported.Actions.Size() == 1u);
+    CHECK(exported.Actions[0].Text == String(u8"Open Folder"));
 }

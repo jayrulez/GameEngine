@@ -220,8 +220,16 @@ namespace editor::app
         exportServices.builders = &m_builders;
         exportServices.userSettings = &m_editorSettings;
         exportServices.dataRoot = m_config.dataRoot;
+        // It stays, its button showing the build in the system's file manager (the old editor's).
         exportServices.onExported = [self](StringView folder)
-        { self->ShowToast(editor::NoticeKind::Success, Format(u8"Exported to {}", folder).AsView()); };
+        {
+            const String where(folder);
+            self->ShowToast(editor::NoticeKind::Success, Format(u8"Exported to {}", folder).AsView(), u8"Open Folder", [self, where]()
+                            {
+                                if (foundation::shell::IDialogService* dialogs = self->ShellDialogs())
+                                    dialogs->OpenPath(where.AsView());
+                            });
+        };
         m_export = MakeUnique<EditorExport>(m_editorAllocator, m_editorAllocator, Move(exportServices));
 
         EditorMcpService::Services mcp;

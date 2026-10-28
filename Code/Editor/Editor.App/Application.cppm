@@ -179,7 +179,10 @@ export namespace editor::app
         void OnShutdown(runtime::IApplicationHost& host) override;
 
         /// A toast, as every notice and job result is said.
-        void ShowToast(editor::NoticeKind kind, StringView message) { m_window.ShowToast(kind, message); }
+        void ShowToast(editor::NoticeKind kind, StringView message, StringView actionText = {}, Function<void()> action = {})
+        {
+            m_window.ShowToast(kind, message, actionText, Move(action));
+        }
 
     private:
         void ReportStartup(StringView status, f32 progress);

@@ -57,7 +57,7 @@ export namespace editor::app
             bool AlwaysExported = false; ///< an export takes it (or all a group holds) whatever reaches it
             bool Group = false;
             bool StateColumns = true; ///< a row's badge and Always Export columns: the browser's; a picker's rows show neither
-            RefPtr<gui::Drawable> Picture; ///< its thumbnail, a tile's in place of its glyph; null: none yet
+            RefPtr<gui::Drawable> Picture; ///< its thumbnail, in its glyph's place (a tile's and a row's); null: none yet
         };
 
         explicit AssetCell(bool tile) : m_tile(tile)
@@ -117,13 +117,23 @@ export namespace editor::app
             m_glyphClass = shown.GlyphClass;
             if (!m_glyphClass.IsEmpty())
                 m_glyph->AddClass(m_glyphClass.AsView());
-            m_glyph->SetSource(shown.Glyph);
-            // A tile shows the asset's picture once there is one, its type's glyph till then.
+            // A tile shows the asset's picture once there is one, its type's glyph till then; a
+            // row, the picture small in its icon's place.
             const bool pictured = m_picture && shown.Picture;
             if (m_picture)
             {
                 m_picture->SetDrawable(shown.Picture);
                 m_picture->SetDisplayed(pictured);
+            }
+            if (!m_tile && shown.Picture)
+            {
+                m_glyph->SetDrawable(shown.Picture);
+                m_glyph->AddClass(u8"row-picture");
+            }
+            else
+            {
+                m_glyph->RemoveClass(u8"row-picture");
+                m_glyph->SetSource(shown.Glyph);
             }
             m_glyph->SetDisplayed(!pictured);
             m_name->SetText(shown.Name.AsView());
@@ -168,7 +178,10 @@ export namespace editor::app
             return m_tile ? m_exportMark->IsDisplayed() : m_exportIcon->HasClass(u8"on");
         }
         [[nodiscard]] bool IsTile() const noexcept { return m_tile; }
-        [[nodiscard]] bool ShowsPicture() const { return m_picture && m_picture->IsDisplayed() && m_picture->GetDrawable() != nullptr; }
+        [[nodiscard]] bool ShowsPicture() const
+        {
+            return m_tile ? m_picture && m_picture->IsDisplayed() && m_picture->GetDrawable() != nullptr : m_glyph->HasClass(u8"row-picture");
+        }
         [[nodiscard]] gui::Label* NameLabel() const noexcept { return m_name.Get(); }
         [[nodiscard]] gui::Label* KindLabel() const noexcept { return m_kind.Get(); }
 

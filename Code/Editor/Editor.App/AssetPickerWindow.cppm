@@ -9,7 +9,8 @@
 // kept with the project), the current value lit, the search over every group while it has text (by
 // name or a guid's start, as the browser's; each match saying where it lives). Enter or a double
 // click picks; Esc or its close keeps the value (a slot's own clear sets nothing, so a pick can
-// never clear it by a slip). Its
+// never clear it by a slip). A row's menu pins it as a favourite, or unpins it; a whole guid of an
+// asset the slot does not take says so. Its
 // cells are the browser's (AssetCell); it opens in the window's middle, as every picker does.
 module;
 #include "Core/Prelude.h"
@@ -93,6 +94,12 @@ export namespace editor::app
                 m_list->SetRowFactory(Move(rows));
                 m_list->SetModel(&m_model);
                 m_list->SetOnActivated([self](gui::ModelIndex index) { self->PickRow(index.Row); });
+                (void)m_list->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
+                                               {
+                                                   const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                                   self->ShowRowMenu(self->m_list->ItemAt(at), at);
+                                                   e.Handled = true;
+                                               });
             }
             if (auto* tiles = Find<gui::Button>(u8"asset-picker-tiles"))
                 tiles->SetOnClick([self]() { self->SetTiles(true); });
@@ -128,7 +135,7 @@ export namespace editor::app
             if (m_services.context != nullptr)
                 m_thumbnails = m_services.context->AddThumbnailListener([self](const Guid&)
                                                                         {
-                                                                            if (self->IsOpen() && self->m_tiles)
+                                                                            if (self->IsOpen())
                                                                                 self->m_model.Changed();
                                                                         });
         }
@@ -231,6 +238,27 @@ export namespace editor::app
                 }
             return false;
         }
+        /// A row's menu at `at` (the list's space): Pin as Favourite, or Unpin Favourite. No row, or
+        /// no context: none.
+        void ShowRowMenu(i32 row, Float2 at)
+        {
+            if (m_list == nullptr || m_services.context == nullptr || row < 0 || static_cast<usize>(row) >= m_rows.Size())
+                return;
+            const Guid id = m_rows[static_cast<usize>(row)]->Id();
+            AssetPickerWindow* self = this;
+            m_menu = MakeRef<gui::Menu>(m_allocator);
+            (void)m_menu->AddItem(m_services.context->IsFavorite(id) ? StringView(u8"Unpin Favourite") : StringView(u8"Pin as Favourite"), [self, id]()
+                                  {
+                                      self->m_services.context->ToggleFavorite(id);
+                                      if (self->m_source == kFavourites && self->m_query.IsEmpty())
+                                          self->BuildRows(); // it joins or leaves the rows
+                                      else
+                                          self->m_model.Changed(); // its star
+                                  });
+            m_menu->Open(*m_list, at);
+        }
+        /// The row menu, while it is open.
+        [[nodiscard]] gui::Menu* RowMenu() const noexcept { return m_menu && m_menu->IsOpen() ? m_menu.Get() : nullptr; }
         /// Picks the lit row; with none lit, nothing.
         void PickLit() { PickRow(m_list != nullptr ? m_list->GetSelectedItem() : -1); }
         void Step(i32 by)
@@ -272,6 +300,8 @@ export namespace editor::app
         }
         [[nodiscard]] StringView Where() const { return m_where != nullptr ? m_where->GetText() : StringView{}; }
         [[nodiscard]] StringView Hint() const { return m_hint != nullptr ? m_hint->GetText() : StringView{}; }
+        /// What it says with no rows to show; empty while it shows rows.
+        [[nodiscard]] StringView State() const { return m_state != nullptr && m_state->IsDisplayed() ? m_state->GetText() : StringView{}; }
         [[nodiscard]] StringView LitName() const
         {
             const i32 lit = m_list != nullptr ? m_list->GetSelectedItem() : -1;
@@ -480,13 +510,25 @@ export namespace editor::app
             if (m_state != nullptr)
             {
                 m_state->SetDisplayed(m_rows.IsEmpty());
-                if (!m_query.IsEmpty())
+                if (const content::Instance* other = WrongTypeNamed(); other != nullptr)
+                    m_state->SetText(Format(u8"'{}' is a {}, which this slot does not take.", other->Name(), AssetsView::KindOf(other->TypeName())).AsView());
+                else if (!m_query.IsEmpty())
                     m_state->SetText(Format(u8"No {} match \"{}\".", Lowered(Noun()), m_query).AsView());
                 else if (m_source == kFavourites)
                     m_state->SetText(Format(u8"No favourite {}: star one in the Assets panel.", Lowered(Noun())).AsView());
                 else
                     m_state->SetText(Format(u8"No {} here.", Lowered(Noun())).AsView());
             }
+        }
+        // The asset a search's whole guid names when the slot does not take its type; else null.
+        [[nodiscard]] const content::Instance* WrongTypeNamed() const
+        {
+            Guid id;
+            content::ContentDatabase* db = Sources();
+            if (db == nullptr || !editor::FilterAsGuid(m_query.AsView(), id))
+                return nullptr;
+            const content::Instance* named = db->GetInstance(id);
+            return named != nullptr && !Takes(*named) ? named : nullptr;
         }
         void Collect(content::Group& group, bool deep)
         {
@@ -523,8 +565,8 @@ export namespace editor::app
                 shown.Glyph = String(u8"Editor/Icons/file.svg");
             shown.StateColumns = false; // a pick asks neither its cook nor its export
             shown.Favourite = m_services.context != nullptr && m_services.context->IsFavorite(instance.Id());
-            if (m_tiles && m_services.picture)
-                shown.Picture = m_services.picture(instance.Id());
+            if (m_services.picture)
+                shown.Picture = m_services.picture(instance.Id()); // a tile's, and a row's small
             cell->Show(shown);
             // Hovered, the whole of where it lives (a row's is cut to fit) and what it is.
             cell->SetTooltip(Format(u8"{}/{} ({})", ShownPath(instance.OwningGroup()), instance.Name(), AssetsView::KindOf(instance.TypeName())).AsView());
@@ -598,6 +640,7 @@ export namespace editor::app
         Array<Source> m_sources; // by the tree's node
         Array<content::Instance*> m_rows;
         Model m_model;
+        RefPtr<gui::Menu> m_menu; // a row's
         AssetPickRequest m_request;
         String m_query;
         usize m_source = kAll;

@@ -498,6 +498,7 @@ combobox > listbox::selection { border-radius: var(--radius-small); }
 
 /* === Type icons: tinted by category where lists are scanned === */
 .row-icon { width: var(--icon-size); height: var(--icon-size); image-color: var(--icon); flex-shrink: 0; }
+.row-icon.row-picture { image-color: #ffffff; object-fit: cover; border-radius: 2px; } /* an asset's thumbnail, untinted */
 /* A class per category, as the type's reflected category names it (Rendering, Physics...). */
 .cat-rendering { image-color: var(--category-rendering); }
 .cat-physics { image-color: var(--category-physics); }

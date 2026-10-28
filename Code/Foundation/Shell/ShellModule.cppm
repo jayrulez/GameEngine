@@ -136,6 +136,12 @@ export namespace foundation::shell
 
         [[nodiscard]] virtual core::u32 Width() const noexcept = 0;
         [[nodiscard]] virtual core::u32 Height() const noexcept = 0;
+        // What the window draws into, in pixels: Width() and Height() are in the OS's window units,
+        // which on a scaled display (Windows at 175%, a Retina screen) are fewer than its pixels. A
+        // swapchain is made at this size, and a GUI lays out to it; the pointer arrives in window
+        // units and is scaled by the ratio of the two.
+        [[nodiscard]] virtual core::u32 PixelWidth() const noexcept = 0;
+        [[nodiscard]] virtual core::u32 PixelHeight() const noexcept = 0;
 
         // Top-left position in screen coordinates (the same global frame the OS uses). For a
         // single-window app this is just where the window landed; multi-window / dockable code

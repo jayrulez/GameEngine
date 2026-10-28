@@ -53,6 +53,8 @@ namespace
         [[nodiscard]] u32 Id() const noexcept override { return 1; }
         [[nodiscard]] u32 Width() const noexcept override { return 100; }
         [[nodiscard]] u32 Height() const noexcept override { return 100; }
+        [[nodiscard]] u32 PixelWidth() const noexcept override { return 100; }
+        [[nodiscard]] u32 PixelHeight() const noexcept override { return 100; }
         [[nodiscard]] i32 X() const noexcept override { return 0; }
         [[nodiscard]] i32 Y() const noexcept override { return 0; }
         void SetPosition(i32, i32) override {}

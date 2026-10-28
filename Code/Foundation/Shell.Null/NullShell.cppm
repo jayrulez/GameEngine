@@ -35,6 +35,10 @@ export namespace foundation::shell
         [[nodiscard]] core::u32 Id() const noexcept override { return m_id; }
         [[nodiscard]] core::u32 Width() const noexcept override { return m_width; }
         [[nodiscard]] core::u32 Height() const noexcept override { return m_height; }
+        // As many pixels as window units, unless a test gives it a pixel density (a scaled display).
+        [[nodiscard]] core::u32 PixelWidth() const noexcept override { return static_cast<core::u32>(static_cast<core::f32>(m_width) * m_pixelDensity + 0.5f); }
+        [[nodiscard]] core::u32 PixelHeight() const noexcept override { return static_cast<core::u32>(static_cast<core::f32>(m_height) * m_pixelDensity + 0.5f); }
+        void SetPixelDensity(core::f32 density) noexcept { m_pixelDensity = density > 0.0f ? density : 1.0f; }
         [[nodiscard]] core::i32 X() const noexcept override { return m_x; }
         [[nodiscard]] core::i32 Y() const noexcept override { return m_y; }
         void SetPosition(core::i32 x, core::i32 y) override
@@ -93,6 +97,7 @@ export namespace foundation::shell
         core::u32 m_id;
         core::u32 m_width;
         core::u32 m_height;
+        core::f32 m_pixelDensity = 1.0f; // pixels a window unit (SetPixelDensity)
         core::i32 m_x = 0;
         core::i32 m_y = 0;
         bool m_open = true;

@@ -39,8 +39,10 @@ export namespace foundation::gui
         /// Bound to the window it is in: `renderer` draws that window's GUI (null: in no window, its
         /// last let go), `input` and `windowId` its input surface's.
         virtual void Bind(rhi::Device& device, vg::renderer::VGRenderer* renderer, shell::IInputManager* input, u32 windowId) = 0;
-        /// Where its node lies in its window, in the window's pixels, and the window's size.
-        virtual void Place(Rectangle windowPixels, Float2 windowSize) = 0;
+        /// Where its node lies in its window: in the window's pixels (what it draws to) and in the
+        /// window's units (where the pointer arrives; fewer on a scaled display), and the window's
+        /// size in its units (where fingers land).
+        virtual void Place(Rectangle windowPixels, Rectangle windowUnits, Float2 windowSize) = 0;
         /// Its drawing, on its window's frame, before that window's GUI is drawn.
         virtual void Record(rhi::CommandEncoder& encoder, i32 frameIndex) = 0;
         /// The input surface the host's content router gates (null until bound).

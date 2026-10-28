@@ -246,8 +246,8 @@ export namespace foundation::graphics
                      core::Array<rhi::Fence*>&& fences) noexcept
             : m_device(&device), m_window(&window), m_surface(surface), m_swapChain(swapChain),
               m_pools(static_cast<core::Array<rhi::CommandPool*>&&>(pools)),
-              m_fences(static_cast<core::Array<rhi::Fence*>&&>(fences)), m_width(window.Width()),
-              m_height(window.Height())
+              m_fences(static_cast<core::Array<rhi::Fence*>&&>(fences)), m_width(window.PixelWidth()),
+              m_height(window.PixelHeight())
         {
             m_fenceValues.Resize(m_fences.Size(), 0ull);
         }
@@ -415,8 +415,8 @@ export namespace foundation::graphics
             }
 
             rhi::SwapChainDesc sd{};
-            sd.width = window.Width();
-            sd.height = window.Height();
+            sd.width = window.PixelWidth(); // the drawable's pixels, not the OS's window units
+            sd.height = window.PixelHeight();
             sd.format = desc.format;
             sd.presentMode = desc.presentMode;
             sd.bufferCount = desc.bufferCount;
@@ -522,8 +522,8 @@ export namespace foundation::graphics
 
     inline bool RenderWindow::SyncSize()
     {
-        const core::u32 nw = m_window->Width();
-        const core::u32 nh = m_window->Height();
+        const core::u32 nw = m_window->PixelWidth();
+        const core::u32 nh = m_window->PixelHeight();
         if (nw == 0 || nh == 0)
         {
             return false;

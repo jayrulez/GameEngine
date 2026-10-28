@@ -195,7 +195,7 @@ export namespace foundation::gui
                 m_surface->SetWindow(windowId);
             Invalidate();
         }
-        void Place(Rectangle windowPixels, Float2 windowSize) override
+        void Place(Rectangle windowPixels, Rectangle windowUnits, Float2 windowSize) override
         {
             // The targets follow the node in device pixels, unless the content has a size of its own.
             const u32 width = m_fixedWidth > 0 ? m_fixedWidth : static_cast<u32>(Max(1.0f, windowPixels.width + 0.5f));
@@ -205,7 +205,7 @@ export namespace foundation::gui
             if (!m_surface)
                 return;
             m_surface->SetWindowSize(windowSize);
-            PlaceSurface(windowPixels);
+            PlaceSurface(windowUnits); // the pointer arrives in window units
         }
         void Record(rhi::CommandEncoder& encoder, i32 frameIndex) override
         {

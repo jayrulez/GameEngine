@@ -502,6 +502,70 @@ TEST_CASE("gui.hosting: a press's release reaches its window though the pointer 
 }
 
 
+TEST_CASE("gui.hosting: on a scaled display the GUI fills the window's pixels, and the pointer in window units lands where it shows")
+{
+    DrivenShell shellDriven;
+    // 175%: the OS counts the window in units, each 1.75 pixels (a 4K screen's 3840 is 2194 units).
+    auto& window = *static_cast<shell::NullWindow*>(shellDriven.MainWindow());
+    window.Resize(800, 600);
+    window.SetPixelDensity(1.75f);
+    UniquePtr<graphics::GraphicsDevice> device = graphics::CreateNullGraphicsDevice(2).Value();
+    rhi::ShaderModule* vs = MakeModule(*device->Raw());
+    rhi::ShaderModule* fs = MakeModule(*device->Raw());
+    {
+        UniquePtr<graphics::RenderWindow> main = device->CreateRenderWindow(window, graphics::RenderWindowDesc{}).Value();
+        CHECK(main->Swap()->Width() == 1400u); // the swapchain is the window's pixels
+        CHECK(main->Swap()->Height() == 1050u);
+        VgShaderSet shaders;
+        shaders.Vertex = vs;
+        shaders.Fragment = fs;
+        UniquePtr<GuiHost> host = MakeUnique<GuiHost>(DefaultAllocator(), DefaultAllocator(), *device, shellDriven, nullptr, shaders);
+        RefPtr<SceneRoot> root = MakeRef<SceneRoot>(DefaultAllocator(), host->ContextRef());
+        // A panel in the bottom right quarter of what the root lays out.
+        RefPtr<Panel> panel = MakeRef<Panel>(DefaultAllocator());
+        panel->EditLayoutStyle([](LayoutStyle& s) {
+            s.Placement = Position::Absolute;
+            s.Left = LayoutLength::Px(1050.0f);
+            s.Top = LayoutLength::Px(787.0f);
+            s.Width = LayoutLength::Px(350.0f);
+            s.Height = LayoutLength::Px(263.0f);
+        });
+        root->AddChild(panel.Get());
+        int downs = 0;
+        panel->AddEventListener(EventType::MouseDown, [&](const Event&) { ++downs; });
+        host->AttachWindow(*main, root);
+        CHECK(root->GetViewportSize().x == doctest::Approx(1400.0f)); // all of it, not the 800 units' corner
+        CHECK(root->GetViewportSize().y == doctest::Approx(1050.0f));
+        DrivenMouse& mouse = shellDriven.input.mouse;
+        const u32 id = main->Window().Id();
+        const auto frame = [&](f32 x, f32 y, bool down, bool edge)
+        {
+            shellDriven.input.hover = id;
+            mouse.x = x;
+            mouse.y = y;
+            mouse.pressed = edge && down;
+            mouse.released = edge && !down;
+            mouse.down = down;
+            host->Update(1.0f / 60.0f);
+            device->AdvanceFrame();
+        };
+        // The pointer at (700, 525) units is (1225, 919) pixels: on the panel.
+        frame(700.0f, 525.0f, false, false);
+        frame(700.0f, 525.0f, true, true);
+        CHECK(downs == 1);
+        frame(700.0f, 525.0f, false, true);
+        // At (500, 400) units it is (875, 700) pixels: above and left of it, though in units the
+        // panel's own numbers would have held it.
+        frame(500.0f, 400.0f, false, false);
+        frame(500.0f, 400.0f, true, true);
+        CHECK(downs == 1);
+        host->DetachWindow(*main);
+        host.Reset();
+    }
+    device->Raw()->DestroyShaderModule(fs);
+    device->Raw()->DestroyShaderModule(vs);
+}
+
 namespace
 {
     // Hosted content that changes as it is placed (a viewport made again at a new size): it
@@ -512,7 +576,7 @@ namespace
         explicit ResizingContent(Node& node) : m_node(node) {}
         Node* HostedNode() override { return &m_node; }
         void Bind(rhi::Device&, foundation::vg::renderer::VGRenderer*, shell::IInputManager*, u32) override {}
-        void Place(Rectangle, Float2) override
+        void Place(Rectangle, Rectangle, Float2) override
         {
             if (resizeNext)
             {
@@ -564,7 +628,7 @@ namespace
             if (input != nullptr && windowId != 0)
                 m_surface = MakeUnique<shell::InputSurface>(DefaultAllocator(), input, windowId, ContentFit{});
         }
-        void Place(Rectangle, Float2) override {}
+        void Place(Rectangle, Rectangle, Float2) override {}
         void Record(rhi::CommandEncoder&, i32) override {}
         shell::InputSurface* HostedSurface() override { return m_surface.Get(); }
 

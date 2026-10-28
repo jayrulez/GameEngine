@@ -183,6 +183,22 @@ namespace foundation::shell
         }
     }
 
+    core::u32 SDL3Window::PixelWidth() const noexcept
+    {
+        int w = 0, h = 0;
+        if (m_window == nullptr || !SDL_GetWindowSizeInPixels(m_window, &w, &h) || w <= 0)
+            return m_width;
+        return static_cast<core::u32>(w);
+    }
+
+    core::u32 SDL3Window::PixelHeight() const noexcept
+    {
+        int w = 0, h = 0;
+        if (m_window == nullptr || !SDL_GetWindowSizeInPixels(m_window, &w, &h) || h <= 0)
+            return m_height;
+        return static_cast<core::u32>(h);
+    }
+
     core::f32 SDL3Window::ContentScale() const noexcept
     {
         const float s = (m_window != nullptr) ? SDL_GetWindowDisplayScale(m_window) : 1.0f;

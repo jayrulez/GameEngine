@@ -230,7 +230,7 @@ export namespace foundation::gui
             data->DrawFormat = window.Swap() == nullptr ? rhi::TextureFormat::RGBA8UnormSrgb
                                : data->Encoded         ? window.Swap()->AlternateViewFormat()
                                                        : window.Swap()->Format();
-            const u32 width = window.Window().Width(), height = window.Window().Height();
+            const u32 width = window.Window().PixelWidth(), height = window.Window().PixelHeight();
             data->Targets = MakeTargets(data->DrawFormat, width, height);
             const bool targets = data->Targets.Get() != nullptr;
             data->Multisampled = targets;
@@ -275,7 +275,7 @@ export namespace foundation::gui
             pane->Styles = styles;
             const Rectangle area = AreaOf(window, region);
             pane->Surface = MakeUnique<shell::InputSurface>(m_allocator, m_shell.Input(), window.Window().Id(),
-                                                            ContentFit{area, Float2{area.width, area.height}, FitMode::Stretch});
+                                                            ContentFit{InWindowUnits(window, area), Float2{area.width, area.height}, FitMode::Stretch});
             m_router->AddSurface(pane->Surface.Get());
             pane->Bridge = MakeUnique<GuiInputBridge>(m_allocator, root->GetEventDispatcher());
             pane->Bridge->SetTextInputTarget(&window.Window());
@@ -380,8 +380,10 @@ export namespace foundation::gui
             const auto under = [&](const Attached& attached) -> SceneRoot*
             {
                 const shell::IWindow& window = attached.Window->Window();
-                const Float2 at{screen.x - static_cast<f32>(window.X()), screen.y - static_cast<f32>(window.Y())};
-                if (at.x < 0.0f || at.y < 0.0f || at.x >= static_cast<f32>(window.Width()) || at.y >= static_cast<f32>(window.Height()) ||
+                // The screen is in window units; the panes are in the window's pixels.
+                const Float2 ratio = PixelsPerUnit(window);
+                const Float2 at{(screen.x - static_cast<f32>(window.X())) * ratio.x, (screen.y - static_cast<f32>(window.Y())) * ratio.y};
+                if (at.x < 0.0f || at.y < 0.0f || at.x >= static_cast<f32>(window.PixelWidth()) || at.y >= static_cast<f32>(window.PixelHeight()) ||
                     window.IsMinimized())
                     return nullptr;
                 for (usize i = attached.Data->Panes.Size(); i-- > 0;) // the pane drawn last is on top
@@ -419,7 +421,9 @@ export namespace foundation::gui
                     {
                         const shell::IWindow& window = attached.Window->Window();
                         const Rectangle area = AreaOf(*attached.Window, pane->Region);
-                        screen = Float2{static_cast<f32>(window.X()) + area.x + local.x, static_cast<f32>(window.Y()) + area.y + local.y};
+                        const Float2 ratio = PixelsPerUnit(window); // the pane's pixels back to window units
+                        screen = Float2{static_cast<f32>(window.X()) + (area.x + local.x) / ratio.x,
+                                        static_cast<f32>(window.Y()) + (area.y + local.y) / ratio.y};
                         return true;
                     }
             return false;
@@ -681,11 +685,27 @@ export namespace foundation::gui
             GuiWindowData* Data = nullptr; // the RenderWindow's
         };
 
+        // A pane's area in its window's pixels (a region is given in them too): all of the window by
+        // default. The GUI lays out to it and draws into the swapchain at the same size, so a scaled
+        // display (more pixels than window units) is filled, not drawn into a corner.
         [[nodiscard]] static Rectangle AreaOf(graphics::RenderWindow& window, Rectangle region) noexcept
         {
             if (region.width > 0.0f && region.height > 0.0f)
                 return region;
-            return Rectangle{0.0f, 0.0f, static_cast<f32>(window.Window().Width()), static_cast<f32>(window.Window().Height())};
+            return Rectangle{0.0f, 0.0f, static_cast<f32>(window.Window().PixelWidth()), static_cast<f32>(window.Window().PixelHeight())};
+        }
+        // How many of the window's pixels a window unit holds, across and down (1 on an unscaled display).
+        [[nodiscard]] static Float2 PixelsPerUnit(const shell::IWindow& window) noexcept
+        {
+            const f32 w = static_cast<f32>(window.Width());
+            const f32 h = static_cast<f32>(window.Height());
+            return Float2{w > 0.0f ? static_cast<f32>(window.PixelWidth()) / w : 1.0f, h > 0.0f ? static_cast<f32>(window.PixelHeight()) / h : 1.0f};
+        }
+        // A pane's area in window units, where the pointer arrives.
+        [[nodiscard]] static Rectangle InWindowUnits(graphics::RenderWindow& window, Rectangle area) noexcept
+        {
+            const Float2 ratio = PixelsPerUnit(window.Window());
+            return Rectangle{area.x / ratio.x, area.y / ratio.y, area.width / ratio.x, area.height / ratio.y};
         }
         // A window's multisampled targets at `width` x `height`; null when the device takes none.
         [[nodiscard]] UniquePtr<vg::renderer::VGPassTargets> MakeTargets(rhi::TextureFormat format, u32 width, u32 height)
@@ -770,7 +790,8 @@ export namespace foundation::gui
                     continue; // its targets kept for when it shows again
                 const Rectangle pane = PaneArea(*root);
                 const Rect bounds = node->GetScreenBounds(); // the root's device pixels
-                hosted.Content->Place(Rectangle{pane.x + bounds.x, pane.y + bounds.y, bounds.width, bounds.height},
+                const Rectangle pixels{pane.x + bounds.x, pane.y + bounds.y, bounds.width, bounds.height};
+                hosted.Content->Place(pixels, InWindowUnits(*window, pixels),
                                       Float2{static_cast<f32>(window->Window().Width()), static_cast<f32>(window->Window().Height())});
             }
             m_contentRouter->Update();
@@ -876,8 +897,10 @@ export namespace foundation::gui
                 const Float2 size{static_cast<f32>(window.Window().Width()), static_cast<f32>(window.Window().Height())};
                 for (const UniquePtr<GuiWindowData::Pane>& pane : pointer->Data->Panes)
                 {
+                    // The pointer arrives in window units; the pane lays out in pixels, so the surface
+                    // maps the one to the other.
                     const Rectangle area = AreaOf(window, pane->Region);
-                    pane->Surface->SetRegion(area);
+                    pane->Surface->SetRegion(InWindowUnits(window, area));
                     pane->Surface->SetWindowSize(size); // places fingers
                     pane->Surface->SetContentSize(Float2{area.width, area.height});
                     if (!m_pointerFilter || !m_pointerFilter(*pane->Root, *pane->Surface))

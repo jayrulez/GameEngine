@@ -64,6 +64,8 @@ namespace
         [[nodiscard]] core::u32 Id() const noexcept override { return 1; }
         [[nodiscard]] core::u32 Width() const noexcept override { return 800; }
         [[nodiscard]] core::u32 Height() const noexcept override { return 600; }
+        [[nodiscard]] core::u32 PixelWidth() const noexcept override { return 800; }
+        [[nodiscard]] core::u32 PixelHeight() const noexcept override { return 600; }
         [[nodiscard]] core::i32 X() const noexcept override { return 0; }
         [[nodiscard]] core::i32 Y() const noexcept override { return 0; }
         void SetPosition(core::i32, core::i32) override {}

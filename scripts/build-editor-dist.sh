@@ -6,8 +6,8 @@
 # build-editor-dist.sh - assemble a portable, downloadable EDITOR distribution for Linux.
 #
 # The result is an unzip-and-run folder: the Tools.Editor executable, its runtime sidecars
-# (DXC - the editor cooks/recompiles shaders), the Data root (Assets + the .dataroot marker)
-# beside the exe. Data/Shaders holds the cooked engine shader pack (shaders.dpak, the path the
+# (DXC - the editor cooks/recompiles shaders), the Data root (Assets, the editor's own interface
+# under Editor, and the .dataroot marker) beside the exe. Data/Shaders holds the cooked engine shader pack (shaders.dpak, the path the
 # ShaderSystemHost opens), the shader SOURCES (an export cooks the game's pack from them) and the
 # .pack-first marker, so this editor starts from the pack and not by compiling the sources.
 # FindDataRoot() discovers Data/ beside the exe, and $ORIGIN on the exe's RUNPATH finds the
@@ -103,8 +103,12 @@ SHADERS_OUT="$(cd "$DIST/Data/Shaders" && pwd)"
 echo "An editor distribution: start from shaders.dpak; the sources are for cooking." \
     > "$DIST/Data/Shaders/.pack-first"
 
-# 5. Stage the rest of the Data root: Assets + the marker. Skip Data/Output (build output).
+# 5. Stage the rest of the Data root: Assets, the editor's interface (Data/Editor: its sheets,
+#    page markup and icons, read at startup; without its frame the editor runs with no interface) + the
+#    marker. Skip Data/Output (build output) and Data/Editor/Mock (the GUISandbox's design mock).
 cp -r "Data/Assets" "$DIST/Data/Assets"
+cp -r "Data/Editor" "$DIST/Data/Editor"
+rm -rf "$DIST/Data/Editor/Mock"
 cp "Data/.dataroot" "$DIST/Data/.dataroot"
 
 # 6. A short run note next to the binary.

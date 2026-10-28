@@ -9,7 +9,7 @@
   The Windows counterpart of build-editor-dist.sh. Produces an unzip-and-run folder:
   Tools.Editor.exe + its runtime DLLs (dxcompiler.dll, SDL3.dll - staged by the build's
   util_copy_runtime_deps into Bin\...\ and listed in Tools.Editor.runtime-libs), and the Data root
-  (Assets + .dataroot) beside the exe. Data\Shaders holds the cooked shader pack (shaders.dpak, the
+  (Assets, the editor's interface under Editor, and .dataroot) beside the exe. Data\Shaders holds the cooked shader pack (shaders.dpak, the
   path the runtime opens), the shader SOURCES (an export cooks the game's pack from them) and the
   .pack-first marker, so this editor starts from the pack and not by compiling the sources.
   FindDataRoot() discovers Data\ beside the exe; Windows searches the exe directory for bare DLLs.
@@ -116,6 +116,10 @@ Get-ChildItem "Data\Shaders" -Recurse -File -Include *.hlsl, *.hlsli | ForEach-O
 Set-Content (Join-Path $Shaders ".pack-first") "An editor distribution: start from shaders.dpak; the sources are for cooking."
 
 Copy-Item -Recurse "Data\Assets"   (Join-Path $Out "Data\Assets")
+# The editor's interface (its sheets, page markup and icons, read at startup), less the GUISandbox's
+# design mock.
+Copy-Item -Recurse "Data\Editor"   (Join-Path $Out "Data\Editor")
+Remove-Item -Recurse -Force (Join-Path $Out "Data\Editor\Mock")
 Copy-Item          "Data\.dataroot" (Join-Path $Out "Data\.dataroot")
 
 @"

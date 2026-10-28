@@ -812,6 +812,89 @@ The layers:
    stop on spike; the MCP profiler and layout tools as before; the old panel's files deleted.
    McpGuide in step where a tool's text changes.
 
+### 5.6 X8, the parity check and the swap
+
+Checked on 2026-10-27, the old editor read at 4fe177db2 against the new one (the files in a
+source list only), surface by surface: the frame, the scene page, the asset pages and the fields.
+The user's ruling for the swap: the old editor goes, no other library does yet (foundation.ui,
+Engine.UI, UI.Toolkit and Profiler.UI stay; DefaultApp's overlay stays on Profiler.UI).
+
+**What holds.** Every old action id (29) with its chord, every old MCP tool (the editor's 78 less
+`project_create` and `project_open`, the stdio host's), every Tools.Editor flag, every menu item,
+dialog and gate; every asset type's page (GameUI's apart, ruling 10) and every thumbnail
+generator; all 25 old scene actions. The sample projects open and play in the Game tab from a
+fresh copy: Sky Hopper, PaperKid, Snowline, Lamplight, Shader Gallery and Masquerade, no error
+in the log (NativeSample needs the shared build for its module, as before). The playthroughs are
+the user's.
+
+**The gaps**, old behaviour the new editor lacks or does worse (old paths at 4fe177db2):
+
+- The fields, shared by the inspector and the pages:
+  1. A `boneName` string offers the skeleton's bones and "(not in the skeleton)"
+     (Editor.Scene/InspectorViewImpl.cpp:2416); the IK and aim fields are plain text now.
+  2. An asset slot shows the asset's thumbnail, the type's glyph only without one
+     (Editor.App/ResourceRefEditorImpl.cpp:155).
+  3. An asset or entity dropped on a list appends to it, a wrong type refused with the types it
+     takes (Editor.App/ContainerListEditorImpl.cpp:26-76): materials, reflected lists, project
+     fonts, particle materials, behaviours.
+  4. A component with no reflection shows as a section under its serialization id
+     (InspectorViewImpl.cpp:1063); it is skipped now.
+  5. A `visibleWhen` with no name or no value is refused, as the old parser did.
+- The frame:
+  6. The Export finished toast stays, with Open Folder (Editor.App/ApplicationImpl.cpp:1544).
+  7. The asset picker: Pin and Unpin on a row's menu; a typed guid of the wrong type says so;
+     thumbnails in list mode too (AssetPickerDialogImpl.cpp:139, 156, 295).
+  8. The assets browser: a slow second click renames; a whole guid typed selects its asset
+     (AssetsView.cppm:330, AssetsViewImpl.cpp:733).
+- The scene page:
+  9. Paste Component on the inspector for any selected entity, not only on a header's menu
+     (InspectorViewImpl.cpp:3213).
+  10. The property animation panel: the previewed entity marked in the view
+      (PropertyAnimationPanelImpl.cpp:1450), Bind through the entity picker (:269), a clip asset
+      opened into the panel while a scene page shows (ScenePage.cppm:371), the panel's toggle on
+      the bar (ScenePageImpl.cpp:1670).
+  11. The terrain's Paint Splat lists the base layer (erase to reveal) above its layers
+      (Editor.Terrain/ToolPanelsImpl.cpp:308).
+- The pages:
+  12. Fonts: the source file relinked with Browse (Editor.Fonts/FontEditorPageImpl.cpp:571).
+  13. The Profiler: Clear (the frames dropped, the recording goes on); a counter's mean over the
+      frames chosen (Profiler.UI CounterStrip).
+  14. The graph page: Bones and Mesh toggles on the preview (the mesh hidden, its pick kept);
+      Delete on a layer's or parameter's row menu (AnimationGraphPageImpl.cpp:201, 567, 571).
+  15. The particle page's tree: a row menu (add a system or module, move up and down, delete),
+      a system renamed in place.
+  16. The input map: its totals line; each binding whose source the action's kind does not take
+      marked on its row; "Listening" said while a capture waits.
+  17. The script page names the class it compiled.
+  18. The colour picker shows the colour it opened with beside the new one.
+  19. Tools.Editor checks the thumbnail generators' counts at startup (Main.cpp:357).
+- The old tests left out of the build (Editor.Scene.Tests' SceneEditorTests, CollisionMatrixTests,
+  SettingsProfileTests, InspectorConditionTests; Editor.App.Tests' Shell, PageToolbar,
+  ContainerListEditor, EditorIcons): 20. what they checked that holds in the new editor and has no
+  test in the build gets one (the camera's dolly floor, unique names from the creators, Copy ID,
+  the tree's keys moving the selection, a new scene's sun, a profile's edits and Copy Into Scene,
+  Make Profile, the scene's bounds, the render components' attributes).
+
+**For the user to rule**: the last collision group removed now sets its bit in every mask where
+the old cleared it (deliberate in the new code, its test says the old); a material takes an
+uncooked shader with a notice where the old refused it; the cue's variants are packed where the
+old kept fixed slots; composite keys as rows, not a keyboard cross; curves and gradients edited in
+a popup, not on the row; "grid as lines" dropped; what GameUI's pages did (the .sml and .sss
+source, their live preview, tag completion on "<") is gone with them.
+
+**Found on the way, not the editor's**: a particle effect names its texture by a string
+(`textureRef`), so the scene page's first cook, of the scene's closure, leaves it out and the
+effect binds nothing until Play's cook (Snowline, Lamplight).
+
+The layers:
+1. The swap: the old editor's files deleted (the unbuilt files left in Editor.App, Editor.Scene
+   and their tests, and Editor.GameUI with its tests), the ledger and the build's comment in step.
+2. The fields (gaps 1 to 5).
+3. The frame (6 to 8).
+4. The scene page (9 to 11).
+5. The pages (12 to 19).
+6. The old tests' behaviours (20).
+
 ## 6. Tests
 
 Editor tests move from UIContext with synthetic events to GUI.Testing (Finder by selector or id,

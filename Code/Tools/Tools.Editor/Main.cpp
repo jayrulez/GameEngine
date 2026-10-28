@@ -333,6 +333,13 @@ int main(int argc, char** argv)
         editor::RegisterSkeletonEditor(app.Context(), pageServices);
         editor::RegisterAnimationGraphEditor(app.Context(), pageServices);
         editor::RegisterGenericAssetEditor(app.Context(), pageServices);
+        // The thumbnail generators' tripwire (the old editor's): each domain's registration above
+        // registers its generators too; bump a count when a domain gains one, so one that stops
+        // registering fails here rather than as icons where pictures were. Five drawn from an
+        // image (texture, font, heightfield, audio clip, splat map), eight staged in a scene (mesh,
+        // material, prefab, scene, particle effect, skeleton, model manifest, collision shape).
+        DIAGNOSTIC_ASSERT(app.Context().Thumbnails() != nullptr && app.Context().Thumbnails()->GeneratorCount() == 5);
+        DIAGNOSTIC_ASSERT(app.Context().Thumbnails() != nullptr && app.Context().Thumbnails()->SceneGeneratorCount() == 8);
         // The script cooks (idempotent by languageId; RegisterAllBuilders below registers them for
         // the cook service too): the script page's check compiles through them.
 #ifdef OPTION_HAS_ANGELSCRIPT

@@ -224,3 +224,31 @@ TEST_CASE("particles.pipeline: a version 0 asset's effect links are read onto it
     }
     (void)RemoveDirectoryRecursive(u8"scratch_pfx_v0_db");
 }
+
+TEST_CASE("particles.pipeline: an effect declares what its systems draw with as references, so a cook of it cooks them")
+{
+    ParticleEffectAsset asset;
+    ParticleEffect& fx = asset.Effect();
+    (void)fx.AddSystem(64);
+    (void)fx.AddSystem(64);
+    ParticleSystem* sparks = fx.GetSystem(0);
+    ParticleSystem* debris = fx.GetSystem(1);
+    REQUIRE(sparks != nullptr);
+    REQUIRE(debris != nullptr);
+    const Guid texture{0x11u, 0x1u};
+    const Guid mesh{0x22u, 0x2u};
+    const Guid material{0x33u, 0x3u};
+    sparks->textureRef = texture;
+    debris->meshRef = mesh;
+    debris->materialRefs.PushBack(Guid{});
+    debris->materialRefs.PushBack(material);
+    ParticleEffectAssetBuilder builder;
+    AssetBuildContext ctx{DefaultAllocator()};
+    AssetDependencies deps;
+    builder.ScanDependencies(asset, ctx, deps);
+    REQUIRE(deps.references.Size() == 3u); // the empty slot left out
+    CHECK(deps.references[0] == texture);
+    CHECK(deps.references[1] == mesh);
+    CHECK(deps.references[2] == material);
+    CHECK(deps.reads.IsEmpty()); // runtime references: an edit of them re-cooks nothing
+}

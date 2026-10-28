@@ -91,6 +91,34 @@ export namespace pipeline{
         // v6 (2026-10-27): each system its sub-emitters (the cooked resource's data version 2).
         // Bumped so stale products re-cook with the new format (the strict reader needs the new keys).
         [[nodiscard]] u32 Version() const override { return 6; }
+        // What each system draws with is a runtime REFERENCE (the factory binds it at load): its
+        // texture, its mesh and its materials, by id, or a texture by its edit-time path. Declared
+        // so a cook of the effect cooks them too (a scene's first cook reached the effect but not
+        // its texture), and asset_uses and the export's reach see them.
+        void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext& ctx, pipeline::AssetDependencies& out) override
+        {
+            const ParticleEffectAsset& pa = static_cast<const ParticleEffectAsset&>(asset);
+            const ParticleEffect& fx = pa.Effect();
+            const auto add = [&out](const Guid& id)
+            {
+                if (!id.IsNil())
+                    out.references.PushBack(id);
+            };
+            for (i32 s = 0; s < fx.SystemCount(); ++s)
+            {
+                const ParticleSystem* system = const_cast<ParticleEffect&>(fx).GetSystem(s);
+                if (system == nullptr)
+                    continue;
+                add(system->textureRef);
+                add(system->meshRef);
+                for (const Guid& material : system->materialRefs)
+                    add(material);
+                const StringView path = pa.SystemTexturePath(s);
+                if (!path.IsEmpty() && ctx.db != nullptr)
+                    if (content::Instance* named = ctx.db->GetInstance(path))
+                        add(named->Id());
+            }
+        }
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {

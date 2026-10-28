@@ -289,9 +289,17 @@ export namespace editor
         const input::Binding& binding = action.bindings[static_cast<usize>(b)];
         if (field.IsEmpty())
         {
-            // A binding: by its source; closed, its input.
+            // A binding: by its source; closed, its input, and when the action's kind does not take
+            // its source (a map the game cannot read), that said on its own row.
             info.DisplayName = String(input_map_edit::SourceTitle(binding.source));
             info.Summary = input::DescribeBinding(binding);
+            input::BindingSource valid[8];
+            const usize count = input::ValidSources(action.kind, valid);
+            bool taken = false;
+            for (usize i = 0; i < count; ++i)
+                taken = taken || valid[i] == binding.source;
+            if (!taken)
+                info.Summary += Format(u8"  (not taken by a {} action)", input_map_edit::KindTitle(action.kind)).AsView();
             return;
         }
         input_map_rows::DescribeBindingField(binding, field, info);

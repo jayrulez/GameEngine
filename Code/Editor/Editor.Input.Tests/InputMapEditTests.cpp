@@ -143,6 +143,18 @@ TEST_CASE("input map rows: an action by its name and a line, a binding by its so
     editor::DescribeInputRow(set, u8"actions.0.bindings.0", binding);
     CHECK(binding.DisplayName == SourceTitle(input::BindingSource::Composite2D));
     CHECK_FALSE(binding.Summary.IsEmpty());
+    CHECK_FALSE(binding.Summary.AsView().ContainsIgnoreCase(u8"not taken")); // an Axis2D takes four keys
+
+    // A binding whose source the action's kind does not take says so on its own row.
+    input::Action jump;
+    jump.name = String(u8"Jump");
+    jump.kind = input::ActionKind::Button;
+    jump.bindings.PushBack(keys); // four keys on a button
+    set.actions.PushBack(jump);
+    gui::PropertyInfo wrong;
+    editor::DescribeInputRow(set, u8"actions.1.bindings.0", wrong);
+    CHECK(wrong.Summary.AsView().ContainsIgnoreCase(u8"(not taken by a "));
+    set.actions.RemoveAt(1);
 
     // A four-key binding: its keys shown and captured, its single input and dead zone not.
     gui::PropertyInfo left, code, deadZone;
@@ -294,6 +306,7 @@ TEST_CASE("input map page: the sets and their actions a tree, the chosen set's r
     PageFixture f;
     REQUIRE_FALSE(f.page->LoadFailed());
     CHECK(f.page->Tree() == String(u8"Gameplay\n  Move\n  Jump\nMenu\n  Back"));
+    CHECK(f.page->Fact(u8"Holds").AsView().StartsWith(u8"2 sets, 3 actions, ")); // the old page's totals
     CHECK(f.page->ChosenSet() == 0);
     CHECK(f.page->SetRows().GetValue(u8"name", 0).AsString() == StringView(u8"Gameplay"));
     const Optional<gui::PropertyInfo> move = f.Info(u8"actions", u8"0");

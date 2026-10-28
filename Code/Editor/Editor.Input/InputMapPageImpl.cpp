@@ -264,6 +264,22 @@ namespace editor
         String error;
         const bool valid = map == nullptr || input::ValidateInputMap(*map, &error);
         SetNotice(u8"invalid", valid ? StringView{} : Format(u8"The game cannot read this map yet: {}", error).AsView());
+        // What it holds, in a line (the old page's totals).
+        if (map != nullptr)
+        {
+            usize actions = 0;
+            usize bindings = 0;
+            for (const input::ActionSet& set : map->sets)
+                for (const input::Action& action : set.actions)
+                {
+                    ++actions;
+                    bindings += action.bindings.Size();
+                }
+            const auto counted = [](usize n, StringView one, StringView many) { return Format(u8"{} {}", n, n == 1 ? one : many); };
+            SetFact(u8"Holds", Format(u8"{}, {}, {}", counted(map->sets.Size(), u8"set", u8"sets"), counted(actions, u8"action", u8"actions"),
+                                      counted(bindings, u8"binding", u8"bindings"))
+                                   .AsView());
+        }
     }
 
     void InputMapEditorPage::OnObjectChanged()

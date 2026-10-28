@@ -5,9 +5,11 @@
 // layout and draw passes and by NeedsFrame.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // BUILD_PROFILING
 import foundation.core;
 import foundation.vg;
 import foundation.gui;
+import foundation.profiler;
 
 using namespace foundation::gui;
 namespace core = foundation::core;
@@ -110,4 +112,34 @@ TEST_CASE("frame-stats: an animation that keeps a GUI drawing is named; a change
     CHECK(root->NeedsFrame());
     CHECK(stats.Reasons.Redraw);
     CHECK_FALSE(stats.Reasons.Animation);
+}
+
+TEST_CASE("frame-stats: a profiled frame times the draw's phases apart: the box, the widget's own drawing")
+{
+#if BUILD_PROFILING
+    foundation::profiler::Profiler& profiler = foundation::profiler::Profiler::Get();
+    profiler.Arm();
+    auto root = NewRoot();
+    (void)Box(*root, u8"filled");
+    StyleManager styles;
+    vg::VGContext canvas;
+    profiler.BeginFrame();
+    (void)Frame(*root, styles, canvas);
+    profiler.EndFrame();
+    const foundation::profiler::FrameRecord* frame = profiler.LatestFrame();
+    REQUIRE(frame != nullptr);
+    core::u32 draws = 0, boxes = 0, widgets = 0;
+    for (const foundation::profiler::ThreadFrame& thread : frame->threads)
+        for (const foundation::profiler::ScopeEvent& scope : thread.scopes)
+        {
+            const core::StringView name = profiler.NameOf(scope.name);
+            draws += name == SV(u8"GUI.Draw") ? 1u : 0u;
+            boxes += name == SV(u8"GUI.Draw.Box") ? 1u : 0u;
+            widgets += name == SV(u8"GUI.Draw.Widget") ? 1u : 0u;
+        }
+    profiler.Disarm();
+    CHECK(draws == 1u);
+    CHECK(boxes == 2u);   // the root's and the box's
+    CHECK(widgets == 2u);
+#endif
 }

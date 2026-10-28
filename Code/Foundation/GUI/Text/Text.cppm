@@ -13,9 +13,11 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE: a frame's text, apart in the GUI's draw
 
 export module foundation.gui:text;
 
+import foundation.profiler;
 import foundation.core;  // String, StringView, Float2, Color, Array, Max
 import foundation.fonts; // CachedFont, IFontService
 import foundation.vg;    // TextEffects
@@ -409,6 +411,7 @@ export namespace foundation::gui
         /// Draws a layout at `origin` (a field draws its own, scrolled).
         void DrawLayout(DrawContext& ctx, const TextLayout& layout, core::Float2 origin) const
         {
+            PROFILE_SCOPE("GUI.Draw.Text"); // the glyphs into the batch
             Sync();
             vg::VGContext& g = ctx.VG();
             bool anyEffects = false;
@@ -538,6 +541,7 @@ export namespace foundation::gui
             for (LayoutCache& cache : m_cache)
                 if (cache.Valid && cache.Width == maxWidth)
                     return cache.Layout;
+            PROFILE_SCOPE("GUI.TextLayout"); // a miss: shaping and breaking (in a draw, a measure or a hit test)
             LayoutCache& slot = m_cache[m_nextSlot];
             m_nextSlot = (m_nextSlot + 1) % 2;
             TextLayoutStyle style;

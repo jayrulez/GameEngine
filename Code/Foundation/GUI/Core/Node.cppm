@@ -12,9 +12,11 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE: a frame's draw, by phase
 
 export module foundation.gui:node;
 
+import foundation.profiler;
 import foundation.core; // Object, RefPtr, Array, Move, Float2
 import foundation.script; // IScriptDelegate (the script surface's event handlers)
 import foundation.vg;     // PathBuilder, ShapeBuilder (rounded clips), layers
@@ -692,8 +694,16 @@ export namespace foundation::gui
 
             const Rect local = GetLocalBounds();
 
-            m_box.DrawUnder(ctx, local, !backdropFirst);
-            OnDraw(ctx, local);
+            // The phases timed apart (what is left in GUI.Draw is the walk: culling, transforms,
+            // clips and damage).
+            {
+                PROFILE_SCOPE("GUI.Draw.Box"); // background, border, shadow, background image
+                m_box.DrawUnder(ctx, local, !backdropFirst);
+            }
+            {
+                PROFILE_SCOPE("GUI.Draw.Widget"); // what the node draws of its own (its text apart)
+                OnDraw(ctx, local);
+            }
 
             // Children clip to the box, its rounded corners included (a path clip; a host without
             // stencil fills gets the bounds' scissor).

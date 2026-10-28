@@ -21,14 +21,6 @@
   skinned mesh in its current pose (today its bind pose, the pose its CPU vertices hold); the
   instanced meshes and other drawn surfaces answering `ISceneSurfaceQuery` too.
 
-- **An icon set for the editor** (UI survey 2026-10-14): the clearest visible gap against
-  LunarSong's editor is icons, not effects: it ships 377 SVG icons; we have about 34 editor icons
-  and 10 window-chrome glyphs, so our toolbars and menus are mostly text. Draw or license a
-  consistent set (check the licence) and use it in the toolbar, menus, the asset browser and the
-  hierarchy.
-- **The editor theme gives nothing elevation** (UI survey 2026-10-14): RoundedDark puts no shadow
-  on popups, menus or floating panels, though the framework draws a good analytic shadow. Add
-  elevation to what floats.
 - **Scene and prefab thumbnails never draw** (user 2026-10-26; the old editor too): the assets
   browser and the pickers show a scene's and a prefab's icon, never a picture, while meshes and
   materials draw. The generators exist (Editor.Scene's AssetThumbnailsImpl.cpp: Prefab- and

@@ -151,3 +151,21 @@ TEST_CASE("color: a picker typed into: a hex code, a channel; its alpha hidden w
     CHECK_FALSE(bed.picker->GetAlphaStrip()->IsDisplayed());
     CHECK(bed.picker->GetColor().a == doctest::Approx(1.0f));
 }
+
+TEST_CASE("color: a picker given the colour it opened with shows it beside the new one; a click on it puts it back")
+{
+    Bed bed;
+    CHECK(bed.picker->GetOriginalSwatch() == nullptr); // none given: no comparison
+    const core::Color was{0.2f, 0.4f, 0.8f, 1.0f};
+    bed.picker->SetColor(was);
+    bed.picker->SetOriginal(was);
+    ColorSwatch* swatch = bed.picker->GetOriginalSwatch();
+    REQUIRE(swatch != nullptr);
+    CHECK(swatch->GetColor().b == doctest::Approx(0.8f));
+    bed.picker->SetColor(core::Color{1.0f, 0.0f, 0.0f, 1.0f});
+    const int before = bed.changes;
+    bed.picker->Revert();
+    CHECK(bed.changes == before + 1); // reported as a change
+    CHECK(bed.picker->GetColor().b == doctest::Approx(0.8f).epsilon(0.01));
+    CHECK(bed.picker->GetColor().r == doctest::Approx(0.2f).epsilon(0.01));
+}

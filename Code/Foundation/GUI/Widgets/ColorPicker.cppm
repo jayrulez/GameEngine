@@ -10,7 +10,8 @@
 //     objects' colours differing); a click, Return or Space reports it.
 //   - ColorPicker: a saturation and value plane, a hue strip, an alpha strip, a hex field (any CSS
 //     colour typed: #rgb, #rrggbb, #rrggbbaa, rgb(), a name) and, on the row below it, 0-255 fields
-//     for each channel. A drag
+//     for each channel; given the colour it opened with, that beside the new one over the plane,
+//     a click on it putting it back. A drag
 //     reports each step (`input`) and its end (`change`); a field reports its commit. The hue is kept
 //     where a grey or black has none, so dragging back out of the corner keeps it.
 
@@ -270,6 +271,33 @@ export namespace foundation::gui
                 s.Direction = FlexDirection::Column;
                 s.RowGap = 8.0f;
             });
+            // The colour it opened with beside the new one (shown once an owner gives it).
+            ColorPicker* owner = this;
+            m_compare = core::MakeRef<UIWidget>(MemoryAllocator());
+            m_compare->AddClass(core::StringView(u8"compare"));
+            m_compare->EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Row;
+                s.Height = LayoutLength::Px(20.0f);
+            });
+            m_was = core::MakeRef<ColorSwatch>(MemoryAllocator());
+            m_was->AddClass(core::StringView(u8"was"));
+            m_was->SetTooltip(core::StringView(u8"The colour it had: click to put it back"));
+            m_was->SetOnClick([owner]() { owner->Revert(); });
+            m_now = core::MakeRef<ColorSwatch>(MemoryAllocator());
+            m_now->AddClass(core::StringView(u8"now"));
+            m_now->SetHitTestVisible(false);
+            ColorSwatch* const halves[] = {m_was.Get(), m_now.Get()};
+            for (ColorSwatch* half : halves)
+                half->EditLayoutStyle([](LayoutStyle& s)
+                {
+                    s.Grow = 1.0f;
+                    s.Basis = LayoutLength::Px(0.0f);
+                });
+            m_compare->AddChild(m_was.Get());
+            m_compare->AddChild(m_now.Get());
+            m_compare->SetDisplayed(false);
+            AddChild(m_compare.Get());
             m_plane = core::MakeRef<ColorPickerArea>(MemoryAllocator(), *this, ColorPickerArea::Kind::Plane);
             m_plane->EditLayoutStyle([](LayoutStyle& s) { s.Height = LayoutLength::Px(140.0f); });
             AddChild(m_plane.Get());
@@ -332,10 +360,30 @@ export namespace foundation::gui
         }
         [[nodiscard]] Color GetColor() const noexcept { return FromHsv(m_hsv); }
         [[nodiscard]] const ColorHsv& GetHsv() const noexcept { return m_hsv; }
+        /// The colour it opened with, shown beside the new one (a click on it puts it back).
+        void SetOriginal(Color color)
+        {
+            m_original = color;
+            m_was->SetColor(color);
+            m_compare->SetDisplayed(true);
+        }
+        [[nodiscard]] ColorSwatch* GetOriginalSwatch() const noexcept { return m_compare->IsDisplayed() ? m_was.Get() : nullptr; }
+        /// Back to the colour it opened with, reported as a change.
+        void Revert()
+        {
+            if (!m_compare->IsDisplayed())
+                return;
+            m_hsv = ToHsv(m_original, m_hsv.H);
+            ShowFields();
+            Invalidate();
+            Report(true);
+        }
         /// Whether it edits alpha (its strip and field show).
         void SetShowsAlpha(bool shows)
         {
             m_showsAlpha = shows;
+            m_was->SetShowsAlpha(shows);
+            m_now->SetShowsAlpha(shows);
             m_alpha->SetDisplayed(shows);
             m_channels[3]->SetDisplayed(shows);
             m_channelLabels[3]->SetDisplayed(shows);
@@ -432,6 +480,7 @@ export namespace foundation::gui
                 if (i != except)
                     m_channels[i]->SetValue(static_cast<f64>(core::Clamp(channels[i], 0.0f, 1.0f) * 255.0f + 0.5f));
             m_showing = false;
+            m_now->SetColor(color);
             m_plane->Invalidate();
             m_hue->Invalidate();
             m_alpha->Invalidate();
@@ -440,6 +489,10 @@ export namespace foundation::gui
         ColorHsv m_hsv{0.0f, 0.0f, 1.0f, 1.0f};
         bool m_showsAlpha = true;
         bool m_showing = false; // the fields are being set from the colour
+        core::RefPtr<UIWidget> m_compare; // the colour it opened with beside the new one
+        core::RefPtr<ColorSwatch> m_was;
+        core::RefPtr<ColorSwatch> m_now;
+        Color m_original;
         core::RefPtr<ColorPickerArea> m_plane;
         core::RefPtr<ColorPickerArea> m_hue;
         core::RefPtr<ColorPickerArea> m_alpha;

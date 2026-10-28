@@ -689,6 +689,7 @@ export namespace foundation::gui
             ShareTextStyle(*m_popup, false);
             m_popup->GetPicker().SetShowsAlpha(m_showsAlpha);
             m_popup->GetPicker().SetColor(m_color);
+            m_popup->GetPicker().SetOriginal(m_color); // beside the new one, a click putting it back
             m_picking = false;
             m_picked = m_color;
             PopupOptions options;

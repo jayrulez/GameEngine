@@ -382,7 +382,7 @@ namespace editor
         gui::MessageBox* raw = box.Get();
         (void)box->AddEventListener(gui::EventType::Changed, [self, raw, onProceed = Move(proceed)](const gui::Event&)
                                     {
-                                        const StringView answer = raw->GetResultName().AsView();
+                                        const String answer = raw->GetResultName(); // by value: a view of the call would dangle
                                         if (answer == StringView(u8"save") && !self->m_animation->Save().IsOk())
                                             return; // it said why
                                         if (answer == StringView(u8"save") || answer == StringView(u8"discard"))

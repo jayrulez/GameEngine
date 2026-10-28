@@ -236,7 +236,7 @@ export namespace editor::app
             auto then = MakeRef<Pending>(m_allocator, foundation::core::Move(proceed));
             (void)box->AddEventListener(gui::EventType::Changed, [self, raw, then](const gui::Event&)
                                         {
-                                            const StringView answer = raw->GetResultName().AsView();
+                                            const String answer = raw->GetResultName(); // by value: a view of the call would dangle
                                             if (answer == StringView(u8"discard"))
                                                 then->proceed();
                                             else if (answer == StringView(u8"save"))

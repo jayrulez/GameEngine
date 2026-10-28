@@ -15,7 +15,7 @@ target_link_libraries(Editor.App
         Foundation::VFS Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code
         Foundation::GUI.Testing # the input tools aim as the GUI's tests do
         Foundation::Scene Foundation::Scene.Resource Engine::Scene Engine::Project # the native module's scenes carried across a reload
-        Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::UI Engine::GUI Foundation::UI.Resource # the game UI's defaults (the runtime's)
+        Foundation::Shaders.System Engine::Render Engine::DefaultApp Engine::GUI # the game GUI's defaults (the runtime's)
         Editor::Core Editor::Preview Foundation::Settings # the thumbnails' GPU stage
         Editor::ViewportTools # the viewport tools' panel seam
         Editor::Mcp Foundation::Mcp Foundation::Mcp.Http) # the MCP host: the shared engine surface over HTTP

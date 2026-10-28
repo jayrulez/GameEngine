@@ -29,7 +29,6 @@ import engine.scene;
 import foundation.scene.resource;
 import foundation.render;
 import engine.render;
-import engine.ui;
 import engine.gui;
 import foundation.messaging;
 import foundation.gui;

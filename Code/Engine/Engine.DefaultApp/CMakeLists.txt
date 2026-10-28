@@ -18,7 +18,7 @@ target_link_libraries(Engine.DefaultApp
            Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Animation.Resource
            Foundation::PropertyAnimation.Resource
            Foundation::Particles.Resource Foundation::Input.Resource Foundation::Physics.Resource
-           Foundation::Texture.Resource Foundation::Image.Resource Foundation::Model.Resource Foundation::UI.Resource Engine::UI Engine::UI.Script Foundation::UI.Gamekit
+           Foundation::Texture.Resource Foundation::Image.Resource Foundation::Model.Resource
            Foundation::Heightfield.Resource Foundation::Terrain.Resource Foundation::Vegetation.Resource
             Foundation::Net Foundation::Net.Manager Engine::Net
             Foundation::Profiler Foundation::Profiler.GUI Foundation::Policy Engine::Composition 

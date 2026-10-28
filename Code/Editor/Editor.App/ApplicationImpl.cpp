@@ -23,7 +23,6 @@ import foundation.gui; // MessageBox (About)
 import pipeline.core;
 import engine.defaultapp;
 import engine.input; // the embedded runtime's scene-input policy
-import engine.ui;
 import engine.gui;
 import editor.core;
 import editor.preview; // ThumbnailStage: staged each frame, rendered in the scene bracket
@@ -323,8 +322,6 @@ namespace editor::app
         if (m_embeddedApp->Input() != nullptr)
             m_embeddedApp->Input()->SetUnboundScenePolicy(engine::input::UnboundInputScenePolicy::ScreenTierOnly);
         // Each Game tab runs its own game in this one application, with screens of its own.
-        if (m_embeddedApp->UI() != nullptr)
-            m_embeddedApp->UI()->SetRunScreens(true);
         if (m_embeddedApp->GUI() != nullptr)
             m_embeddedApp->GUI()->SetRunScreens(true);
         m_runtimeContext.Startup();

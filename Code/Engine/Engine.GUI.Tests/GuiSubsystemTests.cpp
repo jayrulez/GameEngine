@@ -1469,3 +1469,22 @@ TEST_CASE("engine.gui: the touch guide shows the game's touch controls once a fi
             jump = label->IsVisible();
     CHECK(jump);
 }
+
+TEST_CASE("engine.gui: the GUI says it wants text input while a text field input reaches has the focus")
+{
+    Engine engine;
+    engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
+    RefPtr<UIWidget> form = MakeRef<UIWidget>(DefaultAllocator());
+    RefPtr<TextField> name = MakeRef<TextField>(DefaultAllocator());
+    name->SetSize(Float2{200.0f, 30.0f});
+    form->AddChild(name.Get());
+    REQUIRE(engine.gui->Screens()->Push(*form) != nullptr); // a pushed screen focuses its first field
+    engine.Frame();
+    CHECK(engine.gui->WantsTextInput()); // the editor's Game tab starts the window's text input on it
+    engine.gui->ScreenRoot()->GetEventDispatcher()->SetFocusNode(nullptr);
+    engine.Frame();
+    CHECK_FALSE(engine.gui->WantsTextInput());
+    engine.gui->ScreenRoot()->GetEventDispatcher()->SetFocusNode(name.Get());
+    engine.Frame();
+    CHECK(engine.gui->WantsTextInput());
+}

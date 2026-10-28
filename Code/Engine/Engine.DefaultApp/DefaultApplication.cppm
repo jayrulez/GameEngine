@@ -53,10 +53,7 @@ import engine.integration; // ScriptPhysicsContactBridge (physics contacts -> sc
 import foundation.resource;            // ResourceManager (owned or borrowed - see the preset seam)
 import foundation.content;             // IContentDatabase (preset by the entry point)
 import foundation.scene.resource;      // SceneDocument (product-type registration)
-import engine.ui;        // the game screen tier (canvases + overlay + consumption)
-import engine.ui.script;   // the `ui` script facade + its per-context service binding
 import engine.gui; // the engine's GUI on foundation.gui, beside the UI while both live (gui-lab-evolution-3.md, E9)
-import foundation.ui.gamekit; // ScreenStack (the binding points at UISubsystem::Screens())
 import engine.composition; // FullSceneComposition (the single source of truth for scene assembly)
 import foundation.audio;               // AudioEngine (owned by the audio subsystem)
 import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)
@@ -135,7 +132,6 @@ export namespace engine::runtime
         /// Preset BEFORE Configure: audio engine tuning (listener count for split-screen,
         /// voice pool sizes). Defaults suit a single-listener game.
         void SetAudioEngineSettings(const foundation::audio::AudioEngineSettings& settings);
-        [[nodiscard]] engine::ui::UISubsystem* UI() const noexcept { return m_ui; }
         /// The engine's GUI (the GUI's), there whenever the GUI is built.
         [[nodiscard]] engine::gui::GuiSubsystem* GUI() const noexcept { return m_gui; }
 
@@ -288,7 +284,6 @@ export namespace engine::runtime
         foundation::content::IContentDatabase* m_contentDatabase = nullptr;
         core::UniquePtr<foundation::resource::ResourceManager> m_ownedResources;
         engine::input::InputSubsystem* m_input = nullptr;
-        engine::ui::UISubsystem* m_ui = nullptr;
         engine::gui::GuiSubsystem* m_gui = nullptr;
         // The resolution the game draws at, fitted into the window by m_renderFit; nought draws at
         // the window's size. With it, the pointer the game and its screen UI read is in render
@@ -303,10 +298,6 @@ export namespace engine::runtime
         void UpdateFittedInput();
         // The source a game instance reads: the fitted one with a render resolution, else the shell's.
         [[nodiscard]] foundation::input::IInputSourceProvider* GameInputSource() noexcept;
-        // Backs the `ui` script facade: a binding pointing at the UISubsystem's
-        // screen-tier root + ScreenStack + a cooked-UIDocument instantiator, installed on every run
-        // context by the context configurator. App-owned (the screen tier is app-wide).
-        engine::uiscript::UiScreenScriptBinding m_uiScreenBinding;
         core::String m_dataRootOverride; // preset (SetDataRoot); empty = discover
         core::String m_dataRoot;         // resolved in Configure
         core::UniquePtr<foundation::vfs::NativeFileSystem> m_dataFileSystem; // the data mount (owned)

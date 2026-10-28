@@ -28,7 +28,6 @@ import foundation.runtime.client;
 import foundation.scene;
 import foundation.render;
 import engine.render;
-import engine.ui;  // game-UI RenderTexture canvases (live in editing viewports)
 import engine.gui; // and the engine GUI's textures
 import foundation.gui;
 import foundation.gui.hosting;
@@ -62,7 +61,6 @@ export namespace editor
         struct Services
         {
             engine::render::RenderSubsystem* render = nullptr; // null: nothing renders (a test)
-            engine::ui::UISubsystem* gameUI = nullptr;
             engine::gui::GuiSubsystem* gameGui = nullptr;
         };
 
@@ -254,8 +252,6 @@ export namespace editor
             // RenderTexture canvases stay live in editing viewports too: an in-world screen must not
             // show stale content while its scene is edited (Simulate renders through here as well).
             // The subsystems draw at most once a frame, so several pages share one draw of each.
-            if (m_services.gameUI != nullptr)
-                m_services.gameUI->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
             if (m_services.gameGui != nullptr)
                 m_services.gameGui->RenderTextures(*frame.encoder, frame.frameIndex);
 

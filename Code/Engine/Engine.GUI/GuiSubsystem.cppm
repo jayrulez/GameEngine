@@ -497,6 +497,9 @@ export namespace engine::gui
         void EndRunScreens(const void* run);
         [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
         [[nodiscard]] Node* OverlayLayer() noexcept { return m_overlay.Get(); }
+        /// Whether the GUI input reaches is editing text (a field has the focus), as of the last
+        /// input pump: a host that owns the window's text input (the editor's Game tab) starts it.
+        [[nodiscard]] bool WantsTextInput() const noexcept { return m_textWanted; }
         /// The touch controls' guide, beneath the shared tier's screens (tests).
         [[nodiscard]] GuiTouchGuide* TouchGuide() noexcept { return m_touchGuide.Get(); }
         /// `document` built and shown on the overlay layer, above every screen (a loading screen, a
@@ -699,6 +702,7 @@ export namespace engine::gui
         SceneRoot* m_pressRoot = nullptr;  // the root a held press began in
         bool m_pressTaken = false;              // that press began over GUI that takes the pointer
         bool m_pointerTaken = false;
+        bool m_textWanted = false;              // the root input went to is editing text
     };
 
     /// The GUI's domain (engine-composition.md): its resource modules (documents and sheets, the

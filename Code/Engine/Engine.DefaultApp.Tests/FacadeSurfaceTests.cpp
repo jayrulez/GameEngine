@@ -22,7 +22,7 @@ import engine.composition;
 import engine.defaultapp;
 import foundation.input; // IInputSourceProvider
 import engine.input;  // FittedInputSource (the render resolution's pointer)
-import engine.ui;     // the screen tier's resolution
+import engine.gui;    // the screen tier's resolution
 import engine.gameinstance;
 
 using namespace foundation::core;
@@ -91,14 +91,14 @@ TEST_CASE("defaultapp: a render resolution fits the game's pointer and its scree
     engine::runtime::DefaultApplication app;
     app.Configure(host);
     REQUIRE(app.Input() != nullptr);
-    REQUIRE(app.UI() != nullptr);
+    REQUIRE(app.GUI() != nullptr);
     foundation::input::IInputSourceProvider* shell = &app.Input()->ShellSource();
     CHECK(app.Instance().InputSource() == shell);
     CHECK_FALSE(app.HasRenderResolution());
 
     app.SetRenderResolution(320, 180, FitMode::Letterbox);
     CHECK(app.HasRenderResolution());
-    CHECK(app.UI()->HasScreenResolution());
+    CHECK(app.GUI()->HasScreenResolution());
     foundation::input::IInputSourceProvider* fitted = app.Instance().InputSource();
     REQUIRE(fitted != nullptr);
     CHECK(fitted != shell);
@@ -110,7 +110,7 @@ TEST_CASE("defaultapp: a render resolution fits the game's pointer and its scree
 
     app.SetRenderResolution(0, 0, FitMode::Letterbox);
     CHECK_FALSE(app.HasRenderResolution());
-    CHECK_FALSE(app.UI()->HasScreenResolution());
+    CHECK_FALSE(app.GUI()->HasScreenResolution());
     CHECK(app.Instance().InputSource() == shell);
     CHECK(extra->InputSource() == shell);
     CHECK(&app.Input()->ActiveSource() == shell);

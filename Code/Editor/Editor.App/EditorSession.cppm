@@ -26,11 +26,9 @@ import foundation.resource;
 import foundation.runtime;
 import foundation.runtime.client; // IApplicationHost
 import foundation.settings;
-import foundation.ui.resource; // UITheme: the game UI's default theme (Engine.UI, the runtime's)
 import pipeline.core;
 import engine.project;    // kProjectCacheDir
 import engine.defaultapp; // the embedded game application
-import engine.ui;         // UISubsystem (the game UI's defaults)
 import engine.gui;        // GuiSubsystem (the engine GUI's fonts and sheets)
 import editor.core;
 import editor.mcp;        // SourceAssetTypesFor
@@ -135,7 +133,7 @@ export namespace editor::app
             if (m_services.embeddedApp != nullptr)
                 m_services.embeddedApp->SetContentDatabase(&project.SourceDb()); // scripted scene loads read the sources
             ApplyGameUiDefaults();
-            if (m_services.embeddedApp != nullptr && m_services.embeddedApp->UI() != nullptr && project.Settings().defaultUiFontId.IsNil() &&
+            if (m_services.embeddedApp != nullptr && m_services.embeddedApp->GUI() != nullptr && project.Settings().defaultUiFontId.IsNil() &&
                 HasFontAssets(project.SourceDb().RootGroup()))
                 // A project with fonts and no default renders no game-UI text: name the fix.
                 LOG_WARNING(u8"UI",
@@ -193,8 +191,6 @@ export namespace editor::app
             {
                 m_services.embeddedApp->AttachResourceManager(nullptr, *m_services.embeddedHost);
                 m_services.embeddedApp->SetContentDatabase(nullptr); // the sources go with the project
-                if (m_services.embeddedApp->UI() != nullptr)
-                    m_services.embeddedApp->UI()->SetDefaultTheme(nullptr);
             }
             context.SetResources(nullptr);
             m_resources.Reset();
@@ -244,19 +240,11 @@ export namespace editor::app
             // Bound only once cooked: a bind of a product not there yet warns of a broken reference.
             foundation::content::ContentDatabase& cooked = m_project->CookedDb();
             const auto ready = [&cooked](const Guid& id) { return !id.IsNil() && cooked.GetInstance(id) != nullptr; };
-            const Guid themeId = m_project->Settings().defaultUiThemeId;
-            if (ready(themeId) && app->UI() != nullptr)
-                if (auto theme = m_resources->Bind<foundation::ui::UITheme>(themeId))
-                    app->UI()->SetDefaultTheme(theme.Get());
             const Guid fontId = m_project->Settings().defaultUiFontId;
             const foundation::fonts::Font* defaultFont = nullptr;
             if (ready(fontId))
                 if (auto font = m_resources->Bind<foundation::fonts::Font>(fontId))
-                {
                     defaultFont = font.Get();
-                    if (app->UI() != nullptr)
-                        app->UI()->SetDefaultFont(defaultFont);
-                }
             // The other UI fonts, each a family beside the default; always set, so one taken off the
             // list leaves the game UI too.
             Array<const foundation::fonts::Font*> extras;
@@ -265,8 +253,6 @@ export namespace editor::app
                     if (auto extra = m_resources->Bind<foundation::fonts::Font>(id))
                         extras.PushBack(extra.Get());
             const Span<const foundation::fonts::Font* const> extraSpan(extras.Data(), extras.Size());
-            if (app->UI() != nullptr)
-                app->UI()->SetExtraFonts(extraSpan);
             if (app->GUI() != nullptr)
             {
                 app->GUI()->SetFonts(defaultFont, extraSpan);

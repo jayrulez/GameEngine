@@ -38,7 +38,6 @@ if(EMSCRIPTEN)
         Foundation::Model.Resource
         Foundation::Script
         Foundation::Input Foundation::Input.Resource Engine::Input
-        Foundation::UI.Resource Engine::UI
         Foundation::Physics Foundation::Physics.Resource Engine::Physics
         Engine::Project Foundation::VFS.Pak Foundation::Content Foundation::VFS Foundation::Xml.Serialization)
 
@@ -122,7 +121,6 @@ else()
         Foundation::Model.Resource
         Foundation::Script
         Foundation::Input Foundation::Input.Resource Engine::Input
-        Foundation::UI.Resource Engine::UI
         Foundation::Physics Foundation::Physics.Resource Engine::Physics
         Engine::Project Foundation::VFS.Pak Foundation::Content Foundation::VFS Foundation::Xml.Serialization)
 

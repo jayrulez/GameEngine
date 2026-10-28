@@ -21,7 +21,6 @@ import engine.scene;
 import foundation.scene.resource;
 import foundation.render;
 import engine.render;
-import engine.ui;
 import engine.gui;
 import foundation.gui;
 import foundation.gui.hosting;
@@ -78,7 +77,6 @@ namespace editor
         {
             m_scenes = host->Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
             view.render = host->Ctx().GetSubsystem<engine::render::RenderSubsystem>();
-            view.gameUI = host->Ctx().GetSubsystem<engine::ui::UISubsystem>();
             view.gameGui = host->Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
         }
         m_viewport = MakeUnique<SceneViewport>(Allocator(), Allocator(), view);

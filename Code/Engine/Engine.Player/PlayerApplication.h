@@ -125,16 +125,12 @@ namespace engine::player
             SetContentDatabase(m_contentDb.Get());
             engine::runtime::DefaultApplication::OnStartup(host);
 
-            // Game-UI IME lifecycle: the player owns its window, so the UI subsystem
-            // drives StartTextInput/StopTextInput on it as game EditText focus moves.
-            // (The editor leaves this null - its UIHost bridge owns the IME there.)
-            if (UI() != nullptr && host.Shell() != nullptr)
-            {
-                UI()->SetTextInputTarget(host.Shell()->MainWindow());
-            }
+            // The game GUI's IME lifecycle: the player owns its window, so the GUI drives
+            // StartTextInput/StopTextInput on it as a text field's focus moves. (The editor leaves
+            // this null: its own GUI owns the IME there.)
             if (GUI() != nullptr && host.Shell() != nullptr)
             {
-                GUI()->SetTextInputTarget(host.Shell()->MainWindow()); // the GUI's text fields too
+                GUI()->SetTextInputTarget(host.Shell()->MainWindow());
             }
 
             // Native game plugin (game-native-code.md N2). Placed AFTER the base startup so
@@ -293,79 +289,43 @@ namespace engine::player
                 }
             }
 
-            // The project's default UI font: cooked FontResource -> the game context's
-            // font service (nil/unresolved = the dev TTF fallback, which does not exist
-            // in a dist - a distributed game NEEDS this binding for any text at all).
-            if (UI() != nullptr && !m_settings.defaultUiFontId.IsNil())
+            // The engine GUI: the project's fonts and its sheets, in order. The default font is a
+            // cooked font product (nil or unresolved: the built-in one, which is not in a dist - a
+            // distributed game NEEDS this binding for any text at all).
+            if (GUI() != nullptr && Resources() != nullptr)
             {
-                auto fontProxy =
-                    Resources()->Bind<foundation::fonts::Font>(m_settings.defaultUiFontId);
-                if (fontProxy)
+                const foundation::fonts::Font* defaultFont = nullptr;
+                if (!m_settings.defaultUiFontId.IsNil())
                 {
-                    UI()->SetDefaultFont(fontProxy.Get());
-                    LOG_INFO(u8"Player", u8"default UI font bound");
+                    if (auto font = Resources()->Bind<foundation::fonts::Font>(m_settings.defaultUiFontId))
+                    {
+                        defaultFont = font.Get();
+                        LOG_INFO(u8"Player", u8"default UI font bound");
+                    }
+                    else
+                    {
+                        LOG_WARNING(u8"Player", u8"default UI font did not resolve");
+                    }
                 }
                 else
                 {
-                    LOG_WARNING(u8"Player", u8"default UI font did not resolve");
+                    // A distributed game with no default font renders no text (no dev fallback here).
+                    LOG_WARNING(u8"Player",
+                                u8"no default UI font set in project settings - game UI text "
+                                u8"will not render (set Project Settings > Default UI font)");
                 }
-            }
-            else if (UI() != nullptr)
-            {
-                // A distributed game with no default font renders no text (no dev fallback here).
-                LOG_WARNING(u8"Player",
-                                     u8"no default UI font set in project settings - game UI text "
-                                     u8"will not render (set Project Settings > Default UI font)");
-            }
-
-            // The project's other UI fonts, each a family beside the default one (the subsystem
-            // holds the bound products).
-            if (UI() != nullptr && !m_settings.uiFontIds.IsEmpty())
-            {
-                Array<const foundation::fonts::Font*> extras;
+                Array<const foundation::fonts::Font*> others;
                 for (const Guid& id : m_settings.uiFontIds)
                 {
-                    auto extra = Resources()->Bind<foundation::fonts::Font>(id);
-                    if (extra)
+                    if (auto font = Resources()->Bind<foundation::fonts::Font>(id))
                     {
-                        extras.PushBack(extra.Get());
+                        others.PushBack(font.Get());
                     }
                     else
                     {
                         LOG_WARNING(u8"Player", u8"UI font {} did not resolve", id);
                     }
                 }
-                UI()->SetExtraFonts(Span<const foundation::fonts::Font* const>(extras.Data(), extras.Size()));
-            }
-
-            // The project's default UI theme: cooked UITheme -> the game context's
-            // stylesheet (nil/unresolved = the built-in GameTheme stays).
-            if (UI() != nullptr && !m_settings.defaultUiThemeId.IsNil())
-            {
-                auto themeProxy =
-                    Resources()->Bind<foundation::ui::UITheme>(m_settings.defaultUiThemeId);
-                if (themeProxy)
-                {
-                    UI()->SetDefaultTheme(themeProxy.Get());
-                    LOG_INFO(u8"Player", u8"default UI theme bound");
-                }
-                else
-                {
-                    LOG_WARNING(u8"Player", u8"default UI theme did not resolve");
-                }
-            }
-
-            // The engine GUI: the project's fonts (the UI's, shared) and its sheets, in order.
-            if (GUI() != nullptr && Resources() != nullptr)
-            {
-                const foundation::fonts::Font* defaultFont = nullptr;
-                if (!m_settings.defaultUiFontId.IsNil())
-                    if (auto font = Resources()->Bind<foundation::fonts::Font>(m_settings.defaultUiFontId))
-                        defaultFont = font.Get();
-                Array<const foundation::fonts::Font*> others;
-                for (const Guid& id : m_settings.uiFontIds)
-                    if (auto font = Resources()->Bind<foundation::fonts::Font>(id))
-                        others.PushBack(font.Get());
                 GUI()->SetFonts(defaultFont, Span<const foundation::fonts::Font* const>(others.Data(), others.Size()));
                 GUI()->SetStyleSheets(Span<const Guid>(m_settings.guiStyleSheetIds.Data(), m_settings.guiStyleSheetIds.Size()));
             }

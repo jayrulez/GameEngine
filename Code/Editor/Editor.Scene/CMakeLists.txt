@@ -16,7 +16,7 @@ target_link_libraries(Editor.Scene
         Foundation::Physics Foundation::Physics.Resource Engine::Physics Foundation::Heightfield Foundation::Terrain.Resource Foundation::Vegetation.Resource
         Engine::Navigation Foundation::Navigation.Resource Editor::Navigation
         Engine::Spline Foundation::Spline
-        Engine::UI Engine::GUI # the game's UI and GUI textures, live in an editing viewport
+        Engine::GUI # the game's GUI textures, live in an editing viewport
         Foundation::Messaging Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Viewport Editor::App # the page on the GUI
         Foundation::Audio Foundation::Audio.Resource Engine::Audio
         Foundation::Geometry Foundation::Geometry.Resource Pipeline::Geometry

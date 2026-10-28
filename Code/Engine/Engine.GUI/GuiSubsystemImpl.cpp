@@ -1522,6 +1522,7 @@ namespace engine::gui
         // claim (its pump runs first in this lane); EndFrame clears them after the frame read them.
         m_pointerTaken = pointer && (held ? m_pressTaken : target.Panel || root->GetEventDispatcher()->IsPointerOver(target.Point));
         const bool keys = root->GetEventDispatcher()->WantsTextInput();
+        m_textWanted = keys;
         if (!held)
         {
             m_pressRoot = nullptr;

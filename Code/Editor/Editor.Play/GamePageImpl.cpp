@@ -606,10 +606,6 @@ namespace editor
             m_audio->EndRun(m_gameInstance);
         }
         // Its screens go with it (another tab's run keeps its own).
-        if (m_app != nullptr && m_app->UI() != nullptr && m_gameInstance != nullptr)
-        {
-            m_app->UI()->EndRunScreens(m_gameInstance);
-        }
         if (m_app != nullptr && m_app->GUI() != nullptr && m_gameInstance != nullptr)
         {
             m_app->GUI()->EndRunScreens(m_gameInstance);
@@ -749,10 +745,9 @@ namespace editor
         {
             m_input->SetSourceProvider(ActiveSource(), m_scene);
         }
-        // The window's text input follows the GAME UI's focus: the viewport (the GUI's focused node
-        // while playing) says the game's context wants text, and the GUI's bridge starts it.
-        m_viewport->SetHostedTextInputWanted(m_app != nullptr && m_app->UI() != nullptr &&
-                                             m_app->UI()->Context().WantsTextInput());
+        // The window's text input follows the game GUI's focus: the viewport (the editor GUI's focused
+        // node while playing) says the game's GUI wants text, and the editor GUI's bridge starts it.
+        m_viewport->SetHostedTextInputWanted(m_app != nullptr && m_app->GUI() != nullptr && m_app->GUI()->WantsTextInput());
         // The embedded app's OnUpdate (ticking EVERY instance's game script) is driven ONCE by
         // the editor app - not per game tab, or N tabs would
         // tick every instance N times. This tab only drains its own debugger state.
@@ -790,10 +785,6 @@ namespace editor
 
         // RenderTexture canvases draw before the scene (the same host seam the
         // player runs in DefaultApplication::OnRenderWindow).
-        if (m_app != nullptr && m_app->UI() != nullptr)
-        {
-            m_app->UI()->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
-        }
         if (m_app != nullptr && m_app->GUI() != nullptr)
         {
             m_app->GUI()->RenderTextures(*frame.encoder, frame.frameIndex); // and the engine GUI's
@@ -873,14 +864,8 @@ namespace editor
         }
         frame.encoder->TransitionTexture(m_viewport->ColorTexture(), m_viewport->ColorState(),
                                          rhi::ResourceState::RenderTarget);
-        // The UI is shared between the Game tabs; each draws its own run's screen tier, laid out at
+        // The GUI is shared between the Game tabs; each draws its own run's screen tier, laid out at
         // its own render resolution (the shared tier's global overlays draw above it).
-        if (m_app != nullptr && m_app->UI() != nullptr)
-        {
-            m_app->UI()->SetScreenResolution(m_gameInstance, m_renderWidth, m_renderHeight, m_renderFit);
-            m_app->UI()->SetScreenOrientation(m_gameInstance, m_orientation);
-            m_app->UI()->SetRenderRun(m_gameInstance);
-        }
         if (m_app != nullptr && m_app->GUI() != nullptr)
         {
             m_app->GUI()->SetScreenResolution(m_gameInstance, m_renderWidth, m_renderHeight, m_renderFit);
@@ -890,10 +875,6 @@ namespace editor
         render->RenderOverlays(*frame.encoder, m_viewport->ColorView(),
                                m_viewport->ColorFormat(), w, h, frame.frameIndex,
                                m_viewport->ColorAlternateView()); // the screen UI blends encoded
-        if (m_app != nullptr && m_app->UI() != nullptr)
-        {
-            m_app->UI()->SetRenderRun(nullptr);
-        }
         if (m_app != nullptr && m_app->GUI() != nullptr)
         {
             m_app->GUI()->SetRenderRun(nullptr);

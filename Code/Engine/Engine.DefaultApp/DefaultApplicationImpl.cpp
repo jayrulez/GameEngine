@@ -46,10 +46,6 @@ import foundation.resource;            // ResourceManager (owned or borrowed - s
 import foundation.content;             // IContentDatabase (preset by the entry point)
 import foundation.scene.resource;      // SceneDocument (product-type registration)
 import foundation.image;               // Image (the screenshot the capture hands back)
-import foundation.ui;                  // View (the `ui` binding's instantiate return type)
-import foundation.ui.resource;         // cooked UI documents/themes (game-ui)
-import engine.ui;        // the game screen tier (canvases + overlay + consumption)
-import engine.ui.script;   // UiScreenScriptBinding + InstallUiScreenScriptService
 import engine.gui;
 import foundation.audio;               // AudioEngine (owned by the audio subsystem)
 import engine.audio;     // AudioSubsystem (voices/buses/one-shots + scene sync)
@@ -248,14 +244,12 @@ namespace engine::runtime
         // The primary instance's per-instance input reads the shell devices by default (the player
         // path); the editor Game tab overrides this to its gated viewport source per tab.
         m_instance.SetInputSource(&m_input->ShellSource());
-        // Every instance's action runtime, so the UI's consumption and touch guide reach the game.
+        // Every instance's action runtime, so the GUI's consumption and touch guide reach the game.
         m_input->SetActionRuntimeProvider(
             [this](const engine::input::InputSubsystem::ActionRuntimeVisitor& visit)
             { ForEachInstance([&visit](GameInstance& instance) { visit(instance.InputRuntime()); }); });
-        m_ui = host.Ctx().AddSubsystem<engine::ui::UISubsystem>(host.Ctx().Allocator(),
-                                                               *m_dataFileSystem);
-        // The engine's GUI beside it while both live: every game has it (its screen tier, its
-        // components, `gui` in its scripts).
+        // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
+        // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
         m_gui = host.Ctx().AddSubsystem<engine::gui::GuiSubsystem>(host.Ctx().Allocator(), *m_dataFileSystem);
         // Its prompts name the game's bindings: the primary instance's runtime, which the game runs on.
         m_gui->SetPromptRuntime(&m_instance.InputRuntime());
@@ -312,8 +306,6 @@ namespace engine::runtime
                 {
                     self->m_render->ExposeToScript(context); // `DebugDraw.of(scene)` -> DebugScene
                 }
-                // `ui` -> the app-wide screen tier (finders + push/pop over the ScreenStack).
-                engine::uiscript::InstallUiScreenScriptService(context, self->m_uiScreenBinding);
                 // `gui` -> the engine GUI's screen tier.
                 if (self->m_gui != nullptr)
                 {
@@ -321,33 +313,6 @@ namespace engine::runtime
                 }
             }});
 
-        // Back the `ui` facade with the live screen tier: point the binding at the UISubsystem's
-        // screen root + ScreenStack, and supply a cooked-UIDocument instantiator (resolve by guid
-        // from the run's resource manager - read live, as it may attach later in the editor - then
-        // instantiate the markup into a view tree).
-        if (m_ui != nullptr)
-        {
-            m_uiScreenBinding.stack = &m_ui->Screens();
-            // Each run's screens on its own tier when the host turns run screens on (the editor's
-            // Game tabs); the shared stack otherwise (ScreensFor answers it for every run).
-            m_uiScreenBinding.stackForRun =
-                core::Function<foundation::ui::gamekit::ScreenStack*(const void*)>{
-                    [self](const void* run) -> foundation::ui::gamekit::ScreenStack*
-                    { return self->m_ui != nullptr ? &self->m_ui->ScreensFor(run) : nullptr; }};
-            m_uiScreenBinding.instantiate =
-                core::Function<core::RefPtr<foundation::ui::View>(const core::Guid&)>{
-                    [self](const core::Guid& id) -> core::RefPtr<foundation::ui::View>
-                    {
-                        if (self->m_ui == nullptr || self->Resources() == nullptr || id.IsNil())
-                        {
-                            return {};
-                        }
-                        auto proxy = self->Resources()->Bind<foundation::ui::UIDocument>(id);
-                        foundation::ui::UIDocument* document = proxy.Get();
-                        return document != nullptr ? self->m_ui->InstantiateScreenOverlay(*document)
-                                                   : core::RefPtr<foundation::ui::View>{};
-                    }};
-        }
         // Track A resource swaps (SceneRender.setMesh, ...): give the run a GETTER for the app's
         // resource manager (created later, in OnStartup), so a behavior can bind a resource id onto
         // a component's Ref. Borrowed - the app owns it.
@@ -389,10 +354,6 @@ namespace engine::runtime
         m_renderWidth = fixedSize ? width : 0;
         m_renderHeight = fixedSize ? height : 0;
         m_renderFit = fit;
-        if (m_ui != nullptr)
-        {
-            m_ui->SetScreenResolution(m_renderWidth, m_renderHeight, fit);
-        }
         if (m_gui != nullptr)
         {
             m_gui->SetScreenResolution(m_renderWidth, m_renderHeight, fit); // the GUI's screen tier too
@@ -403,10 +364,6 @@ namespace engine::runtime
     void DefaultApplication::SetOrientation(core::ScreenOrientation orientation)
     {
         m_orientation = orientation;
-        if (m_ui != nullptr)
-        {
-            m_ui->SetScreenOrientation(orientation); // the screen tier turns with the game's image
-        }
         if (m_gui != nullptr)
         {
             m_gui->SetScreenOrientation(orientation);
@@ -641,10 +598,6 @@ namespace engine::runtime
     DefaultApplication::SetResourceManager(foundation::resource::ResourceManager* borrowed) noexcept
     {
         m_borrowedResources = borrowed;
-        if (m_ui != nullptr)
-        {
-            m_ui->SetResourceManager(Resources()); // the game UI's images bind through it
-        }
         if (m_gui != nullptr)
         {
             m_gui->SetResourceManager(Resources()); // the GUI's documents, sheets and images by guid
@@ -682,12 +635,6 @@ namespace engine::runtime
         // Product/runtime types: factories construct cooked products BY TYPE NAME - every domain's,
         // from the composition (the scene and prefab documents included).
         engine::RegisterAllResourceTypes();
-        engine::ui::RegisterUIComponentReflection();
-        if (GraphicsDevice* gfx = host.Graphics();
-            gfx != nullptr && gfx->Raw() != nullptr && m_ui != nullptr)
-        {
-            m_ui->EnsureRenderReady(*gfx->Raw(), gfx->FramesInFlight());
-        }
         if (GraphicsDevice* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr && m_gui != nullptr)
         {
             m_gui->EnsureRenderReady(*gfx->Raw(), static_cast<core::i32>(gfx->FramesInFlight()));
@@ -703,10 +650,6 @@ namespace engine::runtime
         }
         foundation::resource::ResourceManager* resources = Resources();
         PointSpawnersAtContent(); // the manager exists now; scenes composed earlier learn of it
-        if (m_ui != nullptr)
-        {
-            m_ui->SetResourceManager(resources); // the game UI's images bind through it
-        }
         if (m_gui != nullptr && m_profilerOverlayAtStart)
         {
             ProfilerOverlay().Show(*m_gui);
@@ -746,10 +689,6 @@ namespace engine::runtime
                                                    IApplicationHost& host)
     {
         m_borrowedResources = borrowed;
-        if (m_ui != nullptr)
-        {
-            m_ui->SetResourceManager(Resources()); // the game UI's images bind through it
-        }
         if (m_gui != nullptr)
         {
             m_gui->SetResourceManager(Resources());
@@ -854,10 +793,6 @@ namespace engine::runtime
         const rhi::TextureFormat colorFormat = frame.window->Swap()->Format();
         // RenderTexture canvases draw BEFORE the scene so materials sampling them
         // see this frame's UI (the RenderCanvasTextures host seam).
-        if (m_ui != nullptr)
-        {
-            m_ui->RenderCanvasTextures(*frame.encoder, static_cast<core::i32>(frame.frameIndex));
-        }
         if (m_gui != nullptr)
         {
             m_gui->RenderTextures(*frame.encoder, frame.frameIndex); // its canvases' and panels' textures, its bakes

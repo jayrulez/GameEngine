@@ -70,6 +70,13 @@
   answer it everywhere (`GetProcessMemoryInfo` on Windows, `task_info` on macOS) and the sandbox ask
   it.
 
+- **Windows that ask for high pixel density** (user 2026-10-28: backlog): on a scaled Linux (Wayland)
+  or macOS display SDL gives a window its logical size unless it asks for
+  `SDL_WINDOW_HIGH_PIXEL_DENSITY`, and the compositor stretches it: blurry text, though it fills. With
+  the flag the GUI draws at the display's pixels, as on Windows (tried locally at 133%: correct after
+  the root's clip fix). Decide whether every window asks, and check the 3D views' cost at the higher
+  resolution.
+
 ## Engine
 
 - **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script

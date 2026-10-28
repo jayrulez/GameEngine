@@ -121,6 +121,7 @@ Copy-Item -Recurse "Data\Assets"   (Join-Path $Out "Data\Assets")
 Copy-Item -Recurse "Data\Editor"   (Join-Path $Out "Data\Editor")
 Copy-Item -Recurse "Data\Branding" (Join-Path $Out "Data\Branding") # the splash, the logo and the window icons
 Copy-Item -Recurse "Data\Engine\Fonts" (Join-Path $Out "Data\Engine\Fonts") # the GUI's built-in font
+Copy-Item -Recurse "Data\Templates" (Join-Path $Out "Data\Templates") # what a new project starts with
 Remove-Item -Recurse -Force (Join-Path $Out "Data\Editor\Mock")
 Copy-Item          "Data\.dataroot" (Join-Path $Out "Data\.dataroot")
 

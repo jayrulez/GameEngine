@@ -74,7 +74,7 @@ namespace editor
         //    4096 x 2048 BlueSky (10 MB, nearly 3 s to cook) was more than a starting sky needs.
         {
             const String source = foundation::vfs::DataPath(
-                dataRoot, u8"Assets/environment/kloofendal_48d_partly_cloudy_puresky/kloofendal_48d_partly_cloudy_puresky_1k.hdr");
+                dataRoot, u8"Templates/kloofendal_48d_partly_cloudy_puresky/kloofendal_48d_partly_cloudy_puresky_1k.hdr");
             Result<String> copied = pipeline::CopyIntoSources(import, source.AsView());
             if (copied.HasValue())
             {

@@ -83,6 +83,15 @@
   content scale: the window sized by it, the font rasterized at the scaled size, the logo from the
   SVG at the size needed, the bar and margins scaled.
 
+- **Images that share a texture draw in one call** (user 2026-10-28, from a RenderDoc capture of
+  the editor: every icon is its own draw): VG's DrawImagePremultiplied closes the open command
+  before every image (Context.cppm), even the next one on the same atlas page with the same clip,
+  blend and draw mode, so a bar's icons are a draw each. Keep the command open while the state
+  holds, with a test counting the commands a row of icons makes. First verify the icons do land on
+  one atlas page (the picture baker's pages, GpuPictureBaker), not one texture each. Beyond it, by
+  design and for when a measurement asks: a box, an icon and a label alternate three pipelines or
+  textures in draw order, and every clip push closes a command.
+
 ## Engine
 
 - **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script

@@ -97,14 +97,17 @@ export namespace editor::app
         /// Told of the problem chosen, to take its code there.
         void SetOnChoose(Function<void(const CodeProblem&)> onChoose) { m_onChoose = Move(onChoose); }
 
-        /// "No problems", "1 error", "2 errors, 1 warning".
+        /// What the summary says with no problems (empty: "No problems"): what a page's check
+        /// found good (the class a script compiles). Said at the next Show.
+        void SetClean(String text) { m_clean = Move(text); }
+        /// "No problems" (or what SetClean said), "1 error", "2 errors, 1 warning".
         [[nodiscard]] String Summary() const
         {
             usize errors = 0, warnings = 0, others = 0;
             for (const CodeProblem& p : m_problems)
                 (p.severity == gui::CodeSeverity::Error ? errors : p.severity == gui::CodeSeverity::Warning ? warnings : others)++;
             if (m_problems.IsEmpty())
-                return String(u8"No problems");
+                return m_clean.IsEmpty() ? String(u8"No problems") : m_clean;
             String out;
             const auto add = [&out](usize count, StringView one, StringView many)
             {
@@ -212,6 +215,7 @@ export namespace editor::app
 
         IAllocator& m_allocator;
         Array<CodeProblem> m_problems;
+        String m_clean; // SetClean's
         Model m_model;
         RefPtr<gui::Label> m_summary;
         RefPtr<gui::ListView> m_list;

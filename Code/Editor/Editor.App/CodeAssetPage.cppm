@@ -162,7 +162,10 @@ export namespace editor::app
             if (m_code != nullptr)
                 m_code->SetDiagnostics(Span<const gui::CodeDiagnostic>(marks.Data(), marks.Size()));
             if (m_problems)
+            {
+                m_problems->SetClean(m_read ? CleanSummary() : String{});
                 m_problems->Show(Span<const CodeProblem>(m_problemsFound.Data(), m_problemsFound.Size()));
+            }
             OnCodeChecked();
         }
 
@@ -204,6 +207,9 @@ export namespace editor::app
         [[nodiscard]] virtual Array<CodeProblem> CheckCode(StringView text) = 0;
         /// After each check (a status, a preview following the code).
         virtual void OnCodeChecked() {}
+        /// What the problems line says when the check found none (empty: "No problems"), asked
+        /// after CheckCode.
+        [[nodiscard]] virtual String CleanSummary() const { return String{}; }
         [[nodiscard]] StringView SourcePath() const noexcept { return m_sourcePath.AsView(); }
         /// A check a moment from now, as after an edit (a page's other code changed: a sheet's
         /// preview markup).

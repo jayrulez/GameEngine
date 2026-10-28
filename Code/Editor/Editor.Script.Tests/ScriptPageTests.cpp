@@ -136,7 +136,7 @@ TEST_CASE("script page: the source read and checked, a broken edit's problem on 
     CHECK(page->Text() == bed.source);
     CHECK(page->Language() == StringView(u8"angelscript"));
     CHECK(page->ErrorCount() == 0u);
-    CHECK(page->Problems()->Summary() == StringView(u8"No problems"));
+    CHECK(page->Problems()->Summary() == StringView(u8"No problems: compiles class Hero")); // the class it compiled, as the old page said
     CHECK_FALSE(page->Code()->TokensOf(0).IsEmpty()); // coloured: its language read
 
     // Typing that breaks it: one step on the page's stack, the problem on its line once checked.

@@ -106,6 +106,11 @@ namespace editor
         return problems;
     }
 
+    String ScriptEditorPage::CleanSummary() const
+    {
+        return m_doc.ClassName().IsEmpty() ? String{} : Format(u8"No problems: compiles class {}", m_doc.ClassName());
+    }
+
     void ScriptEditorPage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
     {
         app::CodeAssetPage::OnUpdate(host, dt);

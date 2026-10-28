@@ -67,6 +67,8 @@ export namespace editor
 
     protected:
         [[nodiscard]] Array<app::CodeProblem> CheckCode(StringView text) override;
+        /// "No problems: compiles class Player": the class the check compiled (the old page's).
+        [[nodiscard]] String CleanSummary() const override;
 
     private:
         void ShowApiTree();

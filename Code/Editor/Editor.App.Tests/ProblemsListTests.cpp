@@ -21,6 +21,9 @@ TEST_CASE("problems list: errors first in their places' order, the count said, a
     root->AddChild(host.Get());
     editor::app::ProblemsList problems(DefaultAllocator(), *host);
     CHECK(problems.Summary() == StringView(u8"No problems"));
+    problems.SetClean(String(u8"No problems: compiles class Hero")); // what the page's check found good
+    CHECK(problems.Summary() == StringView(u8"No problems: compiles class Hero"));
+    problems.SetClean(String{});
 
     const CodeProblem found[] = {
         CodeProblem{gui::CodeSeverity::Warning, String(u8"unused variable"), String{}, 2, 4, true},

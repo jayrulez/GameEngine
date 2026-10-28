@@ -899,6 +899,16 @@ The layers:
 5. The pages (12 to 19).
 6. The old tests' behaviours (20).
 7. The collision groups as a grid; a material refusing an uncooked shader.
+8. Create Asset with its groups a tree in it (gap 21, found by the user after the check: the old
+   dialog had the tree; the new one opened the group picker from a field, though 5.2's layer 5
+   planned the tree).
+
+What the work found: the "Listening" text of gap 16 was there ("Press an input..."); a material
+already refused an uncooked shader with the old notice, untested until now; the user's opens never
+asked the context's open interceptors after the shell moved (a clip's open into the panel needed
+them). The particle effect's references (found on the way) are declared by its builder, as every
+builder declares its own, so a cook of the effect cooks its texture, mesh and materials, and
+asset_uses and the export see them.
 
 ## 6. Tests
 

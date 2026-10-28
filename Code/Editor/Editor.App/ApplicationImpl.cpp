@@ -198,7 +198,8 @@ namespace editor::app
 
         ReportStartup(u8"Preparing the interface", 0.30f);
         const EditorLook look = LookFrom(m_editorSettings.Find<editor::EditorUiSettings>());
-        if (m_window.Open(host, m_config.dataRoot.AsView(), look))
+        if (m_window.Open(host, m_config.dataRoot.AsView(), look,
+                          PathJoin(GetUserDataDirectory().AsView(), StringView(EditorWindow::kThemeFolder)).AsView()))
             OpenDock();
         // The window's close button asks about unsaved pages first, as File > Exit does.
         if (host.Shell() != nullptr)

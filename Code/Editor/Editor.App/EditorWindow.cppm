@@ -8,8 +8,10 @@
 // fonts the editor's sheet names, the editor's own files (EditorResources) and the frame read
 // from Data/Editor/Shell.gml, with the toast host over it. Its look is the editor's sheet
 // (Editor/editor.css over its tokens), the chosen density's sheet after it and a `:root` block of
-// the user's inputs (the accent), the scheme and less motion through the GUI's media; a change to
-// those files on disk (the editor's development loop) applies at once.
+// the user's inputs (the accent), then the user's theme overrides (5.7, layer 1: a file in their
+// data folder, so any token or rule is theirs to set), the scheme and less motion through the
+// GUI's media; a change to those files on disk (the editor's development loop, or the user's
+// overrides) applies at once.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -116,6 +118,9 @@ export namespace editor::app
         /// The frame's markup, its sheet and the folder the editor's files are in, under the data root.
         static constexpr const char8_t* kFramePath = u8"Editor/Shell.gml";
         static constexpr const char8_t* kSheetPath = u8"Editor/editor.css";
+        /// The user's theme overrides: the folder under their data folder, and the file in it.
+        static constexpr const char8_t* kThemeFolder = u8"theme";
+        static constexpr const char8_t* kThemeOverridesPath = u8"overrides.css";
 
         explicit EditorWindow(IAllocator& allocator) : m_allocator(allocator) {}
         EditorWindow(const EditorWindow&) = delete;
@@ -123,9 +128,10 @@ export namespace editor::app
         ~EditorWindow() { Close(); }
 
         /// Opens the GUI on the host's main window over the data root: the shaders, the fonts, the
-        /// frame and the sheet. False (logged) when the window, the device or the shaders are
+        /// frame and the sheet, with the user's theme overrides from `themeFolder` (made if it is
+        /// not there; empty: none). False (logged) when the window, the device or the shaders are
         /// missing; the editor then runs with no interface.
-        bool Open(foundation::runtime::IApplicationHost& host, StringView dataRoot, const EditorLook& look)
+        bool Open(foundation::runtime::IApplicationHost& host, StringView dataRoot, const EditorLook& look, StringView themeFolder)
         {
             m_window = host.MainRenderWindow();
             if (m_window == nullptr || host.Graphics() == nullptr || host.Graphics()->Raw() == nullptr || host.Shell() == nullptr)
@@ -151,6 +157,11 @@ export namespace editor::app
             fonts::BidiAlgorithm::Install();
             m_fonts = MakeUnique<fonts::TrueTypeFontService>(m_allocator, m_allocator);
             m_resources = MakeUnique<editor::EditorResources>(m_allocator, m_allocator, dataRoot);
+            if (!themeFolder.IsEmpty())
+            {
+                (void)CreateDirectories(themeFolder); // a place for the file the user writes
+                m_theme = MakeUnique<editor::EditorResources>(m_allocator, m_allocator, themeFolder);
+            }
 
             m_host = MakeUnique<gui::GuiHost>(m_allocator, m_allocator, *host.Graphics(), *host.Shell(), m_fonts.Get(), m_shaders->Set());
             {
@@ -184,10 +195,12 @@ export namespace editor::app
             gui::Node* dock = FindById(u8"frame-dock");
             (dock != nullptr ? *dock : *m_frame).AddChild(m_toasts.Get());
             SetLook(look);
-            // The editor's own files changed on disk: its sheet applies again.
+            // The editor's own files or the user's overrides changed on disk: the sheet applies again.
             m_reload = MakeUnique<gui::Effect>(m_allocator, [self]()
                                                {
                                                    self->m_resources->TrackChanges();
+                                                   if (self->m_theme)
+                                                       self->m_theme->TrackChanges();
                                                    if (self->m_frame)
                                                        self->ApplySheet();
                                                });
@@ -297,6 +310,8 @@ export namespace editor::app
             {
                 m_sinceSweep = 0.0f;
                 (void)m_resources->Poll();
+                if (m_theme && m_theme->Poll())
+                    LOG_INFO(u8"Editor", u8"the theme overrides applied again ({})", kThemeOverridesPath);
             }
             m_host->Update(deltaTime);
         }
@@ -319,6 +334,7 @@ export namespace editor::app
             m_frame = {};
             m_root = {};
             m_host.Reset();
+            m_theme.Reset();
             m_resources.Reset();
             m_fonts.Reset();
             m_shaders.Reset();
@@ -335,12 +351,16 @@ export namespace editor::app
     private:
         static constexpr f32 kSweepSeconds = 1.0f;
 
-        void ApplySheet() { m_host->Styles().SetStyleSheet(gui::CSSParser::Parse(SheetFor(*m_resources, m_look).AsView(), StringView(kSheetPath))); }
+        void ApplySheet()
+        {
+            m_host->Styles().SetStyleSheet(gui::CSSParser::Parse(SheetFor(*m_resources, m_look, m_theme.Get()).AsView(), StringView(kSheetPath)));
+        }
 
     public:
         /// The sheet `look` makes from the editor's files: the editor's sheet, the density's after
-        /// it (its sizes win), then a `:root` block of the inputs (the accent).
-        [[nodiscard]] static String SheetFor(gui::IResourceProvider& resources, const EditorLook& look)
+        /// it (its sizes win), then a `:root` block of the inputs (the accent), then the user's
+        /// overrides from `theme` (null: none), last so what they set wins.
+        [[nodiscard]] static String SheetFor(gui::IResourceProvider& resources, const EditorLook& look, gui::IResourceProvider* theme)
         {
             String sheet;
             String part;
@@ -352,6 +372,11 @@ export namespace editor::app
                 sheet += part.AsView();
             }
             sheet += Format(u8"\n:root {{ --accent-input: {}; }}\n", look.accent).AsView();
+            if (theme != nullptr && theme->LoadText(StringView(kThemeOverridesPath), part))
+            {
+                sheet += part.AsView();
+                sheet += u8"\n";
+            }
             return sheet;
         }
 
@@ -387,13 +412,14 @@ export namespace editor::app
         UniquePtr<gui::VgShaderLibrary> m_shaders;
         UniquePtr<fonts::TrueTypeFontService> m_fonts;
         UniquePtr<editor::EditorResources> m_resources;
+        UniquePtr<editor::EditorResources> m_theme; // the user's overrides' folder; null: none
         UniquePtr<gui::GuiHost> m_host;
         RefPtr<gui::SceneRoot> m_root;
         RefPtr<gui::Node> m_frame;
         RefPtr<gui::ToastHost> m_toasts;
         RefPtr<gui::Node> m_screen; // over the window in place of the frame, while shown
         UniquePtr<EditorStatusBar> m_status;
-        UniquePtr<gui::Effect> m_reload; // the sheet again when the editor's files change
+        UniquePtr<gui::Effect> m_reload; // the sheet again when the editor's files or the overrides change
         f32 m_sinceSweep = 0.0f;
     };
 }

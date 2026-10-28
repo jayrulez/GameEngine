@@ -112,7 +112,7 @@ namespace editor
         void AddNotice(StringView name, Function<String()> message) override
         {
             gui::PropertyInfo& info = bag.Add(name, gui::PropertyKind::String, gui::Variant(StringView{}));
-            info.Hint = String(app::NoticePropertyEditor::kHint);
+            info.Hint = String(app::kNoticeHint);
             info.ReadOnly = true;
             info.Visible = false; // until it says something
             m_notices.PushBack(Notice{String(name), Move(message), String{}});
@@ -120,7 +120,7 @@ namespace editor
         void AddAction(StringView name, StringView label, StringView description, Function<void()> run) override
         {
             gui::PropertyInfo& info = bag.Add(name, gui::PropertyKind::String, gui::Variant(label));
-            info.Hint = String(app::ActionPropertyEditor::kHint);
+            info.Hint = String(app::kActionHint);
             info.Description = String(description);
             for (usize i = 0; i < bag.ObjectCount(); ++i)
                 bag.SetValue(name, i, gui::Variant(label));

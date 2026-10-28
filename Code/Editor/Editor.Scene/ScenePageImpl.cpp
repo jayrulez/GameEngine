@@ -264,7 +264,7 @@ namespace editor
         m_animationPane = RefPtr<gui::Node>(Find<gui::Node>(u8"scene-animation"));
         if (!m_animationPane || m_scene == nullptr || !m_editContext || !m_services.loadMarkup)
             return;
-        RefPtr<gui::Node> content = m_services.loadMarkup(PropertyAnimationPanel::kPath);
+        RefPtr<gui::Node> content = m_services.loadMarkup(kPropertyAnimationPanelPath);
         if (!content)
             return;
         m_animationPane->AddChild(content.Get());

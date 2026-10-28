@@ -27,11 +27,16 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
+    /// The two editors' hints at namespace scope, for another library to read: MSVC does not export
+    /// a class's static constexpr member from a shared library, so a use elsewhere does not link.
+    inline constexpr StringView kNoticeHint = u8"notice";
+    inline constexpr StringView kActionHint = u8"action";
+
     class NoticePropertyEditor final : public gui::SingleControlEditor
     {
         RTTI_OBJECT(NoticePropertyEditor, gui::SingleControlEditor)
     public:
-        static constexpr StringView kHint = u8"notice";
+        static constexpr StringView kHint = kNoticeHint;
 
         NoticePropertyEditor()
         {
@@ -57,7 +62,7 @@ export namespace editor::app
     {
         RTTI_OBJECT(ActionPropertyEditor, gui::SingleControlEditor)
     public:
-        static constexpr StringView kHint = u8"action";
+        static constexpr StringView kHint = kActionHint;
 
         ActionPropertyEditor()
         {

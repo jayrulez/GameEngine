@@ -39,10 +39,14 @@ using namespace foundation::core;
 
 export namespace editor
 {
+    /// The panel's markup, at namespace scope for another library to read (MSVC does not export a
+    /// class's static constexpr member from a shared library).
+    inline constexpr StringView kPropertyAnimationPanelPath = u8"Editor/PropertyAnimationPanel.xml";
+
     class PropertyAnimationPanel
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PropertyAnimationPanel.xml";
+        static constexpr StringView kPath = kPropertyAnimationPanelPath;
 
         /// Over `scene` (the page's, which outlives it), its markup `content` loaded.
         PropertyAnimationPanel(EditorContext& context, foundation::scene::Scene& scene, RefPtr<foundation::gui::Node> content);

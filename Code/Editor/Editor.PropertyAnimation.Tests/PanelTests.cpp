@@ -77,7 +77,7 @@ namespace
             root->AddChild(page.Get());
             (void)page->OnCommand(u8"edit.undo", [this](gui::CommandEvent&) { ++pageUndos; });
             (void)page->OnCommand(u8"scene.frame", [this](gui::CommandEvent&) { ++pageOthers; });
-            RefPtr<gui::Node> content = LoadMarkup(PropertyAnimationPanel::kPath);
+            RefPtr<gui::Node> content = LoadMarkup(kPropertyAnimationPanelPath);
             REQUIRE(content.Get() != nullptr);
             page->AddChild(content.Get());
             panel = MakeUnique<PropertyAnimationPanel>(DefaultAllocator(), context, sc, content);

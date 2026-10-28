@@ -132,6 +132,7 @@ endmacro()
 option(OPTION_BUILD_TESTS "Build unit tests" ON)
 option(OPTION_BUILD_SAMPLES "Build sample applications" ON)
 option(OPTION_BUILD_TOOLS "Build editor/authoring tooling (the editor libraries + CLI exes)" ON)
+option(OPTION_BUILD_DEPRECATED "Build Code/Deprecated (the old UI framework and its UISandbox)" OFF)
 # Optional extensions are independently switchable; each exposes an OPTION_HAS_* compile define
 # (see the policy block) so C++ can guard usage with #if.
 option(OPTION_GUI_LIBFUZZER "Build a libFuzzer executable per GUI fuzz target (clang; configure the tree with -fsanitize=fuzzer-no-link,address)" OFF)
@@ -432,15 +433,6 @@ add_subdirectory(Code/Foundation/VG)        # 2D vector-graphics core over Core 
 add_subdirectory(Code/Foundation/VG.SVG)
 add_subdirectory(Code/Foundation/VG.Resource) # cooked vector images (validated SVG; renderer- and UI-free records)
 add_subdirectory(Code/Foundation/VG.Renderer)
-add_subdirectory(Code/Foundation/UI)        # retained-mode UI framework (faithful Sedulous.UI port) over Core (+ VG/Fonts as phases land)
-add_subdirectory(Code/Foundation/UI.VFS)
-add_subdirectory(Code/Foundation/UI.Shell)
-add_subdirectory(Code/Foundation/UI.Toolkit)
-# --- UI desktop hosts (UIHost + docking workbench; link Graphics/Runtime.Client, desktop-only) ---
-if(NOT EMSCRIPTEN)
-    add_subdirectory(Code/Foundation/UI.Runtime)
-    add_subdirectory(Code/Foundation/UI.Application)
-endif()
 add_subdirectory(Code/Foundation/GUI)   # fresh eepp-derived UI framework
 add_subdirectory(Code/Foundation/Script)
 # --- Script backends: independently switchable via OPTION_ENABLE_* (declared up top) -----------
@@ -823,11 +815,6 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Foundation/Texture.Resource.Tests          Foundation::Texture.Resource)
     util_test_suite(Code/Foundation/Fonts.Resource.Tests            Foundation::Fonts.Resource)
     util_test_suite(Code/Foundation/Texture.Tests                   Foundation::Texture)
-    util_test_suite(Code/Foundation/UI.Shell.Tests                  Foundation::UI.Shell)
-    util_test_suite(Code/Foundation/UI.Tests                        Foundation::UI)
-    util_test_suite(Code/Foundation/UI.Toolkit.Tests                Foundation::UI.Toolkit)
-    util_test_suite(Code/Foundation/UI.Application.Tests            Foundation::UI.Application)
-    util_test_suite(Code/Foundation/UI.VFS.Tests                    Foundation::UI.VFS)
     util_test_suite(Code/Foundation/VFS.Pak.Tests                   Foundation::VFS.Pak)
     util_test_suite(Code/Foundation/VFS.Tests                       Foundation::VFS)
     util_test_suite(Code/Foundation/VG.Renderer.Tests               Foundation::VG.Renderer)
@@ -890,6 +877,12 @@ endif()
 
 if(OPTION_BUILD_SAMPLES)
     add_subdirectory(Code/Samples)
+endif()
+
+# The old UI framework (foundation.ui, the Sedulous.UI port) and its sandbox, on their way out:
+# nothing outside Code/Deprecated links them, and they build only when asked for.
+if(OPTION_BUILD_DEPRECATED)
+    add_subdirectory(Code/Deprecated/UI)
 endif()
 
 # Game native code (game-native-code.md N3): the game's native directory joins the

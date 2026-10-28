@@ -73,9 +73,9 @@ Code/Foundation/Script.AngelScript/AngelScriptScriptImpl.cpp
 Code/Foundation/Shaders/Compiler.cppm
 Code/Foundation/Shell.Null/NullShell.cppm
 Code/Foundation/Shell.Web/WebWindowManager.cppm
-Code/Foundation/UI.Application/UIApplication.cppm
-Code/Foundation/UI/Styling/ThemeIconSet.cppm
-Code/Foundation/UI.VFS/VfsResourceProvider.cppm
+Code/Deprecated/UI/UI.Application/UIApplication.cppm
+Code/Deprecated/UI/UI/Styling/ThemeIconSet.cppm
+Code/Deprecated/UI/UI.VFS/VfsResourceProvider.cppm
 Code/Foundation/VFS.Pak/PakModule.cppm
 Code/Foundation/VG/Context.cppm
 Code/Foundation/Xml.Serialization/XmlSerializer.cppm
@@ -97,7 +97,7 @@ Code/Samples/RHI/Smoketest/Main.cpp
 Code/Samples/Sandbox/main.cpp
 Code/Samples/ScriptPlayground/main.cpp
 Code/Samples/TerrainPlayground/TerrainPlaygroundApp.h
-Code/Samples/UI/UISandbox/Main.cpp
+Code/Deprecated/UI/UISandbox/Main.cpp
 Code/Samples/VG/VGSandbox/Main.cpp
 Code/Samples/WebScene/WebSceneApp.h
 Code/Tools/Tools.Cook/Main.cpp

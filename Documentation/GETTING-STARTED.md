@@ -51,8 +51,8 @@ binaries.
 **folder == CMake target == module name**, with tests as a sibling target:
 
 ```
-Code/Foundation/UI            -> target UI,        module foundation.ui
-Code/Foundation/UI.Tests      -> target UI.Tests   (doctest executable)
+Code/Foundation/GUI           -> target GUI,       module foundation.gui
+Code/Foundation/GUI.Tests     -> target GUI.Tests  (doctest executable)
 Code/Engine/Engine.Render     -> target Engine.Render, module engine.render
 ```
 
@@ -84,8 +84,10 @@ The roles, in dependency order (lower layers never know about higher ones):
 - **Integration/** - cross-cutting integration test suites (script facades,
   texture compression probes, ...).
 - **Extensions/** - optional integrations (Dear ImGui).
-- **Experimental/** - parked/experimental code; not part of the shipping build
-  contract.
+- **Deprecated/** - code kept compiling on its way out: `UI` holds the old UI
+  framework (`foundation.ui` and its satellites) and its UISandbox. Nothing
+  outside `Deprecated/` links it, and it builds only with
+  `-DOPTION_BUILD_DEPRECATED=ON` (off by default).
 
 Layering rules worth internalizing early: Foundation never imports Engine;
 Pipeline (and its tests) never import UI; editor-only state never lives in
@@ -125,7 +127,8 @@ from (engine-composition.md).
   sheets, layout, text, events, the `gui` script surface), with satellites for
   the editor's widgets, docking, the code editor and a game's screens
   (`GUI.Gamekit`). The editor AND in-game UI use it. See `Systems/gui-port.md`.
-  The older `foundation.ui` remains for the UISandbox (`Systems/ui-framework.md`).
+  The older `foundation.ui` is deprecated, in `Code/Deprecated/UI` with its
+  UISandbox (`Systems/ui-framework.md`).
 
 Drill-down: every subsystem has a doc in `Documentation/Systems/` (35 and
 counting) - `renderer.md`, `scripting.md`, `physics.md`, `audio.md`,

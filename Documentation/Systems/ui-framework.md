@@ -1,6 +1,8 @@
 # UI Framework (foundation.ui core)
 
-> Status: CURRENT
+> Status: DEPRECATED (2026-10-28): moved to `Code/Deprecated/UI` with its UISandbox; nothing
+> outside that folder links it, and it builds only with `-DOPTION_BUILD_DEPRECATED=ON`. The engine, the editor and the games are on foundation.gui
+> (`Systems/gui-port.md`).
 > Verified: 2026-08-16 @ 993d57d2
 > Track: ui-core-audit.md (Backlog) / Specs/ui-box-model.md / Specs/ui-theme-migration.md
 
@@ -12,9 +14,9 @@ game tier that once did is in `Archive/game-ui-history.md`); this doc covers the
 
 ## Modules
 
-- **`foundation.ui`** (`Code/Foundation/UI`) - the core: `View`/`ViewGroup`, controls,
+- **`foundation.ui`** (`Code/Deprecated/UI/UI`) - the core: `View`/`ViewGroup`, controls,
   layouts, styling (`Styling/`), popups/overlays, drag-drop, virtualization, markup.
-- **`foundation.ui.toolkit`** (`Code/Foundation/UI.Toolkit`) - editor-grade widgets:
+- **`foundation.ui.toolkit`** (`Code/Deprecated/UI/UI.Toolkit`) - editor-grade widgets:
   docking, menu/tool/status bars, property grid, pickers, node graph, curve/gradient
   canvases, the code editor.
 - **`foundation.ui.runtime`** - `UIHost`: window attachment, per-frame Update/Draw, the

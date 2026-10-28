@@ -8,4 +8,4 @@ target_link_libraries(UISandbox PRIVATE
     Foundation::Shell Foundation::Image Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
     Foundation::Fonts.DistanceField.Baker
     Foundation::VG Foundation::VG.Renderer Foundation::UI Foundation::UI.Toolkit Foundation::UI.Shell Foundation::UI.VFS Foundation::VFS)
-util_copy_sdl3_dll(UISandbox)
+util_copy_runtime_deps(UISandbox)

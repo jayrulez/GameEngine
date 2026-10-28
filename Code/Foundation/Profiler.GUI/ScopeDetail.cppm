@@ -124,8 +124,10 @@ export namespace foundation::profiler::gui
             const ChosenName chosen = m_focus->Name();
             const StringView name = source->NameOf(chosen.name);
             const u64 frequency = source->TickFrequency();
-            ctx.VG().FillRoundedRect(Rectangle{box.x, y + kLineHeight * 0.5f - 5.0f, 10.0f, 10.0f}, 2.0f, NameColor(name));
-            DrawLabel(ctx, name, Rect{box.x + 16.0f, y, box.width - 16.0f, kLineHeight + 4.0f}, PartTextColor(u8"title"));
+            // The swatch centred on the title's own line, which is taller than the others.
+            const f32 titleHeight = kLineHeight + 4.0f;
+            ctx.VG().FillRoundedRect(Rectangle{box.x, y + titleHeight * 0.5f - 5.0f, 10.0f, 10.0f}, 2.0f, NameColor(name));
+            DrawLabel(ctx, name, Rect{box.x + 16.0f, y, box.width - 16.0f, titleHeight}, PartTextColor(u8"title"));
             y += kLineHeight + 6.0f;
             const String stats = Format(u8"{} {} on {}   total {}   mean {}   max {} ms", summary.calls,
                                         summary.calls == 1 ? StringView(u8"call") : StringView(u8"calls"), summary.lanes.AsView(),

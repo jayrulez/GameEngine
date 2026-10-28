@@ -647,8 +647,8 @@ export namespace foundation::gui
                 layout.RangeOnLine(a, b, i, m_rangeBoxes);
                 if (takesBreak && !underline)
                 {
-                    const f32 end = layout.CaretXOnLine(line.End, i, true);
-                    m_rangeBoxes.PushBack(line.RightToLeft ? core::Float2{end - 4.0f, end} : core::Float2{end, end + 4.0f});
+                    const f32 lineEnd = layout.CaretXOnLine(line.End, i, true);
+                    m_rangeBoxes.PushBack(line.RightToLeft ? core::Float2{lineEnd - 4.0f, lineEnd} : core::Float2{lineEnd, lineEnd + 4.0f});
                 }
                 for (const core::Float2 box : m_rangeBoxes)
                 {

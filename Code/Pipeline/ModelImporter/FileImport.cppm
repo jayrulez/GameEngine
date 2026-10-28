@@ -1268,12 +1268,12 @@ export namespace pipeline
             if (lazy)
             {
                 const foundation::model::ModelMesh* mesh = &m;
-                geometry.produce = [asset, mesh, levels = Move(levels),
+                geometry.produce = [asset, mesh, meshLevels = Move(levels),
                                     generateLods](Array<byte>& bytes) -> Status
                 {
                     BuildMeshSource(*mesh,
-                                    Span<const foundation::model::ModelMesh* const>{levels.Data(),
-                                                                                    levels.Size()},
+                                    Span<const foundation::model::ModelMesh* const>{meshLevels.Data(),
+                                                                                        meshLevels.Size()},
                                     generateLods, *asset);
                     pipeline::detail::MeshSourceToBytes(asset->source, bytes);
                     return Status{};

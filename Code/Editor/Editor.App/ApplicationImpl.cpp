@@ -203,7 +203,7 @@ namespace editor::app
             OpenDock();
         // The window's close button asks about unsaved pages first, as File > Exit does.
         if (host.Shell() != nullptr)
-            host.Shell()->OnMainWindowCloseRequested = [self = this]() { return self->ConfirmExit(); };
+            host.Shell()->OnMainWindowCloseRequested = [self]() { return self->ConfirmExit(); };
         m_context.OnNotice = [self](editor::NoticeKind kind, StringView message)
         {
             self->ShowToast(kind, message);
@@ -353,11 +353,11 @@ namespace editor::app
                 foundation::shell::IDialogService* dialogs = self->ShellDialogs();
                 if (dialogs == nullptr)
                     return;
-                foundation::content::Group* into = &group;
-                dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[self, into](Span<const String> paths)
+                foundation::content::Group* target = &group;
+                dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[self, target](Span<const String> paths)
                                                                                {
                                                                                    if (!paths.IsEmpty())
-                                                                                       self->ImportFiles(paths, *into);
+                                                                                       self->ImportFiles(paths, *target);
                                                                                }},
                                       {}, {}, true);
             };
@@ -550,10 +550,10 @@ namespace editor::app
                 foundation::shell::IDialogService* dialogs = self->ShellDialogs();
                 if (dialogs == nullptr)
                     return;
-                dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{[chosen = Move(chosen)](Span<const String> paths)
+                dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{[onChosen = Move(chosen)](Span<const String> paths)
                                                                                  {
                                                                                      if (paths.Size() > 0)
-                                                                                         chosen(paths[0]);
+                                                                                         onChosen(paths[0]);
                                                                                  }});
             };
             seams.revealFolder = [](StringView folder) { (void)OpenPathInFileManager(folder); };
@@ -589,14 +589,14 @@ namespace editor::app
                 foundation::shell::IDialogService* dialogs = self->ShellDialogs();
                 if (dialogs == nullptr)
                     return;
-                dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[chosen = Move(chosen)](Span<const String> paths)
+                dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[onChosen = Move(chosen)](Span<const String> paths)
                                                                                {
                                                                                    if (paths.IsEmpty())
                                                                                        return;
                                                                                    Array<String> picked;
                                                                                    for (const String& path : paths)
                                                                                        picked.PushBack(path);
-                                                                                   chosen(Move(picked));
+                                                                                   onChosen(Move(picked));
                                                                                }},
                                       {}, {}, true);
             };
@@ -633,10 +633,10 @@ namespace editor::app
                 if (project == nullptr)
                     return;
                 PickerRequest request = GroupPicker::Request(project->SourceDb(), &current);
-                request.OnPicked = [project, picked = Move(picked)](StringView key)
+                request.OnPicked = [project, onPicked = Move(picked)](StringView key)
                 {
-                    if (foundation::content::Group* group = GroupPicker::Find(project->SourceDb(), key))
-                        picked(*group);
+                    if (foundation::content::Group* found = GroupPicker::Find(project->SourceDb(), key))
+                        onPicked(*found);
                 };
                 self->ShowPicker(Move(request));
             };

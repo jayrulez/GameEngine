@@ -228,7 +228,7 @@ export namespace foundation::gui
             }
             const auto command = [this](const char8_t* name, core::Function<void()> run)
             {
-                (void)OnCommand(core::StringView(name), [run = core::Move(run)](CommandEvent&) mutable { run(); });
+                (void)OnCommand(core::StringView(name), [action = core::Move(run)](CommandEvent&) mutable { action(); });
             };
             command(kCodeToggleComment, [this]() { ToggleComment(); });
             command(kCodeIndentLines, [this]() { IndentLines(false); });
@@ -2082,10 +2082,10 @@ export namespace foundation::gui
             // Its tokens as the core's rich text: each run in its token's colour ("[[" a "[").
             core::String markup;
             const core::StringView shown = view.Shown.AsView();
-            const auto append = [&markup](core::StringView text)
+            const auto append = [&markup](core::StringView piece)
             {
-                for (usize i = 0; i < text.Size(); ++i)
-                    markup.Append(text[i] == u8'[' ? core::StringView(u8"[[") : text.SubStr(i, 1));
+                for (usize i = 0; i < piece.Size(); ++i)
+                    markup.Append(piece[i] == u8'[' ? core::StringView(u8"[[") : piece.SubStr(i, 1));
             };
             u32 done = 0;
             for (const CodeSpan& span : m_lex[line].Spans)
@@ -2095,9 +2095,9 @@ export namespace foundation::gui
                     break;
                 if (from > done)
                     append(shown.SubStr(done, from - done));
-                const core::StringView text = shown.SubStr(from, core::Min<usize>(to, shown.Size()) - from);
+                const core::StringView spanText = shown.SubStr(from, core::Min<usize>(to, shown.Size()) - from);
                 if (span.Token == CodeToken::Text)
-                    append(text);
+                    append(spanText);
                 else
                 {
                     const Color c = TokenColor(span.Token);
@@ -2111,7 +2111,7 @@ export namespace foundation::gui
                         tag[9 + k * 2] = kHex[v & 15u];
                     }
                     markup.Append(core::StringView(tag, sizeof(tag) - 1));
-                    append(text);
+                    append(spanText);
                     markup.Append(core::StringView(u8"[/color]"));
                 }
                 done = core::Min<u32>(to, static_cast<u32>(shown.Size()));

@@ -178,12 +178,12 @@ namespace editor
         slot->SetTooltip(tooltip);
         slot->SetAcceptedTypes(Move(types));
         AnimationPreviewRig* self = this;
-        const auto assign = [self, skeleton](const Guid& id)
+        const auto assign = [self, skeleton](const Guid& assetId)
         {
             if (skeleton)
-                self->SetSkeleton(id);
+                self->SetSkeleton(assetId);
             else
-                self->SetMesh(id);
+                self->SetMesh(assetId);
             if (self->OnPicked)
                 self->OnPicked();
         };

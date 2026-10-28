@@ -40,7 +40,7 @@ export namespace editor::app
         {
             if (!run)
                 return;
-            d.execute = [run = Move(run)](EditorPage*) { run(); };
+            d.execute = [action = Move(run)](EditorPage*) { action(); };
             (void)actions.Register(Move(d));
         }
     }
@@ -215,10 +215,10 @@ export namespace editor::app
                     return String(u8"Open a project first");
                 return page == nullptr ? String(u8"No page is active") : String(u8"This page shows no asset");
             };
-            d.execute = [cook = Move(cook)](EditorPage* page)
+            d.execute = [cookPage = Move(cook)](EditorPage* page)
             {
                 if (page != nullptr)
-                    cook(*page);
+                    cookPage(*page);
             };
             (void)actions.Register(Move(d));
         };

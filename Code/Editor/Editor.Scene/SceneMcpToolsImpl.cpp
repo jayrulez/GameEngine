@@ -345,7 +345,7 @@ namespace editor
             const TypeInfo* typePtr = &componentType;
             const PropertyInfo* listPtr = &list;
             return Function<void()>{[editPtr, entity, typePtr, listPtr, count, reference, entityRef,
-                                     ids = Move(ids), leaves = Move(leaves)]()
+                                     pendingIds = Move(ids), pendingLeaves = Move(leaves)]()
             {
                 (void)editPtr->MutateComponent(
                     entity, typePtr,
@@ -372,17 +372,17 @@ namespace editor
                                 }
                                 if (reference)
                                 {
-                                    c.elementType->reference->SetId(at.Pointer(), ids[i]);
+                                    c.elementType->reference->SetId(at.Pointer(), pendingIds[i]);
                                     c.elementType->reference->ClearBinding(at.Pointer());
                                 }
                                 else
                                 {
-                                    static_cast<scene::EntityRef*>(at.Pointer())->id = ids[i];
+                                    static_cast<scene::EntityRef*>(at.Pointer())->id = pendingIds[i];
                                 }
                             }
                             else
                             {
-                                (void)ContainerSetAt(c, container, i, leaves[i]);
+                                (void)ContainerSetAt(c, container, i, pendingLeaves[i]);
                             }
                         }
                     });
@@ -476,7 +476,7 @@ namespace editor
             SceneEditContext* editPtr = &edit;
             const TypeInfo* typePtr = &componentType;
             const PropertyInfo* listPtr = &list;
-            return Function<void()>{[editPtr, entity, typePtr, listPtr, count, elements = Move(elements)]()
+            return Function<void()>{[editPtr, entity, typePtr, listPtr, count, pendingElements = Move(elements)]()
             {
                 (void)editPtr->MutateComponent(
                     entity, typePtr,
@@ -497,7 +497,7 @@ namespace editor
                             {
                                 continue;
                             }
-                            for (const FieldWrite& w : elements[i])
+                            for (const FieldWrite& w : pendingElements[i])
                             {
                                 void* address = w.property->address(at);
                                 if (address == nullptr)
@@ -1115,13 +1115,13 @@ namespace editor
                                           property.AsView()));
                     }
                     SceneEditContext* editPtr = &edit;
-                    EditorContext* context = ctx;
+                    EditorContext* editorContext = ctx;
                     const TypeInfo* typePtr = &type;
                     const char* name = prop->name;
-                    write = [editPtr, context, id, typePtr, name, target]()
+                    write = [editPtr, editorContext, id, typePtr, name, target]()
                     {
                         editPtr->SetComponentReference(id, typePtr, ComponentPropertyPath{}, name,
-                                                       target, context->Resources());
+                                                       target, editorContext->Resources());
                     };
                 }
                 else if (propType.enumeratorCount > 0)
@@ -1174,8 +1174,8 @@ namespace editor
                     SceneEditContext* editPtr = &edit;
                     const TypeInfo* typePtr = &type;
                     const char* name = prop->name;
-                    write = [editPtr, id, typePtr, name, leaf = Move(leaf)]()
-                    { editPtr->SetComponentProperty(id, typePtr, name, leaf); };
+                    write = [editPtr, id, typePtr, name, leafValue = Move(leaf)]()
+                    { editPtr->SetComponentProperty(id, typePtr, name, leafValue); };
                 }
                 EditorCommandStack& commands = edit.Commands();
                 const i64 before = commands.UndoIndex();

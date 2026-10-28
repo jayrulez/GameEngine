@@ -278,7 +278,7 @@ namespace editor
 
     gui::MenuItem* SceneHud::AddCheck(gui::Menu& menu, StringView label, Function<bool()> on, Function<void()> pick)
     {
-        gui::MenuItem* item = menu.AddCheckItem(label, on ? on() : false, [pick = Move(pick)](bool) { if (pick) pick(); });
+        gui::MenuItem* item = menu.AddCheckItem(label, on ? on() : false, [onPick = Move(pick)](bool) { if (onPick) onPick(); });
         m_checks.PushBack(Checked{item, Move(on)});
         return item;
     }

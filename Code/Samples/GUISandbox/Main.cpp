@@ -1006,7 +1006,7 @@ void GUISandbox::BuildSandbox()
     m_styles->SetFontService(m_fontService.Get());
     m_styles->SetFontFaceLoader([app](StringView face, StringView source) { return app->LoadFontFace(face, source); });
     m_gui->SetFontService(m_fontService.Get()); // a rich text's own faces
-    m_resources = MakeUnique<SandboxResources>(AppRoot(), [app](StringView path) { return app->DataPath(path); });
+    m_resources = MakeUnique<SandboxResources>(AppRoot(), [app](StringView relative) { return app->DataPath(relative); });
     m_styles->SetResourceProvider(m_resources.Get());
     m_gui->SetResourceProvider(m_resources.Get());
     ApplySandboxSheet();
@@ -2369,7 +2369,7 @@ void GUISandbox::FillToolkit(gui::Node& frame)
     };
     update();
     const auto on = [self](const char8_t* id, Function<void()> run)
-    { (void)self->m_root->OnCommand(id, [run = Move(run)](gui::CommandEvent&) { run(); }); };
+    { (void)self->m_root->OnCommand(id, [action = Move(run)](gui::CommandEvent&) { action(); }); };
     on(u8"toolkit.change", [self, update, status]()
     {
         ++self->m_toolkitUnsaved;
@@ -3055,13 +3055,13 @@ void GUISandbox::FillGraphs(gui::Node& section)
     const gui::GraphId warm = flow.AddNode(place(tone, 224.0f, 208.0f, u8"warm white"));
     const gui::GraphId tinted = flow.AddNode(place(tint, 432.0f, 192.0f, nullptr));
     const gui::GraphId lit = flow.AddNode(place(lamp, 640.0f, 96.0f, nullptr));
-    const auto link = [&flow](gui::GraphId from, const char8_t* output, gui::GraphId to, const char8_t* input)
+    const auto link = [&flow](gui::GraphId from, const char8_t* outputName, gui::GraphId to, const char8_t* inputName)
     {
         gui::GraphLinkInfo made;
         made.FromNode = from;
-        made.FromPin = flow.FindPin(from, StringView(output), gui::GraphPinDirection::Output);
+        made.FromPin = flow.FindPin(from, StringView(outputName), gui::GraphPinDirection::Output);
         made.ToNode = to;
-        made.ToPin = flow.FindPin(to, StringView(input), gui::GraphPinDirection::Input);
+        made.ToPin = flow.FindPin(to, StringView(inputName), gui::GraphPinDirection::Input);
         (void)flow.AddLink(made);
     };
     link(low, u8"value", mixed, u8"a");

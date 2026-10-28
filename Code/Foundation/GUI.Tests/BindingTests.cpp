@@ -80,7 +80,7 @@ TEST_CASE("binding: one widget's state drives another's, with no subscription")
     root->AddChild(label.Get());
     root->AddChild(bar.Get());
     Slider* s = slider.Get();
-    REQUIRE(label->BindProperty(SV(u8"text"), [s] { return core::Variant::From<f32>(s->GetValue()); }));
+    REQUIRE(label->BindProperty(SV(u8"text"), [s] { return core::Variant::From<f32>(static_cast<f32>(s->GetValue())); }));
     REQUIRE(bar->BindProperty(SV(u8"value"), [s] { return core::Variant::From<core::f64>(s->GetValue()); }));
 
     slider->SetValue(0.25f);

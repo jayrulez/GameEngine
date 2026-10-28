@@ -543,20 +543,20 @@ export namespace foundation::gui
                 const i32 hr = nib(0), hg = nib(1), hb = nib(2);
                 if (hr < 0 || hg < 0 || hb < 0)
                     return {};
-                r = (hr * 17) / 255.0f;
-                g = (hg * 17) / 255.0f;
-                b = (hb * 17) / 255.0f;
+                r = static_cast<f32>(hr * 17) / 255.0f;
+                g = static_cast<f32>(hg * 17) / 255.0f;
+                b = static_cast<f32>(hb * 17) / 255.0f;
             }
             else if (len == 6 || len == 8)
             {
                 for (usize k = 0; k < len; ++k)
                     if (nib(k) < 0)
                         return {};
-                r = (nib(0) * 16 + nib(1)) / 255.0f;
-                g = (nib(2) * 16 + nib(3)) / 255.0f;
-                b = (nib(4) * 16 + nib(5)) / 255.0f;
+                r = static_cast<f32>(nib(0) * 16 + nib(1)) / 255.0f;
+                g = static_cast<f32>(nib(2) * 16 + nib(3)) / 255.0f;
+                b = static_cast<f32>(nib(4) * 16 + nib(5)) / 255.0f;
                 if (len == 8)
-                    a = (nib(6) * 16 + nib(7)) / 255.0f;
+                    a = static_cast<f32>(nib(6) * 16 + nib(7)) / 255.0f;
             }
             else
             {
@@ -574,14 +574,14 @@ export namespace foundation::gui
             usize close = open;
             while (close < s.Size() && s[close] != u8')')
                 ++close;
-            const core::StringView inside = s.SubStr(open, close - open);
+            const core::StringView channelList = s.SubStr(open, close - open);
             f32 comps[4] = {0, 0, 0, 1.0f};
             usize ci = 0, start = 0;
-            for (usize i = 0; i <= inside.Size() && ci < 4; ++i)
+            for (usize i = 0; i <= channelList.Size() && ci < 4; ++i)
             {
-                if (i == inside.Size() || inside[i] == u8',')
+                if (i == channelList.Size() || channelList[i] == u8',')
                 {
-                    const Optional<f32> v = ParseLength(inside.SubStr(start, i - start));
+                    const Optional<f32> v = ParseLength(channelList.SubStr(start, i - start));
                     if (!v.HasValue())
                         return {};
                     comps[ci] = ci < 3 ? (v.Value() / 255.0f) : v.Value(); // alpha is 0..1

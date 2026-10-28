@@ -2594,10 +2594,10 @@ export namespace foundation::gui
         /// for RemoveEventListener.
         u32 AddNamedListener(core::StringView name, EventCallback callback)
         {
-            return AddEventListener(EventType::Named, [name = core::String(name), callback = core::Move(callback)](const Event& event)
+            return AddEventListener(EventType::Named, [eventName = core::String(name), onEvent = core::Move(callback)](const Event& event)
                                     {
-                                        if (static_cast<const NamedEvent&>(event).Name == name.AsView())
-                                            callback(event);
+                                        if (static_cast<const NamedEvent&>(event).Name == eventName.AsView())
+                                            onEvent(event);
                                     });
         }
         /// Tells this node's listeners of an event about it (not routed: geometry, focus, change).

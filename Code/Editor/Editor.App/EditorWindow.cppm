@@ -265,7 +265,7 @@ export namespace editor::app
                 (void)m_toasts->Post(Move(request));
                 return;
             }
-            (void)m_toasts->Post(Move(request), [action = Move(action)](const gui::ToastAction&) { action(); });
+            (void)m_toasts->Post(Move(request), [runAction = Move(action)](const gui::ToastAction&) { runAction(); });
         }
         /// The toast a notice shows: its severity, the message as its title and its key; with an
         /// action's text, a button and no time out.

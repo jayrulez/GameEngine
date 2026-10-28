@@ -433,7 +433,7 @@ export namespace foundation::gui
                 Variant value = Mix(m_from, m_to, t);
                 if (m_whole)
                     if (const f64* n = value.TryGet<f64>())
-                        value = Variant::From<f64>(*n < 0.0 ? -Floor(-*n + 0.5) : Floor(*n + 0.5));
+                        value = Variant::From<f64>(*n < 0.0 ? -Floor(static_cast<f32>(-*n + 0.5)) : Floor(static_cast<f32>(*n + 0.5)));
                 const Variant typed = m_dataType != nullptr ? ConvertVariant(value, *m_dataType) : value;
                 (void)m_data->Set(m_property.AsView(), typed.IsEmpty() ? value : typed);
                 return;

@@ -35,7 +35,7 @@ namespace editor::app
         class InputToolState final : public RefCounted
         {
         public:
-            explicit InputToolState(InputToolSeams seams) : seams(Move(seams)) {}
+            explicit InputToolState(InputToolSeams toolSeams) : seams(Move(toolSeams)) {}
             InputToolSeams seams;
 
             [[nodiscard]] gui::SceneRoot* Root() const
@@ -191,7 +191,7 @@ namespace editor::app
         using Act = Function<bool(gui::SceneRoot& root, const JsonValue& args, JsonValue& answer, String& error)>;
         foundation::mcp::ToolCallHandler Acting(const RefPtr<InputToolState>& state, Act act)
         {
-            return [state, act = Move(act)](ToolCall& call, const JsonValue& args) -> ToolOutcome
+            return [state, actOnRoot = Move(act)](ToolCall& call, const JsonValue& args) -> ToolOutcome
             {
                 gui::SceneRoot* root = state->Root();
                 if (root == nullptr)
@@ -204,7 +204,7 @@ namespace editor::app
                 }
                 JsonValue answer = JsonValue::MakeObject();
                 String error;
-                if (!act(*root, args, answer, error))
+                if (!actOnRoot(*root, args, answer, error))
                     return Err(Move(error));
                 auto wait = MakeUnique<FrameWait>(editor::EditorRootAllocator());
                 wait->answer = Move(answer);

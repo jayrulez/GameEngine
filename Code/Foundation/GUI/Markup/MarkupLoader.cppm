@@ -339,10 +339,10 @@ export namespace foundation::gui
                 return node.BindData(property, model, parts[0].Text.AsView());
             }
             return node.BindProperty(property,
-                                     [model, parts = core::Move(parts)]
+                                     [model, templateParts = core::Move(parts)]
                                      {
                                          core::String text;
-                                         for (const MarkupTemplatePart& part : parts)
+                                         for (const MarkupTemplatePart& part : templateParts)
                                              text.Append(part.IsName ? FormatVariant(model->Get(part.Text.AsView())).AsView()
                                                                      : part.Text.AsView());
                                          return Variant::From<core::String>(core::Move(text));

@@ -54,7 +54,7 @@ TEST_CASE("navigation: a grid moves by rows and columns, and stops at its edges"
     const char8_t* ids[6] = {u8"a", u8"b", u8"c", u8"d", u8"e", u8"f"};
     core::RefPtr<Button> cells[6];
     for (int i = 0; i < 6; ++i)
-        cells[i] = Cell(*bed.root.Get(), ids[i], 10.0f + 60.0f * (i % 3), 10.0f + 40.0f * (i / 3));
+        cells[i] = Cell(*bed.root.Get(), ids[i], 10.0f + 60.0f * static_cast<float>(i % 3), 10.0f + 40.0f * static_cast<float>(i / 3));
 
     bed.Key(KeyCode::Down); // nothing focused: the first
     CHECK(bed.Focused() == SV(u8"a"));
@@ -269,7 +269,7 @@ TEST_CASE("navigation: a held direction repeats after a delay, faster the longer
     for (int i = 0; i < 40; ++i)
     {
         char8_t id[8] = {u8'c', static_cast<char8_t>(u8'0' + i / 10), static_cast<char8_t>(u8'0' + i % 10), 0};
-        cells[i] = Cell(*bed.root.Get(), id, 10.0f, 10.0f + 25.0f * i, 40.0f, 20.0f);
+        cells[i] = Cell(*bed.root.Get(), id, 10.0f, 10.0f + 25.0f * static_cast<float>(i), 40.0f, 20.0f);
     }
     bed.d.SetFocusNode(cells[0].Get());
     const auto index = [&]() {

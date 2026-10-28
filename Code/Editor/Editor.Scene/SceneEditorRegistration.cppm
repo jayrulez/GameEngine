@@ -62,18 +62,18 @@ export namespace editor
         app::EditorApplication* editor = &app;
         const auto services = [appHost, editor]()
         {
-            SceneEditorPage::Services services;
-            services.host = appHost;
-            services.gui = editor->Window().Host();
+            SceneEditorPage::Services pageServices;
+            pageServices.host = appHost;
+            pageServices.gui = editor->Window().Host();
             app::EditorWindow* window = &editor->Window();
-            services.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
-            services.refs = &editor->RefServices();
-            services.icons = &editor->TypeIcons();
-            services.pick = [editor](app::PickerRequest request) { editor->ShowPicker(Move(request)); };
-            services.createAsset = [editor](StringView title, StringView suggested, foundation::content::Group* group,
-                                            Function<void(foundation::content::Group&, StringView)> create)
+            pageServices.loadMarkup = [window](StringView path) { return window->LoadMarkup(path); };
+            pageServices.refs = &editor->RefServices();
+            pageServices.icons = &editor->TypeIcons();
+            pageServices.pick = [editor](app::PickerRequest request) { editor->ShowPicker(Move(request)); };
+            pageServices.createAsset = [editor](StringView title, StringView suggested, foundation::content::Group* group,
+                                                Function<void(foundation::content::Group&, StringView)> create)
             { editor->ShowCreateAsset(title, suggested, group, Move(create)); };
-            return services;
+            return pageServices;
         };
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
             EditorRootAllocator().New<SceneEditorPageFactory>(foundation::scene::SceneDocument::StaticType(), services), EditorRootAllocator()));

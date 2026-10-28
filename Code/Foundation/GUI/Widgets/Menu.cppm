@@ -639,10 +639,10 @@ export namespace foundation::gui
             item->SetText(text);
             core::Function<void()> act = core::Move(action);
             item->SetOnPicked(
-                [act = core::Move(act)]()
+                [onPicked = core::Move(act)]()
                 {
-                    if (act)
-                        act();
+                    if (onPicked)
+                        onPicked();
                 });
             MenuItem* raw = item.Get();
             AddItemNode(item.Get(), raw);
@@ -1146,7 +1146,7 @@ export namespace foundation::gui
             const f32 edgeX = sp.x >= GetPosition().x + GetSize().x * 0.5f ? sp.x : sp.x + ss.x; // the side facing this menu
             const core::Float2 b{edgeX, sp.y};
             const core::Float2 c{edgeX, sp.y + ss.y};
-            const auto side = [](core::Float2 a, core::Float2 b, core::Float2 q) { return (b.x - a.x) * (q.y - a.y) - (b.y - a.y) * (q.x - a.x); };
+            const auto side = [](core::Float2 start, core::Float2 end, core::Float2 point) { return (end.x - start.x) * (point.y - start.y) - (end.y - start.y) * (point.x - start.x); };
             const f32 d1 = side(apex, b, p), d2 = side(b, c, p), d3 = side(c, apex, p);
             const bool negative = d1 < 0.0f || d2 < 0.0f || d3 < 0.0f;
             const bool positive = d1 > 0.0f || d2 > 0.0f || d3 > 0.0f;
@@ -1172,13 +1172,13 @@ export namespace foundation::gui
                 self->m_deferredFor += elapsed.AsSecondsF();
                 if (self->m_deferredFor < kSafeAreaGrace)
                     return true;
-                MenuRow* row = self->m_deferredRow;
+                MenuRow* deferred = self->m_deferredRow;
                 self->m_deferredRow = nullptr;
                 self->m_deferring = false;
-                if (row->IsHovered())
+                if (deferred->IsHovered())
                 {
                     self->m_pointerKnown = false; // resting: no heading
-                    self->OnRowHovered(row);
+                    self->OnRowHovered(deferred);
                 }
                 return false;
             }));

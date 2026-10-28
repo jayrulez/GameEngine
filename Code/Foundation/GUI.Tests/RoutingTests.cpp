@@ -491,7 +491,7 @@ TEST_CASE("routing: CancelPointer ends a press with no click, and a slider drops
     slider->SetSize(core::Float2{200.0f, 20.0f});
     root->AddChild(slider.Get());
     d->InjectMouseDown(core::Float2{100.0f, 110.0f}, MouseButton::Left);
-    const f32 before = slider->GetValue();
+    const f32 before = static_cast<f32>(slider->GetValue());
     d->CancelPointer();
     d->InjectMouseMove(core::Float2{190.0f, 110.0f});
     CHECK(slider->GetValue() == doctest::Approx(before)); // the drag ended with the press

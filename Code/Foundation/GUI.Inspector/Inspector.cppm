@@ -651,11 +651,11 @@ export namespace foundation::gui::inspector
                         group(core::String(core::StringView(u8"set by code"))).Lines.PushBack(Line{e.Property, {}});
                     for (usize i = 0; i < e.Declarations.Size(); ++i)
                     {
-                        const StyleDeclarationSource& d = e.Declarations[i];
-                        const core::String header = d.Inline ? core::String(core::StringView(u8"inline style"))
-                                                             : core::Format(u8"{}   {}:{}", d.Selector, d.Sheet, d.Line);
-                        group(header).Lines.PushBack(Line{e.Property, d.Value, i == 0 && e.Origin != StyleOrigin::Code, d.Important,
-                                                          true, d.Inline, d.Rule});
+                        const StyleDeclarationSource& declaration = e.Declarations[i];
+                        const core::String header = declaration.Inline ? core::String(core::StringView(u8"inline style"))
+                                                                       : core::Format(u8"{}   {}:{}", declaration.Selector, declaration.Sheet, declaration.Line);
+                        group(header).Lines.PushBack(Line{e.Property, declaration.Value, i == 0 && e.Origin != StyleOrigin::Code, declaration.Important,
+                                                          true, declaration.Inline, declaration.Rule});
                     }
                 }
                 Inspector* self = this;

@@ -1285,7 +1285,7 @@ export namespace editor::app
                     Format(u8"Delete {}? {} source {} and cooked {} go, and {} open pages close.", names, ids.Size() == 1 ? StringView(u8"Its") : StringView(u8"Their"),
                            ids.Size() == 1 ? StringView(u8"file") : StringView(u8"files"), ids.Size() == 1 ? StringView(u8"product") : StringView(u8"products"),
                            ids.Size() == 1 ? StringView(u8"its") : StringView(u8"their")),
-                    [ops = m_services.operations, ids = Move(ids)]() mutable { ops->Delete(Move(ids)); });
+                    [ops = m_services.operations, pendingIds = Move(ids)]() mutable { ops->Delete(Move(pendingIds)); });
         }
         void ConfirmDeleteGroup(content::Group& group)
         {
@@ -1312,10 +1312,10 @@ export namespace editor::app
             (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
             (void)box->AddButton(u8"Delete", u8"delete", gui::DialogRole::Destructive);
             gui::MessageBox* raw = box.Get();
-            (void)box->AddEventListener(gui::EventType::Changed, [raw, yes = Move(yes)](const gui::Event&)
+            (void)box->AddEventListener(gui::EventType::Changed, [raw, onYes = Move(yes)](const gui::Event&)
                                         {
-                                            if (raw->GetResultName().AsView() == StringView(u8"delete") && yes)
-                                                yes();
+                                            if (raw->GetResultName().AsView() == StringView(u8"delete") && onYes)
+                                                onYes();
                                         });
             box->OpenModal(*root);
             m_confirm = box;

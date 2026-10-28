@@ -125,7 +125,7 @@ namespace
         }
         void AddTrack(propanim::PropertyTrack track)
         {
-            document->Edit(u8"test", [&track](propanim::PropertyAnimationClip& clip) { clip.tracks.PushBack(track); });
+            document->Edit(u8"test", [&track](propanim::PropertyAnimationClip& edited) { edited.tracks.PushBack(track); });
         }
     };
 }

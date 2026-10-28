@@ -55,7 +55,7 @@ namespace
         class Counted final : public IStream
         {
         public:
-            Counted(UniquePtr<IStream> inner, u64& reads) : m_inner(Move(inner)), m_reads(&reads) {}
+            Counted(UniquePtr<IStream> inner, u64& readCount) : m_inner(Move(inner)), m_reads(&readCount) {}
 
             [[nodiscard]] u64 Read(void* data, u64 size) override
             {

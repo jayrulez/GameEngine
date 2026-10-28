@@ -158,10 +158,10 @@ export namespace editor::app
             const auto onChange = [self](gui::Node* node, Function<void()> apply)
             {
                 if (node != nullptr)
-                    (void)node->AddEventListener(gui::EventType::Changed, [self, apply = Move(apply)](const gui::Event&)
+                    (void)node->AddEventListener(gui::EventType::Changed, [self, applyChange = Move(apply)](const gui::Event&)
                                                  {
                                                      if (!self->m_showing)
-                                                         apply();
+                                                         applyChange();
                                                  });
             };
             onChange(Find<gui::Button>(u8"pref-dark"), [self]() { self->Change([](EditorLook& look) { look.dark = true; }); });

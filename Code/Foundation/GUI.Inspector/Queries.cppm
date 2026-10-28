@@ -165,9 +165,9 @@ export namespace foundation::gui::inspector
                 s += core::StringView(u8" (capture)");
             d.Commands.PushBack(core::Move(s));
         });
-        node.ForEachListener([&d](EventType type, bool capture)
+        node.ForEachListener([&d](EventType eventType, bool capture)
         {
-            const core::StringView name = EventTypeName(type);
+            const core::StringView name = EventTypeName(eventType);
             core::String s(name.Size() != 0 ? name : core::StringView(u8"(an event)"));
             if (capture)
                 s += core::StringView(u8" (capture)");

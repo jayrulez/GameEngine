@@ -319,10 +319,10 @@ namespace editor
                 const usize index = edit.Index;
                 EditWhole(u8"edit_soundcue", [index](ISerializable& object)
                           {
-                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
-                              Array<CueVariant> variants = VariantsOf(cue);
+                              auto& asset = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(asset);
                               variants.RemoveAt(index);
-                              SetVariants(cue, variants);
+                              SetVariants(asset, variants);
                           });
             }
             else if (edit.Index - kept < m_pending.Size())
@@ -335,12 +335,12 @@ namespace editor
                 const usize to = edit.To;
                 EditWhole(u8"edit_soundcue", [from, to](ISerializable& object)
                           {
-                              auto& cue = static_cast<pipeline::SoundCueAsset&>(object);
-                              Array<CueVariant> variants = VariantsOf(cue);
+                              auto& asset = static_cast<pipeline::SoundCueAsset&>(object);
+                              Array<CueVariant> variants = VariantsOf(asset);
                               const CueVariant moved = variants[from];
                               variants.RemoveAt(from);
                               variants.Insert(to, moved);
-                              SetVariants(cue, variants);
+                              SetVariants(asset, variants);
                           });
             }
             break;

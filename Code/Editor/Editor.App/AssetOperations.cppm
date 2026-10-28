@@ -214,7 +214,7 @@ export namespace editor::app
         void Delete(Array<Guid> ids)
         {
             AssetOperations* self = this;
-            Later([self, ids = Move(ids)]() mutable { self->DeleteNow(Move(ids)); });
+            Later([self, pendingIds = Move(ids)]() mutable { self->DeleteNow(Move(pendingIds)); });
         }
         /// One asset, now (an agent's delete, gated by its own wait): false when it is not there
         /// or did not go.
@@ -233,7 +233,7 @@ export namespace editor::app
                 return;
             AssetOperations* self = this;
             content::Group* target = &group;
-            Later([self, target, whereNext = Move(whereNext)]() mutable { self->DeleteGroupNow(*target, Move(whereNext)); });
+            Later([self, target, pendingWhereNext = Move(whereNext)]() mutable { self->DeleteGroupNow(*target, Move(pendingWhereNext)); });
         }
         /// The assets a group holds, all the way down.
         [[nodiscard]] static usize CountAssets(const content::Group& group)
@@ -369,7 +369,7 @@ export namespace editor::app
             {
                 AssetOperations* self = this;
                 content::Group* target = &group;
-                (void)Waits([self, target, whereNext = Move(whereNext)]() mutable { self->DeleteGroupNow(*target, Move(whereNext)); }, u8"Delete");
+                (void)Waits([self, target, pendingWhereNext = Move(whereNext)]() mutable { self->DeleteGroupNow(*target, Move(pendingWhereNext)); }, u8"Delete");
                 return;
             }
             Array<Guid> ids;

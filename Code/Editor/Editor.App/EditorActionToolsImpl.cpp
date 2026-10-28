@@ -25,7 +25,7 @@ namespace editor::app
         class ActionToolState final : public RefCounted
         {
         public:
-            explicit ActionToolState(ActionToolSeams seams) : seams(Move(seams)) {}
+            explicit ActionToolState(ActionToolSeams toolSeams) : seams(Move(toolSeams)) {}
             ActionToolSeams seams;
         };
 
@@ -138,8 +138,8 @@ namespace editor::app
             ToolAnnotations::Overwrites(),
             [state](const JsonValue& args) -> ToolResult
             {
-                const ActionToolSeams& seams = state->seams;
-                const editor::EditorActionRegistry& actions = seams.context->Actions();
+                const ActionToolSeams& toolSeams = state->seams;
+                const editor::EditorActionRegistry& actions = toolSeams.context->Actions();
                 Result<const editor::EditorActionDeclaration*, String> found = FindAction(actions, args);
                 if (!found.HasValue())
                 {
@@ -162,7 +162,7 @@ namespace editor::app
                 }
                 Array<String> suppressed;
                 {
-                    UnattendedDialogs unattended(seams.dialogs);
+                    UnattendedDialogs unattended(toolSeams.dialogs);
                     const Status ran = actions.Execute(action.id.AsView());
                     if (!ran.IsOk())
                     {

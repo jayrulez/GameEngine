@@ -61,7 +61,7 @@ TEST_CASE("easing: the named curves are CSS's")
     CheckBezier(ParseEasing(SV(u8"ease-in-out")).Value(), 0.42f, 0.0f, 0.58f, 1.0f);
     const Easing linear = ParseEasing(SV(u8"linear")).Value();
     for (int i = 0; i <= 10; ++i)
-        CHECK(linear.Evaluate(i / 10.0f) == doctest::Approx(i / 10.0f));
+        CHECK(linear.Evaluate(static_cast<float>(i) / 10.0f) == doctest::Approx(static_cast<float>(i) / 10.0f));
 }
 
 TEST_CASE("easing: steps jump where their position says")

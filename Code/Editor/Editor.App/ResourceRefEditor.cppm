@@ -65,7 +65,7 @@ export namespace editor::app
             editor::EditorContext* ctx = &context;
             editor::EditorIcons* typeIcons = &icons;
             if (open)
-                services.Pick = [ctx, open = Move(open)](Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)
+                services.Pick = [ctx, openPicker = Move(open)](Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)
                 {
                     if (ctx->Project() == nullptr)
                         return;
@@ -74,7 +74,7 @@ export namespace editor::app
                         request.types.PushBack(type);
                     request.current = current;
                     request.chosen = Move(chosen);
-                    open(Move(request));
+                    openPicker(Move(request));
                 };
             // What the builders make it from; none: the type itself, a reference naming a source
             // asset type (Project Settings', ruling 20).

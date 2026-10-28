@@ -176,14 +176,14 @@ namespace editor
             m_hud = MakeUnique<SceneHud>(Allocator(), Allocator(), Move(hud), [self](StringView id) { return self->Find<gui::Node>(id); });
         }
         if (m_editContext)
-            if (gui::Node* pane = Find<gui::Node>(u8"scene-viewport"))
+            if (gui::Node* viewportPane = Find<gui::Node>(u8"scene-viewport"))
             {
                 // The camera preview at the HUD's bottom end: the selected or pinned camera's view.
                 SceneCameraPreview::Services preview;
                 preview.edit = m_editContext.Get();
                 preview.icons = m_services.icons;
                 preview.render = m_viewport->Renderer();
-                m_cameraPreview = MakeUnique<SceneCameraPreview>(Allocator(), Allocator(), preview, *pane);
+                m_cameraPreview = MakeUnique<SceneCameraPreview>(Allocator(), Allocator(), preview, *viewportPane);
                 m_cameraPreview->HostIn(m_services.gui);
             }
         if (m_editContext)
@@ -218,7 +218,7 @@ namespace editor
 
         // The hierarchy in its pane: the scene's tree, the page's selection.
         if (m_editContext)
-            if (gui::Node* pane = Find<gui::Node>(u8"scene-hierarchy"))
+            if (gui::Node* hierarchyPane = Find<gui::Node>(u8"scene-hierarchy"))
             {
                 SceneHierarchyView::Services tree;
                 tree.context = &context;
@@ -229,12 +229,12 @@ namespace editor
                 tree.sceneName = [self]() { return self->m_title.AsView(); };
                 tree.frame = [self](const Guid& entity) { (void)self->FrameEntities(Span<const Guid>(&entity, 1u), true); };
                 tree.spawnPrefab = [self](const Guid& prefab, const Guid& parent) { return self->m_prefabs && self->m_prefabs->Spawn(prefab, parent); };
-                m_hierarchy = MakeUnique<SceneHierarchyView>(Allocator(), Allocator(), *m_editContext, Move(tree), *pane);
+                m_hierarchy = MakeUnique<SceneHierarchyView>(Allocator(), Allocator(), *m_editContext, Move(tree), *hierarchyPane);
             }
 
         // The inspector in its pane: the selection's entities and components.
         if (m_editContext)
-            if (gui::Node* pane = Find<gui::Node>(u8"scene-inspector"))
+            if (gui::Node* inspectorPane = Find<gui::Node>(u8"scene-inspector"))
             {
                 SceneInspectorView::Services inspector;
                 inspector.context = &context;
@@ -249,7 +249,7 @@ namespace editor
                 inspector.sceneSelected = [self]() { return self->m_hierarchy && self->m_hierarchy->SceneSelected(); };
                 inspector.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
                 inspector.sceneName = [self]() { return self->m_title.AsView(); };
-                m_inspector = MakeUnique<SceneInspectorView>(Allocator(), Allocator(), *m_editContext, Move(inspector), *pane);
+                m_inspector = MakeUnique<SceneInspectorView>(Allocator(), Allocator(), *m_editContext, Move(inspector), *inspectorPane);
             }
 
         BuildAnimationPanel(context);
@@ -382,13 +382,13 @@ namespace editor
         (void)box->AddButton(u8"Save", u8"save", gui::DialogRole::Primary);
         SceneEditorPage* self = this;
         gui::MessageBox* raw = box.Get();
-        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, proceed = Move(proceed)](const gui::Event&)
+        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, onProceed = Move(proceed)](const gui::Event&)
                                     {
                                         const StringView answer = raw->GetResultName().AsView();
                                         if (answer == StringView(u8"save") && !self->m_animation->Save().IsOk())
                                             return; // it said why
                                         if (answer == StringView(u8"save") || answer == StringView(u8"discard"))
-                                            proceed();
+                                            onProceed();
                                     });
         box->OpenModal(*root);
         m_confirm = box;
@@ -817,10 +817,10 @@ namespace editor
         (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
         (void)box->AddButton(verb, u8"yes", gui::DialogRole::Destructive);
         gui::MessageBox* raw = box.Get();
-        (void)box->AddEventListener(gui::EventType::Changed, [raw, yes = Move(yes)](const gui::Event&)
+        (void)box->AddEventListener(gui::EventType::Changed, [raw, onYes = Move(yes)](const gui::Event&)
                                     {
-                                        if (raw->GetResultName().AsView() == StringView(u8"yes") && yes)
-                                            yes();
+                                        if (raw->GetResultName().AsView() == StringView(u8"yes") && onYes)
+                                            onYes();
                                     });
         box->OpenModal(*root);
         m_confirm = box;

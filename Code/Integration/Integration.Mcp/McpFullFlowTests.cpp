@@ -842,9 +842,9 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
         {
             list.Add(JsonValue::MakeString(String(id)));
         }
-        JsonValue arguments = JsonValue::MakeObject();
-        arguments.Set(u8"uiFontIds", Move(list));
-        return arguments;
+        JsonValue fontSettings = JsonValue::MakeObject();
+        fontSettings.Set(u8"uiFontIds", Move(list));
+        return fontSettings;
     };
     CHECK(refused(fonts({fontId.AsView(), sceneId.AsView()}))
               .AsView()

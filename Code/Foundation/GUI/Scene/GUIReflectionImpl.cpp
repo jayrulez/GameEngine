@@ -399,9 +399,9 @@ namespace foundation::gui
                 m_translations.RemoveAt(i);
                 break;
             }
-        BindFor(property, false, [this, property, expression = core::Move(expression)]() mutable
+        BindFor(property, false, [this, property, boundExpression = core::Move(expression)]() mutable
              {
-                 const core::Variant value = ConvertVariant(expression(), *property->type);
+                 const core::Variant value = ConvertVariant(boundExpression(), *property->type);
                  // The write is not a read: setting a property must not make this binding follow it.
                  if (!value.IsEmpty())
                      Untracked([&] { (void)SetProperty(*property, Instance::From(this), value); });
@@ -418,7 +418,7 @@ namespace foundation::gui
         const core::String keyText(key);
         const core::String fallbackText(fallback);
         const bool bound = BindProperty(property,
-                            [this, keyText, fallbackText, data = core::Move(data), count = core::Move(count), args = core::Move(args)]() -> core::Variant
+                            [this, keyText, fallbackText, dataModel = core::Move(data), countArgument = core::Move(count), arguments = core::Move(args)]() -> core::Variant
                             {
                                 // The GUI it is in (a binding made before it joins one reruns when it does).
                                 SceneRoot* root = ObserveSceneRoot();
@@ -430,27 +430,27 @@ namespace foundation::gui
                                 if (fallbackText.Size() != 0 && !loc->Has(keyText.AsView()))
                                     return core::Variant::From<core::String>(fallbackText); // no table names it: the widget's own
                                 // Arguments as text, a named one read from the GUI's data (followed).
-                                const auto value = [&data](const TranslationArgument& a) -> core::Variant
+                                const auto value = [&dataModel](const TranslationArgument& a) -> core::Variant
                                 {
-                                    if (a.IsName && data)
-                                        return data->Get(a.Text.AsView());
+                                    if (a.IsName && dataModel)
+                                        return dataModel->Get(a.Text.AsView());
                                     return core::Variant::From<core::String>(a.Text);
                                 };
                                 Array<core::Variant> values;
                                 i64 n = 0;
-                                if (count.HasValue())
+                                if (countArgument.HasValue())
                                 {
-                                    const core::Variant c = ConvertVariant(value(count.Value()), TypeOf<i64>());
+                                    const core::Variant c = ConvertVariant(value(countArgument.Value()), TypeOf<i64>());
                                     if (const i64* v = c.TryGet<i64>())
                                         n = *v;
                                     values.PushBack(core::Variant::From<i64>(n));
                                 }
-                                for (const TranslationArgument& a : args)
+                                for (const TranslationArgument& a : arguments)
                                     values.PushBack(core::Variant::From<core::String>(FormatVariant(value(a))));
                                 const Span<const core::Variant> span(values.Data(), values.Size());
-                                if (count.HasValue())
+                                if (countArgument.HasValue())
                                     return core::Variant::From<core::String>(loc->FormatPlural(keyText.AsView(), n, span));
-                                if (!args.IsEmpty())
+                                if (!arguments.IsEmpty())
                                     return core::Variant::From<core::String>(loc->Format(keyText.AsView(), span));
                                 return core::Variant::From<core::String>(core::String(loc->Text(keyText.AsView())));
                             });
@@ -467,10 +467,10 @@ namespace foundation::gui
         const PropertyInfo* property = FindReflectedProperty(GetType(), name);
         if (property == nullptr || FindAttribute(*property, u8"twoWay") == nullptr)
             return false;
-        BindFor(property, true, [this, property, write = core::Move(write)]() mutable
+        BindFor(property, true, [this, property, writeBack = core::Move(write)]() mutable
              {
                  const core::Variant value = GetProperty(*property, Instance::From(this)); // followed
-                 Untracked([&] { write(value); });
+                 Untracked([&] { writeBack(value); });
              });
         return true;
     }

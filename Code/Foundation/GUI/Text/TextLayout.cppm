@@ -1163,19 +1163,19 @@ export namespace foundation::gui
                     LaidOutBox& box = (*boxes)[b];
                     if (box.Line != line)
                         continue;
-                    const f32 left = Max(box.Rect.x, from);
+                    const f32 boxLeft = Max(box.Rect.x, from);
                     const f32 boxRight = Min(box.Rect.x + box.Rect.width, to);
-                    if (boxRight <= left || (whole && (box.Rect.x < from - 0.01f || box.Rect.x + box.Rect.width > to + 0.01f)))
+                    if (boxRight <= boxLeft || (whole && (box.Rect.x < from - 0.01f || box.Rect.x + box.Rect.width > to + 0.01f)))
                     {
                         boxes->RemoveAt(b);
                         continue;
                     }
-                    box.Rect.x = left;
-                    box.Rect.width = boxRight - left;
+                    box.Rect.x = boxLeft;
+                    box.Rect.width = boxRight - boxLeft;
                     if (whole)
                     {
                         right = Max(right, boxRight);
-                        leftmost = Min(leftmost, left);
+                        leftmost = Min(leftmost, boxLeft);
                     }
                 }
             }

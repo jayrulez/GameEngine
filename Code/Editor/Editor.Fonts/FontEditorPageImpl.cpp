@@ -337,8 +337,8 @@ namespace editor
 
         FontEditorPage* self = this;
         jobs->SubmitLight(
-            Function<void()>{[slot, request = Move(request)]()
-                             { RunBake(request, slot->outcome); }},
+            Function<void()>{[slot, bakeRequest = Move(request)]()
+                             { RunBake(bakeRequest, slot->outcome); }},
             Function<void()>{
                 [self, slot]()
                 {

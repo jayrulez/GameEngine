@@ -413,7 +413,7 @@ export namespace foundation::gui
             const usize commands = before.commands.Size();
             const u32 drawn = ctx.NodesDrawn();
             const u32 culled = ctx.NodesCulled();
-            ctx.SetFrame(m_framesDrawn + 1); // the nodes drawn note it (FramesDrawn is set after)
+            ctx.SetFrame(static_cast<u32>(m_framesDrawn + 1)); // the nodes drawn note it (FramesDrawn is set after)
             ctx.SetPictureBaker(m_context->GetPictureBaker());
             m_bakeGeneration = m_context->GetPictureBaker() != nullptr ? m_context->GetPictureBaker()->Generation() : 0;
             m_frameRedraws.Clear();
@@ -458,7 +458,7 @@ export namespace foundation::gui
         /// The last frame: its style, layout and reasons (as NeedsFrame closed it), and its draw
         /// (none when it was skipped).
         [[nodiscard]] const FrameStats& GetLastFrameStats() const noexcept { return m_lastFrame; }
-        [[nodiscard]] u32 GetLastDrawnFrame() const override { return m_framesDrawn; }
+        [[nodiscard]] u32 GetLastDrawnFrame() const override { return static_cast<u32>(m_framesDrawn); }
 
         // === This root's time on the GUI's clock ===
         /// Its animations' time scale (1: real time; 0.5: half speed). A paused root's stand still.

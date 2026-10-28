@@ -4,7 +4,7 @@
 //
 // The playback actions over any page that publishes IPlaybackPage: playback.play (a toggle,
 // checked while playing: start, pause, resume), playback.stop (stop and rewind) and
-// playback.restart. A page shows them through PageToolbar::AddPlayback.
+// playback.restart. A page binds its transport's buttons to them (BindAction).
 module;
 #include "Core/Prelude.h"
 export module editor.app:playback_actions;

@@ -1,8 +1,6 @@
 # Editor::Scene - `editor.scene`: the scene editor plugin (SceneEditorPage +
 # factory + RegisterSceneEditor). Linked by the editor EXECUTABLE only (never by editor core/app).
-# On the GUI in parts (Documentation/Specs/editor-gui.md, 5.3): the source lists name the files
-# back so far; the two picker dialogs are still on foundation.ui and stay out, unedited, until
-# their layers.
+# On the GUI (Documentation/Specs/editor-gui.md, 5.3).
 
 util_add_engine_library(Editor.Scene ALIAS Editor::Scene)
 target_link_libraries(Editor.Scene

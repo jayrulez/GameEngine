@@ -566,15 +566,9 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Project) # the headless project half: project/cook/export/jobs/log (tooling; hosts without an editor stand on it)
     add_subdirectory(Code/Editor/Editor.Core) # the editor-facing half: context/commands/pages/selection/actions over Editor.Project (tooling)
     add_subdirectory(Code/Editor/Editor.Mcp) # MCP project tools (project_create/open/info); headless
-    # The editor moves onto the GUI on this branch (Documentation/Specs/editor-gui.md, 4): a library
-    # still on foundation.ui is PARKED, out of the build with its tests, its source untouched, and
-    # comes back with its port commit (the spec's ledger, 4.1, keeps the list):
-    # Generic, Texture, Fonts, Image, Heightfield,
-    # Render, Vegetation, Audio, Materials, Geometry, Physics, Input, Terrain, Script (and its
-    # AngelScript and Luau lexers), Shaders, GUI, GameUI.
-    # Editor.App, the shell, comes back in parts (the spec's 5.1): its source list names the files
-    # on the GUI so far.
-    add_subdirectory(Code/Editor/Editor.Preview) # the thumbnail stage so far (the spec's 5.3); its preview viewport with the asset pages
+    # The editor is on the GUI (Documentation/Specs/editor-gui.md; its ledger, 4.1, says where each
+    # library moved); the old editor's files went at the swap (5.6).
+    add_subdirectory(Code/Editor/Editor.Preview) # the thumbnail stage and the preview viewport
     add_subdirectory(Code/Editor/Editor.App)
     add_subdirectory(Code/Pipeline/Physics.Pipeline)    # collision/material assets + builders (tooling)
     add_subdirectory(Code/Pipeline/Render.Pipeline)     # render profile assets + builders (tooling)
@@ -592,11 +586,11 @@ if(OPTION_BUILD_TOOLS)
         add_subdirectory(Code/Pipeline/Script.Luau.Pipeline)  # Luau cook service
     endif()
     add_subdirectory(Code/Editor/Editor.Spline) # interactive spline viewport tool (editor exe only)
-    add_subdirectory(Code/Editor/Editor.Terrain) # the terrain's scene-view brushes and their panels (its asset page later)
-    add_subdirectory(Code/Editor/Editor.Vegetation) # the vegetation's scene-view brushes and their panels
+    add_subdirectory(Code/Editor/Editor.Terrain) # the terrain's scene-view brushes and their panels, the terrain page
+    add_subdirectory(Code/Editor/Editor.Vegetation) # the vegetation's scene-view brushes and their panels, the vegetation mask page
     add_subdirectory(Code/Editor/Editor.Particles) # the particle effect page
-    add_subdirectory(Code/Editor/Editor.Animation) # the animation pages (the clip page so far)
-    add_subdirectory(Code/Editor/Editor.PropertyAnimation) # property animation in the scene (its UI-free half so far)
+    add_subdirectory(Code/Editor/Editor.Animation) # the animation pages: clip, skeleton, graph
+    add_subdirectory(Code/Editor/Editor.PropertyAnimation) # property animation in the scene: its panel under the viewport
     add_subdirectory(Code/Editor/Editor.ViewportTools) # viewport tool-mode framework (IViewportTool + manager + provider registry)
     add_subdirectory(Code/Editor/Editor.Camera) # shared free-fly viewport camera (lean, foundation-only) for all editor pages
     add_subdirectory(Code/Editor/Editor.Navigation) # navmesh bake tooling (collect + Recast bake -> zone asset)
@@ -624,8 +618,8 @@ if(OPTION_BUILD_TOOLS)
     # come AFTER all pipeline modules (incl. the fonts block) since it links them.
     add_subdirectory(Code/Pipeline/Pipeline.Registration)
 
-    add_subdirectory(Code/Editor/Editor.Scene) # scene editor plugin; on the GUI in parts (the spec's 5.3): its UI-free half so far
-    add_subdirectory(Code/Editor/Editor.Play) # play in editor; on the GUI in parts (the spec's 5.3, layer 7): its UI-free half so far
+    add_subdirectory(Code/Editor/Editor.Scene) # the scene page: viewport, hierarchy, inspector, tools
+    add_subdirectory(Code/Editor/Editor.Play) # play in editor: the Game tab
     add_subdirectory(Code/Editor/Editor.Generic) # the fallback asset page, on the GUI (the spec's 5.4, layer 1)
     add_subdirectory(Code/Editor/Editor.Image) # the image pages (the spec's 5.4, layer 2)
     add_subdirectory(Code/Editor/Editor.Heightfield)
@@ -684,7 +678,6 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Editor/Editor.Shaders.Tests                Editor::Shaders)
     util_test_suite(Code/Editor/Editor.Tests                        Pipeline::Core)
     util_test_suite(Code/Editor/Editor.Texture.Tests                Editor::Texture)
-    util_test_suite(Code/Editor/Editor.GameUI.Tests                 Editor::GameUI)
     util_test_suite(Code/Editor/Editor.GUI.Tests                    Editor::GUI)
     util_test_suite(Code/Editor/Editor.Input.Tests                  Editor::Input)
     util_test_suite(Code/Editor/Editor.Physics.Tests                Editor::Physics)

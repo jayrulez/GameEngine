@@ -6,7 +6,6 @@ Code/Editor/Editor.Project/ProjectManager.cppm
 Code/Editor/Editor.Project/ProjectRegistry.cppm
 Code/Editor/Editor.Core/ThumbnailService.cppm
 Code/Editor/Editor.Scene/ComponentGizmos.cppm
-Code/Editor/Editor.Scene/EntityPickerDialog.cppm
 Code/Engine/Engine.Animation/AnimationComponents.cppm
 Code/Engine/Engine.Audio/AudioSubsystem.cppm
 Code/Engine/Engine.DefaultApp/DefaultApplicationImpl.cpp

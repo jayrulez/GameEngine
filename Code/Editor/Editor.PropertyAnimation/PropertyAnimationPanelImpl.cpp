@@ -163,6 +163,7 @@ namespace editor
         m_undo = button(u8"anim-undo", [self]() { self->Undo(); });
         m_redo = button(u8"anim-redo", [self]() { self->Redo(); });
         (void)button(u8"anim-bind", [self]() { self->BindSelected(); }); // always on: the page's selection is read when clicked
+        (void)button(u8"anim-pick", [self]() { self->PickEntity(); });
         m_addTrack = button(u8"anim-add-track", [self]() { self->OpenTrackMenu(); });
         m_key = button(u8"anim-key", [self]() { (void)self->KeyChosen(); });
         m_remove = button(u8"anim-remove", [self]() { (void)self->RemoveChosen(); });
@@ -285,6 +286,18 @@ namespace editor
     {
         if (SelectedEntity)
             BindEntity(SelectedEntity());
+    }
+
+    void PropertyAnimationPanel::PickEntity()
+    {
+        if (!RequestPickEntity)
+            return;
+        PropertyAnimationPanel* self = this;
+        RequestPickEntity(m_entity, [self](const Guid& picked)
+                          {
+                              if (!picked.IsNil()) // the picker's None keeps the binding
+                                  self->BindEntity(picked);
+                          });
     }
 
     Variant PropertyAnimationPanel::EntityValue(StringView componentType, StringView propertyPath) const

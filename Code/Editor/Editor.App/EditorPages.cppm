@@ -99,6 +99,19 @@ export namespace editor::app
             CookMissing(instance);
             return uiPage;
         }
+        /// A user's open of the source asset `id` (the browser's, a slot's Open): an editor that
+        /// claims it takes it first (the scene page on screen takes a property animation clip into
+        /// its panel); else its page opens. False when nothing took it.
+        bool OpenForUser(const Guid& id)
+        {
+            foundation::content::ContentDatabase* sources = Sources();
+            foundation::content::Instance* instance = sources != nullptr ? sources->GetInstance(id) : nullptr;
+            if (instance == nullptr)
+                return false;
+            if (m_services.context->TryInterceptOpenAsset(*instance))
+                return true;
+            return Open(*instance) != nullptr;
+        }
         /// Opens (or brings forward) the page for the source asset `id`; null when there is none.
         UIEditorPage* Open(const Guid& id)
         {

@@ -52,6 +52,7 @@ export namespace editor
         u32 height = 0;
         ViewportToolManager* tools = nullptr;
         GizmoRendererRegistry* componentGizmos = nullptr;
+        Guid previewed; // the entity the animation panel's preview poses; nil: none
     };
 
     class SceneOverlays
@@ -73,6 +74,7 @@ export namespace editor
             }
             DrawEntityMarkers(dd, frame);
             DrawGizmos(dd, frame);
+            DrawPreviewMarker(dd, frame);
         }
 
         /// The grid's spacing where the camera is now: what the grid draws and the zoom readout says.
@@ -136,6 +138,21 @@ export namespace editor
         // entities have no renderable, so the editor gives them a visual anchor. The selection box
         // is what the scene's systems measure the entity as (meshes, colliders), the box F frames;
         // a small cube at its origin when nothing does.
+        // The entity the animation panel poses: a sphere and "preview" over it, drawn over the
+        // scene so it reads through what stands in front.
+        void DrawPreviewMarker(foundation::render::debug::DebugDraw& dd, const SceneOverlayFrame& frame) const
+        {
+            if (frame.previewed.IsNil())
+                return;
+            const foundation::scene::EntityHandle entity = frame.scene->FindEntity(frame.previewed);
+            if (!entity.IsAssigned())
+                return;
+            const Float4x4 world = frame.scene->GetWorldMatrix(entity);
+            const Float3 at{world.m[3][0], world.m[3][1], world.m[3][2]};
+            const Color marker{1.0f, 0.85f, 0.2f, 1.0f};
+            dd.DrawWireSphereOverlay(at, 0.35f, marker);
+            dd.DrawText3D(at, u8"preview", marker);
+        }
         void DrawEntityMarkers(foundation::render::debug::DebugDraw& dd, const SceneOverlayFrame& frame) const
         {
             if (frame.selection == nullptr)

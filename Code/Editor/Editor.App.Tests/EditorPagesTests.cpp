@@ -231,6 +231,27 @@ TEST_CASE("editor pages: a page docks by its asset's guid in the central stack, 
     CHECK(described->TabClasses == String(u8"active"));
 }
 
+TEST_CASE("editor pages: a user's open goes first to an editor that claims the asset, else its page opens")
+{
+    Bed bed;
+    Array<Guid> claimed;
+    const u64 interceptor = bed.context.AddOpenAssetInterceptor([&claimed, &bed](foundation::content::Instance& instance)
+                                                                {
+                                                                    if (instance.Id() != bed.two->Id())
+                                                                        return false;
+                                                                    claimed.PushBack(instance.Id());
+                                                                    return true;
+                                                                });
+    CHECK(bed.pages->OpenForUser(bed.two->Id()));
+    REQUIRE(claimed.Size() == 1u);
+    CHECK(bed.pages->Count() == 0u); // taken: no page
+    CHECK(bed.pages->OpenForUser(bed.one->Id()));
+    CHECK(bed.pages->Count() == 1u); // not claimed: its page
+    CHECK_FALSE(bed.pages->OpenForUser(Guid{7u, 7u})); // no such asset
+    bed.context.RemoveOpenAssetInterceptor(interceptor);
+    CHECK(bed.pages->Open(*bed.two) != nullptr); // a page open (MCP's page_open, a restore) is never claimed
+}
+
 TEST_CASE("editor pages: a clean page closes at the next frame with its panel; one with unsaved changes asks: Cancel, Discard, Save")
 {
     Bed bed;

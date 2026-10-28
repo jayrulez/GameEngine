@@ -255,6 +255,11 @@ namespace editor
         }
         if (auto* search = Find<gui::TextField>(u8"inspector-search"))
             search->SetOnTextChanging([self](StringView text) { self->Search(text); });
+        if (auto* paste = Find<gui::Button>(u8"inspector-paste"))
+        {
+            paste->SetOnClick([self]() { (void)self->PasteComponent(); });
+            paste->SetDisplayed(false);
+        }
         if (auto* add = Find<gui::Button>(u8"inspector-add"))
             add->SetOnClick([self]() { self->OpenAddComponent(); });
         if (auto* name = Find<gui::TextField>(u8"inspector-name"))
@@ -317,6 +322,7 @@ namespace editor
         // The values as they are now (a gizmo's drag, an undo): the transforms read again, the
         // notices asked again, the grid told, except while it is editing one (its row is the
         // gesture's).
+        ShowPaste();
         PullTransforms();
         RefreshExtras();
         if (m_grid != nullptr && !m_grid->IsEditing())
@@ -350,6 +356,7 @@ namespace editor
             m_grid->SetDisplayed(any || sceneShown);
         if (auto* add = Find<gui::Node>(u8"inspector-add"))
             add->SetDisplayed(any); // a scene has settings, not components
+        ShowPaste();
         BuildHead();
         if (sceneShown)
         {
@@ -675,6 +682,70 @@ namespace editor
         if (name.EndsWith(u8"Component") && name.Size() > 9)
             name = name.SubStr(0, name.Size() - 9);
         return gui::ReadablePropertyName(name);
+    }
+
+    bool SceneInspectorView::CanPasteComponent() const
+    {
+        return !m_readOnly && !m_entities.IsEmpty() && m_services.context != nullptr && !m_services.context->ClipboardData(u8"component").IsEmpty();
+    }
+
+    void SceneInspectorView::ShowPaste()
+    {
+        if (auto* paste = Find<gui::Node>(u8"inspector-paste"))
+            paste->SetDisplayed(CanPasteComponent());
+    }
+
+    bool SceneInspectorView::PasteComponent()
+    {
+        if (!CanPasteComponent())
+            return false;
+        // Over a component an entity has, it overwrites it: asked first (the old inspector's).
+        const Span<const byte> clip = m_services.context->ClipboardData(u8"component");
+        scene::Scene& scene = m_edit->Scene();
+        scene::ComponentManagerBase* manager = scene.FindManagerBySerializationId(SceneEditContext::PeekComponentTypeId(clip).AsView());
+        bool overwrites = false;
+        for (const Guid& entity : m_entities)
+            overwrites = overwrites || (manager != nullptr && manager->HasComponent(scene.FindEntity(entity)));
+        gui::Node* root = m_pane != nullptr ? m_pane->GetRootNode() : nullptr;
+        if (!overwrites || manager == nullptr || root == nullptr)
+            return PasteComponentNow();
+        const String title = manager->ComponentType() != nullptr ? TitleOf(*manager->ComponentType()) : String(u8"component");
+        m_pasteConfirm = MakeRef<gui::MessageBox>(m_allocator);
+        m_pasteConfirm->Configure(u8"Overwrite Component?",
+                                  Format(u8"{} has a {} component already. Pasting overwrites it (you can undo).",
+                                         m_entities.Size() == 1 ? StringView(u8"This entity") : StringView(u8"An entity selected"), title)
+                                      .AsView(),
+                                  gui::MessageBox::Buttons::Ok);
+        m_pasteConfirm->ClearButtons();
+        (void)m_pasteConfirm->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+        (void)m_pasteConfirm->AddButton(u8"Overwrite", u8"overwrite", gui::DialogRole::Primary);
+        SceneInspectorView* self = this;
+        gui::MessageBox* raw = m_pasteConfirm.Get();
+        (void)m_pasteConfirm->AddEventListener(gui::EventType::Changed, [self, raw](const gui::Event&)
+                                               {
+                                                   if (raw->GetResultName().AsView() == StringView(u8"overwrite"))
+                                                       (void)self->PasteComponentNow();
+                                               });
+        m_pasteConfirm->OpenModal(*root);
+        return true;
+    }
+
+    bool SceneInspectorView::PasteComponentNow()
+    {
+        if (!CanPasteComponent())
+            return false;
+        const Span<const byte> clip = m_services.context->ClipboardData(u8"component");
+        m_edit->Commands().BeginGroup(u8"inspector.paste");
+        bool pasted = false;
+        for (const Guid& entity : m_entities)
+            pasted = m_edit->PasteComponent(entity, clip) || pasted;
+        m_edit->Commands().EndGroup();
+        return pasted;
+    }
+
+    gui::MessageBox* SceneInspectorView::PasteConfirm() const
+    {
+        return m_pasteConfirm && m_pasteConfirm->IsOpen() ? m_pasteConfirm.Get() : nullptr;
     }
 
     void SceneInspectorView::HeaderMenu(gui::Menu& menu, const gui::PropertyRow& row)

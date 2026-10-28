@@ -292,6 +292,25 @@ namespace editor
         // New: the clip named and placed in Create Asset (Animations and the entity's name to
         // start), then opened; an animator on the entity with no clip yet plays it.
         m_animation->RequestNewClip = [self]() { self->AskAboutClip([self]() { self->NewClip(); }); };
+        // Pick: the page's entity picker, the bound entity lit.
+        m_animation->RequestPickEntity = [self](const Guid& current, Function<void(const Guid&)> chosen)
+        {
+            EntityPickRequest request;
+            request.current = current;
+            request.chosen = Move(chosen);
+            (void)self->PickEntity(Move(request));
+        };
+        // A clip opened from the browser or a slot while this page is on screen: into the panel,
+        // shown, bound to the selected entity (the old page's), not a page of its own.
+        m_openClipInterceptor = context.AddOpenAssetInterceptor([self](foundation::content::Instance& instance) -> bool
+                                                                {
+                                                                    if (instance.TypeName() != StringView(u8"PropertyAnimationClipAsset") || !self->IsOnScreen())
+                                                                        return false;
+                                                                    self->SetAnimationPanelShown(true);
+                                                                    const Guid* primary = self->m_editContext->EntitySelection().Primary();
+                                                                    self->m_animation->RequestEditClip(instance.Id(), primary != nullptr ? *primary : Guid{});
+                                                                    return true;
+                                                                });
         m_animationPane->GetParent()->RemoveChild(m_animationPane.Get()); // hidden until shown
     }
 
@@ -480,6 +499,8 @@ namespace editor
             frame.height = m_viewport->View().RenderHeight();
             frame.tools = &m_viewportTools;
             frame.componentGizmos = &m_componentGizmos;
+            if (m_animation && m_animationShown && m_animation->Preview().IsPosing())
+                frame.previewed = m_animation->Preview().PosedEntity();
             m_overlays.Draw(*dd, frame);
         }
         if (m_tools)
@@ -581,8 +602,18 @@ namespace editor
         return m_entityPicker->Open(*root, Move(request));
     }
 
+    bool SceneEditorPage::IsOnScreen() const
+    {
+        return m_content && m_content->GetSceneRoot() != nullptr && m_content->IsTreeVisible();
+    }
+
     void SceneEditorPage::OnClose()
     {
+        if (m_openClipInterceptor != 0)
+        {
+            m_context->RemoveOpenAssetInterceptor(m_openClipInterceptor);
+            m_openClipInterceptor = 0;
+        }
         m_animation.Reset(); // what its preview posed goes back while the scene is here
         m_entityPicker.Reset(); // it lets the scene's tree go before the scene does
         m_cameraPreview.Reset(); // its picture's targets go with the viewports, before the scene

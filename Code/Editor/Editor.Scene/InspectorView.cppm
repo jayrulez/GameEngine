@@ -89,6 +89,16 @@ export namespace editor
         [[nodiscard]] Array<const TypeInfo*> AddableTypes() const;
         /// Adds a component of `type` (a type name) to every selected entity, one undo step each.
         bool AddComponent(StringView type);
+        /// Whether a copied component waits on the clipboard for the entities selected (Paste
+        /// Component's button shows then).
+        [[nodiscard]] bool CanPasteComponent() const;
+        /// Paste Component: the copied component onto every selected entity, one undo step; when
+        /// one has that component already, asked first (it is overwritten). False: nothing to do.
+        bool PasteComponent();
+        /// The same without asking (the confirm's yes).
+        bool PasteComponentNow();
+        /// The overwrite question, while it is open.
+        [[nodiscard]] foundation::gui::MessageBox* PasteConfirm() const;
 
         // === For tests ===
         [[nodiscard]] foundation::gui::PropertyGrid* Grid() const noexcept { return m_grid; }
@@ -132,6 +142,7 @@ export namespace editor
 
         void Build();
         void Clear();
+        void ShowPaste();
         [[nodiscard]] u64 Signature() const;
         void BuildHead();
         void BuildTransform();
@@ -153,6 +164,7 @@ export namespace editor
         SceneEditContext* m_edit;
         Services m_services;
         foundation::gui::Node* m_pane = nullptr;
+        RefPtr<foundation::gui::MessageBox> m_pasteConfirm; // Paste Component's overwrite question
         foundation::gui::PropertyGrid* m_grid = nullptr;
         app::PropertySections m_sections;
         EntityRefEditor::Services m_entityRefs; // what the entity slots ask (the grid's registry holds it)

@@ -91,6 +91,29 @@ export namespace editor::app
             AddChild(row.Get());
         }
 
+        /// A picture shown, not chosen, under `name` (a terrain's base layer, which erasing
+        /// reveals): `shown`'s picture once it has one, its icon meanwhile, its tooltip.
+        void AddPicture(StringView name, Choice shown)
+        {
+            if (!name.IsEmpty())
+                AddHeading(name);
+            auto row = MakeRef<gui::Panel>(MemoryAllocator());
+            row->AddClass(u8"segmented");
+            auto frame = MakeRef<gui::Panel>(MemoryAllocator());
+            frame->AddClass(u8"segment");
+            frame->AddClass(u8"picture");
+            frame->AddClass(u8"shown"); // not a button: nothing to choose
+            frame->SetTooltip(shown.tooltip.AsView());
+            auto image = MakeRef<gui::Image>(MemoryAllocator());
+            image->AddClass(u8"segment-picture");
+            image->SetSource(shown.icon);
+            image->SetHitTestVisible(false);
+            frame->AddChild(image.Get());
+            row->AddChild(frame.Get());
+            m_pictures.PushBack(ChoicePicture{image.Get(), core::Move(shown.picture), false});
+            AddChild(row.Get());
+        }
+
         /// A slider named `name` with its number beside it, between `min` and `max` by `step`.
         void AddSlider(StringView name, f64 min, f64 max, f64 step, Function<f64()> get, Function<void(f64)> set)
         {
@@ -183,6 +206,13 @@ export namespace editor::app
                         }
                 }
             }
+            for (ChoicePicture& picture : m_pictures)
+                if (picture.ask && !picture.shown)
+                    if (RefPtr<gui::Drawable> drawable = picture.ask())
+                    {
+                        picture.image->SetDrawable(drawable);
+                        picture.shown = true;
+                    }
             for (SliderRow& slide : m_slides)
             {
                 if (!slide.get)
@@ -213,6 +243,8 @@ export namespace editor::app
         [[nodiscard]] usize ChoiceCount(usize group) const { return group < m_choices.Size() ? m_choices[group].buttons.Size() : 0u; }
         [[nodiscard]] gui::NumberField* NumberAt(usize index) const { return index < m_slides.Size() ? m_slides[index].number : nullptr; }
         [[nodiscard]] gui::CheckBox* CheckAt(usize index) const { return index < m_checks.Size() ? m_checks[index].box : nullptr; }
+        /// The `index`th shown picture's image (AddPicture's); null: none.
+        [[nodiscard]] gui::Image* PictureAt(usize index) const { return index < m_pictures.Size() ? m_pictures[index].image : nullptr; }
 
     private:
         void AddHeading(StringView name)
@@ -254,6 +286,7 @@ export namespace editor::app
             Function<String()> text;
         };
         Array<ChoiceRow> m_choices;
+        Array<ChoicePicture> m_pictures; // AddPicture's: shown, not chosen
         Array<SliderRow> m_slides;
         Array<CheckRow> m_checks;
         Array<NoteRow> m_notes;

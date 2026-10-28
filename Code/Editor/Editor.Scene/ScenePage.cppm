@@ -165,6 +165,8 @@ export namespace editor
         /// Opens the entity picker over the page's GUI for `request` (made the first time); false
         /// with no markup, no edit context, or the page in no GUI.
         bool PickEntity(EntityPickRequest request);
+        /// Whether its content is shown in the window now (its tab the one in front).
+        [[nodiscard]] bool IsOnScreen() const;
         [[nodiscard]] EntityPickerWindow* EntityPicker() const noexcept { return m_entityPicker.Get(); }
         [[nodiscard]] foundation::gui::MessageBox* OpenConfirm() const noexcept { return m_confirm && m_confirm->IsOpen() ? m_confirm.Get() : nullptr; }
 
@@ -222,6 +224,7 @@ export namespace editor
         UniquePtr<PropertyAnimationPanel> m_animation; // under the viewport (null: no markup)
         RefPtr<foundation::gui::Node> m_animationPane; // held: out of the splitter while hidden, nothing else holds it
         bool m_animationShown = false;
+        u64 m_openClipInterceptor = 0; // takes a clip's open into the panel while on screen
         RefPtr<foundation::gui::MessageBox> m_confirm;
         // The launcher's picture of the project: the default scene's view, taken once it settled
         // when there is none yet, and on every save of it.

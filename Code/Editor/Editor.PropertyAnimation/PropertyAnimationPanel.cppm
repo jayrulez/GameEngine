@@ -16,8 +16,9 @@
 // track's with none chosen. Scrubbing or playing poses the bound entity (:clip_preview), which is
 // put back as it was when the preview stops, and stands down while the scene simulates. The bound
 // entity is the panel's own choice (Use Selected binds the scene's selection), not the drifting
-// selection. Opening, making a clip and asking about an unsaved one are the page's (its dialogs),
-// through the seams below.
+// selection, or Pick's choice from the scene's entities. While its preview poses the entity, the
+// page marks it in the view. Opening, making a clip, picking an entity and asking about an unsaved
+// one are the page's (its dialogs), through the seams below.
 
 module;
 #include "Core/Prelude.h"
@@ -62,6 +63,9 @@ export namespace editor
         Function<void(Function<void()>)> GuardUnsaved;
         /// The bar's Close: the page hides the panel (the clip stays open in it). Unset: nothing.
         Function<void()> RequestClose;
+        /// The bar's Pick: the page's entity picker over the scene, `current` lit; `chosen`
+        /// answers its pick. Unset: the button does nothing.
+        Function<void(const Guid& current, Function<void(const Guid&)> chosen)> RequestPickEntity;
 
         // === The clip ===
         /// Edits the clip asset `clipId` (false: no such clip); the transport stopped, at the start.
@@ -76,6 +80,8 @@ export namespace editor
         // === The entity it animates ===
         void BindEntity(const Guid& entity);
         void BindSelected();
+        /// Binds the entity picked in the page's entity picker (the bar's Pick).
+        void PickEntity();
         [[nodiscard]] const Guid& BoundEntity() const noexcept { return m_entity; }
 
         // === The tracks ===

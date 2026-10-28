@@ -7,7 +7,8 @@
 // Redo; Select, Move, Rotate and Scale as one choice; the space, its icon the space it is in;
 // Snap, every drag snapping while it is on, with its increments in its menu (they had no UI:
 // Ctrl snapped by fixed steps); Vertex Snap; Simulate, Pause and Stop, the state named beside
-// them while it runs (layer 7, part 1: Simulate is named so, Play is the Game tab's); Frame. Each button is an action over the page
+// them while it runs (layer 7, part 1: Simulate is named so, Play is the Game tab's); Frame; the
+// property animation panel shown or not (the old bar's Animation, spec 5.6 gap 10). Each button is an action over the page
 // (PageActionBar), so its tooltip says its keys and it is disabled where the action is (the
 // transform choice while the camera owns the keys). The view's own controls are the HUD's chips,
 // not the bar's (ruling 22).
@@ -80,6 +81,7 @@ export namespace editor
             m_bar.Bind(find(u8"scene-pause"), kSimulatePause);
             m_bar.Bind(find(u8"scene-stop"), kSimulateStop);
             m_bar.Bind(find(u8"scene-frame"), kFrameSelection);
+            m_bar.Bind(find(u8"scene-animation-panel"), kAnimationPanel);
             if (auto* snap = Cast<foundation::gui::ToolMenuButton>(find(u8"scene-snap")))
                 BuildSnapMenu(snap->GetMenu());
             SyncState(); // hidden until it runs

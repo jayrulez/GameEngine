@@ -97,6 +97,12 @@ TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the 
     CHECK(splatPanel->ChoiceAt(0, 5)->IsChecked());
     for (usize i = 0; i < 6; ++i)
         CHECK_FALSE(splatPanel->ChoiceAt(0, i)->GetTooltipText().IsEmpty());
+    // The base above them, shown and not chosen (erasing reveals it); its tooltip names it.
+    foundation::gui::Image* base = splatPanel->PictureAt(0);
+    REQUIRE(base != nullptr);
+    REQUIRE(base->GetParent() != nullptr);
+    CHECK(String(base->GetParent()->GetTooltipText()).AsView().StartsWith(u8"The base layer"));
+    CHECK(splatPanel->PictureAt(1) == nullptr);
     REQUIRE(splatPanel->ChoiceCount(1) == 3u);
     CHECK(splatPanel->ChoiceAt(1, 0)->IsChecked()); // painting
     splatPanel->ChoiceAt(1, 1)->HandleActivate();   // Erase

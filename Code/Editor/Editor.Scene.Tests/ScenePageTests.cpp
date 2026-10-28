@@ -25,6 +25,7 @@ import foundation.graphics;
 import foundation.settings;
 import foundation.scene;
 import engine.scene;
+import foundation.render;    // debug::DebugDraw (the overlays)
 import engine.render;      // RegisterRenderComponentReflection, LightComponent
 import engine.composition; // FullSceneComposition
 import engine.physics;
@@ -355,6 +356,35 @@ TEST_CASE("scene page: where the scene was left (the camera, the selection, the 
     CHECK(weights[0] / total == doctest::Approx(0.3f));
     CHECK(weights[2] / total == doctest::Approx(0.2f));
     again->OnClose();
+}
+
+TEST_CASE("scene overlays: the entity the animation panel poses is marked, a sphere and \"preview\" over it")
+{
+    scene::Scene scene(DefaultAllocator(), u8"overlays");
+    const scene::EntityHandle e = scene.CreateEntity(u8"Door");
+    Transform moved;
+    moved.position = Float3{2.0f, 1.0f, 0.0f};
+    scene.SetLocalTransform(e, moved);
+    scene.UpdateTransforms();
+    EditorCamera camera;
+    SceneOverlays overlays;
+    overlays.settings.showGrid = false;
+    SceneOverlayFrame frame;
+    frame.scene = &scene;
+    frame.camera = &camera;
+    foundation::render::debug::DebugDraw plain;
+    overlays.Draw(plain, frame);
+    CHECK(plain.TextCommands3D().IsEmpty());
+
+    frame.previewed = scene.GetEntityId(e);
+    foundation::render::debug::DebugDraw marked;
+    overlays.Draw(marked, frame);
+    REQUIRE(marked.TextCommands3D().Size() == 1u);
+    const auto& text = marked.TextCommands3D()[0];
+    CHECK(text.worldPos.x == doctest::Approx(2.0f));
+    CHECK(text.worldPos.y == doctest::Approx(1.0f));
+    CHECK(StringView(reinterpret_cast<const utf8char*>(marked.TextChars().Data()) + text.textStart, static_cast<usize>(text.textLength)) == StringView(u8"preview"));
+    CHECK(marked.OverlayLineVertices().Size() > plain.OverlayLineVertices().Size());
 }
 
 TEST_CASE("scene view state: the panes' weights and the prefs' nested ratios convert both ways")
@@ -797,6 +827,44 @@ TEST_CASE("inspector: an entity reference is a slot over the scene's entities: i
     page->OnClose();
 }
 
+TEST_CASE("scene page: the animation panel binds an entity picked from the scene; a clip opened while the page shows goes into it")
+{
+    Bed bed;
+    pipeline::RegisterPropertyAnimationAssets();
+    foundation::content::Instance* clip = pipeline::CreatePropertyAnimationClip(bed.project->SourceDb().RootGroup(), u8"Swing");
+    REQUIRE(clip != nullptr);
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    PropertyAnimationPanel* panel = page->AnimationPanel();
+    REQUIRE(panel != nullptr);
+    const Guid door = page->EditContext().CreateEntity(u8"Door");
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+
+    // Off screen, a clip's open is not the page's: it opens as an asset would.
+    CHECK_FALSE(page->IsOnScreen());
+    CHECK_FALSE(bed.context.TryInterceptOpenAsset(*clip));
+
+    Shown shown(*page);
+    CHECK(page->IsOnScreen());
+    page->EditContext().EntitySelection().Set(bed.crate);
+    CHECK(bed.context.TryInterceptOpenAsset(*clip));
+    CHECK(page->AnimationPanelShown());
+    CHECK(panel->Document().ClipId() == clip->Id());
+    CHECK(panel->BoundEntity() == bed.crate); // the selection, as Edit Clip binds it
+    CHECK_FALSE(bed.context.TryInterceptOpenAsset(*bed.barrel)); // a prefab is not a clip
+
+    // Pick: the entity picker, the bound entity lit; a pick binds, None keeps it.
+    panel->PickEntity();
+    EntityPickerWindow* picker = page->EntityPicker();
+    REQUIRE(picker != nullptr);
+    CHECK(picker->IsOpen());
+    CHECK(picker->LitName() == String(u8"Crate"));
+    picker->Search(u8"door");
+    picker->PickLit();
+    CHECK(panel->BoundEntity() == door);
+    page->OnClose();
+    CHECK_FALSE(bed.context.TryInterceptOpenAsset(*clip)); // closed: it let go
+}
+
 TEST_CASE("inspector: a bone name picks from the skeleton of the animator above, a name it lacks said so; with none, text")
 {
     Bed bed;
@@ -862,6 +930,53 @@ TEST_CASE("inspector: a bone name picks from the skeleton of the animator above,
     auto* text = Cast<BoneNameEditor>(inspector->Grid()->FindEditor(inspector->PathOf(u8"Two Bone IK", u8"startBone").AsView()));
     REQUIRE(text != nullptr);
     CHECK_FALSE(text->ListsBones());
+    page->OnClose();
+}
+
+TEST_CASE("inspector: Paste Component puts the copied component on the selection, one undo; over one it has, it asks first")
+{
+    Bed bed;
+    UniquePtr<SceneEditorPage> page = bed.Open(*bed.level);
+    SceneInspectorView* inspector = page->Inspector();
+    SceneEditContext& edit = page->EditContext();
+    const Guid lamp = edit.CreateEntity(u8"Lamp");
+    edit.EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    REQUIRE(inspector->AddComponent(u8"InstanceMemberComponent"));
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    Shown shown(*page);
+    CHECK_FALSE(inspector->CanPasteComponent()); // nothing copied
+    const TypeInfo& member = TypeOf<engine::render::InstanceMemberComponent>();
+    Array<byte> blob = edit.CopyComponent(bed.crate, &member);
+    REQUIRE_FALSE(blob.IsEmpty());
+    bed.context.CopyToEditorClipboard(u8"component", Move(blob), u8"component");
+
+    // Onto an entity without one: pasted at once, one step.
+    edit.EntitySelection().Set(lamp);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(inspector->CanPasteComponent());
+    scene::Scene& scene = *page->ScenePtr();
+    auto* manager = edit.FindManager(&member);
+    REQUIRE(manager != nullptr);
+    CHECK_FALSE(manager->HasComponent(scene.FindEntity(lamp)));
+    CHECK(inspector->PasteComponent());
+    CHECK(inspector->PasteConfirm() == nullptr);
+    CHECK(manager->HasComponent(scene.FindEntity(lamp)));
+    page->Commands().Undo(); // one step
+    CHECK_FALSE(manager->HasComponent(scene.FindEntity(lamp)));
+
+    // Onto one that has it: asked; Cancel leaves it, Overwrite pastes.
+    edit.EntitySelection().Set(bed.crate);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    const i64 asked = page->Commands().UndoIndex();
+    CHECK(inspector->PasteComponent());
+    REQUIRE(inspector->PasteConfirm() != nullptr);
+    CHECK(page->Commands().UndoIndex() == asked); // nothing yet
+    inspector->PasteConfirm()->Close();
+    CHECK(inspector->PasteComponentNow());
+    CHECK(page->Commands().UndoIndex() > asked);
+    page->Commands().Undo(); // one step
+    CHECK(page->Commands().UndoIndex() == asked);
     page->OnClose();
 }
 
@@ -1140,10 +1255,22 @@ TEST_CASE("scene bar: the editing controls are the page's actions; Select, the s
     Shown shown(*page);
     SceneBar* bar = page->Bar();
     REQUIRE(bar != nullptr);
-    CHECK(bar->Bound() == 15u); // save, undo, redo, discard, four transform, space, snap, vertex snap, Simulate's three, frame
+    CHECK(bar->Bound() == 16u); // save, undo, redo, discard, four transform, space, snap, vertex snap, Simulate's three, frame, the animation panel
     GizmoController* gizmos = page->Gizmos();
     REQUIRE(gizmos != nullptr);
     page->OnUpdate(bed.host, 1.0f / 60.0f);
+
+    // The animation panel's toggle: shows it, checked while it shows.
+    auto* animation = FindId<gui::ButtonBase>(*page->Content(), u8"scene-animation-panel");
+    REQUIRE(animation != nullptr);
+    CHECK_FALSE(animation->IsChecked());
+    shown.Click(*animation);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK(page->AnimationPanelShown());
+    CHECK(animation->IsChecked());
+    shown.Click(*animation);
+    page->OnUpdate(bed.host, 1.0f / 60.0f);
+    CHECK_FALSE(page->AnimationPanelShown());
 
     auto* select = FindId<gui::ButtonBase>(*page->Content(), u8"scene-select");
     auto* move = FindId<gui::ButtonBase>(*page->Content(), u8"scene-move");

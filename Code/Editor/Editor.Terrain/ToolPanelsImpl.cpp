@@ -44,6 +44,7 @@ namespace editor
         {
             u32 count = 0;   // its palette's, unbounded
             Array<Guid> ids; // each palette layer's albedo
+            Guid baseId;     // the base layer's albedo, never painted (erasing reveals it)
         };
 
         LayerSet ResolveLayers(scene::Scene& sc)
@@ -61,6 +62,7 @@ namespace editor
                              for (u32 i = 0; i < res->PaletteCount(); ++i)
                                  out.ids.PushBack(res->palette[i].albedo.id);
                              out.count = res->PaletteCount();
+                             out.baseId = res->base.albedo.id;
                          });
             return out;
         }
@@ -141,6 +143,17 @@ namespace editor
                 ThumbnailService* thumbs = ctx.editorContext != nullptr ? ctx.editorContext->Thumbnails() : nullptr;
                 const LayerSet layers = ctx.scene != nullptr ? ResolveLayers(*ctx.scene) : LayerSet{};
                 auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
+
+                // The base, shown and never chosen: it is never painted, erasing reveals it.
+                if (layers.count > 0)
+                {
+                    app::ToolPanelBody::Choice base;
+                    base.tooltip = Format(u8"The base layer: {}. It is never painted; Erase reveals it.", AlbedoName(ctx.editorContext, layers.baseId));
+                    base.icon = String(u8"Editor/Icons/texture.svg");
+                    if (thumbs != nullptr && !layers.baseId.IsNil())
+                        base.picture = [thumbs, baseId = layers.baseId]() { return thumbs->Get(baseId); };
+                    body->AddPicture(u8"Base (erase to reveal)", Move(base));
+                }
 
                 // The layers, numbered from 1 as their keys are (and the Terrain page names them),
                 // each its albedo's picture once there is one. With no terrain resolved, four.

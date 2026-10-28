@@ -344,7 +344,7 @@ namespace editor::app
             assets.cook = &m_cookService;
             (void)RefServices(); // the type icons
             assets.icons = m_typeIcons.Get();
-            assets.open = [self](foundation::content::Instance& instance) { (void)self->m_pages->Open(instance.Id()); };
+            assets.open = [self](foundation::content::Instance& instance) { (void)self->m_pages->OpenForUser(instance.Id()); };
             assets.picture = [self](const Guid& id) { return self->m_thumbnailService.Get(id); };
             assets.operations = m_assetOps.Get();
             assets.import = [self](foundation::content::Group& group)
@@ -369,7 +369,7 @@ namespace editor::app
                     (void)self->m_dock.Controller().Show(kPanelAssets);
             };
             if (!m_context.OpenAsset)
-                m_context.OpenAsset = [self](const Guid& id) { (void)self->m_pages->Open(id); };
+                m_context.OpenAsset = [self](const Guid& id) { (void)self->m_pages->OpenForUser(id); };
         }
         contents.assets = [self]() { return self->m_assets->Content(); };
         m_console = MakeUnique<LogView>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(LogView::kPath));

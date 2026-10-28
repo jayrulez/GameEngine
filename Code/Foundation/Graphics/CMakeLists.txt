@@ -7,6 +7,7 @@ util_add_engine_library(Graphics ALIAS Foundation::Graphics)
 target_link_libraries(Graphics
     PUBLIC
         Foundation::Core
+        Foundation::Profiler
         Foundation::RHI
         Foundation::Shell
         Foundation::Policy)

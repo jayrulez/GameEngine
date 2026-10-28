@@ -24,10 +24,12 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // PROFILE_SCOPE: a frame's two waits apart
 
 export module foundation.graphics;
 
 import foundation.core;
+import foundation.profiler;
 import foundation.rhi;
 import foundation.shell;
 // Backend factories live in sibling modules so this core host imports only the
@@ -555,14 +557,21 @@ export namespace foundation::graphics
         const core::u32 fi = m_device->CurrentFrame();
         // Guard reuse of this slot's pool/backbuffer: wait the GPU's last
         // submission against this window's fence at this ring slot.
+        // Timed apart, as their causes differ: the fence is the GPU still on the frame that last
+        // used this slot (ours to fix); the image is the compositor not yet giving one back (vsync,
+        // or the display stalled).
         if (m_fenceValues[fi] > 0)
         {
+            PROFILE_SCOPE("Render.Acquire.Fence");
             m_fences[fi]->Wait(m_fenceValues[fi], ~0ull);
         }
 
-        if (!m_swapChain->AcquireNextImage().IsOk())
         {
-            return FrameContext{};
+            PROFILE_SCOPE("Render.Acquire.Image");
+            if (!m_swapChain->AcquireNextImage().IsOk())
+            {
+                return FrameContext{};
+            }
         }
 
         m_pools[fi]->Reset();

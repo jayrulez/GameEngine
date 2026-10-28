@@ -81,6 +81,23 @@ export namespace foundation::rhi::vk
         }
     }
 
+    inline const char* vkPresentModeName(VkPresentModeKHR mode)
+    {
+        switch (mode)
+        {
+        case VK_PRESENT_MODE_FIFO_KHR:
+            return "FIFO";
+        case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+            return "FIFO_RELAXED";
+        case VK_PRESENT_MODE_MAILBOX_KHR:
+            return "MAILBOX";
+        case VK_PRESENT_MODE_IMMEDIATE_KHR:
+            return "IMMEDIATE";
+        default:
+            return "(other)";
+        }
+    }
+
     class VkDeviceImpl; // forward
 
     class VkSwapChainImpl : public SwapChain
@@ -204,6 +221,12 @@ export namespace foundation::rhi::vk
         m_bufferCount = Max(wantCount, caps.minImageCount);
         if (caps.maxImageCount > 0)
             m_bufferCount = Min(m_bufferCount, caps.maxImageCount);
+        // How the display paces frames: under FIFO the CPU waits in the acquire for an image the
+        // compositor gives back, and how many images there are bounds how far it can run ahead, so
+        // a long acquire in a capture is read against these.
+        LogInfof("[RHI] swapchain present mode: requested %s, chosen %s; %u images (the surface allows %u to %u)",
+                 vkPresentModeName(toVkPresentMode(m_presentMode)), vkPresentModeName(presentMode), m_bufferCount,
+                 caps.minImageCount, caps.maxImageCount);
 
         auto surfFmt = chooseSurfaceFormat(reqFormat);
         m_format = fromVkFormat(surfFmt.format);

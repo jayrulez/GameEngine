@@ -7,8 +7,10 @@
 // multi-window rendering, resize, and the minimized-skip path.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include "Profiler/Profiler.h" // BUILD_PROFILING
 
 import foundation.core;
+import foundation.profiler;
 import foundation.graphics;
 import foundation.graphics.null;
 import foundation.shell;
@@ -207,4 +209,43 @@ TEST_CASE("graphics: an executable's device desc takes both its backend and its 
     const GraphicsDeviceDesc defaults = DeviceDescFromArguments(1, const_cast<char**>(plain));
     CHECK(defaults.backend == BackendType::Vulkan);
     CHECK(defaults.enableValidation == GraphicsDeviceDesc{}.enableValidation); // the config's
+}
+
+TEST_CASE("graphics: a profiled frame start times the slot's fence and the image apart")
+{
+#if BUILD_PROFILING
+    NullShell shell;
+    auto created = CreateNullGraphicsDevice(2);
+    REQUIRE(created.HasValue());
+    UniquePtr<GraphicsDevice>& gd = created.Value();
+    auto rwResult = gd->CreateRenderWindow(*shell.MainWindow(), RenderWindowDesc{});
+    REQUIRE(rwResult.HasValue());
+    UniquePtr<RenderWindow>& rw = rwResult.Value();
+    foundation::profiler::Profiler& profiler = foundation::profiler::Profiler::Get();
+    profiler.Arm();
+    u32 fences = 0, images = 0;
+    // Three frames: the third reuses slot 0, so it waits that slot's fence.
+    for (u32 n = 0; n < 3; ++n)
+    {
+        profiler.BeginFrame();
+        FrameContext frame = rw->BeginFrame();
+        REQUIRE(frame.valid);
+        rw->EndFrame(frame);
+        gd->AdvanceFrame();
+        profiler.EndFrame();
+        const foundation::profiler::FrameRecord* record = profiler.LatestFrame();
+        REQUIRE(record != nullptr);
+        for (const foundation::profiler::ThreadFrame& thread : record->threads)
+            for (const foundation::profiler::ScopeEvent& scope : thread.scopes)
+            {
+                const StringView name = profiler.NameOf(scope.name);
+                fences += name == StringView(u8"Render.Acquire.Fence") ? 1u : 0u;
+                images += name == StringView(u8"Render.Acquire.Image") ? 1u : 0u;
+            }
+    }
+    profiler.Disarm();
+    CHECK(images == 3u);      // every frame takes an image
+    CHECK(fences >= 1u);      // a slot used before waits its fence
+    CHECK(fences <= 3u);
+#endif
 }

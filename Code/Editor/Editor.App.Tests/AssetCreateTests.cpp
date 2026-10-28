@@ -129,16 +129,15 @@ TEST_CASE("asset names: refused when empty, holding what a file cannot, spaced a
     CHECK(AssetNames::Refusal(*bed.town, u8"Crate").IsEmpty()); // in another group it is free
 }
 
-TEST_CASE("create asset: Create waits while the name is refused, saying why; the group field picks another; Create answers and closes")
+TEST_CASE("create asset: the groups a tree in it, a click choosing one; Create waits while the name is refused, saying why; Create answers and closes")
 {
     Project bed;
     RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
     root->SetSize(Float2{800.0f, 600.0f});
-    Picker picker(DefaultAllocator(), Load(StringView(Picker::kPath)));
     content::Group* madeIn = nullptr;
     String madeName;
     RefPtr<gui::Window> window =
-        AssetCreate::Open(DefaultAllocator(), *root, Load(StringView(AssetCreate::kPath)), bed.Sources(), *bed.top, u8"New Asset", u8"Crate", picker,
+        AssetCreate::Open(DefaultAllocator(), *root, Load(StringView(AssetCreate::kPath)), bed.Sources(), *bed.top, u8"New Asset", u8"Crate",
                           [&madeIn, &madeName](content::Group& group, StringView name)
                           {
                               madeIn = &group;
@@ -150,22 +149,36 @@ TEST_CASE("create asset: Create waits while the name is refused, saying why; the
     auto* name = FindId<gui::TextField>(*window, u8"asset-create-name");
     auto* why = FindId<gui::Label>(*window, u8"asset-create-why");
     auto* create = FindId<gui::Button>(*window, u8"asset-create-create");
-    auto* group = FindId<gui::Button>(*window, u8"asset-create-group");
+    auto* tree = FindId<gui::TreeView>(*window, u8"asset-create-groups");
     REQUIRE(name != nullptr);
     REQUIRE(why != nullptr);
     REQUIRE(create != nullptr);
-    REQUIRE(group != nullptr);
-    CHECK(group->GetText() == StringView(u8"Content"));
+    REQUIRE(tree != nullptr);
+    i32 town = -1;
+    i32 chosen = -1;
+    for (i32 item = 0; item < static_cast<i32>(tree->GetItemCount()); ++item)
+    {
+        if (tree->GetItemText(item) == String(u8"Town"))
+            town = item;
+        if (tree->IsItemSelected(item))
+            chosen = item;
+    }
+    REQUIRE(town >= 0); // every group shown, open
+    CHECK(tree->GetItemText(chosen) == String(u8"Content")); // the group it starts in
     CHECK_FALSE(create->IsEnabled()); // the suggestion is taken here
     CHECK(why->GetText() == StringView(u8"Crate is already in Content."));
     CHECK(why->HasClass(u8"refused"));
 
-    // Another group, through the picker below the field: the same name is free there.
-    CHECK(group->HandleActivate());
-    REQUIRE(picker.IsOpen());
-    picker.SetQuery(u8"town");
-    picker.PickLit(); // Town, not the current Content shown above it
-    CHECK(group->GetText() == StringView(u8"Models/Town"));
+    // Another group, clicked in its tree: the same name is free there.
+    {
+        (void)root->UpdateLayout();
+        gui::ItemRow* row = tree->RowForItem(town);
+        REQUIRE(row != nullptr);
+        const gui::Rect box = row->GetScreenBounds();
+        const Float2 at{box.x + box.width * 0.5f, box.y + box.height * 0.5f};
+        root->GetEventDispatcher()->InjectMouseDown(at, gui::MouseButton::Left);
+        root->GetEventDispatcher()->InjectMouseUp(at, gui::MouseButton::Left);
+    }
     CHECK(create->IsEnabled());
     CHECK(why->GetText() == StringView(u8"Makes Crate in Models/Town."));
     CHECK_FALSE(why->HasClass(u8"refused"));

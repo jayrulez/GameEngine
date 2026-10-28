@@ -646,11 +646,9 @@ namespace editor::app
         gui::SceneRoot* root = m_window.Root();
         if (root == nullptr || m_context.Project() == nullptr)
             return;
-        if (!m_picker)
-            m_picker = MakeUnique<Picker>(m_editorAllocator, m_editorAllocator, m_window.LoadMarkup(Picker::kPath));
         foundation::content::ContentDatabase& sources = m_context.Project()->SourceDb();
         m_createAsset = AssetCreate::Open(m_editorAllocator, *root, m_window.LoadMarkup(AssetCreate::kPath), sources, group != nullptr ? *group : *sources.RootGroup(),
-                                          title, suggested, *m_picker, Move(create));
+                                          title, suggested, Move(create));
     }
 
     void EditorApplication::ShowAssetPicker(AssetPickRequest request)

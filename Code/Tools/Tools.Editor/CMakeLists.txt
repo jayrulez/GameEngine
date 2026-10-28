@@ -6,11 +6,11 @@ set(_embedded_font_src "${CMAKE_CURRENT_BINARY_DIR}/EmbeddedEditorFont.cpp")
 add_custom_command(
     OUTPUT "${_embedded_font_src}"
     COMMAND ${CMAKE_COMMAND}
-        -DIN=${CMAKE_SOURCE_DIR}/Data/Assets/fonts/roboto/Roboto-Regular.ttf
+        -DIN=${CMAKE_SOURCE_DIR}/Data/Engine/Fonts/roboto/Roboto-Regular.ttf
         -DOUT=${_embedded_font_src}
         -DSYMBOL=g_embeddedEditorFont
         -P ${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake
-    DEPENDS "${CMAKE_SOURCE_DIR}/Data/Assets/fonts/roboto/Roboto-Regular.ttf"
+    DEPENDS "${CMAKE_SOURCE_DIR}/Data/Engine/Fonts/roboto/Roboto-Regular.ttf"
             "${CMAKE_SOURCE_DIR}/cmake/EmbedBinary.cmake"
     COMMENT "Embedding the editor fallback font")
 

@@ -798,7 +798,7 @@ namespace engine::gui
         UniquePtr<foundation::fonts::TrueTypeFontService> fonts = MakeUnique<foundation::fonts::TrueTypeFontService>(m_allocator, m_allocator);
         // The built-in font through the data mount (in a dev tree and any dist that stages it); the
         // project's own fonts come with the player's settings (E9).
-        constexpr StringView kDefaultFont = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
+        constexpr StringView kDefaultFont = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         Array<u8> bytes(m_allocator);
         if (ReadDataFile(kDefaultFont, bytes) &&
             fonts->LoadFontFromMemory(u8"Roboto", Span<const u8>(bytes.Data(), bytes.Size())) == foundation::fonts::FontLoadResult::Success)

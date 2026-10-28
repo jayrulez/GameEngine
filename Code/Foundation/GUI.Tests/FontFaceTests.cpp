@@ -70,7 +70,7 @@ TEST_CASE("font face: a face loaded through the host draws the label that asks f
     fonts::TrueTypeFontService service{DefaultAllocator()};
     fonts::TrueTypeFonts::Initialize();
     const String root = foundation::vfs::FindDataRoot();
-    REQUIRE(service.LoadFont(u8"Brand", foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView()) ==
+    REQUIRE(service.LoadFont(u8"Brand", foundation::vfs::DataPath(root.AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView()) ==
             fonts::FontLoadResult::Success);
     usize loads = 0;
     StyleManager styles;
@@ -82,8 +82,8 @@ TEST_CASE("font face: a face loaded through the host draws the label that asks f
             return service.LoadFont(face, foundation::vfs::DataPath(root.AsView(), source).AsView()) == fonts::FontLoadResult::Success;
         });
     // The regular face the service has already is not asked for.
-    styles.SetStyleSheet(CSSParser::Parse(StringView(u8"@font-face { font-family: Brand; src: url(Assets/fonts/roboto/Roboto-Regular.ttf); }"
-                                                     u8"@font-face { font-family: Brand; src: url(Assets/fonts/roboto/Roboto-Bold.ttf); font-weight: bold; }"
+    styles.SetStyleSheet(CSSParser::Parse(StringView(u8"@font-face { font-family: Brand; src: url(Engine/Fonts/roboto/Roboto-Regular.ttf); }"
+                                                     u8"@font-face { font-family: Brand; src: url(Engine/Fonts/roboto/Roboto-Bold.ttf); font-weight: bold; }"
                                                      u8".text { font-family: Brand; font-size: 16px; font-weight: 700; }")));
     RefPtr<GUIContext> context = MakeRef<GUIContext>(DefaultAllocator());
     context->SetFontService(&service);

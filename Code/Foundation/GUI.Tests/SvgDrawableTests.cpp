@@ -158,7 +158,7 @@ TEST_CASE("svg-drawable: a rich text's inline icon by an .svg path is drawn as i
     fonts::TrueTypeFonts::Initialize();
     fonts::TrueTypeFontService service{core::DefaultAllocator()};
     const core::String data = foundation::vfs::FindDataRoot();
-    REQUIRE(service.LoadFont(u8"Roboto", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView())
+    REQUIRE(service.LoadFont(u8"Roboto", foundation::vfs::DataPath(data.AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView())
             == fonts::FontLoadResult::Success);
     Pictures pictures;
     Text text;
@@ -269,7 +269,7 @@ TEST_CASE("svg-drawable: an inline SVG as a sheet's background, an Image's src a
     fonts::TrueTypeFonts::Initialize();
     fonts::TrueTypeFontService service{core::DefaultAllocator()};
     const core::String data = foundation::vfs::FindDataRoot();
-    REQUIRE(service.LoadFont(u8"Roboto", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView())
+    REQUIRE(service.LoadFont(u8"Roboto", foundation::vfs::DataPath(data.AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView())
             == fonts::FontLoadResult::Success);
     Text text;
     text.SetFontService(&service);

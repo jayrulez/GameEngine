@@ -33,8 +33,8 @@ namespace
         }
         void LoadRoboto()
         {
-            Load(u8"Roboto", u8"Assets/fonts/roboto/Roboto-Regular.ttf");
-            Load(u8"Roboto Bold", u8"Assets/fonts/roboto/Roboto-Bold.ttf");
+            Load(u8"Roboto", u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
+            Load(u8"Roboto Bold", u8"Engine/Fonts/roboto/Roboto-Bold.ttf");
         }
     };
     struct Scene
@@ -90,9 +90,9 @@ TEST_CASE("font selection: weights are tried in CSS's order")
 TEST_CASE("font selection: the nearest weight's face, the style matched first, the rest synthesized")
 {
     Faces faces;
-    faces.Load(u8"X", u8"Assets/fonts/roboto/Roboto-Regular.ttf");
-    faces.Load(u8"X Bold", u8"Assets/fonts/roboto/Roboto-Bold.ttf");
-    faces.Load(u8"X Light Italic", u8"Assets/fonts/roboto/Roboto-Regular.ttf");
+    faces.Load(u8"X", u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
+    faces.Load(u8"X Bold", u8"Engine/Fonts/roboto/Roboto-Bold.ttf");
+    faces.Load(u8"X Light Italic", u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
 
     foundation::gui::detail::FaceChoice face = foundation::gui::detail::ChooseFace(faces.service, StringView(u8"X"), 700, false);
     CHECK(face.Face == StringView(u8"X Bold"));

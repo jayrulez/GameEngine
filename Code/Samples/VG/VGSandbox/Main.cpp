@@ -48,7 +48,7 @@ namespace
 {
     // VG shaders ship in the engine corpus (vg.vs/vg.ps); resolved via ShaderSystemHost in OnInit.
     // The demo font is the engine's built-in Roboto under the data root.
-    constexpr StringView kFontAsset = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
+    constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
 
     // Gradient stops take the engine's float Color; UI colors are byte Color32.
     inline Color GC(u8 r, u8 g, u8 b, u8 a = 255) { return ToColor(Color32{r, g, b, a}); }

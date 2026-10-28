@@ -45,7 +45,7 @@ namespace editor
         //    72 px title and a 14 px caption both draw clean from its one bake.
         {
             const String source =
-                foundation::vfs::DataPath(dataRoot, u8"Assets/fonts/roboto/Roboto-Regular.ttf");
+                foundation::vfs::DataPath(dataRoot, u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
             Result<String> copied = pipeline::CopyIntoSources(import, source.AsView());
             if (copied.HasValue())
             {

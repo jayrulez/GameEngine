@@ -24,7 +24,7 @@ TEST_CASE("font thumbnail rasterizes a glyph sample from TTF bytes")
         const String root = foundation::vfs::FindDataRoot();
         REQUIRE_FALSE(root.IsEmpty());
         FileStream stream(
-            foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/roboto/Roboto-Bold.ttf").AsView(),
+            foundation::vfs::DataPath(root.AsView(), u8"Engine/Fonts/roboto/Roboto-Bold.ttf").AsView(),
             FileMode::Read);
         REQUIRE(stream.IsValid());
         const i64 size = stream.Size();

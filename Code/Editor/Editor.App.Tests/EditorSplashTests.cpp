@@ -24,7 +24,7 @@ namespace
     [[nodiscard]] Array<u8> RobotoBytes()
     {
         Array<u8> bytes;
-        Result<Array<byte>> read = ReadFile(PathJoin(DataRoot().AsView(), u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView());
+        Result<Array<byte>> read = ReadFile(PathJoin(DataRoot().AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView());
         if (read.HasValue())
         {
             for (const byte b : read.Value())

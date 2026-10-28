@@ -23,7 +23,7 @@ namespace
 {
     String FontPath(const char* rel)
     {
-        String p = foundation::vfs::DataPath(foundation::vfs::FindDataRoot(), u8"Assets/fonts");
+        String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there
         for (const char* s = rel; *s != '\0'; ++s)
             p.PushBack(static_cast<utf8char>(static_cast<unsigned char>(*s)));
         return p;
@@ -53,7 +53,7 @@ namespace
 
 TEST_CASE("harfbuzz: fi is one glyph over two characters, and hits and carets go by its cluster")
 {
-    IFont* font = Load("/roboto/Roboto-Regular.ttf");
+    IFont* font = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
     REQUIRE(font != nullptr);
     Shaper s;
     Array<GlyphPosition> glyphs;
@@ -80,7 +80,7 @@ TEST_CASE("harfbuzz: fi is one glyph over two characters, and hits and carets go
 
 TEST_CASE("harfbuzz: Arabic joins, so it has fewer glyphs than characters, and reads right to left")
 {
-    IFont* font = Load("/dejavu/DejaVuSansMono.ttf");
+    IFont* font = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(font != nullptr);
     Shaper s;
     Array<GlyphPosition> glyphs;
@@ -101,7 +101,7 @@ TEST_CASE("harfbuzz: Arabic joins, so it has fewer glyphs than characters, and r
 
 TEST_CASE("harfbuzz: wrapping breaks after spaces, keeps the ligature whole, and starts lines at 0")
 {
-    IFont* font = Load("/roboto/Roboto-Regular.ttf", 20.0f);
+    IFont* font = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf", 20.0f);
     REQUIRE(font != nullptr);
     Shaper s;
     Array<GlyphPosition> one;
@@ -178,7 +178,7 @@ TEST_CASE("harfbuzz: a font with no file is shaped by the basic shaper")
 
 TEST_CASE("harfbuzz: installed, it is the shaper a font service hands out")
 {
-    const String path = FontPath("/roboto/Roboto-Regular.ttf");
+    const String path = FontPath("/Engine/Fonts/roboto/Roboto-Regular.ttf");
     HarfBuzzShaping::Install();
     CHECK(HarfBuzzShaping::IsInstalled());
     {
@@ -217,7 +217,7 @@ TEST_CASE("harfbuzz: installing again changes nothing, so a repeat never touches
 
 TEST_CASE("harfbuzz: the glyphs substitutions reach are named, and bakers bake them")
 {
-    IFont* font = Load("/roboto/Roboto-Regular.ttf");
+    IFont* font = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
     REQUIRE(font != nullptr);
     Shaper s;
     Array<GlyphPosition> shaped;
@@ -270,7 +270,7 @@ TEST_CASE("harfbuzz: through a font service, every glyph of shaped text has its 
     HarfBuzzShaping::Install();
     {
         TrueTypeFontService service(DefaultAllocator());
-        REQUIRE(service.LoadFont(u8"Roboto", FontPath("/roboto/Roboto-Regular.ttf").AsView()) ==
+        REQUIRE(service.LoadFont(u8"Roboto", FontPath("/Engine/Fonts/roboto/Roboto-Regular.ttf").AsView()) ==
                 FontLoadResult::Success);
         CachedFont* font = service.GetFont(u8"Roboto", 24.0f);
         REQUIRE(font != nullptr);
@@ -293,8 +293,8 @@ TEST_CASE("harfbuzz: through a font service, every glyph of shaped text has its 
 
 TEST_CASE("harfbuzz: a character no font before has takes the next font in the list")
 {
-    IFont* roboto = Load("/roboto/Roboto-Regular.ttf");
-    IFont* dejavu = Load("/dejavu/DejaVuSansMono.ttf");
+    IFont* roboto = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
+    IFont* dejavu = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(roboto != nullptr);
     REQUIRE(dejavu != nullptr);
     IFont* const fonts[2] = {roboto, dejavu};
@@ -325,8 +325,8 @@ TEST_CASE("harfbuzz: a character no font before has takes the next font in the l
 
 TEST_CASE("harfbuzz: a right-to-left request reads right to left, and a language picks its forms")
 {
-    IFont* roboto = Load("/roboto/Roboto-Regular.ttf");
-    IFont* dejavu = Load("/dejavu/DejaVuSansMono.ttf");
+    IFont* roboto = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
+    IFont* dejavu = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(roboto != nullptr);
     REQUIRE(dejavu != nullptr);
     Shaper s;
@@ -370,8 +370,8 @@ TEST_CASE("harfbuzz: a right-to-left request reads right to left, and a language
 
 TEST_CASE("harfbuzz: the basic shaper takes the same request: fallback by font, and a mirrored line")
 {
-    IFont* roboto = Load("/roboto/Roboto-Regular.ttf");
-    IFont* dejavu = Load("/dejavu/DejaVuSansMono.ttf");
+    IFont* roboto = Load("/Engine/Fonts/roboto/Roboto-Regular.ttf");
+    IFont* dejavu = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(roboto != nullptr);
     REQUIRE(dejavu != nullptr);
     IFont* const fonts[2] = {roboto, dejavu};
@@ -421,7 +421,7 @@ TEST_CASE("bidi: the resolver gives Arabic odd levels and finds a paragraph's di
 
 TEST_CASE("bidi: a right-to-left paragraph with Latin inside reads right to left and hit tests")
 {
-    IFont* font = Load("/dejavu/DejaVuSansMono.ttf");
+    IFont* font = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf");
     REQUIRE(font != nullptr);
     BidiAlgorithm::Install();
     Shaper s;
@@ -466,7 +466,7 @@ TEST_CASE("bidi: a right-to-left paragraph with Latin inside reads right to left
 
 TEST_CASE("bidi: a wrapped right-to-left paragraph reorders each line, its first words on the right of the first")
 {
-    IFont* font = Load("/dejavu/DejaVuSansMono.ttf", 20.0f);
+    IFont* font = Load("/Assets/fonts/dejavu/DejaVuSansMono.ttf", 20.0f);
     REQUIRE(font != nullptr);
     BidiAlgorithm::Install();
     Shaper s;

@@ -941,7 +941,7 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
     }
 
     Result<Array<byte>> ttfFile =
-        ReadFile(testsupport::DataPath(u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView());
+        ReadFile(testsupport::DataPath(u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView());
     REQUIRE(ttfFile.HasValue());
     const Array<byte>& ttf = ttfFile.Value();
     REQUIRE(!ttf.IsEmpty());
@@ -949,7 +949,7 @@ TEST_CASE("vg.pixels: the baked-font draw path matches the TTF path (fonts triad
     // Path A: the TTF service (rasterize-on-demand; the dev-tree path - ground truth).
     fonts::TrueTypeFontService ttfService(DefaultAllocator());
     REQUIRE(ttfService.LoadFont(u8"Roboto",
-                                testsupport::DataPath(u8"Assets/fonts/roboto/Roboto-Regular.ttf")
+                                testsupport::DataPath(u8"Engine/Fonts/roboto/Roboto-Regular.ttf")
                                     .AsView()) == fonts::FontLoadResult::Success);
     fonts::CachedFont* ttfFont = ttfService.GetFont(u8"Roboto", kProbeSize);
     REQUIRE(ttfFont != nullptr);
@@ -1318,7 +1318,7 @@ namespace
             fonts::FontLoadOptions options = fonts::FontLoadOptions::DistanceField();
             options.pixelHeight = 48.0f;
             auto parsed = parser.ParseFromFile(
-                testsupport::DataPath(u8"Assets/fonts/roboto/Roboto-Regular.ttf").AsView(), options,
+                testsupport::DataPath(u8"Engine/Fonts/roboto/Roboto-Regular.ttf").AsView(), options,
                 DefaultAllocator());
             REQUIRE(parsed.HasValue());
             font = parsed.Value();

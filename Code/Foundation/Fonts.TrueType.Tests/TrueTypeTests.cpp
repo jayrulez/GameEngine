@@ -19,11 +19,11 @@ using namespace foundation::fonts;
 namespace
 {
     // Build a UTF-8 path from the (ASCII) asset dir + a relative suffix.
-    // "<data root>/Assets/fonts" + rel (rel starts with '/'): the bundled fonts are found the way
+    // "<data root>" + rel (rel starts with '/'): the bundled fonts are found the way
     // every executable finds engine data - the Data/.dataroot walk from the test binary.
     String AssetPath(const char* rel)
     {
-        String p = foundation::vfs::DataPath(foundation::vfs::FindDataRoot(), u8"Assets/fonts");
+        String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there
         REQUIRE_FALSE(p.IsEmpty());
         for (const char* s = rel; *s != '\0'; ++s)
             p.PushBack(static_cast<utf8char>(static_cast<unsigned char>(*s)));
@@ -33,7 +33,7 @@ namespace
     // Parse the bundled Roboto font with default options. Caller owns it.
     IFont* LoadRoboto()
     {
-        const String path = AssetPath("/roboto/Roboto-Regular.ttf");
+        const String path = AssetPath("/Engine/Fonts/roboto/Roboto-Regular.ttf");
         Result<IFont*, FontLoadResult> parsed =
             FontParserFactory::ParseFromFile(path, FontLoadOptions::Default(),
                                              DefaultAllocator());
@@ -341,7 +341,7 @@ TEST_CASE("ttf.service: a coverage family answers each size with its own bake, c
 {
     TrueTypeFonts::Initialize();
     TrueTypeFontService service(DefaultAllocator());
-    REQUIRE(service.LoadFont(u8"Roboto", AssetPath("/roboto/Roboto-Regular.ttf")) == FontLoadResult::Success);
+    REQUIRE(service.LoadFont(u8"Roboto", AssetPath("/Engine/Fonts/roboto/Roboto-Regular.ttf")) == FontLoadResult::Success);
 
     CachedFont* small = service.GetFont(u8"Roboto", 16.0f);
     CachedFont* large = service.GetFont(u8"Roboto", 40.0f);
@@ -371,7 +371,7 @@ TEST_CASE("ttf.service: a coverage family answers each size with its own bake, c
 TEST_CASE("ttf.service: a family loaded from memory bakes its other sizes from the kept bytes")
 {
     TrueTypeFonts::Initialize();
-    const String path = AssetPath("/roboto/Roboto-Regular.ttf");
+    const String path = AssetPath("/Engine/Fonts/roboto/Roboto-Regular.ttf");
     Array<u8> bytes;
     {
         FileStream file(path.AsView(), FileMode::Read);

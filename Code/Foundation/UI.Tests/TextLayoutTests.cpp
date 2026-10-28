@@ -31,10 +31,10 @@ namespace
             fonts::TrueTypeFonts::Initialize();
             const String root = foundation::vfs::FindDataRoot();
             REQUIRE(service.LoadFont(u8"Roboto",
-                                     foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/roboto/Roboto-Regular.ttf")
+                                     foundation::vfs::DataPath(root.AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf")
                                          .AsView()) == fonts::FontLoadResult::Success);
             REQUIRE(service.LoadFont(u8"Roboto Bold",
-                                     foundation::vfs::DataPath(root.AsView(), u8"Assets/fonts/roboto/Roboto-Bold.ttf")
+                                     foundation::vfs::DataPath(root.AsView(), u8"Engine/Fonts/roboto/Roboto-Bold.ttf")
                                          .AsView()) == fonts::FontLoadResult::Success);
         }
     };

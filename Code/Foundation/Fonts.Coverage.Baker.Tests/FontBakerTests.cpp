@@ -19,11 +19,11 @@ using namespace foundation::fonts;
 
 namespace
 {
-    // "<data root>/Assets/fonts" + rel (rel starts with '/'): the bundled fonts are found the way
+    // "<data root>" + rel (rel starts with '/'): the bundled fonts are found the way
     // every executable finds engine data - the Data/.dataroot walk from the test binary.
     String AssetPath(const char* rel)
     {
-        String p = foundation::vfs::DataPath(foundation::vfs::FindDataRoot(), u8"Assets/fonts");
+        String p = foundation::vfs::FindDataRoot(); // the data root; rel names the font from there
         REQUIRE_FALSE(p.IsEmpty());
         for (const char* s = rel; *s != '\0'; ++s)
             p.PushBack(static_cast<utf8char>(static_cast<unsigned char>(*s)));
@@ -33,7 +33,7 @@ namespace
     // Read the bundled Roboto font bytes off disk.
     bool ReadFontBytes(Array<u8>& out)
     {
-        FileStream fs(AssetPath("/roboto/Roboto-Regular.ttf"), FileMode::Read);
+        FileStream fs(AssetPath("/Engine/Fonts/roboto/Roboto-Regular.ttf"), FileMode::Read);
         if (!fs.IsValid())
             return false;
         const i64 length = fs.Size();

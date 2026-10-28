@@ -821,7 +821,7 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
     CHECK(FfCall(server, u8"project_info", JsonValue::MakeObject()).Get(u8"settings").Get(u8"guiStyleSheetIds").Count() == 0);
     (void)FfCall(server, u8"asset_import",
                  FfStr(JsonValue::MakeObject(), u8"source",
-                       PathJoin(foundation::vfs::FindDataRoot().AsView(), u8"Assets/fonts/roboto/Roboto-Bold.ttf")
+                       PathJoin(foundation::vfs::FindDataRoot().AsView(), u8"Engine/Fonts/roboto/Roboto-Bold.ttf")
                            .AsView()));
     String fontId;
     {

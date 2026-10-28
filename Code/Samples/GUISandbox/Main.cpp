@@ -108,7 +108,7 @@ namespace
         return resident.HasValue() ? static_cast<f64>(resident.Value()) * 4096.0 / (1024.0 * 1024.0) : 0.0;
     }
 
-    constexpr StringView kRoboto = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
+    constexpr StringView kRoboto = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
     constexpr StringView kLilita = u8"Assets/fonts/lilita-one/LilitaOne-Regular.ttf";
     constexpr StringView kDejaVu = u8"Assets/fonts/dejavu/DejaVuSansMono.ttf"; // Arabic, which Roboto has not
     constexpr StringView kStrings = u8"Assets/ui/sandbox/i18n/sandbox.strings.xml";

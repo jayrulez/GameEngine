@@ -80,7 +80,7 @@ if(EMSCRIPTEN)
         "--preload-file=${_web_shader_pack}@Data/Engine/Shaders/shaders.dpak"
         # The game-UI default font, at the exact dev-tree path the UI subsystem probes -
         # without it the HUD renders shapes but no text (the startup warning).
-        "--preload-file=${CMAKE_SOURCE_DIR}/Data/Assets/fonts/roboto/Roboto-Regular.ttf@Data/Assets/fonts/roboto/Roboto-Regular.ttf")
+        "--preload-file=${CMAKE_SOURCE_DIR}/Data/Engine/Fonts/roboto/Roboto-Regular.ttf@Data/Engine/Fonts/roboto/Roboto-Regular.ttf")
 
     set_target_properties(WebScene PROPERTIES SUFFIX ".html")
 

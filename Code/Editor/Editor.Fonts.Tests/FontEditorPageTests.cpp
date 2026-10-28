@@ -55,7 +55,7 @@ namespace
             project = EditorProject::Open(DefaultAllocator(), dir.AsView());
             REQUIRE(static_cast<bool>(project));
             context.SetProject(project.Get());
-            const String face = PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data/Assets/fonts/roboto/Roboto-Regular.ttf");
+            const String face = PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data/Engine/Fonts/roboto/Roboto-Regular.ttf");
             Result<Array<byte>> bytes = ReadFile(face.AsView());
             REQUIRE(bytes.HasValue());
             REQUIRE(WriteFile(PathJoin(project->SourcesRoot().AsView(), u8"roboto.ttf").AsView(), bytes.Value().AsSpan()).IsOk());

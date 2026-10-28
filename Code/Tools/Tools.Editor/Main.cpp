@@ -281,7 +281,7 @@ int main(int argc, char** argv)
     config.startInProjectManager = config.projectDirectory.IsEmpty();
     // The splash's face, from the data root, with an embedded twin as the last resort (the editor's
     // own faces are its sheet's, through its resources).
-    const String splashFontPath = foundation::vfs::DataPath(EditorDataRoot(), u8"Assets/fonts/roboto/Roboto-Regular.ttf");
+    const String splashFontPath = foundation::vfs::DataPath(EditorDataRoot(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
     const Span<const u8> embeddedFont(reinterpret_cast<const u8*>(g_embeddedEditorFont), static_cast<usize>(g_embeddedEditorFontSize));
     config.logBuffer = &logBuffer;
 

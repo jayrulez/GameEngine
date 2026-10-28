@@ -27,7 +27,7 @@ namespace
     {
         const String root = FindDataRoot();
         REQUIRE_FALSE(root.IsEmpty());
-        return DataPath(root.AsView(), u8"Assets/fonts/roboto/Roboto-Regular.ttf");
+        return DataPath(root.AsView(), u8"Engine/Fonts/roboto/Roboto-Regular.ttf");
     }
 
     IFont* LoadRoboto()

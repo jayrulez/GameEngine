@@ -74,7 +74,7 @@ if(EMSCRIPTEN)
         "--preload-file=${CMAKE_SOURCE_DIR}/Data/.dataroot@Data/.dataroot"
         "--preload-file=${_web_shader_pack}@Data/Engine/Shaders/shaders.dpak"
         # The ImGui HUD font, at the exact dev-tree path the subsystem probes.
-        "--preload-file=${CMAKE_SOURCE_DIR}/Data/Assets/fonts/roboto/Roboto-Regular.ttf@Data/Assets/fonts/roboto/Roboto-Regular.ttf")
+        "--preload-file=${CMAKE_SOURCE_DIR}/Data/Engine/Fonts/roboto/Roboto-Regular.ttf@Data/Engine/Fonts/roboto/Roboto-Regular.ttf")
 
     set_target_properties(TerrainPlayground PROPERTIES SUFFIX ".html")
 

@@ -76,7 +76,7 @@ namespace
 
 // Engine data under the data root (discovered at startup - the one mechanism every executable
 // uses; this sample has no argv, so there is no --data-root here).
-constexpr StringView kFontAsset = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
+constexpr StringView kFontAsset = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
 
     // Appends "<n>" into buf (small values); caller supplies the prefix.
     inline void AppendNum(char8_t* buf, usize& pos, i32 n)
@@ -839,7 +839,7 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
         LoadFontSize(u8"Roboto", fontPath.AsView(), 16.0f);
         LoadFontSize(u8"Roboto", fontPath.AsView(), 24.0f);
         // The bold face, as its own family: rich text's [b] takes "<family> Bold" when there is one.
-        const String boldPath = DataPath(u8"Assets/fonts/roboto/Roboto-Bold.ttf");
+        const String boldPath = DataPath(u8"Engine/Fonts/roboto/Roboto-Bold.ttf");
         LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 14.0f);
         LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 16.0f);
         LoadFontSize(u8"Roboto Bold", boldPath.AsView(), 24.0f);

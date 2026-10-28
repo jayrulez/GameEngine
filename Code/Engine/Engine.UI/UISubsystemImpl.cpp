@@ -735,7 +735,7 @@ namespace engine::ui
                                                                      m_allocator);
         // The built-in default font, read through the data mount (present in a dev tree and in
         // any dist that stages it; a web dist usually does not).
-        constexpr StringView kDefaultFont = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
+        constexpr StringView kDefaultFont = u8"Engine/Fonts/roboto/Roboto-Regular.ttf";
         Array<u8> fontBytes(m_allocator);
         if (ReadDataFile(kDefaultFont, fontBytes) &&
             m_fonts->LoadFontFromMemory(u8"Roboto", Span<const u8>(fontBytes.Data(),

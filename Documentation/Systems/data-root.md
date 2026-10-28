@@ -73,7 +73,7 @@ Consumers take `vfs::IFileSystem&` (the data mount), never a path:
   paths, so a pak-backed mount works too). A first-level include arrives bare and is looked up
   in the folder; nested includes carry the includer's directory.
 - `UISubsystem`: VG shaders via the host + the built-in default font read from
-  `Assets/fonts/roboto/Roboto-Regular.ttf` (bytes -> `LoadFontFromMemory`); a dist without it
+  `Engine/Fonts/roboto/Roboto-Regular.ttf` (bytes -> `LoadFontFromMemory`); a dist without it
   logs once and relies on the project's cooked default font, as before.
 - `ImguiSubsystem(device, framesInFlight, dataFileSystem)`, `UIHost(..., dataFileSystem)`.
 

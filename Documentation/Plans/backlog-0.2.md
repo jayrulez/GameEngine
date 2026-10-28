@@ -112,6 +112,22 @@ against the code on 2026-10-28; what is still open:
   list of places, not a map.
 - **Web.** The engine's GUI has never run in a browser (wasm builds it).
 
+## A CPU rasterizer for VG (user 2026-10-28)
+
+VG already does all but the last step on the CPU: an SVG parses into VG paths (VG.SVG), and fills
+and strokes tessellate into triangles that carry their colour and an anti-aliasing coverage
+(Tessellation.cppm). A CPU backend would fill a batch's triangles into an RGBA buffer instead of
+the GPU. Two sizes (estimates): solid fills, normal blending and the scissor clip, enough for the
+logos (a few hundred lines); or a twin of VG.Renderer (textures, distance-field text, radial and
+conic gradients, the box shadow, blur, layers, stencil clipping, the blend modes and spaces;
+1,500 to 2,500 lines, the GPU renderer and its shaders being about 2,800). The first is the
+second's first step.
+
+Its uses: the GUI's reference images and sweeps running on CI with no GPU (they skip with 77
+today), against references of their own; the splash, the window icons and export art (a Windows
+`.ico`, Steam artwork) rendered from one SVG instead of PNGs at each size; vector thumbnails in a
+host with no GPU. The splash took a 2x PNG instead for now (scripts/logo-splash.py).
+
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 
 The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API

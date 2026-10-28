@@ -208,7 +208,7 @@ TEST_CASE("cook: a one-file project shader cooks both stages into the pack")
     REQUIRE_FALSE(dataRoot.IsEmpty());
     const String shaderDir = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
     const Result<Array<byte>> bytes = ReadFile(
-        foundation::vfs::DataPath(dataRoot.AsView(), u8"Assets/shaders/toon/toon.hlsl").AsView());
+        foundation::vfs::DataPath(dataRoot.AsView(), u8"Samples/Shaders/toon/toon.hlsl").AsView());
     REQUIRE(bytes.HasValue());
     const StringView text(reinterpret_cast<const char8_t*>(bytes.Value().Data()),
                           bytes.Value().Size());

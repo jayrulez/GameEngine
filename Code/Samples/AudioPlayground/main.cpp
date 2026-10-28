@@ -97,7 +97,7 @@ namespace
             m_scene = PrimaryScenes().CreateScene(u8"audio-playground");
 
             const core::String dataDir =
-                foundation::vfs::DataPath(DataRoot(), u8"Assets/audio/playground");
+                foundation::vfs::DataPath(DataRoot(), u8"Samples/Audio/playground");
             m_ambient =
                 LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"ambient_loop.wav"), true);
             m_beepHigh = LoadClipFromFile(core::PathJoin(dataDir.AsView(), u8"beep_high.wav"));

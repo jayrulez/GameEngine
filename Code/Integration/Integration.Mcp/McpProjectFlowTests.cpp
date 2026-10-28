@@ -431,7 +431,7 @@ TEST_CASE("integration.mcp: asset_import names the other claimants of an extensi
     // on the asset it already made.
     const String dataRoot = foundation::vfs::FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
-    const String png = PathJoin(dataRoot.AsView(), u8"Assets/images/logo.png");
+    const String png = PathJoin(dataRoot.AsView(), u8"Samples/Images/logo.png");
     REQUIRE(FileExists(png.AsView()));
     std::filesystem::copy_file(std::filesystem::path(reinterpret_cast<const char*>(png.CStr())),
                                "mcp_import_claimants_second.png",

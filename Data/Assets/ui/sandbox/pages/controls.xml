@@ -60,7 +60,7 @@
             <TabPage title="Overview" closable="false">
                 <Label class="caption" white-space="normal" height="60" text="A tab view pairs a bar of tabs with their pages. Drag a tab across its neighbour to reorder; hover one to close it, or middle-click it. This first tab is not closable."/>
             </TabPage>
-            <TabPage title="Settings" icon="Assets/images/logo.png">
+            <TabPage title="Settings" icon="Samples/Images/logo.png">
                 <CheckBox class="choice" text="A page keeps its state while hidden"/>
             </TabPage>
             <TabPage title="Notes">
@@ -146,7 +146,7 @@
         <Panel width="590" height="170" flex-direction="row" align-items="start" gap="16">
             <ListBox id="controls-list" class="list" items="Item 1|Item 2|Item 3|Item 4|Item 5|Item 6|Item 7|Item 8|Item 9|Item 10|Item 11|Item 12"/>
             <Panel id="controls-image" class="image-host" display="stack" justify-items="start" align-items="start"/>
-            <Image class="logo" src="Assets/images/logo.png" object-fit="contain" tooltip="An Image from markup: src, object-fit: contain"/>
+            <Image class="logo" src="Samples/Images/logo.png" object-fit="contain" tooltip="An Image from markup: src, object-fit: contain"/>
         </Panel>
     </Panel>
 </Panel>

@@ -91,7 +91,7 @@
     <Panel class="section" gap="12">
         <Label class="section-title" text="Pinch, turn and pan"/>
         <Panel id="input-viewer" class="viewer" touch-action="none" display="stack" justify-items="center" align-items="center">
-            <Image id="input-photo" class="photo" src="Assets/images/logo.png" object-fit="contain"/>
+            <Image id="input-photo" class="photo" src="Samples/Images/logo.png" object-fit="contain"/>
         </Panel>
         <Panel flex-direction="row" align-items="center" gap="12">
             <Button id="input-viewer-reset" class="viewer-reset" text="Reset"/>

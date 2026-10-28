@@ -133,7 +133,7 @@ namespace
                 // tonemap washes out at 1.0. Tune live via the Environment window's Exposure slider.
                 render->SetExposure(0.5f);
                 core::String hdrPath =
-                    foundation::vfs::DataPath(DataRoot(), u8"Assets/environment/BlueSky.hdr");
+                    foundation::vfs::DataPath(DataRoot(), u8"Templates/kloofendal_48d_partly_cloudy_puresky/kloofendal_48d_partly_cloudy_puresky_1k.hdr"); // the sky a new project starts with
                 foundation::image::Image img;
                 if (foundation::image::io::LoadImage(hdrPath.AsView(), img).IsOk() &&
                     img.Format() == foundation::image::PixelFormat::RGBA32F)
@@ -159,7 +159,7 @@ namespace
                 // Cubemap source: point at ONE face; the importer detects the other 5 (px/nx/...) and
                 // loads + combines them. (Explicit 6-path LoadCubemap also works.)
                 core::String oneFace = foundation::vfs::DataPath(
-                    DataRoot(), u8"Assets/environment/cube_sky/px.png");
+                    DataRoot(), u8"Samples/Environment/cube_sky/px.png");
                 core::Array<core::String> facePaths;
                 if (pipeline::TextureImporter::DetectCubemapFaces(oneFace.AsView(), facePaths)
                         .IsOk() &&
@@ -574,7 +574,7 @@ namespace
                 return nullptr;
             }
             const core::String imageDirStorage =
-                foundation::vfs::DataPath(DataRoot(), u8"Assets/images");
+                foundation::vfs::DataPath(DataRoot(), u8"Samples/Images");
             const core::StringView imageDir = imageDirStorage.AsView();
 
             pipeline::TextureAsset asset;

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // CustomShader - a LOW-LEVEL custom shader end to end: a toon (cel) shader, one file with VSMain
-// and PSMain (Data/Assets/shaders/toon/toon.hlsl), registered with the render subsystem's shader
+// and PSMain (Data/Samples/Shaders/toon/toon.hlsl), registered with the render subsystem's shader
 // system under the name "toon", and a material built in code whose properties lay out the
 // shader's set-2 block. Nothing in the renderer knows about it: the material's property list
 // derives its bind-group layout and pipeline (the material-driven renderer), and the shader keeps
@@ -133,7 +133,7 @@ namespace
 
             m_scene->Start();
             m_scene->SetSimulationEnabled(true);
-            core::ConsoleWrite(u8"CustomShader: a toon shader from Data/Assets/shaders/toon.\n"
+            core::ConsoleWrite(u8"CustomShader: a toon shader from Data/Samples/Shaders/toon.\n"
                                u8"WASD/RMB-look fly, Esc quits.\n");
         }
 
@@ -182,7 +182,7 @@ namespace
         bool RegisterToonShader(shaders::ShaderSystem& shaderSystem)
         {
             const core::String path =
-                foundation::vfs::DataPath(DataRoot(), u8"Assets/shaders/toon/toon.hlsl");
+                foundation::vfs::DataPath(DataRoot(), u8"Samples/Shaders/toon/toon.hlsl");
             core::Result<core::Array<core::byte>> bytes = core::ReadFile(path.AsView());
             if (!bytes.HasValue())
             {

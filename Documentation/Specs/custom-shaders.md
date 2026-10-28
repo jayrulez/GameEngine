@@ -166,7 +166,7 @@ Low-level shaders first: the engine already draws them, so each phase carries th
 closer to an editor user and a shipped game. Surface shaders then build on the same asset path.
 
 0. **The spike, and entry points as data** (done 2026-10-12): `Code/Samples/CustomShader`, the
-   toon shader in `Data/Assets/shaders/toon/toon.hlsl`, one file with `VSMain` and `PSMain`, kept
+   toon shader in `Data/Samples/Shaders/toon/toon.hlsl`, one file with `VSMain` and `PSMain`, kept
    as the low-level reference sample. Entry names are carried end to end (user, 2026-10-12: what
    is correct over what is convenient): a source registers each stage's entry, the compiler,
    WGSL translation and pack (v3) carry it, every module records it, and a pipeline stage runs

@@ -292,7 +292,7 @@ TEST_CASE("shader cook: the toon sample's shader cooks against the engine's shad
     const String dataRoot = FindDataRoot();
     REQUIRE_FALSE(dataRoot.IsEmpty());
     const Result<Array<byte>> toon =
-        ReadFile(DataPath(dataRoot.AsView(), u8"Assets/shaders/toon/toon.hlsl"));
+        ReadFile(DataPath(dataRoot.AsView(), u8"Samples/Shaders/toon/toon.hlsl"));
     REQUIRE(toon.HasValue());
     if (!HaveCompiler())
     {

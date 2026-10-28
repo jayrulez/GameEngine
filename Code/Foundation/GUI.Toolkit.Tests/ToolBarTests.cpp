@@ -157,6 +157,41 @@ TEST_CASE("tool bar: what does not fit overflows, the lowest priority first, the
     CHECK_FALSE(overflow->IsVisible());
 }
 
+TEST_CASE("tool bar: an item that may shrink to a minimum of its own gives up its room before any tool overflows")
+{
+    Bed bed(200.0f); // 192 inside its padding
+    core::Array<core::RefPtr<ToolButton>> b(core::DefaultAllocator());
+    for (i32 i = 0; i < 3; ++i)
+        b.PushBack(bed.Button());
+    // A long status, 160 wide, that shrinks and may go to nothing (min-width: 0, as a label that
+    // ellipsizes); three tools of 40 with gaps of 2 beside it ask 290.
+    auto status = Make<UIWidget>();
+    status->EditLayoutStyle([](LayoutStyle& s) {
+        s.Width = LayoutLength::Px(160.0f);
+        s.Height = LayoutLength::Px(20.0f);
+        s.MinWidth = LayoutLength::Px(0.0f);
+        s.Shrink = 1.0f;
+    });
+    bed.bar->AddChild(status.Get());
+    bed.Lay();
+    for (const auto& button : b)
+        CHECK(button->IsVisible()); // no tool went to the overflow menu
+    CHECK(bed.bar->GetOverflowed().IsEmpty());
+    CHECK_FALSE(bed.bar->GetOverflowButton()->IsVisible());
+    CHECK(status->GetSize().x == doctest::Approx(192.0f - 3 * 40.0f - 3 * 2.0f)); // what is left: 66
+
+    // Below its minimum it holds, and only then do tools overflow.
+    status->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength::Px(100.0f); });
+    bed.Lay();
+    CHECK(status->GetSize().x == doctest::Approx(100.0f));
+    CHECK_FALSE(bed.bar->GetOverflowed().IsEmpty());
+
+    // With an automatic minimum (its content) it never shrinks: the tools overflow as before.
+    status->EditLayoutStyle([](LayoutStyle& s) { s.MinWidth = LayoutLength{}; });
+    bed.Lay();
+    CHECK(status->GetSize().x == doctest::Approx(160.0f));
+}
+
 TEST_CASE("tool bar: a separator shows only between shown items; a widget no menu row stands for never overflows")
 {
     Bed bed(400.0f);

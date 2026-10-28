@@ -460,6 +460,44 @@ export namespace foundation::gui
                 }
                 return count > 1 ? total + gap * static_cast<f32>(count - 1) : total;
             };
+            // An item that may shrink (flex-shrink with a minimum of its own, as a label that
+            // ellipsizes: CSS's automatic minimum keeps the rest at their content) gives up its room
+            // first, down to that minimum, so a long text never pushes the tools out of the bar.
+            {
+                const f32 over = used(false) - room;
+                f32 weight = 0.0f;
+                f32 give = 0.0f;
+                for (const Item& item : items)
+                    if (const f32 spare = ShrinkRoom(*item.node, along(item.size), column); spare > 0.0f)
+                    {
+                        weight += item.node->GetLayoutStyle().Shrink * along(item.size);
+                        give += spare;
+                    }
+                if (over > 0.0f && weight > 0.0f)
+                {
+                    // Each by its share of the shrink (CSS: flex-shrink times its size), held at its minimum.
+                    f32 left = core::Min(over, give);
+                    for (i32 round = 0; round < 4 && left > 0.01f; ++round)
+                    {
+                        f32 share = 0.0f;
+                        for (const Item& item : items)
+                            if (ShrinkRoom(*item.node, along(item.size), column) > 0.0f)
+                                share += item.node->GetLayoutStyle().Shrink * along(item.size);
+                        if (share <= 0.0f)
+                            break;
+                        const f32 cut = left;
+                        for (Item& item : items)
+                        {
+                            const f32 spare = ShrinkRoom(*item.node, along(item.size), column);
+                            if (spare <= 0.0f)
+                                continue;
+                            const f32 take = core::Min(spare, cut * item.node->GetLayoutStyle().Shrink * along(item.size) / share);
+                            (column ? item.size.y : item.size.x) -= take;
+                            left -= take;
+                        }
+                    }
+                }
+            }
             // Hide the lowest priority first, the last of a priority first, until what shows fits.
             bool hiding = used(false) > room + 0.5f;
             while (hiding && used(true) > room + 0.5f)
@@ -550,6 +588,20 @@ export namespace foundation::gui
         }
 
     private:
+        // How much of `extent` an item may give up along the bar: down to its own minimum when it
+        // shrinks and sets one; none for an automatic minimum (its content).
+        [[nodiscard]] static f32 ShrinkRoom(const Node& node, f32 extent, bool column)
+        {
+            const LayoutStyle& s = node.GetLayoutStyle();
+            if (s.Shrink <= 0.0f)
+                return 0.0f;
+            const LayoutLength& min = column ? s.MinHeight : s.MinWidth;
+            if (min.IsAuto())
+                return 0.0f;
+            const f32 floor = min.Resolve(0.0f).ValueOr(0.0f) + (column ? s.Margin.TotalVertical() : s.Margin.TotalHorizontal());
+            return core::Max(0.0f, extent - floor);
+        }
+
         template <typename Items>
         [[nodiscard]] bool SeparatorShows(const Items& items, usize at) const
         {

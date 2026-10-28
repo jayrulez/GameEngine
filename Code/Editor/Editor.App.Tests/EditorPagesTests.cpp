@@ -469,7 +469,7 @@ TEST_CASE("editor pages: Save As names a new asset beside the page's; an empty o
 
     name->SetText(u8"One Again");
     CHECK(save->HandleActivate());
-    CHECK_FALSE(window->IsOpen());
+    CHECK(FindWindow(*bed.root) == nullptr); // closed and let go: `window` no longer points at one
     content::Instance* made = bed.project->SourceDb().RootGroup()->GetInstance(u8"One Again");
     REQUIRE(made != nullptr);
     CHECK(page->InstanceId() == made->Id());

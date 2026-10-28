@@ -1049,4 +1049,5 @@ TEST_CASE("layout: a scroller in a column has no automatic minimum on the axis i
     bed.Layout();
     CHECK(list->GetSize().y == doctest::Approx(200.0f)); // not the rows it realised, nor all of them
     CHECK(list->GetScrollRange().y == doctest::Approx(200.0f * 20.0f - 200.0f));
+    list->SetModel(nullptr); // the model, made after the bed, dies before the bed's tree
 }

@@ -386,7 +386,7 @@ namespace engine::player
             if (instance != nullptr)
             {
                 m_bootScenePath = String(instance->Path());
-                m_splashView = PushSplash();
+                PushSplash();
                 foundation::content::ContentDatabase* sceneDb = m_sceneDb;
                 m_bootLoad = Instance().LoadSceneAsync(
                     *instance, *Resources(),
@@ -553,10 +553,10 @@ namespace engine::player
             (void)StartGameScript(*proxy); // with its handlers: the game's on<Event> inbox
         }
 
-        // ---- boot splash (task #123 step 4): a SCREEN overlay shown while the default scene streams
-        // async. loadingDocumentId names a cooked UIDocument; nil = the engine's default loading
-        // screen (engine::ui::BuildDefaultLoadingScreen: its logo, a bar). Conventional control ids
-        // driven each frame: `progress` (ProgressBar). ----
+        // ---- boot splash (task #123 step 4): the GUI's overlay shown while the default scene streams
+        // async. guiLoadingDocumentId names a cooked GUI document, its progress the GUI's data value
+        // `bootProgress`; nil = the engine's own (engine::gui::BuildDefaultLoadingScreen: its logo,
+        // a bar, "Loading"). ----
 
         void DriveBoot(runtime::IApplicationHost& host)
         {
@@ -584,7 +584,7 @@ namespace engine::player
 
         // The engine GUI's splash, when the project names one (guiLoadingDocumentId): on the GUI's
         // overlay layer, its progress the GUI's data value `bootProgress`. False when there is none
-        // or it does not resolve (the UI's splash shows instead).
+        // or it does not resolve (the engine's own shows instead).
         bool PushGuiSplash()
         {
             if (GUI() == nullptr || m_settings.guiLoadingDocumentId.IsNil() || Resources() == nullptr)
@@ -594,7 +594,7 @@ namespace engine::player
             auto proxy = Resources()->Bind<foundation::gui::GuiDocument>(m_settings.guiLoadingDocumentId);
             if (proxy.Get() == nullptr)
             {
-                LOG_WARNING(u8"Player", u8"the GUI loading screen did not resolve; the UI's shows");
+                LOG_WARNING(u8"Player", u8"the GUI loading screen did not resolve; the engine's own shows");
                 return false;
             }
             GUI()->Context().GetData().Set(StringView(u8"bootProgress"), Variant::From<f64>(0.0));
@@ -602,66 +602,44 @@ namespace engine::player
             return static_cast<bool>(m_guiSplash);
         }
 
-        [[nodiscard]] RefPtr<foundation::ui::View> PushSplash()
+        void PushSplash()
         {
-            if (PushGuiSplash())
+            if (PushGuiSplash() || GUI() == nullptr)
             {
-                return {};
-            }
-            if (UI() == nullptr)
-            {
-                return {};
-            }
-            RefPtr<foundation::ui::UIDocument> doc;
-            if (!m_settings.loadingDocumentId.IsNil() && Resources() != nullptr)
-            {
-                auto proxy =
-                    Resources()->Bind<foundation::ui::UIDocument>(m_settings.loadingDocumentId);
-                if (proxy.Get() != nullptr)
-                {
-                    doc = RefPtr<foundation::ui::UIDocument>(proxy.Get());
-                }
-            }
-            if (doc)
-            {
-                return UI()->PushScreenOverlay(*doc);
+                return;
             }
             // None authored: the engine's own, with its logo.
-            RefPtr<foundation::ui::View> view = engine::ui::BuildDefaultLoadingScreen(
+            engine::gui::DefaultLoadingScreen screen = engine::gui::BuildDefaultLoadingScreen(
                 AppRoot(), StringView(reinterpret_cast<const utf8char*>(g_embeddedEngineLogo),
                                       static_cast<usize>(g_embeddedEngineLogoSize)));
-            UI()->PushScreenOverlay(view);
-            return view;
+            m_guiSplash = screen.Root;
+            m_splashProgress = screen.Progress;
+            GUI()->PushOverlay(*m_guiSplash);
         }
 
         void PopSplash()
         {
-            if (m_splashView && UI() != nullptr)
-            {
-                UI()->RemoveScreenOverlay(m_splashView.Get());
-            }
-            m_splashView = nullptr;
             if (m_guiSplash && GUI() != nullptr)
             {
                 GUI()->RemoveOverlay(*m_guiSplash);
             }
             m_guiSplash = nullptr;
+            m_splashProgress = nullptr;
         }
 
         void DriveSplash(f32 progress)
         {
-            if (m_guiSplash && GUI() != nullptr)
-            {
-                GUI()->Context().GetData().Set(StringView(u8"bootProgress"), Variant::From<f64>(static_cast<f64>(progress)));
-            }
-            foundation::ui::ViewGroup* root = Cast<foundation::ui::ViewGroup>(m_splashView.Get());
-            if (root == nullptr)
+            if (!m_guiSplash || GUI() == nullptr)
             {
                 return;
             }
-            if (auto* bar = root->FindByName<foundation::ui::ProgressBar>(u8"progress"))
+            if (m_splashProgress != nullptr)
             {
-                bar->Value.SetValue(progress);
+                m_splashProgress->SetValue(static_cast<f64>(progress)); // the engine's own
+            }
+            else
+            {
+                GUI()->Context().GetData().Set(StringView(u8"bootProgress"), Variant::From<f64>(static_cast<f64>(progress)));
             }
         }
 
@@ -680,8 +658,8 @@ namespace engine::player
 
         // Boot splash + async default-scene load (task #123 step 4).
         engine::runtime::SceneLoadHandle m_bootLoad;     // the in-flight async boot load
-        RefPtr<foundation::ui::View> m_splashView; // the pushed splash overlay (null = none)
-        RefPtr<foundation::gui::Node> m_guiSplash; // the GUI's splash, when the project names one
+        RefPtr<foundation::gui::Node> m_guiSplash;            // the splash on the GUI's overlay layer (null = none)
+        foundation::gui::ProgressBar* m_splashProgress = nullptr; // the engine's own splash's bar (in m_guiSplash)
         String m_bootScenePath;
         bool m_booting = false;
     };

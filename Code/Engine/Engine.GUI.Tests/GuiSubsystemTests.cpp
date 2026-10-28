@@ -1362,3 +1362,30 @@ TEST_CASE("engine.gui: a prompt names the game's binding with no host wiring, an
     engine.gui->SetPromptRuntime(nullptr);
     engine.Frame();
 }
+
+TEST_CASE("engine.gui: the default loading screen is the logo over a bar and \"Loading\", on the overlay layer, its bar the player's to drive")
+{
+    constexpr StringView kSvg = u8R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 931 200"><rect width="931" height="200"/></svg>)";
+    engine::gui::DefaultLoadingScreen screen = engine::gui::BuildDefaultLoadingScreen(DefaultAllocator(), kSvg);
+    REQUIRE(screen.Root);
+    REQUIRE(screen.Progress != nullptr);
+    REQUIRE(screen.Root->ChildCount() == 3u); // the logo, the bar, the status
+    CHECK(Cast<Image>(screen.Root->GetChildAt(0)) != nullptr);
+    CHECK(screen.Root->GetChildAt(1) == screen.Progress);
+    const Label* status = Cast<Label>(screen.Root->GetChildAt(2));
+    REQUIRE(status != nullptr);
+    CHECK(status->GetText() == StringView(u8"Loading"));
+    screen.Progress->SetValue(0.5);
+    CHECK(screen.Progress->GetValue() == doctest::Approx(0.5));
+
+    // No logo it can read: the bar and the line alone.
+    CHECK(engine::gui::BuildDefaultLoadingScreen(DefaultAllocator(), StringView{}).Root->ChildCount() == 2u);
+    CHECK(engine::gui::BuildDefaultLoadingScreen(DefaultAllocator(), StringView(u8"not svg")).Root->ChildCount() == 2u);
+
+    Engine engine;
+    const usize before = engine.gui->OverlayCount();
+    engine.gui->PushOverlay(*screen.Root);
+    CHECK(engine.gui->OverlayCount() == before + 1);
+    engine.gui->RemoveOverlay(*screen.Root);
+    CHECK(engine.gui->OverlayCount() == before);
+}

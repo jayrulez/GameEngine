@@ -2037,6 +2037,56 @@ namespace engine::gui
         }
     }
 
+    DefaultLoadingScreen BuildDefaultLoadingScreen(IAllocator& allocator, StringView logoSvg)
+    {
+        DefaultLoadingScreen screen;
+        // The screen: dark, its column in the middle (the overlay layer stacks it over the window).
+        screen.Root = MakeRef<UIWidget>(allocator);
+        {
+            UIWidget& root = static_cast<UIWidget&>(*screen.Root);
+            root.SetId(StringView(u8"loading-screen"));
+            root.SetInlineStyle(StringView(u8"background-color"), StringView(u8"#0a0a0c"));
+            root.EditLayoutStyle([](LayoutStyle& s)
+            {
+                s.Direction = FlexDirection::Column;
+                s.JustifyContent = Justify::Center;
+                s.AlignItems = Align::Center;
+                s.RowGap = 14.0f;
+            });
+        }
+        if (!logoSvg.IsEmpty())
+            if (RefPtr<SvgDrawable> logo = SvgDrawable::FromText(allocator, logoSvg))
+            {
+                constexpr f32 kLogoHeight = 72.0f;
+                RefPtr<Image> image = MakeRef<Image>(allocator);
+                image->SetId(StringView(u8"logo"));
+                image->SetDrawable(logo);
+                image->EditLayoutStyle([](LayoutStyle& s)
+                {
+                    s.Width = LayoutLength::Px(kLogoHeight * kEngineLogoAspect);
+                    s.Height = LayoutLength::Px(kLogoHeight);
+                    s.Margin.Bottom = 22.0f; // the logo stands clear of the bar
+                });
+                screen.Root->AddChild(image.Get());
+            }
+        RefPtr<ProgressBar> bar = MakeRef<ProgressBar>(allocator);
+        bar->SetId(StringView(u8"progress"));
+        bar->EditLayoutStyle([](LayoutStyle& s)
+        {
+            s.Width = LayoutLength::Px(320.0f);
+            s.Height = LayoutLength::Px(6.0f);
+        });
+        screen.Root->AddChild(bar.Get());
+        screen.Progress = bar.Get();
+        RefPtr<Label> status = MakeRef<Label>(allocator);
+        status->SetId(StringView(u8"status"));
+        status->SetText(StringView(u8"Loading"));
+        status->SetInlineStyle(StringView(u8"font-size"), StringView(u8"13px"));
+        status->SetInlineStyle(StringView(u8"color"), StringView(u8"#9aa3b2"));
+        screen.Root->AddChild(status.Get());
+        return screen;
+    }
+
     const engine::DomainModule& GuiDomain() noexcept
     {
         static const resource::ResourceModule* const kResources[] = {

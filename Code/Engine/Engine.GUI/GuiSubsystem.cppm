@@ -646,4 +646,20 @@ export namespace engine::gui
     /// The GUI's domain (engine-composition.md): its resource modules (documents and sheets, the
     /// vector images, the fonts) beside the UI domain's while both live.
     [[nodiscard]] const engine::DomainModule& GuiDomain() noexcept;
+
+    /// The aspect (width over height) of the AssiduousEngine logo with its wordmark.
+    inline constexpr f32 kEngineLogoAspect = 931.0f / 200.0f;
+
+    /// The loading screen a game shows while its first scene loads when it authors none (its
+    /// guiLoadingDocumentId is unset), on the GUI: the AssiduousEngine logo (`logoSvg`, the SVG
+    /// text; left out when empty or unreadable) over a progress bar and "Loading", centred on a
+    /// dark screen. `Progress` is the bar the player drives (0 to 1).
+    struct DefaultLoadingScreen
+    {
+        RefPtr<Node> Root;
+        ProgressBar* Progress = nullptr; // in Root
+    };
+    /// (Defined in the implementation unit, as its old UI counterpart is: a body here left GCC
+    /// unable to read the module back.)
+    [[nodiscard]] DefaultLoadingScreen BuildDefaultLoadingScreen(IAllocator& allocator, StringView logoSvg);
 }

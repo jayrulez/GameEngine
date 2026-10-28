@@ -68,6 +68,7 @@ namespace
         Array<String> pickedFrom;
         Guid pickedOver;
         int commits = 0;
+        RefPtr<gui::Drawable> woodPicture; // its thumbnail, once "generated"
 
         explicit Bed(usize objects = 1) : bag(DefaultAllocator(), objects)
         {
@@ -96,6 +97,7 @@ namespace
                 out.Name = String(u8"Wood");
                 out.Glyph = String(u8"Editor/Icons/Types/MeshAsset.svg");
                 out.GlyphClass = String(u8"cat-rendering");
+                out.Picture = woodPicture;
                 return true;
             };
             services.Pick = [this](Span<const String> types, const Guid& current, Function<void(const Guid&)> answer)
@@ -174,6 +176,23 @@ TEST_CASE("resource-ref: a reference row is a slot taking the types for its targ
     CHECK(bed.commits == 2);
     CHECK(bed.bag.GetValue(StringView(u8"mesh"), 0).AsString().IsEmpty());
     CHECK(slot.ShownName() == StringView(u8"Not set"));
+}
+
+TEST_CASE("resource-ref: the slot draws the asset's thumbnail in its glyph's place once there is one")
+{
+    Bed bed;
+    bed.Add(u8"mesh", bed.wood);
+    bed.Show();
+    editor::app::AssetPickerSlot& slot = *bed.Editor(u8"mesh").Slot();
+    CHECK(slot.Picture() == nullptr); // none generated yet: the type's glyph
+    bed.woodPicture = RefPtr<gui::Drawable>(gui::SvgDrawable::FromText(DefaultAllocator(), u8"<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><rect width='8' height='8'/></svg>").Get());
+    bed.grid->SetSource(nullptr);
+    bed.Show();
+    editor::app::AssetPickerSlot& again = *bed.Editor(u8"mesh").Slot();
+    CHECK(again.Picture() == bed.woodPicture.Get());
+    CHECK(again.ShownName() == StringView(u8"Wood"));
+    again.SetPicture({});
+    CHECK(again.Picture() == nullptr); // back to the glyph
 }
 
 TEST_CASE("resource-ref: a dropped asset of a type it takes is one write; a read-only one only opens; objects that differ are Mixed")

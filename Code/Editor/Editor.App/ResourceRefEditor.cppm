@@ -30,12 +30,14 @@ export namespace editor::app
 {
     namespace gui = foundation::gui;
 
-    /// What a referenced asset shows: its name, its type's glyph and the class that tints it.
+    /// What a referenced asset shows: its name, its type's glyph and the class that tints it, and
+    /// its thumbnail in the glyph's place once there is one.
     struct ResourceRefShown
     {
         String Name;
         String Glyph;
         String GlyphClass;
+        RefPtr<gui::Drawable> Picture;
     };
 
     /// What a reference row asks of the editor. Each is optional: one unset leaves its verb out.
@@ -53,7 +55,7 @@ export namespace editor::app
 
         /// Filled from the editor's context: the builders' types (SourceAssetTypesOf; none, the
         /// type itself, a reference naming a source asset type), the
-        /// project's names, the type icons, the asset picker over the project's assets (`open`
+        /// project's names, the type icons and thumbnails, the asset picker over the project's assets (`open`
         /// shows the asset picker for a request), the context's open and reveal. `context`
         /// and `icons` outlive what it is given to.
         [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons,
@@ -100,6 +102,8 @@ export namespace editor::app
                     out.Glyph = icon.Source;
                     out.GlyphClass = icon.Class;
                 }
+                if (ctx->Thumbnails() != nullptr)
+                    out.Picture = ctx->Thumbnails()->Get(id); // null until generated; a bind asks again
                 return true;
             };
             services.Open = [ctx](const Guid& id)
@@ -170,6 +174,7 @@ export namespace editor::app
         }
         void Show()
         {
+            m_slot->SetPicture({});
             if (m_mixed)
             {
                 m_slot->SetGlyph({});
@@ -186,6 +191,7 @@ export namespace editor::app
             if (m_services->Describe && m_services->Describe(m_current, shown))
             {
                 m_slot->SetGlyph(shown.Glyph.AsView(), shown.GlyphClass.AsView());
+                m_slot->SetPicture(foundation::core::Move(shown.Picture));
                 m_slot->SetValue(shown.Name.AsView());
             }
             else

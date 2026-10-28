@@ -4,7 +4,8 @@
 // Editor App - :asset_picker_slot partition
 //
 // The asset slot (Documentation/Specs/editor-gui.md, 5.2, layer 3), as the kit draws it: the
-// referenced asset's type glyph (its category's tint), its name, and its verbs: pick (the target;
+// referenced asset's thumbnail, or its type glyph (its category's tint) until it has one, its
+// name, and its verbs: pick (the target;
 // a click on the name picks too), open, reveal (in the assets browser), clear. An empty slot says
 // "None" and keeps only pick. A verb shows only when its owner wired it; open, reveal and clear
 // need something referenced. It is a drop target for an asset of a type it takes, naming why not
@@ -90,10 +91,32 @@ export namespace editor::app
             m_glyphClass = String(categoryClass);
             if (!m_glyphClass.IsEmpty())
                 m_glyph->AddClass(m_glyphClass.AsView());
-            m_glyph->SetSource(String(path));
+            m_glyphSource = String(path);
+            if (!m_picture)
+                m_glyph->SetSource(m_glyphSource);
             m_hasGlyph = !path.IsEmpty();
             Show();
         }
+        /// The referenced asset's thumbnail, drawn in the glyph's place; null: the glyph.
+        void SetPicture(RefPtr<gui::Drawable> picture)
+        {
+            if (picture.Get() == m_picture.Get())
+                return;
+            m_picture = foundation::core::Move(picture);
+            if (m_picture)
+            {
+                m_glyph->SetDrawable(m_picture);
+                m_glyph->AddClass(u8"slot-picture");
+            }
+            else
+            {
+                m_glyph->RemoveClass(u8"slot-picture");
+                m_glyph->SetSource(m_glyphSource); // back to the type's glyph
+            }
+            Show();
+        }
+        /// The thumbnail it shows, or null.
+        [[nodiscard]] gui::Drawable* Picture() const noexcept { return m_picture.Get(); }
 
         /// Picks, as its target button does.
         void Pick()
@@ -154,7 +177,7 @@ export namespace editor::app
                 RemoveClass(u8"empty");
             else
                 AddClass(u8"empty");
-            m_glyph->SetDisplayed(m_hasValue && m_hasGlyph);
+            m_glyph->SetDisplayed(m_hasValue && (m_hasGlyph || m_picture));
             m_pick->SetDisplayed(static_cast<bool>(m_onPick));
             m_open->SetDisplayed(static_cast<bool>(m_onOpen) && m_hasValue);
             m_reveal->SetDisplayed(static_cast<bool>(m_onReveal) && m_hasValue);
@@ -174,6 +197,8 @@ export namespace editor::app
         Function<void(const Guid&)> m_onDropped;
         Array<String> m_types;
         String m_glyphClass;
+        String m_glyphSource;
+        RefPtr<gui::Drawable> m_picture; // SetPicture: shown in the glyph's place
         bool m_hasValue = false;
         bool m_hasGlyph = false;
     };

@@ -193,9 +193,32 @@ namespace
     };
 
     // The engine's active input source as a test drives it: the mouse, and this frame's events.
+    // Fingers the test puts down (normalized over an 800 x 600 screen) and lifts.
+    struct FakeTouch final : foundation::shell::ITouch
+    {
+        Array<foundation::shell::TouchPoint> points;
+        [[nodiscard]] i32 TouchCount() const override { return static_cast<i32>(points.Size()); }
+        [[nodiscard]] bool GetTouchPoint(i32 index, foundation::shell::TouchPoint& out) const override
+        {
+            if (index < 0 || static_cast<usize>(index) >= points.Size())
+                return false;
+            out = points[static_cast<usize>(index)];
+            return true;
+        }
+        [[nodiscard]] bool HasTouch() const override { return !points.IsEmpty(); }
+        void Put(u64 id, f32 x, f32 y)
+        {
+            points.Clear();
+            points.PushBack(foundation::shell::TouchPoint{id, x / 800.0f, y / 600.0f, 1.0f, x, y});
+        }
+    };
+
     struct FakeDevices final : foundation::input::IInputSourceProvider
     {
         FakeMouse mouse;
+        FakeTouch touch;
+        bool touchPresent = false; // a touch screen; off, the devices are a desktop's
+        [[nodiscard]] foundation::shell::ITouch* Touch() override { return touchPresent ? &touch : nullptr; }
         Array<foundation::shell::InputEvent> events;
         [[nodiscard]] foundation::shell::IKeyboard* Keyboard() override { return nullptr; }
         [[nodiscard]] foundation::shell::IMouse* Mouse() override { return &mouse; }
@@ -344,14 +367,15 @@ TEST_CASE("engine.gui: a sheet cooked again is seen at the next poll, once")
     CHECK_FALSE(provider.Poll());
 }
 
-TEST_CASE("engine.gui: the screen tier holds the screen stack under the overlay layer, and each scene a root of its own")
+TEST_CASE("engine.gui: the screen tier holds the touch guide under the screen stack under the overlay layer, and each scene a root of its own")
 {
     Engine engine;
     SceneRoot* screen = engine.gui->ScreenRoot();
     REQUIRE(screen != nullptr);
-    REQUIRE(screen->ChildCount() == 2u);
-    CHECK(screen->GetChildAt(0) == engine.gui->Screens());
-    CHECK(screen->GetChildAt(1) == engine.gui->OverlayLayer());
+    REQUIRE(screen->ChildCount() == 3u);
+    CHECK(screen->GetChildAt(0) == engine.gui->TouchGuide());
+    CHECK(screen->GetChildAt(1) == engine.gui->Screens());
+    CHECK(screen->GetChildAt(2) == engine.gui->OverlayLayer());
     CHECK(engine.gui->Context().GetResourceProvider() == &engine.gui->Resources());
     CHECK(engine.gui->Fonts() != nullptr);
 
@@ -1272,7 +1296,7 @@ TEST_CASE("engine.gui: an editor's preview builds in the GUI's context, a sheet 
     RefPtr<SceneRoot> preview =
         engine.gui->CreatePreview(u8"<Panel><Panel class=\"title\" id=\"t\"/></Panel>", u8".title { width: 66px; height: 4px; }");
     REQUIRE(preview);
-    CHECK(engine.gui->ScreenRoot()->ChildCount() == 2u); // not in a tier: the screen's stack and overlays alone
+    CHECK(engine.gui->ScreenRoot()->ChildCount() == 3u); // not in a tier: the screen's guide, stack and overlays alone
 
     rhi::Texture* texture = nullptr;
     rhi::TextureView* target = nullptr;
@@ -1388,4 +1412,60 @@ TEST_CASE("engine.gui: the default loading screen is the logo over a bar and \"L
     CHECK(engine.gui->OverlayCount() == before + 1);
     engine.gui->RemoveOverlay(*screen.Root);
     CHECK(engine.gui->OverlayCount() == before);
+}
+
+TEST_CASE("engine.gui: the touch guide shows the game's touch controls once a finger has touched the screen")
+{
+    Engine engine;
+    engine.devices.touchPresent = true;
+    engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
+    foundation::input::InputMap map;
+    foundation::input::ActionSet set;
+    set.name = String(u8"Gameplay");
+    {
+        foundation::input::Action move;
+        move.name = String(u8"Move");
+        move.kind = foundation::input::ActionKind::Axis2D;
+        foundation::input::Binding stick;
+        stick.source = foundation::input::BindingSource::TouchStick;
+        stick.regionW = 0.5f;
+        move.bindings.PushBack(stick);
+        set.actions.PushBack(Move(move));
+        foundation::input::Action jump;
+        jump.name = String(u8"Jump");
+        foundation::input::Binding zone;
+        zone.source = foundation::input::BindingSource::TouchButton;
+        zone.regionX = 0.5f;
+        zone.regionW = 0.5f;
+        jump.bindings.PushBack(zone);
+        set.actions.PushBack(Move(jump));
+    }
+    map.sets.PushBack(Move(set));
+    engine.input->Runtime().SetMap(map);
+
+    engine::gui::GuiTouchGuide* guide = engine.gui->TouchGuide();
+    REQUIRE(guide != nullptr);
+    CHECK(guide->GetParent() == engine.gui->ScreenRoot());
+    CHECK(guide->GetParent()->GetChildAt(0) == guide); // beneath the screens and the overlays
+    CHECK_FALSE(guide->IsHitTestVisible());
+    // No finger yet (a desktop player): nothing shown.
+    engine.Frame();
+    CHECK(guide->ControlCount() == 0u);
+    CHECK_FALSE(guide->IsVisible());
+    // A finger: both controls, and they stay after it lifts.
+    engine.devices.touch.Put(1, 600.0f, 300.0f);
+    engine.Frame();
+    CHECK(guide->ControlCount() == 2u);
+    CHECK(guide->IsVisible());
+    engine.devices.touch.points.Clear();
+    engine.Frame();
+    CHECK(guide->ControlCount() == 2u);
+    // It covers the screen, and the Jump button's name is shown, sized by its button.
+    CHECK(guide->GetSize().x == doctest::Approx(800.0f));
+    CHECK(guide->GetSize().y == doctest::Approx(600.0f));
+    bool jump = false;
+    for (usize i = 0; i < guide->ChildCount(); ++i)
+        if (const Label* label = Cast<Label>(guide->GetChildAt(i)); label != nullptr && label->GetText() == StringView(u8"Jump"))
+            jump = label->IsVisible();
+    CHECK(jump);
 }

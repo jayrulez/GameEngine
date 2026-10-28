@@ -373,6 +373,60 @@ export namespace engine::gui
         UniquePtr<State> m_state;
     };
 
+    /// The guide to a game's touch controls, drawn over the game once a finger has touched the
+    /// screen (a desktop player never sees it): every touch binding of the sets in effect
+    /// (ActionRuntime::ForEachTouchControl), a button as a circle filling its zone with its action's
+    /// name (what is seen is what is tapped; stronger while held), an idle stick as a small ring low
+    /// in its zone, in a dark wash with a light edge that reads on snow and at night alike; a stick
+    /// a finger holds as a ring where the finger came down and a knob where it is. Regions are
+    /// normalized over the guide. It takes no pointer. Bodies in the implementation unit.
+    class GuiTouchGuide final : public UIWidget
+    {
+    public:
+        GuiTouchGuide();
+        /// This frame's controls, from every action runtime in play (`input`); `touched` = a
+        /// finger has touched the screen.
+        void Update(engine::input::InputSubsystem& input, bool touched);
+        /// The controls shown (empty while hidden), for tests.
+        [[nodiscard]] usize ControlCount() const noexcept { return m_controls.Size(); }
+
+    protected:
+        void OnDraw(DrawContext& ctx, const Rect& localBounds) override;
+
+    private:
+        struct Shown
+        {
+            Rectangle region;  // normalized
+            bool stick = false;
+            bool down = false;
+            bool held = false;
+            Float2 anchor{};   // normalized
+            Float2 finger{};
+            f32 radius = 0.0f; // normalized, over the width
+        };
+        // Where a control's guide is drawn and how large, in the guide's units: a button fills its
+        // zone; an idle stick is a small ring low in its zone, a third of the way in.
+        [[nodiscard]] static Float2 GuideCentre(const Shown& shown, f32 w, f32 h) noexcept
+        {
+            const f32 across = shown.stick ? 0.3f : 0.5f;
+            const f32 down = shown.stick ? 0.75f : 0.5f;
+            return Float2{(shown.region.x + shown.region.width * across) * w, (shown.region.y + shown.region.height * down) * h};
+        }
+        [[nodiscard]] static f32 GuideRadius(const Shown& shown, f32 w, f32 h) noexcept
+        {
+            const f32 zoneW = shown.region.width * w;
+            const f32 zoneH = shown.region.height * h;
+            const f32 inscribed = (zoneW < zoneH ? zoneW : zoneH) * 0.5f;
+            return shown.stick ? inscribed * 0.35f : (inscribed > 4.0f ? inscribed - 3.0f : inscribed);
+        }
+        // A control's name is this share of its guide's diameter, and never smaller than the least.
+        static constexpr f32 kGuideFontPerSize = 0.16f;
+        static constexpr f32 kGuideMinFontSize = 15.0f;
+
+        Array<Shown> m_controls;
+        Array<RefPtr<Label>> m_labels; // one per control: its action's name
+    };
+
     class GuiSubsystem final : public foundation::runtime::Subsystem,
                                public scene::ISceneObserver,
                                public render::ISceneOverlay,
@@ -443,6 +497,8 @@ export namespace engine::gui
         void EndRunScreens(const void* run);
         [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
         [[nodiscard]] Node* OverlayLayer() noexcept { return m_overlay.Get(); }
+        /// The touch controls' guide, beneath the shared tier's screens (tests).
+        [[nodiscard]] GuiTouchGuide* TouchGuide() noexcept { return m_touchGuide.Get(); }
         /// `document` built and shown on the overlay layer, above every screen (a loading screen, a
         /// system menu), modal while it shows, unless it takes no pointer (`pointer-events: none`
         /// on its root: a watermark); the tree, to take off again, or null when it does not build.
@@ -618,6 +674,8 @@ export namespace engine::gui
         bool m_runScreens = false;
         const void* m_renderRun = nullptr;
         RefPtr<UIWidget> m_overlay;
+        RefPtr<GuiTouchGuide> m_touchGuide; // beneath the shared tier's screens
+        bool m_touchSeen = false;           // a finger has touched the screen: the guide shows
         GuiScriptBinding m_scriptBinding; // what each script context is given
         Array<SceneTier> m_sceneTiers;
         Array<UniquePtr<TextureRoot>> m_textureRoots;

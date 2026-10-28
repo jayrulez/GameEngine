@@ -822,6 +822,9 @@ namespace engine::gui
             m_overlay->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });
         }
         m_screen.Root->AddChild(m_overlay.Get());
+        // The touch controls' guide, beneath the screens pushed on this tier and the overlays.
+        m_touchGuide = MakeRef<GuiTouchGuide>(m_allocator);
+        m_screen.Root->AddChildAt(m_touchGuide.Get(), 0);
         // A script's root is its run's screen tier (the shared one in the player).
         m_scriptBinding.resolve = [this]() { return ScreenRootFor(foundation::script::CurrentRun()); };
     }
@@ -1446,6 +1449,10 @@ namespace engine::gui
         else if (mouse != nullptr)
             point = Float2{mouse->X(), mouse->Y()};
         const bool pointer = fingers || mouse != nullptr;
+        // The touch guide: from the first touch on, the controls of the sets in effect.
+        m_touchSeen = m_touchSeen || fingers;
+        if (m_touchGuide)
+            m_touchGuide->Update(*m_input, m_touchSeen);
         const bool held = fingers || (mouse != nullptr && (mouse->IsButtonDown(foundation::shell::MouseButton::Left) ||
                                                            mouse->IsButtonDown(foundation::shell::MouseButton::Right) ||
                                                            mouse->IsButtonDown(foundation::shell::MouseButton::Middle)));
@@ -2034,6 +2041,110 @@ namespace engine::gui
             m_render->Device->WaitIdle();
             m_render->Release(target);
             m_render->Targets.RemoveAt(i);
+        }
+    }
+
+    GuiTouchGuide::GuiTouchGuide() : m_controls(MemoryAllocator()), m_labels(MemoryAllocator())
+    {
+        SetTag(StringView(u8"touchguide"));
+        SetHitTestVisible(false);
+        SetVisible(false);
+    }
+
+    void GuiTouchGuide::Update(engine::input::InputSubsystem& input, bool touched)
+    {
+        m_controls.Clear();
+        if (touched)
+            input.ForEachActionRuntime([this](foundation::input::ActionRuntime& runtime)
+                                       {
+                                           runtime.ForEachTouchControl([this](const foundation::input::ActionRuntime::TouchControl& control)
+                                                                       {
+                                                                           const foundation::input::Binding& b = *control.binding;
+                                                                           Shown shown;
+                                                                           shown.region = Rectangle{b.regionX, b.regionY, b.regionW, b.regionH};
+                                                                           shown.stick = b.source == foundation::input::BindingSource::TouchStick;
+                                                                           shown.down = control.down;
+                                                                           shown.held = control.held;
+                                                                           shown.anchor = control.anchor;
+                                                                           shown.finger = control.finger;
+                                                                           shown.radius = b.stickRadius > 0.0f ? b.stickRadius : 0.15f;
+                                                                           m_controls.PushBack(shown);
+                                                                           // The action's name, centred in its zone (a stick's while no finger holds it).
+                                                                           if (m_labels.Size() < m_controls.Size())
+                                                                           {
+                                                                               RefPtr<Label> label = MakeRef<Label>(MemoryAllocator());
+                                                                               label->SetHitTestVisible(false);
+                                                                               label->SetInlineStyle(StringView(u8"text-align"), StringView(u8"center"));
+                                                                               label->SetInlineStyle(StringView(u8"color"), StringView(u8"#ffffff"));
+                                                                               m_labels.PushBack(label);
+                                                                               AddChild(label.Get());
+                                                                           }
+                                                                           m_labels[m_controls.Size() - 1]->SetText(control.action);
+                                                                       });
+                                       });
+        const f32 w = GetSize().x;
+        const f32 h = GetSize().y;
+        for (usize i = 0; i < m_labels.Size(); ++i)
+        {
+            Label& label = *m_labels[i];
+            const bool show = i < m_controls.Size() && !m_controls[i].held;
+            label.SetVisible(show);
+            if (!show)
+                continue;
+            const Float2 centre = GuideCentre(m_controls[i], w, h);
+            const f32 size = GuideRadius(m_controls[i], w, h) * 2.0f;
+            // The name grows with its button, as the button grows with the screen: a fixed size
+            // was legible on a desktop window and tiny on a phone's many pixels (user, 2026-10-11).
+            const f32 fontSize = Max(kGuideMinFontSize, size * kGuideFontPerSize);
+            label.SetInlineStyle(StringView(u8"font-size"), Format(u8"{}px", fontSize).AsView());
+            label.SetInlineStyle(StringView(u8"opacity"), StringView(m_controls[i].down ? u8"1" : u8"0.85"));
+            label.EditLayoutStyle([&](LayoutStyle& s)
+            {
+                s.Placement = Position::Absolute;
+                s.Left = LayoutLength::Px(centre.x - size * 0.5f);
+                s.Top = LayoutLength::Px(centre.y - fontSize * 0.65f); // the line's middle on the centre
+                s.Width = LayoutLength::Px(size);
+            });
+        }
+        // Redraw while a control shows (fingers move), and once more as the last one goes; idle with
+        // nothing shown it asks for nothing.
+        const bool wasShown = IsVisible();
+        SetVisible(!m_controls.IsEmpty());
+        if (!m_controls.IsEmpty() || wasShown)
+            Invalidate();
+    }
+
+    void GuiTouchGuide::OnDraw(DrawContext& ctx, const Rect& localBounds)
+    {
+        const f32 w = localBounds.width;
+        const f32 h = localBounds.height;
+        foundation::vg::VGContext& g = ctx.VG();
+        for (const Shown& shown : m_controls)
+        {
+            if (shown.stick && shown.held)
+            {
+                // A ring where the finger came down, the stick's reach; a knob where it is, held
+                // inside the ring.
+                const Float2 anchor{shown.anchor.x * w, shown.anchor.y * h};
+                const f32 reach = shown.radius * w;
+                Float2 knob{shown.finger.x * w, shown.finger.y * h};
+                const Float2 offset{knob.x - anchor.x, knob.y - anchor.y};
+                const f32 length = Sqrt(offset.x * offset.x + offset.y * offset.y);
+                if (length > reach && length > 0.0f)
+                    knob = Float2{anchor.x + offset.x / length * reach, anchor.y + offset.y / length * reach};
+                g.FillCircle(anchor, reach, Color{0.0f, 0.0f, 0.0f, 0.22f});
+                g.StrokeCircle(anchor, reach, Color{1.0f, 1.0f, 1.0f, 0.6f}, 3.0f);
+                g.FillCircle(knob, reach * 0.4f, Color{1.0f, 1.0f, 1.0f, 0.7f});
+                g.StrokeCircle(knob, reach * 0.4f, Color{0.0f, 0.0f, 0.0f, 0.35f}, 2.0f);
+                continue;
+            }
+            // A button fills its zone (what is seen is what is tapped); an idle stick is a small ring
+            // low in its zone, where a thumb rests. A dark wash with a light edge reads on snow and at
+            // night alike.
+            const Float2 centre = GuideCentre(shown, w, h);
+            const f32 radius = GuideRadius(shown, w, h);
+            g.FillCircle(centre, radius, Color{0.0f, 0.0f, 0.0f, shown.down ? 0.34f : 0.2f});
+            g.StrokeCircle(centre, radius, Color{1.0f, 1.0f, 1.0f, shown.down ? 0.85f : 0.5f}, 2.5f);
         }
     }
 

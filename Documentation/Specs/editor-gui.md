@@ -883,8 +883,9 @@ the old one did. The collision groups are edited as a grid of rows and columns, 
 a column, a cell the pair's flag (the old matrix). "Grid as lines" stays dropped; GameUI's pages go
 with what they did. The last group removed sets its bit in the masks left (ruled 2026-10-28: the
 runtime's default, everything colliding, and what a group added there later gets) where the old
-cleared it. Open: the cue's variants packed where the old kept fixed slots (the runtime resolves a list, an empty
-slot only skipped); a Composite 2D binding's four keys as rows where the old drew them as a cross.
+cleared it. The cue's variants are packed where the old kept fixed slots (ruled 2026-10-28: the
+runtime resolves a list, an empty slot only skipped). Open: a Composite 2D binding's four keys as
+rows where the old drew them as a cross.
 
 **Found on the way, not the editor's**: a particle effect names its texture by a string
 (`textureRef`), so the scene page's first cook, of the scene's closure, leaves it out and the

@@ -40,7 +40,12 @@ extern "C" const char* BuildStamp();
 namespace editor::app
 {
     EditorApplication::EditorApplication(EditorAppConfig config)
-        : m_config(Move(config)), m_creation(CreationServices()), m_session(m_editorAllocator, SessionServices())
+        : m_config(Move(config)),
+          // In the constructor, not at their declarations: MSVC does not take a lambda capturing
+          // this in a member's brace initializer as the Function its constructor wants.
+          m_pageServices(Function<AssetPageServices()>([this]() { return PageServices(); })),
+          m_codeLanguages(m_editorAllocator, Function<bool(StringView, String&)>([this](StringView path, String& out) { return m_window.LoadText(path, out); })),
+          m_creation(CreationServices()), m_session(m_editorAllocator, SessionServices())
     {
         editor::SetEditorRootAllocator(m_editorAllocator);
         m_context.SetThumbnails(&m_thumbnailService);

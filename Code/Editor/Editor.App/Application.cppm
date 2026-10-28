@@ -243,8 +243,8 @@ export namespace editor::app
 
         // The parts, in the order they start; they stop in reverse.
         EditorWindow m_window{m_editorAllocator};
-        AssetPageServicesSource m_pageServices{[this]() { return PageServices(); }}; // the page factories', reading the window above
-        CodeLanguages m_codeLanguages{m_editorAllocator, [this](StringView path, String& out) { return m_window.LoadText(path, out); }}; // read through the window's resources
+        AssetPageServicesSource m_pageServices; // the page factories', reading the window above (made in the constructor)
+        CodeLanguages m_codeLanguages;          // read through the window's resources (made in the constructor)
         EditorDock m_dock{m_editorAllocator};
         UniquePtr<EditorPages> m_pages; // made with the dock, in OnStartup
         UniquePtr<ActionMenuBar> m_menus; // the frame's menu bar, from the actions

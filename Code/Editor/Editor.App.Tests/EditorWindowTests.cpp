@@ -9,6 +9,8 @@
 
 import foundation.core;
 import foundation.gui;
+import foundation.graphics;
+import foundation.rhi;
 import editor.core;
 import editor.app;
 
@@ -158,4 +160,12 @@ TEST_CASE("editor window: a notice's toast times out; one with an action (Open F
     CHECK(exported.Duration == 0.0f); // until closed
     REQUIRE(exported.Actions.Size() == 1u);
     CHECK(exported.Actions[0].Text == String(u8"Open Folder"));
+}
+
+TEST_CASE("editor window: its windows present with a third image, so a late compositor costs no refresh")
+{
+    const foundation::graphics::RenderWindowDesc desc = editor::app::EditorRenderWindowDesc();
+    CHECK(desc.bufferCount == 3u);
+    CHECK(desc.presentMode == foundation::rhi::PresentMode::Fifo);
+    CHECK(foundation::graphics::RenderWindowDesc{}.bufferCount == 2u); // a game keeps the default
 }

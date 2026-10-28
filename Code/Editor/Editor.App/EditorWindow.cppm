@@ -21,6 +21,7 @@ export module editor.app:editor_window;
 import foundation.core;
 import foundation.shell;
 import foundation.graphics;
+import foundation.rhi; // PresentMode
 import foundation.runtime;
 import foundation.runtime.client; // IApplicationHost
 import foundation.fonts;
@@ -112,6 +113,17 @@ export namespace editor::app
         ui.uiScale = look.uiScale;
     }
 
+    /// How every editor window presents: vsync, with a third swapchain image, so a compositor late
+    /// in giving one back (two images held the frame for whole refreshes, the user's spikes) costs
+    /// nothing; the frame of latency it adds is no matter in an editor. A game keeps the default.
+    [[nodiscard]] inline foundation::graphics::RenderWindowDesc EditorRenderWindowDesc() noexcept
+    {
+        foundation::graphics::RenderWindowDesc desc;
+        desc.presentMode = foundation::rhi::PresentMode::Fifo;
+        desc.bufferCount = 3;
+        return desc;
+    }
+
     class EditorWindow
     {
     public:
@@ -168,7 +180,7 @@ export namespace editor::app
                 foundation::runtime::IApplicationHost* runtimeHost = &host;
                 gui::GuiHost::WindowOpener opener; // a float in an OS window of its own
                 opener.Open = [runtimeHost](const foundation::shell::WindowSettings& settings)
-                { return runtimeHost->OpenWindow(settings, foundation::graphics::RenderWindowDesc{}); };
+                { return runtimeHost->OpenWindow(settings, EditorRenderWindowDesc()); };
                 opener.Close = [runtimeHost](foundation::graphics::RenderWindow& window) { runtimeHost->CloseWindow(&window); };
                 m_host->SetWindowOpener(Move(opener));
             }

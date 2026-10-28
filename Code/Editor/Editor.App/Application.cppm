@@ -174,6 +174,8 @@ export namespace editor::app
 
         void SetSceneRenderer(foundation::render::ISceneRenderer* renderer) noexcept { m_sceneRenderer = renderer; }
 
+        /// The main window presents as every editor window does (EditorRenderWindowDesc).
+        [[nodiscard]] foundation::graphics::RenderWindowDesc MainRenderWindow() const override { return EditorRenderWindowDesc(); }
         void Configure(runtime::IApplicationHost& host) override;
         void OnStartup(runtime::IApplicationHost& host) override;
         void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;

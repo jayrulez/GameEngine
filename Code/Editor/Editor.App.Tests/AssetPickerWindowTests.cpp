@@ -333,7 +333,7 @@ TEST_CASE("asset picker: a long where gives way, never the name, nor drawn over 
     foundation::fonts::TrueTypeFonts::Initialize();
     foundation::fonts::TrueTypeFontService fonts{DefaultAllocator()};
     const String data = foundation::vfs::FindDataRoot();
-    REQUIRE(fonts.LoadFont(u8"Inter", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/inter/Inter-Regular.ttf").AsView()) == foundation::fonts::FontLoadResult::Success);
+    REQUIRE(fonts.LoadFont(u8"Inter", foundation::vfs::DataPath(data.AsView(), u8"Editor/Fonts/inter/Inter-Regular.ttf").AsView()) == foundation::fonts::FontLoadResult::Success);
     far->NameLabel()->SetFont(fonts.GetFont(u8"Inter", 13.0f));
     far->KindLabel()->SetFont(fonts.GetFont(u8"Inter", 11.0f));
     (void)bed.root->UpdateLayout();

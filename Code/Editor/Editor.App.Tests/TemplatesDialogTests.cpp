@@ -206,7 +206,7 @@ TEST_CASE("templates dialog: a long folder wraps inside the details, never past 
     foundation::fonts::TrueTypeFonts::Initialize();
     foundation::fonts::TrueTypeFontService fonts{DefaultAllocator()};
     const String data = foundation::vfs::FindDataRoot();
-    REQUIRE(fonts.LoadFont(u8"Inter", foundation::vfs::DataPath(data.AsView(), u8"Assets/fonts/inter/Inter-Regular.ttf").AsView()) == foundation::fonts::FontLoadResult::Success);
+    REQUIRE(fonts.LoadFont(u8"Inter", foundation::vfs::DataPath(data.AsView(), u8"Editor/Fonts/inter/Inter-Regular.ttf").AsView()) == foundation::fonts::FontLoadResult::Success);
     folder->SetFont(fonts.GetFont(u8"Inter", 13.0f));
     (void)f.ui->UpdateLayout();
     gui::Node* fields = folder->GetParent();

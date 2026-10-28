@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the project manager over its markup (Data/Editor/ProjectManager.gml): the
+// Editor::App tests - the project manager over its markup (Data/Editor/ProjectManager.xml): the
 // recent projects as a list or a grid (remembered), each by its picture (the thumbnail in its
 // editor folder, an image chosen for it, or its initial), a missing one with no Open, each
 // project's menu and what it runs, and New Project's dialog.

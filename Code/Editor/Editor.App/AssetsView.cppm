@@ -4,7 +4,7 @@
 // Editor App - :assets_view partition
 //
 // The Assets panel (Documentation/Specs/editor-gui.md, 5.2, layer 7), over its markup
-// (Data/Editor/Assets.gml) as the mock draws it: the project's source content, the content database
+// (Data/Editor/Assets.xml) as the mock draws it: the project's source content, the content database
 // the truth. The group tree on the left (folders, Content at the top); the toolbar's breadcrumb
 // where it is; the group's subgroups then its assets on the right, as tiles or a list (kept per
 // project), each by its type's glyph (its category's tint), its name, what it is, its cook badge
@@ -222,7 +222,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Assets.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Assets.xml";
         static constexpr StringView kTopGroup = u8"Content";
         /// What an asset type (by name) is called to the user: its displayName, else its name. The
         /// asset picker's rows say it as the browser's do.

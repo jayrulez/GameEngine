@@ -4,7 +4,7 @@
 // Editor::Physics - the `editor.physics` module (tooling).
 //
 // CollisionShapeEditorPage: the bespoke authoring page for a CollisionShapeAsset. On the GUI from
-// the preview pages' markup (Data/Editor/PreviewPage.gml; Documentation/Specs/editor-gui.md, 5.4,
+// the preview pages' markup (Data/Editor/PreviewPage.xml; Documentation/Specs/editor-gui.md, 5.4,
 // layer 3): the cooked collider's outline as a wireframe in the preview, framed when it first
 // shows and when a cook changes it, beside the asset's rows: its source mesh (an asset slot taking
 // what a mesh cooks to, static or skinned), the cook mode and the hull's tolerance. Each edit is
@@ -45,7 +45,7 @@ export namespace editor
     class CollisionShapeEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
+        static constexpr StringView kPath = u8"Editor/PreviewPage.xml";
 
         CollisionShapeEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 

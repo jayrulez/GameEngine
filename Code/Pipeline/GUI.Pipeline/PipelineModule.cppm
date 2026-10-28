@@ -5,7 +5,7 @@
 // foundation.ui's counterpart: UI.Pipeline.
 //
 // The GUI's sources, cooked:
-//   * GuiDocumentAsset (`.gml` markup) and GuiStyleSheetAsset (`.css`): a LINKED source file in the
+//   * GuiDocumentAsset (`.xml` markup) and GuiStyleSheetAsset (`.css`): a LINKED source file in the
 //     project's Sources/ tree (Asset::fileName), as a script's; an asset with no linked file fails
 //     the cook.
 //   * The builders VALIDATE: a document through the GUI's markup loader with every element type the
@@ -17,7 +17,7 @@
 //   * What a document or a sheet names by asset guid (`url("{guid}")`, `source="{guid}"`, a
 //     document pushed by its guid) is recorded as a runtime reference of the product; a guid naming
 //     no asset is a warning.
-//   * One importer takes a dropped `.gml` or `.css` into Sources/ and links it; creators make a new
+//   * One importer takes a dropped `.xml` or `.css` into Sources/ and links it; creators make a new
 //     one from starter text (File > New, MCP's asset_create).
 //
 // Never linked by the runtime, nor in a web or shipping build.
@@ -55,7 +55,7 @@ export namespace pipeline
         u8":root { --accent: #f3a047; }\n"
         u8".page { background-color: var(--surface); }\n";
 
-    /// A GUI document: a LINKED `.gml` in Sources/.
+    /// A GUI document: a LINKED `.xml` in Sources/.
     class GuiDocumentAsset final : public pipeline::Asset
     {
         RTTI_OBJECT(GuiDocumentAsset, pipeline::Asset)
@@ -232,13 +232,13 @@ export namespace pipeline
         }
     };
 
-    /// Drag-drop importer for `.gml` and `.css` files: STAGED into Sources/ and LINKED, as a
+    /// Drag-drop importer for `.xml` and `.css` files: STAGED into Sources/ and LINKED, as a
     /// document or a sheet by the extension.
     class GuiFileImporter final : public pipeline::IFileImporter
     {
     public:
         [[nodiscard]] StringView Label() const override { return u8"GUI document or style sheet"; }
-        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == u8"gml" || extension == u8"css"; }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == u8"xml" || extension == u8"css"; }
 
         [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView sourcePath, const pipeline::ImportOptions*, Object*) override
         {

@@ -15,14 +15,14 @@ samples and editor have moved onto it.
 
 - `Code/Foundation/GUI` (`foundation.gui`): nodes and widgets, layout (flex, grid, stack), the CSS
   engine (selectors, cascade, variables, transitions and animations, media queries), markup
-  (`.gml`), text (shaping, bidi, rich text), events and input, data binding, localization, the
+  (`.xml`), text (shaping, bidi, rich text), events and input, data binding, localization, the
   script surface (every widget reflected; the `gui` facade).
 - Satellites, each `foundation.gui.<name>` in `Code/Foundation/GUI.<Name>`: `Shell` (the platform
   input bridge), `Hosting` (windows, roots, renderers; drawing into a caller's pass), `Toolkit`
   (editor widgets), `Code` (the code editor), `Docking`, `Viewport` (3D content in a node),
   `Gamekit` (a game's screens and prompts), `Inspector`, `Testing`, `VFS`, `Resources` (cooked
   documents and sheets). Each has a `.Tests` suite beside it; `GUI.Fuzz.Tests` fuzzes the parsers.
-- `Code/Pipeline/GUI.Pipeline` (`gui.pipeline`): `.gml` documents and `.css` sheets as validated,
+- `Code/Pipeline/GUI.Pipeline` (`gui.pipeline`): `.xml` documents and `.css` sheets as validated,
   linked-source assets.
 - `Code/Engine/Engine.GUI` (`engine.gui`): the engine's GUI (screen and scene tiers, components,
   the resource provider by guid, the overlays, the script surface); `Code/Editor/Editor.GUI`: the

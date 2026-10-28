@@ -4,7 +4,7 @@
 // Editor::Animation - the `:graph_page` partition.
 //
 // AnimationGraphEditorPage: an animation graph on the GUI from its markup
-// (Data/Editor/AnimationGraphPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 5).
+// (Data/Editor/AnimationGraphPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 5).
 // The graph's layers and parameters are lists, each with its bar (a parameter added by its type);
 // the chosen layer is on the graph view (:graph_states: its states the nodes, Any State one more,
 // its transitions arrows; a state added from the view's menu, a transition dragged from a state's
@@ -64,7 +64,7 @@ export namespace editor
     class AnimationGraphEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/AnimationGraphPage.gml";
+        static constexpr StringView kPath = u8"Editor/AnimationGraphPage.xml";
 
         AnimationGraphEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~AnimationGraphEditorPage() override;

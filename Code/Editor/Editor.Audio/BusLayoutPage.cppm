@@ -4,7 +4,7 @@
 // Editor::Audio - the `:bus_layout_page` partition.
 //
 // AudioBusLayoutEditorPage: the mixer's buses, on the GUI from its markup (Data/Editor/
-// BusLayoutPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The buses' tree (the four
+// BusLayoutPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The buses' tree (the four
 // fixed ones, Master and Effects, Music and UI under it, and the custom ones under their parents)
 // on the GUI's tree beside the grid, which shows the chosen bus: a custom one's name and parent (only
 // the parents that make no cycle offered), then its mix (volume, mute), its filters, its delay and
@@ -36,7 +36,7 @@ export namespace editor
     class AudioBusLayoutEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/BusLayoutPage.gml";
+        static constexpr StringView kPath = u8"Editor/BusLayoutPage.xml";
 
         AudioBusLayoutEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~AudioBusLayoutEditorPage() override;

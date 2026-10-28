@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Assets panel over its markup (Data/Editor/Assets.gml) and a scratch project: the group tree
+// The Assets panel over its markup (Data/Editor/Assets.xml) and a scratch project: the group tree
 // and the breadcrumb following where it is; a group's subgroups then its assets, each by name, what
 // it is and its star; entering a group and opening an asset; the search over every group saying
 // where each match is, and the type filter, each with its state when nothing is left and the way

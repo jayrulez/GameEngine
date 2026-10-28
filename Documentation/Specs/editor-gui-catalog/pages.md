@@ -517,7 +517,7 @@ the clip and cue factories plus the waveform thumbnail generator; the bus layout
 
 ## 8. Editor.GUI: GUI document / style sheet page (`GuiAssetEditorPage`, two kinds)
 - Files: `Editor/Editor.GUI/{GuiPages.cppm, GuiPagesImpl.cpp}`.
-- Assets: `pipeline::GuiDocumentAsset` (Kind::Document, source `.gml`) and `pipeline::GuiStyleSheetAsset`
+- Assets: `pipeline::GuiDocumentAsset` (Kind::Document, source `.xml`) and `pipeline::GuiStyleSheetAsset`
   (Kind::StyleSheet, source `.css`), both .xasset linked to a Sources/ file. Two factories, one page class.
 - PURPOSE: edit engine-GUI markup or a CSS sheet as text with the cook's diagnostics on lines, and see a live preview
   rendered by the RUNTIME GuiSubsystem (the game's fonts, theme and sheets) in an offscreen target. A sheet is previewed

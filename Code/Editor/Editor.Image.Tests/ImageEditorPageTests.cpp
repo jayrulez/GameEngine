@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // ImageEditorPage tests: the factory's type, then the page from the image pages' markup
-// (Data/Editor/ImagePage.gml) over an image in a project: its picture decoded from the source file
+// (Data/Editor/ImagePage.xml) over an image in a project: its picture decoded from the source file
 // and its pixels read, its facts read only, an edit of its colour space one undo step, a source
 // file that is not there said in the picture's place, and an asset that did not read.
 

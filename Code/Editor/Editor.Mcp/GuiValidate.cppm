@@ -3,7 +3,7 @@
 
 // Editor::Mcp - :gui_validate partition
 //
-// gui_validate: check the engine GUI's markup (a `.gml` document) or a sheet (`.css`) WITHOUT saving
+// gui_validate: check the engine GUI's markup (a `.xml` document) or a sheet (`.css`) WITHOUT saving
 // it, through the check its cook runs (the markup loader's or the CSS parser's diagnostics: what was
 // dropped a warning, markup that does not build an error), so an agent writing a game's screens
 // loops on it as on script_validate and shader_validate. Returns each diagnostic with its line, and
@@ -37,7 +37,7 @@ export namespace editor::mcp
         kinds.PushBack(String(u8"sheet"));
         server.RegisterTool(
             u8"gui_validate",
-            u8"CHECK the engine GUI's text without saving: a `document` (.gml markup) or a `sheet` "
+            u8"CHECK the engine GUI's text without saving: a `document` (.xml markup) or a `sheet` "
             u8"(.css), the exact check its cook runs. Returns `valid` (false only when markup does not "
             u8"build; a sheet always reads), each diagnostic {level: error | warning, line (from 1, 0 "
             u8"when not known), message} (what the loader or the parser dropped, a property name "
@@ -46,7 +46,7 @@ export namespace editor::mcp
             u8"the asset's linked source file and cook; the editor's page for it previews it live.",
             SchemaBuilder()
                 .Str(u8"source", u8"the full text", true)
-                .Enum(u8"kind", Move(kinds), u8"document (.gml) or sheet (.css)", true)
+                .Enum(u8"kind", Move(kinds), u8"document (.xml) or sheet (.css)", true)
                 .Build(),
             foundation::mcp::ToolAnnotations::ReadOnly(),
             [](const JsonValue& args) -> ToolResult

@@ -4,7 +4,7 @@
 // Editor App - :export_dialog partition
 //
 // Export (Documentation/Specs/editor-gui.md, 5.2, layer 6): Project > Export, a window over its
-// markup (Data/Editor/Export.gml). The project's export presets on the left (add, duplicate,
+// markup (Data/Editor/Export.xml). The project's export presets on the left (add, duplicate,
 // remove after asking), each by the icon of the template it resolves to here, warned of when none
 // does; the selected one on the right under a card naming the template it exports with, or saying
 // why there is none, its settings on the property grid as Project Settings' are (ruling 20): a
@@ -59,7 +59,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Export.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Export.xml";
 
         ExportDialog(IAllocator& allocator, editor::ExportPresetsController& presets, ExportDialogSeams seams,
                      RefPtr<gui::Node> body)

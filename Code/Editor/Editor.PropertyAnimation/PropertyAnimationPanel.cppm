@@ -4,7 +4,7 @@
 // Editor::PropertyAnimation - the `:panel` partition.
 //
 // PropertyAnimationPanel: property animation authored in the scene, on the GUI from its markup
-// (Data/Editor/PropertyAnimationPanel.gml; Documentation/Specs/editor-gui.md, 5.4, layer 9, part 2).
+// (Data/Editor/PropertyAnimationPanel.xml; Documentation/Specs/editor-gui.md, 5.4, layer 9, part 2).
 // The scene page holds it under its viewport; the panel edits a clip asset of its own, never the
 // scene: its own history, Undo, Redo and Save on its bar, its own unsaved mark (user 2026-10-27).
 // While it holds the focus the keys are its own: the actions' commands it binds (Undo, Redo, Save)
@@ -42,7 +42,7 @@ export namespace editor
     class PropertyAnimationPanel
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PropertyAnimationPanel.gml";
+        static constexpr StringView kPath = u8"Editor/PropertyAnimationPanel.xml";
 
         /// Over `scene` (the page's, which outlives it), its markup `content` loaded.
         PropertyAnimationPanel(EditorContext& context, foundation::scene::Scene& scene, RefPtr<foundation::gui::Node> content);

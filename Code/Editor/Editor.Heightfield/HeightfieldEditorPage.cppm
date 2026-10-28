@@ -6,7 +6,7 @@
 // HeightfieldEditorPage: the inspect + author surface over a HeightfieldAsset. A heightfield IS an
 // image of heights, so the preview is a 2D grayscale height image (permanent, by asset identity -
 // the texture/image page precedent, NOT a placeholder awaiting 3D; the 3D preview belongs to the
-// terrain asset page). On the GUI from the image pages' markup (Data/Editor/ImagePage.gml;
+// terrain asset page). On the GUI from the image pages' markup (Data/Editor/ImagePage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 2): the source's heights from its lowest to its
 // highest as black to white (so low relief shows, as its thumbnail does), the pointer's height read
 // in metres, beside the authored fields (grid size, world footprint, Y range) and the source's
@@ -37,7 +37,7 @@ export namespace editor
     class HeightfieldEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
+        static constexpr StringView kPath = u8"Editor/ImagePage.xml";
 
         HeightfieldEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 

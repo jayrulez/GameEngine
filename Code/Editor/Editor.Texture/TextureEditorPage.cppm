@@ -4,7 +4,7 @@
 // Editor::Texture - the `editor.texture` module.
 //
 // TextureEditorPage: the import-settings surface over TextureAsset. On the GUI from the image
-// pages' markup (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 2): the
+// pages' markup (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 2): the
 // source image (decoded through the same stb path the cook rides, so what you see is what gets
 // cooked; a model's embedded texture from its "pixels" stream) to zoom, pan and read pixels in,
 // beside the GPU-texture intent: usage, colour space, compression, shape, sampler filters and
@@ -40,7 +40,7 @@ export namespace editor
     class TextureEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
+        static constexpr StringView kPath = u8"Editor/ImagePage.xml";
 
         /// A preset: what its menu item says, and what it sets.
         struct Preset

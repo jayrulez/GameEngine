@@ -5,7 +5,7 @@
 //
 // GenericAssetEditorPage: the fallback
 // property-form editor for EVERY asset without a dedicated page, on the GUI from its markup
-// (Data/Editor/AssetForm.gml; Documentation/Specs/editor-gui.md, 5.4, layer 1). Registered against
+// (Data/Editor/AssetForm.xml; Documentation/Specs/editor-gui.md, 5.4, layer 1). Registered against
 // ISerializable's TypeInfo, so the page registry's nearest-base dispatch routes every bespoke
 // page first (distance 0) and everything else lands here instead of the hard "No editor
 // registered" failure.
@@ -98,7 +98,7 @@ export namespace editor
     class GenericAssetEditorPage final : public app::UIEditorPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/AssetForm.gml";
+        static constexpr StringView kPath = u8"Editor/AssetForm.xml";
 
         GenericAssetEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~GenericAssetEditorPage() override;

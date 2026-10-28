@@ -1,4 +1,4 @@
-# Pipeline::GUI - `gui.pipeline`: the GUI's documents (.gml) and style
+# Pipeline::GUI - `gui.pipeline`: the GUI's documents (.xml) and style
 # sheets (.css) as linked-source assets, their validating builders, importer and creators. Tools
 # only, never in a web or shipping build. foundation.ui's counterpart: UI.Pipeline.
 # Specs/gui-lab-evolution-3.md, E3.

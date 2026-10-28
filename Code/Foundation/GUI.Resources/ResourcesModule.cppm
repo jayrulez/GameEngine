@@ -4,7 +4,7 @@
 // GUI.Resources - `foundation.gui.resources`: cooked GUI documents and style sheets (E2 of
 // Specs/gui-lab-evolution-3.md). foundation.ui's counterpart: UI.Resource.
 //
-// Each payload is VALIDATED TEXT: the cook (GUI.Pipeline) parses a `.gml` document with the GUI's
+// Each payload is VALIDATED TEXT: the cook (GUI.Pipeline) parses a `.xml` document with the GUI's
 // markup loader and a `.css` sheet with its CSS parser, fails on what cannot be read, and ships the
 // source text; whatever hosts the GUI parses it again (a document is a template: each use builds its
 // own tree from it). Free of the GUI framework, so a headless tool reads them. Nothing is embedded:
@@ -27,7 +27,7 @@ using namespace foundation::resource;
 
 export namespace foundation::gui
 {
-    /// Cooked GUI document: validated `.gml` markup.
+    /// Cooked GUI document: validated `.xml` markup.
     class GuiDocumentSource : public ISerializable
     {
         RTTI_OBJECT(GuiDocumentSource, ISerializable)

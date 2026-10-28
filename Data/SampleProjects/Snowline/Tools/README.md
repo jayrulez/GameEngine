@@ -23,7 +23,7 @@ copies live in the project's `Sources/`.
    <dir> --music <dir>`, the Kenney sound effects and the two music tracks), `ghosts.py`
    (the ghosts' materials), `gates.py` (the gate and finish prefabs), `gems.py` (the sparkle
    prefab) and `graph.py` (the rider's animation graph).
-5. **Scripts and UI**: `importscripts.py` imports the screens on the engine GUI (`ui/*.gml`, styled by
+5. **Scripts and UI**: `importscripts.py` imports the screens on the engine GUI (`ui/*.xml`, styled by
    `ui/SnowlineSheet.css`, the project's GUI sheet), then `scripts/*.as`, filling in the screens' ids.
 6. **The scenes**: `course.py <course>` writes a course's scene: the terrain and its vegetation, the
    course line, the rider, the gates, the gems, the kickers, a gap, the medal ghosts, the player's

@@ -5,7 +5,7 @@
 //
 // Project Settings (Documentation/Specs/editor-gui.md, 5.2, layer 6; ruling 20): the project's
 // manifest (Project.xml) on the property grid, a window over its markup
-// (Data/Editor/ProjectSettings.gml). The rows are a bag made from ProjectSettings' reflection, a
+// (Data/Editor/ProjectSettings.xml). The rows are a bag made from ProjectSettings' reflection, a
 // section per category the settings name, each by its label: text, a number within its range, a
 // check box, an enum's choices by name, and each asset setting an asset reference to the source
 // type it names (a list of them for a list setting), so the slot picks, drops and clears as an
@@ -39,7 +39,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/ProjectSettings.gml";
+        static constexpr const char8_t* kPath = u8"Editor/ProjectSettings.xml";
 
         /// Over `context`'s project; `refs` (the asset slots') outlives it.
         ProjectSettingsDialog(IAllocator& allocator, editor::EditorContext& context, const ResourceRefServices& refs, RefPtr<gui::Node> body)

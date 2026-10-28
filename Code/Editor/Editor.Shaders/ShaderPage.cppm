@@ -3,7 +3,7 @@
 
 // Editor::Shaders - the `:shader_page` partition: a custom shader's page.
 //
-// The shader's .hlsl on the GUI from its markup (Data/Editor/ShaderPage.gml;
+// The shader's .hlsl on the GUI from its markup (Data/Editor/ShaderPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 6, part 4), on the code pages' base (the source
 // file, the shared HLSL colours, one history, the problems list): checked a moment after each edit
 // (CheckShaderSource on each stage's base variant), its file's errors on their lines and an
@@ -82,7 +82,7 @@ export namespace editor
     class ShaderEditorPage final : public app::CodeAssetPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ShaderPage.gml";
+        static constexpr StringView kPath = u8"Editor/ShaderPage.xml";
 
         /// `shaderLibrary`: the engine's Shaders/ folder, the include path a check compiles with.
         ShaderEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance, StringView shaderLibrary);

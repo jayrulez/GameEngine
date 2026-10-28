@@ -303,7 +303,7 @@ TEST_CASE("engine.gui: the provider answers documents, sheets, vector images and
     CHECK(text.AsView() == StringView(u8"<Panel id=\"menu\"/>"));
     REQUIRE(provider.LoadText(Format(u8"{}", sheet).AsView(), text)); // the bare guid too
     CHECK(text.AsView() == StringView(u8"#menu { width: 10px; }"));
-    CHECK_FALSE(provider.LoadText(u8"menu.gml", text)); // a path is not a guid
+    CHECK_FALSE(provider.LoadText(u8"menu.xml", text)); // a path is not a guid
     CHECK_FALSE(provider.LoadText(Braced(icon).AsView(), text)); // a vector image is no text
 
     const foundation::vg::svg::SVGDocument* picture = provider.LoadSvg(Braced(icon).AsView());

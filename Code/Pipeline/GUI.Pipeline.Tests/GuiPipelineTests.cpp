@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GUI.Pipeline (E3 of Specs/gui-lab-evolution-3.md): a `.gml` document and a `.css` sheet cooked
+// GUI.Pipeline (E3 of Specs/gui-lab-evolution-3.md): a `.xml` document and a `.css` sheet cooked
 // through their validating builders and loaded as products; what cannot be read fails the cook, what
 // was dropped is said with its line; the guids a source names are found; the importer links a
 // dropped file as the asset its extension says.
@@ -61,7 +61,7 @@ TEST_CASE("gui.pipeline: a document and a sheet cook (validated) and load as the
     const StringView sourcesRoot = u8"scratch_guipipe_src";
     RemoveAll(sourcesRoot);
     REQUIRE(CreateDirectories(sourcesRoot));
-    WriteText(PathJoin(sourcesRoot, u8"title.gml").AsView(), kTitle);
+    WriteText(PathJoin(sourcesRoot, u8"title.xml").AsView(), kTitle);
     WriteText(PathJoin(sourcesRoot, u8"game.css").AsView(), kSheet);
     {
         foundation::vfs::NativeFileSystem outMount(u8"scratch_guipipe_db", DefaultAllocator());
@@ -72,7 +72,7 @@ TEST_CASE("gui.pipeline: a document and a sheet cook (validated) and load as the
         auto* sheetInstance = outDb.RootGroup()->CreateInstance(u8"game", gui::GuiStyleSheetSource::StaticType());
         {
             GuiDocumentAsset asset;
-            asset.fileName = foundation::vfs::SourcePath(u8"title.gml");
+            asset.fileName = foundation::vfs::SourcePath(u8"title.xml");
             GuiDocumentAssetBuilder builder;
             AssetBuildContext ctx{DefaultAllocator()};
             ctx.sources = &sourcesMount;
@@ -136,7 +136,7 @@ TEST_CASE("gui.pipeline: markup that cannot be read fails the cook; what was dro
     const StringView sourcesRoot = u8"scratch_guipipe_bad_src";
     RemoveAll(sourcesRoot);
     REQUIRE(CreateDirectories(sourcesRoot));
-    WriteText(PathJoin(sourcesRoot, u8"bad.gml").AsView(), u8"<Panel><Label text=\"x\"</Panel>");
+    WriteText(PathJoin(sourcesRoot, u8"bad.xml").AsView(), u8"<Panel><Label text=\"x\"</Panel>");
     {
         foundation::vfs::NativeFileSystem outMount(u8"scratch_guipipe_bad_db", DefaultAllocator());
         content::ContentDatabase outDb(DefaultAllocator(), outMount, BinarySerializerFactory(), u8".rasset");
@@ -146,12 +146,12 @@ TEST_CASE("gui.pipeline: markup that cannot be read fails the cook; what was dro
         ctx.output = outDb.RootGroup()->CreateInstance(u8"bad", gui::GuiDocumentSource::StaticType());
         GuiDocumentAssetBuilder builder;
         GuiDocumentAsset bad;
-        bad.fileName = foundation::vfs::SourcePath(u8"bad.gml");
+        bad.fileName = foundation::vfs::SourcePath(u8"bad.xml");
         CHECK_FALSE(builder.Build(bad, ctx).IsOk());
         GuiDocumentAsset unlinked;
         CHECK_FALSE(builder.Build(unlinked, ctx).IsOk());
         GuiDocumentAsset missing;
-        missing.fileName = foundation::vfs::SourcePath(u8"missing.gml");
+        missing.fileName = foundation::vfs::SourcePath(u8"missing.xml");
         CHECK_FALSE(builder.Build(missing, ctx).IsOk());
     }
     RemoveAll(sourcesRoot);
@@ -168,12 +168,12 @@ TEST_CASE("gui.pipeline: the guids a source names are found, each once")
     CHECK(found[1] == Guid(StringView(u8"6b1c0d3e-0000-4000-8000-000000000002")));
 }
 
-TEST_CASE("gui.pipeline: the importer takes .gml and .css; the creators make a document and a sheet")
+TEST_CASE("gui.pipeline: the importer takes .xml and .css; the creators make a document and a sheet")
 {
     GuiFileImporter importer;
-    CHECK(importer.Accepts(u8"gml"));
+    CHECK(importer.Accepts(u8"xml"));
     CHECK(importer.Accepts(u8"css"));
-    CHECK_FALSE(importer.Accepts(u8"xml"));
+    CHECK_FALSE(importer.Accepts(u8"gml")); // markup's old extension
     CHECK_FALSE(importer.Accepts(u8"sml"));
     AssetCreatorRegistry creators{DefaultAllocator()};
     RegisterGuiCreators(creators);

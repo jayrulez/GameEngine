@@ -7,7 +7,7 @@
 // preview of the COOKED mesh product (bound by the asset's guid through the editor's cooked-DB
 // resources, lit by a default sun + procedural sky, shown under a neutral PBR material) beside its
 // stats, read only: vertex/index/submesh counts, bounds, skinning, a per-submesh breakdown and the
-// LOD chain. On the GUI from the preview pages' markup (Data/Editor/PreviewPage.gml;
+// LOD chain. On the GUI from the preview pages' markup (Data/Editor/PreviewPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 3): the preview's own choices on its bar, where
 // they had been among the stats (the catalog's inconsistency 10): the material it shows the mesh in
 // (kept per asset) and, for a chain, the level of detail it draws. A mesh not cooked yet says so
@@ -50,7 +50,7 @@ export namespace editor
     class MeshEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
+        static constexpr StringView kPath = u8"Editor/PreviewPage.xml";
 
         MeshEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance, const TypeInfo& type);
 

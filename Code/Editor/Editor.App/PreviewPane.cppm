@@ -3,7 +3,7 @@
 
 // Editor App - :preview_pane partition
 //
-// PreviewPane: the 3D preview of a preview page's markup (Data/Editor/PreviewPage.gml;
+// PreviewPane: the 3D preview of a preview page's markup (Data/Editor/PreviewPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 3), bound: Editor.Preview's PreviewViewport in
 // `preview-stage`, Frame (`preview-frame`, and F over the preview) telling the page to frame what
 // it shows, the page's own choices placed after `preview-own`, and what shows while there is

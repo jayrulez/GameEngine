@@ -3,7 +3,7 @@
 
 // Editor::Animation - the `:skeleton_page` partition.
 //
-// SkeletonEditorPage: a skeleton on the GUI from its markup (Data/Editor/SkeletonPage.gml;
+// SkeletonEditorPage: a skeleton on the GUI from its markup (Data/Editor/SkeletonPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 10, part 3). A viewer: a skeleton comes from its
 // model's import and nothing here edits it. Its bones are a tree (each under its parent), with a
 // search that keeps a bone whose name holds it and the bones above it, so where it hangs still
@@ -49,7 +49,7 @@ export namespace editor
     class SkeletonEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/SkeletonPage.gml";
+        static constexpr StringView kPath = u8"Editor/SkeletonPage.xml";
 
         SkeletonEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~SkeletonEditorPage() override;

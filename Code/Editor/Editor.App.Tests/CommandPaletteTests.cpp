@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The command palette over a registry and its own markup (Data/Editor/CommandPalette.gml): the rows
+// The command palette over a registry and its own markup (Data/Editor/CommandPalette.xml): the rows
 // a query yields and their order, the lit row under the arrow keys (taken ahead of the search
 // field), Enter running the lit action and closing the palette (a disabled one keeps it open and
 // says so), a row's chord and dimmed state, and Escape closing it.
@@ -43,7 +43,7 @@ namespace
     }
     RefPtr<gui::Node> LoadPalette()
     {
-        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), u8"Editor/CommandPalette.gml");
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), u8"Editor/CommandPalette.xml");
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         gui::RegisterGuiElements();

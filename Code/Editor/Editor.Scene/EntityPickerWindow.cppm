@@ -4,7 +4,7 @@
 // Editor::Scene - :entity_picker_window partition.
 //
 // An entity slot's pick (Documentation/Specs/editor-gui.md, ruling 25; the mock's
-// entity-picker.gml): the scene as its hierarchy shows it, the hierarchy's own tree model
+// entity-picker.xml): the scene as its hierarchy shows it, the hierarchy's own tree model
 // (SceneTreeModel) in a picker's frame. The scene is its top row (open, and no pick); each entity
 // by its type's icon in its category's colour, opened and closed by its arrow; the way to the
 // current entity open and its row lit. The search keeps each match with what holds it and opens
@@ -39,7 +39,7 @@ export namespace editor
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/EntityPicker.gml";
+        static constexpr const char8_t* kPath = u8"Editor/EntityPicker.xml";
 
         /// What it shows the scene by, as the page's hierarchy does.
         struct Services

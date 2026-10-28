@@ -47,7 +47,7 @@ export namespace sandbox
         /// the frame's markup does not load.
         bool Build()
         {
-            m_frame = m_host.Load(u8"Editor/Mock/frame.gml");
+            m_frame = m_host.Load(u8"Editor/Mock/frame.xml");
             if (!m_frame)
                 return false;
             m_root.AddChild(m_frame.Get());
@@ -199,9 +199,9 @@ export namespace sandbox
             // turn, and a dialog.
             (void)m_root.OnCommand(u8"mock.toast", [self](gui::CommandEvent&) { self->ShowToast(); });
             (void)m_root.OnCommand(u8"mock.dialog", [self](gui::CommandEvent&) { self->ShowDialog(); });
-            (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowPicker(self->m_textures, u8"Editor/Mock/textures.gml"); });
-            (void)m_root.OnCommand(u8"mock.asset-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_assetPicker, u8"Editor/Mock/asset-picker.gml"); });
-            (void)m_root.OnCommand(u8"mock.entity-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_entityPicker, u8"Editor/Mock/entity-picker.gml"); });
+            (void)m_root.OnCommand(u8"mock.textures", [self](gui::CommandEvent&) { self->ShowPicker(self->m_textures, u8"Editor/Mock/textures.xml"); });
+            (void)m_root.OnCommand(u8"mock.asset-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_assetPicker, u8"Editor/Mock/asset-picker.xml"); });
+            (void)m_root.OnCommand(u8"mock.entity-picker", [self](gui::CommandEvent&) { self->ShowPicker(self->m_entityPicker, u8"Editor/Mock/entity-picker.xml"); });
             (void)m_root.OnCommand(u8"mock.side-by-side", [self](gui::CommandEvent&) { self->SetSideBySide(!self->m_sideBySide); });
             Define(u8"look.dark", u8"Dark");
             Define(u8"look.light", u8"Light");
@@ -354,18 +354,18 @@ export namespace sandbox
                 return;
             gui::DefineDockingCommands(m_context);
             m_dock = MakeUnique<gui::DockController>(m_allocator, m_allocator);
-            Register(u8"scene", u8"Level 1", u8"Editor/Mock/scene.gml");
-            Register(u8"scene-2", u8"Level 2", u8"Editor/Mock/scene.gml");
-            Register(u8"kit", u8"Kit", u8"Editor/Mock/kit.gml");
+            Register(u8"scene", u8"Level 1", u8"Editor/Mock/scene.xml");
+            Register(u8"scene-2", u8"Level 2", u8"Editor/Mock/scene.xml");
+            Register(u8"kit", u8"Kit", u8"Editor/Mock/kit.xml");
             // The input map page's two designs, to compare (the user, 2026-10-26).
-            Register(u8"input-outline", u8"Input A: Outline", u8"Editor/Mock/input-outline.gml");
-            Register(u8"input-split", u8"Input B: Tree and Grid", u8"Editor/Mock/input-split.gml");
-            Register(u8"input-split-set", u8"Input B: Set Chosen", u8"Editor/Mock/input-split-set.gml");
-            Register(u8"input-split-set-open", u8"Input B: Set, Actions Open", u8"Editor/Mock/input-split-set-open.gml");
+            Register(u8"input-outline", u8"Input A: Outline", u8"Editor/Mock/input-outline.xml");
+            Register(u8"input-split", u8"Input B: Tree and Grid", u8"Editor/Mock/input-split.xml");
+            Register(u8"input-split-set", u8"Input B: Set Chosen", u8"Editor/Mock/input-split-set.xml");
+            Register(u8"input-split-set-open", u8"Input B: Set, Actions Open", u8"Editor/Mock/input-split-set-open.xml");
             // The profiler page (X7), a tab in the page area (the user, 2026-10-27).
-            Register(u8"profiler", u8"Profiler", u8"Editor/Mock/profiler.gml");
-            Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.gml");
-            Register(u8"console", u8"Console", u8"Editor/Mock/console.gml");
+            Register(u8"profiler", u8"Profiler", u8"Editor/Mock/profiler.xml");
+            Register(u8"assets", u8"Assets", u8"Editor/Mock/assets.xml");
+            Register(u8"console", u8"Console", u8"Editor/Mock/console.xml");
             Said(m_dock->Adopt(DefaultLayout(false)));
             m_dockArea = MakeRef<gui::DockArea>(m_allocator);
             m_dockArea->EditLayoutStyle([](gui::LayoutStyle& s) { s.Grow = 1.0f; });

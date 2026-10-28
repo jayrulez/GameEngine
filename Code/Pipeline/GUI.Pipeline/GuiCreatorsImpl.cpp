@@ -21,7 +21,7 @@ namespace pipeline
 {
     void RegisterGuiCreators(AssetCreatorRegistry& registry)
     {
-        // Each writes its starter text to a LINKED source file in Sources/ (.gml, .css) that the
+        // Each writes its starter text to a LINKED source file in Sources/ (.xml, .css) that the
         // asset references through fileName, like a script.
         {
             AssetCreator creator;
@@ -31,7 +31,7 @@ namespace pipeline
             creator.run = [](const AssetCreationContext& context) -> foundation::content::Instance*
             {
                 GuiDocumentAsset asset;
-                return CreateLinkedTextAsset(context, u8"GuiDocument", u8".gml", kGuiDocumentStarter, GuiDocumentAsset::StaticType(), asset);
+                return CreateLinkedTextAsset(context, u8"GuiDocument", u8".xml", kGuiDocumentStarter, GuiDocumentAsset::StaticType(), asset);
             };
             registry.Register(Move(creator));
         }

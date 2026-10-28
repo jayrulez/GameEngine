@@ -4,7 +4,7 @@
 // Editor::Fonts - the `editor.fonts` module.
 //
 // FontEditorPage: the bespoke authoring page for FontAsset (the fonts-triad source asset). On the
-// GUI from the image pages' markup (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md,
+// GUI from the image pages' markup (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md,
 // 5.4, layer 2): the atlas the cook would produce at the preview size, baked live (coverage as
 // white over alpha; a distance field decoded at its edge, where its raw channels read as noise),
 // rebaked on every edit and its undo, to zoom, pan and read in; beside the authored surface:
@@ -38,7 +38,7 @@ export namespace editor
     class FontEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
+        static constexpr StringView kPath = u8"Editor/ImagePage.xml";
 
         FontEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~FontEditorPage() override;

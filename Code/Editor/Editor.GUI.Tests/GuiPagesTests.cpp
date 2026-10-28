@@ -58,7 +58,7 @@ namespace
     constexpr StringView kHud = u8"<Panel class=\"hud\">\n    <Label class=\"score\" text=\"0\"/>\n</Panel>\n";
     constexpr StringView kSheet = u8".hud { padding: 8px; }\n.score { color: #ffcc00; }\n";
 
-    // A project with a document ("Hud", Sources/Hud.gml) and a sheet ("Theme", Sources/Theme.css),
+    // A project with a document ("Hud", Sources/Hud.xml) and a sheet ("Theme", Sources/Theme.css),
     // its editor settings the context's.
     struct Bed
     {
@@ -81,7 +81,7 @@ namespace
             REQUIRE(static_cast<bool>(project));
             context.SetProject(project.Get());
             context.SetProjectEditorSettings(&store);
-            WriteSource(*project, u8"Hud.gml", kHud);
+            WriteSource(*project, u8"Hud.xml", kHud);
             WriteSource(*project, u8"Theme.css", kSheet);
             foundation::content::Group* top = project->SourceDb().RootGroup();
             hud = top->CreateInstance(u8"Hud", pipeline::GuiDocumentAsset::StaticType());
@@ -89,7 +89,7 @@ namespace
             REQUIRE(hud != nullptr);
             REQUIRE(theme != nullptr);
             pipeline::GuiDocumentAsset document;
-            document.fileName = foundation::vfs::SourcePath(u8"Hud.gml");
+            document.fileName = foundation::vfs::SourcePath(u8"Hud.xml");
             REQUIRE(hud->WriteObject(document).IsOk());
             pipeline::GuiStyleSheetAsset sheet;
             sheet.fileName = foundation::vfs::SourcePath(u8"Theme.css");

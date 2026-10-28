@@ -338,7 +338,7 @@ namespace editor::app
         }
         EditorApplication* self = this;
         EditorDock::Contents contents;
-        contents.welcome = [self]() { return self->m_window.LoadMarkup(u8"Editor/Welcome.gml"); };
+        contents.welcome = [self]() { return self->m_window.LoadMarkup(u8"Editor/Welcome.xml"); };
         {
             AssetsView::Services assets;
             assets.context = &m_context;
@@ -472,7 +472,7 @@ namespace editor::app
         if (root == nullptr)
             return;
         if (!m_palette)
-            m_palette = MakeUnique<CommandPalette>(m_editorAllocator, m_editorAllocator, m_context.Actions(), m_window.LoadMarkup(u8"Editor/CommandPalette.gml"));
+            m_palette = MakeUnique<CommandPalette>(m_editorAllocator, m_editorAllocator, m_context.Actions(), m_window.LoadMarkup(u8"Editor/CommandPalette.xml"));
         (void)m_palette->Open(*root);
     }
 

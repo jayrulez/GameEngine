@@ -1011,7 +1011,7 @@ and the 0.2 backlog deferred (the engine's hosting, the decision to replace foun
    (foundation.ui, Engine.UI, Engine.UI.Script, the editor's game UI pages, their pipeline) until
    the work is blocked and the user says how to proceed. (The user first said they would not
    coexist, then, the same day, that they must for a while.)
-2. **Sources are `.gml` (markup) and `.css` (sheets).** A distinct markup extension, so the
+2. **Sources are `.xml` (markup) and `.css` (sheets).** A distinct markup extension, so the
    importer never takes an unrelated XML file; plain CSS for sheets.
 3. **References are asset guids.** A sheet's `url("{guid}")`, a document pushed by its guid, an
    image's source: as every other asset reference in the engine, so a rename or a move breaks
@@ -1060,7 +1060,7 @@ and the 0.2 backlog deferred (the engine's hosting, the decision to replace foun
   (`GuiDocumentSource`, `GuiStyleSheetSource`), and the module `kGuiResourceModule` ("gui"). No
   icons embedded: a sheet reads an SVG by guid as it reads any image, through the vector images'
   own resource (VG.Resource), so an icon is cooked once however many sheets use it.
-- **`GUI.Pipeline`** (`experimental.gui.pipeline`, tools only): a `GuiDocumentAsset` (`.gml`) and a
+- **`GUI.Pipeline`** (`experimental.gui.pipeline`, tools only): a `GuiDocumentAsset` (`.xml`) and a
   `GuiStyleSheetAsset` (`.css`), linked-source assets; builders that validate by parsing (the
   markup through the lab's loader with every element type the tools register, the core's,
   the gamekit's, the toolkit's and the code editor's; the sheet through the CSS parser) and fail
@@ -1095,7 +1095,7 @@ and the 0.2 backlog deferred (the engine's hosting, the decision to replace foun
     loading document, the boot splash, the run screens.
   - *Composition*: its domain (resources `gui`, `vg`, `fonts`) beside the UI domain while both live
     (ruling 1); the composition tests' counts follow.
-- **The editor**: asset pages for a `.gml` document (a code editor and a live preview, drawn by the
+- **The editor**: asset pages for a `.xml` document (a code editor and a live preview, drawn by the
   lab offscreen into the editor's view) and a `.css` sheet; the inspector naming the new asset
   types; the MCP guide updated (the generic asset tools serve them).
 - **The web**: the engine's GUI ships in a web game, so the lab, its hosting and the engine's GUI
@@ -1220,7 +1220,7 @@ Each a layer with its tests.
     names one, its load progress the GUI's data value `bootProgress` (0 to 1, which the document
     binds), else the UI's splash as before. The project settings' asset count follows (8).
 - **E10 The editor's pages.** Document and sheet pages, previews, the inspector, the MCP guide.
-  Built (vg, 2026-10-23): `Editor.GUI` (with the lab): `GuiAssetEditorPage` for a `.gml` document
+  Built (vg, 2026-10-23): `Editor.GUI` (with the lab): `GuiAssetEditorPage` for a `.xml` document
   (its markup, XML-lexed, beside a live preview) and a `.css` sheet (its CSS beside preview markup
   of its own, kept on `GuiStyleSheetAsset` as editor-only `previewMarkup`, "Preview Document..."
   copying a document's in); the cook's diagnostics mark the lines, a document that does not build

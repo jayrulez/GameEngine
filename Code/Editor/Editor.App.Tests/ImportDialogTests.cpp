@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The import window over its markup (Data/Editor/Import.gml) and an import of the test's own: what a
+// The import window over its markup (Data/Editor/Import.xml) and an import of the test's own: what a
 // file would create shown by kind, each kept or not and named; Import open with what it will do,
 // and waiting, saying why, while a file is being read or nothing is kept; the files listed when
 // there are several; Import making what is kept and closing. Keeps the 2026-09-21 regression: Import

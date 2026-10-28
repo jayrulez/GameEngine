@@ -5,7 +5,7 @@
 //
 // Export Templates (Documentation/Specs/editor-gui.md, 5.2, layer 6): the player builds this editor
 // exports with, Edit > Export Templates (and Export's own button, over it), a window over its markup
-// (Data/Editor/Templates.gml). They are the editor's, not a project's: every project shares them.
+// (Data/Editor/Templates.xml). They are the editor's, not a project's: every project shares them.
 // The templates on the left, each by the icon its bundle carries, its name, platform, config and
 // engine version, the host build marked as this editor's own and one built for another engine
 // warned of; the selected one's details on the right (its id, compiler, engine and whether it is
@@ -93,7 +93,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Templates.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Templates.xml";
 
         TemplatesDialog(IAllocator& allocator, editor::EditorContext& context, TemplatesDialogSeams seams, RefPtr<gui::Node> body)
             : m_allocator(allocator), m_context(&context), m_seams(Move(seams)), m_body(Move(body)), m_icons(allocator),

@@ -4,7 +4,7 @@
 // Editor::Particles - the `:page` partition.
 //
 // ParticleEffectEditorPage: a particle effect on the GUI from its markup
-// (Data/Editor/ParticleEffectPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 8). The effect's
+// (Data/Editor/ParticleEffectPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 8). The effect's
 // systems a tree (each its emitter, initializers, behaviors and sub-emitters), the live preview beside it,
 // and the grid showing the chosen system from reflection (the particle types are reflected): its
 // options, each shown where its render mode uses it, its emitter, and its modules as the grid's lists,
@@ -72,7 +72,7 @@ export namespace editor
     class ParticleEffectEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ParticleEffectPage.gml";
+        static constexpr StringView kPath = u8"Editor/ParticleEffectPage.xml";
         /// The grid's section the chosen system's rows are in: its paths are "system/" and the system's own.
         static constexpr StringView kSystemSection = u8"system";
         /// The system's own path of a grid row's ("system/emitter.mode" is "emitter.mode").

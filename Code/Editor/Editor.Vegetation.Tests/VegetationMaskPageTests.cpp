@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The vegetation mask page over its markup (Data/Editor/ImagePage.gml) and a scratch project:
+// The vegetation mask page over its markup (Data/Editor/ImagePage.xml) and a scratch project:
 // a painted mask's planes shown one at a time, its density under the pointer, its size read only
 // once painted while its plane count edits (one undo step, the planes as the cook would keep
 // them); a blank mask said so with its size editable; an imported one's planes its image's

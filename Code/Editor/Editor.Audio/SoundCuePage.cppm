@@ -3,7 +3,7 @@
 
 // Editor::Audio - the `:sound_cue_page` partition.
 //
-// SoundCueEditorPage: a sound cue on the GUI from its markup (Data/Editor/SoundCuePage.gml;
+// SoundCueEditorPage: a sound cue on the GUI from its markup (Data/Editor/SoundCuePage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 5). The cue on the grid: how it picks (at random
 // never the same twice running, at random, or in order), its pitch and volume ranges, then its
 // variants, each a clip (an asset slot) and its weight: those filled, and one more to fill while
@@ -39,7 +39,7 @@ export namespace editor
     class SoundCueEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/SoundCuePage.gml";
+        static constexpr StringView kPath = u8"Editor/SoundCuePage.xml";
 
         SoundCueEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~SoundCueEditorPage() override;

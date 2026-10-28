@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The terrain page over its markup (Data/Editor/PreviewPage.gml) and a scratch project, without a
+// The terrain page over its markup (Data/Editor/PreviewPage.xml) and a scratch project, without a
 // host (no preview): its rows from the asset (the terrain's, the base layer's, the paint layers a
 // list of groups that adds and removes but does not reorder), each edit one undo step, a layer
 // added and removed with every array kept in line, new splat weights made beside the terrain, and

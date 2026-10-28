@@ -4,7 +4,7 @@
 // Editor::Animation - the `:clip_page` partition.
 //
 // AnimationClipEditorPage: an animation clip on the GUI from its markup
-// (Data/Editor/AnimationClipPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 2). The
+// (Data/Editor/AnimationClipPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 2). The
 // preview plays the cooked clip on a skeleton (the bones, and a skinned mesh over them when one is
 // picked), both chosen on the preview's bar and kept per clip with the project; the skeleton the
 // importer named is the one it starts on. Travel, the preview's own choice (it had been among the
@@ -47,7 +47,7 @@ export namespace editor
     class AnimationClipEditorPage final : public app::AssetObjectPage, public IPlaybackPage, public foundation::gui::ITimeMarkerSource
     {
     public:
-        static constexpr StringView kPath = u8"Editor/AnimationClipPage.gml";
+        static constexpr StringView kPath = u8"Editor/AnimationClipPage.xml";
 
         AnimationClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~AnimationClipEditorPage() override;

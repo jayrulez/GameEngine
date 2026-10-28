@@ -42,7 +42,7 @@ export namespace editor::app
     {
     public:
         /// Save As's dialog, under the data root.
-        static constexpr const char8_t* kSaveAsPath = u8"Editor/SaveAs.gml";
+        static constexpr const char8_t* kSaveAsPath = u8"Editor/SaveAs.xml";
 
         /// What it works over.
         struct Services

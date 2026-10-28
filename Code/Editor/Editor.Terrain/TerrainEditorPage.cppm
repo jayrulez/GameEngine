@@ -3,7 +3,7 @@
 
 // Editor::Terrain - the `:page` partition.
 //
-// TerrainEditorPage: a terrain on the GUI from the preview pages' markup (Data/Editor/PreviewPage.gml;
+// TerrainEditorPage: a terrain on the GUI from the preview pages' markup (Data/Editor/PreviewPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 7). The cooked terrain on a preview lit by a sun
 // (its self-shadowing shown), beside its rows. The asset keeps its layers in parallel arrays, so
 // the rows are the page's own, not its reflection's: under Terrain the heightfield and the splat
@@ -58,7 +58,7 @@ export namespace editor
     class TerrainEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
+        static constexpr StringView kPath = u8"Editor/PreviewPage.xml";
         /// The sizes New Splat Weights offers, in its menu's order.
         static constexpr i32 kSplatSizes[] = {512, 1024, 2048};
 

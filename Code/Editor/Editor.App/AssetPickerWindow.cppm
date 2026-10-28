@@ -4,7 +4,7 @@
 // Editor App - :asset_picker_window partition
 //
 // An asset slot's pick, shaped as the assets browser (Documentation/Specs/editor-gui.md, ruling 24;
-// the mock's asset-picker.gml): the project's groups a tree at its side (Favourites and All first),
+// the mock's asset-picker.xml): the project's groups a tree at its side (Favourites and All first),
 // what the chosen group holds of the slot's types beside it as tiles or a list (the last one chosen
 // kept with the project), the current value lit, the search over every group while it has text (by
 // name or a guid's start, as the browser's; each match saying where it lives). Enter or a double
@@ -46,7 +46,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/AssetPicker.gml";
+        static constexpr const char8_t* kPath = u8"Editor/AssetPicker.xml";
 
         /// What it works over.
         struct Services

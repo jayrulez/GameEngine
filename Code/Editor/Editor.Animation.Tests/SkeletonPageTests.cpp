@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The skeleton page over its markup (Data/Editor/SkeletonPage.gml) and a scratch project, without a
+// The skeleton page over its markup (Data/Editor/SkeletonPage.xml) and a scratch project, without a
 // host (no preview): the bones a tree under their parents, read from the asset (no cook); a search
 // keeping a bone found and the bones above it; the chosen bone's facts and the skeleton's read only;
 // a rotation said in degrees about an axis.

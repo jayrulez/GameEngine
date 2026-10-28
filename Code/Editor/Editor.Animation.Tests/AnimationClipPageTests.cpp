@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The animation clip page over its markup (Data/Editor/AnimationClipPage.gml) and a scratch project,
+// The animation clip page over its markup (Data/Editor/AnimationClipPage.xml) and a scratch project,
 // without a host (no preview): the clip's rows its own (Looping, the root motion, the events a list
 // named by each event's name and summed up by its time), its facts read only; each edit one undo
 // step; a new event at the playhead; the events as the ruler's markers, a marker's move one step

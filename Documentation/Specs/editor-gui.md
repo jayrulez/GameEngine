@@ -164,7 +164,7 @@ setting stays and multiplies everything.
 
 ### 3.5 Structure of a page
 
-Every page is a document: `.gml` markup for its static structure and a sheet for anything only it
+Every page is a document: `.xml` markup for its static structure and a sheet for anything only it
 needs, under `Data/Editor/`, loaded through the editor's resource provider and reloaded when the
 file changes (the editor's own development loop). Code binds behaviour to elements by id and
 fills dynamic content (rows, trees, the grid). Dialogs are markup. The command palette,
@@ -201,7 +201,7 @@ its source list, again unedited. The editor runs at every step, without its park
 
 1. Keeps file names where the role is the same; renames are their own commit.
 2. Puts a file's markup and sheet under `Data/Editor/`, named after it (`HierarchyView.cppm`,
-   `HierarchyView.gml`, `HierarchyView.css`).
+   `HierarchyView.xml`, `HierarchyView.css`).
 3. Updates the ledger (section 4.1) with the library's state.
 
 Kept in the build throughout, or with its foundation.ui imports removed: Editor.Project, Editor.Mcp,
@@ -396,7 +396,7 @@ the component gizmos, the grid, the view gizmo, the zoom readout, the view setti
 preview's sizing, the capture recorder, entity JSON, loading, settings profiles, the thumbnail
 generators and the scene MCP tools), with 6.8k lines of headless tests. Editor.Play is about 4k
 (2.2k on foundation.ui: the Game tab and its registration), Editor.Preview 0.9k. The design is the
-mock's scene page (Data/Editor/Mock/scene.gml): the page's tool bar over its own hierarchy,
+mock's scene page (Data/Editor/Mock/scene.xml): the page's tool bar over its own hierarchy,
 viewport and inspector (ruling 11), the scene the hierarchy's top row (ruling 12), the viewport's
 HUD in fixed zones. As before, each layer is one commit with its tests; GUI library additions go
 first and are grouped with the other GUI commits. The catalog's problems for these pieces
@@ -516,7 +516,7 @@ CurveView, GradientView, Dopesheet and TimeAxis, GraphView, GUI.Code's CodeEdito
 languages, completion and find bar, GUI.Viewport, the Splitter, TreeView and ListView. So X6 adds
 no GUI library work of its own; a gap found on the way is a GUI commit grouped with the others.
 
-What every page shares, from the kit (Mock/kit.gml): one page bar, Save, Undo and Redo first,
+What every page shares, from the kit (Mock/kit.xml): one page bar, Save, Undo and Redo first,
 bound to the actions over the page (PageActionBar), the page's own after; one transport for every
 preview (Restart, Play, Pause, Stop, the state named); a page that cannot read its asset says so on
 the page (the kit's failed state), not only in the log; read-only facts as read-only rows, never as
@@ -547,7 +547,7 @@ The layers:
    GUI's tree beside the grid); Input's map (its sets, actions and bindings, the key capture the
    kit's).
    The input map's design (user 2026-10-26, from three mocked in the GUISandbox's editor mock,
-   Data/Editor/Mock/input-*.gml): the sets and their actions a tree beside the grid; the tree's bar
+   Data/Editor/Mock/input-*.xml): the sets and their actions a tree beside the grid; the tree's bar
    adds sets only and removes the chosen row (an add there would guess which set); a set chosen
    shows its name and priority and its actions as the grid's list, its Add adding to that set, each
    action a group opening in place (its kind and interaction, its bindings a list of their own, its
@@ -801,7 +801,7 @@ The design (proposed; the mock is judged before anything is built):
   W A S D) wait for the user.
 
 The layers:
-0. The mock: `Data/Editor/Mock/profiler.gml` in the GUISandbox's editor mock, a static frame of
+0. The mock: `Data/Editor/Mock/profiler.xml` in the GUISandbox's editor mock, a static frame of
    made-up data (the strip and two counters under it, a frame's timeline with its threads, a
    folded group and the GPU, a range marked and a scope chosen, the table and the detail), dark
    and light, for the user to judge.
@@ -952,7 +952,7 @@ Rulings (the user, 2026-10-23):
 
 1. A parallel editor on a branch; non-UI code moved over as it is needed. No page on the old UI
    inside the new frame: the two UIs never run in one editor.
-2. Pages are markup (`.gml`) and a sheet, under `Data/Editor/`, with code binding by id.
+2. Pages are markup (`.xml`) and a sheet, under `Data/Editor/`, with code binding by id.
 3. The icons are all drawn by us.
 4. Type icons: whatever suits the use (section 3.2: tinted by category in scanned lists,
    monochrome in bars and menus).
@@ -1005,9 +1005,9 @@ Rulings (the user, 2026-10-23):
     (Favourites and All first), what the chosen group holds of the slot's types beside it as tiles
     or a list (the picker keeping the last one chosen), the current value checked, the search over
     every group while it has text (each match saying where it lives) (2026-10-25; the mock's
-    asset-picker.gml).
+    asset-picker.xml).
 25. The entity picker shows the scene as its hierarchy does: the hierarchy's tree model in a
     picker's frame, the scene its top row (not a pick), each entity by its type's icon in its
     category's colour, prefab members and inactive entities marked, levels opened and closed by
     their arrows, the current entity lit, the search keeping each match with what holds it
-    (2026-10-25; the mock's entity-picker.gml).
+    (2026-10-25; the mock's entity-picker.xml).

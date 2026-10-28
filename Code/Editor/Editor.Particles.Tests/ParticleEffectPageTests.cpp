@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The particle effect page over its markup (Data/Editor/ParticleEffectPage.gml) and a scratch
+// The particle effect page over its markup (Data/Editor/ParticleEffectPage.xml) and a scratch
 // project, without a host (no preview): the default system the seed and Add System share; the
 // systems and their modules a tree; the chosen system's rows from reflection, each shown where its
 // render mode uses it, its modules added by type from what derives from the list's base, a curve

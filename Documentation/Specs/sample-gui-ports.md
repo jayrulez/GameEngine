@@ -2,7 +2,7 @@
 
 The sample games and the native samples move from the old game UI (foundation.ui, Engine.UI,
 Engine.UI.Script, UI.Pipeline: `.sml` UI documents, `.sss` UI themes, the `ui` script facade) onto
-the engine GUI (foundation.gui, Engine.GUI, GUI.Pipeline: `.gml` documents, `.css` sheets, the
+the engine GUI (foundation.gui, Engine.GUI, GUI.Pipeline: `.xml` documents, `.css` sheets, the
 `gui` script facade). WebScene moved first (2026-10-23) and is the model. The editor's pages for the
 GUI's assets (Documentation/Specs/editor-gui.md, 5.4, layer 6, part 5) and `gui_validate` come
 before it, as the tools the ports are made and checked with.
@@ -36,7 +36,7 @@ before it, as the tools the ports are made and checked with.
 
 The old markup's dialect (`<screen mode= transition= default-focus=>`, `Frame`, `Flex direction=`,
 `gravity=`, `rounded-rect(...)` backgrounds) is not the GUI's: each screen is written again as a
-`.gml` document over a `.css` sheet, not renamed. A theme becomes a sheet in the project's
+`.xml` document over a `.css` sheet, not renamed. A theme becomes a sheet in the project's
 `guiStyleSheetIds`; a loading document, `guiLoadingDocumentId`. The fonts stay the project's UI
 fonts, which the GUI shares.
 
@@ -48,7 +48,7 @@ rich text's runs and text box (Masquerade's one use).
 ## Phases
 
 - P0. The tools: `gui_validate` (MCP), the editor's GUI document and sheet page with its live
-  preview. A port then loops: write the `.gml` and `.css`, `gui_validate`, look at the page's
+  preview. A port then loops: write the `.xml` and `.css`, `gui_validate`, look at the page's
   preview with `editor_screenshot`, then play it.
 - P1. The native samples: PhysicsPlayground, then GameUiSandbox onto GUI.Gamekit.
 - P2 to P7. The games in the ruled order, one at a time, each on its own: its screens written

@@ -6,7 +6,7 @@
 // EditorPreferencesDialog: the user's own editor settings (the foundation.settings store at
 // <user-data>/editor.settings.xml), distinct from Project Settings, which edits the project
 // (Documentation/Specs/editor-gui.md, 5.1, layer 12). A modal window of the editor's markup
-// (Data/Editor/Preferences.gml), a tab per category. Appearance holds the look's inputs: the
+// (Data/Editor/Preferences.xml), a tab per category. Appearance holds the look's inputs: the
 // scheme, the accent (one of the editor's or any #rrggbb), the density, less motion and the UI
 // scale, and whether axis views are orthographic; each change of the look shows at once. Export
 // holds the templates' folder, Agent access the MCP host (on, its port, its token), Game preview
@@ -38,7 +38,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Preferences.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Preferences.xml";
 
         /// What it works over.
         struct Services

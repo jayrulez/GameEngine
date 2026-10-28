@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Console over its markup (Data/Editor/Console.gml): lines with their category, the levels'
+// The Console over its markup (Data/Editor/Console.xml): lines with their category, the levels'
 // chips (Debug holding trace, Error holding fatal) with their counts showing and hiding
 // their lines, the search, the cap trimming the oldest, Clear, the empty line, a selection kept
 // by entry through a trim and copied oldest first, and each line's time.

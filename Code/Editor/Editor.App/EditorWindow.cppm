@@ -6,7 +6,7 @@
 // EditorWindow: the editor's GUI on its main window (Documentation/Specs/editor-gui.md, 5.1,
 // layer 3). It owns the GUI host (the window's input, frames, renderer and picture baker), the
 // fonts the editor's sheet names, the editor's own files (EditorResources) and the frame read
-// from Data/Editor/Shell.gml, with the toast host over it. Its look is the editor's sheet
+// from Data/Editor/Shell.xml, with the toast host over it. Its look is the editor's sheet
 // (Editor/editor.css over its tokens), the chosen density's sheet after it and a `:root` block of
 // the user's inputs (the accent), then the user's theme overrides (5.7, layer 1: a file in their
 // data folder, so any token or rule is theirs to set), the scheme and less motion through the
@@ -116,7 +116,7 @@ export namespace editor::app
     {
     public:
         /// The frame's markup, its sheet and the folder the editor's files are in, under the data root.
-        static constexpr const char8_t* kFramePath = u8"Editor/Shell.gml";
+        static constexpr const char8_t* kFramePath = u8"Editor/Shell.xml";
         static constexpr const char8_t* kSheetPath = u8"Editor/editor.css";
         /// The user's theme overrides: the folder under their data folder, and the file in it.
         static constexpr const char8_t* kThemeFolder = u8"theme";

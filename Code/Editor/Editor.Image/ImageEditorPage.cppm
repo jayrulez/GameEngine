@@ -5,7 +5,7 @@
 //
 // ImageEditorPage (the Texture page's source-side sibling): the inspect + intent surface over an
 // ImageAsset, the raw source image that Texture assets (and future consumers) build on. On the GUI
-// from the image pages' markup (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md, 5.4,
+// from the image pages' markup (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md, 5.4,
 // layer 2): the decoded file (the same decode the cook rides, as RGBA8 for display) to zoom, pan and
 // read pixels in, beside the grid: its source file and colour-space intent, then the source's facts
 // read only (its size, pixel format and data size). Each edit is one undo step; Save writes the asset and
@@ -33,7 +33,7 @@ export namespace editor
     class ImageEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
+        static constexpr StringView kPath = u8"Editor/ImagePage.xml";
 
         ImageEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 

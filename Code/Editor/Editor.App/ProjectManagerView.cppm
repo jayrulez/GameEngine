@@ -5,7 +5,7 @@
 //
 // The project manager (Documentation/Specs/editor-gui.md, 5.1, layer 13): the window's whole
 // screen at startup with no project given, and after File > Close Project. Its frame is markup
-// (Data/Editor/ProjectManager.gml), New Project and Open Folder first, then every recent project as
+// (Data/Editor/ProjectManager.xml), New Project and Open Folder first, then every recent project as
 // a row (its picture, name, folder and engine, Open, a menu) or a tile of its picture. There is no
 // selection: an action is one click on the project it is for. Each project is probed as it is
 // shown: one whose folder no longer holds it is dimmed with no Open; one saved by a newer engine
@@ -39,8 +39,8 @@ export namespace editor::app
     {
     public:
         /// Its frames, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/ProjectManager.gml";
-        static constexpr const char8_t* kNewProjectPath = u8"Editor/NewProject.gml";
+        static constexpr const char8_t* kPath = u8"Editor/ProjectManager.xml";
+        static constexpr const char8_t* kNewProjectPath = u8"Editor/NewProject.xml";
 
         struct Services
         {

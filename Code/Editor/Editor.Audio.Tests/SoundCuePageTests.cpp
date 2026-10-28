@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The sound cue page over its markup (Data/Editor/SoundCuePage.gml) and a scratch project, without
+// The sound cue page over its markup (Data/Editor/SoundCuePage.xml) and a scratch project, without
 // a host (no audio engine: nothing plays): the cue's rows and a variant per clip with one more to
 // fill, a clip picked or cleared one undo step that adds or takes out a variant, the cue's options,
 // and a cue with no clip said so.

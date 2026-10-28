@@ -3,7 +3,7 @@
 
 // Editor::Script - the `editor.script` module.
 //
-// ScriptEditorPage: a behaviour script's code on the GUI from its markup (Data/Editor/ScriptPage.gml;
+// ScriptEditorPage: a behaviour script's code on the GUI from its markup (Data/Editor/ScriptPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 6, part 3), on the code pages' base (the source file,
 // its language's colours, a check a moment after each edit into the problems list, one history,
 // Save then a cook). Its check compiles the code as the cook does, running none of it (a failing one
@@ -40,7 +40,7 @@ export namespace editor
     class ScriptEditorPage final : public app::CodeAssetPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ScriptPage.gml";
+        static constexpr StringView kPath = u8"Editor/ScriptPage.xml";
 
         ScriptEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~ScriptEditorPage() override;

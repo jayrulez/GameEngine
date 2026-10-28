@@ -4,7 +4,7 @@
 // Generic asset page tests (headless): the serialize-driven scan/patch machinery is pure over
 // any ISerializable, so it is covered with a synthetic asset exercising scalars, strings,
 // guids, blobs, arrays, and a version-gated + a value-conditional field. Then the page from its
-// markup (Data/Editor/AssetForm.gml) over that asset in a project: its rows, an edit and its undo,
+// markup (Data/Editor/AssetForm.xml) over that asset in a project: its rows, an edit and its undo,
 // a change of shape, Save, and an asset that does not read.
 
 #include <doctest/doctest.h>

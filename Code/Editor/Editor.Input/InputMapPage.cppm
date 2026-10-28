@@ -3,7 +3,7 @@
 
 // Editor::Input - the `editor.input` module.
 //
-// InputMapEditorPage: an input map on the GUI from its markup (Data/Editor/InputMapPage.gml;
+// InputMapEditorPage: an input map on the GUI from its markup (Data/Editor/InputMapPage.xml;
 // Documentation/Specs/editor-gui.md, 5.4, layer 5, part 4; the user's choice among the designs
 // mocked in the editor mock). The sets and their actions a tree beside the grid; the tree's bar
 // adds a set and removes the chosen row, its search keeping the actions whose name or input
@@ -44,7 +44,7 @@ export namespace editor
     class InputMapEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/InputMapPage.gml";
+        static constexpr StringView kPath = u8"Editor/InputMapPage.xml";
         /// The grid's section the chosen set's rows are in: its paths are "set/" and the set's own.
         static constexpr StringView kSetSection = u8"set";
         /// The set's own path of a grid row's ("set/actions.0" is "actions.0").

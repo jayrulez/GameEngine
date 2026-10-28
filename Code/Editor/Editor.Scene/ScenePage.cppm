@@ -4,7 +4,7 @@
 // Editor::Scene - :page partition.
 //
 // SceneEditorPage: the scene (and prefab) document editor, on the GUI from markup
-// (Data/Editor/Scene.gml; Documentation/Specs/editor-gui.md, 5.3, layer 2). Each page owns its own
+// (Data/Editor/Scene.xml; Documentation/Specs/editor-gui.md, 5.3, layer 2). Each page owns its own
 // live scene, in its own scene manager (several pages are open at once; everything scene-scoped is
 // per page), and is made of parts: its viewport (the renderer drawing the scene into it, the
 // camera, picking, the capture), its overlays, Simulate, the prefab flows and the view state kept
@@ -65,7 +65,7 @@ export namespace editor
     class SceneEditorPage final : public app::UIEditorPage, public ISceneEditorPage
     {
     public:
-        static constexpr const char8_t* kPath = u8"Editor/Scene.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Scene.xml";
 
         /// What a page asks of the editor.
         struct Services

@@ -4,7 +4,7 @@
 // Editor::Materials - :page partition.
 //
 // MaterialEditorPage: edits a MaterialAsset. On the GUI from the preview pages' markup
-// (Data/Editor/PreviewPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 4): the material on
+// (Data/Editor/PreviewPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 4): the material on
 // a preview shape lit by a default sun and procedural sky (its clock running, so a shader that
 // moves with Time moves), beside its rows. The authored form IS the runtime source
 // (MaterialSource), so Save writes the object back and asks for a cook; every live proxy bound to
@@ -105,7 +105,7 @@ export namespace editor
     class MaterialEditorPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
+        static constexpr StringView kPath = u8"Editor/PreviewPage.xml";
         /// The shapes the preview shows the material on, in the bar's order.
         static constexpr StringView kShapes[] = {u8"Sphere", u8"Cube", u8"Plane", u8"Cylinder", u8"Torus", u8"Cone"};
 

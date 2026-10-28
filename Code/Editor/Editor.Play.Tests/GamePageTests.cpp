@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The Game tab from its markup (Data/Editor/Game.gml) on a headless host, no game running: the
+// The Game tab from its markup (Data/Editor/Game.xml) on a headless host, no game running: the
 // kit's transport (Play while stopped; Pause and Stop while it runs or waits; the state named;
 // a Play waiting for the cook said so and cancelled by Stop), the resolutions in the dropdown, the
 // phone kept with the project, and the debugger opened by its toggle.

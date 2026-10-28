@@ -4,7 +4,7 @@
 // Editor App - :asset_create_dialog partition
 //
 // Create Asset (Documentation/Specs/editor-gui.md, 5.2, layer 5): a window over its markup
-// (Data/Editor/AssetCreate.gml) that names a new asset and the group it goes in, for any type:
+// (Data/Editor/AssetCreate.xml) that names a new asset and the group it goes in, for any type:
 // it creates nothing itself, its owner does with what Create answers. The groups are a tree in it,
 // every one open, the group it starts in chosen and a click choosing another (the old dialog's);
 // the name is checked as it is typed (AssetNames, the rule Save
@@ -51,7 +51,7 @@ export namespace editor::app
     class AssetCreate
     {
     public:
-        static constexpr const char8_t* kPath = u8"Editor/AssetCreate.gml";
+        static constexpr const char8_t* kPath = u8"Editor/AssetCreate.xml";
         static constexpr f32 kWidth = 440.0f;
         static constexpr f32 kHeight = 420.0f;
 

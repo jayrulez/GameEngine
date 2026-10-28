@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - Preferences over its own markup (Data/Editor/Preferences.gml): its controls as the
+// Editor::App - Preferences over its own markup (Data/Editor/Preferences.xml): its controls as the
 // user's store has the look; each change shown at once; Save into the store and persisted; Cancel
 // or closing putting the look back as it was; the Shortcuts tab's edits staged, applied on Save
 // (a chord another action holds refused, named), Reset going back to the declaration's; the

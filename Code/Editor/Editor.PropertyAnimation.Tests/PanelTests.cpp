@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The property animation panel over its markup (Data/Editor/PropertyAnimationPanel.gml), a scratch
+// The property animation panel over its markup (Data/Editor/PropertyAnimationPanel.xml), a scratch
 // project and a scene, without a host (Documentation/Specs/editor-gui.md, 5.4, layer 9, part 2):
 // the state with no clip; a clip opened, an entity bound, a track added holding what the entity
 // shows; keying and removing the chosen tracks; the bar's Undo, Redo and Save the clip's alone; the

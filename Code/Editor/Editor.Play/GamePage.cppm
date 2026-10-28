@@ -12,7 +12,7 @@
 // EnsureCamera frames the origin when the scene ships none, like the player).
 //
 // On the GUI (Documentation/Specs/editor-gui.md, 5.3, layer 7, part 3), from its markup
-// (Data/Editor/Game.gml): the kit's transport (Restart, Play, Pause, Stop, the state named beside
+// (Data/Editor/Game.xml): the kit's transport (Restart, Play, Pause, Stop, the state named beside
 // them and the scene it runs, a Play waiting for the cook said so), the resolution and the phone,
 // the debugger's toggle; the game on GUI.Viewport, which keeps every key while it runs and has
 // the focus (Shift+F1 gives them back), the script debugger beside it.
@@ -92,7 +92,7 @@ export namespace editor
     namespace render = foundation::render;
     namespace script = foundation::script;
 
-    // The debugger panel beside the game (its markup in Game.gml): Continue, Step Into, Step
+    // The debugger panel beside the game (its markup in Game.xml): Continue, Step Into, Step
     // Over and Break; the call stack; the locals, an object's members one level under it. It
     // consumes ONLY the neutral IScriptDebugger and its snapshot types, so the same panel would
     // drive a remote debugger. The Game page rebuilds it from OnUpdate, never mid-script-dispatch.
@@ -176,7 +176,7 @@ export namespace editor
                                  public IGameRunPage
     {
     public:
-        static constexpr const char8_t* kPath = u8"Editor/Game.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Game.xml";
 
         /// What the tab asks of the editor.
         struct Services

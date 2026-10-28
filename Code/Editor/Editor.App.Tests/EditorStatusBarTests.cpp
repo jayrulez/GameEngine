@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - EditorStatusBar over the editor's own frame (Data/Editor/Shell.gml): the message
+// Editor::App - EditorStatusBar over the editor's own frame (Data/Editor/Shell.xml): the message
 // line; the job with its name, progress and count, a sweep when its length is unknown, hidden
 // when none runs; the agent hidden while there is none; a frame without the items skipped.
 #include <doctest/doctest.h>
@@ -20,7 +20,7 @@ namespace
 {
     RefPtr<gui::Node> LoadFrame()
     {
-        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), u8"Editor/Shell.gml");
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), u8"Editor/Shell.xml");
         Result<Array<byte>> bytes = ReadFile(path.AsView());
         REQUIRE(bytes.HasValue());
         gui::RegisterGuiElements();

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the Project page over its markup (Data/Editor/ProjectHome.gml): the project's
+// Editor::App tests - the Project page over its markup (Data/Editor/ProjectHome.xml): the project's
 // name, the scenes (the assets of the default-scene setting's type) as links that open them, every
 // reflected setting with its value (an asset by its name), the Game and Project menus' actions as
 // buttons, and a rebuild when the settings change.

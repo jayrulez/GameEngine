@@ -3,8 +3,8 @@
 
 // Editor::GUI - the `editor.gui` module: the editor's pages for the engine GUI's assets.
 //
-// GuiAssetEditorPage edits a `.gml` document or a `.css` sheet on the GUI from its markup
-// (Data/Editor/GuiPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 6, part 5), on the code
+// GuiAssetEditorPage edits a `.xml` document or a `.css` sheet on the GUI from its markup
+// (Data/Editor/GuiPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 6, part 5), on the code
 // pages' base (the source file, the shared XML or CSS colours, one history, the problems list): its
 // check is what the cook would report (the loader's and the parser's diagnostics), and beside the
 // code a live preview the RUNTIME context's GuiSubsystem draws into a viewport of the page
@@ -99,7 +99,7 @@ export namespace editor
     class GuiAssetEditorPage final : public app::CodeAssetPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/GuiPage.gml";
+        static constexpr StringView kPath = u8"Editor/GuiPage.xml";
 
         /// What the page edits: a document (its markup, previewed as it is) or a sheet (its CSS,
         /// previewed over markup of the page's own).

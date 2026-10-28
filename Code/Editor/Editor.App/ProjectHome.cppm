@@ -4,7 +4,7 @@
 // Editor::App - :project_home partition.
 //
 // ProjectHomeView: the Project panel with a project open (Documentation/Specs/editor-gui.md, 5.1,
-// layer 13). Its frame is markup (Data/Editor/ProjectHome.gml); it fills the project's picture,
+// layer 13). Its frame is markup (Data/Editor/ProjectHome.xml); it fills the project's picture,
 // name, engine and folder; a Start column (open the default scene, the Game menu's actions, every
 // scene in the project); and a Project column (every setting the project's settings reflect, by
 // category, each asset a link that opens it, then the Project menu's actions). Nothing here is a
@@ -39,7 +39,7 @@ export namespace editor::app
     {
     public:
         /// Its frame under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/ProjectHome.gml";
+        static constexpr const char8_t* kPath = u8"Editor/ProjectHome.xml";
 
         /// Over `context`'s project, its frame `content` (the markup's); `cook` (nullable) says
         /// when the project's assets changed.

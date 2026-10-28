@@ -4,7 +4,7 @@
 // Editor App - :import_dialog partition
 //
 // The import window (Documentation/Specs/editor-gui.md, 5.2, layer 7), over its markup
-// (Data/Editor/Import.gml): one window for one file or many, where the old editor had two. Where
+// (Data/Editor/Import.xml): one window for one file or many, where the old editor had two. Where
 // they go, a field that opens the group picker; the files, when there are several, each kept or
 // not, with its state (reading, ready, failed), one chosen; the chosen file's importer (a choice
 // when several take it), its options, and what it would create by kind, each kept or not and
@@ -35,7 +35,7 @@ export namespace editor::app
     {
     public:
         /// Its markup, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Import.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Import.xml";
 
         struct Services
         {

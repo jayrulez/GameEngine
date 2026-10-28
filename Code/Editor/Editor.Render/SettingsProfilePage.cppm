@@ -5,7 +5,7 @@
 //
 // SettingsProfilePage: edits a profile asset (an Environment Profile, a Post Process Profile; any
 // pipeline::SettingsProfileAsset). On the GUI from the preview pages' markup
-// (Data/Editor/PreviewPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 4): a preview
+// (Data/Editor/PreviewPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 4): a preview
 // rendered with the profile applied, beside the profile's values, the rows a scene's settings
 // show (its settings type's reflection; the block's own fields, its source and its profile, left
 // out, as they are a scene's). The preview is a built-in scene (a ground, spheres of a few
@@ -91,7 +91,7 @@ export namespace editor
     class SettingsProfilePage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
+        static constexpr StringView kPath = u8"Editor/PreviewPage.xml";
 
         SettingsProfilePage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~SettingsProfilePage() override;

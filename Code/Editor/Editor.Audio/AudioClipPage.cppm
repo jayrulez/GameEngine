@@ -4,7 +4,7 @@
 // Editor::Audio - the `editor.audio` module.
 //
 // AudioClipEditorPage: the audition page of an AudioClipAsset, on the GUI from its markup
-// (Data/Editor/AudioClipPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The clip's
+// (Data/Editor/AudioClipPage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The clip's
 // peak waveform (decoded from its source file, the bytes the cook writes through) with the kit's
 // transport over it: Play, Stop and Restart are the playback actions over the page, auditioned
 // through the RUNTIME context's AudioSubsystem (the game's engine, buses and voices, so what is
@@ -49,7 +49,7 @@ export namespace editor
     class AudioClipEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/AudioClipPage.gml";
+        static constexpr StringView kPath = u8"Editor/AudioClipPage.xml";
         static constexpr usize kPeakBuckets = 256;
 
         AudioClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);

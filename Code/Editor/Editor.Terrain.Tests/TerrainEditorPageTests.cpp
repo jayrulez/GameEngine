@@ -3,7 +3,7 @@
 
 // TerrainEditorPage tests: the cooked terrain's facts (pure), the TerrainAsset blob round-trips a
 // snapshot rides (versioned payload, so the top-K fields survive), and the page over its markup
-// (Data/Editor/PreviewPage.gml) and a scratch project without a host (no preview): its rows from
+// (Data/Editor/PreviewPage.xml) and a scratch project without a host (no preview): its rows from
 // the asset, each edit one undo step, layers added and removed, new splat weights made.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

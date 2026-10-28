@@ -4,7 +4,7 @@
 // Editor App - :picker partition
 //
 // The picker (Documentation/Specs/editor-gui.md, 5.2, layer 5; catalog 2.4): one for paths, groups
-// and components (an asset slot's is the asset picker, AssetPickerWindow), as the kit draws it (Data/Editor/Picker.gml). A search over the rows, which sit under
+// and components (an asset slot's is the asset picker, AssetPickerWindow), as the kit draws it (Data/Editor/Picker.xml). A search over the rows, which sit under
 // their sections in the order the owner gives them, favourites first in a section of their own; a
 // row shows its glyph (its category's tint), its name, what it is, a star when a favourite, and a
 // check on the current value. The current value is lit when it opens; Up and Down move the light
@@ -132,7 +132,7 @@ export namespace editor::app
     class Picker
     {
     public:
-        static constexpr const char8_t* kPath = u8"Editor/Picker.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Picker.xml";
         static constexpr StringView kFavourites = u8"Favourites";
 
         /// The picker in `content` (the markup's: `picker-search`, `picker-list`, `picker-state` and

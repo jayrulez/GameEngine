@@ -4,7 +4,7 @@
 // Editor::Vegetation - the `:mask_page` partition.
 //
 // VegetationMaskPage: a vegetation mask on the GUI from the image pages' markup
-// (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 7, part 2), new: no
+// (Data/Editor/ImagePage.xml; Documentation/Specs/editor-gui.md, 5.4, layer 7, part 2), new: no
 // editor had one, a mask opened on the generic page. A mask is where each vegetation layer that
 // places by Mask may grow, a density plane per layer; the page shows one plane at a time (chosen
 // on the picture's bar, in the channel's place: a plane is one value, not colours), none to full
@@ -36,7 +36,7 @@ export namespace editor
     class VegetationMaskPage final : public app::AssetObjectPage
     {
     public:
-        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
+        static constexpr StringView kPath = u8"Editor/ImagePage.xml";
 
         VegetationMaskPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 

@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The group picker, the rule a new asset's name keeps, and Create Asset over its markup
-// (Data/Editor/AssetCreate.gml): the groups in the tree's order, each by name and what holds it,
+// (Data/Editor/AssetCreate.xml): the groups in the tree's order, each by name and what holds it,
 // a key finding its group again; a name refused when empty, holding what a file cannot, spaced at
 // an end or taken, saying why; Create waiting while refused, the line under the name saying why
 // or what it makes, the group field picking another group, and Create answering the group and

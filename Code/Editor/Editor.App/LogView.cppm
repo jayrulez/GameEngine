@@ -4,7 +4,7 @@
 // Editor::App - :log_view partition.
 //
 // LogView: the Console panel (Documentation/Specs/editor-gui.md, 5.2, layer 1). Its frame is
-// markup (Data/Editor/Console.gml): a chip per level (Debug, holding the trace lines too, Info,
+// markup (Data/Editor/Console.xml): a chip per level (Debug, holding the trace lines too, Info,
 // Warnings, Errors, holding the fatal ones) with how many lines it holds, on showing them; a search matching anywhere in a
 // line ignoring case, cleared by its x; Clear; then the lines on a virtualised list, each its time
 // since the editor started and `[Category] message` in its level's colour. The newest line is
@@ -30,7 +30,7 @@ export namespace editor::app
     {
     public:
         /// Its frame, under the data root.
-        static constexpr const char8_t* kPath = u8"Editor/Console.gml";
+        static constexpr const char8_t* kPath = u8"Editor/Console.xml";
 
         /// The chips' levels: Debug holds trace and debug lines; Error holds fatal ones.
         enum class Bucket : u8

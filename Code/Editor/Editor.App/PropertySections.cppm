@@ -52,6 +52,9 @@ export namespace editor::app
             Release();
             NotifyPropertiesChanged();
         }
+        /// No sections, their sources not touched: for an owner whose sources may be gone already
+        /// (a page's own sources are a derived page's members, which die before its base).
+        void Abandon() { m_sections.Clear(); }
         [[nodiscard]] usize SectionCount() const noexcept { return m_sections.Size(); }
         /// Every row read only, every edit through it refused (a scene page while it simulates).
         void SetReadOnly(bool readOnly)

@@ -183,6 +183,10 @@ export namespace editor::app
         {
             if (m_grid != nullptr)
                 m_grid->SetSource(nullptr);
+            // The page's own sections' sources died with the derived page, before this runs: forget
+            // every section unasked (each source dies with the page, so none keeps a client in use).
+            if (m_sections)
+                m_sections->Abandon();
         }
         AssetObjectPage(const AssetObjectPage&) = delete;
         AssetObjectPage& operator=(const AssetObjectPage&) = delete;
@@ -326,7 +330,7 @@ export namespace editor::app
         }
 
         /// A section of the page's own (rows reflection does not show: a font's size ramp) after
-        /// the asset's and before the facts; `source` is the page's and outlives it.
+        /// the asset's and before the facts; `source` is the page's, dying with it.
         void AddSection(StringView key, StringView title, gui::IPropertySource& source)
         {
             m_own.PushBack(OwnSection{String(key), String(title), &source});

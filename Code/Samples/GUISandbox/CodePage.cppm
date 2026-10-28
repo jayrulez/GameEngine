@@ -6,7 +6,7 @@
 // after each edit without running it (IScriptManager::Check), its errors the editor's diagnostics;
 // a click in the gutter sets a breakpoint; completion and hover from the surface the script
 // backend bound (DescribeBoundApi) and the language's words; and a shader beside it. The
-// languages are the editor's too (Data/Assets/code), read through the XML serialization.
+// languages are the editor's too (Data/Editor/Code), read through the XML serialization.
 
 module;
 #include "Core/Prelude.h"
@@ -42,7 +42,7 @@ export namespace sandbox
                 m_api = m_scripts->DescribeBoundApi();
         }
 
-        /// Reads a language definition (the XML of one of Data/Assets/code's files).
+        /// Reads a language definition (the XML of one of Data/Editor/Code's files).
         [[nodiscard]] bool ReadLanguage(StringView text, gui::CodeLanguage& out)
         {
             xml::XmlDocument doc(m_allocator);

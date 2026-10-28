@@ -4,7 +4,7 @@
 // Editor App - :code_languages partition
 //
 // CodeLanguages: the code editors' languages by id, for the code pages (Documentation/Specs/
-// editor-gui.md, 5.4, layer 6, part 1). A language is a data file of Data/Assets/code, one for the
+// editor-gui.md, 5.4, layer 6, part 1). A language is a data file of Data/Editor/Code, one for the
 // editor and the GUI sandbox alike (the user's choice, 2026-10-26), named by its id and read through
 // the XML serialization the first time a page asks for it (a script asset's language, "hlsl", "css");
 // so no list of languages is written anywhere, and one added is a file. The editor's application owns
@@ -29,7 +29,7 @@ export namespace editor::app
     {
     public:
         /// Where the languages are, under the data root: <id>.xml each.
-        static constexpr StringView kFolder = u8"Assets/code/";
+        static constexpr StringView kFolder = u8"Editor/Code/";
 
         /// `read` gives a file's text by its path under the data root (false: it is not there).
         CodeLanguages(IAllocator& allocator, Function<bool(StringView path, String& out)> read)

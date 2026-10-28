@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the code languages: each of the shared definitions (Data/Assets/code) read by
+// Editor::App tests - the code languages: each of the shared definitions (Data/Editor/Code) read by
 // its id the first time it is asked for and kept, one with no file none (and not read again).
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"

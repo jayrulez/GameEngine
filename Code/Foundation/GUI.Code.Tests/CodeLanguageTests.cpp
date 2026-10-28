@@ -231,7 +231,7 @@ TEST_CASE("code editor: keeps each line's tokens, tokenizing again only what cha
 
 namespace
 {
-    // One of the shared definitions (Data/Assets/code), read as the sandbox and the editor read it.
+    // One of the shared definitions (Data/Editor/Code), read as the sandbox and the editor read it.
     bool LoadSharedLanguage(const char* id, CodeLanguage& out)
     {
         std::ifstream file(std::string(GUI_CODE_LANGUAGES) + "/" + id + ".xml", std::ios::binary);

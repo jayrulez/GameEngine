@@ -1160,7 +1160,7 @@ void GUISandbox::FillNativeHosts()
     if (auto* editor = Cast<gui::CodeEditor>(FindById(*m_shellNode, u8"code-script")))
     {
         const String dir = Format(u8"{}code/", kSandboxDir); // the sandbox's samples
-        const StringView languages = u8"Assets/code/";      // the languages, the editor's too
+        const StringView languages = u8"Editor/Code/";      // the languages, the editor's too
         m_code = MakeUnique<sandbox::CodePage>(AppRoot(), AppRoot(), m_scripts.Get());
         m_code->AttachScript(*editor, ReadText(Format(u8"{}angelscript.xml", languages).AsView()).AsView(),
                              ReadText(Format(u8"{}sample.as", dir).AsView()).AsView(),

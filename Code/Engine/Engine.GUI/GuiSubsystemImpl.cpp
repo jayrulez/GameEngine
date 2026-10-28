@@ -48,6 +48,7 @@ import foundation.vg.renderer;     // VGPassTargets: a texture's multisampled pa
 
 using namespace foundation::core;
 using namespace foundation::gui;
+namespace rhi = foundation::rhi; // the interface's alias is its own: MSVC does not carry it here
 
 namespace engine::gui
 {

@@ -184,7 +184,7 @@ namespace editor
         i32 chosen = -1;
         for (const BusRow& row : m_rows)
         {
-            const i32 parent = row.depth > 0 && static_cast<usize>(row.depth - 1) < parents.Size() ? parents[static_cast<usize>(row.depth - 1)] : gui::TreeModel::kRoot;
+            const i32 parent = row.depth > 0 && static_cast<usize>(row.depth - 1) < parents.Size() ? parents[static_cast<usize>(row.depth - 1)] : gui::kTreeModelRoot;
             const i32 node = m_model->AddNode(parent, row.name.AsView());
             m_model->SetIcon(node, u8"Editor/Icons/speaker.svg");
             while (parents.Size() > static_cast<usize>(row.depth))

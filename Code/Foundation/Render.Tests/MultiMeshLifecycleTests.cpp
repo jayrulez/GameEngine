@@ -112,7 +112,7 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
     ExtractedScene partial{DefaultAllocator()};
     AddSet(partial, 0x22u, cube.Get(), material.Get(), Span<const Float4x4>{transforms.Data(), 3},
            renderer.RendererId());
-    for (u32 f = 0; f < MeshRenderer::kMultiMeshEvictFrames; ++f)
+    for (u32 f = 0; f < kMeshRendererMultiMeshEvictFrames; ++f)
     {
         renderer.PrepareFrame(2, f % 2);
         UploadOne(renderer, partial);
@@ -126,7 +126,7 @@ TEST_CASE("multimesh: a set unseen for kMultiMeshEvictFrames leaves the pool, re
 
     // An empty frame still ages: the survivor goes too once unseen long enough.
     ExtractedScene empty{DefaultAllocator()};
-    for (u32 f = 0; f <= MeshRenderer::kMultiMeshEvictFrames; ++f)
+    for (u32 f = 0; f <= kMeshRendererMultiMeshEvictFrames; ++f)
     {
         renderer.PrepareFrame(2, f % 2);
         UploadOne(renderer, empty);

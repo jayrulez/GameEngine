@@ -168,7 +168,7 @@ TEST_CASE("TimeRuler: its labelled ticks are at least the spacing apart and cove
         CHECK(tick.Offset <= 500.0f + 0.01f);
         if (!tick.Major)
             continue;
-        CHECK(tick.Offset - lastMajor >= TimeRuler::kMinLabelSpacing - 0.01f);
+        CHECK(tick.Offset - lastMajor >= kTimeRulerMinLabelSpacing - 0.01f);
         lastMajor = tick.Offset;
         ++majors;
     }

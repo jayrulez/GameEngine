@@ -25,6 +25,10 @@ using namespace foundation::core;
 
 export namespace editor
 {
+    /// EditorCamera::kStraightPitch, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kEditorCameraStraightPitch = 1.5707963f;
+
     struct EditorCamera
     {
         Float3 position{6.0f, 5.0f, 10.0f};
@@ -180,7 +184,7 @@ export namespace editor
         /// Whether the view is orthographic because a snap made it so (and turning away undoes it).
         [[nodiscard]] bool IsOrthographicFromSnap() const noexcept { return m_orthographicFromSnap; }
 
-        static constexpr f32 kStraightPitch = 1.5707963f; // straight down or up
+        static constexpr f32 kStraightPitch = kEditorCameraStraightPitch; // straight down or up
         static constexpr f32 kLookPitch = 1.55f;          // the mouse-look limit
 
         /// Frame a sphere in a view of vertical field of view `viewFovY` (radians): keep the view

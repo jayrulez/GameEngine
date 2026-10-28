@@ -55,6 +55,10 @@ export namespace foundation::physics
         Heightfield // appended: keeps existing wire values stable
     };
 
+    /// ShapeDesc::kNoCollisionHeight, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kShapeDescNoCollisionHeight = 3.402823466e38f;
+
     // One shape (a body carries one or more; >1 = compound).
     struct ShapeDesc
     {
@@ -90,7 +94,7 @@ export namespace foundation::physics
         Float2 heightWorldSize{0.0f, 0.0f};
         /// A height sample with NO surface (Jolt's cNoCollisionValue, FLT_MAX): every triangle
         /// touching it is not collidable - the terrain holes rule (Specs/terrain-holes.md).
-        static constexpr f32 kNoCollisionHeight = 3.402823466e38f;
+        static constexpr f32 kNoCollisionHeight = kShapeDescNoCollisionHeight;
     };
 
     struct BodyDesc

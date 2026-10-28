@@ -224,7 +224,7 @@ namespace editor
             }
             if (!m_search.IsEmpty() && shown.IsEmpty() && !set.name.AsView().ContainsIgnoreCase(m_search.AsView()))
                 continue;
-            const i32 setNode = m_model->AddNode(gui::TreeModel::kRoot, set.name.AsView());
+            const i32 setNode = m_model->AddNode(gui::kTreeModelRoot, set.name.AsView());
             m_model->SetIcon(setNode, u8"Editor/Icons/Types/InputMapAsset.svg", u8"cat-scripting");
             m_rows.PushBack(TreeRow{static_cast<i32>(s), -1});
             if (m_chosen.set == static_cast<i32>(s) && m_chosen.action < 0)

@@ -1241,19 +1241,19 @@ TEST_CASE("extract: a light's shadow controls reach the shadow it casts")
     const DirectionalShadow& ds = out.DirectionalShadowData();
     REQUIRE(ds.valid);
     CHECK(Near(ds.normalBias, 1.5f));
-    CHECK(Near(ds.depthBias, ShadowBiasDefaults::kDepthBias * 2.0f)); // a scale of the default
+    CHECK(Near(ds.depthBias, kShadowBiasDefaultsDepthBias * 2.0f)); // a scale of the default
     CHECK(Near(ds.strength, 0.4f));
     REQUIRE(out.Lights().Size() == 2u);
     CHECK(Near(out.Lights()[0].shadowStrength, 0.4f)); // the forward shader's per-light lerp
     CHECK(Near(out.Lights()[1].shadowStrength, 1.0f)); // the default: a full shadow
     REQUIRE(out.LocalShadowCasters().Size() == 1u);
     CHECK(Near(out.LocalShadowCasters()[0].normalBias, 0.5f));
-    CHECK(Near(out.LocalShadowCasters()[0].depthBias, ShadowBiasDefaults::kLocalDepthBias * 3.0f));
+    CHECK(Near(out.LocalShadowCasters()[0].depthBias, kShadowBiasDefaultsLocalDepthBias * 3.0f));
 
     // A built atlas entry carries them: the depth bias as is, the normal offset as world units per
     // unit of distance (its texels times the tile's texel size at distance 1).
     const GpuLocalShadow entry = BuildSpotShadow(out.LocalShadowCasters()[0], 0, 2048, 512);
-    CHECK(Near(entry.depthBias, ShadowBiasDefaults::kLocalDepthBias * 3.0f));
+    CHECK(Near(entry.depthBias, kShadowBiasDefaultsLocalDepthBias * 3.0f));
     const f32 fov = Min(spot.outerAngle * 2.0f + 0.05f, 3.0f);
     CHECK(Abs(entry.normalBiasPerDistance - 0.5f * 2.0f * Tan(fov * 0.5f) / 512.0f) < 1e-6f);
 }
@@ -1842,7 +1842,7 @@ TEST_CASE("render: an orthographic view's cascades cover its box from the near p
     for (const f32 depth : depths)
     {
         u32 c = 0;
-        while (c + 1 < ShadowCascades::kCount && cascades.splitFar[c] < depth)
+        while (c + 1 < kShadowCascadesCount && cascades.splitFar[c] < depth)
         {
             ++c;
         }

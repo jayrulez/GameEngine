@@ -23,11 +23,15 @@ using namespace foundation::core;
 
 export namespace foundation::profiler
 {
+    /// ProfileRecording::kSettleFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kProfileRecordingSettleFrames = 4;
+
     class ProfileRecording final : public IProfileSource
     {
     public:
         static constexpr u32 kDefaultCapacity = 3600; // a minute at 60 fps
-        static constexpr u32 kSettleFrames = 4;       // frames in flight before a frame's GPU passes land
+        static constexpr u32 kSettleFrames = kProfileRecordingSettleFrames;       // frames in flight before a frame's GPU passes land
 
         explicit ProfileRecording(IAllocator& allocator, u32 capacity = kDefaultCapacity)
             : m_allocator(&allocator), m_frames(allocator), m_names(allocator), m_threads(allocator),

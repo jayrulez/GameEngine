@@ -231,7 +231,7 @@ TEST_CASE("ProfileTimeline: a click on a lane's arrow folds it to one row of its
     CHECK(bed.timeline->IsFolded(0));
     const Span<const ProfileTimeline::Lane> lanes = bed.timeline->Lanes();
     CHECK(lanes[0].folded);
-    CHECK(lanes[0].height == doctest::Approx(ProfileTimeline::kRowHeight));
+    CHECK(lanes[0].height == doctest::Approx(kProfileTimelineRowHeight));
     CHECK(lanes[1].y == doctest::Approx(66.0f));
     CHECK(bed.BarOf(bed.physics) == nullptr);
     CHECK(bed.BarOf(bed.update) != nullptr);

@@ -37,16 +37,16 @@ TEST_CASE("view gizmo: the knobs sit where the axes point for the camera, drawn 
     const editor::ViewGizmoLayout layout =
         editor::ViewGizmo::LayoutFor(cam.Right(), cam.Up(), cam.Forward(), 1000.0f);
     CHECK(layout.center.x < 1000.0f);
-    CHECK(layout.center.x > 1000.0f - 2.0f * editor::ViewGizmo::kArm - editor::ViewGizmo::kKnob -
-                                editor::ViewGizmo::kMargin - 1.0f);
+    CHECK(layout.center.x > 1000.0f - 2.0f * editor::kViewGizmoArm - editor::kViewGizmoKnob -
+                                editor::kViewGizmoMargin - 1.0f);
 
     const editor::ViewGizmoPole* x = PoleOf(layout, Float3{1, 0, 0});
     const editor::ViewGizmoPole* y = PoleOf(layout, Float3{0, 1, 0});
     REQUIRE(x != nullptr);
     REQUIRE(y != nullptr);
-    CHECK(Near(x->screen.x, layout.center.x + editor::ViewGizmo::kArm)); // right of the centre
+    CHECK(Near(x->screen.x, layout.center.x + editor::kViewGizmoArm)); // right of the centre
     CHECK(Near(x->screen.y, layout.center.y));
-    CHECK(Near(y->screen.y, layout.center.y - editor::ViewGizmo::kArm)); // above (screen y runs down)
+    CHECK(Near(y->screen.y, layout.center.y - editor::kViewGizmoArm)); // above (screen y runs down)
 
     // -Z points away from the viewer (drawn first), +Z toward it (drawn last, over the rest).
     CHECK(Near(layout.poles[0].axis.z, -1.0f));
@@ -62,7 +62,7 @@ TEST_CASE("view gizmo: the knobs sit where the axes point for the camera, drawn 
         editor::ViewGizmo::LayoutFor(cam.Right(), cam.Up(), cam.Forward(), 1000.0f);
     const editor::ViewGizmoPole* z = PoleOf(turned, Float3{0, 0, 1});
     REQUIRE(z != nullptr);
-    CHECK(Near(z->screen.x, turned.center.x - editor::ViewGizmo::kArm));
+    CHECK(Near(z->screen.x, turned.center.x - editor::kViewGizmoArm));
 }
 
 TEST_CASE("view gizmo: a click lands on the front-most knob under it, and nowhere else")
@@ -84,8 +84,8 @@ TEST_CASE("view gizmo: a click lands on the front-most knob under it, and nowher
     CHECK(Near(layout.poles[onCentre].axis.z, 1.0f));
 
     // Between knobs, and far from the gizmo: nothing.
-    CHECK(editor::ViewGizmo::Hit(layout, layout.center.x + 0.5f * editor::ViewGizmo::kArm,
-                                 layout.center.y - 0.5f * editor::ViewGizmo::kArm) == -1);
+    CHECK(editor::ViewGizmo::Hit(layout, layout.center.x + 0.5f * editor::kViewGizmoArm,
+                                 layout.center.y - 0.5f * editor::kViewGizmoArm) == -1);
     CHECK(editor::ViewGizmo::Hit(layout, 10.0f, 500.0f) == -1);
 }
 
@@ -120,9 +120,9 @@ TEST_CASE("view gizmo: a knob snaps the camera to look along its axis, about the
     f32 pitch = 0.0f;
     editor::ViewGizmo::SnapAngles(Float3{0, 1, 0}, 0.7f, yaw, pitch);
     CHECK(Near(yaw, 0.7f));
-    CHECK(Near(pitch, -editor::ViewGizmo::kStraightPitch));
+    CHECK(Near(pitch, -editor::kViewGizmoStraightPitch));
     editor::ViewGizmo::SnapAngles(Float3{0, -1, 0}, 0.7f, yaw, pitch);
-    CHECK(Near(pitch, editor::ViewGizmo::kStraightPitch));
+    CHECK(Near(pitch, editor::kViewGizmoStraightPitch));
 }
 
 TEST_CASE("view gizmo: knobs are labelled by axis, coloured by axis, the negatives dimmer")

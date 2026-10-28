@@ -318,7 +318,7 @@ TEST_CASE("selector: the ancestor keys come from compounds a child or descendant
     CHECK(has(siblingOfParent, u8"box"));
     CHECK_FALSE(has(siblingOfParent, u8"panel")); // only a sibling of an ancestor
 
-    CHECK(StyleSelector(core::StringView(u8".a.b .c.d .e .f")).AncestorKeys().Size() == StyleSelector::kAncestorKeys);
+    CHECK(StyleSelector(core::StringView(u8".a.b .c.d .e .f")).AncestorKeys().Size() == kStyleSelectorAncestorKeys);
     CHECK(StyleSelector(core::StringView(u8"button:hover")).AncestorKeys().Size() == 0);
 }
 

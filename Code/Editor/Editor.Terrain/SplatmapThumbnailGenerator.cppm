@@ -117,7 +117,7 @@ export namespace editor
                 {196, 186, 74},  // gold
             };
 
-            constexpr u32 kTile = editor::ThumbnailService::kThumbnailSize;
+            constexpr u32 kTile = editor::kThumbnailServiceThumbnailSize;
             out = image::Image(kTile, kTile, image::PixelFormat::RGBA8);
             Span<u8> dst = out.PixelDataMut();
             for (u32 y = 0; y < kTile; ++y)

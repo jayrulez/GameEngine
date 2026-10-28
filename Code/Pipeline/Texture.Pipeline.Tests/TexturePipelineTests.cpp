@@ -1164,7 +1164,7 @@ TEST_CASE("texture.pipeline: a render texture asset cooks to a record its factor
     // A side past the limit is refused at the cook, not at the first frame.
     auto* huge = db.RootGroup()->CreateInstance(u8"huge", RenderTextureResource::StaticType());
     RenderTextureAsset tooBig;
-    tooBig.width = RenderTextureResource::kMaxSize * 2;
+    tooBig.width = kRenderTextureResourceMaxSize * 2;
     {
         pipeline::AssetBuildContext ctx{DefaultAllocator()};
         ctx.output = huge;

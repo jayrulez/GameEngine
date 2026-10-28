@@ -339,7 +339,7 @@ export namespace engine::render
         // spaces), the normal offset in shadow texels (what keeps a wall the light grazes from
         // shadowing itself), and how dark the shadow gets (1 = full, 0 = none).
         f32 shadowDepthBiasScale = 1.0f;
-        f32 shadowNormalBias = foundation::render::ShadowBiasDefaults::kNormalBias;
+        f32 shadowNormalBias = foundation::render::kShadowBiasDefaultsNormalBias;
         f32 shadowStrength = 1.0f;
     };
 

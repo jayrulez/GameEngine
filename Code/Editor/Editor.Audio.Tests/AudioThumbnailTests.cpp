@@ -55,7 +55,7 @@ TEST_CASE("audio thumbnail waveform tracks the clip's envelope")
     editor::AudioClipThumbnailGenerator generator;
     image::Image tile;
     REQUIRE(generator.Generate(Span<const byte>(wav.Data(), wav.Size()), tile).IsOk());
-    REQUIRE(tile.Width() == editor::ThumbnailService::kThumbnailSize);
+    REQUIRE(tile.Width() == editor::kThumbnailServiceThumbnailSize);
 
     CHECK(BarHeight(tile, 64) > 80);  // loud middle fills most of the strip
     CHECK(BarHeight(tile, 4) <= 4);   // silent edges keep the survival midline only

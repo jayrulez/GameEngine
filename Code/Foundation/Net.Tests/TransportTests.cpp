@@ -47,7 +47,7 @@ TEST_CASE("transport: both sides see Connected on link creation")
     REQUIRE(b.Size() == 1u);
     CHECK(a[0].kind == net::NetEventKind::Connected);
     CHECK(b[0].kind == net::NetEventKind::Connected);
-    CHECK(a[0].peer == net::LoopbackLink::kRemotePeer);
+    CHECK(a[0].peer == net::kLoopbackLinkRemotePeer);
 }
 
 TEST_CASE("transport: a reliable message arrives after the latency, not before")
@@ -59,7 +59,7 @@ TEST_CASE("transport: a reliable message arrives after the latency, not before")
     (void)Drain(link.B()); // clear Connected
 
     const Array<byte> msg = Bytes({0xDE, 0xAD, 0xBE, 0xEF});
-    link.A().Send(net::LoopbackLink::kRemotePeer, 0, msg.AsSpan(),
+    link.A().Send(net::kLoopbackLinkRemotePeer, 0, msg.AsSpan(),
                   net::Reliability::ReliableOrdered);
 
     link.Advance(30.0f); // not yet
@@ -83,7 +83,7 @@ TEST_CASE("transport: reliable channel is never dropped, even at 100% loss")
 
     for (int i = 0; i < 10; ++i)
     {
-        link.A().Send(net::LoopbackLink::kRemotePeer, 0, Bytes({static_cast<u8>(i)}).AsSpan(),
+        link.A().Send(net::kLoopbackLinkRemotePeer, 0, Bytes({static_cast<u8>(i)}).AsSpan(),
                       net::Reliability::ReliableOrdered);
     }
     link.Advance(1.0f);
@@ -101,7 +101,7 @@ TEST_CASE("transport: unreliable channel drops packets under loss (deterministic
 
     for (int i = 0; i < 100; ++i)
     {
-        link.A().Send(net::LoopbackLink::kRemotePeer, 0, Bytes({static_cast<u8>(i)}).AsSpan(),
+        link.A().Send(net::kLoopbackLinkRemotePeer, 0, Bytes({static_cast<u8>(i)}).AsSpan(),
                       net::Reliability::Unreliable);
     }
     link.Advance(1.0f);
@@ -115,7 +115,7 @@ TEST_CASE("transport: unreliable channel drops packets under loss (deterministic
     (void)Drain(link2.B());
     for (int i = 0; i < 100; ++i)
     {
-        link2.A().Send(net::LoopbackLink::kRemotePeer, 0, Bytes({static_cast<u8>(i)}).AsSpan(),
+        link2.A().Send(net::kLoopbackLinkRemotePeer, 0, Bytes({static_cast<u8>(i)}).AsSpan(),
                        net::Reliability::Unreliable);
     }
     link2.Advance(1.0f);
@@ -134,7 +134,7 @@ TEST_CASE("transport: reorder produces out-of-order delivery on unreliable chann
 
     for (u8 i = 0; i < 8; ++i)
     {
-        link.A().Send(net::LoopbackLink::kRemotePeer, 0, Bytes({i}).AsSpan(),
+        link.A().Send(net::kLoopbackLinkRemotePeer, 0, Bytes({i}).AsSpan(),
                       net::Reliability::Unreliable);
     }
     link.Advance(1000.0f); // deliver everything
@@ -165,7 +165,7 @@ TEST_CASE("transport: reliable channel stays in order despite reorder settings")
 
     for (u8 i = 0; i < 8; ++i)
     {
-        link.A().Send(net::LoopbackLink::kRemotePeer, 0, Bytes({i}).AsSpan(),
+        link.A().Send(net::kLoopbackLinkRemotePeer, 0, Bytes({i}).AsSpan(),
                       net::Reliability::ReliableOrdered);
     }
     link.Advance(1000.0f);
@@ -182,7 +182,7 @@ TEST_CASE("transport: Disconnect delivers a Disconnected event to the peer")
     net::LoopbackLink link;
     (void)Drain(link.A());
     (void)Drain(link.B());
-    link.A().Disconnect(net::LoopbackLink::kRemotePeer);
+    link.A().Disconnect(net::kLoopbackLinkRemotePeer);
     Array<net::NetEvent> got = Drain(link.B());
     REQUIRE(got.Size() == 1u);
     CHECK(got[0].kind == net::NetEventKind::Disconnected);
@@ -195,7 +195,7 @@ TEST_CASE("transport: Update on an endpoint advances the shared clock")
     net::LoopbackLink link(sim);
     (void)Drain(link.A());
     (void)Drain(link.B());
-    link.A().Send(net::LoopbackLink::kRemotePeer, 0, Bytes({1}).AsSpan(),
+    link.A().Send(net::kLoopbackLinkRemotePeer, 0, Bytes({1}).AsSpan(),
                   net::Reliability::ReliableOrdered);
     link.B().Update(15.0f); // driving time from either endpoint works
     CHECK(Drain(link.B()).Size() == 1u);

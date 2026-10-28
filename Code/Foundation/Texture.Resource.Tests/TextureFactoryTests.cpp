@@ -159,7 +159,7 @@ TEST_CASE("texture.factory: a cooked RenderTextureResource is a texture a camera
 
     RenderTextureResource limits;
     CHECK(limits.IsValid()); // the defaults: 256x256 LDR
-    limits.width = RenderTextureResource::kMaxSize + 1;
+    limits.width = kRenderTextureResourceMaxSize + 1;
     CHECK_FALSE(limits.IsValid());
     limits.width = 64;
     limits.format = rhi::TextureFormat::Depth32Float; // a camera renders colour

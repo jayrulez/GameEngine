@@ -85,5 +85,5 @@ TEST_CASE("event bus: a runaway emit loop is bounded (Drain terminates, never ha
     bus.Publish(StringHash(u8"loop"), Variant{});
     bus.Drain(); // must terminate at the pass cap, not spin
     CHECK(calls >= 1);
-    CHECK(calls <= static_cast<int>(EventBus::kMaxDrainPasses)); // capped, not infinite
+    CHECK(calls <= static_cast<int>(kEventBusMaxDrainPasses)); // capped, not infinite
 }

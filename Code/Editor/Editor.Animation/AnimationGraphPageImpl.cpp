@@ -875,14 +875,14 @@ namespace editor
         m_layerModel->Clear();
         for (const animation::GraphLayerData& layer : graph->source.layers)
         {
-            const i32 node = m_layerModel->AddNode(gui::TreeModel::kRoot, layer.name.IsEmpty() ? StringView(u8"Layer") : layer.name.AsView());
+            const i32 node = m_layerModel->AddNode(gui::kTreeModelRoot, layer.name.IsEmpty() ? StringView(u8"Layer") : layer.name.AsView());
             m_layerModel->SetIcon(node, u8"Editor/Icons/layers.svg");
         }
         m_parameterModel->Clear();
         for (usize p = 0; p < graph->source.paramNames.Size(); ++p)
         {
             const u8 type = p < graph->source.paramTypes.Size() ? graph->source.paramTypes[p] : 0;
-            (void)m_parameterModel->AddNode(gui::TreeModel::kRoot, Format(u8"{}   {}", graph->source.paramNames[p], kParameterTypes[Min<u8>(type, 3)]).AsView());
+            (void)m_parameterModel->AddNode(gui::kTreeModelRoot, Format(u8"{}   {}", graph->source.paramNames[p], kParameterTypes[Min<u8>(type, 3)]).AsView());
         }
         if (m_layerTree != nullptr)
         {

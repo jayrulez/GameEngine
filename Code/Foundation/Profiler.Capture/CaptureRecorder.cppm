@@ -60,11 +60,15 @@ export namespace foundation::profiler
         return streamPath;
     }
 
+    /// CaptureRecorder::kGpuGraceFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kCaptureRecorderGpuGraceFrames = 4;
+
     class CaptureRecorder
     {
     public:
         /// Frames waited after the time is up, for the last frames' GPU passes (frames in flight).
-        static constexpr u32 kGpuGraceFrames = 4;
+        static constexpr u32 kGpuGraceFrames = kCaptureRecorderGpuGraceFrames;
 
         /// The process's recorder (the key, the flag and the tools share it). NON-inline
         /// (ProfilerCaptureImpl.cpp): one per process across shared libraries.

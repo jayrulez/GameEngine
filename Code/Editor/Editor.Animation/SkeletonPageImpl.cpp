@@ -208,7 +208,7 @@ namespace editor
         {
             const i32 parent = m_skeleton->GetBone(b)->parentIndex;
             if ((parent < 0 || parent >= count) && kept[static_cast<usize>(b)])
-                add(b, gui::TreeModel::kRoot);
+                add(b, gui::kTreeModelRoot);
         }
         if (m_tree != nullptr)
         {

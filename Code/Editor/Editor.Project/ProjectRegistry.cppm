@@ -58,13 +58,17 @@ export namespace editor
         ar.EndObject();
     }
 
+    /// RecentProjectsSettings::kMaxEntries, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr ENGINE_EXPORT_DATA usize kRecentProjectsSettingsMaxEntries = 20;
+
     // The registry section (user-level settings store). Most recent FIRST.
     class RecentProjectsSettings final : public ISerializable
     {
         RTTI_OBJECT(RecentProjectsSettings, ISerializable)
     public:
         // ENGINE_EXPORT_DATA: odr-used from another library (shared-libraries.md P5/W1).
-        static constexpr ENGINE_EXPORT_DATA usize kMaxEntries = 20;
+        static constexpr ENGINE_EXPORT_DATA usize kMaxEntries = kRecentProjectsSettingsMaxEntries;
 
         Array<RecentProjectEntry> entries;
         // The launcher shows the projects as a grid of their pictures, else as a list.

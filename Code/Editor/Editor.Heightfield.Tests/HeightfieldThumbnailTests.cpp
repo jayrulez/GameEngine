@@ -50,7 +50,7 @@ TEST_CASE("heightfield thumbnail normalizes a low-relief gradient to the full ra
     editor::HeightfieldThumbnailGenerator generator;
     image::Image tile;
     REQUIRE(generator.Generate(Span<const byte>(payload.Data(), payload.Size()), tile).IsOk());
-    REQUIRE(tile.Width() == editor::ThumbnailService::kThumbnailSize);
+    REQUIRE(tile.Width() == editor::kThumbnailServiceThumbnailSize);
     Span<const u8> px = tile.PixelData();
     const usize lastRow =
         (static_cast<usize>(tile.Height() - 1) * tile.Width()) * 4;

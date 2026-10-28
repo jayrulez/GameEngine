@@ -59,7 +59,7 @@ export namespace editor
 
         [[nodiscard]] Status Generate(Span<const byte> payload, image::Image& out) override
         {
-            constexpr u32 kTile = editor::ThumbnailService::kThumbnailSize;
+            constexpr u32 kTile = editor::kThumbnailServiceThumbnailSize;
             Array<f32> peaks;
             if (!audio::BuildWaveformPeaks(Span<const byte>(payload.Data(), payload.Size()),
                                            kTile, peaks) ||

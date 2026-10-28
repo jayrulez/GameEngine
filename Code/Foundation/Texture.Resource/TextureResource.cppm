@@ -71,13 +71,17 @@ export namespace foundation::texture
         }
     };
 
+    /// RenderTextureResource::kMaxSize, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kRenderTextureResourceMaxSize = 4096;
+
     // Cooked render-texture record: a texture a camera renders into, with no pixels of its own.
     // Its product is an ordinary Texture, so whatever samples a texture samples this one.
     class RenderTextureResource final : public ISerializable
     {
         RTTI_OBJECT(RenderTextureResource, ISerializable)
     public:
-        static constexpr u32 kMaxSize = 4096;
+        static constexpr u32 kMaxSize = kRenderTextureResourceMaxSize;
 
         u32 width = 256;
         u32 height = 256;

@@ -701,7 +701,7 @@ namespace engine::render
                     ds.direction = g.directionWS;
                     ds.valid = true;
                     ds.normalBias = lc.shadowNormalBias;
-                    ds.depthBias = ShadowBiasDefaults::kDepthBias * lc.shadowDepthBiasScale;
+                    ds.depthBias = kShadowBiasDefaultsDepthBias * lc.shadowDepthBiasScale;
                     ds.strength = lc.shadowStrength;
                     out.SetDirectionalShadow(ds);
                 }
@@ -717,7 +717,7 @@ namespace engine::render
                     c.caster.outerAngle = lc.outerAngle;
                     c.caster.isStatic = (lc.shadowUpdate == ShadowUpdateMode::Static);
                     c.caster.normalBias = lc.shadowNormalBias;
-                    c.caster.depthBias = ShadowBiasDefaults::kLocalDepthBias * lc.shadowDepthBiasScale;
+                    c.caster.depthBias = kShadowBiasDefaultsLocalDepthBias * lc.shadowDepthBiasScale;
                     if (out.HasViewOrigin())
                     {
                         c.distance = Length(g.positionWS - out.ViewOrigin());

@@ -1359,14 +1359,14 @@ void GUISandbox::FillNativeHosts()
     if (gui::Node* host = FindById(*m_shellNode, u8"views-tree"))
     {
         m_treeModel = MakeUnique<gui::TreeModel>(AppRoot());
-        const i32 code = m_treeModel->AddNode(gui::TreeModel::kRoot, u8"Code");
+        const i32 code = m_treeModel->AddNode(gui::kTreeModelRoot, u8"Code");
         const i32 experimental = m_treeModel->AddNode(code, u8"Experimental");
         m_treeModel->AddNode(experimental, u8"GUI");
         m_treeModel->AddNode(experimental, u8"GUI.Sandbox");
         const i32 foundation = m_treeModel->AddNode(code, u8"Foundation");
         m_treeModel->AddNode(foundation, u8"VG");
         m_treeModel->AddNode(foundation, u8"Script");
-        const i32 data = m_treeModel->AddNode(gui::TreeModel::kRoot, u8"Data");
+        const i32 data = m_treeModel->AddNode(gui::kTreeModelRoot, u8"Data");
         m_treeModel->AddNode(data, u8"Assets");
         auto tree = MakeRef<gui::TreeView>(AppRoot());
         tree->SetSize(Float2{320.0f, 180.0f});

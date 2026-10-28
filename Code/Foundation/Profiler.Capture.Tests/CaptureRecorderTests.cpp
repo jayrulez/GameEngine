@@ -40,7 +40,7 @@ TEST_CASE("capture recorder: a capture becomes a stream file and a Chrome trace,
         ++frames;
     }
     REQUIRE(written);
-    CHECK(frames == u32{CaptureRecorder::kGpuGraceFrames}); // the time was up at once; then the grace
+    CHECK(frames == u32{kCaptureRecorderGpuGraceFrames}); // the time was up at once; then the grace
     CHECK_FALSE(p.Armed());
     CHECK_FALSE(recorder.Capturing());
     REQUIRE_FALSE(recorder.LastCapture().IsEmpty());

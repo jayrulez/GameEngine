@@ -341,7 +341,7 @@ TEST_CASE("message box: shown in no GUI it refuses, rather than becoming its own
     auto box = core::MakeRef<MessageBox>(core::DefaultAllocator());
     CHECK_FALSE(box->Show());
     CHECK(box->GetParent() == nullptr);
-    CHECK(box->GetChildIndex(box.Get()) == Node::kInvalidIndex);
+    CHECK(box->GetChildIndex(box.Get()) == kNodeInvalidIndex);
     auto window = core::MakeRef<Window>(core::DefaultAllocator());
     window->OpenModal(*window); // inside itself: refused
     CHECK_FALSE(window->IsOpen());

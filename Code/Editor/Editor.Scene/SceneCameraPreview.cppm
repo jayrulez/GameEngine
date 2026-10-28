@@ -31,11 +31,15 @@ using namespace foundation::core;
 
 export namespace editor
 {
+    /// SceneCameraPreview::kPictureWidth, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kSceneCameraPreviewPictureWidth = 194.0f;
+
     class SceneCameraPreview
     {
     public:
         /// The picture's width: the panel's 200 px less its padding (editor.css, .camera-preview).
-        static constexpr f32 kPictureWidth = 194.0f;
+        static constexpr f32 kPictureWidth = kSceneCameraPreviewPictureWidth;
 
         struct Services
         {

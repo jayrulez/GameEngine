@@ -238,7 +238,7 @@ TEST_CASE("picking: a rect fully outside the view answers at once with no pass; 
 
     // Expiry: a request whose view never renders completes as NOT rendered after the window.
     const PickRequestId orphan = pick.Request(&viewportKey, PickRect{1, 1, 1, 1});
-    for (u32 f = 0; f <= PickSystem::kExpireFrames; ++f)
+    for (u32 f = 0; f <= kPickSystemExpireFrames; ++f)
     {
         CHECK_FALSE(pick.TryTakeResult(orphan, result));
         pick.BeginFrame(f % 2);

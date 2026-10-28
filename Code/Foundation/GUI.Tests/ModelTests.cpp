@@ -245,7 +245,7 @@ TEST_CASE("model: a tree reports rows under their parent, and a removed node's i
     TreeModel tree;
     RangeClient client;
     tree.AddClient(&client);
-    const core::i32 a = tree.AddNode(TreeModel::kRoot, SV(u8"A"));
+    const core::i32 a = tree.AddNode(kTreeModelRoot, SV(u8"A"));
     const core::i32 a1 = tree.AddNode(a, SV(u8"A1"));
     const core::i32 a2 = tree.AddNode(a, SV(u8"A2"));
     tree.SetText(a2, SV(u8"A two"));
@@ -258,7 +258,7 @@ TEST_CASE("model: a tree reports rows under their parent, and a removed node's i
     CHECK(client.seen[4] == core::Format(u8"remove {} 0 1", a));
     CHECK(tree.RowCount(tree.IndexOfNode(a)) == 1);
     CHECK(tree.IdOf(tree.Index(0, 0, tree.IndexOfNode(a))) == static_cast<ItemId>(a2));
-    const core::i32 b = tree.AddNode(TreeModel::kRoot, SV(u8"B"));
+    const core::i32 b = tree.AddNode(kTreeModelRoot, SV(u8"B"));
     CHECK(b != a1);
     CHECK_FALSE(tree.IndexOfNode(a1).IsValid());
 }

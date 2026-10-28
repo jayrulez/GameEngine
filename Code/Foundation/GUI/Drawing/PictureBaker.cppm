@@ -31,13 +31,17 @@ export namespace foundation::gui
         Rectangle Source{};
     };
 
+    /// IPictureBaker::kLargestAtlasPicture, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kIPictureBakerLargestAtlasPicture = 128;
+
     class IPictureBaker
     {
     public:
         virtual ~IPictureBaker() = default;
 
         /// The largest side a picture keeps in an atlas: larger ones are baked alone (Baked).
-        static constexpr u32 kLargestAtlasPicture = 128;
+        static constexpr u32 kLargestAtlasPicture = kIPictureBakerLargestAtlasPicture;
 
         /// `document` at `width` by `height` device pixels in an atlas shared by many pictures (an
         /// icon), so pictures drawn one after another are one draw: its page and rectangle, or

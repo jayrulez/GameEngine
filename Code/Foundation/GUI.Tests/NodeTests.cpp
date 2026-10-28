@@ -257,7 +257,7 @@ TEST_CASE("node: a child's index follows adds, moves, removes and a move to anot
     CHECK(root->GetChildIndex(kids[4].Get()) == 1);
     CHECK(root->GetChildIndex(kids[1].Get()) == 2);
     root->RemoveChild(kids[0].Get());
-    CHECK(root->GetChildIndex(kids[0].Get()) == Node::kInvalidIndex);
+    CHECK(root->GetChildIndex(kids[0].Get()) == kNodeInvalidIndex);
     CHECK(root->GetChildIndex(kids[4].Get()) == 0);
     CHECK(kids[1]->GetPrevSibling() == kids[4].Get());
 
@@ -265,7 +265,7 @@ TEST_CASE("node: a child's index follows adds, moves, removes and a move to anot
     other->AddChild(MakeNode().Get());
     other->AddChild(kids[3].Get());
     CHECK(other->GetChildIndex(kids[3].Get()) == 1);
-    CHECK(root->GetChildIndex(kids[3].Get()) == Node::kInvalidIndex);
+    CHECK(root->GetChildIndex(kids[3].Get()) == kNodeInvalidIndex);
     CHECK(root->GetChildIndex(kids[2].Get()) == 2);
-    CHECK(root->GetChildIndex(nullptr) == Node::kInvalidIndex);
+    CHECK(root->GetChildIndex(nullptr) == kNodeInvalidIndex);
 }

@@ -57,6 +57,10 @@ export namespace foundation::render
     [[nodiscard]] u32 ApplyLodHysteresis(const geometry::StaticMesh& mesh, f32 coverage,
                                          u32 rawSelection, u32 last);
 
+    /// MeshRenderer::kMultiMeshEvictFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kMeshRendererMultiMeshEvictFrames = 120;
+
     class MeshRenderer final : public Renderer
     {
     public:
@@ -166,7 +170,7 @@ export namespace foundation::render
         // bind groups (through the retire queue when wired) and leaves the pool: per-chunk
         // vegetation sets come and go with the camera, and a set seen once must not pin its
         // buffer for the rest of the run.
-        static constexpr u32 kMultiMeshEvictFrames = 120;
+        static constexpr u32 kMultiMeshEvictFrames = kMeshRendererMultiMeshEvictFrames;
 
         // Whether a material opts into the WIND vertex variant: it declares a "WindStrength"
         // float whose default is above zero. Every other material keeps the variant it had, so

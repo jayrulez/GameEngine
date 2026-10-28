@@ -441,11 +441,11 @@ export namespace editor::app
             m_building = true;
             m_groups.Clear();
             m_sources.Clear();
-            AddSource(m_groups.AddNode(gui::TreeModel::kRoot, u8"Favourites"), u8"Editor/Icons/star.svg", String(u8"Favourites"), nullptr);
+            AddSource(m_groups.AddNode(gui::kTreeModelRoot, u8"Favourites"), u8"Editor/Icons/star.svg", String(u8"Favourites"), nullptr);
             const String all = Format(u8"All {}", Noun());
-            AddSource(m_groups.AddNode(gui::TreeModel::kRoot, all.AsView()), u8"Editor/Icons/layers.svg", all, nullptr);
+            AddSource(m_groups.AddNode(gui::kTreeModelRoot, all.AsView()), u8"Editor/Icons/layers.svg", all, nullptr);
             if (content::ContentDatabase* db = Sources())
-                AddGroup(*db->RootGroup(), gui::TreeModel::kRoot);
+                AddGroup(*db->RootGroup(), gui::kTreeModelRoot);
             for (usize node = 0; node < m_sources.Size(); ++node)
                 m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
             m_building = false;

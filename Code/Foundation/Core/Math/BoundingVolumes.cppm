@@ -209,13 +209,17 @@ export namespace foundation::core
         }
     };
 
+    /// BoundingFrustum::kPlaneCount, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr i32 kBoundingFrustumPlaneCount = 6;
+
     // =======================================================================
     // BoundingFrustum - 6 planes + 8 corners derived from a view-projection matrix.
     // =======================================================================
     struct BoundingFrustum
     {
         static constexpr i32 kCornerCount = 8;
-        static constexpr i32 kPlaneCount = 6;
+        static constexpr i32 kPlaneCount = kBoundingFrustumPlaneCount;
 
         Float4x4 matrix{};
         Plane planes[kPlaneCount]{};

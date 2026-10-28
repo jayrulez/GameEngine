@@ -191,6 +191,10 @@ export namespace foundation::gui
         i64 m_specificity = 0;
     };
 
+    /// StyleSelector::kAncestorKeys, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u8 kStyleSelectorAncestorKeys = 4;
+
     class StyleSelector
     {
     public:
@@ -500,7 +504,7 @@ export namespace foundation::gui
         }
 
     public:
-        static constexpr u8 kAncestorKeys = 4;
+        static constexpr u8 kAncestorKeys = kStyleSelectorAncestorKeys;
         /// Hashes of names its subject's ancestors must carry (at most four), for AncestorFilter.
         [[nodiscard]] Span<const u64> AncestorKeys() const noexcept { return Span<const u64>(m_ancestorKeys, m_ancestorKeyCount); }
 

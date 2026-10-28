@@ -61,18 +61,18 @@ TEST_CASE("zoom readout: shown whole after a zoom, fading once the zoom stops, t
 
     readout.Zoomed();
     CHECK(readout.Opacity() == 1.0f);
-    readout.Advance(editor::ZoomReadout::kHoldSeconds * 0.9f);
+    readout.Advance(editor::kZoomReadoutHoldSeconds * 0.9f);
     CHECK(readout.Opacity() == 1.0f);
 
     // Another notch holds it again from the start.
     readout.Zoomed();
-    readout.Advance(editor::ZoomReadout::kHoldSeconds * 0.9f);
+    readout.Advance(editor::kZoomReadoutHoldSeconds * 0.9f);
     CHECK(readout.Opacity() == 1.0f);
 
     // Half way through the fade, half there.
-    readout.Advance(editor::ZoomReadout::kHoldSeconds * 0.1f + editor::ZoomReadout::kFadeSeconds * 0.5f);
+    readout.Advance(editor::kZoomReadoutHoldSeconds * 0.1f + editor::kZoomReadoutFadeSeconds * 0.5f);
     CHECK(readout.Opacity() == doctest::Approx(0.5f).epsilon(0.01));
 
-    readout.Advance(editor::ZoomReadout::kFadeSeconds);
+    readout.Advance(editor::kZoomReadoutFadeSeconds);
     CHECK(readout.Opacity() == 0.0f);
 }

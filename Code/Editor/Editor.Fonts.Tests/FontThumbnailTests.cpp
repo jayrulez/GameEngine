@@ -36,7 +36,7 @@ TEST_CASE("font thumbnail rasterizes a glyph sample from TTF bytes")
     editor::FontThumbnailGenerator generator;
     image::Image tile;
     REQUIRE(generator.Generate(Span<const byte>(ttf.Data(), ttf.Size()), tile).IsOk());
-    REQUIRE(tile.Width() == editor::ThumbnailService::kThumbnailSize);
+    REQUIRE(tile.Width() == editor::kThumbnailServiceThumbnailSize);
 
     // Ink coverage: a meaningful share of texels must differ from the flat ground.
     Span<const u8> px = tile.PixelData();

@@ -149,7 +149,7 @@ export namespace editor
             {
                 return Status{ErrorCode::InvalidArgument}; // loaders always yield RGBA8 today
             }
-            constexpr u32 kTile = editor::ThumbnailService::kThumbnailSize;
+            constexpr u32 kTile = editor::kThumbnailServiceThumbnailSize;
             const u32 sourceW = source.Width();
             const u32 sourceH = source.Height();
             if (sourceW == 0 || sourceH == 0)

@@ -39,13 +39,29 @@ export namespace editor
         ViewGizmoPole poles[6];
     };
 
+    /// ViewGizmo::kArm, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kViewGizmoArm = 34.0f;
+
+    /// ViewGizmo::kKnob, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kViewGizmoKnob = 18.0f;
+
+    /// ViewGizmo::kMargin, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kViewGizmoMargin = 12.0f;
+
+    /// ViewGizmo::kStraightPitch, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kViewGizmoStraightPitch = 1.5707963f;
+
     struct ViewGizmo
     {
-        static constexpr f32 kArm = 34.0f;    // pixels from the centre to a knob
-        static constexpr f32 kKnob = 18.0f;   // a knob's side, pixels
-        static constexpr f32 kMargin = 12.0f; // from the viewport's right edge
+        static constexpr f32 kArm = kViewGizmoArm;    // pixels from the centre to a knob
+        static constexpr f32 kKnob = kViewGizmoKnob;   // a knob's side, pixels
+        static constexpr f32 kMargin = kViewGizmoMargin; // from the viewport's right edge
         static constexpr f32 kTop = 28.0f;    // from the top edge, below the FPS readout's line
-        static constexpr f32 kStraightPitch = 1.5707963f; // a top or bottom view looks straight down or up
+        static constexpr f32 kStraightPitch = kViewGizmoStraightPitch; // a top or bottom view looks straight down or up
         static constexpr f32 kCentre = 10.0f; // the centre's side, pixels (the projection toggle)
 
         /// Where the knobs sit for a camera whose basis is `right`, `up`, `forward`, in a viewport

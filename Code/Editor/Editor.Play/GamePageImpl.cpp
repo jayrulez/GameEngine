@@ -133,7 +133,7 @@ namespace editor
             text += u8":";
             AppendInt(text, frame.line);
             text += u8")";
-            (void)m_stackModel.AddNode(gui::TreeModel::kRoot, text.AsView());
+            (void)m_stackModel.AddNode(gui::kTreeModelRoot, text.AsView());
         }
         // The locals, an object's members one level under it (closed until opened).
         m_localsModel.Clear();
@@ -148,7 +148,7 @@ namespace editor
                 text += local.typeName;
                 text += u8")";
             }
-            const i32 node = m_localsModel.AddNode(gui::TreeModel::kRoot, text.AsView());
+            const i32 node = m_localsModel.AddNode(gui::kTreeModelRoot, text.AsView());
             if (local.objectRef == 0)
                 continue;
             for (const script::ScriptVariable& member : m_debugger->CaptureObject(local.objectRef))

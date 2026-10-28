@@ -173,7 +173,7 @@ TEST_CASE("dock area: a float moved (Shift on its title) or resized by the user 
     bed.D().InjectMouseUp(core::Float2{from.x + 2000.0f, from.y - 500.0f}, MouseButton::Left, KeyModShift);
     bed.Lay();
     const core::Rectangle kept = bed.controller.GetLayout().FindSurface(floating)->Bounds;
-    CHECK(kept.x == doctest::Approx(800.0f - DockArea::kKeepInView));
+    CHECK(kept.x == doctest::Approx(800.0f - kDockAreaKeepInView));
     CHECK(kept.y == doctest::Approx(0.0f));
     CHECK(window->GetPosition().x == doctest::Approx(kept.x));
 }
@@ -211,8 +211,8 @@ TEST_CASE("dock area: floats with no bounds of their own cascade, and a restored
     const core::Float2 first = bed.area->GetFloat(0)->GetPosition();
     const core::Float2 second = bed.area->GetFloat(1)->GetPosition();
     CHECK(second.x > first.x);
-    CHECK(bed.area->GetFloat(0)->GetSize().x == doctest::Approx(DockArea::kFloatSize.x));
-    CHECK(bed.controller.GetLayout().FindSurface(bed.area->GetFloat(0)->GetSurface())->Bounds.width == doctest::Approx(DockArea::kFloatSize.x));
+    CHECK(bed.area->GetFloat(0)->GetSize().x == doctest::Approx(kDockAreaFloatSize.x));
+    CHECK(bed.controller.GetLayout().FindSurface(bed.area->GetFloat(0)->GetSurface())->Bounds.width == doctest::Approx(kDockAreaFloatSize.x));
 
     // The same layout adopted again (a restore): the windows stay one per float.
     const DockLayout saved = bed.controller.GetLayout();

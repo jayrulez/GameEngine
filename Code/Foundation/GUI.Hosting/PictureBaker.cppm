@@ -65,17 +65,37 @@ export namespace foundation::gui
         i32 FrameCount = 2;
     };
 
+    /// GpuPictureBaker::kAtlasGutter, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kGpuPictureBakerAtlasGutter = 1;
+
+    /// GpuPictureBaker::kAtlasPageSize, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kGpuPictureBakerAtlasPageSize = 1024;
+
+    /// GpuPictureBaker::kKeepFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u64 kGpuPictureBakerKeepFrames = 600;
+
+    /// GpuPictureBaker::kMostAtlasPages, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr usize kGpuPictureBakerMostAtlasPages = 4;
+
+    /// GpuPictureBaker::kRecentFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u64 kGpuPictureBakerRecentFrames = 60;
+
     class GpuPictureBaker final : public IPictureBaker
     {
     public:
         /// Frames a bake stays after a draw last asked for it.
-        static constexpr u64 kKeepFrames = 600;
+        static constexpr u64 kKeepFrames = kGpuPictureBakerKeepFrames;
         /// An atlas page's side, the gutter round each picture on it, and the most pages.
-        static constexpr u32 kAtlasPageSize = 1024;
-        static constexpr u32 kAtlasGutter = 1;
-        static constexpr usize kMostAtlasPages = 4;
+        static constexpr u32 kAtlasPageSize = kGpuPictureBakerAtlasPageSize;
+        static constexpr u32 kAtlasGutter = kGpuPictureBakerAtlasGutter;
+        static constexpr usize kMostAtlasPages = kGpuPictureBakerMostAtlasPages;
         /// Packing a full atlas anew keeps the pictures asked for in this many frames.
-        static constexpr u64 kRecentFrames = 60;
+        static constexpr u64 kRecentFrames = kGpuPictureBakerRecentFrames;
 
         /// `fonts` draws an SVG's text. The renderers that sample the bakes are its targets.
         GpuPictureBaker(IAllocator& allocator, rhi::Device& device, foundation::fonts::IFontService* fonts) noexcept

@@ -89,12 +89,20 @@ export namespace editor
         return oneDecimal(metres * 0.001f, u8"km");
     }
 
+    /// ZoomReadout::kFadeSeconds, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kZoomReadoutFadeSeconds = 0.5f;
+
+    /// ZoomReadout::kHoldSeconds, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kZoomReadoutHoldSeconds = 1.0f;
+
     /// When the readout shows: fully for a moment after the last zoom, then fading out.
     class ZoomReadout
     {
     public:
-        static constexpr f32 kHoldSeconds = 1.0f; // shown whole after the last notch
-        static constexpr f32 kFadeSeconds = 0.5f; // then gone over this long
+        static constexpr f32 kHoldSeconds = kZoomReadoutHoldSeconds; // shown whole after the last notch
+        static constexpr f32 kFadeSeconds = kZoomReadoutFadeSeconds; // then gone over this long
 
         /// A zoom happened this frame: show it (again) from the start.
         void Zoomed() noexcept

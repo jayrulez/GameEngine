@@ -281,7 +281,7 @@ TEST_CASE("shadow controls: a wall the sun grazes is clean at the default normal
         CHECK(acne[i] < 0.005); // no false shadow across the sweep
     }
     const testsupport::CapturedImage image =
-        Render(*device, GrazingWall(ShadowBiasDefaults::kNormalBias));
+        Render(*device, GrazingWall(kShadowBiasDefaultsNormalBias));
     u32 median = 0;
     CHECK(AcneFraction(image, median) < 0.005); // the default leaves it clean
     device->Destroy();

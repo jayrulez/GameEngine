@@ -40,18 +40,34 @@ export namespace foundation::profiler::gui
         BottomLeft,
     };
 
+    /// ProfilerOverlay::kGraphFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kProfilerOverlayGraphFrames = 120;
+
+    /// ProfilerOverlay::kMargin, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kProfilerOverlayMargin = 8.0f;
+
+    /// ProfilerOverlay::kPadding, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kProfilerOverlayPadding = 8.0f;
+
+    /// ProfilerOverlay::kPanelWidth, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kProfilerOverlayPanelWidth = 360.0f;
+
     class ProfilerOverlay final : public ProfilerWidget
     {
         RTTI_OBJECT(ProfilerOverlay, ProfilerWidget)
     public:
-        static constexpr f32 kPanelWidth = 360.0f;
-        static constexpr f32 kPadding = 8.0f;
+        static constexpr f32 kPanelWidth = kProfilerOverlayPanelWidth;
+        static constexpr f32 kPadding = kProfilerOverlayPadding;
         static constexpr f32 kGap = 6.0f;
-        static constexpr f32 kMargin = 8.0f;
+        static constexpr f32 kMargin = kProfilerOverlayMargin;
         static constexpr f32 kLineHeight = 15.0f;
         static constexpr f32 kGraphHeight = 64.0f;
         static constexpr f32 kBudgets[] = {16.667f, 33.333f};
-        static constexpr u32 kGraphFrames = 120; // the graph and the statistics: two seconds at 60 fps
+        static constexpr u32 kGraphFrames = kProfilerOverlayGraphFrames; // the graph and the statistics: two seconds at 60 fps
         static constexpr u32 kListFrames = 30;   // the lists and counters: steady, yet recent
         static constexpr u32 kScopeRows = 6;
         static constexpr u32 kPassRows = 5;

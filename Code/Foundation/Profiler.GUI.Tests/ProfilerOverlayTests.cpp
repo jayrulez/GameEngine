@@ -82,8 +82,8 @@ TEST_CASE("profiler overlay: the graph plots the newest frames on its scale, new
     CHECK(ProfilerOverlay::ScaleFor(100.0f) == doctest::Approx(160.0f));
     REQUIRE(bed.overlay->CpuPoints().Size() == 11);
     REQUIRE(bed.overlay->GpuPoints().Size() == 11);
-    const f32 width = ProfilerOverlay::kPanelWidth - 2 * ProfilerOverlay::kPadding;
-    const f32 step = width / static_cast<f32>(ProfilerOverlay::kGraphFrames - 1);
+    const f32 width = kProfilerOverlayPanelWidth - 2 * kProfilerOverlayPadding;
+    const f32 step = width / static_cast<f32>(kProfilerOverlayGraphFrames - 1);
     CHECK(bed.overlay->CpuPoints()[10].x == doctest::Approx(width));
     CHECK(bed.overlay->CpuPoints()[0].x == doctest::Approx(width - 10.0f * step)); // a short history grows in from the right
     CHECK(bed.overlay->CpuPoints()[0].y == doctest::Approx(48.0f));                // 10 ms a quarter up the 64
@@ -124,15 +124,15 @@ TEST_CASE("profiler overlay: the panel sits in its corner, and the pointer passe
     Bed bed;
     CHECK_FALSE(bed.overlay->IsHitTestVisible());
     fgui::Rect panel = bed.overlay->Panel();
-    CHECK(panel.width == doctest::Approx(f32{ProfilerOverlay::kPanelWidth}));
-    CHECK(panel.x == doctest::Approx(1280.0f - ProfilerOverlay::kMargin - ProfilerOverlay::kPanelWidth));
-    CHECK(panel.y == doctest::Approx(f32{ProfilerOverlay::kMargin}));
+    CHECK(panel.width == doctest::Approx(f32{kProfilerOverlayPanelWidth}));
+    CHECK(panel.x == doctest::Approx(1280.0f - kProfilerOverlayMargin - kProfilerOverlayPanelWidth));
+    CHECK(panel.y == doctest::Approx(f32{kProfilerOverlayMargin}));
     CHECK(panel.height == doctest::Approx(bed.overlay->PanelHeight()));
 
     bed.overlay->SetCorner(OverlayCorner::BottomLeft);
     panel = bed.overlay->Panel();
-    CHECK(panel.x == doctest::Approx(f32{ProfilerOverlay::kMargin}));
-    CHECK(panel.y + panel.height == doctest::Approx(720.0f - ProfilerOverlay::kMargin));
+    CHECK(panel.x == doctest::Approx(f32{kProfilerOverlayMargin}));
+    CHECK(panel.y + panel.height == doctest::Approx(720.0f - kProfilerOverlayMargin));
 
     // A widget under it still takes a click inside the panel.
     RefPtr<fgui::UIWidget> under = MakeRef<fgui::UIWidget>(DefaultAllocator());

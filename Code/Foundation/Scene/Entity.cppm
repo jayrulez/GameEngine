@@ -21,9 +21,13 @@ using namespace foundation::core;
 export namespace foundation::scene
 {
 
+    /// EntityHandle::kInvalidIndex, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kEntityHandleInvalidIndex = 0xFFFFFFFFu;
+
     struct EntityHandle
     {
-        static constexpr u32 kInvalidIndex = 0xFFFFFFFFu;
+        static constexpr u32 kInvalidIndex = kEntityHandleInvalidIndex;
 
         u32 index = kInvalidIndex;
         u32 generation = 0;

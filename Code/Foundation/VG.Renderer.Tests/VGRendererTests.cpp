@@ -753,7 +753,7 @@ TEST_CASE("vg.renderer: pass targets configure, create, resize and describe the 
     REQUIRE(targets.IsValid());
     CHECK(targets.StencilFormat() != rhi::TextureFormat::Undefined);
     const VGTargetConfig config = targets.ConfigFor();
-    CHECK(config.sampleCount == u32{VGPassTargets::kDefaultSamples}); // a copy: a DLL exports no definition to bind
+    CHECK(config.sampleCount == u32{kVGPassTargetsDefaultSamples}); // a copy: a DLL exports no definition to bind
     CHECK(config.depthStencilFormat == targets.StencilFormat());
 
     REQUIRE(targets.Create(rhi::TextureFormat::BGRA8Unorm, 64, 32));

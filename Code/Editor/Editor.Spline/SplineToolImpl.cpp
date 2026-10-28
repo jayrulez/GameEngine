@@ -357,7 +357,7 @@ namespace editor
                 const u32 segments = curve.SegmentCount();
                 if (segments > 0)
                 {
-                    const u32 steps = segments * fspline::SplineCurve::kSamplesPerSegment;
+                    const u32 steps = segments * fspline::kSplineCurveSamplesPerSegment;
                     Float3 previous = TransformPoint(curve.Evaluate(0.0f), m_world);
                     for (u32 i = 1; i <= steps; ++i)
                     {
@@ -439,7 +439,7 @@ namespace editor
 
             void FindRayClosest(const fspline::SplineCurve& curve, const ViewportRay& ray)
             {
-                const u32 steps = curve.SegmentCount() * fspline::SplineCurve::kSamplesPerSegment;
+                const u32 steps = curve.SegmentCount() * fspline::kSplineCurveSamplesPerSegment;
                 f32 bestDistance = kFloatMax;
                 for (u32 i = 0; i <= steps; ++i)
                 {

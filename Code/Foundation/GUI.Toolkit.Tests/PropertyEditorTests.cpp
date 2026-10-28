@@ -110,7 +110,7 @@ TEST_CASE("property editors: chosen by hint, then kind, else a row that says non
     RegisterDefaultPropertyEditors(registry);
     PropertyInfo info = Info(PropertyKind::Float);
     const core::u32 number = registry.Choose(info);
-    CHECK(number != PropertyEditorRegistry::kNoEditor);
+    CHECK(number != kPropertyEditorRegistryNoEditor);
     CHECK(core::Cast<NumberPropertyEditor>(registry.Create(number, core::DefaultAllocator()).Get()) != nullptr);
 
     info.Hint = core::String(u8"slider"); // a number over its range
@@ -127,7 +127,7 @@ TEST_CASE("property editors: chosen by hint, then kind, else a row that says non
 
     info.Kind = PropertyKind::Group;
     info.Hint = core::String(u8"curve");
-    CHECK(registry.Choose(info) == PropertyEditorRegistry::kNoEditor);
+    CHECK(registry.Choose(info) == kPropertyEditorRegistryNoEditor);
     Bed bed;
     auto unknown = bed.Editor<UnknownPropertyEditor>(info, PropertyValue{});
     CHECK(unknown->GetMessage() == SV(u8"No editor for curve"));

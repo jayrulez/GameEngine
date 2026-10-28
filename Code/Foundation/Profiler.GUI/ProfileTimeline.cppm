@@ -36,6 +36,10 @@ using namespace foundation::gui;
 
 export namespace foundation::profiler::gui
 {
+    /// ProfileTimeline::kRowHeight, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kProfileTimelineRowHeight = 18.0f;
+
     class ProfileTimeline final : public ProfilerWidget
     {
         RTTI_OBJECT(ProfileTimeline, ProfilerWidget)
@@ -44,7 +48,7 @@ export namespace foundation::profiler::gui
         static constexpr f32 kTickHeight = 20.0f;   // the ruler's ticks and times
         static constexpr f32 kFramesHeight = 16.0f; // the frames' row under it
         static constexpr f32 kRulerHeight = kTickHeight + kFramesHeight;
-        static constexpr f32 kRowHeight = 18.0f; // a depth of scopes
+        static constexpr f32 kRowHeight = kProfileTimelineRowHeight; // a depth of scopes
         static constexpr f32 kLaneGap = 6.0f;
         static constexpr f32 kMinBarWidth = 3.0f; // narrower scopes join a hatched block
         static constexpr f32 kFoldWidth = 18.0f;  // a lane's arrow, at its name's start

@@ -210,7 +210,7 @@ namespace engine::physics
             for (usize i = 0; i < src.Size(); ++i)
             {
                 buf[i] = (i < holes.Size() && holes[i] != 0)
-                             ? ShapeDesc::kNoCollisionHeight
+                             ? kShapeDescNoCollisionHeight
                              : hf->SampleToWorldY(static_cast<f32>(src[i]));
             }
             s.heightSamples = Span<const f32>(buf.Data(), buf.Size());

@@ -906,7 +906,7 @@ export namespace engine::terrain
 
     private:
         static constexpr u32 kMaxTerrains = 8;
-        static constexpr u32 kCascadeCount = 4; // matches render::ShadowCascades::kCount
+        static constexpr u32 kCascadeCount = 4; // matches render::kShadowCascadesCount
         static constexpr u64 kViewSlotSize = 768;  // 8 mat4 + 6 float4, padded to dynamic alignment
         static constexpr u64 kChunkSlotSize = 256; // 6 float2, padded to dynamic alignment
 

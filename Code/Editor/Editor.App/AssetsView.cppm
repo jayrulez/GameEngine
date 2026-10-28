@@ -743,7 +743,7 @@ export namespace editor::app
             m_groupModel.Clear();
             m_treeGroups.Clear();
             if (content::ContentDatabase* db = Sources())
-                AddTreeGroup(*db->RootGroup(), gui::TreeModel::kRoot);
+                AddTreeGroup(*db->RootGroup(), gui::kTreeModelRoot);
             for (usize node = 0; node < m_treeGroups.Size(); ++node)
                 m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
             if (m_current != nullptr)

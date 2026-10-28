@@ -41,7 +41,7 @@ export namespace editor
     class ThumbnailStage
     {
     public:
-        /// Supersample factor: render at kSupersample * ThumbnailService::kThumbnailSize and
+        /// Supersample factor: render at kSupersample * kThumbnailServiceThumbnailSize and
         /// box-downscale, so edges land antialiased without MSAA machinery.
         static constexpr u32 kSupersample = 4;
         /// Frames a Pending generator may retry before the job fails (a missing product never

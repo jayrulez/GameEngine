@@ -117,7 +117,7 @@ export namespace foundation::script
     struct Entity
     {
         scene::Scene* scene = nullptr;
-        u32 entityIndex = scene::EntityHandle::kInvalidIndex;
+        u32 entityIndex = scene::kEntityHandleInvalidIndex;
         u32 entityGeneration = 0;
 
         [[nodiscard]] scene::EntityHandle Handle() const noexcept

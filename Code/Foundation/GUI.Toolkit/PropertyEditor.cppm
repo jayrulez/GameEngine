@@ -163,12 +163,16 @@ export namespace foundation::gui
 
     using PropertyEditorFactory = core::Function<core::RefPtr<PropertyEditor>(core::IAllocator&)>;
 
+    /// PropertyEditorRegistry::kNoEditor, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kPropertyEditorRegistryNoEditor = 0;
+
     /// The editors a grid chooses from. Each registered editor has a type of row of its own (its
     /// pool), numbered from 1; 0 is the row no editor takes.
     class PropertyEditorRegistry
     {
     public:
-        static constexpr u32 kNoEditor = 0;
+        static constexpr u32 kNoEditor = kPropertyEditorRegistryNoEditor;
 
         PropertyEditorRegistry() = default;
         explicit PropertyEditorRegistry(core::IAllocator& allocator) : m_entries(allocator) {}

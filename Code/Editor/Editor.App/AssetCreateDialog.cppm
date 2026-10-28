@@ -95,7 +95,7 @@ export namespace editor::app
             RefPtr<State> state = MakeRef<State>(allocator, allocator);
             state->group = &group;
             state->create = Move(create);
-            AddGroups(state->model, state->groups, *sources.RootGroup(), gui::TreeModel::kRoot);
+            AddGroups(state->model, state->groups, *sources.RootGroup(), gui::kTreeModelRoot);
             tree->SetModel(&state->model);
             // A tree has no size of its own: room for a few groups whatever the sheet says.
             tree->EditLayoutStyle([](gui::LayoutStyle& s) { s.MinHeight = gui::LayoutLength::Px(160.0f); });

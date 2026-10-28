@@ -139,11 +139,15 @@ export namespace foundation::input
         bool m_released[kButtons] = {};
     };
 
+    /// ScriptedInputSource::kMaxGamepads, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr i32 kScriptedInputSourceMaxGamepads = 4;
+
     class ScriptedInputSource final : public IInputSourceProvider
     {
     public:
         /// The gamepads a timeline can address, 0 to 3.
-        static constexpr i32 kMaxGamepads = 4;
+        static constexpr i32 kMaxGamepads = kScriptedInputSourceMaxGamepads;
 
         explicit ScriptedInputSource(IAllocator& allocator);
 

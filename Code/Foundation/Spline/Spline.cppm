@@ -56,6 +56,10 @@ export namespace foundation::spline
         f32 t = 0.0f; // global parameter: segment index + local [0,1)
     };
 
+    /// SplineCurve::kSamplesPerSegment, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kSplineCurveSamplesPerSegment = 16;
+
     class SplineCurve
     {
     public:
@@ -111,7 +115,7 @@ export namespace foundation::spline
         /// needs RebuildArcLength for the coarse table).
         [[nodiscard]] SplineSample ClosestPoint(Float3 target) const;
 
-        static constexpr u32 kSamplesPerSegment = 16;
+        static constexpr u32 kSamplesPerSegment = kSplineCurveSamplesPerSegment;
 
     private:
         // Bezier control points of segment `index` (b0..b3).

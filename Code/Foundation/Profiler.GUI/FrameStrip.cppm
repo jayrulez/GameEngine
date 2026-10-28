@@ -42,12 +42,16 @@ export namespace foundation::profiler::gui
         virtual void OnFrameAxisChanged() = 0;
     };
 
+    /// FrameAxis::kMinFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f64 kFrameAxisMinFrames = 8.0;
+
     /// The frames a strip and its plots show: the frame at their start and how many across.
     class FrameAxis : public RefCounted
     {
     public:
         /// Never fewer frames across than this (a zoom stops there).
-        static constexpr f64 kMinFrames = 8.0;
+        static constexpr f64 kMinFrames = kFrameAxisMinFrames;
 
         explicit FrameAxis(IAllocator& allocator) : m_clients(allocator) {}
 

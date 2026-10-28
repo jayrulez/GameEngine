@@ -285,6 +285,10 @@ export namespace foundation::gui
         core::Array<ITimeMarkerSourceClient*> m_markerClients; // non-owning: each ruler leaves as it goes
     };
 
+    /// TimeRuler::kMinLabelSpacing, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kTimeRulerMinLabelSpacing = 60.0f;
+
     /// The axis drawn: ticks, labels and the playhead; a drag scrubs, the wheel zooms, a middle drag pans.
     class TimeRuler : public UIWidget, public ITimeAxisClient, public ITimeMarkerSourceClient
     {
@@ -299,7 +303,7 @@ export namespace foundation::gui
             out.PushBack(core::StringView(u8"playhead"));
         }
         /// Labelled ticks at least this far apart (pixels).
-        static constexpr f32 kMinLabelSpacing = 60.0f;
+        static constexpr f32 kMinLabelSpacing = kTimeRulerMinLabelSpacing;
         /// A marker is under the pointer this near its time (pixels).
         static constexpr f32 kMarkerHitRadius = 5.0f;
         static constexpr f32 kDragThreshold = 3.0f;

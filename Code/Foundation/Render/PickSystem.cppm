@@ -85,12 +85,16 @@ export namespace foundation::render
                                   const Float4x4& viewProj, const PickRect& rect,
                                   const void* viewContext);
 
+    /// PickSystem::kExpireFrames, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kPickSystemExpireFrames = 32;
+
     class PickSystem
     {
     public:
         // A request that no view renders within this many frames completes as not rendered
         // (a hidden viewport must not leave the requester polling forever).
-        static constexpr u32 kExpireFrames = 32;
+        static constexpr u32 kExpireFrames = kPickSystemExpireFrames;
 
         PickSystem(IAllocator& allocator, rhi::Device& device, u32 framesInFlight) noexcept;
         ~PickSystem();

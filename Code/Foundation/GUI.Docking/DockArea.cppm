@@ -96,14 +96,22 @@ export namespace foundation::gui
         core::Float2 m_dragFrom{0.0f, 0.0f}; // where it was (Escape puts it back)
     };
 
+    /// DockArea::kFloatSize, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr core::Float2 kDockAreaFloatSize{360.0f, 260.0f};
+
+    /// DockArea::kKeepInView, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kDockAreaKeepInView = 48.0f;
+
     class DockArea : public UIWidget, public IDockView, public IDockSurroundings
     {
         RTTI_OBJECT(DockArea, UIWidget)
     public:
         /// A float placed with no bounds of its own (a layout written by hand) takes this size.
-        static constexpr core::Float2 kFloatSize{360.0f, 260.0f};
+        static constexpr core::Float2 kFloatSize = kDockAreaFloatSize;
         /// How much of a float's title bar stays in the area however far it is moved.
-        static constexpr f32 kKeepInView = 48.0f;
+        static constexpr f32 kKeepInView = kDockAreaKeepInView;
 
         DockArea()
         {

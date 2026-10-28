@@ -41,7 +41,7 @@ namespace
     };
     [[nodiscard]] Pixel At(const app::EditorSplash& splash, u32 x, u32 y)
     {
-        const u8* p = &splash.Pixels()[(static_cast<usize>(y) * app::EditorSplash::kWidth + x) * 4];
+        const u8* p = &splash.Pixels()[(static_cast<usize>(y) * app::kEditorSplashWidth + x) * 4];
         return Pixel{p[0], p[1], p[2]};
     }
 
@@ -96,11 +96,11 @@ TEST_CASE("splash: the logo, the status line and the progress bar, drawn on the 
     }
     app::EditorSplash splash(nullptr, nullptr, Span<const u8>(logo.Data(), logo.Size()), 20, 10, RobotoBytes(),
                              u8"Version 0.1.0");
-    REQUIRE(splash.Pixels().Size() == static_cast<usize>(app::EditorSplash::kWidth) * app::EditorSplash::kHeight * 4);
-    const Pixel background = At(splash, app::EditorSplash::kWidth / 2, 20);
+    REQUIRE(splash.Pixels().Size() == static_cast<usize>(app::kEditorSplashWidth) * app::kEditorSplashHeight * 4);
+    const Pixel background = At(splash, app::kEditorSplashWidth / 2, 20);
 
     // The logo, centred near the top.
-    const Pixel logoPixel = At(splash, app::EditorSplash::kWidth / 2, 89);
+    const Pixel logoPixel = At(splash, app::kEditorSplashWidth / 2, 89);
     CHECK(logoPixel.r == 255);
     CHECK(logoPixel.g == 0);
 

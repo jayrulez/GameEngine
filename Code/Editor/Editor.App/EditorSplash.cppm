@@ -29,11 +29,19 @@ export namespace editor::app
 {
     namespace shell = foundation::shell;
 
+    /// EditorSplash::kHeight, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kEditorSplashHeight = 300;
+
+    /// EditorSplash::kWidth, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kEditorSplashWidth = 560;
+
     class EditorSplash
     {
     public:
-        static constexpr u32 kWidth = 560;
-        static constexpr u32 kHeight = 300;
+        static constexpr u32 kWidth = kEditorSplashWidth;
+        static constexpr u32 kHeight = kEditorSplashHeight;
 
         /// `logoRgba` is the logo at the splash's size (Branding/assiduous-logo-splash.png,
         /// tightly packed RGBA), `fontData` a TrueType face for the text; either may be empty (the

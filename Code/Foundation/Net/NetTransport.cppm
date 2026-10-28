@@ -128,6 +128,10 @@ export namespace foundation::net
         TransportStats m_stats;
     };
 
+    /// LoopbackLink::kRemotePeer, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr ENGINE_EXPORT_DATA PeerId kLoopbackLinkRemotePeer = 1;
+
     // A deterministic in-memory link connecting two endpoints (A <-> B) with injectable sim conditions.
     // The MANUAL clock (Advance / either endpoint's Update) + SEEDED rng make delivery reproducible.
     // The remote PeerId on each side is 1 (a pair has exactly one remote).
@@ -172,7 +176,7 @@ export namespace foundation::net
         // member and flags each non-exported member type C4251. const-integral is NOT exempt
         // from needing this - odr-using it (binding to a const& parameter, taking its address)
         // still needs the definition the owning DLL holds. shared-libraries.md P5/W1.
-        static constexpr ENGINE_EXPORT_DATA PeerId kRemotePeer = 1;
+        static constexpr ENGINE_EXPORT_DATA PeerId kRemotePeer = kLoopbackLinkRemotePeer;
 
     private:
         friend class LoopbackEndpoint;

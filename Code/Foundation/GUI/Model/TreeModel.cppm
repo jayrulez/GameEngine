@@ -25,10 +25,14 @@ namespace core = foundation::core;
 
 export namespace foundation::gui
 {
+    /// TreeModel::kRoot, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr i32 kTreeModelRoot = -1;
+
     class TreeModel : public IModel
     {
     public:
-        static constexpr i32 kRoot = -1; // parent id for a top-level node
+        static constexpr i32 kRoot = kTreeModelRoot; // parent id for a top-level node
 
         TreeModel() = default;
 

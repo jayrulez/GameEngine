@@ -539,6 +539,14 @@ export namespace foundation::gui
         core::Function<void(GraphId, core::StringView, bool)> m_onCommitted;
     };
 
+    /// GraphView::kFrameMinWidth, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kGraphViewFrameMinWidth = 80.0f;
+
+    /// GraphView::kParallelGap, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kGraphViewParallelGap = 6.0f;
+
     class GraphView : public UIWidget, public IGraphSourceClient
     {
         RTTI_OBJECT(GraphView, UIWidget)
@@ -563,11 +571,11 @@ export namespace foundation::gui
         /// How near a link a click selects it.
         static constexpr f32 kLinkReach = 5.0f;
         /// How far apart a node link and its reverse are drawn.
-        static constexpr f32 kParallelGap = 6.0f;
+        static constexpr f32 kParallelGap = kGraphViewParallelGap;
         /// How far inside a frame's edge a press resizes it.
         static constexpr f32 kFrameEdge = 6.0f;
         /// The least a frame is resized to, in the graph's units.
-        static constexpr f32 kFrameMinWidth = 80.0f;
+        static constexpr f32 kFrameMinWidth = kGraphViewFrameMinWidth;
         static constexpr f32 kFrameMinHeight = 48.0f;
         /// How far past its edges nodes are made before they come into view.
         static constexpr f32 kViewMargin = 64.0f;

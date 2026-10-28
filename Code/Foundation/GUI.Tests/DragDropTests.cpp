@@ -475,7 +475,7 @@ TEST_CASE("dnd: a drag resting a moment opens a closed tree node and selects a t
 {
     TreeModel model; // outlives the scene, whose tree is its client
     Scene s;
-    const core::i32 a = model.AddNode(TreeModel::kRoot, core::StringView(u8"A"));
+    const core::i32 a = model.AddNode(kTreeModelRoot, core::StringView(u8"A"));
     (void)model.AddNode(a, core::StringView(u8"A1"));
     auto tree = core::MakeRef<TreeView>(core::DefaultAllocator());
     tree->EditLayoutStyle([](LayoutStyle& st)
@@ -702,9 +702,9 @@ TEST_CASE("dnd: rows moved to another list leave the source; copied (Ctrl) they 
 TEST_CASE("dnd: a tree takes a node onto another (its child) or beside it, and refuses one inside itself")
 {
     TreeModel model;
-    const core::i32 a = model.AddNode(TreeModel::kRoot, core::StringView(u8"A"));
+    const core::i32 a = model.AddNode(kTreeModelRoot, core::StringView(u8"A"));
     const core::i32 a1 = model.AddNode(a, core::StringView(u8"A1"));
-    const core::i32 b = model.AddNode(TreeModel::kRoot, core::StringView(u8"B"));
+    const core::i32 b = model.AddNode(kTreeModelRoot, core::StringView(u8"B"));
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
     root->SetSize(core::Float2{400.0f, 300.0f});
     auto tree = core::MakeRef<TreeView>(core::DefaultAllocator());

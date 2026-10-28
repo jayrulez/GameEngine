@@ -126,7 +126,7 @@ export namespace editor
             }
             const u32 range = Max<u32>(1u, static_cast<u32>(maxSample) - minSample);
 
-            constexpr u32 kTile = editor::ThumbnailService::kThumbnailSize;
+            constexpr u32 kTile = editor::kThumbnailServiceThumbnailSize;
             out = image::Image(kTile, kTile, image::PixelFormat::RGBA8);
             Span<u8> dst = out.PixelDataMut();
             for (u32 y = 0; y < kTile; ++y)

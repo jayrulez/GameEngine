@@ -1727,14 +1727,14 @@ TEST_CASE("camera preview: the selected camera's view titled with its name at it
     CHECK(preview->IsShown());
     CHECK(preview->Target() == eye);
     CHECK(preview->Title() == StringView(u8"Eye"));
-    CHECK(preview->PictureSize().x == doctest::Approx(SceneCameraPreview::kPictureWidth));
+    CHECK(preview->PictureSize().x == doctest::Approx(kSceneCameraPreviewPictureWidth));
     CHECK(preview->PictureSize().y == doctest::Approx(109.0f)); // 16:9
     scene::Scene& scene = *page->ScenePtr();
     auto* cameras = scene.GetSystem<engine::render::CameraComponentManager>();
     REQUIRE(cameras != nullptr);
     cameras->Get(scene.FindEntity(eye))->aspect = 1.0f;
     page->OnUpdate(bed.host, 1.0f / 60.0f);
-    CHECK(preview->PictureSize().y == doctest::Approx(SceneCameraPreview::kPictureWidth)); // square
+    CHECK(preview->PictureSize().y == doctest::Approx(kSceneCameraPreviewPictureWidth)); // square
 
     // Another entity selected: hidden, unless the camera is pinned.
     page->EditContext().EntitySelection().Set(bed.crate);

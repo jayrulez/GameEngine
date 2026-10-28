@@ -202,7 +202,7 @@ namespace editor
         for (const i32 root : m_apiTree.roots)
         {
             const ScriptApiTreeNode& type = m_apiTree.nodes[static_cast<usize>(root)];
-            modelOf[static_cast<usize>(root)] = m_apiModel->AddNode(gui::TreeModel::kRoot, type.label.AsView());
+            modelOf[static_cast<usize>(root)] = m_apiModel->AddNode(gui::kTreeModelRoot, type.label.AsView());
             for (const i32 child : type.children)
                 modelOf[static_cast<usize>(child)] = m_apiModel->AddNode(modelOf[static_cast<usize>(root)], m_apiTree.nodes[static_cast<usize>(child)].label.AsView());
         }

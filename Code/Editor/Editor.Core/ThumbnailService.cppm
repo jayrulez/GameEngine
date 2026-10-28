@@ -154,6 +154,10 @@ export namespace editor
         ISceneThumbnailGenerator* generator = nullptr; // borrowed; lives on the service
     };
 
+    /// ThumbnailService::kThumbnailSize, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr ENGINE_EXPORT_DATA u32 kThumbnailServiceThumbnailSize = 128;
+
     /// The thumbnail service. One per open project - the app Configures
     /// it on project open and Resets it on close.
     class ThumbnailService
@@ -161,7 +165,7 @@ export namespace editor
     public:
         /// Thumbnail edge size (square, aspect-fit letterboxed by the generators' helper).
         // ENGINE_EXPORT_DATA: odr-used from another library (shared-libraries.md P5/W1).
-        static constexpr ENGINE_EXPORT_DATA u32 kThumbnailSize = 128;
+        static constexpr ENGINE_EXPORT_DATA u32 kThumbnailSize = kThumbnailServiceThumbnailSize;
         /// Scheduling budget (the cross-engine lesson): at most this many loads in flight; a
         /// bind sweep over a big folder trickles instead of flooding the light lane - the NEXT
         /// Get for a skipped id (every bind re-queries) schedules it once a slot frees.

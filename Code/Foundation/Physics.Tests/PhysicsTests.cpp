@@ -138,7 +138,7 @@ TEST_CASE("physics: a heightfield hole - a sphere over the cut falls through, on
     {
         for (u32 x = 30; x <= 34; ++x)
         {
-            samples[static_cast<usize>(z) * n + x] = ShapeDesc::kNoCollisionHeight; // a 5x5 cut at the centre
+            samples[static_cast<usize>(z) * n + x] = kShapeDescNoCollisionHeight; // a 5x5 cut at the centre
         }
     }
     BodyDesc ground;

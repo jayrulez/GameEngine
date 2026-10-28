@@ -60,7 +60,7 @@ TEST_CASE("splatmap thumbnail gives each dominant slot a distinct hue")
     editor::SplatmapThumbnailGenerator generator;
     image::Image tile;
     REQUIRE(generator.Generate(Span<const byte>(payload.Data(), payload.Size()), tile).IsOk());
-    REQUIRE(tile.Width() == editor::ThumbnailService::kThumbnailSize);
+    REQUIRE(tile.Width() == editor::kThumbnailServiceThumbnailSize);
 
     const u32 quadrant[4] = {TexelAt(tile, 32, 32), TexelAt(tile, 96, 32),
                              TexelAt(tile, 32, 96), TexelAt(tile, 96, 96)};

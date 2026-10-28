@@ -106,7 +106,7 @@ export namespace editor
                 pen += r.advanceX;
             }
 
-            constexpr u32 kTile = editor::ThumbnailService::kThumbnailSize;
+            constexpr u32 kTile = editor::kThumbnailServiceThumbnailSize;
             constexpr u8 kGround[3] = {26, 28, 33};  // the GPU stage's tile ground
             constexpr u8 kInk[3] = {225, 227, 232};
             out = image::Image(kTile, kTile, image::PixelFormat::RGBA8);

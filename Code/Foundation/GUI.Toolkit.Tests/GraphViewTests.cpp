@@ -672,7 +672,7 @@ TEST_CASE("GraphView: node links from just outside a node's edge, where the sour
     REQUIRE(bed.view->LinkPoints(back, other));
     const core::Float2 m1{(one[0].x + one.Back().x) * 0.5f, (one[0].y + one.Back().y) * 0.5f};
     const core::Float2 m2{(other[0].x + other.Back().x) * 0.5f, (other[0].y + other.Back().y) * 0.5f};
-    CHECK(core::Abs(m1.y - m2.y) >= 2.0f * GraphView::kParallelGap - 0.01f);
+    CHECK(core::Abs(m1.y - m2.y) >= 2.0f * kGraphViewParallelGap - 0.01f);
     CHECK(bed.view->HitLink(m1) == there.Id);
     CHECK(bed.view->HitLink(m2) == back.Id);
 
@@ -1008,7 +1008,7 @@ TEST_CASE("GraphView: a frame's edges resize it, previewed and one change on rel
     r = bed.view->FrameRect(frame);
     const core::Float2 left{r.x + 2.0f, r.y + r.height * 0.5f};
     bed.Drag(left, core::Float2{left.x + 1000.0f, left.y});
-    CHECK(FrameOf(bed, frame).Size.x == doctest::Approx(GraphView::kFrameMinWidth));
+    CHECK(FrameOf(bed, frame).Size.x == doctest::Approx(kGraphViewFrameMinWidth));
 }
 
 TEST_CASE("GraphView: a frame's title and body edit in place; the menu adds a frame round the selection and a comment; Delete deletes them")

@@ -26,11 +26,15 @@ using namespace foundation::core;
 
 export namespace foundation::messaging
 {
+    /// EventBus::kMaxDrainPasses, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kEventBusMaxDrainPasses = 8;
+
     class EventBus
     {
     public:
         // Cascade bound: a handler that keeps emitting cannot spin the drain forever.
-        static constexpr u32 kMaxDrainPasses = 8;
+        static constexpr u32 kMaxDrainPasses = kEventBusMaxDrainPasses;
 
         // Publish `payload` under event name `name`. Delivered (deferred) at the next Drain.
         void Publish(StringHash name, Variant payload)

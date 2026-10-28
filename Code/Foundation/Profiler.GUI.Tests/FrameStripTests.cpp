@@ -99,7 +99,7 @@ TEST_CASE("FrameAxis: it fits the source and follows it, until a zoom or a pan; 
     CHECK(bed.axis->Count() == 25.0); // not fitting: it stays
 
     bed.axis->ZoomAbout(25.0, 1000.0);
-    CHECK(bed.axis->Count() == FrameAxis::kMinFrames);
+    CHECK(bed.axis->Count() == kFrameAxisMinFrames);
     bed.axis->ZoomAbout(25.0, 0.0001);
     CHECK(bed.axis->Count() == 51.0); // never more than every frame
     bed.axis->PanBy(-100.0);

@@ -395,7 +395,7 @@ namespace editor
         for (i32 s = 0; s < effect->SystemCount(); ++s)
         {
             particles::ParticleSystem& system = *effect->GetSystem(s);
-            const i32 systemNode = add(gui::TreeModel::kRoot, SystemName(system, static_cast<usize>(s)).AsView(), ParticleTreeRow{ParticleRowKind::System, s, -1});
+            const i32 systemNode = add(gui::kTreeModelRoot, SystemName(system, static_cast<usize>(s)).AsView(), ParticleTreeRow{ParticleRowKind::System, s, -1});
             m_model->SetIcon(systemNode, u8"Editor/Icons/Types/ParticleEffectAsset.svg", u8"cat-rendering");
             const i32 emitter = add(systemNode, u8"Emitter", ParticleTreeRow{ParticleRowKind::Emitter, s, -1});
             m_model->SetIcon(emitter, u8"Editor/Icons/particles.svg");

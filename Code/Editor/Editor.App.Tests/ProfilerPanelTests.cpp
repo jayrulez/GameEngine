@@ -136,7 +136,7 @@ TEST_CASE("profiler page: Record copies settled frames and follows the newest; S
     RunFrames(bed.store, 10); // frames 3..12
     bed.panel->Update();
     CHECK(bed.panel->Recording().OldestFrame() == 3u);
-    CHECK(bed.panel->Recording().NewestFrame() == 12u - profiler::ProfileRecording::kSettleFrames);
+    CHECK(bed.panel->Recording().NewestFrame() == 12u - profiler::kProfileRecordingSettleFrames);
     // Following: the newest settled frame is the one chosen, in every view.
     CHECK(bed.panel->IsFollowing());
     CHECK(bed.Find<gui::ToolButton>(u8"profiler-live")->IsChecked());

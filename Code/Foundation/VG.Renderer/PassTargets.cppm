@@ -24,10 +24,14 @@ using namespace foundation::core;
 
 export namespace foundation::vg::renderer
 {
+    /// VGPassTargets::kDefaultSamples, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kVGPassTargetsDefaultSamples = 4;
+
     class VGPassTargets
     {
     public:
-        static constexpr u32 kDefaultSamples = 4;
+        static constexpr u32 kDefaultSamples = kVGPassTargetsDefaultSamples;
 
         VGPassTargets() noexcept = default;
         VGPassTargets(const VGPassTargets&) = delete;

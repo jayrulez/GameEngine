@@ -471,6 +471,18 @@ export namespace foundation::render
         return falloff;
     }
 
+    /// ShadowBiasDefaults::kDepthBias, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kShadowBiasDefaultsDepthBias = 0.0009f;
+
+    /// ShadowBiasDefaults::kLocalDepthBias, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kShadowBiasDefaultsLocalDepthBias = 0.0015f;
+
+    /// ShadowBiasDefaults::kNormalBias, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr f32 kShadowBiasDefaultsNormalBias = 0.02f;
+
     // The active directional shadow caster for a scene (the extraction OUTPUT): just the light direction
     // + whether one exists. The cascade matrices are derived later (in RenderFrame, where the camera
     // frustum is available) since CSM fitting needs the camera. valid == false => no shadow this frame.
@@ -483,9 +495,9 @@ export namespace foundation::render
     // NDC depth (toward the light, per depth.hlsli).
     struct ShadowBiasDefaults
     {
-        static constexpr f32 kNormalBias = 0.02f;
-        static constexpr f32 kDepthBias = 0.0009f;      // directional (cascades)
-        static constexpr f32 kLocalDepthBias = 0.0015f; // spot / point (atlas)
+        static constexpr f32 kNormalBias = kShadowBiasDefaultsNormalBias;
+        static constexpr f32 kDepthBias = kShadowBiasDefaultsDepthBias;      // directional (cascades)
+        static constexpr f32 kLocalDepthBias = kShadowBiasDefaultsLocalDepthBias; // spot / point (atlas)
     };
 
     // A scene's directional-shadow reach (its environment settings): how far from the camera the
@@ -508,13 +520,17 @@ export namespace foundation::render
         f32 strength = 1.0f;
     };
 
+    /// ShadowCascades::kCount, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr u32 kShadowCascadesCount = 4;
+
     // Cascaded shadow map data for the directional caster, computed per-frame from the
     // primary view's frustum + the light direction. kCount cascades, each a world->light-clip matrix +
     // the view-space depth where it ends (cascade selection) + the world size of one shadow texel (for
     // normal-offset bias). Shared by all views (fit to the primary camera).
     struct ShadowCascades
     {
-        static constexpr u32 kCount = 4;
+        static constexpr u32 kCount = kShadowCascadesCount;
         Float4x4 viewProj[kCount] = {Float4x4::Identity(), Float4x4::Identity(),
                                      Float4x4::Identity(), Float4x4::Identity()};
         f32 splitFar[kCount] = {0.0f, 0.0f, 0.0f, 0.0f}; // view-space far depth of each cascade

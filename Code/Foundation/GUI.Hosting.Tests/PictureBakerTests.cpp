@@ -110,14 +110,14 @@ TEST_CASE("gui.hosting.baker: a bake no draw asks for goes, and the GUI's render
     (void)bed.Frame(0);
     const foundation::image::ImageData* key = bed.baker.Baked(bed.document, 48, 24);
     REQUIRE(key != nullptr);
-    for (u64 frame = 0; frame < GpuPictureBaker::kKeepFrames; ++frame)
+    for (u64 frame = 0; frame < kGpuPictureBakerKeepFrames; ++frame)
     {
         if (frame % 100 == 0)
             CHECK(bed.baker.Baked(bed.document, 48, 24) == key); // still asked for: kept
         (void)bed.Frame(static_cast<i32>(frame % 2));
     }
     CHECK(bed.baker.BakeCount() == 1u);
-    for (u64 frame = 0; frame <= GpuPictureBaker::kKeepFrames; ++frame)
+    for (u64 frame = 0; frame <= kGpuPictureBakerKeepFrames; ++frame)
         (void)bed.Frame(static_cast<i32>(frame % 2));
     CHECK(bed.baker.BakeCount() == 0u);
     CHECK_FALSE(bed.target.IsExternalTextureRegistered(key));
@@ -154,10 +154,10 @@ TEST_CASE("gui.hosting.baker: an icon asked for in the atlas is queued, baked on
     const Optional<PictureRegion> region = bed.baker.AtlasRegion(bed.document, 24, 12, true);
     REQUIRE(region.HasValue());
     REQUIRE(region.Value().Page != nullptr);
-    CHECK(region.Value().Page->Width() == GpuPictureBaker::kAtlasPageSize);
+    CHECK(region.Value().Page->Width() == kGpuPictureBakerAtlasPageSize);
     CHECK(region.Value().Source.width == doctest::Approx(24.0f));
     CHECK(region.Value().Source.height == doctest::Approx(12.0f));
-    CHECK(region.Value().Source.x >= static_cast<f32>(GpuPictureBaker::kAtlasGutter)); // inside its gutter
+    CHECK(region.Value().Source.x >= static_cast<f32>(kGpuPictureBakerAtlasGutter)); // inside its gutter
     CHECK(bed.target.IsExternalTextureRegistered(region.Value().Page));
 
     // The same picture as authored is a bake of its own, on the same page, beside it.
@@ -174,11 +174,11 @@ TEST_CASE("gui.hosting.baker: an icon asked for in the atlas is queued, baked on
 TEST_CASE("gui.hosting.baker: a picture larger than an atlas keeps is not taken; one no draw asks for goes")
 {
     Bed bed;
-    CHECK_FALSE(bed.baker.AtlasRegion(bed.document, IPictureBaker::kLargestAtlasPicture + 1, 12, true).HasValue());
+    CHECK_FALSE(bed.baker.AtlasRegion(bed.document, kIPictureBakerLargestAtlasPicture + 1, 12, true).HasValue());
     CHECK(bed.baker.AtlasPictureCount() == 0u);
     (void)bed.baker.AtlasRegion(bed.document, 24, 12, true);
     (void)bed.Frame(0);
-    for (u64 frame = 0; frame <= GpuPictureBaker::kKeepFrames + 1; ++frame)
+    for (u64 frame = 0; frame <= kGpuPictureBakerKeepFrames + 1; ++frame)
         (void)bed.Frame(static_cast<i32>(frame % 2));
     CHECK(bed.baker.AtlasPictureCount() == 0u);
 }
@@ -187,18 +187,18 @@ TEST_CASE("gui.hosting.baker: a full atlas is packed anew from the pictures aske
 {
     Bed bed;
     // Pictures of the largest size an atlas keeps, each its own document: every page full.
-    const u32 side = IPictureBaker::kLargestAtlasPicture;
-    const u32 perRow = GpuPictureBaker::kAtlasPageSize / (side + 2 * GpuPictureBaker::kAtlasGutter);
-    const usize fit = static_cast<usize>(perRow) * perRow * GpuPictureBaker::kMostAtlasPages;
+    const u32 side = kIPictureBakerLargestAtlasPicture;
+    const u32 perRow = kGpuPictureBakerAtlasPageSize / (side + 2 * kGpuPictureBakerAtlasGutter);
+    const usize fit = static_cast<usize>(perRow) * perRow * kGpuPictureBakerMostAtlasPages;
     Array<vg::svg::SVGDocument> documents(DefaultAllocator());
     for (usize i = 0; i <= fit; ++i)
         documents.PushBack(vg::svg::SVGLoader::Load(StringView(u8"<svg width='8' height='8'><rect width='8' height='8'/></svg>")).Value());
     for (usize i = 0; i < fit; ++i)
         (void)bed.baker.AtlasRegion(documents[i], side, side, true);
     CHECK(bed.baker.AtlasPictureCount() == fit);
-    CHECK(bed.baker.AtlasPageCount() == GpuPictureBaker::kMostAtlasPages);
+    CHECK(bed.baker.AtlasPageCount() == kGpuPictureBakerMostAtlasPages);
     // Long after, only the first asked for still; then one more than fits: packed anew round it.
-    for (u64 frame = 0; frame <= GpuPictureBaker::kRecentFrames + 1; ++frame)
+    for (u64 frame = 0; frame <= kGpuPictureBakerRecentFrames + 1; ++frame)
     {
         (void)bed.baker.AtlasRegion(documents[0], side, side, true);
         (void)bed.Frame(static_cast<i32>(frame % 2));

@@ -335,7 +335,7 @@ TEST_CASE("EditorCamera orthographic: it draws from a view height back, showing 
 TEST_CASE("EditorCamera orthographic: a snap to an axis turns it on, and turning away turns it off")
 {
     editor::EditorCamera cam;
-    cam.SnapToAxis(0.0f, -editor::EditorCamera::kStraightPitch); // the top view
+    cam.SnapToAxis(0.0f, -editor::kEditorCameraStraightPitch); // the top view
     CHECK(cam.orthographic);
     CHECK(cam.IsOrthographicFromSnap());
     CHECK(Near(cam.Forward().y, -1.0f)); // straight down, past the mouse-look limit

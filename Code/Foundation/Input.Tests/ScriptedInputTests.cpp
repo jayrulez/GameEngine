@@ -101,7 +101,7 @@ TEST_CASE("scripted-input: the mouse and the pads, a release-all frame, and the 
 
     // A pad outside 0 to 3 is refused.
     ScriptedInput far = pad;
-    far.gamepad = ScriptedInputSource::kMaxGamepads;
+    far.gamepad = kScriptedInputSourceMaxGamepads;
     CHECK_FALSE(source.Add(far));
 
     source.Advance(0.0);

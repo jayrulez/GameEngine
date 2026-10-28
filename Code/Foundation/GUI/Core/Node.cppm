@@ -132,11 +132,15 @@ export namespace foundation::gui
         bool m_closed = false;
     };
 
+    /// Node::kInvalidIndex, at namespace scope for another library to read (MSVC exports no class's
+    /// static constexpr member from a shared library).
+    inline constexpr usize kNodeInvalidIndex = static_cast<usize>(-1);
+
     class Node : public Object, public Transformable
     {
         RTTI_OBJECT(Node, Object)
     public:
-        static constexpr usize kInvalidIndex = static_cast<usize>(-1);
+        static constexpr usize kInvalidIndex = kNodeInvalidIndex;
 
         /// Where a weak reference to a node resolves: its GUI's table, a slot and a generation.
         struct ElementRef

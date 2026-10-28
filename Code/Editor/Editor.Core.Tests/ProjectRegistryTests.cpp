@@ -73,14 +73,14 @@ TEST_CASE("project-registry: touch inserts most-recent-first, dedupes, and caps"
     CHECK(reg.entries[1].path.AsView() == u8"/projects/b");
 
     // The cap drops the OLDEST entries.
-    for (u32 i = 0; i < RecentProjectsSettings::kMaxEntries + 5; ++i)
+    for (u32 i = 0; i < kRecentProjectsSettingsMaxEntries + 5; ++i)
     {
         const String p = Format(u8"/projects/p{}", i);
         TouchRecentProject(store, p.AsView(), u8"P", u8"0.1.0");
     }
-    CHECK(reg.entries.Size() == RecentProjectsSettings::kMaxEntries);
+    CHECK(reg.entries.Size() == kRecentProjectsSettingsMaxEntries);
     CHECK(reg.entries[0].path.AsView() ==
-          Format(u8"/projects/p{}", RecentProjectsSettings::kMaxEntries + 4).AsView());
+          Format(u8"/projects/p{}", kRecentProjectsSettingsMaxEntries + 4).AsView());
     CHECK(reg.Find(u8"/projects/a") == nullptr); // evicted
 }
 

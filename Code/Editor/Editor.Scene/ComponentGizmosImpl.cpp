@@ -129,7 +129,7 @@ namespace editor
         const u32 segments = curve.SegmentCount();
         if (segments > 0)
         {
-            const u32 steps = segments * foundation::spline::SplineCurve::kSamplesPerSegment;
+            const u32 steps = segments * foundation::spline::kSplineCurveSamplesPerSegment;
             Float3 previous = TransformPoint(curve.Evaluate(0.0f), world);
             for (u32 i = 1; i <= steps; ++i)
             {

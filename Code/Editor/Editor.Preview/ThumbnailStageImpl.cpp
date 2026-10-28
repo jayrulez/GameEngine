@@ -34,7 +34,7 @@ namespace editor
 
     namespace
     {
-        constexpr u32 kTileSize = ThumbnailService::kThumbnailSize;
+        constexpr u32 kTileSize = kThumbnailServiceThumbnailSize;
         constexpr u32 kRenderSize = kTileSize * ThumbnailStage::kSupersample;
 
         // Exact integer box downscale (kSupersample x kSupersample average per output texel)

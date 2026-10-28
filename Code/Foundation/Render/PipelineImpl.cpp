@@ -891,7 +891,7 @@ namespace foundation::render
                     // plane (outward normals). Avoids BoundingSphere construction + the enum/switch
                     // Intersects() runs per plane - this is the hot path (~448k tests/frame at 112k casters).
                     bool inside = true;
-                    for (i32 p = 0; p < BoundingFrustum::kPlaneCount; ++p)
+                    for (i32 p = 0; p < kBoundingFrustumPlaneCount; ++p)
                     {
                         if (Dot(frustum.planes[p].normal, c) + frustum.planes[p].d > b.w)
                         {

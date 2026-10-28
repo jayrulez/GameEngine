@@ -31,8 +31,8 @@ namespace
         core::i32 a, b, a1, a2, a1x;
         Tree()
         {
-            a = model.AddNode(TreeModel::kRoot, SV(u8"A"));
-            b = model.AddNode(TreeModel::kRoot, SV(u8"B"));
+            a = model.AddNode(kTreeModelRoot, SV(u8"A"));
+            b = model.AddNode(kTreeModelRoot, SV(u8"B"));
             a1 = model.AddNode(a, SV(u8"A1"));
             a2 = model.AddNode(a, SV(u8"A2"));
             a1x = model.AddNode(a1, SV(u8"A1x"));
@@ -233,8 +233,8 @@ namespace
 TEST_CASE("tree-view: a row takes the classes the model gives it, in place of those it gave before")
 {
     StatedTree model;
-    (void)model.AddNode(TreeModel::kRoot, SV(u8"A")); // node 0
-    (void)model.AddNode(TreeModel::kRoot, SV(u8"B"));
+    (void)model.AddNode(kTreeModelRoot, SV(u8"A")); // node 0
+    (void)model.AddNode(kTreeModelRoot, SV(u8"B"));
     model.aClasses = core::String(u8"member  inactive"); // spaced as written
     core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &model);
@@ -321,7 +321,7 @@ TEST_CASE("tree-view: a row deeper than the view is wide makes the rows that wid
     // A chain twenty levels deep at 32 px a level: the rows in view (about fifteen of 20 px in
     // 300) pass the view's 260 px by their indent alone.
     TreeModel model;
-    core::i32 parent = TreeModel::kRoot;
+    core::i32 parent = kTreeModelRoot;
     for (int depth = 0; depth < 20; ++depth)
         parent = model.AddNode(parent, SV(u8"Level"));
     core::RefPtr<SceneRoot> root;
@@ -344,7 +344,7 @@ TEST_CASE("tree-view: a long name bound before the row had a font widens the row
     // A row just made has no font until the sheet reaches it (the editor's hierarchy), so its name
     // measured nothing as it bound; placed with its font, it is measured again.
     TreeModel model;
-    (void)model.AddNode(TreeModel::kRoot, SV(u8"An entity whose name runs far past the edge of a view two hundred and sixty wide"));
+    (void)model.AddNode(kTreeModelRoot, SV(u8"An entity whose name runs far past the edge of a view two hundred and sixty wide"));
     core::RefPtr<SceneRoot> root;
     auto tree = MountTree(root, &model);
     CHECK(tree->GetContentExtent().x <= 260.0f + 0.5f); // no font: no width to its name

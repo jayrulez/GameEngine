@@ -374,6 +374,33 @@ namespace reflected
         builder.Property<&TestLinks::target>("target");
         builder.Property<&TestLinks::up>("up");
     }
+
+    // A joint of an application's: a bone named by a string its editor offers from a skeleton,
+    // and rows whose conditions read or do not.
+    class TestJoint : public core::Object
+    {
+        RTTI_OBJECT(TestJoint, core::Object)
+    public:
+        core::String bone;
+        core::String label;
+        i32 mode = 0;
+        f32 whenTwo = 0.0f;
+        f32 noName = 0.0f;
+        f32 noValue = 0.0f;
+        f32 notANumber = 0.0f;
+        f32 emptyItem = 0.0f;
+    };
+    REFLECT_MEMBERS(TestJoint, "rtti::tests::reflected")
+    {
+        builder.Property<&TestJoint::bone>("bone").PropAttribute("boneName", true);
+        builder.Property<&TestJoint::label>("label");
+        builder.Property<&TestJoint::mode>("mode");
+        builder.Property<&TestJoint::whenTwo>("whenTwo").PropAttribute("visibleWhen", core::String(u8"mode=2"));
+        builder.Property<&TestJoint::noName>("noName").PropAttribute("visibleWhen", core::String(u8"=1"));
+        builder.Property<&TestJoint::noValue>("noValue").PropAttribute("visibleWhen", core::String(u8"mode="));
+        builder.Property<&TestJoint::notANumber>("notANumber").PropAttribute("visibleWhen", core::String(u8"mode=x"));
+        builder.Property<&TestJoint::emptyItem>("emptyItem").PropAttribute("visibleWhen", core::String(u8"mode=1,,2"));
+    }
 }
 
 namespace
@@ -1138,4 +1165,50 @@ TEST_CASE("reflected source: a struct the application registers as a reference i
     source.BeginEdit(SV(u8"target"));
     source.CommitEdit(SV(u8"target"), PropertyWrite{Variant(core::StringView{})}); // empty clears it
     CHECK(links->target.id.IsNil());
+}
+
+TEST_CASE("ReflectedPropertySource: an attribute the application registers hints its rows")
+{
+    core::RefPtr<reflected::TestJoint> joint = core::MakeRef<reflected::TestJoint>(core::DefaultAllocator());
+    ReflectedPropertySource source{core::DefaultAllocator()};
+    const core::Instance object(joint.Get(), joint->GetType());
+    source.SetObjects(core::Span<const core::Instance>(&object, 1u));
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    source.GetProperties(SV(u8""), rows);
+    CHECK(rows[0].Kind == PropertyKind::String);
+    CHECK(rows[0].Hint.IsEmpty()); // not registered: a string's field
+
+    source.RegisterHintAttribute(SV(u8"boneName"));
+    rows.Clear();
+    source.GetProperties(SV(u8""), rows);
+    CHECK(rows[0].Kind == PropertyKind::String);
+    CHECK(rows[0].Hint == core::String(u8"boneName"));
+    CHECK(rows[1].Hint.IsEmpty()); // a string without it
+}
+
+TEST_CASE("ReflectedPropertySource: a condition that does not read hides nothing")
+{
+    core::RefPtr<reflected::TestJoint> joint = core::MakeRef<reflected::TestJoint>(core::DefaultAllocator());
+    ReflectedPropertySource source{core::DefaultAllocator()};
+    const core::Instance object(joint.Get(), joint->GetType());
+    source.SetObjects(core::Span<const core::Instance>(&object, 1u));
+    core::Array<PropertyInfo> rows(core::DefaultAllocator());
+    source.GetProperties(SV(u8""), rows);
+    const auto visible = [&rows](const char8_t* name)
+    {
+        for (const PropertyInfo& row : rows)
+            if (row.Name == core::String(name))
+                return row.Visible;
+        FAIL("no row");
+        return false;
+    };
+    CHECK_FALSE(visible(u8"whenTwo")); // mode 0
+    CHECK(visible(u8"noName"));
+    CHECK(visible(u8"noValue"));
+    CHECK(visible(u8"notANumber"));
+    CHECK(visible(u8"emptyItem"));
+    joint->mode = 2;
+    rows.Clear();
+    source.GetProperties(SV(u8""), rows);
+    CHECK(visible(u8"whenTwo"));
 }

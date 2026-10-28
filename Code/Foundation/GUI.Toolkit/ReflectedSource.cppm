@@ -195,6 +195,13 @@ export namespace foundation::gui
             m_referenceTypes.PushBack(ReferenceType{core::String(typeName), core::Move(parts)});
             NotifyPropertiesChanged();
         }
+        /// Hints a property carrying the attribute `attribute` with the attribute's name, for the
+        /// application's editor of what that attribute says (a string naming a bone of a skeleton).
+        void RegisterHintAttribute(core::StringView attribute)
+        {
+            m_hintAttributes.PushBack(core::String(attribute));
+            NotifyPropertiesChanged();
+        }
         /// Takes the type named `typeName` as a curve: one value, its keys at `parts.Keys`.
         void RegisterCurveType(core::StringView typeName, ReflectedCurveParts parts)
         {
@@ -730,6 +737,9 @@ export namespace foundation::gui
                     if (info.Kind == PropertyKind::Float && info.Hint.IsEmpty())
                         info.Hint = core::String(u8"slider");
                 }
+            for (const core::String& attribute : m_hintAttributes)
+                if (info.Hint.IsEmpty() && core::FindAttribute(property, attribute.AsView()) != nullptr)
+                    info.Hint = attribute;
             // A bare Guid's property may name what it points at, by its type's name.
             if (info.Kind == PropertyKind::Reference && info.ReferenceType == nullptr)
                 if (const core::String* named = StringAttribute(property, u8"referenceType"))
@@ -885,6 +895,7 @@ export namespace foundation::gui
             return attribute != nullptr ? attribute->value.TryGet<core::String>() : nullptr;
         }
         // `visibleWhen` ("prop", or "prop=1,2" of its raw integer): a sibling's value, in every object.
+        // A condition that does not read so (no name, an empty or non-integer value) hides nothing.
         bool Holds(core::StringView group, core::StringView condition) const
         {
             usize eq = 0;
@@ -892,6 +903,19 @@ export namespace foundation::gui
                 ++eq;
             if (eq == 0)
                 return true;
+            if (eq < condition.Size())
+            {
+                usize start = eq + 1;
+                while (start <= condition.Size())
+                {
+                    usize end = start;
+                    while (end < condition.Size() && condition[end] != u8',')
+                        ++end;
+                    if (!core::ParseInt(core::Trim(condition.SubStr(start, end - start))).HasValue())
+                        return true;
+                    start = end + 1;
+                }
+            }
             const core::String sibling = JoinPropertyPath(group, condition.SubStr(0, eq));
             const auto matches = [&](i64 value)
             {
@@ -1801,6 +1825,7 @@ export namespace foundation::gui
         core::Array<CurveType> m_curveTypes;
         core::Array<ReferenceType> m_referenceTypes;
         core::Array<GradientType> m_gradientTypes;
+        core::Array<core::String> m_hintAttributes; // RegisterHintAttribute
         core::Function<void(const ReflectedChange&)> m_onChange;
         core::Function<void(core::StringView, PropertyInfo&)> m_onDescribe; // SetOnDescribe
     };

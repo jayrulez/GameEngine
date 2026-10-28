@@ -1,5 +1,5 @@
 # Integration.Shaders - a surface shader against the engine's own, on REAL GPU backends: the
-# built-in PBR written as a surface shader (Data/Assets/shaders/surface_pbr) is cooked by the
+# built-in PBR written as a surface shader (Data/Tests/Shaders/surface_pbr) is cooked by the
 # shader pipeline (Pipeline::Shaders) and drawn by the Foundation render chain beside `forward`,
 # and the two images must agree. Cross-collection flow (Pipeline cook x Foundation render), so it
 # lives in Code/Integration. Skips cleanly when no GPU backend is available.

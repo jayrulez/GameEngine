@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // A surface shader renders as the engine's own does: the built-in PBR written as a lit surface
-// shader (Data/Assets/shaders/surface_pbr), cooked by the shader pipeline into its forward, depth
+// shader (Data/Tests/Shaders/surface_pbr), cooked by the shader pipeline into its forward, depth
 // and pick programs, draws a lit, windy sphere casting its shadow on a ground the same as
 // `forward` draws them, on REAL GPU backends. Measured identical on Vulkan and WebGPU (2026-10-12);
 // the test allows a rounding step, since the two programs compute the same lighting in a different
@@ -62,7 +62,7 @@ namespace
         const String dataRoot = foundation::vfs::FindDataRoot();
         const String library = foundation::vfs::DataPath(dataRoot.AsView(), u8"Engine/Shaders");
         const Result<Array<byte>> text = ReadFile(
-            foundation::vfs::DataPath(dataRoot.AsView(), u8"Assets/shaders/surface_pbr/surface_pbr.hlsl")
+            foundation::vfs::DataPath(dataRoot.AsView(), u8"Tests/Shaders/surface_pbr/surface_pbr.hlsl")
                 .AsView());
         REQUIRE(text.HasValue());
         String source(StringView(reinterpret_cast<const char8_t*>(text.Value().Data()), text.Value().Size()));

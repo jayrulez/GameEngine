@@ -61,10 +61,10 @@ namespace
     }
     String MiDuck() { return MiPath(u8"Assets/models/Duck/glTF/Duck.gltf"); }
     String MiFox() { return MiPath(u8"Assets/models/Fox/glTF/Fox.gltf"); }
-    String MiFoxNested() { return MiPath(u8"Assets/models/FoxNested/glTF/Fox.gltf"); }
+    String MiFoxNested() { return MiPath(u8"Tests/Models/FoxNested/glTF/Fox.gltf"); }
     String MiGlb()
     {
-        return MiPath(u8"Assets/models/KenneyPlatformerCharacters/GLB/character-oozi.glb");
+        return MiPath(u8"Tests/Models/KenneyPlatformerCharacters/GLB/character-oozi.glb");
     }
 }
 

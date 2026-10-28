@@ -2,7 +2,8 @@
 
 > STATUS: BUILT 2026-10-13, P0 to P5: the capture store, GPU timings and statistics, the RHI's
 > counters, the stream with capture files and `profiler_capture`, `Profiler.UI` with the overlay,
-> and the editor's Profiler tab. Decisions taken and revised the same day (below). Backlog entry it closes:
+> and the editor's Profiler tab. Decisions taken and revised the same day (below). Since
+> 2026-10-28 the overlay and the editor's views are Profiler.GUI's; `Profiler.UI` is deleted. Backlog entry it closes:
 > `Plans/backlog-0.1.md` (Seeded: GPU profiler + profiler visualization). Read CONVENTIONS.md first.
 
 ## What it is for

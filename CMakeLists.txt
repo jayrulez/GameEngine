@@ -436,7 +436,6 @@ add_subdirectory(Code/Foundation/UI)        # retained-mode UI framework (faithf
 add_subdirectory(Code/Foundation/UI.VFS)
 add_subdirectory(Code/Foundation/UI.Shell)
 add_subdirectory(Code/Foundation/UI.Toolkit)
-add_subdirectory(Code/Foundation/Profiler.UI) # the profiler's views drawn with VG (overlay + panel pieces) over Profiler + UI
 add_subdirectory(Code/Foundation/UI.Viewport)
 # --- UI desktop hosts (UIHost + docking workbench; link Graphics/Runtime.Client, desktop-only) ---
 if(NOT EMSCRIPTEN)
@@ -783,7 +782,6 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Foundation/Navigation.Tests                Foundation::Navigation)
     util_test_suite(Code/Foundation/Profiler.Tests                  Foundation::Profiler)
     util_test_suite(Code/Foundation/Profiler.Capture.Tests          Foundation::Profiler.Capture)
-    util_test_suite(Code/Foundation/Profiler.UI.Tests               Foundation::Profiler.UI)
     util_test_suite(Code/Foundation/RHI.Null.Tests                  Foundation::RHI.Null)
     util_test_suite(Code/Foundation/RHI.Validation.Tests            Foundation::RHI.Validation)
     util_test_suite(Code/Foundation/RHI.Capture.Tests               Foundation::RHI.Capture)

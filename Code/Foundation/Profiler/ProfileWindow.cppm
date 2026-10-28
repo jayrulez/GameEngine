@@ -5,8 +5,8 @@
 ///
 /// What a profiler's views show, computed from a source and nothing drawn: the frame times of the
 /// last frames, their statistics, the scopes or GPU passes that took longest over them, and the
-/// counters' values. Here, under every viewer, so the overlay's views (Profiler.UI) and the
-/// editor's (Profiler.GUI) read the same numbers; tests call them on a source of known frames.
+/// counters' values. Here, under the viewers (Profiler.GUI's overlay and the editor's
+/// page), so they read the same numbers; tests call them on a source of known frames.
 
 module;
 #include "Core/Prelude.h"

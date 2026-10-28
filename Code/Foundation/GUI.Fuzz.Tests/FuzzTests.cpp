@@ -31,8 +31,10 @@ namespace
 {
     usize Runs()
     {
-        if (const char* value = std::getenv("GUI_FUZZ_RUNS"))
-            return static_cast<usize>(std::max(1L, std::strtol(value, nullptr, 10)));
+        namespace core = foundation::core;
+        if (const core::Optional<core::String> value = core::GetEnvironmentVariable(u8"GUI_FUZZ_RUNS"); value.HasValue())
+            if (const core::Optional<core::i64> runs = core::ParseInt(value.Value().AsView()); runs.HasValue())
+                return static_cast<usize>(std::max<core::i64>(1, runs.Value()));
         return 40;
     }
 

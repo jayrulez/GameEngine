@@ -93,16 +93,19 @@ namespace
     // The process's resident memory in MiB (Linux; 0 elsewhere), for what does not go through AppRoot.
     [[nodiscard]] f64 ResidentMiB()
     {
-        f64 mib = 0.0;
-        if (FILE* statm = std::fopen("/proc/self/statm", "r"))
-        {
-            unsigned long size = 0;
-            unsigned long resident = 0;
-            if (std::fscanf(statm, "%lu %lu", &size, &resident) == 2)
-                mib = static_cast<f64>(resident) * 4096.0 / (1024.0 * 1024.0);
-            std::fclose(statm);
-        }
-        return mib;
+        // statm's second field is the resident pages.
+        const Result<Array<byte>> statm = ReadFile(StringView(u8"/proc/self/statm"));
+        if (!statm.HasValue())
+            return 0.0;
+        const StringView text(reinterpret_cast<const utf8char*>(statm.Value().Data()), statm.Value().Size());
+        usize start = 0;
+        while (start < text.Size() && text[start] != u8' ')
+            ++start;
+        usize end = ++start;
+        while (end < text.Size() && text[end] >= u8'0' && text[end] <= u8'9')
+            ++end;
+        const Optional<i64> resident = start < text.Size() ? ParseInt(text.SubStr(start, end - start)) : Optional<i64>{};
+        return resident.HasValue() ? static_cast<f64>(resident.Value()) * 4096.0 / (1024.0 * 1024.0) : 0.0;
     }
 
     constexpr StringView kRoboto = u8"Assets/fonts/roboto/Roboto-Regular.ttf";
@@ -487,8 +490,14 @@ private:
     f32 m_soakStart = -1.0f;
     f32 m_soakNextRow = 0.0f;
     Array<f32> m_soakFrames; // frame times (ms) since the last row
-    FILE* m_soakFile = nullptr;
+    UniquePtr<FileStream> m_soakFile; // the soak's rows (--soak-csv)
     void SoakFrame();
+    // A row (or the header) into the soak's CSV, when it is being written.
+    void SoakLine(StringView line)
+    {
+        if (m_soakFile.Get() != nullptr)
+            (void)m_soakFile->Write(line.Data(), line.Size());
+    }
     Array<SweepStep> m_sweepSteps;
     usize m_sweepNext = 0;
     f32 m_nextStatsTime = 1.0f;
@@ -1863,9 +1872,11 @@ void GUISandbox::SoakFrame()
     {
         m_soakStart = m_totalTime;
         m_soakNextRow = m_totalTime + 10.0f;
-        m_soakFile = std::fopen(reinterpret_cast<const char*>(m_soakCsv.CStr()), "w");
-        if (m_soakFile != nullptr)
-            std::fprintf(m_soakFile, "seconds,frames,p50_ms,p95_ms,p99_ms,live_allocations,live_bytes,resident_mib\n");
+        m_soakFile = MakeUnique<FileStream>(AppRoot(), m_soakCsv.AsView(), FileMode::Write);
+        if (!m_soakFile->IsValid())
+            m_soakFile.Reset();
+        else
+            SoakLine(u8"seconds,frames,p50_ms,p95_ms,p99_ms,live_allocations,live_bytes,resident_mib\n");
         std::printf("GUISandbox soak: %.1f minutes, rows in %s\n", static_cast<double>(m_soakSeconds / 60.0f),
                     reinterpret_cast<const char*>(m_soakCsv.CStr()));
     }
@@ -1880,20 +1891,16 @@ void GUISandbox::SoakFrame()
     std::printf("GUISandbox soak %.0fs: p50 %.2f ms, p95 %.2f ms, p99 %.2f ms, %llu live allocations, %.1f MiB resident\n",
                 static_cast<double>(m_totalTime - m_soakStart), static_cast<double>(at(0.5f)), static_cast<double>(at(0.95f)),
                 static_cast<double>(at(0.99f)), static_cast<unsigned long long>(tracking.LiveAllocations()), ResidentMiB());
-    if (m_soakFile != nullptr)
+    if (m_soakFile.Get() != nullptr)
     {
-        std::fprintf(m_soakFile, "%.1f,%llu,%.3f,%.3f,%.3f,%llu,%llu,%.2f\n", static_cast<double>(m_totalTime - m_soakStart),
-                     static_cast<unsigned long long>(sorted.Size()), static_cast<double>(at(0.5f)), static_cast<double>(at(0.95f)),
-                     static_cast<double>(at(0.99f)), static_cast<unsigned long long>(tracking.LiveAllocations()),
-                     static_cast<unsigned long long>(tracking.LiveBytes()), ResidentMiB());
-        std::fflush(m_soakFile);
+        SoakLine(Format(u8"{},{},{},{},{},{},{},{}\n", FormatFixed(m_totalTime - m_soakStart, 1).AsView(), sorted.Size(),
+                        FormatFixed(at(0.5f), 3).AsView(), FormatFixed(at(0.95f), 3).AsView(), FormatFixed(at(0.99f), 3).AsView(),
+                        tracking.LiveAllocations(), tracking.LiveBytes(), FormatFixed(ResidentMiB(), 2).AsView())
+                     .AsView());
     }
     m_soakFrames.Clear();
-    if (m_totalTime - m_soakStart >= m_soakSeconds && m_soakFile != nullptr)
-    {
-        std::fclose(m_soakFile);
-        m_soakFile = nullptr;
-    }
+    if (m_totalTime - m_soakStart >= m_soakSeconds && m_soakFile.Get() != nullptr)
+        m_soakFile.Reset();
 }
 
 void GUISandbox::Settle()
@@ -3509,9 +3516,15 @@ int main(int argc, char** argv)
             app.SetMockPage(StringView(reinterpret_cast<const utf8char*>(argv[++i])));
         else if (arg == StringView(u8"--mock-size") && i + 1 < argc)
         {
-            unsigned width = 0, height = 0;
-            if (std::sscanf(argv[++i], "%ux%u", &width, &height) == 2 && width > 0 && height > 0)
-                app.SetMockSize(width, height);
+            // <width>x<height>
+            const StringView size(reinterpret_cast<const utf8char*>(argv[++i]));
+            usize cross = 0;
+            while (cross < size.Size() && size[cross] != u8'x')
+                ++cross;
+            const Optional<i64> width = ParseInt(size.SubStr(0, cross));
+            const Optional<i64> height = cross < size.Size() ? ParseInt(size.SubStr(cross + 1, size.Size() - cross - 1)) : Optional<i64>{};
+            if (width.HasValue() && height.HasValue() && width.Value() > 0 && height.Value() > 0)
+                app.SetMockSize(static_cast<unsigned>(width.Value()), static_cast<unsigned>(height.Value()));
         }
         else if (arg == StringView(u8"--light"))
             app.SetLightAtStart(true);

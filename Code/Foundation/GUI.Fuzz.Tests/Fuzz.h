@@ -10,7 +10,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cstdio>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -103,19 +102,15 @@ namespace guifuzz
         "<?xml version=\"1.0\"?>", "<!DOCTYPE x>", "type=\"", "{0}", "{1, plural, one {a} other {b}}", "\xC3",
     };
 
-    /// The file's bytes, or nothing.
+    /// The file's bytes, or nothing (read through the engine's file system, as everything else is).
     inline std::string ReadBytes(const std::filesystem::path& path)
     {
-        std::string out;
-        if (FILE* file = std::fopen(path.string().c_str(), "rb"))
-        {
-            char buffer[4096];
-            usize n = 0;
-            while ((n = std::fread(buffer, 1, sizeof buffer, file)) > 0)
-                out.append(buffer, n);
-            std::fclose(file);
-        }
-        return out;
+        const std::u8string name = path.u8string();
+        const foundation::core::Result<foundation::core::Array<foundation::core::byte>> bytes =
+            foundation::core::ReadFile(foundation::core::StringView(name.data(), name.size()));
+        if (!bytes.HasValue())
+            return {};
+        return std::string(reinterpret_cast<const char*>(bytes.Value().Data()), bytes.Value().Size());
     }
 
     /// The sandbox's pages with this extension (`.css`, `.xml`), its main sheet among them: real

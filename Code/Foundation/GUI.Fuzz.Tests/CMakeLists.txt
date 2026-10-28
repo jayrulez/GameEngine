@@ -10,8 +10,7 @@ target_link_libraries(GUI.Fuzz.Tests PRIVATE
     Foundation::I18N doctest::doctest)
 
 target_compile_definitions(GUI.Fuzz.Tests PRIVATE
-    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
-    _CRT_SECURE_NO_WARNINGS) # the harness reads its seeds and GUI_FUZZ_RUNS through the C library (fopen, getenv), as libFuzzer's does
+    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)
 
 target_compile_options(GUI.Fuzz.Tests PRIVATE
     "$<$<CXX_COMPILER_ID:Clang>:-Wno-error=#warnings;-Wno-error=c2y-extensions>"

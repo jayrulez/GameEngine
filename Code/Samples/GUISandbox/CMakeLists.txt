@@ -9,7 +9,6 @@ target_link_libraries(GUISandbox PRIVATE
     Foundation::Shell Foundation::Image Foundation::Image.IO Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.Bidi Foundation::Fonts.HarfBuzz Foundation::Xml.Serialization Foundation::Fonts.DistanceField.Baker
     Foundation::VG Foundation::VG.Renderer Foundation::GUI Foundation::GUI.Shell Foundation::GUI.Inspector Foundation::GUI.Testing Foundation::GUI.Hosting Foundation::GUI.Viewport Foundation::GUI.Docking Foundation::GUI.Toolkit Foundation::GUI.Code Foundation::GUI.Gamekit Foundation::Input Foundation::Shaders Foundation::RHI.Capture
     Foundation::Script ${SCRIPTLIB_ANGELSCRIPT}) # the showcase (G6) runs AngelScript
-target_compile_definitions(GUISandbox PRIVATE _CRT_SECURE_NO_WARNINGS) # its soak log, the process's memory and --size go through the C library (fopen, sscanf)
 util_copy_sdl3_dll(GUISandbox)
 
 # A sanitized run reports only our leaks, not what the desktop's libraries keep (lsan.supp says

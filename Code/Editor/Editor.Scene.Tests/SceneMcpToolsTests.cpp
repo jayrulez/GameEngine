@@ -775,6 +775,12 @@ TEST_CASE("scene-mcp-tools: component_set writes a whole list - references by gu
     REQUIRE(animators->Get(rider)->meshEntities.Size() == 1u);
     CHECK(animators->Get(rider)->meshEntities[0].id == bodyId);
     CHECK(got.payload.Get(u8"value").At(0).AsString() == GuidText(bodyId).AsView());
+    // The same with EntityRef reflected, as the editor's inspector reflects it for its slot.
+    scene::RegisterEntityRefReflection();
+    got = set(u8"skeletal_animation", u8"meshEntities", Format(u8"[\"{}\"]", GuidText(bodyId).AsView()).AsView());
+    REQUIRE(got.ok);
+    CHECK(got.payload.Get(u8"value").At(0).AsString() == GuidText(bodyId).AsView());
+    edit.Commands().Undo(); // that write's own step, so the steps below count as before
 
     // A list of structures: each element an object of the fields it sets, the rest at defaults
     // (foot IK's legs, which Sky Hopper's hero needs and scene_write was the only way to write).

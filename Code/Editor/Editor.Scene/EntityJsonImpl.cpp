@@ -189,7 +189,9 @@ namespace editor
             for (usize i = 0; i < count; ++i)
             {
                 const Variant element = ContainerGetAt(container, nested, i);
-                if (!element.IsEmpty() && element.Type() != nullptr &&
+                // An entity reference is its id, as a lone one is, whether or not its struct is
+                // reflected (the inspector reflects it for its slot).
+                if (!element.IsEmpty() && element.Type() != nullptr && !element.Is<scene::EntityRef>() &&
                     element.Type()->propertyCount > 0 && !IsReferenceType(*element.Type()))
                 {
                     items.Add(PropertiesJson(

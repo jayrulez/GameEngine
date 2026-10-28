@@ -7,7 +7,7 @@
 
 # The AssiduousEngine logo baked into every player as its SVG text (EmbeddedEngineLogo.h): the
 # default loading screen shows it when a game names no loading document.
-set(_engine_logo_svg "${CMAKE_SOURCE_DIR}/Data/Assets/branding/assiduous-logo.svg")
+set(_engine_logo_svg "${CMAKE_SOURCE_DIR}/Data/Branding/assiduous-logo.svg")
 set(_engine_logo_src "${CMAKE_CURRENT_BINARY_DIR}/EmbeddedEngineLogo.cpp")
 add_custom_command(
     OUTPUT "${_engine_logo_src}"

@@ -141,7 +141,7 @@ namespace editor::app
         (void)ApplyEditorWindowIcon(*window, dataRoot);
 
         foundation::image::Image logo;
-        const String logoPath = PathJoin(dataRoot, u8"Assets/branding/assiduous-logo-splash.png");
+        const String logoPath = PathJoin(dataRoot, u8"Branding/assiduous-logo-splash.png");
         const bool hasLogo = foundation::image::io::LoadImage(logoPath.AsView(), logo).IsOk() &&
                              logo.Format() == foundation::image::PixelFormat::RGBA8;
         Array<u8> font;
@@ -172,7 +172,7 @@ namespace editor::app
         Array<shell::WindowIconImage> icon;
         for (const u32 size : kSizes)
         {
-            const String path = PathJoin(dataRoot, Format(u8"Assets/branding/assiduous-icon-{}.png", size).AsView());
+            const String path = PathJoin(dataRoot, Format(u8"Branding/assiduous-icon-{}.png", size).AsView());
             foundation::image::Image image;
             if (foundation::image::io::LoadImage(path.AsView(), image).IsOk() &&
                 image.Format() == foundation::image::PixelFormat::RGBA8 && image.Width() == size)

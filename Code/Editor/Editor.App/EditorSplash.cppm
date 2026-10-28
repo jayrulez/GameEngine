@@ -35,7 +35,7 @@ export namespace editor::app
         static constexpr u32 kWidth = 560;
         static constexpr u32 kHeight = 300;
 
-        /// `logoRgba` is the logo at the splash's size (Assets/branding/assiduous-logo-splash.png,
+        /// `logoRgba` is the logo at the splash's size (Branding/assiduous-logo-splash.png,
         /// tightly packed RGBA), `fontData` a TrueType face for the text; either may be empty (the
         /// splash draws without it). `window` may be null (a test draws without showing).
         EditorSplash(shell::IShell* shellRef, shell::IWindow* window, Span<const u8> logoRgba, u32 logoWidth,
@@ -75,7 +75,7 @@ export namespace editor::app
     };
 
     /// Open the splash over a new software window of `shell` (after the main window: the shell's
-    /// first window is its main one), with the logo from <dataRoot>/Assets/branding and the text
+    /// first window is its main one), with the logo from <dataRoot>/Branding and the text
     /// in the font at `fontPath`, else `embeddedFont` (the face built into the editor). Null when
     /// the window cannot open: the editor then starts without one.
     [[nodiscard]] UniquePtr<EditorSplash> OpenEditorSplash(shell::IShell& shellRef, StringView dataRoot,
@@ -85,11 +85,11 @@ export namespace editor::app
     /// The AssiduousEngine logo (mark and wordmark, for a dark background), relative to the data
     /// root: what a page's markup shows (`<Image src="...">`, through the editor's resources). Its
     /// aspect is kEditorLogoAspect (width over height).
-    inline constexpr const char8_t* kEditorLogoPath = u8"Assets/branding/assiduous-logo.svg";
+    inline constexpr const char8_t* kEditorLogoPath = u8"Branding/assiduous-logo.svg";
     inline constexpr f32 kEditorLogoAspect = 931.0f / 200.0f;
 
     /// The AssiduousEngine icon on `window` (its title bar, the taskbar), from
-    /// <dataRoot>/Assets/branding/assiduous-icon-<size>.png: 32 px at the normal scale, the larger
+    /// <dataRoot>/Branding/assiduous-icon-<size>.png: 32 px at the normal scale, the larger
     /// sizes for scaled displays. False when none of them loads.
     bool ApplyEditorWindowIcon(shell::IWindow& window, StringView dataRoot);
 }

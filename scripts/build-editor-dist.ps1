@@ -119,6 +119,7 @@ Copy-Item -Recurse "Data\Assets"   (Join-Path $Out "Data\Assets")
 # The editor's interface (its sheets, page markup and icons, read at startup), less the GUISandbox's
 # design mock.
 Copy-Item -Recurse "Data\Editor"   (Join-Path $Out "Data\Editor")
+Copy-Item -Recurse "Data\Branding" (Join-Path $Out "Data\Branding") # the splash, the logo and the window icons
 Remove-Item -Recurse -Force (Join-Path $Out "Data\Editor\Mock")
 Copy-Item          "Data\.dataroot" (Join-Path $Out "Data\.dataroot")
 

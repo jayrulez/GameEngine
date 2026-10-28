@@ -108,6 +108,7 @@ echo "An editor distribution: start from shaders.dpak; the sources are for cooki
 #    marker. Skip Data/Output (build output) and Data/Editor/Mock (the GUISandbox's design mock).
 cp -r "Data/Assets" "$DIST/Data/Assets"
 cp -r "Data/Editor" "$DIST/Data/Editor"
+cp -r "Data/Branding" "$DIST/Data/Branding" # the splash, the logo and the window icons
 rm -rf "$DIST/Data/Editor/Mock"
 cp "Data/.dataroot" "$DIST/Data/.dataroot"
 

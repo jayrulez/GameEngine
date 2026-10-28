@@ -67,7 +67,7 @@ Shared facts that apply everywhere:
 - Files: Editor/Editor.App/EditorSplash.cppm, EditorSplashImpl.cpp; Tools/Tools.Editor/Main.cpp (opens it, `startupProgress`, `startupFinished`); ApplicationImpl.cpp ReportStartup.
 - Kind: frame (separate CPU-drawn software window, 560x300, title "AssiduousEngine").
 - Opened by: launch; closed when the main window shows.
-- Regions: logo PNG (Assets/branding/assiduous-logo-splash.png) centred in the upper part | status text (15px TrueType, left) | progress bar (track + accent fill) | version (bottom right, dim).
+- Regions: logo PNG (Branding/assiduous-logo-splash.png) centred in the upper part | status text (15px TrueType, left) | progress bar (track + accent fill) | version (bottom right, dim).
 - States: steps "Starting the graphics device" 0.05, "Loading settings" 0.12, "Loading fonts" 0.18, "Preparing the interface" 0.30, "Starting the renderer" 0.45, "Loading the editors" 0.62, "Opening the project manager" 0.80 or "Opening <dir>" 0.70, "Opening <page>" 0.72..0.98 per restored page, "Ready" 1.0. Without the logo or font it draws without them.
 - Interactions: none (events are pumped so the window stays responsive).
 - Problems: no cancel; a failure during startup is not shown here (it goes to the log); progress is hand-tuned constants, not measured.

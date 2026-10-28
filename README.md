@@ -1,7 +1,7 @@
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Data/Assets/branding/assiduous-logo.svg">
-    <img alt="AssiduousEngine" src="Data/Assets/branding/assiduous-logo-light.svg" height="72">
+    <source media="(prefers-color-scheme: dark)" srcset="Data/Branding/assiduous-logo.svg">
+    <img alt="AssiduousEngine" src="Data/Branding/assiduous-logo-light.svg" height="72">
   </picture>
 </h1>
 
@@ -237,4 +237,4 @@ The engine draws inspiration from [ezEngine](https://github.com/ezEngine/ezEngin
 ## License
 
 MIT. See [LICENSE](LICENSE). The AssiduousEngine name and logo are not: they stay the project's
-own, under the terms in [Data/Assets/branding/LICENSE.txt](Data/Assets/branding/LICENSE.txt).
+own, under the terms in [Data/Branding/LICENSE.txt](Data/Branding/LICENSE.txt).

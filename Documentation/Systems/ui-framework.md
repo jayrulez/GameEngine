@@ -19,7 +19,7 @@ game tier that once did is in `Archive/game-ui-history.md`); this doc covers the
   canvases, the code editor.
 - **`foundation.ui.runtime`** - `UIHost`: window attachment, per-frame Update/Draw, the
   damage gate, theme-icon baking, DPI/UI-scale.
-- Sibling libs: `.viewport` (3D-in-UI), `.shell` (input bridge), `.application`,
+- Sibling libs: `.shell` (input bridge), `.application`,
   `.vfs`. (The cooked documents and themes, `.resource` and `ui.pipeline`, went with the game
   tier: games use foundation.gui.)
 

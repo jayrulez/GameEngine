@@ -15,8 +15,6 @@
 #include "Core/Log/Log.h" // LOG_ERROR (no data root)
 
 import foundation.core;
-import foundation.rhi;
-import foundation.shaders;
 import foundation.shell;
 import foundation.image;
 import foundation.fonts;
@@ -39,17 +37,12 @@ import foundation.graphics;
 import foundation.graphics.gpu;
 import foundation.ui.runtime;
 import foundation.ui.application;
-import foundation.ui.viewport;
 
-#include "../../Common/FlyCamera.h" // shared free-fly camera, driven from the viewport's gated devices
-#include "../../Common/SpinningCube.h" // what the Viewport tab shows
 
 using namespace foundation::core;
 namespace runtime = foundation::runtime;
 namespace graphics = foundation::graphics;
 namespace ui = foundation::ui;
-namespace rhi = foundation::rhi;
-namespace shaders = foundation::shaders;
 namespace shell = foundation::shell;
 namespace image = foundation::image;
 namespace fonts = foundation::fonts;
@@ -678,7 +671,6 @@ public:
     void OnStartup(runtime::IApplicationHost& host) override;
     void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;
     void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override;
-    void OnShutdown(runtime::IApplicationHost& host) override;
 
 private:
     void BuildUI();
@@ -739,8 +731,6 @@ private:
     BuildNodeGraphTab(ui::TabView* tabView); // foundation.ui.toolkit: NodeGraphCanvas state machine
     void BuildDockingTab(
         ui::TabView* tabView); // foundation.ui.application: DockManager + OS floating windows
-    void BuildViewportTab(
-        ui::TabView* tabView); // foundation.ui.viewport: ViewportView hosting a spinning cube
     void BuildPauseMenuTab(
         ui::TabView* tabView); // loads a .sml screen via a VFS-backed resource provider
 
@@ -784,23 +774,6 @@ private:
     // (the tab tree owns it via AddView; we keep a ref for lifetime clarity). Constructed in OnStartup.
     UniquePtr<ui::application::RuntimeDockableWindowHost> m_dockHost;
     RefPtr<ui::toolkit::DockManager> m_dockManager;
-
-    // foundation.ui.viewport: a ViewportView hosting a raw-RHI spinning cube. The view owns the offscreen
-    // RT + gated InputSurface; the app owns an InputRouter and a FlyCamera driven by that surface's gated
-    // devices (occlusion-gated by IsHovered()/IsFocused()). Wired in OnStartup after AttachWindow.
-    graphics::RenderWindow* m_mainRw = nullptr;
-    RefPtr<ui::viewport::ViewportView> m_viewport;
-    RefPtr<ui::toolkit::DockManager>
-        m_viewportDock; // separate DockManager (the existing Docking tab is untouched)
-    graphics::RenderWindow* m_viewportWindow =
-        nullptr; // window currently hosting the viewport (tracks undock)
-    UniquePtr<shell::InputRouter> m_vpRouter;
-    samples::FlyCamera m_cam;
-    samples::SpinningCube m_cube;
-    shaders::Compiler* m_cubeCompiler = nullptr;
-    f32 m_time = 0.0f;
-    void WireViewport(runtime::IApplicationHost& host);
-    void UpdateViewportHostWindow(); // re-bind the viewport when its dockable panel moves windows
 
     // The reusable UI-on-runtime bridge (owns the UIContext, per-window VG + input). Declared LAST so it
     // tears down first.
@@ -875,100 +848,6 @@ void UISandbox::OnStartup(runtime::IApplicationHost& host)
     BuildUI(); // builds m_root, sets theme on m_uiHost->Context(), registers m_toolkitThemeExt
     m_uiHost->AttachWindow(mainRw,
                            m_root); // adds the root to the context + wires per-window VG + input
-
-    m_mainRw = mainRw;
-    WireViewport(host); // now that the window is attached, RendererFor(mainRw) is valid
-}
-
-// Wire the Viewport tab's 3D content after the main window is attached: register the ViewportView's
-// color target into the main window's VGRenderer, build the spinning-cube renderer, and set up the gated
-// input (own InputRouter + the view's InputSurface). Must run AFTER AttachWindow (RendererFor needs it).
-void UISandbox::WireViewport(runtime::IApplicationHost& host)
-{
-    if (!m_viewport || m_mainRw == nullptr)
-    {
-        return;
-    }
-
-    rhi::Device* device = host.Graphics()->Raw();
-    vg::renderer::VGRenderer* renderer = m_uiHost->RendererFor(m_mainRw);
-    m_viewport->Initialize(device, renderer, host.Shell()->Input(), m_mainRw->Window().Id());
-    m_viewportWindow =
-        m_mainRw; // starts docked in the main window; UpdateViewportHostWindow tracks undock
-
-    // The spinning-cube renderer (its own shader compiler, kept for the app lifetime).
-    (void)shaders::createCompiler(shaders::CompilerDesc{}, m_cubeCompiler);
-    if (m_cubeCompiler != nullptr)
-    {
-        // The cube's pipeline reads the viewport's owned formats - single source of truth, no mismatch.
-        m_cube.Init(device, m_cubeCompiler, static_cast<i32>(host.Graphics()->FramesInFlight()),
-                    m_viewport->ColorFormat(), m_viewport->DepthFormat());
-    }
-
-    // Camera framing the cube; slower move so it stays usable in a small panel.
-    m_cam.position = Float3{0.0f, 0.0f, 4.5f};
-    m_cam.yaw = 0.0f;
-    m_cam.pitch = 0.0f;
-    m_cam.moveSpeed = 4.0f;
-    m_cam.fastSpeed = 12.0f;
-
-    // Render callback: build the MVP from the camera + spin time and draw the cube into the viewport's
-    // offscreen targets (already transitioned to their render states by RenderContent).
-    samples::SpinningCube* cube = &m_cube;
-    samples::FlyCamera* cam = &m_cam;
-    f32* time = &m_time;
-    m_viewport->OnRender =
-        [cube, cam, time](ui::viewport::ViewportView& v, rhi::CommandEncoder& enc, i32 frameIndex)
-    {
-        const u32 w = v.RenderWidth(), h = v.RenderHeight();
-        if (w == 0 || h == 0)
-        {
-            return;
-        }
-        const f32 aspect = static_cast<f32>(w) / static_cast<f32>(h);
-        const Float4x4 proj = Float4x4::PerspectiveFovRH(1.0f, aspect, 0.1f, 100.0f);
-        const Float4x4 view =
-            Float4x4::LookAtRH(cam->position, cam->position + cam->Forward(), cam->Up());
-        const Float4x4 model = Float4x4::RotationY(*time) * Float4x4::RotationX(*time * 0.5f);
-        const Float4x4 mvp = model * view * proj; // row-vector order (v * M * V * P)
-        cube->Render(enc, v.ColorTargetView(), v.DepthTargetView(), w, h, v.ClearColor, mvp,
-                     frameIndex);
-    };
-
-    // Gated input: the app owns an InputRouter (UIHost's is private); register the view's surface.
-    m_vpRouter = MakeUnique<shell::InputRouter>(AppRoot(), host.Shell()->Input());
-    if (m_viewport->Surface() != nullptr)
-    {
-        m_vpRouter->AddSurface(m_viewport->Surface());
-    }
-}
-
-// Detect when the viewport's dockable panel has moved to a different window (undocked into an OS float, or
-// re-docked into the main window) and re-bind the viewport to that window's VGRenderer + window id, so its
-// UI can sample the 3D target and input routes correctly. Called each frame after the UI has updated.
-void UISandbox::UpdateViewportHostWindow()
-{
-    if (!m_viewport || !m_uiHost)
-    {
-        return;
-    }
-    ui::RootView* root = m_viewport->Root();
-    if (root == nullptr)
-    {
-        return;
-    }
-    graphics::RenderWindow* host = m_uiHost->WindowForRoot(root);
-    if (host == nullptr || host == m_viewportWindow)
-    {
-        return;
-    } // unchanged (or not yet attached)
-
-    // Only switch once the new window's renderer exists (the float's UIHost::AttachWindow ran).
-    if (vg::renderer::VGRenderer* renderer = m_uiHost->RendererFor(host))
-    {
-        m_viewport->AttachToWindow(renderer, host->Window().Id());
-        m_viewportWindow = host;
-    }
 }
 
 void UISandbox::LoadFontSize(StringView family, StringView path, f32 pixelHeight)
@@ -1053,7 +932,6 @@ void UISandbox::BuildUI()
     BuildPropertyGridTab(tabView.Get());
     BuildCurveEditorTab(tabView.Get());
     BuildNodeGraphTab(tabView.Get());
-    BuildViewportTab(tabView.Get()); // foundation.ui.viewport: a 3D spinning cube in a UI panel
     BuildDockingTab(
         tabView.Get()); // foundation.ui.application: DockManager -> real OS floating windows (last)
     BuildPauseMenuTab(tabView.Get());
@@ -3079,48 +2957,6 @@ void UISandbox::BuildControlsTab(ui::TabView* tabView)
     }
 }
 
-void UISandbox::BuildViewportTab(ui::TabView* tabView)
-{
-    auto body = VFlex(6.0f);
-    body->Padding = ui::Thickness{8, 8};
-    body->AddView(
-        MakeRef<ui::Label>(AppRoot(),
-                           StringView(u8"foundation.ui.viewport - a 3D spinning cube hosted in a "
-                                      u8"dockable UI panel. Hover + hold RMB to "
-                                      u8"look, WASD/QE to move, wheel to zoom; input is gated to "
-                                      u8"the viewport (move off and the camera "
-                                      u8"stops, the cube keeps spinning). Drag the Viewport "
-                                      u8"panel's tab OUT to float it into its own OS "
-                                      u8"window - the cube keeps rendering and stays input-gated "
-                                      u8"there (undock re-binds it to that "
-                                      u8"window's renderer)."))
-            .Get(),
-        LP(ui::SizeSpec::Match(), ui::SizeSpec::Wrap()));
-
-    // A SEPARATE DockManager (shares the app's RuntimeDockableWindowHost with the existing Docking tab,
-    // which is left untouched). The viewport lives in a dockable panel, so it can be floated into an OS window.
-    auto dm = MakeRef<ui::toolkit::DockManager>(AppRoot());
-    m_viewportDock = dm;
-    dm->DockableWindowHost = m_dockHost.Get();
-    body->AddView(dm.Get(), Grow(1.0f));
-
-    m_viewport = MakeRef<ui::viewport::ViewportView>(AppRoot());
-    m_viewport->SetFitMode(
-        FitMode::Letterbox); // preserve the cube's aspect; bars visualize the fit region
-    ui::toolkit::DockablePanel* vpPanel = dm->AddPanel(u8"Viewport", m_viewport.Get());
-    ui::toolkit::DockablePanel* infoPanel = dm->AddPanel(
-        u8"Inspector",
-        MakeRef<ui::Label>(AppRoot(),
-                           StringView(u8"Drag the Viewport tab out to float it into an OS window."))
-            .Get());
-    dm->DockPanel(vpPanel, ui::toolkit::DockPosition::Center);
-    dm->DockPanel(infoPanel, ui::toolkit::DockPosition::Right);
-
-    const i32 idx = tabView->AddTab(u8"Viewport (3D)", body.Get());
-    tabView->SetSelectedIndex(
-        idx); // open on the viewport so the 3D cube + gating are the first thing shown
-}
-
 void UISandbox::OnUpdate(runtime::IApplicationHost&, f32 dt)
 {
     // Hold-to-repeat: tick the RepeatButton each frame (mirrors Sedulous UISandbox).
@@ -3141,51 +2977,13 @@ void UISandbox::OnUpdate(runtime::IApplicationHost&, f32 dt)
     {
         m_dockHost->Tick();
     }
-
-    // Viewport: spin the cube + drive its camera from the gated surface. SyncInputRegion runs AFTER the
-    // UI laid out this frame (uiHost->Update) so the surface tracks the view's current on-screen rect; the
-    // camera reads the gated devices only when the UI says the viewport is genuinely hovered/focused (so
-    // occluded/inactive-tab input can't leak, and a look-drag off the view keeps going while focused).
-    m_time += dt;
-    if (m_viewport && m_vpRouter)
-    {
-        UpdateViewportHostWindow(); // re-bind if the dockable panel was floated into / out of an OS window
-        m_viewport->SyncInputRegion();
-        m_vpRouter->Update();
-        if (m_viewport->IsHovered() || m_viewport->IsFocused())
-        {
-            m_cam.Update(m_viewport->Keyboard(), m_viewport->Mouse(), dt);
-        }
-    }
 }
 
 void UISandbox::OnRenderWindow(runtime::IApplicationHost&, graphics::FrameContext& frame)
 {
-    // Render the 3D viewport content into its offscreen target BEFORE the UI draws (the UI samples that
-    // target as an image). On whichever window currently hosts the viewport (main, or a floated OS window).
-    if (m_viewport && m_viewport->IsReady() && frame.valid && frame.window == m_viewportWindow)
-    {
-        m_viewport->RenderContent(*frame.encoder, static_cast<i32>(frame.frameIndex));
-    }
     if (m_uiHost)
     {
         m_uiHost->RenderWindow(frame);
-    }
-}
-
-void UISandbox::OnShutdown(runtime::IApplicationHost&)
-{
-    // Release the viewport's GPU targets + external-texture registration while the device and the
-    // per-window VGRenderer are still alive (the ViewportView outlives the window inside the view tree).
-    if (m_viewport)
-    {
-        m_viewport->Shutdown();
-    }
-    m_cube.Shutdown();
-    if (m_cubeCompiler != nullptr)
-    {
-        m_cubeCompiler->Destroy();
-        m_cubeCompiler = nullptr;
     }
 }
 

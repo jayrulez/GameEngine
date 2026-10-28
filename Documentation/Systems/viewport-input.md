@@ -6,7 +6,8 @@
 
 One mechanism for routing input into a content surface placed in a window through a fit transform -
 covering both the editor's embedded-game panel and the runtime fit mode with a single path. Shipped
-(`foundation.shell` + `foundation.ui.viewport`).
+(`foundation.shell`; the GUI's `foundation.gui.viewport::Viewport` owns an `InputSurface`; the old
+`foundation.ui.viewport` was deleted 2026-10-28).
 
 ## The unified problem
 
@@ -43,7 +44,7 @@ OS events
   (`ContentMouse()`); letterbox bars return "no hit." A consumer (`FlyCamera`, an ImGui feed) polls
   `surface->Mouse()->X()` instead of the raw manager and is otherwise unchanged (drop-in), so there is
   no per-consumer viewport code. `SetFit` / `SetFitMode` retarget the region.
-- **`InputRouter`** (consumed by `ViewportView` in `foundation.ui.viewport`): owns focus/capture/hover
+- **`InputRouter`**: owns focus/capture/hover
   and dispatch order, consulting `HoverWindow()` + the event stream.
 
 ## One fit function, one enum

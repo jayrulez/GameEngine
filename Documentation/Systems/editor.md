@@ -50,8 +50,8 @@ skeleton + Lumix's mutation discipline + Traktor's asset pipeline.
 - **UI framework + workbench layer - proven in UISandbox:** `foundation.ui` + toolkit
  `DockManager`/`DockablePanel` (persistence IDs + dock-layout save/restore tests),
  `foundation.ui.application::RuntimeDockableWindowHost` (floating panels = real borderless OS windows,
- drag-follow Tick), `foundation.ui.viewport::ViewportView` (offscreen color+depth RT, `OnRender`
- delegate with barriers handled, ContentFit shared draw/input math, gated `InputSurface` facades).
+ drag-follow Tick). (Its `foundation.ui.viewport::ViewportView` is deleted; the GUI's
+ `foundation.gui.viewport::Viewport` does the same job.)
 - **Debug-draw** (per-scene + global gizmos + text) - gizmo rendering foundation.
 - **Renderer + scene/ECS + animation + particles** - viewport content done. Resource manager with
  dependency tracking + transitive reload (hot-reload seam).

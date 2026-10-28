@@ -386,6 +386,9 @@ export namespace foundation::gui
             for (usize i = 0; i < 4; ++i) // a standard one also answers as its Result
                 if (kNames[i] == resultName && m_onResult)
                     m_onResult(static_cast<Result>(i));
+            // Closing lets the popup layer's reference go, which may be the last one: kept alive
+            // until its answer has been told.
+            const core::RefPtr<Node> keep(this);
             Close();
             SendEvent(Event(EventType::Changed, this));
         }

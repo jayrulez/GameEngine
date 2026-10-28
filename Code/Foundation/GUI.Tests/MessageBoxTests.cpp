@@ -200,6 +200,34 @@ TEST_CASE("messagebox: pressing a button reports the result and closes")
     CHECK(d->PopupCount() == 0u);
 }
 
+// A box nothing else holds (an editor's prompt: made, opened, its reference dropped) tells its
+// answer after its close let the popup layer's reference go: it lives until the event is out.
+TEST_CASE("messagebox: one only its popup holds tells its answer after closing")
+{
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{500.0f, 500.0f});
+    EventDispatcher* d = root->GetEventDispatcher();
+
+    core::String answer;
+    Button* okButton = nullptr;
+    {
+        auto box = Make<MessageBox>();
+        box->Configure(core::StringView(u8"Confirm"), core::StringView(u8"Delete it?"), MessageBox::Buttons::OkCancel);
+        MessageBox* raw = box.Get();
+        (void)box->AddEventListener(EventType::Changed, [&answer, raw](const Event&) { answer = raw->GetResultName(); });
+        box->OpenModal(*root.Get());
+        (void)root->UpdateLayout();
+        okButton = box->ButtonAt(1);
+    } // the popup layer holds it alone now
+    REQUIRE(okButton != nullptr);
+    const core::Float2 center = WorldCenter(okButton);
+    d->InjectMouseDown(center, MouseButton::Left);
+    d->InjectMouseUp(center, MouseButton::Left);
+
+    CHECK(answer == core::StringView(u8"ok"));
+    CHECK(d->PopupCount() == 0u);
+}
+
 TEST_CASE("window: its close button closes it; closable and resizable show or hide its button and grip")
 {
     auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));

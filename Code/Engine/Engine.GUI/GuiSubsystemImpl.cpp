@@ -815,6 +815,7 @@ namespace engine::gui
         MakeScreenTier(m_screen);
         m_overlay = MakeRef<UIWidget>(m_allocator);
         m_overlay->SetTag(StringView(u8"overlays"));
+        m_overlay->SetHitTestVisible(false); // over the screens: only what is on it takes the pointer
         {
             Node::StyleWriteScope defaults(*m_overlay);
             m_overlay->EditLayoutStyle([](LayoutStyle& s) { s.Kind = Display::Stack; });

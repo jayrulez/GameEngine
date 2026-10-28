@@ -578,6 +578,33 @@ TEST_CASE("engine.gui: with no GUI under the pointer the keys go to the screens 
     CHECK(engine.gui->Screens()->Count() == 1u);
 }
 
+TEST_CASE("engine.gui: a button on a screen a game pushed takes the hover and the click; the empty overlay layer over it takes nothing")
+{
+    Engine engine;
+    engine.gui->ScreenRoot()->SetViewportSize(Float2{800.0f, 600.0f});
+    RefPtr<UIWidget> menu = MakeRef<UIWidget>(DefaultAllocator());
+    RefPtr<Button> play = MakeButton(u8"play", Float2{20.0f, 20.0f});
+    menu->AddChild(play.Get());
+    i32 clicks = 0;
+    (void)play->AddEventListener(EventType::MouseClick, [&](const Event&) { ++clicks; });
+    REQUIRE(engine.gui->Screens()->Push(*menu) != nullptr);
+    REQUIRE(engine.gui->OverlayLayer() != nullptr);
+    CHECK(engine.gui->OverlayCount() == 0u);
+    engine.Frame();
+
+    engine.devices.mouse.x = 50.0f;
+    engine.devices.mouse.y = 30.0f;
+    engine.Frame();
+    CHECK(engine.gui->ActiveInputRoot() == engine.gui->ScreenRoot());
+    CHECK(engine.gui->ScreenRoot()->GetEventDispatcher()->NodeAt(Float2{50.0f, 30.0f}) == play.Get());
+    CHECK(play->IsHovered());
+    engine.devices.mouse.down = true;
+    engine.Frame();
+    engine.devices.mouse.down = false;
+    engine.Frame();
+    CHECK(clicks == 1);
+}
+
 TEST_CASE("engine.gui: a source bound to another scene never reaches this scene's GUI")
 {
     Engine engine;

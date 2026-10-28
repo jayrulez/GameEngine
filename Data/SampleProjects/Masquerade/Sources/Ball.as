@@ -35,7 +35,6 @@ const int kNoteGotTarget = 1;  // you tagged your target
 const int kNoteMissed = 2;     // you tagged the wrong person: your mask flares
 const int kNoteTagged = 3;     // your hunter tagged you: a new costume, somewhere else
 const int kNoteFlare = 4;      // someone's mask flares: a hunter, there
-const int kNoteWrongMap = 5;   // the host is at another map: you have left
 const int kNoteFull = 6;       // every seat is a player's: you watch
 
 class Ball
@@ -117,16 +116,15 @@ class Ball
             m_bots.insertLast(m_hunters[h]);
             m_dressed.insertLast(-1);
         }
-        // The network's half: the host hears input, tags, joins and leaves; a client its notes and
-        // the host's map. Registered on every peer (a handler that never fires costs nothing).
+        // The network's half: the host hears input, tags, joins and leaves; a client its notes (the
+        // host's map is the game's: Masquerade.as). Registered on every peer (a handler that never
+        // fires costs nothing).
         NetNumberHandler@ input = NetNumberHandler(this.onNetInput);
         Net::on("input", input);
         NetHandler@ tag = NetHandler(this.onNetTag);
         Net::on("tag", tag);
         NetNumberHandler@ note = NetNumberHandler(this.onNetNote);
         Net::on("note", note);
-        NetTextHandler@ map = NetTextHandler(this.onNetMap);
-        Net::on("map", map);
         NetHandler@ joined = NetHandler(this.onJoined);
         Net::onJoin(joined);
         NetHandler@ left = NetHandler(this.onLeft);
@@ -600,16 +598,6 @@ class Ball
         if (Net::isClient())
         {
             self.scene.events.emit("Note", int(what));
-        }
-    }
-
-    // A client: the host's map, on joining. At another map, it leaves and says why.
-    void onNetMap(int sender, const string &in name)
-    {
-        if (Net::isClient() && name != self.scene.name())
-        {
-            Net::disconnect();
-            self.scene.events.emit("Note", kNoteWrongMap);
         }
     }
 

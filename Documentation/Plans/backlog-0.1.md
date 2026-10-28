@@ -65,6 +65,11 @@
   their text (a small cache in the views) so an unchanged one is reused; then measure the timeline's
   bars, the rest of the views' 2.6 ms.
 
+- **A process's resident memory on every platform** (user 2026-10-28: backlog): GUISandbox's soak
+  log reads `/proc/self/statm`, so it reports 0 MiB resident off Linux. Core's system layer could
+  answer it everywhere (`GetProcessMemoryInfo` on Windows, `task_info` on macOS) and the sandbox ask
+  it.
+
 ## Engine
 
 - **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script

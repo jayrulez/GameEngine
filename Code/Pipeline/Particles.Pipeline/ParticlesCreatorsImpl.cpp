@@ -23,6 +23,11 @@ namespace pipeline
 
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& fx)
     {
+        (void)AddDefaultParticleSystem(fx);
+    }
+
+    foundation::particles::ParticleSystem& AddDefaultParticleSystem(foundation::particles::ParticleEffect& fx)
+    {
         namespace particles = foundation::particles;
         particles::ParticleSystem& sys = fx.AddSystem(2000);
         sys.AddInitializer<particles::LifetimeInitializer>().lifetime =
@@ -34,6 +39,7 @@ namespace pipeline
         sys.AddBehavior<particles::GravityBehavior>();
         sys.emitter.mode = particles::EmissionMode::Continuous;
         sys.emitter.spawnRate = 120.0f;
+        return sys;
     }
 
     void RegisterParticleCreators(AssetCreatorRegistry& registry)
@@ -53,5 +59,12 @@ namespace pipeline
             };
             registry.Register(Move(creator));
         }
+    }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(ParticleEffectAsset, "rtti::pipeline::particles")
+    {
+        // v1 (2026-10-27): each system its sub-emitters; v0's effect-level links read onto them.
+        builder.DataVersion(1).ReadsDataVersionsFrom(0).Attribute("displayName", String(u8"Particle Effect"));
     }
 }

@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Animation - :graph_page partition.
+// Editor::Animation - the `:graph_page` partition.
 //
-// AnimationGraphEditorPage: the blend-tree / state-machine
-// authoring tool for an AnimationGraphAsset.
+// AnimationGraphEditorPage: an animation graph on the GUI from its markup
+// (Data/Editor/AnimationGraphPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 10, part 5).
+// The graph's layers and parameters are lists, each with its bar (a parameter added by its type);
+// the chosen layer is on the graph view (:graph_states: its states the nodes, Any State one more,
+// its transitions arrows; a state added from the view's menu, a transition dragged from a state's
+// edge); under it the preview plays the graph on the rig the clip page has (a skeleton and a
+// skinned mesh, kept per graph; never shown before, the skeleton its first clip's import names),
+// with the kit's transport, the state it plays lit on the graph and named beside the transport.
 //
-//   +----------------+--------------------------------------+---------------------+
-//   | Layers         |  NodeGraphCanvas (selected layer)    |  inspector for the  |
-//   |  + add/select  |   states = nodes, transitions =      |  selected state /   |
-//   | Parameters     |   straight arrowed edges, Any State  |  transition / layer |
-//   |  + add/select  |   pseudo-node; right-click authors   |  / parameter        |
-//   +----------------+--------------------------------------+---------------------+
-//
-// The canvas runs in ConnectionStyle::StraightNodeToNode (the state-machine style added for this
-// page): node 0 is the per-layer "Any State" pseudo-node, node 1+i is state i, and connection
-// index == transition index (built in transition order), so canvas events map back losslessly.
-// Node positions persist on the ASSET (layerStatePositions / layerAnyStatePositions - editor-only
-// data never rides the cooked source). Edits mutate the authored source in place and record
-// coalesced whole-asset blob-snapshot undo; structural edits defer canvas + inspector rebuilds
-// through the UI mutation queue and reselect by identity. Save writes the asset + recooks.
+// The grid shows what is chosen: a layer (its name, blend, weight and the state it starts in), a
+// parameter (its name, type and default), a state (its name, speed, looping and what it plays: a
+// clip, or a blend by one or two parameters of entries, each a clip at a threshold or a place) or a
+// transition (where it goes, its blend time, its exit time, its priority and its conditions, each a
+// parameter compared with a value). The asset keeps its kinds as numbers and its lists in parallel
+// arrays, so the rows are the page's own. Each edit is one undo step of the whole asset. Under them,
+// the preview's parameters: what the graph plays on, set here to try it (a trigger fired), the
+// page's alone and never the graph's.
 
 module;
 #include "Core/Prelude.h"
@@ -28,265 +28,163 @@ export module editor.animation:graph_page;
 
 import foundation.core;
 import foundation.content;
-import foundation.rhi;
 import foundation.graphics;
-import foundation.shell;
 import foundation.runtime;
 import foundation.runtime.client;
-import foundation.scene;
-import engine.scene;
+import foundation.resource;
 import foundation.animation;
 import foundation.animation.resource;
 import animation.pipeline;
-import foundation.geometry; // StaticMesh (the optional skinned preview mesh)
-import foundation.resource;
-import foundation.render;
-import engine.render;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
-import editor.preview;
+import :preview;
+import :graph_states;
 
 using namespace foundation::core;
 
 export namespace editor
 {
-    namespace runtime = foundation::runtime;
-    namespace ui = foundation::ui;
-    namespace vg = foundation::vg;
-    namespace scene = foundation::scene;
-    namespace render = foundation::render;
-    namespace animation = foundation::animation;
-
-    // What the inspector is currently showing. Identity survives rebuilds (indices into the
-    // source, re-validated on every use).
-    enum class GraphSelKind : u8
+    /// What the graph page's grid shows.
+    enum class GraphChoiceKind : u8
     {
-        None,
         Layer,
         Parameter,
         State,
-        Transition
+        Transition,
     };
-
-    struct GraphSel
+    struct GraphChoice
     {
-        GraphSelKind kind = GraphSelKind::None;
-        i32 layer = 0;  // owning layer (Layer/State/Transition)
-        i32 index = -1; // parameter / state / transition index
-
-        [[nodiscard]] bool operator==(const GraphSel& o) const noexcept
-        {
-            return kind == o.kind && layer == o.layer && index == o.index;
-        }
+        GraphChoiceKind kind = GraphChoiceKind::Layer;
+        i32 index = 0; // the parameter's, the state's or the transition's (in the layer shown)
+        [[nodiscard]] bool operator==(const GraphChoice&) const = default;
     };
 
-    class AnimationGraphEditorPage final : public app::UIEditorPage, public IPlaybackPage
+    class AnimationGraphEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
-        // ---- IPlaybackPage: the preview player; a rebuild is the rewind ----
+        static constexpr StringView kPath = u8"Editor/AnimationGraphPage.gml";
+
+        AnimationGraphEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
+        ~AnimationGraphEditorPage() override;
+
+        void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) override;
+        void OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
+        void OnClose() override;
+
+        // === IPlaybackPage: the preview's, never the graph's ===
         [[nodiscard]] bool CanPlay() const override { return m_player.Get() != nullptr; }
-        [[nodiscard]] bool IsPlaying() const override { return m_previewPlaying; }
-        void Play() override { m_previewPlaying = true; }
-        void Pause() override { m_previewPlaying = false; }
+        [[nodiscard]] bool IsPlaying() const override { return m_playing; }
+        void Play() override { m_playing = true; }
+        void Pause() override { m_playing = false; }
         void Stop() override;
         void Restart() override;
 
-        AnimationGraphEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                                 ui::runtime::UIHost& uiHost,
-                                 foundation::content::Instance& instance);
+        /// The layer on the graph view.
+        void ChooseLayer(i32 layer);
+        [[nodiscard]] i32 Layer() const noexcept { return m_layer; }
+        /// What the grid shows; the lists and the view follow.
+        void Choose(const GraphChoice& choice);
+        [[nodiscard]] const GraphChoice& Chosen() const noexcept { return m_chosen; }
+        void AddLayer();
+        bool RemoveLayer();
+        void AddParameter(foundation::animation::AnimationParameterType type);
+        bool RemoveParameter();
+        /// A layer's (`layers`) or a parameter's row menu at `at` over `owner` (its list): the row
+        /// chosen, then Delete.
+        void ShowListMenu(bool layers, i32 index, foundation::gui::Node& owner, Float2 at);
+        /// That menu, while it is open.
+        [[nodiscard]] foundation::gui::Menu* ListMenu() const noexcept { return m_listMenu && m_listMenu->IsOpen() ? m_listMenu.Get() : nullptr; }
 
-        [[nodiscard]] foundation::ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] Status Save() override;
+        /// A preview parameter's value, by the parameter's index (a trigger fires): the page's alone.
+        void SetLive(i32 parameter, f64 value);
 
-        void OnUpdate(runtime::IApplicationHost&, f32 dt) override;
-        void OnRenderWindow(runtime::IApplicationHost&,
-                            foundation::graphics::FrameContext& frame) override;
-        void OnClose() override;
+        // === For tests ===
+        [[nodiscard]] pipeline::AnimationGraphAsset* Graph() const;
+        [[nodiscard]] AnimationGraphStates& States() noexcept { return *m_states; }
+        [[nodiscard]] foundation::gui::PropertyBag& LayerRows() noexcept { return *m_layerRows; }
+        [[nodiscard]] foundation::gui::PropertyBag& ParameterRows() noexcept { return *m_parameterRows; }
+        [[nodiscard]] foundation::gui::PropertyBag& StateRows() noexcept { return *m_stateRows; }
+        [[nodiscard]] foundation::gui::PropertyBag& TransitionRows() noexcept { return *m_transitionRows; }
+        [[nodiscard]] foundation::gui::PropertyBag& LiveRows() noexcept { return *m_liveRows; }
+        /// The lists' rows ("Base" / "Speed  Float"), one a line.
+        [[nodiscard]] String LayerList() const;
+        [[nodiscard]] String ParameterList() const;
+        [[nodiscard]] AnimationPreviewRig* Rig() const noexcept { return m_rig.Get(); }
 
-        // Record a coalesced undo step for an in-place edit that already happened (merge by key).
-        void CommitEdit(StringView mergeKey);
+    protected:
+        void OnObjectChanged() override;
 
     private:
-        // Whole-asset snapshot command (source + canvas layout): same coalescing model as the
-        // particle page - Execute() at push time is a no-op (if-changed guard), only a real
-        // undo/redo re-deserializes + rebuilds.
-        class EditGraphCommand final : public IEditorCommand
-        {
-        public:
-            EditGraphCommand(AnimationGraphEditorPage& page, StringView mergeKey,
-                             Array<byte> before, Array<byte> after)
-                : m_page(&page), m_mergeKey(mergeKey), m_before(Move(before)), m_after(Move(after))
-            {
-            }
-            [[nodiscard]] bool Execute() override
-            {
-                m_page->ApplyAssetBlob(m_after);
-                return true;
-            }
-            void Undo() override { m_page->ApplyAssetBlob(m_before); }
-            [[nodiscard]] StringView TypeId() const override { return u8"edit_animgraph"; }
-            [[nodiscard]] bool MergeInto(IEditorCommand& previous) override
-            {
-                auto& prev = static_cast<EditGraphCommand&>(previous);
-                if (prev.m_page != m_page || prev.m_mergeKey.AsView() != m_mergeKey.AsView())
-                {
-                    return false;
-                }
-                prev.m_after = Move(m_after);
-                return true;
-            }
-
-        private:
-            AnimationGraphEditorPage* m_page;
-            String m_mergeKey;
-            Array<byte> m_before;
-            Array<byte> m_after;
-        };
-
-        // --- model access ---
-        [[nodiscard]] animation::GraphLayerData* SelectedLayer();
-        // Keep the asset's layout arrays exactly parallel to the source (call after any
-        // structural change BEFORE using them).
-        void SyncLayoutArrays();
-
-        // --- canvas ---
-        void RebuildCanvas(); // rebuild nodes+connections for the selected layer
-        void RebuildLeftPanel();
-        void ShowCanvasMenu(f32 canvasX, f32 canvasY);
-        void ShowNodeMenu(i32 nodeIndex);
-        void ShowConnectionMenu(i32 connectionIndex);
-        // Deferred structural apply: mutate -> undo -> rebuild panels/canvas/inspector ->
-        // reselect. Runs through the UI mutation queue (never mid-event).
-        void QueueStructural(StringView undoKey, Function<void()> mutate, GraphSel reselect);
-        void Select(const GraphSel& sel); // set selection + deferred inspector rebuild
-
-        // --- inspector ---
-        void RebuildInspector();
-        void BuildLayerInspector(i32 layerIndex);
-        void BuildParameterInspector(i32 paramIndex);
-        void BuildStateInspector(i32 layerIndex, i32 stateIndex);
-        void BuildTransitionInspector(i32 layerIndex, i32 transitionIndex);
-
-        // --- structural internals (index remapping lives here, not in lambdas) ---
-        // Remove a state: drops transitions touching it, decrements higher state indices in
-        // transitions + defaultState, and keeps the layout arrays parallel.
-        void DeleteStateInternal(i32 layerIndex, i32 stateIndex);
-        // Remove a parameter: erases the parallel arrays and remaps references (conditions +
-        // blend-tree drivers; higher indices decrement, references to IT clear to -1 / drop).
-        void DeleteParameterInternal(i32 paramIndex);
-
-        // --- live preview ---
-        // The preview scene exists only as a debug-draw + camera surface (no entities): the
-        // graph plays through an AnimationGraphPlayer and the skeleton draws as a wireframe.
-        // The preview rig's skeleton and skinned mesh (nil clears); the slots show them.
-        void SetPreviewSkeleton(const Guid& id);
-        // Delete a layer (the last one stays) or a parameter: the row menus and section icons.
-        void DeleteLayer(i32 layerIndex);
-        void DeleteParam(i32 paramIndex);
-        // A transition, or null when the indices name none.
-        [[nodiscard]] animation::GraphTransitionData* TransitionAt(i32 layer, i32 transition) const;
-        // A state's node, or null when the indices name none.
-        [[nodiscard]] animation::GraphNodeData* StateNode(i32 layer, i32 state) const;
-        // Persist / restore the preview rig (skeleton + skinned mesh) per graph (project settings).
+        void BuildRows();
+        void BuildLiveRows();
+        void ShowLists();
+        void ShowRows();
+        void ShowSections();
+        void ShowFacts();
+        void Committed(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
+        void ListEdited(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::ListEdit& edit);
+        void LiveCommitted(StringView path, const foundation::gui::Variant& value);
+        void Edit(StringView typeId, const Function<void(pipeline::AnimationGraphAsset&)>& mutate);
+        void FollowView();
+        void RebuildPlayer();
+        void ApplyLive();
+        void Pose(f32 dt);
+        void ShowTransport();
+        void FramePreview();
         void LoadPreviewPref();
         void SavePreviewPref();
-        // (Re)build the runtime graph + player from the CURRENT source (clips resolved through
-        // the editor's cooked-DB resources). Called after every edit - graphs are tiny.
-        void RebuildPreviewGraph();
-        void UpdatePreview(f32 dt); // tick + bone wireframe + active-state canvas highlight
+        [[nodiscard]] String ClipName(const Guid& id) const;
 
-        // --- undo ---
-        [[nodiscard]] Array<byte> SnapshotAsset() const;
-        void ApplyAssetBlob(const Array<byte>& blob);
+        UniquePtr<AnimationGraphStates> m_states;
+        i32 m_layer = 0;
+        GraphChoice m_chosen;
+        bool m_showing = false; // choosing from code: not the user's
 
-        [[nodiscard]] ui::UIContext* Ctx() const;
+        UniquePtr<foundation::gui::PropertyBag> m_layerRows;
+        UniquePtr<foundation::gui::PropertyBag> m_parameterRows;
+        UniquePtr<foundation::gui::PropertyBag> m_stateRows;
+        UniquePtr<foundation::gui::PropertyBag> m_transitionRows;
+        UniquePtr<foundation::gui::PropertyBag> m_liveRows; // made again as the parameters change
+        usize m_liveCount = static_cast<usize>(-1);         // the parameters it was made for
 
-        EditorContext* m_context = nullptr;
-        runtime::IApplicationHost* m_host = nullptr;
-        ui::runtime::UIHost* m_uiHost = nullptr;
-        String m_title;
+        foundation::gui::GraphView* m_view = nullptr;
+        foundation::gui::TreeView* m_layerTree = nullptr;
+        RefPtr<foundation::gui::Menu> m_listMenu; // a list row's
+        foundation::gui::TreeView* m_parameterTree = nullptr;
+        UniquePtr<foundation::gui::TreeModel> m_layerModel;
+        UniquePtr<foundation::gui::TreeModel> m_parameterModel;
+        foundation::gui::Label* m_state = nullptr;
+        foundation::gui::ButtonBase* m_travelButton = nullptr;
 
-        RefPtr<pipeline::AnimationGraphAsset> m_asset;
-
-        // views
-        RefPtr<ui::toolkit::NodeGraphCanvas> m_canvas;
-        RefPtr<ui::FlexLayout> m_leftRows; // layers + parameters rows
-        RefPtr<ui::toolkit::PropertyGrid> m_grid;
-        RefPtr<ui::Label> m_inspectorTitle;
-        RefPtr<foundation::ui::View> m_content;
-
-        i32 m_selectedLayer = 0; // the layer shown on the canvas
-        GraphSel m_selected;
-        Array<byte> m_undoBaseline;
-        bool m_syncingCanvas = false; // guard: canvas events ignored during RebuildCanvas
-
-        // preview world (shared substrate hosts a scene; wireframe + optional skinned mesh)
-        UniquePtr<PreviewViewport> m_preview;
-        void SetPreviewMesh(const Guid& id); // the SkinnedMeshAsset skinned with the graph pose
-        RefPtr<app::CompactAssetSlot> m_skeletonSlot; // the preview skeleton
-        RefPtr<app::CompactAssetSlot> m_meshSlot;     // the preview mesh
-        RefPtr<app::PageToolbar> m_toolbar; // the standard set, playback, bones and mesh
-        RefPtr<ui::Label> m_previewStatus; // current state + transition readout
-
-        Guid m_skeletonGuid{};
-        foundation::resource::Proxy<animation::Skeleton> m_skeleton;
-        RefPtr<animation::AnimationGraph> m_previewGraph; // player borrows it - keep alive
-        UniquePtr<animation::AnimationGraphPlayer> m_player;
-        animation::Skeleton* m_playerSkeleton = nullptr; // hot-reload guard (pointer identity)
-        Array<Float4x4> m_worldScratch;
-
-        // Optional skinned preview mesh: deformed by the graph player's skinning matrices, fed to a
-        // MeshComponent each frame. Null = wireframe only.
-        Guid m_previewMeshId{};
-        foundation::resource::Proxy<foundation::geometry::StaticMesh> m_previewMesh;
-        scene::EntityHandle m_meshEntity;
-        bool m_showSkeleton = true; // draw the bone wireframe
-        bool m_showMesh = true;     // draw the skinned mesh (when one is picked)
-        // Travel: the preview walks by the graph's root motion (back to the middle past a few
-        // metres), off: it plays in place.
-        bool m_showTravel = false;
+        UniquePtr<app::PreviewPane> m_pane;
+        UniquePtr<AnimationPreviewRig> m_rig;
+        RefPtr<foundation::animation::AnimationGraph> m_graph;          // the player borrows it
+        UniquePtr<foundation::animation::AnimationGraphPlayer> m_player;
+        foundation::animation::Skeleton* m_playerSkeleton = nullptr;    // what the player was made for
+        bool m_rebuild = true;                                           // the graph changed: a new player
+        Array<f64> m_live;                                               // the preview's parameter values
+        bool m_playing = true;
+        bool m_travel = false;
         Float3 m_travelPosition{};
         f32 m_travelYaw = 0.0f;
-
-        bool m_previewPlaying = true;
-        i32 m_lastHighlightedNode = -1; // canvas node with the active-state ring
+        foundation::gui::GraphId m_lit = 0; // the node lit as the state played
+        bool m_graphFramed = false;         // the view framed to the layer's states, once it has a size
     };
 
     class AnimationGraphPageFactory final : public IEditorPageFactory
     {
     public:
-        AnimationGraphPageFactory(runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost)
-            : m_host(&host), m_uiHost(&uiHost)
-        {
-        }
-
+        explicit AnimationGraphPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        runtime::IApplicationHost* m_host;
-        ui::runtime::UIHost* m_uiHost;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    // Draw a skeleton as a bone wireframe (parent->joint lines + joint crosses) into a debug
-    // lane. `worldScratch` is the caller's reusable world-pose buffer. Shared by the animation
-    // graph + clip preview pages.
-    // `base` places the whole rig (a preview travelling by its root motion).
-    void DrawSkeletonWireframe(foundation::render::debug::DebugDraw& draw,
-                               animation::Skeleton& skeleton,
-                               Span<const animation::BoneTransform> localPoses,
-                               Array<Float4x4>& worldScratch,
-                               const Float4x4& base = Float4x4::Identity());
-
-
-    // Registers the AnimationGraph page factory + an "Animation Graph" New-Asset creator.
-    void RegisterAnimationGraphEditor(EditorContext& context, runtime::IApplicationHost& host,
-                                      ui::runtime::UIHost& uiHost);
+    /// The graph page (asking for its services when it is made) and its preview prefs' section. A
+    /// new graph comes from Create Asset (Animation.Pipeline's creator).
+    void RegisterAnimationGraphEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

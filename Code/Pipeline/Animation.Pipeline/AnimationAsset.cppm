@@ -225,9 +225,6 @@ export namespace pipeline{
         }
     };
 
-    RTTI_DEFINE_OBJECT(SkeletonAsset, "rtti::pipeline::animation")
-    RTTI_DEFINE_OBJECT(AnimationClipAsset, "rtti::pipeline::animation")
-    RTTI_DEFINE_OBJECT(AnimationGraphAsset, "rtti::pipeline::animation")
 
 
     /// A new graph's content: a Speed parameter and a Base layer holding an Idle state.

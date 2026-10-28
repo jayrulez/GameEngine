@@ -43,3 +43,5 @@ target_sources(Engine.DefaultApp
         FILE_SET runtime_defaultapp_modules TYPE CXX_MODULES FILES
             DefaultApplication.cppm
             ProfilerOverlayHost.cppm)
+
+target_link_libraries(Engine.DefaultApp PUBLIC Engine::GUI) # the engine GUI beside the UI (gui-lab-evolution-3.md, E9)

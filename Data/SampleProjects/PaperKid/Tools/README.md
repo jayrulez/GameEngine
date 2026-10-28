@@ -18,6 +18,11 @@ scripts drive them; none of this is game content.
   use, written through `asset_data_write` from the engine's own new effect; `kit.py` wraps each in
   an `Fx*` prefab (the effect plus `Fx.as`, which removes it once the burst has played), and the
   scripts spawn those where things happen. Run `fx.py` before `kit.py` in a fresh project.
+- `ui/*.gml` + `ui/PaperKidSheet.css` + `importui.py`: the screens on the engine GUI (Title, Hud,
+  Cleared, Failed, GameOver, Pause, Settings) and the sheet that gives them the morning edition's
+  look, the project's GUI sheet; `importui.py` checks each with `gui_validate`, imports them and
+  cooks. The game script names the screens by id (`"{{{Title}}}"`, a braced id), so run
+  `render.py PaperKidGame` after their first import.
 - `scripts/*.as` + `render.py`: the game's scripts with `{{AssetName}}` placeholders;
   `render.py <Name>...` fills in the asset ids, writes `Sources/<Name>.as` and compile-checks it.
   A name several assets answer to (each model's Walk clip) is refused: such an asset is a

@@ -3,12 +3,18 @@
 
 // Editor::Audio - the `editor.audio` module.
 //
-// AudioClipPage: the audition page. Opens an AudioClipAsset with a peak
-// waveform (decoded from the copied source file - the same container bytes the cook
-// writes through) and Play/Stop that audition through the RUNTIME CONTEXT's
-// AudioSubsystem - the GAME's engine, buses, and voice pool, so what you hear IS what
-// the game plays (the "cook says fine, ears say nothing" gap this page closes).
-// Auditioning honors the asset's loop intent; a playhead tracks the voice.
+// AudioClipEditorPage: the audition page of an AudioClipAsset, on the GUI from its markup
+// (Data/Editor/AudioClipPage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 5). The clip's
+// peak waveform (decoded from its source file, the bytes the cook writes through) with the kit's
+// transport over it: Play, Stop and Restart are the playback actions over the page, auditioned
+// through the RUNTIME context's AudioSubsystem (the game's engine, buses and voices, so what is
+// heard is what the game plays), honouring the clip's loop, a playhead following the voice. Beside
+// it the clip's options on the grid, each edit one undo step, the audition following them (a loop
+// turned on loops the next play), and its source's facts read only (channels, rate, length). The
+// old page edited nothing itself; its options were the inspector's.
+//
+// The sound cue page is its :sound_cue_page partition, the bus layout page its :bus_layout_page
+// (the rules it edits by its :bus_layout_model).
 
 module;
 #include "Core/Prelude.h"
@@ -16,7 +22,10 @@ module;
 
 export module editor.audio;
 
+export import :waveform_view;
+export import :audition;
 export import :sound_cue_page;
+export import :bus_layout_model;
 export import :bus_layout_page;
 export import :thumbnail_generator;
 
@@ -26,7 +35,7 @@ import foundation.runtime.client;
 import foundation.audio;
 import audio.pipeline;
 import engine.audio;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
@@ -35,155 +44,84 @@ using namespace foundation::core;
 export namespace editor
 {
     namespace runtime = foundation::runtime;
-    namespace ui = foundation::ui;
     namespace audio = foundation::audio;
 
-    /// The peak waveform strip: symmetric per-bucket bars around the midline plus an
-    /// optional playhead (fraction of the clip; < 0 hides it).
-    class WaveformView final : public ui::View
+    class AudioClipEditorPage final : public app::AssetObjectPage, public IPlaybackPage
     {
     public:
-        void SetPeaks(Array<f32> peaks);
-        void SetPlayheadFraction(f32 fraction);
+        static constexpr StringView kPath = u8"Editor/AudioClipPage.gml";
+        static constexpr usize kPeakBuckets = 256;
 
-        void OnDraw(ui::UIDrawContext& ctx) override;
+        AudioClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
+        ~AudioClipEditorPage() override;
 
-    private:
-        Array<f32> m_peaks;
-        f32 m_playhead = -1.0f;
-    };
-
-    class AudioClipEditorPage final : public app::UIEditorPage, public IPlaybackPage
-    {
-    public:
-        AudioClipEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                            foundation::content::Instance& instance)
-            : app::UIEditorPage(context.Allocator()),
-              m_context(&context), m_title(instance.Name())
-        {
-            SetInstanceId(instance.Id());
-            Provide<IPlaybackPage>(*this);
-            m_audio = host.Ctx().GetSubsystem<engine::audio::AudioSubsystem>();
-            LoadClip(instance);
-
-            auto column = MakeRef<ui::FlexLayout>(Allocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 8.0f;
-
-            m_info = MakeRef<ui::Label>(Allocator(), StringView(u8""));
-            m_info->FontSize.SetValue(13.0f);
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                column->AddView(m_info.Get(), lp);
-            }
-
-            m_waveform = MakeRef<WaveformView>(Allocator());
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(160));
-                column->AddView(m_waveform.Get(), lp);
-            }
-
-            // The page toolbar: the playback transport, the audition volume and the status.
-            AudioClipEditorPage* self = this;
-            m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions(),
-                                                  app::PageToolbar::Standard::None);
-            m_toolbar->AddPlayback();
-            m_toolbar->AddSeparator();
-            (void)m_toolbar->AddLabel(u8"Vol");
-            // Audition-local gain (not persisted - it only scales THIS page's preview voice).
-            m_volumeSlider = MakeRef<ui::Slider>(Allocator());
-            m_volumeSlider->Min.SetValue(0.0f);
-            m_volumeSlider->Max.SetValue(1.0f);
-            m_volumeSlider->Step.SetValue(0.05f);
-            m_volumeSlider->Value.SetValue(1.0f);
-            m_volumeSlider->OnValueChanged.Add(ui::Event<void(ui::Slider*, f32)>::Handler{
-                [self](ui::Slider*, f32 v) { self->SetAuditionVolume(v); }});
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(90));
-                lp.AlignSelf = ui::Align::Center;
-                m_toolbar->AddItem(m_volumeSlider.Get(), lp);
-            }
-            m_status = RefPtr<ui::Label>(m_toolbar->AddLabel(u8""));
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                column->InsertView(m_toolbar.Get(), 0, lp);
-            }
-
-            m_content = column;
-            RefreshInfo();
-        }
-
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] Status Save() override;
-
-        void OnUpdate(runtime::IApplicationHost&, f32) override;
-
+        void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;
         void OnClose() override { StopAudition(); }
 
-        // ---- IPlaybackPage ----
-        [[nodiscard]] bool CanPlay() const override { return m_clip.Get() != nullptr; }
-        [[nodiscard]] bool IsPlaying() const override { return m_voice.IsValid() && !m_paused; }
+        // === IPlaybackPage ===
+        [[nodiscard]] bool CanPlay() const override { return m_clip.Get() != nullptr && m_voice && m_voice->HasEngine(); }
+        [[nodiscard]] bool IsPlaying() const override { return m_voice && m_voice->IsPlaying(); }
         void Play() override;
         void Pause() override;
         void Stop() override { StopAudition(); }
         void Restart() override { Audition(); }
 
-    private:
-        void LoadClip(foundation::content::Instance& instance);
-
-        void RefreshInfo();
-
-        void Audition();
-
-        void StopAudition();
-
-        // Pause/resume the audition voice in place; audition-local gain.
-        void TogglePause();
+        /// The audition's volume (this page's voice only, not saved), 0 to 1.
         void SetAuditionVolume(f32 volume);
+        [[nodiscard]] f32 AuditionVolume() const noexcept { return m_voice ? m_voice->Volume() : 1.0f; }
 
-        EditorContext* m_context = nullptr;
-        engine::audio::AudioSubsystem* m_audio = nullptr; // the RUNTIME context's subsystem
-        String m_title;
-        bool m_loop = false;
-        bool m_paused = false;
-        f32 m_auditionVolume = 1.0f;
+        // === For tests ===
+        [[nodiscard]] const audio::AudioClip* Clip() const noexcept { return m_clip.Get(); }
+        [[nodiscard]] WaveformView* Waveform() const noexcept { return m_waveform.Get(); }
+        [[nodiscard]] StringView State() const;
+
+    protected:
+        void OnObjectChanged() override;
+
+    private:
+        /// Reads the source file named by the asset: the clip to audition, its peaks and its facts;
+        /// the waveform's place says why when there is none.
+        void LoadClip();
+        /// The clip's options as the asset has them now (an edit, an undo): the next play takes them.
+        void ApplyOptions();
+        void Audition();
+        void StopAudition();
+        void ShowState(StringView state, StringView text);
+        void ShowEmpty(StringView why);
+
+        UniquePtr<AuditionVoice> m_voice; // through the runtime context's audio (none in a test)
         RefPtr<audio::AudioClip> m_clip;
-        audio::VoiceHandle m_voice;
-        RefPtr<ui::View> m_content;
-        RefPtr<ui::Label> m_info;
-        RefPtr<ui::Label> m_status;
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<ui::Slider> m_volumeSlider;
+        String m_loadedFile; // the source the clip was read from (a new one reads it again)
         RefPtr<WaveformView> m_waveform;
+        foundation::gui::Node* m_stage = nullptr;
+        foundation::gui::Node* m_empty = nullptr;
+        foundation::gui::Label* m_emptyText = nullptr;
+        foundation::gui::Label* m_state = nullptr;
+        foundation::gui::Slider* m_volume = nullptr;
     };
 
     class AudioClipPageFactory final : public IEditorPageFactory
     {
     public:
-        explicit AudioClipPageFactory(runtime::IApplicationHost& host) : m_host(&host) {}
+        explicit AudioClipPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        runtime::IApplicationHost* m_host;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    inline void RegisterAudioClipEditor(EditorContext& context, runtime::IApplicationHost& host)
+    /// The audio pages' registration (from the editor's assembly), each page asking for its
+    /// services when it is made; the clip thumbnails with them.
+    inline void RegisterAudioClipEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<AudioClipPageFactory>(host), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<AudioClipPageFactory>(services), editor::EditorRootAllocator()));
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<SoundCuePageFactory>(host), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<SoundCuePageFactory>(services), editor::EditorRootAllocator()));
+        context.Pages().Register(UniquePtr<IEditorPageFactory>(
+            editor::EditorRootAllocator().New<AudioBusLayoutPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
-        {
             RegisterAudioThumbnailGenerator(*context.Thumbnails());
-        }
     }
 }

@@ -1,92 +1,77 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// The chord capture button: a click begins a capture, the next non-modifier key is the chord
-// (modifiers normalised), Escape cancels, Delete chooses none, a modifier alone keeps waiting,
-// and losing focus cancels.
+// The chord capture button: a click begins a capture, its focus taking every key; the next key not
+// a modifier is the chord, with the modifiers held; Escape cancels, Delete chooses none, a modifier
+// alone keeps waiting, and losing focus cancels. A chord a binding holds goes to the button while
+// it waits, not to the binding.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
 using namespace editor;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 TEST_CASE("shortcut-capture: click, press, chosen - with the cancel, clear, modifier-alone and focus-lost rules")
 {
-    const EditorShortcut ctrlS{ui::KeyCode::S, ui::KeyModifiers::Ctrl};
-    auto button = MakeRef<app::ShortcutCaptureButton>(DefaultAllocator(), ctrlS);
-    CHECK(button->Text.Value() == u8"Ctrl+S");
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{400.0f, 300.0f});
+    gui::EventDispatcher& d = *root->GetEventDispatcher();
+    RefPtr<app::ShortcutCaptureButton> button = MakeRef<app::ShortcutCaptureButton>(DefaultAllocator());
+    RefPtr<gui::Button> other = MakeRef<gui::Button>(DefaultAllocator());
+    root->AddChild(button.Get());
+    root->AddChild(other.Get());
+    button->SetChord(EditorShortcut::Of(u8"ctrl-s"));
+    CHECK(button->GetText() == FormatShortcut(EditorShortcut::Of(u8"ctrl-s")).AsView());
     CHECK_FALSE(button->IsCapturing());
     Array<EditorShortcut> chosen;
-    button->OnChordChosen = [&chosen](EditorShortcut chord) { chosen.PushBack(chord); };
+    button->SetOnChordChosen([&chosen](EditorShortcut chord) { chosen.PushBack(chord); });
+    // A binding of the keys the user will press: while the button waits, it does not run.
+    int bound = 0;
+    REQUIRE(root->GetContext().GetKeymap().Bind(u8"ctrl-shift-k", u8"test.bound"));
+    (void)root->OnCommand(u8"test.bound", [&bound](gui::CommandEvent&) { ++bound; });
 
-    // A key while idle is the button's (Return clicks, which begins a capture).
-    ui::KeyEventArgs enter;
-    enter.Key = ui::KeyCode::Return;
-    button->OnKeyDown(enter);
+    CHECK(button->HandleActivate()); // a click (or Return): it waits
     CHECK(button->IsCapturing());
-    CHECK(button->Text.Value().AsView().StartsWith(u8"Press a chord"));
+    CHECK(button->IsFocused());
+    CHECK(button->HasClass(u8"capturing"));
 
-    // A modifier alone keeps waiting; the next key with LEFT ctrl held is Ctrl+K, normalised.
-    ui::KeyEventArgs ctrlAlone;
-    ctrlAlone.Key = ui::KeyCode::LeftCtrl;
-    ctrlAlone.Modifiers = ui::KeyModifiers::LeftCtrl;
-    button->OnKeyDown(ctrlAlone);
-    CHECK(ctrlAlone.Handled);
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::LeftCtrl), gui::KeyModCtrl); // a modifier alone
     CHECK(button->IsCapturing());
     CHECK(chosen.IsEmpty());
-    ui::KeyEventArgs unknown; // a key the shell could not map: not a chord, keep waiting
-    unknown.Key = ui::KeyCode::Unknown;
-    unknown.Modifiers = ui::KeyModifiers::LeftCtrl;
-    button->OnKeyDown(unknown);
-    CHECK(unknown.Handled);
-    CHECK(button->IsCapturing());
-    CHECK(chosen.IsEmpty());
-    ui::KeyEventArgs k;
-    k.Key = ui::KeyCode::K;
-    k.Modifiers = ui::KeyModifiers::LeftCtrl | ui::KeyModifiers::NumLock; // a lock key is not part of a chord
-    button->OnKeyDown(k);
-    CHECK(k.Handled);
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::K), gui::KeyModCtrl | gui::KeyModShift);
     CHECK_FALSE(button->IsCapturing());
     REQUIRE(chosen.Size() == 1u);
-    CHECK(chosen[0] == EditorShortcut{ui::KeyCode::K, ui::KeyModifiers::Ctrl});
-    CHECK(button->Chord() == chosen[0]);
-    CHECK(button->Text.Value() == u8"Ctrl+K");
+    CHECK(chosen[0] == EditorShortcut::Of(u8"ctrl-shift-k"));
+    CHECK(bound == 0); // the button's, not the binding's
+    CHECK(button->GetText() == FormatShortcut(EditorShortcut::Of(u8"ctrl-shift-k")).AsView());
 
-    // Escape cancels: the chord stays, nothing chosen.
-    button->BeginCapture();
-    ui::KeyEventArgs escape;
-    escape.Key = ui::KeyCode::Escape;
-    button->OnKeyDown(escape);
+    // Escape cancels: the chord stays.
+    CHECK(button->HandleActivate());
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Escape));
     CHECK_FALSE(button->IsCapturing());
     CHECK(chosen.Size() == 1u);
-    CHECK(button->Text.Value() == u8"Ctrl+K");
+    CHECK(button->Chord() == EditorShortcut::Of(u8"ctrl-shift-k"));
 
-    // Delete chooses "no shortcut".
-    button->BeginCapture();
-    ui::KeyEventArgs del;
-    del.Key = ui::KeyCode::Delete;
-    button->OnKeyDown(del);
+    // Delete chooses none.
+    CHECK(button->HandleActivate());
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Delete));
     REQUIRE(chosen.Size() == 2u);
     CHECK_FALSE(chosen[1].IsSet());
-    CHECK(button->Text.Value() == u8"(none)");
+    CHECK(button->GetText() == StringView(u8"Not set"));
 
-    // Losing focus cancels a capture in progress.
-    button->BeginCapture();
-    CHECK(button->IsCapturing());
-    button->OnFocusLost();
+    // The focus leaving cancels; the keys are the GUI's again.
+    CHECK(button->HandleActivate());
+    other->RequestFocus();
     CHECK_FALSE(button->IsCapturing());
+    CHECK_FALSE(button->HasClass(u8"capturing"));
+    d.InjectKeyDown(static_cast<u32>(gui::KeyCode::K), gui::KeyModCtrl | gui::KeyModShift);
+    CHECK(bound == 1);
     CHECK(chosen.Size() == 2u);
-
-    // SetChord shows a chord set from outside (Reset showing the default) and ends a capture.
-    button->BeginCapture();
-    button->SetChord(ctrlS);
-    CHECK_FALSE(button->IsCapturing());
-    CHECK(button->Text.Value() == u8"Ctrl+S");
 }

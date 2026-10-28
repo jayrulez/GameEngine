@@ -20,15 +20,16 @@
 // ends the level ("GoalReached"). In a run the scene bus IS the run bus, so all of them reach
 // this class.
 
-Guid kHudDoc = Guid("628098f1-29ea-4b5e-bdea-e6a828da27f5");
-Guid kTitleDoc = Guid("56b50198-2bcf-4b62-8f30-8d13a4f5cce0");
-Guid kIntroDoc = Guid("490f0994-d42b-488d-b9f7-25199105819a");
-Guid kPauseDoc = Guid("a5fbc391-7746-4948-80a3-4e04ce330d93");
-Guid kClearDoc = Guid("3f75887a-3307-46a8-9a26-cb67ff50b552");
-Guid kVictoryDoc = Guid("02f01d46-4ab6-4d5e-99b1-f805ee089785");
-Guid kFadeDoc = Guid("34ea193f-3d13-409c-bc2b-9727c0b6df87");
-Guid kSettingsDoc = Guid("b2d2fa8d-33c1-458a-a509-af220c6b2141");
-Guid kGameOverDoc = Guid("201f7898-8288-44c8-a274-bdfbc0f2fc44");
+// The screens, on the engine GUI (Tools/ui, imported by Tools/importui.py).
+const string kHudDoc = "{9d00988e-9dd5-4b2e-9200-28ca795f3298}";
+const string kTitleDoc = "{6aba15c4-48fd-49a0-9995-327c7a40a194}";
+const string kIntroDoc = "{7d2fca4e-b704-45fb-aba7-54c05893a8c0}";
+const string kPauseDoc = "{45db2613-0da7-43f8-bb24-dc726172daec}";
+const string kClearDoc = "{2ec13757-466e-4b94-bcdc-56b9c2c86cce}";
+const string kVictoryDoc = "{1aae20ad-b07e-4d73-b5c1-cfb1f2589b52}";
+const string kFadeDoc = "{ded29542-28ae-4d60-9688-8e4d3c86d279}";
+const string kSettingsDoc = "{3ad8e4fb-0f47-4f4f-8c81-8c3969ebe58b}";
+const string kGameOverDoc = "{f04d29b6-6576-4ddf-a226-e84fe69d4c18}";
 
 Guid kLevel1 = Guid("6dd1ae0e-fbe8-4c9b-8c9e-d10b727f4d84");
 Guid kLevel2 = Guid("96aab32b-3151-41a9-ac2e-5d16ba80ee06");
@@ -63,6 +64,47 @@ const float kFadeSeconds = 0.45f;
 const float kDyingSeconds = 1.1f;
 /// How long the clear card waits once its tally is done before the next level comes on its own.
 const float kClearHoldSeconds = 4.0f;
+
+// A GUI event's handler (a button's click, a slider's move).
+funcdef bool EventHandler(GuiEvent e);
+
+ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
+// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
+// with the same ids, and would be found first. Null when there is none: a level's coins and
+// enemies report while the title is up, before there is a HUD.
+Node@ find(string id)
+{
+    Screen@ top = screens().top();
+    Node@ n = top !is null ? top.find(id) : null;
+    return n !is null ? n : gui::root().find(id);
+}
+void wire(string id, string event, EventHandler@ handler) { find(id).on(event, handler); } // `on*` names are the engine's handlers
+void setText(string id, string text)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        Label::of(n).text = text;
+    }
+}
+// Shown or hidden at once (the sheet starts what waits for its moment at opacity 0).
+void show(string id, bool shown)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        n.tween("opacity", shown ? "1" : "0", 0.0f, "linear"); // a tween of no length replaces the last
+    }
+}
+// Grows to `scale` and back over `seconds`: a counter that just changed.
+void pulse(string id, float scale, float seconds)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        n.tween("transform", "scale(" + scale + ")", seconds * 0.5f, "ease-out").from("scale(1)").repeats(2).pingPong(true);
+    }
+}
 
 Guid levelScene(int index)
 {
@@ -139,7 +181,7 @@ class Game
     private int m_nextLevel = 0;
     /// The phase a fade in reveals.
     private Phase m_afterFade = Phase::Intro;
-    private UIView@ m_fade;
+    private Node@ m_fade;
     /// The track playing: 0 none, 1 the menu's, 2 + n level n's. A track asked for again keeps
     /// playing rather than restarting.
     private int m_track = 0;
@@ -199,14 +241,14 @@ class Game
         case Phase::FadingIn:
             if (m_timer >= kFadeSeconds)
             {
-                ui::pop(); // the fade layer, on top since the fade began
+                screens().pop(); // the fade layer, on top since the fade began
                 enter(m_afterFade);
                 if (m_afterFade == Phase::Intro)
                 {
                     // The level's card drops in from above and settles with a bounce.
-                    UIView@ card = ui::find("intro-card");
-                    card.moveTo(0.0f, 0.0f, 0.55f, Ease::OutBack);
-                    card.fadeTo(1.0f, 0.25f);
+                    Node@ card = find("intro-card");
+                    card.tween("transform", "translateY(0px)", 0.55f, "ease-out-back").from("translateY(-260px)");
+                    card.tween("opacity", "1", 0.25f, "linear").from("0");
                 }
             }
             break;
@@ -215,14 +257,14 @@ class Game
             // never sees it and does not jump the moment play starts.
             if (Input::wasReleased("Jump"))
             {
-                ui::pop(); // the intro banner
+                screens().pop(); // the intro banner
                 run::setTimeScale(1.0f);
                 enter(Phase::Playing);
             }
             break;
         case Phase::Playing:
             m_time += dt;
-            ui::findLabel("hud-time").setText(clock(m_time));
+            setText("hud-time", clock(m_time));
             rollScore(real, m_score + levelPoints());
             if (Input::wasPressed("Pause"))
             {
@@ -239,13 +281,13 @@ class Game
         case Phase::Settings:
             if (Input::wasPressed("Pause"))
             {
-                onSettingsBack();
+                settingsBack();
             }
             break;
         case Phase::Paused:
             if (Input::wasPressed("Pause"))
             {
-                onResume();
+                resume();
             }
             break;
         case Phase::Cleared:
@@ -259,7 +301,7 @@ class Game
 
     void exit()
     {
-        ui::clear();
+        screens().clear();
     }
 
     // ---- run events ----
@@ -277,7 +319,7 @@ class Game
         }
         m_coins += value;
         popup("+" + (value * kCoinPoints));
-        ui::find("hud-coin").pulse(1.35f, 0.25f);
+        pulse("hud-coin", 1.35f, 0.25f);
         m_lifeCoins += value;
         if (m_lifeCoins >= kCoinsPerLife)
         {
@@ -306,11 +348,12 @@ class Game
         }
         m_gem = true;
         popup("+" + kGemPoints);
-        UIView@ gem = ui::find("hud-gem");
-        gem.setVisible(true);
-        gem.setScale(0.0f);
-        gem.scaleTo(1.0f, 0.45f, Ease::OutBack);
-        refreshHud();
+        refreshHud(); // shows it
+        Node@ gem = find("hud-gem");
+        if (gem !is null)
+        {
+            gem.tween("transform", "scale(1)", 0.45f, "ease-out-back").from("scale(0)");
+        }
     }
 
     void onLifeCollected(int count)
@@ -330,8 +373,7 @@ class Game
         }
         m_falls += 1;
         m_lives -= 1;
-        UIView@ heart = ui::find("hud-heart");
-        heart.pulse(0.6f, 0.35f); // the heart shrinks and comes back: a life gone
+        pulse("hud-heart", 0.6f, 0.35f); // the heart shrinks and comes back: a life gone
         refreshHud();
         if (m_lives <= 0)
         {
@@ -375,94 +417,115 @@ class Game
         m_allFalls += m_falls;
         m_allTime += m_time;
         Audio::playOneShot(kClearJingle);
-        UIScreen@ s = ui::push(kClearDoc);
-        s.findLabel("star-3-caption").setText("Under " + clock(par));
-        s.findLabel("tally-total").setText("0");
-        s.findLabel("clear-best").setText("");
-        s.findLabel("clear-next").setText("");
+        screens().push(kClearDoc);
+        setText("star-3-caption", "Under " + clock(par));
+        setText("tally-total", "0");
+        setText("clear-best", "");
+        setText("clear-next", "");
         m_tallyStep = 0;
         m_tallyDone = false;
         enter(Phase::Cleared);
     }
 
-    // ---- buttons ----
-    void onPlay()
+    // ---- buttons (a GUI event's handlers; what they do, the flow below runs too) ----
+    bool onPlay(GuiEvent e)
     {
         click();
         startRun();
+        return true;
     }
 
     /// The volumes, on the audio buses the player saves when it exits, so a change made
     /// here is there next time without the game storing anything itself.
-    void onSettings()
+    bool onSettings(GuiEvent e)
     {
         click();
-        UIScreen@ s = ui::push(kSettingsDoc);
-        bindVolume(s, "master", AudioBus::Master, Action(this.onMasterChanged));
-        bindVolume(s, "music", AudioBus::Music, Action(this.onMusicChanged));
-        bindVolume(s, "effects", AudioBus::Effects, Action(this.onEffectsChanged));
-        s.findButton("settings-back-btn").onClick(Action(this.onSettingsBack));
+        screens().push(kSettingsDoc);
+        bindVolume("master", AudioBus::Master, EventHandler(this.onMasterChanged));
+        bindVolume("music", AudioBus::Music, EventHandler(this.onMusicChanged));
+        bindVolume("effects", AudioBus::Effects, EventHandler(this.onEffectsChanged));
+        wire("settings-back-btn", "click", EventHandler(this.onSettingsBack));
         enter(Phase::Settings);
+        return true;
     }
 
-    void onSettingsBack()
+    bool onSettingsBack(GuiEvent e)
     {
-        click();
-        ui::pop(); // the settings screen; the title is under it
-        enter(Phase::Title);
+        settingsBack();
+        return true;
     }
 
-    void onMasterChanged()
+    bool onMasterChanged(GuiEvent e)
     {
         volumeChanged("master", AudioBus::Master);
+        return true;
     }
 
-    void onMusicChanged()
+    bool onMusicChanged(GuiEvent e)
     {
         volumeChanged("music", AudioBus::Music);
+        return true;
     }
 
-    void onEffectsChanged()
+    bool onEffectsChanged(GuiEvent e)
     {
         volumeChanged("effects", AudioBus::Effects);
         click(); // hear the level being set; the music is heard anyway
+        return true;
     }
 
-    void onQuit()
+    bool onQuit(GuiEvent e)
     {
         click();
         run::requestExit(0);
+        return true;
     }
 
-    void onResume()
+    bool onResume(GuiEvent e)
     {
-        click();
-        ui::pop(); // the pause menu
-        run::setTimeScale(1.0f);
-        enter(Phase::Playing);
+        resume();
+        return true;
     }
 
     /// From the pause menu: the level again from its start, with the score it started with and
     /// the lives left now (a restart is no way to win lives back).
-    void onRestart()
+    bool onRestart(GuiEvent e)
     {
         click();
         fadeToLevel(m_level);
+        return true;
     }
 
-    void onRetry()
+    bool onRetry(GuiEvent e)
     {
         click();
         startRun();
+        return true;
     }
 
-    void onQuitToTitle()
+    bool onQuitToTitle(GuiEvent e)
     {
         click();
         fadeToTitle();
+        return true;
     }
 
     // ---- the flow ----
+    private void settingsBack()
+    {
+        click();
+        screens().pop(); // the settings screen; the title is under it
+        enter(Phase::Title);
+    }
+
+    private void resume()
+    {
+        click();
+        screens().pop(); // the pause menu
+        run::setTimeScale(1.0f);
+        enter(Phase::Playing);
+    }
+
     private void enter(Phase phase)
     {
         m_phase = phase;
@@ -484,47 +547,47 @@ class Game
     }
 
     /// A bound volume row: its slider at the bus's level, its readout, and the handler.
-    private void bindVolume(UIScreen@ s, string row, AudioBus bus, Action@ handler)
+    private void bindVolume(string row, AudioBus bus, EventHandler@ handler)
     {
-        UISlider@ slider = s.findSlider(row + "-slider");
-        slider.setValue(Audio::busVolume(bus));
-        showVolume(row, slider.value);
-        slider.onChanged(handler);
+        Slider@ slider = Slider::of(find(row + "-slider"));
+        slider.value = Audio::busVolume(bus);
+        showVolume(row, float(slider.value));
+        wire(row + "-slider", "input", handler); // each step as the slider moves
     }
 
     private void volumeChanged(string row, AudioBus bus)
     {
-        float level = ui::findSlider(row + "-slider").value;
+        float level = float(Slider::of(find(row + "-slider")).value);
         Audio::setBusVolume(bus, level);
         showVolume(row, level);
     }
 
     private void showVolume(string row, float level)
     {
-        ui::findLabel(row + "-value").setText("" + int(level * 100.0f + 0.5f) + "%");
+        setText(row + "-value", "" + int(level * 100.0f + 0.5f) + "%");
     }
 
     private void showTitle()
     {
         music(1);
-        ui::clear();
-        UIScreen@ s = ui::push(kTitleDoc);
-        s.findButton("play-btn").onClick(Action(this.onPlay));
-        s.findButton("settings-btn").onClick(Action(this.onSettings));
-        s.findButton("quit-btn").onClick(Action(this.onQuit));
-        s.findLabel("title-stars").setText("" + savedStars() + " / " + (kLevelCount * 3));
+        screens().clear();
+        screens().push(kTitleDoc);
+        wire("play-btn", "click", EventHandler(this.onPlay));
+        wire("settings-btn", "click", EventHandler(this.onSettings));
+        wire("quit-btn", "click", EventHandler(this.onQuit));
+        setText("title-stars", "" + savedStars() + " / " + (kLevelCount * 3));
         int best = Save::getInt("best.run", 0);
-        s.findLabel("title-best").setText(best > 0 ? "Best " + points(best) : "");
+        setText("title-best", best > 0 ? "Best " + points(best) : "");
         enter(Phase::Title);
     }
 
     private void pause()
     {
         run::setTimeScale(0.0f);
-        UIScreen@ s = ui::push(kPauseDoc);
-        s.findButton("resume-btn").onClick(Action(this.onResume));
-        s.findButton("restart-btn").onClick(Action(this.onRestart));
-        s.findButton("title-btn").onClick(Action(this.onQuitToTitle));
+        screens().push(kPauseDoc);
+        wire("resume-btn", "click", EventHandler(this.onResume));
+        wire("restart-btn", "click", EventHandler(this.onRestart));
+        wire("title-btn", "click", EventHandler(this.onQuitToTitle));
         enter(Phase::Paused);
     }
 
@@ -533,27 +596,27 @@ class Game
         run::setTimeScale(0.0f);
         int total = m_score + levelPoints();
         bool best = saveRun(total);
-        UIScreen@ s = ui::push(kGameOverDoc);
-        s.findLabel("gameover-reached").setText("Reached level " + (m_level + 1) + ", " + levelName(m_level));
-        s.findLabel("gameover-score").setText(points(total));
-        s.findLabel("gameover-best").setText(best ? "New best run!" : "Best " + points(Save::getInt("best.run", 0)));
-        s.findButton("gameover-retry-btn").onClick(Action(this.onRetry));
-        s.findButton("gameover-title-btn").onClick(Action(this.onQuitToTitle));
+        screens().push(kGameOverDoc);
+        setText("gameover-reached", "Reached level " + (m_level + 1) + ", " + levelName(m_level));
+        setText("gameover-score", points(total));
+        setText("gameover-best", best ? "New best run!" : "Best " + points(Save::getInt("best.run", 0)));
+        wire("gameover-retry-btn", "click", EventHandler(this.onRetry));
+        wire("gameover-title-btn", "click", EventHandler(this.onQuitToTitle));
         enter(Phase::GameOver);
     }
 
     private void showVictory()
     {
-        ui::pop(); // the clear card
+        screens().pop(); // the clear card
         Audio::playOneShot(kVictoryJingle);
         bool best = saveRun(m_score);
-        UIScreen@ s = ui::push(kVictoryDoc);
-        s.findLabel("victory-summary").setText("Coins " + m_allCoins + " / " + m_allCoinTotal + "    Falls "
+        screens().push(kVictoryDoc);
+        setText("victory-summary", "Coins " + m_allCoins + " / " + m_allCoinTotal + "    Falls "
             + m_allFalls + "    Time " + clock(m_allTime));
-        s.findLabel("victory-score").setText(points(m_score));
-        s.findLabel("victory-stars").setText("" + m_runStars + " / " + (kLevelCount * 3));
-        s.findLabel("victory-best").setText(best ? "New best run!" : "Best " + points(Save::getInt("best.run", 0)));
-        s.findButton("victory-title-btn").onClick(Action(this.onQuitToTitle));
+        setText("victory-score", points(m_score));
+        setText("victory-stars", "" + m_runStars + " / " + (kLevelCount * 3));
+        setText("victory-best", best ? "New best run!" : "Best " + points(Save::getInt("best.run", 0)));
+        wire("victory-title-btn", "click", EventHandler(this.onQuitToTitle));
         enter(Phase::Victory);
     }
 
@@ -577,16 +640,16 @@ class Game
         {
             return;
         }
-        UIScreen@ s = ui::push(kFadeDoc);
-        @m_fade = s.find("fade");
-        m_fade.fadeTo(1.0f, kFadeSeconds);
+        screens().push(kFadeDoc);
+        @m_fade = find("fade");
+        m_fade.tween("opacity", "1", kFadeSeconds, "linear").from("0");
         enter(Phase::FadingOut);
     }
 
     /// Under the black: the new scene and its screens, then the black fades away.
     private void arrive()
     {
-        ui::clear();
+        screens().clear();
         run::setTimeScale(0.0f);
         if (m_toTitle)
         {
@@ -606,21 +669,18 @@ class Game
             run::loadScene(levelScene(m_level));
             m_track = 0; // the level's music from its start, at full volume after a game over
             music(2 + m_level);
-            ui::push(kHudDoc);
+            screens().push(kHudDoc);
             m_shownScore = float(m_score);
             refreshHud();
-            UIScreen@ intro = ui::push(kIntroDoc);
-            intro.findLabel("intro-number").setText("Level " + (m_level + 1));
-            intro.findLabel("intro-name").setText(levelName(m_level));
-            UIView@ card = intro.find("intro-card"); // above, waiting for the fade to clear
-            card.setTranslation(0.0f, -260.0f);
-            card.setOpacity(0.0f);
+            screens().push(kIntroDoc);
+            setText("intro-number", "Level " + (m_level + 1));
+            setText("intro-name", levelName(m_level));
+            show("intro-card", false); // waiting above for the fade to clear
             m_afterFade = Phase::Intro;
         }
-        UIScreen@ s = ui::push(kFadeDoc);
-        @m_fade = s.find("fade");
-        m_fade.setOpacity(1.0f);
-        m_fade.fadeTo(0.0f, kFadeSeconds);
+        screens().push(kFadeDoc);
+        @m_fade = find("fade");
+        m_fade.tween("opacity", "0", kFadeSeconds, "linear").from("1");
         enter(Phase::FadingIn);
     }
 
@@ -654,8 +714,7 @@ class Game
         }
         bool more = m_level + 1 < kLevelCount;
         int left = int(kClearHoldSeconds - m_timer + 0.999f);
-        ui::findLabel("clear-next").setText((more ? "Next level in " : "Results in ") + left
-            + "    (Space or A to go on)");
+        setText("clear-next", (more ? "Next level in " : "Results in ") + left + "    (Space or A to go on)");
         if (m_timer >= kClearHoldSeconds || Input::wasPressed("Jump"))
         {
             if (more)
@@ -701,27 +760,26 @@ class Game
                 key = "flawless";
                 value = (m_flawless > 0) ? "+" + points(m_flawless) : "-";
             }
-            UIView@ row = ui::find("tally-" + key + "-row");
-            row.setVisible(true);
-            UILabel@ label = ui::findLabel("tally-" + key);
-            label.setText(value);
-            if (!quiet)
+            setText("tally-" + key, value);
+            Node@ row = find("tally-" + key + "-row");
+            if (quiet)
             {
-                row.setOpacity(0.0f);
-                row.fadeTo(1.0f, 0.2f);
-                row.setTranslation(-24.0f, 0.0f);
-                row.moveTo(0.0f, 0.0f, 0.25f, Ease::Out);
+                show("tally-" + key + "-row", true);
+            }
+            else if (row !is null)
+            {
+                row.tween("opacity", "1", 0.2f, "linear").from("0");
+                row.tween("transform", "translateX(0px)", 0.25f, "ease-out").from("translateX(-24px)");
                 Audio::playOneShot(kChime, AudioBus::Effects, 0.35f, 0.9f + 0.08f * float(step));
             }
             return;
         }
         if (step == 5)
         {
-            UILabel@ total = ui::findLabel("tally-total");
-            total.setText(points(m_levelScore));
+            setText("tally-total", points(m_levelScore));
             if (!quiet)
             {
-                total.pulse(1.4f, 0.35f);
+                pulse("tally-total", 1.4f, 0.35f);
             }
             return;
         }
@@ -730,14 +788,11 @@ class Game
         {
             return;
         }
-        UIView@ filled = ui::find("star-" + star);
-        filled.setVisible(true);
-        if (!quiet)
+        show("star-" + star, true);
+        Node@ filled = find("star-" + star);
+        if (!quiet && filled !is null)
         {
-            filled.setScale(0.0f);
-            filled.scaleTo(1.0f, 0.4f, Ease::OutBack);
-            filled.setRotation(-40.0f);
-            filled.rotateTo(0.0f, 0.4f, Ease::Out);
+            filled.tween("transform", "scale(1) rotate(0deg)", 0.4f, "ease-out-back").from("scale(0) rotate(-40deg)");
             Audio::playOneShot(kChime, AudioBus::Effects, 0.7f, 1.0f + 0.15f * float(star));
             Input::rumble(0.0f, 0.3f, 0.06f);
         }
@@ -746,16 +801,18 @@ class Game
     private void finishTally()
     {
         m_tallyDone = true;
-        UILabel@ best = ui::findLabel("clear-best");
         if (m_newBest)
         {
-            best.setText("New best!");
-            best.setScale(0.0f);
-            best.scaleTo(1.0f, 0.4f, Ease::OutBack);
+            setText("clear-best", "New best!");
+            Node@ best = find("clear-best");
+            if (best !is null)
+            {
+                best.tween("transform", "scale(1)", 0.4f, "ease-out-back").from("scale(0)");
+            }
         }
         else
         {
-            best.setText("Best " + points(Save::getInt("best.score." + m_level, 0)));
+            setText("clear-best", "Best " + points(Save::getInt("best.score." + m_level, 0)));
         }
         enter(Phase::Cleared); // the hold before the next level starts now
     }
@@ -851,13 +908,8 @@ class Game
         {
             m_lives += 1;
         }
-        UILabel@ up = ui::findLabel("hud-life-popup");
-        up.setVisible(true);
-        up.setOpacity(1.0f);
-        up.setTranslation(0.0f, 0.0f);
-        up.moveTo(0.0f, -26.0f, 0.9f, Ease::Out);
-        up.fadeTo(0.0f, 0.9f, Ease::In);
-        ui::find("hud-heart").pulse(1.5f, 0.4f);
+        rise("hud-life-popup", 26.0f, 0.9f);
+        pulse("hud-heart", 1.5f, 0.4f);
         refreshHud();
     }
 
@@ -870,13 +922,19 @@ class Game
     /// A gain floating up from the score.
     private void popup(string text)
     {
-        UILabel@ pop = ui::findLabel("hud-popup");
-        pop.setText(text);
-        pop.setVisible(true);
-        pop.setOpacity(1.0f);
-        pop.setTranslation(0.0f, 0.0f);
-        pop.moveTo(0.0f, -22.0f, 0.7f, Ease::Out);
-        pop.fadeTo(0.0f, 0.7f, Ease::In);
+        setText("hud-popup", text);
+        rise("hud-popup", 22.0f, 0.7f);
+    }
+
+    /// A label rising `height` pixels from its place as it fades away.
+    private void rise(string id, float height, float seconds)
+    {
+        Node@ n = find(id);
+        if (n !is null)
+        {
+            n.tween("transform", "translateY(" + (-height) + "px)", seconds, "ease-out").from("translateY(0px)");
+            n.tween("opacity", "0", seconds, "ease-in").from("1");
+        }
     }
 
     /// The HUD's score rolls up toward `goal`, quickly for a big gain.
@@ -889,22 +947,21 @@ class Game
         }
         float step = (target - m_shownScore) * 8.0f * real + 40.0f * real;
         m_shownScore = (m_shownScore + step > target) ? target : m_shownScore + step;
-        UILabel@ score = ui::findLabel("hud-score");
-        score.setText(points(int(m_shownScore)));
+        setText("hud-score", points(int(m_shownScore)));
         if (m_shownScore >= target)
         {
-            score.pulse(1.2f, 0.2f);
+            pulse("hud-score", 1.2f, 0.2f);
         }
     }
 
     private void refreshHud()
     {
-        ui::findLabel("hud-lives").setText("x " + m_lives);
-        ui::findLabel("hud-coins").setText("" + m_coins + " / " + m_coinTotal);
-        ui::findLabel("hud-time").setText(clock(m_time));
-        ui::findLabel("hud-level").setText("" + (m_level + 1) + "  " + levelName(m_level));
-        ui::findLabel("hud-score").setText(points(int(m_shownScore)));
-        ui::find("hud-gem").setVisible(m_gem);
+        setText("hud-lives", "x " + m_lives);
+        setText("hud-coins", "" + m_coins + " / " + m_coinTotal);
+        setText("hud-time", clock(m_time));
+        setText("hud-level", "" + (m_level + 1) + "  " + levelName(m_level));
+        setText("hud-score", points(int(m_shownScore)));
+        show("hud-gem", m_gem);
     }
 
     private string clock(float seconds)

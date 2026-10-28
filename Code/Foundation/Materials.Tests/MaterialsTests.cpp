@@ -109,6 +109,63 @@ TEST_CASE("material templates: the builtin shaders' colours are colour propertie
     CHECK_FALSE(BuiltinMaterialTemplate(u8"my_custom_shader"));
 }
 
+TEST_CASE("material templates: the Phong builtin lays its cbuffer out as phong.ps.hlsl reads it")
+{
+    RefPtr<Material> phong = BuiltinMaterialTemplate(u8"phong");
+    REQUIRE(phong);
+    CHECK(phong->shaderName == StringView(u8"phong"));
+    // The order phong.ps.hlsl's Material cbuffer declares, in 64 bytes.
+    const struct
+    {
+        StringView name;
+        MaterialPropertyType type;
+        u32 offset;
+    } kUniforms[] = {
+        {u8"BaseColor", MaterialPropertyType::Color, 0u},
+        {u8"SpecularColor", MaterialPropertyType::Color, 16u},
+        {u8"EmissiveColor", MaterialPropertyType::ColorHdr, 32u},
+        {u8"Shininess", MaterialPropertyType::Float, 48u},
+        {u8"NormalScale", MaterialPropertyType::Float, 52u},
+        {u8"AlphaCutoff", MaterialPropertyType::Float, 56u},
+    };
+    for (const auto& uniform : kUniforms)
+    {
+        const MaterialPropertyDef* found = phong->FindProperty(uniform.name);
+        REQUIRE(found != nullptr);
+        CHECK(found->type == uniform.type);
+        CHECK(found->offset == uniform.offset);
+    }
+    // Its maps in their slots, t0 to t3, then the sampler.
+    const StringView kMaps[] = {u8"AlbedoMap", u8"SpecularMap", u8"NormalMap", u8"EmissiveMap"};
+    for (const StringView map : kMaps)
+    {
+        REQUIRE(phong->FindProperty(map) != nullptr);
+        CHECK(phong->FindProperty(map)->type == MaterialPropertyType::Texture2D);
+    }
+    CHECK(phong->FindProperty(u8"MainSampler")->type == MaterialPropertyType::Sampler);
+    // No wind: a Phong material never asks for the swaying vertex variant.
+    CHECK(phong->FindProperty(u8"WindStrength") == nullptr);
+}
+
+TEST_CASE("material builtins: each known by its shader, its short name and its label")
+{
+    CHECK(kBuiltinShadingCount == 3u);
+    CHECK(FindBuiltinShadingByShader(u8"forward")->shading == BuiltinShading::Pbr);
+    CHECK(FindBuiltinShadingByShader(u8"unlit")->shading == BuiltinShading::Unlit);
+    CHECK(FindBuiltinShadingByShader(u8"phong")->shading == BuiltinShading::Phong);
+    CHECK(FindBuiltinShadingByShader(u8"toon") == nullptr);
+    CHECK(FindBuiltinShadingByShortName(u8"phong")->shaderName == StringView(u8"phong"));
+    CHECK(FindBuiltinShadingByShortName(u8"pbr")->shaderName == StringView(u8"forward"));
+    CHECK(FindBuiltinShadingByShortName(u8"forward") == nullptr);
+    for (usize i = 0; i < kBuiltinShadingCount; ++i)
+    {
+        // Each made from its own builtin.
+        RefPtr<Material> made = CreateBuiltin(kBuiltinShadings[i].shading, u8"m");
+        CHECK(made->shaderName == kBuiltinShadings[i].shaderName);
+        CHECK(static_cast<usize>(kBuiltinShadings[i].shading) == i); // the table is in the enum's order
+    }
+}
+
 TEST_CASE("material system: infers bind-group layout from properties + builds instance bind group")
 {
     rhi::null::NullDevice device{DefaultAllocator()};

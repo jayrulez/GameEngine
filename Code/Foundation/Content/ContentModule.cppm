@@ -263,6 +263,12 @@ export namespace foundation::content
         // AlreadyExists when the name is taken; NotSupported on read-only mounts.
         Status RenameInstance(const Guid& id, StringView newName);
 
+        // Move an instance to another group, keeping its name and guid: its envelope and every
+        // data-stream sidecar move to the group's folder (made when it has none yet). Guid-based
+        // references are untouched. AlreadyExists when the group has one of that name;
+        // InvalidArgument when it is already there; NotSupported on read-only mounts.
+        Status MoveInstance(const Guid& id, Group& to);
+
         // Rename a group (directory move; child paths derive dynamically, so descendants
         // need no fixup). NotSupported for the root or read-only mounts.
         Status RenameGroup(Group& group, StringView newName);
@@ -334,9 +340,17 @@ export namespace foundation::content
             return m_factory(stream, mode);
         }
 
+        /// Counts the changes to the tree's shape: a group or an instance added, removed, renamed
+        /// or moved. A view of the tree (the asset browser) builds again when it moves, however
+        /// the change came (a page, an import, an agent's write).
+        [[nodiscard]] u64 Revision() const noexcept { return m_revision; }
+        /// The shape changed (what the groups' own edits call).
+        void Touch() noexcept { ++m_revision; }
+
         Group* NewGroup(Group* parent, StringView name)
         {
             Group* group = m_allocator->New<Group>(*this, parent, name);
+            Touch();
             m_allGroups.PushBack(group);
             return group;
         }
@@ -346,6 +360,7 @@ export namespace foundation::content
         {
             Instance* instance =
                 m_allocator->New<Instance>(*this, group, id, name, typeNs, typeName);
+            Touch();
             m_allInstances.PushBack(instance);
             if (!id.IsNil())
             {
@@ -433,6 +448,7 @@ export namespace foundation::content
         Array<Group*> m_allGroups;
         Array<Instance*> m_allInstances;
         HashMap<Guid, Instance*> m_byGuid;
+        u64 m_revision = 0; // Revision()
     };
 
     // -----------------------------------------------------------------------

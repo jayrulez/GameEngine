@@ -100,13 +100,11 @@ class Thief
     void onCheckpoint(Float3 at)
     {
         m_checkpoint = at;
-        UILabel@ note = ui::findLabel("hud-note");
-        if (note !is null && note.isValid())
+        Node@ note = gui::root().find("hud-note");
+        if (note !is null)
         {
-            note.setText("Checkpoint");
-            note.setOpacity(1.0f);
-            note.setVisible(true);
-            note.fadeTo(0.0f, 2.5f);
+            Label::of(note).text = "Checkpoint";
+            note.tween("opacity", "0", 2.5f, "ease").from("1");
         }
     }
 

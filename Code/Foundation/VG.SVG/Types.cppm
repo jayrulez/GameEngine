@@ -69,6 +69,8 @@ export namespace foundation::vg::svg
         String fillGradientId; ///< Set when fill="url(#id)" - resolved via the document.
         Optional<Color> strokeColor;               ///< Stroke color (empty = none).
         f32 strokeWidth = 1.0f;
+        foundation::vg::VGLineCap strokeCap = foundation::vg::VGLineCap::Butt;    ///< stroke-linecap
+        foundation::vg::VGLineJoin strokeJoin = foundation::vg::VGLineJoin::Miter; ///< stroke-linejoin
         f32 opacity = 1.0f;
         Array<SVGElement> children; ///< Children (for group elements).
 

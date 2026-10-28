@@ -24008,7 +24008,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">9101614852607320285</u64>
-					<u32 name="version">2</u32>
+					<u32 name="version">3</u32>
 				</array>
 				<f32 name="radius">0.35</f32>
 				<f32 name="height">1.8</f32>
@@ -24016,6 +24016,7 @@
 				<f32 name="maxAcceleration">8</f32>
 				<bool name="moveEntity">true</bool>
 				<f32 name="stopDistance">0</f32>
+				<bool name="avoidOthers">true</bool>
 			</object>
 		</object>
 		<object>
@@ -24448,7 +24449,7 @@
 					<string name="script">bdaa4dac-b034-4353-8aa0-d938e9182d19</string>
 					<bool name="enabled">true</bool>
 					<f32 name="updateInterval">0</f32>
-					<array name="overrides" count="5">
+					<array name="overrides" count="6">
 						<u64 name="nameHash">1057872514463661283</u64>
 						<u8 name="kind">7</u8>
 						<string name="guid">89d3ec81-8e1b-58e2-a475-0e474f8ec03e</string>
@@ -24464,6 +24465,9 @@
 						<u64 name="nameHash">15912740436197969649</u64>
 						<u8 name="kind">1</u8>
 						<f64 name="number">1</f64>
+						<u64 name="nameHash">11793007960982004773</u64>
+						<u8 name="kind">1</u8>
+						<f64 name="number">3</f64>
 					</array>
 				</array>
 			</object>
@@ -27734,13 +27738,14 @@
 		</object>
 		<object>
 			<string name="owner">08de6271-0fbe-54e9-99b6-b155c296dd1b</string>
-			<string name="type">ui.Billboard</string>
+			<string name="type">gui.Billboard</string>
 			<object name="data">
 				<array name="dataVersions" count="1">
-					<u64 name="type">5579425152935273144</u64>
+					<u64 name="type">13797404026464035722</u64>
 					<u32 name="version">1</u32>
 				</array>
-				<string name="document">743c57b6-8d1c-4d9e-9731-13b328247e18</string>
+				<string name="document">6c039b5e-0f8d-4fcc-bf97-4455acadc5d1</string>
+				<string name="sheet">00000000-0000-0000-0000-000000000000</string>
 				<object name="offset">
 					<f32 name="x">0</f32>
 					<f32 name="y">0</f32>

@@ -30,11 +30,9 @@ import foundation.runtime.client;
 import foundation.graphics;
 import engine.scene;
 import foundation.rhi;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.vg.renderer;
-import foundation.ui.viewport;
+import foundation.gui;
+import foundation.gui.hosting;
+import foundation.gui.viewport;
 import foundation.script;
 import foundation.script.resource;  // ScriptClass (the cooked game script, bound from the content DB)
 import engine.script; // ScriptSubsystem / ScriptRunHost (debugger wiring)
@@ -57,19 +55,64 @@ namespace rhi = foundation::rhi;
 namespace runtime = foundation::runtime;
 namespace scene = foundation::scene;
 namespace script = foundation::script;
-namespace ui = foundation::ui;
-namespace vg = foundation::vg;
+namespace gui = foundation::gui;
 
 namespace editor
 {
+    DebuggerPanel::~DebuggerPanel()
+    {
+        if (m_stack != nullptr)
+            m_stack->SetModel(nullptr);
+        if (m_locals != nullptr)
+            m_locals->SetModel(nullptr);
+    }
+
+    void DebuggerPanel::Bind(gui::Node& pane)
+    {
+        const auto find = [&pane](StringView id) -> gui::Node*
+        {
+            Array<gui::Node*> pending;
+            pending.PushBack(&pane);
+            while (!pending.IsEmpty())
+            {
+                gui::Node* node = pending.Back();
+                pending.PopBack();
+                if (auto* widget = Cast<gui::UIWidget>(node); widget != nullptr && widget->GetId() == id)
+                    return node;
+                for (usize i = 0; i < node->ChildCount(); ++i)
+                    pending.PushBack(node->GetChildAt(i));
+            }
+            return nullptr;
+        };
+        m_status = Cast<gui::Label>(find(u8"game-debugger-state"));
+        m_stack = Cast<gui::TreeView>(find(u8"game-debugger-stack"));
+        m_locals = Cast<gui::TreeView>(find(u8"game-debugger-locals"));
+        if (m_stack != nullptr)
+            m_stack->SetModel(&m_stackModel);
+        if (m_locals != nullptr)
+            m_locals->SetModel(&m_localsModel);
+        DebuggerPanel* self = this;
+        const auto verb = [&find, self](StringView id, void (*run)(script::IScriptDebugger&))
+        {
+            if (auto* button = Cast<gui::ButtonBase>(find(id)))
+                button->SetOnClick([self, run]()
+                                   {
+                                       if (self->m_debugger != nullptr)
+                                           run(*self->m_debugger);
+                                   });
+        };
+        verb(u8"game-debugger-continue", [](script::IScriptDebugger& d) { d.Continue(); });
+        verb(u8"game-debugger-step-into", [](script::IScriptDebugger& d) { d.StepInto(); });
+        verb(u8"game-debugger-step-over", [](script::IScriptDebugger& d) { d.StepOver(); });
+        verb(u8"game-debugger-break", [](script::IScriptDebugger& d) { d.Break(); });
+        SetIdle();
+    }
+
     void DebuggerPanel::SetDebugger(script::IScriptDebugger* debugger)
     {
         m_debugger = debugger;
-        m_expanded.Clear();
         if (debugger == nullptr)
-        {
             Clear();
-        }
     }
 
     void DebuggerPanel::Refresh()
@@ -79,8 +122,9 @@ namespace editor
             Clear();
             return;
         }
-        m_status->SetText(u8"Debugger: paused");
-        m_stackList->RemoveAllViews(true);
+        if (m_status != nullptr)
+            m_status->SetText(u8"Paused");
+        m_stackModel.Clear();
         for (const script::ScriptStackFrame& frame : m_debugger->CaptureStackFrames())
         {
             String text(frame.function.AsView());
@@ -89,131 +133,53 @@ namespace editor
             text += u8":";
             AppendInt(text, frame.line);
             text += u8")";
-            AddRow(*m_stackList, text.AsView(), 0.0f);
+            (void)m_stackModel.AddNode(gui::TreeModel::kRoot, text.AsView());
         }
-        m_localsList->RemoveAllViews(true);
+        // The locals, an object's members one level under it (closed until opened).
+        m_localsModel.Clear();
         for (const script::ScriptVariable& local : m_debugger->CaptureLocals(0))
         {
-            AddLocalRow(local, 0.0f);
+            String text(local.name.AsView());
+            text += u8" = ";
+            text += local.value;
+            if (!local.typeName.IsEmpty())
+            {
+                text += u8"  (";
+                text += local.typeName;
+                text += u8")";
+            }
+            const i32 node = m_localsModel.AddNode(gui::TreeModel::kRoot, text.AsView());
+            if (local.objectRef == 0)
+                continue;
+            for (const script::ScriptVariable& member : m_debugger->CaptureObject(local.objectRef))
+            {
+                String memberText(member.name.AsView());
+                memberText += u8" = ";
+                memberText += member.value;
+                (void)m_localsModel.AddNode(node, memberText.AsView());
+            }
         }
     }
 
     void DebuggerPanel::Clear()
     {
-        m_status->SetText(u8"Debugger: running");
-        m_stackList->RemoveAllViews(true);
-        m_localsList->RemoveAllViews(true);
+        if (m_status != nullptr)
+            m_status->SetText(u8"Running");
+        m_stackModel.Clear();
+        m_localsModel.Clear();
     }
 
     void DebuggerPanel::SetIdle()
     {
         m_debugger = nullptr;
-        m_expanded.Clear();
-        m_status->SetText(u8"Debugger: not running");
-        m_stackList->RemoveAllViews(true);
-        m_localsList->RemoveAllViews(true);
+        if (m_status != nullptr)
+            m_status->SetText(u8"Not running");
+        m_stackModel.Clear();
+        m_localsModel.Clear();
     }
 
-    bool DebuggerPanel::ConsumeDirty() noexcept
-    {
-        const bool was = m_dirty;
-        m_dirty = false;
-        return was;
-    }
-
-    ui::LayoutStyle DebuggerPanel::MatchWidth()
-    {
-        ui::LayoutStyle lp;
-        lp.Width = ui::SizeSpec::Match();
-        return lp;
-    }
-
-    void DebuggerPanel::AddRow(ui::FlexLayout& list, StringView text, f32 indent)
-    {
-        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text);
-        label->FontSize.SetValue(12.0f);
-        ui::LayoutStyle lp;
-        lp.Width = ui::SizeSpec::Match();
-        lp.Margin = ui::Thickness{indent, 0, 0, 0};
-        list.AddView(label.Get(), lp);
-    }
-
-    void DebuggerPanel::AddLocalRow(const script::ScriptVariable& variable, f32 indent)
-    {
-        String text(variable.name.AsView());
-        text += u8" = ";
-        text += variable.value;
-        if (!variable.typeName.IsEmpty())
-        {
-            text += u8"  (";
-            text += variable.typeName;
-            text += u8")";
-        }
-        const bool expandable = variable.objectRef != 0;
-        const bool expanded = expandable && IsExpanded(variable.objectRef);
-        if (expandable)
-        {
-            // A row with an ASCII expand toggle (the editor font renders only <=255).
-            auto row = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 4.0f;
-            auto toggle =
-                MakeRef<ui::Button>(editor::EditorRootAllocator(), StringView(expanded ? u8"-" : u8"+"));
-            toggle->FontSize.SetValue(12.0f);
-            DebuggerPanel* self = this;
-            const u64 ref = variable.objectRef;
-            toggle->OnClick.Add([self, ref](ui::ButtonBase*) { self->ToggleExpand(ref); });
-            row->AddView(toggle.Get());
-            auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text.AsView());
-            label->FontSize.SetValue(12.0f);
-            row->AddView(label.Get());
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.Margin = ui::Thickness{indent, 0, 0, 0};
-            m_localsList->AddView(row.Get(), lp);
-            if (expanded && m_debugger != nullptr)
-            {
-                for (const script::ScriptVariable& member : m_debugger->CaptureObject(ref))
-                {
-                    String memberText(member.name.AsView());
-                    memberText += u8" = ";
-                    memberText += member.value;
-                    AddRow(*m_localsList, memberText.AsView(), indent + 18.0f);
-                }
-            }
-        }
-        else
-        {
-            AddRow(*m_localsList, text.AsView(), indent);
-        }
-    }
-
-    bool DebuggerPanel::IsExpanded(u64 ref) const
-    {
-        for (u64 e : m_expanded)
-        {
-            if (e == ref)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void DebuggerPanel::ToggleExpand(u64 ref)
-    {
-        for (usize i = 0; i < m_expanded.Size(); ++i)
-        {
-            if (m_expanded[i] == ref)
-            {
-                m_expanded.RemoveAt(i);
-                m_dirty = true;
-                return;
-            }
-        }
-        m_expanded.PushBack(ref);
-        m_dirty = true;
-    }
+    StringView DebuggerPanel::State() const { return m_status != nullptr ? m_status->GetText() : StringView{}; }
+    usize DebuggerPanel::StackCount() const { return m_stackModel.RowCount(gui::ModelIndex{}); }
 
     void DebuggerPanel::AppendInt(String& out, i32 value)
     {
@@ -240,6 +206,167 @@ namespace editor
         state = newState;
         changed = true;
     }
+    GameEditorPage::GameEditorPage(EditorContext& context, runtime::IApplicationHost& host, Services services,
+                                   engine::runtime::DefaultApplication* embeddedApp, engine::runtime::GameInstance* instance, StringView pieId)
+        : app::UIEditorPage(context.Allocator()), m_context(&context), m_host(&host), m_services(Move(services)), m_app(embeddedApp),
+          m_gameInstance(instance), m_pieId(pieId), m_title(TitleFor(pieId))
+    {
+        Provide<IPieInstancePage>(*this); // what the PIE tools act through
+        Provide<IGameScenePage>(*this);   // what the scene tools read of the run
+        Provide<IGameRunPage>(*this);     // what the editor stops before a native reload
+        m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+        m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+        m_audio = host.Ctx().GetSubsystem<engine::audio::AudioSubsystem>();
+        m_input = host.Ctx().GetSubsystem<engine::input::InputSubsystem>();
+        m_shellInput = host.Shell() != nullptr ? host.Shell()->Input() : nullptr;
+
+        m_viewport = MakeRef<gui::Viewport>(Allocator());
+        m_viewport->AddClass(u8"game-view");
+        m_viewport->ClearColor = Color{0.248f, 0.248f, 0.272f, 1.0f};
+        // The finished game, as the player draws it into its sRGB window: 8-bit sRGB rather than
+        // the viewports' float default, so the Game tab matches the player and its screen UI can
+        // blend encoded values through the target's twin view (RenderOverlays).
+        m_viewport->SetFormats(rhi::TextureFormat::RGBA8UnormSrgb, m_viewport->DepthFormat());
+        // Shift+F1 (the GUI's capture release) gives the keyboard back to the editor: the game
+        // view lets the focus go too, as the game reads its keys while the view has it; a click
+        // in the view takes it, and the capture, again.
+        {
+            gui::Viewport* view = m_viewport.Get();
+            (void)m_viewport->AddNamedListener(u8"keysreleased", [view](const gui::Event&) { view->ReleaseFocus(); });
+        }
+        // The game's input is the viewport's surface, gated to it (hover the mouse, focus the keys).
+        m_viewportSource.viewport = m_viewport.Get();
+        m_viewportSource.shellInput = m_shellInput;
+        if (m_input != nullptr)
+            m_input->SetSourceProvider(ActiveSource(), nullptr);
+
+        // THIS instance's exit request stops THIS tab's run, whichever tab it is: the script asking
+        // fires inside the embedded app's update, which runs before the pages, so the stop waits for
+        // this page's next OnUpdate, no script call on the stack.
+        if (m_gameInstance != nullptr)
+        {
+            GameEditorPage* self = this;
+            m_gameInstance->RunBinding().requestExit = Function<void(i32)>{[self](i32 code)
+                                                                          {
+                                                                              LOG_INFO(u8"Editor", u8"Game: '{}' requested exit({})", self->m_pieId, code);
+                                                                              self->m_exitRequested = true;
+                                                                          }};
+        }
+
+        // The tab from its markup: the bar over the stage, the game beside the debugger.
+        m_content = m_services.loadMarkup ? m_services.loadMarkup(StringView(kPath)) : RefPtr<gui::Node>{};
+        if (!m_content)
+            m_content = MakeRef<gui::Panel>(Allocator()); // no markup: still a tab, with its viewport
+        gui::Node* stage = Find<gui::Node>(u8"game-view-pane");
+        (void)(stage != nullptr ? stage : m_content.Get())->AddChildAt(m_viewport.Get(), 0);
+        if (m_services.gui != nullptr)
+            m_viewport->HostIn(*m_services.gui);
+        m_stage = Find<gui::Splitter>(u8"game-stage");
+        m_debuggerPane = RefPtr<gui::Node>(Find<gui::Node>(u8"game-debugger"));
+        if (m_debuggerPane)
+        {
+            m_debuggerPanel.Bind(*m_debuggerPane);
+            ShowDebugger(false); // it takes room the game wants: opened by its toggle or a break
+        }
+        BindBar();
+        RefreshToolbar();
+    }
+
+    template <typename T>
+    T* GameEditorPage::Find(StringView id) const
+    {
+        if (!m_content)
+            return nullptr;
+        Array<gui::Node*> pending;
+        pending.PushBack(m_content.Get());
+        while (!pending.IsEmpty())
+        {
+            gui::Node* node = pending.Back();
+            pending.PopBack();
+            if (auto* widget = Cast<gui::UIWidget>(node); widget != nullptr && widget->GetId() == id)
+                return Cast<T>(node);
+            for (usize i = 0; i < node->ChildCount(); ++i)
+                pending.PushBack(node->GetChildAt(i));
+        }
+        return nullptr;
+    }
+
+    void GameEditorPage::BindBar()
+    {
+        GameEditorPage* self = this;
+        m_restartButton = Find<gui::ButtonBase>(u8"game-restart");
+        m_playButton = Find<gui::ButtonBase>(u8"game-play");
+        m_pauseToggle = Find<gui::ButtonBase>(u8"game-pause");
+        m_stopButton = Find<gui::ButtonBase>(u8"game-stop");
+        m_stateLabel = Find<gui::Label>(u8"game-state");
+        m_sceneLabel = Find<gui::Label>(u8"game-scene");
+        m_cookBadge = Find<gui::Label>(u8"game-cook");
+        m_debuggerToggle = Find<gui::ButtonBase>(u8"game-debugger-toggle");
+        if (m_restartButton != nullptr)
+            m_restartButton->SetOnClick([self]()
+                                        {
+                                            self->Stop();
+                                            self->Play();
+                                        });
+        if (m_playButton != nullptr)
+            m_playButton->SetOnClick([self]() { self->Play(); });
+        if (m_pauseToggle != nullptr)
+            m_pauseToggle->SetOnToggled([self](bool paused)
+                                        {
+                                            if (self->m_scene != nullptr && self->m_running)
+                                                self->m_scene->SetSimulationEnabled(!paused);
+                                            self->RefreshToolbar();
+                                        });
+        if (m_stopButton != nullptr)
+            m_stopButton->SetOnClick([self]() { self->Stop(); });
+        if (m_debuggerToggle != nullptr)
+            m_debuggerToggle->SetOnToggled([self](bool shown) { self->ShowDebugger(shown); });
+        BindResolution();
+    }
+
+    String GameEditorPage::TitleFor(StringView pieId)
+    {
+        constexpr StringView kNewInstance = u8"game-page-";
+        if (!pieId.StartsWith(kNewInstance))
+            return String(u8"Game");
+        const Optional<i64> number = ParseInt(pieId.SubStr(kNewInstance.Size(), pieId.Size() - kNewInstance.Size()));
+        return number.HasValue() ? Format(u8"Game {}", number.Value() + 1) : String(pieId);
+    }
+
+    void GameEditorPage::ShowDebugger(bool shown)
+    {
+        if (!m_debuggerPane)
+            return;
+        if (m_stage == nullptr)
+        {
+            m_debuggerPane->SetDisplayed(shown); // no split: the stage gives the game the room back
+            return;
+        }
+        // In the split while it is on, at the share it was last given; out of it while it is off,
+        // the game taking the whole stage (a hidden pane would keep its share empty).
+        const bool in = m_debuggerPane->GetParent() == m_stage;
+        if (shown && !in)
+        {
+            m_stage->AddChild(m_debuggerPane.Get());
+            const f32 weights[2] = {1.0f - m_debuggerShare, m_debuggerShare};
+            m_stage->SetWeights(Span<const f32>(weights, 2u));
+        }
+        else if (!shown && in)
+        {
+            const Array<f32> weights = m_stage->GetWeights();
+            if (weights.Size() == 2u && weights[1] > 0.0f)
+                m_debuggerShare = weights[1];
+            m_stage->RemoveChild(m_debuggerPane.Get());
+        }
+    }
+
+    bool GameEditorPage::DebuggerShown() const
+    {
+        if (!m_debuggerPane)
+            return false;
+        return m_stage != nullptr ? m_debuggerPane->GetParent() == m_stage : m_debuggerPane->IsDisplayed();
+    }
+
     scene::SceneManager& GameEditorPage::SceneGroup() noexcept
     {
         return (m_gameInstance != nullptr) ? m_gameInstance->Scenes() : m_fallbackScenes;
@@ -386,7 +513,7 @@ namespace editor
         m_running = true;
         if (m_pauseToggle != nullptr)
         {
-            m_pauseToggle->SetIsChecked(false);
+            m_pauseToggle->SetChecked(false);
         }
         // Adopt the instance's current scene as this tab's borrowed render/input pointer: the default
         // we just started, a scene the game script loaded during launch(), or null (a scripted boot
@@ -483,7 +610,12 @@ namespace editor
         {
             m_app->UI()->EndRunScreens(m_gameInstance);
         }
+        if (m_app != nullptr && m_app->GUI() != nullptr && m_gameInstance != nullptr)
+        {
+            m_app->GUI()->EndRunScreens(m_gameInstance);
+        }
         m_running = false;
+        m_viewport->ClearPicture(); // the run's last frame does not linger
         RefreshToolbar();
     }
 
@@ -550,61 +682,6 @@ namespace editor
         RefreshToolbar();
     }
 
-    void GameEditorPage::EnsureViewportBound()
-    {
-        foundation::ui::RootView* root = m_viewport->Root();
-        if (root == nullptr)
-        {
-            return;
-        }
-        foundation::graphics::RenderWindow* window = m_uiHost->WindowForRoot(root);
-        if (window == nullptr || window == m_hostWindow)
-        {
-            return;
-        }
-
-        vg::renderer::VGRenderer* renderer = m_uiHost->RendererFor(window);
-        if (renderer == nullptr)
-        {
-            return;
-        } // float's AttachWindow hasn't run yet
-
-        if (m_hostWindow == nullptr)
-        {
-            m_viewport->Initialize(m_host->Graphics()->Raw(), renderer, m_host->Shell()->Input(),
-                                   window->Window().Id());
-            // The (now-existing) gated surface is the runtime input's permanent
-            // source. The SCENE BINDING rides the play state: bound to the fresh
-            // run's scene while playing (BindInput), un-bound otherwise - which,
-            // under the editor's ScreenTierOnly policy, keeps game UI inert until
-            // Play (editing-page HUDs render but never take editor input).
-            m_viewportSource.viewport = m_viewport.Get();
-            m_viewportSource.shellInput = m_shellInput;
-            // Gate the viewport surface (hover/focus) via an InputRouter, like ScenePage. Without
-            // it the surface is never focused, so SurfaceKeyboard reports every key UP and the game
-            // reads no keyboard - the game viewport must own a router or its input is dead.
-            if (m_router.Get() == nullptr)
-            {
-                m_router = MakeUnique<foundation::shell::InputRouter>(Allocator(),
-                                                                    m_host->Shell()->Input());
-            }
-            if (m_viewport->Surface() != nullptr)
-            {
-                m_router->AddSurface(m_viewport->Surface());
-            }
-            if (m_input != nullptr)
-            {
-                m_input->SetSourceProvider(ActiveSource(),
-                                           m_running ? static_cast<const void*>(m_scene) : nullptr);
-            }
-        }
-        else
-        {
-            m_viewport->AttachToWindow(renderer, window->Window().Id());
-        }
-        m_hostWindow = window;
-    }
-
     void GameEditorPage::SyncRunAudio()
     {
         if (m_audio == nullptr || m_gameInstance == nullptr)
@@ -626,7 +703,7 @@ namespace editor
             m_simPausedByDebugger || (m_pauseToggle != nullptr && m_pauseToggle->IsChecked());
         m_audio->SetRunPaused(m_gameInstance, paused);
         // Clicking into this tab's viewport makes its run the one heard.
-        if (m_viewport->HostKeyboardFocusHere() && m_audio->FocusedRun() != m_gameInstance)
+        if (m_viewport->IsFocused() && m_audio->FocusedRun() != m_gameInstance)
         {
             m_audio->SetFocusedRun(m_gameInstance);
         }
@@ -653,37 +730,27 @@ namespace editor
         // (run.loadScene) repointed it, so adopt the new scene + retire the outgoing one here.
         FollowInstanceScene();
         AdvanceScriptedInput();
-        EnsureViewportBound();
         TickResolution(dt);
         SyncGameFit(); // the target may have changed shape: the turn, and so the pointer's map
-        m_viewport->SyncInputRegion();
-        // A running game owns the keys its focused viewport receives: the editor's arrow key
-        // focus moves and single key bindings stay out of it.
-        m_viewport->SetCapturesKeys(m_running);
+        // A running game owns every key while its view has the focus (the editor's focus moves and
+        // its bindings stay out of it); Shift+F1 gives the keyboard back, the focus with it, until
+        // a click in the view. Armed only while focused: armed whenever it ran, the release was
+        // undone the next frame and the game kept the keys.
+        m_viewport->SetCapturesAllKeys(m_running && m_viewport->IsFocused());
         SyncRunAudio();
-        if (m_router.Get() != nullptr)
-        {
-            // One app keyboard (issues repro: Tab in an editor dialog field traversed the PIE
-            // game's menu): while the editor UI's keyboard focus is on any view but this
-            // viewport, the router drops surface focus, closing the gated source the game's
-            // devices, bindings, AND screen UI all read. Clicking the viewport re-focuses it
-            // in the editor UI, reopening the gate.
-            m_router->SetExternalCapture(false, m_viewport->HostKeyboardFocusElsewhere());
-            m_router->Update();
-        } // gate the surface: hover=mouse, click=keyboard focus
+        RefreshToolbar();
         // The game UI's input (one pump for every Game tab) goes to the tab the keyboard is in, or
         // to the one a playtest is scripting; with neither, it stays with the tab that took it last
         // (a lone tab keeps it from Play on). Each run's screens are its own (run screens), so the
         // claim decides only whose menus the keys and clicks reach.
         if (m_running && m_input != nullptr &&
             (m_scripted.Get() != nullptr ||
-             (m_viewport->Surface() != nullptr && m_viewport->Surface()->Focused())))
+             (m_viewport->IsFocused() && m_viewport->HostedSurface() != nullptr && m_viewport->HostedSurface()->Focused())))
         {
             m_input->SetSourceProvider(ActiveSource(), m_scene);
         }
-        // IME follows the GAME UI's focus through the host window: the viewport (the
-        // editor context's focused view while playing) forwards the game context's
-        // WantsTextInput, and the editor's own input bridge does the Start/Stop.
+        // The window's text input follows the GAME UI's focus: the viewport (the GUI's focused node
+        // while playing) says the game's context wants text, and the GUI's bridge starts it.
         m_viewport->SetHostedTextInputWanted(m_app != nullptr && m_app->UI() != nullptr &&
                                              m_app->UI()->Context().WantsTextInput());
         // The embedded app's OnUpdate (ticking EVERY instance's game script) is driven ONCE by
@@ -701,12 +768,9 @@ namespace editor
         {
             return;
         }
-        // Idle (no run): the editor UI still SAMPLES the viewport texture every frame,
-        // so it must be in a defined shader-read layout - clear it once per frame.
-        // (Every other viewport page renders every frame; only the Game tab idles.)
+        // Idle (no run): the viewport keeps what it was cleared to (Stop asks for the clear).
         if (m_scene == nullptr)
         {
-            m_viewport->ClearContent(*frame.encoder);
             return;
         }
         if (m_render == nullptr || !m_render->IsReady())
@@ -719,7 +783,7 @@ namespace editor
         {
             return;
         }
-        if (!m_viewport->IsEffectivelyVisible())
+        if (!m_viewport->IsTreeVisible())
         {
             return;
         }
@@ -729,6 +793,10 @@ namespace editor
         if (m_app != nullptr && m_app->UI() != nullptr)
         {
             m_app->UI()->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
+        }
+        if (m_app != nullptr && m_app->GUI() != nullptr)
+        {
+            m_app->GUI()->RenderTextures(*frame.encoder, frame.frameIndex); // and the engine GUI's
         }
 
         // No camera override: the SCENE's primary camera drives the view (its clear
@@ -750,7 +818,7 @@ namespace editor
             const render::ViewportRect viewport{static_cast<i32>(dst.x), static_cast<i32>(dst.y),
                                                 static_cast<u32>(Max(dst.width, 1.0f)),
                                                 static_cast<u32>(Max(dst.height, 1.0f))};
-            m_render->RenderScene(*m_scene, m_viewport->ColorTargetView(), m_viewport->ColorFormat(), w, h,
+            m_render->RenderScene(*m_scene, m_viewport->ColorView(), m_viewport->ColorFormat(), w, h,
                                   viewport, nullptr, targetState, nullptr, nullptr, nullptr,
                                   render::SceneSize::FromFit(fit));
             m_captureX = static_cast<u32>(Max(viewport.x, 0));
@@ -760,7 +828,7 @@ namespace editor
         }
         else
         {
-            m_render->RenderScene(*m_scene, m_viewport->ColorTargetView(), m_viewport->ColorFormat(), w, h,
+            m_render->RenderScene(*m_scene, m_viewport->ColorView(), m_viewport->ColorFormat(), w, h,
                                   render::ViewportRect{0, 0, w, h}, nullptr, targetState);
         }
         m_viewport->SetColorState(rhi::ResourceState::ShaderRead);
@@ -813,12 +881,22 @@ namespace editor
             m_app->UI()->SetScreenOrientation(m_gameInstance, m_orientation);
             m_app->UI()->SetRenderRun(m_gameInstance);
         }
-        render->RenderOverlays(*frame.encoder, m_viewport->ColorTargetView(),
+        if (m_app != nullptr && m_app->GUI() != nullptr)
+        {
+            m_app->GUI()->SetScreenResolution(m_gameInstance, m_renderWidth, m_renderHeight, m_renderFit);
+            m_app->GUI()->SetScreenOrientation(m_gameInstance, m_orientation);
+            m_app->GUI()->SetRenderRun(m_gameInstance);
+        }
+        render->RenderOverlays(*frame.encoder, m_viewport->ColorView(),
                                m_viewport->ColorFormat(), w, h, frame.frameIndex,
-                               m_viewport->ColorTargetAlternateView()); // the screen UI blends encoded
+                               m_viewport->ColorAlternateView()); // the screen UI blends encoded
         if (m_app != nullptr && m_app->UI() != nullptr)
         {
             m_app->UI()->SetRenderRun(nullptr);
+        }
+        if (m_app != nullptr && m_app->GUI() != nullptr)
+        {
+            m_app->GUI()->SetRenderRun(nullptr);
         }
         frame.encoder->TransitionTexture(m_viewport->ColorTexture(),
                                          rhi::ResourceState::RenderTarget,
@@ -863,9 +941,11 @@ namespace editor
         m_gameInstance = nullptr;
         if (m_host->Graphics() != nullptr)
         {
+            // A copy recorded last frame completes first: freeing its buffer in flight is the
+            // device's error (the scene viewport's, 2026-10-25).
+            m_capture.Complete(m_host->Graphics()->Raw(), Allocator());
             m_capture.Release(m_host->Graphics()->Raw()); // the readback buffer, while the device lives
         }
-        m_viewport->Shutdown();
     }
 
     // ---- scripted input (pie_run) ----
@@ -1149,7 +1229,8 @@ namespace editor
                 // A paused run shows why: the panel opens if it was hidden.
                 if (m_debuggerToggle != nullptr && !m_debuggerToggle->IsChecked())
                 {
-                    m_debuggerToggle->SetIsChecked(true);
+                    m_debuggerToggle->SetChecked(true);
+                    ShowDebugger(true);
                 }
                 m_debuggerPanel.Refresh();
                 // Publish the paused location (innermost frame) - the ScriptPage editing
@@ -1175,10 +1256,6 @@ namespace editor
                 m_debuggerPanel.Clear();
                 m_context->ClearScriptExecutionPoint();
             }
-        }
-        if (m_debuggerPanel.ConsumeDirty())
-        {
-            m_debuggerPanel.Refresh();
         }
     }
 
@@ -1226,44 +1303,42 @@ namespace editor
         }
     }
 
-    void GameEditorPage::CreateResolutionCombo()
+    void GameEditorPage::BindResolution()
     {
-        m_resolutionCombo = MakeRef<ui::ComboBox>(Allocator());
-        ui::LayoutStyle style;
-        style.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(220));
-        style.Height = ui::SizeSpec::Match();
-        m_toolbar->AddView(m_resolutionCombo.Get(), style);
         GameEditorPage* self = this;
-        m_resolutionCombo->OnSelectionChanged.Add(
-            [self](ui::ComboBox*, i32 index)
-            {
-                if (self->m_resolutionRebuilding || index < 0 ||
-                    static_cast<usize>(index) >= self->m_resolutionChoices.Size())
-                {
-                    return;
-                }
-                self->m_resolutionKey = self->m_resolutionChoices[static_cast<usize>(index)].key;
-                self->SaveResolutionKey();
-                self->ApplyResolution();
-            });
+        m_resolutionCombo = Find<gui::ComboBox>(u8"game-resolution");
+        if (m_resolutionCombo != nullptr)
+            m_resolutionCombo->SetOnSelectionChanged([self](i32 index)
+                                                     {
+                                                         if (self->m_resolutionRebuilding || index < 0 ||
+                                                             static_cast<usize>(index) >= self->m_resolutionChoices.Size())
+                                                             return;
+                                                         self->m_resolutionKey = self->m_resolutionChoices[static_cast<usize>(index)].key;
+                                                         self->SaveResolutionKey();
+                                                         self->ApplyResolution();
+                                                     });
         // A phone held upright: the game as a phone would show it, turned when it is held the
         // other way (mouse and touch map through the same turn).
-        m_phoneToggle = m_toolbar->AddToggle(u8"Phone");
-        m_phoneToggle->OnCheckedChanged.Add(
-            [self](ui::toolkit::ToolbarToggle*, bool on)
-            {
-                if (self->m_resolutionRebuilding)
-                {
-                    return;
-                }
-                self->SetPhonePreview(on);
-                self->SaveResolutionKey();
-            });
+        m_phoneToggle = Find<gui::ButtonBase>(u8"game-phone");
+        if (m_phoneToggle != nullptr)
+            m_phoneToggle->SetOnToggled([self](bool on)
+                                        {
+                                            self->SetPhonePreview(on);
+                                            self->SaveResolutionKey();
+                                        });
         LoadResolutionKey();
-        m_resolutionRebuilding = true;
-        m_phoneToggle->SetIsChecked(m_phonePreview);
-        m_resolutionRebuilding = false;
+        if (m_phoneToggle != nullptr)
+            m_phoneToggle->SetChecked(m_phonePreview);
         RefreshResolutionChoices(true);
+    }
+
+    i32 GameEditorPage::SelectedResolution() const
+    {
+        if (m_resolutionCombo != nullptr)
+            return m_resolutionCombo->GetSelectedIndex();
+        // No dropdown (no markup): the chosen key's entry.
+        const usize found = FindGameResolution(Span<const GameResolutionChoice>(m_resolutionChoices.Data(), m_resolutionChoices.Size()), m_resolutionKey.AsView());
+        return m_resolutionChoices.IsEmpty() ? -1 : static_cast<i32>(found);
     }
 
     Span<const GameResolutionChoice> GameEditorPage::ResolutionChoices()
@@ -1279,10 +1354,11 @@ namespace editor
         {
             if (m_resolutionChoices[i].key.AsView() == key)
             {
-                m_resolutionRebuilding = true; // the dropdown shows it; its handler stays out
-                m_resolutionCombo->SetSelectedIndex(static_cast<i32>(i));
-                m_resolutionRebuilding = false;
                 m_resolutionKey = m_resolutionChoices[i].key;
+                m_resolutionRebuilding = true; // the dropdown shows it; its handler stays out
+                if (m_resolutionCombo != nullptr)
+                    m_resolutionCombo->SetSelectedIndex(static_cast<i32>(i));
+                m_resolutionRebuilding = false;
                 SaveResolutionKey();
                 ApplyResolution();
                 return true;
@@ -1293,9 +1369,8 @@ namespace editor
 
     void GameEditorPage::SelectPhonePreview(bool on)
     {
-        m_resolutionRebuilding = true; // the toggle shows it; its handler stays out
-        m_phoneToggle->SetIsChecked(on);
-        m_resolutionRebuilding = false;
+        if (m_phoneToggle != nullptr)
+            m_phoneToggle->SetChecked(on); // code's change: its handler stays out
         SetPhonePreview(on);
         SaveResolutionKey();
     }
@@ -1365,21 +1440,22 @@ namespace editor
         const usize selected = FindGameResolution(
             Span<const GameResolutionChoice>(m_resolutionChoices.Data(), m_resolutionChoices.Size()),
             m_resolutionKey.AsView());
-        m_resolutionRebuilding = true;
-        m_resolutionCombo->ClearItems();
-        for (const GameResolutionChoice& choice : m_resolutionChoices)
-        {
-            (void)m_resolutionCombo->AddItem(choice.label.AsView());
-        }
-        m_resolutionCombo->SetSelectedIndex(static_cast<i32>(selected));
-        m_resolutionRebuilding = false;
         m_resolutionKey = m_resolutionChoices[selected].key;
+        if (m_resolutionCombo != nullptr)
+        {
+            m_resolutionRebuilding = true;
+            m_resolutionCombo->SetItemsText(String{});
+            for (const GameResolutionChoice& choice : m_resolutionChoices)
+                m_resolutionCombo->AddItem(choice.label.AsView());
+            m_resolutionCombo->SetSelectedIndex(static_cast<i32>(selected));
+            m_resolutionRebuilding = false;
+        }
         ApplyResolution();
     }
 
     void GameEditorPage::ApplyResolution()
     {
-        const i32 index = m_resolutionCombo->SelectedIndex();
+        const i32 index = SelectedResolution();
         if (index < 0 || static_cast<usize>(index) >= m_resolutionChoices.Size())
         {
             return;
@@ -1433,20 +1509,36 @@ namespace editor
 
     void GameEditorPage::RefreshToolbar()
     {
-        if (m_statusLabel.Get() != nullptr)
+        // The kit's transport: Play while stopped, Pause and Stop while it runs, Restart either way;
+        // its state named beside it (Playing, Paused, a script's fault) and the scene it runs.
+        const bool faulted = m_running && ScriptState() == PieScriptState::Faulted;
+        const bool paused = m_running && (m_simPausedByDebugger || (m_pauseToggle != nullptr && m_pauseToggle->IsChecked()));
+        if (m_playButton != nullptr)
+            m_playButton->SetEnabled(!m_running && !m_pendingPlay);
+        if (m_pauseToggle != nullptr)
+            m_pauseToggle->SetEnabled(m_running);
+        if (m_stopButton != nullptr)
+            m_stopButton->SetEnabled(m_running || m_pendingPlay);
+        if (m_cookBadge != nullptr)
+            m_cookBadge->SetDisplayed(m_pendingPlay);
+        if (m_stateLabel != nullptr)
         {
-            if (m_running)
+            const StringView state = !m_running ? StringView(u8"Stopped") : faulted ? StringView(u8"Script error") : paused ? StringView(u8"Paused") : StringView(u8"Playing");
+            const StringView kind = !m_running ? StringView(u8"stopped") : faulted ? StringView(u8"faulted") : paused ? StringView(u8"paused") : StringView(u8"playing");
+            if (m_stateLabel->GetText() != state)
             {
-                String s(u8"  Running: ");
-                s += m_sceneTitle;
-                m_statusLabel->SetText(s.AsView());
-            }
-            else
-            {
-                m_statusLabel->SetText(u8"  Stopped");
+                m_stateLabel->SetText(state);
+                const StringView kinds[] = {u8"stopped", u8"faulted", u8"paused", u8"playing"};
+                for (const StringView old : kinds)
+                    m_stateLabel->RemoveClass(old);
+                m_stateLabel->AddClass(kind);
+                m_stateLabel->SetTooltip(faulted ? ScriptFault() : StringView{});
             }
         }
+        if (m_sceneLabel != nullptr)
+            m_sceneLabel->SetText(m_running ? m_sceneTitle.AsView() : StringView{});
     }
+
     void GameScriptErrorSink::OnError(const foundation::script::ScriptError& error)
     {
         if (context == nullptr)
@@ -1457,9 +1549,11 @@ namespace editor
         message += error.message;
         context->Notify(NoticeKind::Error, message.AsView());
     }
+    // The keys only while the viewport is the GUI's focused node: a field elsewhere in the editor
+    // types without the game reading it (one app keyboard).
     foundation::shell::IKeyboard* GameViewportInputSource::Keyboard()
     {
-        return viewport != nullptr ? viewport->Keyboard() : nullptr;
+        return viewport != nullptr && viewport->IsFocused() ? viewport->Keyboard() : nullptr;
     }
 
     foundation::shell::IMouse* GameViewportInputSource::Mouse()
@@ -1475,7 +1569,7 @@ namespace editor
 
     foundation::shell::IGamepad* GameViewportInputSource::Gamepad(i32 index)
     {
-        auto* surface = viewport != nullptr ? viewport->Surface() : nullptr;
+        auto* surface = viewport != nullptr && viewport->IsFocused() ? viewport->HostedSurface() : nullptr;
         return surface != nullptr ? surface->Gamepad(index) : nullptr;
     }
 
@@ -1488,7 +1582,7 @@ namespace editor
     {
         // Key/text events stream only while the viewport owns keyboard focus - the
         // same gate SurfaceKeyboard applies to the polled reads.
-        auto* surface = viewport != nullptr ? viewport->Surface() : nullptr;
+        auto* surface = viewport != nullptr && viewport->IsFocused() ? viewport->HostedSurface() : nullptr;
         if (surface == nullptr || !surface->Focused() || shellInput == nullptr)
         {
             return {};

@@ -32,11 +32,71 @@
 // the best medal and time on every course, their total and the medals won. Jump from it goes back
 // to the title.
 
-Guid kHudDoc = Guid("9ff3ed63-f33c-487a-a88f-2761d48af746");    // UI/Hud
-Guid kFinishDoc = Guid("409e4cea-20a2-4705-9a54-059fa662850f"); // UI/Finish
-Guid kTitleDoc = Guid("2a97818d-8b96-4bfc-a7ae-6200a870ea69");  // UI/Title
-Guid kEndingDoc = Guid("c9a6c0a0-f6af-407c-9dc1-919fcf16923a"); // UI/Ending
-Guid kPauseDoc = Guid("d5271221-42fb-4bae-9d00-d8f16d328daa");  // UI/Pause
+// The screens, on the engine GUI's screen stack: their documents by asset id (importscripts.py fills
+// these in).
+const string kHudDoc = "{0f992d08-9ccb-4289-a1ca-7dea8d1e106e}";
+const string kFinishDoc = "{fcf23249-e50a-4394-af4c-2bc21ab39962}";
+const string kTitleDoc = "{8c593c33-05cf-465d-8184-a24dfbdb22a0}";
+const string kEndingDoc = "{98ad5925-d11c-4a56-bb3a-8c6fe4753f6c}";
+const string kPauseDoc = "{2c7a1bce-3e6e-4df7-b88b-bdfaade24b91}";
+
+// A GUI event's handler (a button's click).
+funcdef bool EventHandler(GuiEvent e);
+
+ScreenStack@ screens() { return ScreenStack::of(gui::root().find("screens")); }
+// The top screen first: one just cleared or popped away is still in the tree while its exit plays,
+// with the same ids, and would be found first.
+Node@ find(string id)
+{
+    Screen@ top = screens().top();
+    Node@ n = top !is null ? top.find(id) : null;
+    return n !is null ? n : gui::root().find(id);
+}
+void wire(string id, EventHandler@ handler) { find(id).on("click", handler); } // `on*` names are the engine's handlers
+// These skip a node the screens up now do not have: a course's gates and gems announce themselves
+// behind the title, before the HUD is up.
+void setText(string id, string text)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        Label::of(n).text = text;
+    }
+}
+// Shown at once, or hidden (a sheet's opacity 0 keeps its place in the layout).
+void show(string id, bool shown)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        n.tween("opacity", shown ? "1" : "0", 0.0f, "linear");
+    }
+}
+// In the layout, or out of it.
+void display(string id, bool shown)
+{
+    Node@ n = find(id);
+    if (n !is null)
+    {
+        n.visible = shown;
+    }
+}
+// The medal's disc: its colour by class, rank 0 (none) to 3 (gold).
+void setMedal(string id, int rank)
+{
+    UIWidget@ disc = UIWidget::of(find(id));
+    if (disc is null)
+    {
+        return;
+    }
+    disc.removeClass("medal-bronze");
+    disc.removeClass("medal-silver");
+    disc.removeClass("medal-gold");
+    if (rank > 0)
+    {
+        disc.addClass(rank == 3 ? "medal-gold" : (rank == 2 ? "medal-silver" : "medal-bronze"));
+    }
+}
 
 // The courses, in order: each unlocked by a bronze on the one before it.
 const int kCourseCount = 3;
@@ -126,18 +186,17 @@ class Game
         m_onTitle = true;
         music(kMusicTitle);
         run::setTimeScale(0.0f); // the scene behind the title holds still
-        ui::clear();
-        UIScreen@ s = ui::push(kTitleDoc);
-        s.findButton("course-0").onClick(Action(this.onMeadow));
-        s.findButton("course-1").onClick(Action(this.onForest));
-        s.findButton("course-2").onClick(Action(this.onRidge));
-        s.findButton("quit-btn").onClick(Action(this.onQuit));
+        screens().clear();
+        screens().push(kTitleDoc);
+        wire("course-0", EventHandler(this.onMeadow));
+        wire("course-1", EventHandler(this.onForest));
+        wire("course-2", EventHandler(this.onRidge));
+        wire("quit-btn", EventHandler(this.onQuit));
         for (int i = 0; i < kCourseCount; ++i)
         {
             bool open = unlocked(i);
-            s.findButton("course-" + i).setEnabled(open);
-            s.findLabel("course-" + i + "-best").setText(open ? bestLine(i)
-                                                           : "Locked: " + courseName(i - 1) + " bronze");
+            find("course-" + i).enabled = open;
+            setText("course-" + i + "-best", open ? bestLine(i) : "Locked: " + courseName(i - 1) + " bronze");
         }
     }
 
@@ -147,15 +206,21 @@ class Game
         m_paused = true;
         Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
         m_controlsShow = 0.0f;
-        ui::find("hud-controls").setVisible(false); // the menu shows them itself
+        show("hud-controls", false); // the menu shows them itself
         run::setTimeScale(0.0f);
-        UIScreen@ s = ui::push(kPauseDoc);
-        s.findButton("resume-btn").onClick(Action(this.onResume));
-        s.findButton("restart-btn").onClick(Action(this.onRestartRun));
-        s.findButton("courses-btn").onClick(Action(this.onCourses));
+        screens().push(kPauseDoc);
+        wire("resume-btn", EventHandler(this.onResume));
+        wire("restart-btn", EventHandler(this.onRestartRun));
+        wire("courses-btn", EventHandler(this.onCourses));
     }
 
-    private void onResume()
+    private bool onResume(GuiEvent e)
+    {
+        resume();
+        return true;
+    }
+
+    private void resume()
     {
         if (!m_paused)
         {
@@ -163,32 +228,35 @@ class Game
         }
         Audio::playOneShot(kBack, AudioBus::Effects, 0.7f);
         m_paused = false;
-        ui::pop(); // the pause menu
+        screens().pop(); // the pause menu
         run::setTimeScale(1.0f);
     }
 
-    private void onRestartRun()
+    private bool onRestartRun(GuiEvent e)
     {
         Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
-        onResume();
+        resume();
         restart();
+        return true;
     }
 
-    private void onCourses()
+    private bool onCourses(GuiEvent e)
     {
         Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
         m_paused = false;
         showTitle();
+        return true;
     }
 
-    private void onMeadow() { startCourse(0); }
-    private void onForest() { startCourse(1); }
-    private void onRidge() { startCourse(2); }
+    private bool onMeadow(GuiEvent e) { startCourse(0); return true; }
+    private bool onForest(GuiEvent e) { startCourse(1); return true; }
+    private bool onRidge(GuiEvent e) { startCourse(2); return true; }
 
-    private void onQuit()
+    private bool onQuit(GuiEvent e)
     {
         Audio::playOneShot(kClick, AudioBus::Effects, 0.7f);
         run::requestExit(0);
+        return true;
     }
 
     // A course opens with a bronze or better on the one before it; the first is always open.
@@ -225,15 +293,12 @@ class Game
         m_gold = 0.0f;
         m_silver = 0.0f;
         m_bronze = 0.0f;
-        ui::clear();
-        ui::push(kHudDoc);
+        screens().clear();
+        screens().push(kHudDoc);
         resetRun();
         // The controls, keyboard and pad, along the bottom for the first seconds of the course
-        // (and always in the pause menu).
-        UIView@ controls = ui::find("hud-controls");
-        controls.setVisible(true);
-        controls.setOpacity(0.0f);
-        controls.fadeTo(1.0f, 0.3f);
+        // (and always in the pause menu): faded in from the sheet's 0.
+        find("hud-controls").tween("opacity", "1", 0.3f, "ease");
         m_controlsShow = kControlsShown;
         run::setTimeScale(1.0f);
         run::loadScene(courseScene(i));
@@ -259,7 +324,7 @@ class Game
             // Back out of the menu the way it came in, or with B (the Grab button) on a pad.
             if (Input::wasPressed("Pause") || Input::wasPressed("Grab"))
             {
-                onResume();
+                resume();
             }
             return;
         }
@@ -282,13 +347,13 @@ class Game
                 return;
             }
             m_time += dt;
-            ui::findLabel("hud-time").setText(clock(m_time + m_penalty));
+            setText("hud-time", clock(m_time + m_penalty));
             if (m_flash > 0.0f)
             {
                 m_flash -= run::realDeltaTime();
                 if (m_flash <= 0.0f)
                 {
-                    ui::find("hud-penalty").setVisible(false);
+                    show("hud-penalty", false);
                 }
             }
             if (m_controlsShow > 0.0f)
@@ -296,7 +361,7 @@ class Game
                 m_controlsShow -= run::realDeltaTime();
                 if (m_controlsShow <= 0.0f)
                 {
-                    ui::find("hud-controls").fadeTo(0.0f, 0.6f);
+                    find("hud-controls").tween("opacity", "0", 0.6f, "ease");
                 }
             }
             if (m_trickShow > 0.0f)
@@ -304,7 +369,7 @@ class Game
                 m_trickShow -= run::realDeltaTime();
                 if (m_trickShow <= 0.0f)
                 {
-                    ui::find("hud-trick").setVisible(false);
+                    show("hud-trick", false);
                 }
             }
             return;
@@ -332,8 +397,7 @@ class Game
         m_missed += 1;
         m_penalty += kMissPenalty;
         m_flash = 1.2f;
-        UIView@ penalty = ui::find("hud-penalty");
-        penalty.setVisible(true);
+        show("hud-penalty", true);
         showGates();
     }
 
@@ -390,30 +454,31 @@ class Game
     {
         if (m_running)
         {
-            ui::find("hud-avalanche-panel").setVisible(true);
+            display("hud-avalanche-panel", true);
             onAvalancheGap(metres);
         }
     }
 
     void onAvalancheGap(int metres)
     {
-        if (!m_running)
+        UIWidget@ gap = UIWidget::of(find("hud-avalanche"));
+        if (!m_running || gap is null)
         {
             return;
         }
-        UILabel@ gap = ui::findLabel("hud-avalanche");
-        gap.setText("" + metres + " m");
+        setText("hud-avalanche", "" + metres + " m");
         if (metres < 15)
         {
-            gap.setTextColor(Color(1.0f, 0.45f, 0.4f, 1.0f));
+            gap.addClass("close");
             if (metres % 2 == 0)
             {
-                ui::find("hud-avalanche-panel").pulse(1.12f, 0.18f);
+                // A beat: up and back down.
+                find("hud-avalanche-panel").tween("transform", "scale(1.12)", 0.09f, "ease-out").from("scale(1)").repeats(2).pingPong(true);
             }
         }
         else
         {
-            gap.clearTextColor();
+            gap.removeClass("close");
         }
     }
 
@@ -423,7 +488,7 @@ class Game
         if (m_running)
         {
             showTrick("Caught by the avalanche", "");
-            ui::find("hud-avalanche-panel").setVisible(false);
+            display("hud-avalanche-panel", false);
             m_caught = true;
         }
     }
@@ -461,9 +526,8 @@ class Game
         {
             m_combo += 1;
         }
-        UIView@ combo = ui::find("hud-combo");
-        ui::findLabel("hud-combo").setText("Combo x" + m_combo);
-        combo.setVisible(true);
+        setText("hud-combo", "Combo x" + m_combo);
+        show("hud-combo", true);
     }
 
     // "360 Grab", "180", "Air": the spin if any, then the grab if held a while, else just air.
@@ -479,18 +543,20 @@ class Game
 
     private void showTrick(string name, string points)
     {
-        UILabel@ trick = ui::findLabel("hud-trick");
-        trick.setText(points == "" ? name : name + "   " + points);
-        trick.setVisible(true);
-        trick.setOpacity(0.0f);
-        trick.fadeTo(1.0f, 0.15f);
+        Node@ trick = find("hud-trick");
+        if (trick is null)
+        {
+            return;
+        }
+        setText("hud-trick", points == "" ? name : name + "   " + points);
+        trick.tween("opacity", "1", 0.15f, "ease").from("0");
         m_trickShow = kTrickShown;
     }
 
     private void endCombo()
     {
         m_combo = 1;
-        ui::find("hud-combo").setVisible(false);
+        show("hud-combo", false);
     }
 
     void onMedalGold(int hundredths) { m_gold = float(hundredths) / 100.0f; }
@@ -505,11 +571,11 @@ class Game
     void onRunFinished(int unused)
     {
         m_running = false;
-        ui::find("hud-avalanche-panel").setVisible(false);
+        display("hud-avalanche-panel", false);
         m_tallyStep = 0;
         m_tallyTime = 0.0f;
         keepBest(m_time + m_penalty);
-        ui::push(kFinishDoc);
+        screens().push(kFinishDoc);
     }
 
     // The course's best time and medal, kept in the save; a new best is announced at once, so the
@@ -571,7 +637,7 @@ class Game
         }
         if (Input::wasPressed("Jump"))
         {
-            ui::pop(); // the results
+            screens().pop(); // the results
             if (m_endingDue)
             {
                 m_endingDue = false;
@@ -589,10 +655,10 @@ class Game
         Audio::playOneShot(kMedalSting, AudioBus::Music, 0.9f);
         music(kMusicTitle);
         run::setTimeScale(0.0f); // the course behind it holds still
-        ui::clear();
-        ui::push(kEndingDoc);
+        screens().clear();
+        screens().push(kEndingDoc);
         string last = courseName(kCourseCount - 1);
-        ui::findLabel("end-headline").setText(medalTitle(Save::getInt("medal." + last, 0)) + " on " + last);
+        setText("end-headline", medalTitle(Save::getInt("medal." + last, 0)) + " on " + last);
         float total = 0.0f;
         bool allRidden = true;
         int golds = 0;
@@ -602,9 +668,8 @@ class Game
         {
             float best = Save::getFloat("best." + courseName(i), -1.0f);
             int rank = Save::getInt("medal." + courseName(i), 0);
-            ui::find("end-" + i + "-" + (rank == 3 ? "gold" : (rank == 2 ? "silver" : (rank == 1 ? "bronze" : "none"))))
-                .setVisible(true);
-            ui::findLabel("end-" + i + "-best").setText(best < 0.0f ? "not ridden" : medalTitle(rank) + "   " + clock(best));
+            setMedal("end-" + i + "-medal", rank);
+            setText("end-" + i + "-best", best < 0.0f ? "not ridden" : medalTitle(rank) + "   " + clock(best));
             if (best < 0.0f)
             {
                 allRidden = false;
@@ -617,10 +682,10 @@ class Game
             silvers += rank == 2 ? 1 : 0;
             bronzes += rank == 1 ? 1 : 0;
         }
-        ui::findLabel("end-total").setText(allRidden ? clock(total) : "");
-        ui::findLabel("end-medals").setText("" + golds + " gold   " + silvers + " silver   " + bronzes + " bronze");
-        ui::findLabel("end-closing").setText(golds == kCourseCount ? "Gold on every course. Thanks for riding."
-                                                                  : "Thanks for riding. There is gold still out there.");
+        setText("end-total", allRidden ? clock(total) : "");
+        setText("end-medals", "" + golds + " gold   " + silvers + " silver   " + bronzes + " bronze");
+        setText("end-closing", golds == kCourseCount ? "Gold on every course. Thanks for riding."
+                                                     : "Thanks for riding. There is gold still out there.");
     }
 
     // The music: switched only when the track changes, so the title's keeps playing across menus.
@@ -673,27 +738,30 @@ class Game
                 key = "bonus";
                 value = "+" + timeBonus(total);
             }
-            UIView@ row = ui::find("row-" + key);
-            row.setVisible(true);
-            ui::findLabel("value-" + key).setText(value);
-            if (!quiet)
+            Node@ row = find("row-" + key);
+            setText("value-" + key, value);
+            if (quiet)
             {
-                row.setOpacity(0.0f);
-                row.fadeTo(1.0f, 0.2f);
-                row.setTranslation(-24.0f, 0.0f);
-                row.moveTo(0.0f, 0.0f, 0.25f, Ease::Out);
+                show("row-" + key, true);
+            }
+            else
+            {
+                // In from the left as it fades in.
+                row.tween("opacity", "1", 0.2f, "ease").from("0");
+                row.tween("transform", "translateX(0px)", 0.25f, "ease-out").from("translateX(-24px)");
                 Audio::playOneShot(kChime, AudioBus::Effects, 0.3f, 0.8f + 0.08f * float(step));
             }
             return;
         }
         if (step == 5)
         {
-            ui::findLabel("final-time").setText(clock(total));
+            setText("final-time", clock(total));
             string medal = medalName(total);
-            ui::findLabel("final-medal").setText(medalLine(total));
+            setText("final-medal", medalLine(total));
+            setMedal("medal", medalRank(medal));
+            show("medal", true);
             if (medal == "")
             {
-                ui::find("medal-none").setVisible(true);
                 if (!quiet)
                 {
                     Audio::playOneShot(kNoMedalSting, AudioBus::Music, 0.8f);
@@ -701,19 +769,16 @@ class Game
             }
             else
             {
-                UIView@ disc = ui::find("medal-" + medal);
-                disc.setVisible(true);
                 if (!quiet)
                 {
-                    disc.setScale(1.6f);
-                    disc.scaleTo(1.0f, 0.3f, Ease::Out);
+                    find("medal").tween("transform", "scale(1)", 0.3f, "ease-out").from("scale(1.6)");
                     Audio::playOneShot(kMedalSting, AudioBus::Music, 0.9f);
                 }
             }
             return;
         }
-        ui::find("row-score").setVisible(true);
-        ui::findLabel("final-score").setText("" + (m_taken * kGemPoints + m_tricks + timeBonus(total)));
+        show("row-score", true);
+        setText("final-score", "" + (m_taken * kGemPoints + m_tricks + timeBonus(total)));
         string best;
         if (m_previousBest < 0.0f)
         {
@@ -727,8 +792,8 @@ class Game
         {
             best = "Best " + clock(m_previousBest);
         }
-        ui::findLabel("final-best").setText(best);
-        ui::findLabel("final-prompt").setText("Jump to ride again");
+        setText("final-best", best);
+        setText("final-prompt", "Jump to ride again");
     }
 
     // "gold", "silver", "bronze", or "" for none.
@@ -798,21 +863,21 @@ class Game
         m_tricks = 0;
         m_trickShow = 0.0f;
         endCombo();
-        ui::find("hud-trick").setVisible(false);
-        ui::find("hud-penalty").setVisible(false);
-        ui::find("hud-avalanche-panel").setVisible(false);
+        show("hud-trick", false);
+        show("hud-penalty", false);
+        display("hud-avalanche-panel", false);
         showGates();
         showGems();
     }
 
     private void showGates()
     {
-        ui::findLabel("hud-gates").setText("" + m_passed + " / " + m_gates);
+        setText("hud-gates", "" + m_passed + " / " + m_gates);
     }
 
     private void showGems()
     {
-        ui::findLabel("hud-gems").setText("" + m_taken + " / " + m_gems);
+        setText("hud-gems", "" + m_taken + " / " + m_gems);
     }
 
     // m:ss.cc

@@ -3,37 +3,36 @@
 
 // Editor::App - :log_view partition.
 //
-// LogView: the Console panel content - a log view on foundation.ui, with category display
-// (core logs carry categories). A
-// header row - a chip per level (its colour, its name, how many lines it holds; on shows them), a
-// search field matching anywhere in a line ignoring case (an x clears it), and a Clear icon - over
-// a recycled ListView of level-colored rows; bounded entry count; auto-scroll to the newest entry.
-// Fed once per frame by
-// EditorApplication draining the EditorLogBuffer. Rows select like any list (click, Ctrl click,
-// Shift click, Ctrl+A), and Ctrl+C or the context menu's Copy puts the selected rows on the
-// clipboard, oldest first, one per line.
-
+// LogView: the Console panel (Documentation/Specs/editor-gui.md, 5.2, layer 1). Its frame is
+// markup (Data/Editor/Console.gml): a chip per level (Debug, holding the trace lines too, Info,
+// Warnings, Errors, holding the fatal ones) with how many lines it holds, on showing them; a search matching anywhere in a
+// line ignoring case, cleared by its x; Clear; then the lines on a virtualised list, each its time
+// since the editor started and `[Category] message` in its level's colour. The newest line is
+// followed until the user scrolls up, and again once they are back at the bottom. Rows select as
+// any list's do (click, Ctrl, Shift, Ctrl+A); Ctrl+C or the menu's Copy puts the selected lines on
+// the clipboard, oldest first, one per line. The entries are capped (oldest trimmed); a selection
+// is by entry, so it survives a trim. Fed once a frame from the editor's log buffer.
 module;
 #include "Core/Prelude.h"
-#include "Core/Reflection/Reflect.h"
 
 export module editor.app:log_view;
 
 import foundation.core;
-import foundation.ui;
-import :editor_icons; // the search, clear-field and clear-console glyphs
+import foundation.gui;
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
 
-    class LogView : public ui::ViewGroup
+    class LogView
     {
-        RTTI_OBJECT(LogView, ui::ViewGroup)
     public:
-        /// Display buckets (core Trace+Debug fold into Debug; Error+Fatal into Error).
+        /// Its frame, under the data root.
+        static constexpr const char8_t* kPath = u8"Editor/Console.gml";
+
+        /// The chips' levels: Debug holds trace and debug lines; Error holds fatal ones.
         enum class Bucket : u8
         {
             Debug,
@@ -42,7 +41,6 @@ export namespace editor::app
             Error
         };
         static constexpr usize kBucketCount = 4;
-
         [[nodiscard]] static Bucket BucketOf(LogLevel level) noexcept
         {
             switch (level)
@@ -59,537 +57,348 @@ export namespace editor::app
             }
         }
 
-        LogView()
-        {
-            auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            column->Direction = ui::Orientation::Vertical;
+        /// Cap on the lines kept (the oldest trimmed).
+        static constexpr usize kMaxEntries = 1000;
 
-            // The header row: [level chips] ........ [search: icon, field, x] [clear].
-            auto toolbar = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            toolbar->Direction = ui::Orientation::Horizontal;
-            toolbar->Spacing = 4.0f;
-            toolbar->Padding = ui::Thickness{6, 3};
-            toolbar->AlignItems = ui::Align::Center;
-            ui::LayoutStyle center;
-            center.AlignSelf = ui::Align::Center;
-            EditorIcons& icons = EditorIcons::Get(); // null drawables before Initialize (tests)
+        LogView(IAllocator& allocator, RefPtr<gui::Node> content)
+            : m_allocator(allocator), m_content(Move(content)), m_entries(allocator), m_shown(allocator), m_model(*this)
+        {
+            if (!m_content)
+                return;
+            LogView* self = this;
+            m_list = Find<gui::ListView>(u8"console-list");
+            if (m_list != nullptr)
+            {
+                gui::RowFactory rows;
+                rows.Create = [self](u32) { return self->MakeRow(); };
+                rows.Bind = [self](gui::Node& row, const gui::ModelIndex& index) { self->BindRow(row, index); };
+                m_list->SetRowFactory(Move(rows));
+                m_list->SetModel(&m_model);
+                // Ctrl+C before the list's own keys; the menu's Copy, Select All and Clear.
+                (void)m_list->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
+                                               {
+                                                   const auto& key = static_cast<const gui::KeyEvent&>(e);
+                                                   if (static_cast<gui::KeyCode>(key.KeyCode) == gui::KeyCode::C && key.Modifiers == gui::KeyModCtrl)
+                                                   {
+                                                       self->CopySelection();
+                                                       e.Handled = true;
+                                                   }
+                                               },
+                                               true);
+                (void)m_list->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
+                                               {
+                                                   self->ShowMenu(static_cast<const gui::MouseEvent&>(e).Position);
+                                                   e.Handled = true;
+                                               });
+            }
+            const char8_t* const chips[kBucketCount] = {u8"console-debug", u8"console-info", u8"console-warnings", u8"console-errors"};
             for (usize i = 0; i < kBucketCount; ++i)
             {
-                toolbar->AddView(MakeLevelChip(static_cast<Bucket>(i)).Get(), center);
-            }
-            {
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                toolbar->AddView(MakeRef<ui::View>(MemoryAllocator()).Get(), grow); // the gap
-            }
-            auto magnifier = MakeRef<ui::DrawableView>(
-                MemoryAllocator(), ui::DrawablePtr(icons.search.Get()), 14.0f, 14.0f);
-            magnifier->KeepAspect = true;
-            toolbar->AddView(magnifier.Get(), center);
-            m_searchEdit = MakeRef<ui::EditText>(MemoryAllocator());
-            m_searchEdit->SetPlaceholder(u8"Filter lines");
-            m_searchEdit->TooltipText = String(u8"Show only the lines containing this (any case)");
-            m_searchEdit->OnTextChanged.Add([this](ui::EditText* edit) { SetSearch(edit->Text()); });
-            {
-                // It grows with the panel up to a comfortable width and gives way in a narrow
-                // one, so the header never runs past the panel's edge.
-                ui::LayoutStyle field;
-                field.FlexGrow = 1.0f;
-                field.MinWidth = ui::Unit::Dp(80.0f);
-                field.MaxWidth = ui::Unit::Dp(260.0f);
-                field.AlignSelf = ui::Align::Center;
-                toolbar->AddView(m_searchEdit.Get(), field);
-            }
-            m_clearSearch = MakeRef<ui::IconButton>(MemoryAllocator(), icons.close.Get(), 10.0f);
-            m_clearSearch->TooltipText = String(u8"Clear the filter");
-            m_clearSearch->Visibility = ui::VisibilityValue::Hidden; // keeps its place: no jump
-            m_clearSearch->OnClick.Add(
-                [this](ui::ButtonBase*)
+                m_chips[i] = Find<gui::Button>(StringView(chips[i]));
+                if (m_chips[i] != nullptr)
                 {
-                    m_searchEdit->SetText(u8"");
-                    SetSearch(u8"");
-                });
-            toolbar->AddView(m_clearSearch.Get(), center);
-            auto clear = MakeRef<ui::IconButton>(MemoryAllocator(), icons.remove.Get(), 16.0f);
-            clear->TooltipText = String(u8"Clear the console");
-            clear->OnClick.Add([this](ui::ButtonBase*) { Clear(); });
-            toolbar->AddView(clear.Get(), center);
-            {
-                ui::LayoutStyle row;
-                row.Width = ui::SizeSpec::Match();
-                row.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(28.0f));
-                column->AddView(toolbar.Get(), row);
+                    const Bucket bucket = static_cast<Bucket>(i);
+                    m_chips[i]->SetOnClick([self, bucket]() { self->SetBucketVisible(bucket, !self->IsBucketVisible(bucket)); });
+                }
             }
-            {
-                // A hairline under the header (the theme's separator), so it reads as chrome.
-                auto rule = MakeRef<ui::Separator>(MemoryAllocator());
-                ui::LayoutStyle line;
-                line.Width = ui::SizeSpec::Match();
-                column->AddView(rule.Get(), line);
-            }
-            UpdateCounts();
-
-            // The entry list (recycled rows), selecting many.
-            m_adapter = MakeUnique<Adapter>(MemoryAllocator(), *this);
-            m_list = MakeRef<EntryList>(MemoryAllocator(), *this);
-            m_list->ItemHeight.SetValue(20.0f);
-            m_list->Padding = ui::Thickness{8, 4}; // the lines off the panel's edges and the header
-            m_list->Selection.Mode = ui::SelectionMode::Multiple;
-            m_list->SetAdapter(m_adapter.Get());
-            m_list->OnItemRightClicked.Add([this](i32, f32 x, f32 y) { ShowContextMenu(x, y); });
-            m_list->OnBackgroundRightClicked.Add([this](f32 x, f32 y) { ShowContextMenu(x, y); });
-            {
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                column->AddView(m_list.Get(), grow);
-            }
-
-            AddView(column.Get());
+            if (auto* search = Find<gui::TextField>(u8"console-search"))
+                search->SetOnTextChanging([self](StringView text) { self->SetSearch(text); });
+            if (auto* clearSearch = Find<gui::Button>(u8"console-clear-search"))
+                clearSearch->SetOnClick([self]()
+                                        {
+                                            if (auto* field = self->Find<gui::TextField>(u8"console-search"))
+                                                field->SetText(StringView{});
+                                            self->SetSearch(StringView{});
+                                        });
+            if (auto* clear = Find<gui::Button>(u8"console-clear"))
+                clear->SetOnClick([self]() { self->Clear(); });
+            ShowChrome();
+        }
+        LogView(const LogView&) = delete;
+        LogView& operator=(const LogView&) = delete;
+        ~LogView()
+        {
+            if (m_list != nullptr)
+                m_list->SetModel(nullptr);
         }
 
-        ~LogView() override { m_list->SetAdapter(nullptr); }
+        [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
+        /// Told how many lines a copy put on the clipboard (the application's toast).
+        void SetOnCopied(Function<void(usize)> copied) { m_onCopied = Move(copied); }
 
-        /// Says a copy happened (the app's toast): the number of lines copied.
-        Function<void(usize)> OnCopied;
-
-        /// True while the newest entry is kept in view.
-        bool AutoScroll = true;
-
-        /// Cap on retained entries (oldest trimmed).
-        usize MaxEntries = 1000;
-
-        void AddEntry(LogLevel level, StringView category, StringView message)
+        /// One line, at the end; the oldest go past the cap.
+        void AddEntry(LogLevel level, StringView category, StringView message, Duration time = {})
         {
+            const bool follow = IsAtBottom();
             Entry entry;
-            entry.bucket = BucketOf(level);
-            entry.text = String(u8"[");
-            entry.text += category;
-            entry.text += u8"] ";
-            entry.text += message;
-            ++m_counts[static_cast<usize>(entry.bucket)];
+            entry.level = level;
+            entry.text = category.IsEmpty() ? String(message) : Format(u8"[{}] {}", category, message);
+            entry.time = time;
+            entry.id = m_nextId++;
+            ++m_counts[static_cast<usize>(BucketOf(level))];
             m_entries.PushBack(Move(entry));
-
-            // Trim to cap: indices into m_entries shift, so the filter is rebuilt below, and the
-            // selection moves up by the visible rows that went (a trimmed selected row is gone).
-            bool trimmed = false;
-            i32 trimmedVisible = 0;
-            while (m_entries.Size() > MaxEntries)
+            bool reset = false;
+            while (m_entries.Size() > kMaxEntries)
             {
-                if (Shows(m_entries[0]))
-                {
-                    ++trimmedVisible;
-                }
-                --m_counts[static_cast<usize>(m_entries[0].bucket)];
+                --m_counts[static_cast<usize>(BucketOf(m_entries[0].level))];
                 m_entries.RemoveAt(0);
-                trimmed = true;
+                reset = true;
             }
-
-            if (trimmed)
-            {
-                m_list->Selection.ShiftIndices(0, -trimmedVisible);
-                RebuildFilter();
-            }
+            if (reset)
+                Refilter();
             else if (Shows(m_entries.Back()))
             {
-                m_filtered.PushBack(m_entries.Size() - 1);
-                m_adapter->NotifyDataSetChanged();
+                m_shown.PushBack(m_entries.Size() - 1);
+                m_model.Inserted(static_cast<i32>(m_shown.Size()) - 1);
             }
-            UpdateCounts();
-            ScrollToNewest();
+            ShowChrome();
+            if (follow && m_list != nullptr && !m_shown.IsEmpty())
+                m_list->ScrollToItem(static_cast<i32>(m_shown.Size()) - 1);
         }
-
         void Clear()
         {
             m_entries.Clear();
-            m_filtered.Clear();
-            m_list->Selection.ClearSelection();
-            m_adapter->NotifyDataSetChanged();
             for (usize& count : m_counts)
-            {
                 count = 0;
-            }
-            UpdateCounts();
+            Refilter();
+            ShowChrome();
         }
 
-        /// A level's chip in the header (on shows its lines), and the count it shows.
-        [[nodiscard]] ui::ToggleButton* LevelChip(Bucket bucket) const noexcept
+        [[nodiscard]] usize EntryCount() const noexcept { return m_entries.Size(); }
+        [[nodiscard]] usize ShownCount() const noexcept { return m_shown.Size(); }
+        [[nodiscard]] usize CountOf(Bucket bucket) const noexcept { return m_counts[static_cast<usize>(bucket)]; }
+        /// A shown line's text ("[Category] message").
+        [[nodiscard]] StringView ShownText(usize row) const { return row < m_shown.Size() ? m_entries[m_shown[row]].text.AsView() : StringView{}; }
+
+        [[nodiscard]] bool IsBucketVisible(Bucket bucket) const noexcept { return m_visible[static_cast<usize>(bucket)]; }
+        void SetBucketVisible(Bucket bucket, bool visible)
         {
-            return m_chips[static_cast<usize>(bucket)];
+            if (m_visible[static_cast<usize>(bucket)] == visible)
+                return;
+            m_visible[static_cast<usize>(bucket)] = visible;
+            Refilter();
+            ShowChrome();
         }
-        [[nodiscard]] usize LevelCount(Bucket bucket) const noexcept
+        /// Shows only the lines holding `text`, ignoring case (the category is part of a line);
+        /// empty shows them all.
+        void SetSearch(StringView text)
         {
-            return m_counts[static_cast<usize>(bucket)];
-        }
-        [[nodiscard]] StringView LevelCountText(Bucket bucket) const noexcept
-        {
-            const ui::Label* label = m_countLabels[static_cast<usize>(bucket)];
-            return label != nullptr ? label->Text.Value().AsView() : StringView{};
-        }
-        /// The search field's clear button (shown only while the field holds text).
-        [[nodiscard]] ui::IconButton* ClearSearchButton() const noexcept
-        {
-            return m_clearSearch.Get();
+            if (m_search.AsView() == text)
+                return;
+            m_search = String(text);
+            Refilter();
+            ShowChrome();
         }
 
-        /// Selects every visible row.
-        void SelectAll()
-        {
-            if (!m_filtered.IsEmpty())
-            {
-                m_list->Selection.SelectRange(0, static_cast<i32>(m_filtered.Size()) - 1);
-            }
-        }
-
-        [[nodiscard]] usize SelectedCount() const noexcept
-        {
-            return m_list->Selection.SelectedCount();
-        }
-        /// The entry list: its selection, and the keys it takes (the tests drive both).
-        [[nodiscard]] ui::ListView& List() noexcept { return *m_list; }
-
-        /// The selected rows' text, oldest first, one per line.
+        /// The selected lines, oldest first, one per line.
         [[nodiscard]] String SelectedText() const
         {
-            Array<i32> positions;
-            for (i32 position : m_list->Selection.SelectedPositions())
-            {
-                if (position >= 0 && static_cast<usize>(position) < m_filtered.Size())
-                {
-                    positions.PushBack(position);
-                }
-            }
-            positions.Sort([](i32 a, i32 b) { return a < b; });
             String text;
-            for (i32 position : positions)
-            {
-                if (!text.IsEmpty())
+            if (m_list == nullptr)
+                return text;
+            for (usize row = 0; row < m_shown.Size(); ++row)
+                if (m_list->IsItemSelected(static_cast<i32>(row)))
                 {
-                    text.Append(u8"\n");
+                    if (!text.IsEmpty())
+                        text += u8"\n";
+                    text += m_entries[m_shown[row]].text.AsView();
                 }
-                text.Append(m_entries[m_filtered[static_cast<usize>(position)]].text.AsView());
+            return text;
+        }
+        /// The selected lines on the system clipboard; nothing selected copies nothing.
+        void CopySelection()
+        {
+            const String text = SelectedText();
+            gui::EventDispatcher* dispatcher = m_content ? m_content->GetEventDispatcher() : nullptr;
+            if (text.IsEmpty() || dispatcher == nullptr || dispatcher->GetClipboard() == nullptr)
+                return;
+            dispatcher->GetClipboard()->SetText(text.AsView());
+            if (m_onCopied)
+                m_onCopied(m_list != nullptr ? m_list->GetSelectionCount() : 0);
+        }
+        /// The list (its selection, for a test).
+        [[nodiscard]] gui::ListView* List() const noexcept { return m_list; }
+
+    private:
+        struct Entry
+        {
+            LogLevel level = LogLevel::Info;
+            String text;
+            Duration time;
+            u64 id = 0;
+        };
+
+        // The shown lines as the list's model: a line's id its entry's, so a selection follows it.
+        class Model final : public gui::IModel
+        {
+        public:
+            explicit Model(LogView& view) : m_view(view) {}
+            [[nodiscard]] usize RowCount(const gui::ModelIndex& parent = {}) const override { return parent.IsValid() ? 0 : m_view.m_shown.Size(); }
+            [[nodiscard]] usize ColumnCount() const override { return 1; }
+            [[nodiscard]] gui::Variant Data(const gui::ModelIndex& index, gui::ModelRole role = gui::ModelRole::Display) const override
+            {
+                if (role != gui::ModelRole::Display || index.Row < 0 || static_cast<usize>(index.Row) >= m_view.m_shown.Size())
+                    return gui::Variant{};
+                return gui::Variant(m_view.m_entries[m_view.m_shown[static_cast<usize>(index.Row)]].text.AsView());
+            }
+            [[nodiscard]] gui::ItemId IdOf(const gui::ModelIndex& index) const override
+            {
+                return index.Row >= 0 && static_cast<usize>(index.Row) < m_view.m_shown.Size() ? m_view.m_entries[m_view.m_shown[static_cast<usize>(index.Row)]].id : 0;
+            }
+            [[nodiscard]] gui::ModelIndex IndexOfId(gui::ItemId id) const override
+            {
+                for (usize row = 0; row < m_view.m_shown.Size(); ++row)
+                    if (m_view.m_entries[m_view.m_shown[row]].id == id)
+                        return gui::ModelIndex{static_cast<i32>(row), 0};
+                return {};
+            }
+            void Inserted(i32 row) { NotifyRowsInserted(gui::ModelIndex{}, row, 1); }
+            void Reset() { NotifyReset(); }
+
+        private:
+            LogView& m_view;
+        };
+
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const
+        {
+            return m_content ? Cast<T>(FindIn(*m_content, id)) : nullptr;
+        }
+        static gui::Node* FindIn(gui::Node& node, StringView id)
+        {
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
+
+        [[nodiscard]] bool Shows(const Entry& entry) const
+        {
+            return m_visible[static_cast<usize>(BucketOf(entry.level))] && (m_search.IsEmpty() || entry.text.AsView().ContainsIgnoreCase(m_search.AsView()));
+        }
+        void Refilter()
+        {
+            m_shown.Clear();
+            for (usize i = 0; i < m_entries.Size(); ++i)
+                if (Shows(m_entries[i]))
+                    m_shown.PushBack(i);
+            m_model.Reset();
+        }
+        // At the bottom, or with nothing to scroll: a new line is followed.
+        [[nodiscard]] bool IsAtBottom() const
+        {
+            if (m_list == nullptr)
+                return true;
+            return m_list->GetScrollOffset().y >= m_list->GetScrollRange().y - kFollowSlack;
+        }
+
+        // The chips' counts and states, the search's x, the empty line.
+        void ShowChrome()
+        {
+            static constexpr StringView kNames[kBucketCount] = {u8"Debug", u8"Info", u8"Warnings", u8"Errors"};
+            for (usize i = 0; i < kBucketCount; ++i)
+                if (gui::Button* chip = m_chips[i])
+                {
+                    const usize count = m_counts[i];
+                    chip->SetText(count == 0 ? String(kNames[i]).AsView()
+                                  : count > 9999 ? Format(u8"{} 9999+", kNames[i]).AsView()
+                                                 : Format(u8"{} {}", kNames[i], count).AsView());
+                    if (m_visible[i])
+                        chip->AddClass(u8"checked");
+                    else
+                        chip->RemoveClass(u8"checked");
+                }
+            if (auto* clearSearch = Find<gui::Button>(u8"console-clear-search"))
+                clearSearch->SetVisible(!m_search.IsEmpty()); // keeps its place: the field does not jump
+            if (auto* empty = Find<gui::Label>(u8"console-empty"))
+            {
+                empty->SetDisplayed(m_shown.IsEmpty());
+                empty->SetText(m_entries.IsEmpty() ? StringView(u8"No messages yet.") : StringView(u8"No line matches."));
+            }
+        }
+
+        [[nodiscard]] RefPtr<gui::Node> MakeRow()
+        {
+            RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+            row->AddClass(u8"log-row");
+            RefPtr<gui::Label> time = MakeRef<gui::Label>(m_allocator);
+            time->AddClass(u8"log-time");
+            time->AddClass(u8"mono");
+            RefPtr<gui::Label> text = MakeRef<gui::Label>(m_allocator);
+            text->AddClass(u8"log-text");
+            row->AddChild(time.Get());
+            row->AddChild(text.Get());
+            return RefPtr<gui::Node>(row);
+        }
+        void BindRow(gui::Node& node, const gui::ModelIndex& index)
+        {
+            auto* row = Cast<gui::UIWidget>(&node);
+            if (row == nullptr || index.Row < 0 || static_cast<usize>(index.Row) >= m_shown.Size() || row->ChildCount() < 2)
+                return;
+            const Entry& entry = m_entries[m_shown[static_cast<usize>(index.Row)]];
+            if (auto* time = Cast<gui::Label>(row->GetChildAt(0)))
+                time->SetText(TimeText(entry.time).AsView());
+            if (auto* text = Cast<gui::Label>(row->GetChildAt(1)))
+                text->SetText(entry.text.AsView());
+            static constexpr StringView kLevels[] = {u8"debug", u8"warning", u8"error"};
+            for (StringView level : kLevels)
+                row->RemoveClass(level);
+            if (BucketOf(entry.level) == Bucket::Debug)
+                row->AddClass(u8"debug");
+            else if (entry.level == LogLevel::Warning)
+                row->AddClass(u8"warning");
+            else if (BucketOf(entry.level) == Bucket::Error)
+                row->AddClass(u8"error");
+        }
+
+        // hh:mm:ss since the editor started.
+        [[nodiscard]] static String TimeText(Duration time)
+        {
+            const i64 seconds = static_cast<i64>(time.AsSeconds());
+            String text;
+            const i64 parts[] = {seconds / 3600, (seconds / 60) % 60, seconds % 60};
+            for (usize i = 0; i < 3; ++i)
+            {
+                if (i > 0)
+                    text += u8":";
+                if (parts[i] < 10)
+                    text += u8"0";
+                text += Format(u8"{}", parts[i]).AsView();
             }
             return text;
         }
 
-        /// Puts the selected rows on the system clipboard; nothing selected copies nothing.
-        void CopySelection()
+        void ShowMenu(Float2 at)
         {
-            const String text = SelectedText();
-            ui::IClipboard* clipboard = Context != nullptr ? Context->Clipboard() : nullptr;
-            if (text.IsEmpty() || clipboard == nullptr)
-            {
+            if (m_list == nullptr)
                 return;
-            }
-            if (clipboard->SetText(text.AsView()).IsOk() && OnCopied)
-            {
-                OnCopied(SelectedCount());
-            }
+            m_menu = MakeRef<gui::Menu>(m_allocator);
+            LogView* self = this;
+            gui::MenuItem* copy = m_menu->AddItem(u8"Copy", [self]() { self->CopySelection(); });
+            copy->SetShortcut(u8"Ctrl+C");
+            copy->SetEnabled(m_list->GetSelectionCount() > 0);
+            (void)m_menu->AddItem(u8"Select All", [self]() { self->m_list->SelectAll(); });
+            m_menu->AddSeparator();
+            (void)m_menu->AddItem(u8"Clear", [self]() { self->Clear(); });
+            m_menu->Open(*m_list, at);
         }
 
-        void SetBucketVisible(Bucket bucket, bool visible)
-        {
-            m_visible[static_cast<usize>(bucket)] = visible;
-            // A filter change re-numbers the rows, so the selection goes.
-            m_list->Selection.ClearSelection();
-            if (ui::ToggleButton* chip = m_chips[static_cast<usize>(bucket)])
-            {
-                chip->IsChecked.SetSilent(visible); // keep the header in sync on programmatic calls
-                chip->Invalidate();
-            }
-            UpdateCounts(); // an off level's chip dims
-            RebuildFilter();
-            ScrollToNewest();
-        }
+        static constexpr f32 kFollowSlack = 4.0f; // this near the bottom counts as at it
 
-        [[nodiscard]] bool IsBucketVisible(Bucket bucket) const noexcept
-        {
-            return m_visible[static_cast<usize>(bucket)];
-        }
-
-        /// Shows only the lines containing `text`, ignoring case (the category is part of the
-        /// line); empty shows them all. The search box calls it as the user types.
-        void SetSearch(StringView text)
-        {
-            if (m_search.AsView() == text)
-            {
-                return;
-            }
-            m_search = String(text);
-            if (m_clearSearch)
-            {
-                m_clearSearch->Visibility =
-                    m_search.IsEmpty() ? ui::VisibilityValue::Hidden : ui::VisibilityValue::Visible;
-            }
-            // The rows re-number, so the selection goes.
-            m_list->Selection.ClearSelection();
-            RebuildFilter();
-            ScrollToNewest();
-        }
-        [[nodiscard]] StringView Search() const noexcept { return m_search.AsView(); }
-
-        [[nodiscard]] usize EntryCount() const noexcept { return m_entries.Size(); }
-        [[nodiscard]] usize VisibleEntryCount() const noexcept { return m_filtered.Size(); }
-
-        [[nodiscard]] StringView VisibleEntryText(usize visibleIndex) const
-        {
-            return m_entries[m_filtered[visibleIndex]].text.AsView();
-        }
-
-        // Fill the available space (the default ViewGroup measure wraps to children, which would
-        // collapse the virtualized list); the single child column fills us.
-        void OnMeasure(ui::BoxConstraints constraints) override
-        {
-            for (usize i = 0; i < ChildCount(); ++i)
-            {
-                GetChildAt(i)->Measure(constraints);
-            }
-            MeasuredSize = Float2{constraints.MaxWidth, constraints.MaxHeight};
-        }
-
-        void OnLayout(f32 left, f32 top, f32 width, f32 height) override
-        {
-            (void)left;
-            (void)top;
-            for (usize i = 0; i < ChildCount(); ++i)
-            {
-                GetChildAt(i)->Layout(0, 0, width, height);
-            }
-        }
-
-    private:
-        // The entry list: Ctrl+C copies the selection and Ctrl+A selects every row.
-        class EntryList final : public ui::ListView
-        {
-        public:
-            explicit EntryList(LogView& owner) : m_owner(&owner) {}
-
-            void OnKeyDown(ui::KeyEventArgs& e) override
-            {
-                if (ui::HasFlag(e.Modifiers, ui::KeyModifiers::Ctrl) &&
-                    !ui::HasFlag(e.Modifiers, ui::KeyModifiers::Alt))
-                {
-                    if (e.Key == ui::KeyCode::C)
-                    {
-                        m_owner->CopySelection();
-                        e.Handled = true;
-                        return;
-                    }
-                    if (e.Key == ui::KeyCode::A)
-                    {
-                        m_owner->SelectAll();
-                        e.Handled = true;
-                        return;
-                    }
-                }
-                ui::ListView::OnKeyDown(e);
-            }
-
-        private:
-            LogView* m_owner;
-        };
-
-        void ShowContextMenu(f32 localX, f32 localY)
-        {
-            if (Context == nullptr)
-            {
-                return;
-            }
-            auto menu = MakeRef<ui::ContextMenu>(MemoryAllocator());
-            const usize count = SelectedCount();
-            const String copyLabel =
-                count > 1 ? Format(u8"Copy {} Lines", count) : String(u8"Copy");
-            menu->AddItem(copyLabel.AsView(), [this]() { CopySelection(); }, count > 0);
-            menu->AddItem(u8"Select All", [this]() { SelectAll(); }, !m_filtered.IsEmpty());
-            menu->AddSeparator();
-            menu->AddItem(u8"Clear", [this]() { Clear(); });
-            const Float2 at = m_list->LocalToScreen(Float2{localX, localY});
-            menu->Show(Context, at.x, at.y);
-        }
-
-        struct Entry
-        {
-            Bucket bucket = Bucket::Info;
-            String text;
-        };
-
-        [[nodiscard]] static Color BucketColor(Bucket bucket) noexcept
-        {
-            switch (bucket)
-            {
-            case Bucket::Debug:
-                return Color{150.0f / 255.0f, 150.0f / 255.0f, 150.0f / 255.0f, 1.0f};
-            case Bucket::Info:
-                return Color{80.0f / 255.0f, 180.0f / 255.0f, 255.0f / 255.0f, 1.0f};
-            case Bucket::Warning:
-                return Color{255.0f / 255.0f, 200.0f / 255.0f, 50.0f / 255.0f, 1.0f};
-            default:
-                return Color{255.0f / 255.0f, 80.0f / 255.0f, 80.0f / 255.0f, 1.0f};
-            }
-        }
-
-        // Recycled row = one Label; bind sets text + level color.
-        class Adapter final : public ui::ListAdapterBase
-        {
-        public:
-            explicit Adapter(LogView& owner) : m_owner(&owner) {}
-
-            [[nodiscard]] i32 ItemCount() const override
-            {
-                return static_cast<i32>(m_owner->m_filtered.Size());
-            }
-
-            [[nodiscard]] RefPtr<ui::View> CreateView(i32) override
-            {
-                auto label = MakeRef<ui::Label>(m_owner->MemoryAllocator());
-                label->FontSize.SetValue(12.0f);
-                return RefPtr<ui::View>(label.Get());
-            }
-
-            void BindView(ui::View* view, i32 position) override
-            {
-                auto* label = Cast<ui::Label>(view);
-                if (label == nullptr)
-                {
-                    return;
-                }
-                const usize index = m_owner->m_filtered[static_cast<usize>(position)];
-                const Entry& entry = m_owner->m_entries[index];
-                label->SetText(entry.text.AsView());
-                label->TextColor.SetValue(Optional<Color>(BucketColor(entry.bucket)));
-            }
-
-        private:
-            LogView* m_owner;
-        };
-
-        // Whether a line passes the level filters and the search.
-        [[nodiscard]] bool Shows(const Entry& entry) const
-        {
-            return IsBucketVisible(entry.bucket) &&
-                   (m_search.IsEmpty() || entry.text.AsView().ContainsIgnoreCase(m_search.AsView()));
-        }
-
-        // A level's chip: a dot in the level's row colour, its name, and its line count; a toggle,
-        // on while its lines show, dimmed off.
-        RefPtr<ui::ToggleButton> MakeLevelChip(Bucket bucket)
-        {
-            static constexpr const char8_t* kNames[kBucketCount] = {u8"Debug", u8"Info",
-                                                                    u8"Warning", u8"Error"};
-            static constexpr const char8_t* kTips[kBucketCount] = {
-                u8"Show debug and trace lines", u8"Show info lines", u8"Show warnings",
-                u8"Show errors"};
-            const usize i = static_cast<usize>(bucket);
-            auto content = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            content->Direction = ui::Orientation::Horizontal;
-            content->Spacing = 5.0f;
-            content->AlignItems = ui::Align::Center;
-            auto dotShape =
-                MakeRef<ui::RoundedRectDrawable>(MemoryAllocator(), BucketColor(bucket), 4.0f);
-            auto dot = MakeRef<ui::DrawableView>(MemoryAllocator(), ui::DrawablePtr(dotShape.Get()),
-                                                 8.0f, 8.0f);
-            content->AddView(dot.Get());
-            auto name = MakeRef<ui::Label>(MemoryAllocator(), StringView(kNames[i]));
-            name->FontSize.SetValue(12.0f);
-            content->AddView(name.Get());
-            m_nameLabels[i] = name.Get();
-            auto count = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"0"));
-            count->FontSize.SetValue(11.0f);
-            count->TextColor.SetValue(Optional<Color>(Color{0.6f, 0.6f, 0.62f, 1.0f}));
-            content->AddView(count.Get());
-            m_countLabels[i] = count.Get();
-
-            auto chip = MakeRef<ui::ToggleButton>(MemoryAllocator());
-            chip->SetContent(RefPtr<ui::View>(content.Get()));
-            chip->SetStyle(ui::StyleProperty::Padding, ui::Thickness{7.0f, 2.0f});
-            // A quiet pill rather than the theme's accent toggle: outlined when off, a soft fill
-            // when on, a touch lighter under the pointer.
-            const auto pill = [this](f32 fill, f32 border)
-            {
-                return RefPtr<ui::Drawable>(MakeRef<ui::RoundedRectDrawable>(
-                                                MemoryAllocator(), Color{1.0f, 1.0f, 1.0f, fill}, 9.0f,
-                                                Color{1.0f, 1.0f, 1.0f, border}, 1.0f)
-                                                .Get());
-            };
-            auto look = MakeRef<ui::StateListDrawable>(MemoryAllocator());
-            look->Set(ui::ControlState::Normal, pill(0.0f, 0.10f));
-            look->Set(ui::ControlState::Hover, pill(0.05f, 0.14f));
-            look->Set(ui::ControlState::Checked, pill(0.10f, 0.16f));
-            look->Set(ui::ControlState::Checked | ui::ControlState::Hover, pill(0.14f, 0.20f));
-            chip->SetStyle(ui::StyleProperty::Background, RefPtr<ui::Drawable>(look.Get()));
-            // A checked toggle draws its CheckedBackground first (the theme's accent): this pill too.
-            chip->SetStyle(ui::StyleProperty::CheckedBackground, RefPtr<ui::Drawable>(look.Get()));
-            chip->TooltipText = String(kTips[i]);
-            chip->IsChecked.SetSilent(m_visible[i]);
-            chip->OnCheckedChanged.Add([this, bucket](ui::ToggleButton*, bool checked)
-                                       { SetBucketVisible(bucket, checked); });
-            m_chips[i] = chip.Get();
-            return chip;
-        }
-
-        // Each chip's count: the lines its level holds now (capped in the text, not the count).
-        void UpdateCounts()
-        {
-            for (usize i = 0; i < kBucketCount; ++i)
-            {
-                if (ui::Label* label = m_countLabels[i])
-                {
-                    const String text = m_counts[i] > 9999
-                                            ? String(u8"9999+")
-                                            : Format(u8"{}", static_cast<u64>(m_counts[i]));
-                    if (label->Text.Value().AsView() != text.AsView())
-                    {
-                        label->SetText(text.AsView());
-                    }
-                    // An empty level's chip reads quieter.
-                    const Color quiet{0.45f, 0.45f, 0.47f, 1.0f};
-                    const Color shown{0.72f, 0.72f, 0.74f, 1.0f};
-                    label->TextColor.SetValue(
-                        Optional<Color>(m_counts[i] == 0 || !m_visible[i] ? quiet : shown));
-                }
-                // The name dims with its level hidden.
-                if (ui::Label* name = m_nameLabels[i])
-                {
-                    name->TextColor.SetValue(Optional<Color>(
-                        m_visible[i] ? Color{0.9f, 0.9f, 0.92f, 1.0f} : Color{0.5f, 0.5f, 0.52f, 1.0f}));
-                }
-            }
-        }
-
-        void RebuildFilter()
-        {
-            m_filtered.Clear();
-            for (usize i = 0; i < m_entries.Size(); ++i)
-            {
-                if (Shows(m_entries[i]))
-                {
-                    m_filtered.PushBack(i);
-                }
-            }
-            m_adapter->NotifyDataSetChanged();
-        }
-
-        void ScrollToNewest()
-        {
-            if (AutoScroll && !m_filtered.IsEmpty())
-            {
-                m_list->ScrollToPosition(static_cast<i32>(m_filtered.Size()) - 1);
-            }
-        }
-
+        IAllocator& m_allocator;
+        RefPtr<gui::Node> m_content;
+        gui::ListView* m_list = nullptr;
+        gui::Button* m_chips[kBucketCount] = {};
+        RefPtr<gui::Menu> m_menu;
         Array<Entry> m_entries;
-        Array<usize> m_filtered; // indices into m_entries passing the filter
+        Array<usize> m_shown; // the entries shown, by their place in m_entries
+        usize m_counts[kBucketCount] = {};
         bool m_visible[kBucketCount] = {true, true, true, true};
-        String m_search; // what a line must contain to show; empty shows every line
-        RefPtr<ui::EditText> m_searchEdit;
-
-        UniquePtr<Adapter> m_adapter;
-        RefPtr<EntryList> m_list;
-        ui::ToggleButton* m_chips[kBucketCount] = {};    // borrowed (the header owns them)
-        ui::Label* m_countLabels[kBucketCount] = {};     // borrowed (each chip owns its own)
-        ui::Label* m_nameLabels[kBucketCount] = {};      // borrowed (each chip owns its own)
-        usize m_counts[kBucketCount] = {};               // the lines each level holds now
-        RefPtr<ui::IconButton> m_clearSearch;
+        String m_search;
+        u64 m_nextId = 1;
+        Function<void(usize)> m_onCopied;
+        Model m_model;
     };
-
-    RTTI_DEFINE_OBJECT(LogView, "rtti::editor::editor::app")
 }

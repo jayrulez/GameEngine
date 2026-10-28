@@ -7,7 +7,6 @@ module;
 module editor.app;
 
 import foundation.core;
-import foundation.ui;
 import foundation.json;
 import foundation.mcp;
 import editor.core;
@@ -62,6 +61,10 @@ namespace editor::app
                     JsonValue::MakeBool(editor::EditorActionRegistry::IsEnabled(action, subject)));
             out.Set(u8"checked",
                     JsonValue::MakeBool(editor::EditorActionRegistry::IsChecked(action, subject)));
+            // Why it is disabled, when it says (a tool with nothing to work on): what to change.
+            const String reason = actions.DisabledReason(action.id.AsView(), subject);
+            if (!reason.IsEmpty())
+                out.Set(u8"disabledReason", JsonValue::MakeString(reason));
             return out;
         }
 
@@ -145,6 +148,11 @@ namespace editor::app
                 const editor::EditorActionDeclaration& action = *found.Value();
                 if (!editor::EditorActionRegistry::IsEnabled(action, actions.Subject()))
                 {
+                    const String reason = actions.DisabledReason(action.id.AsView(), actions.Subject());
+                    if (!reason.IsEmpty())
+                        return Err(Format(u8"action '{}' is not enabled over the active page ({}): {}", action.id.AsView(),
+                                          actions.Subject() != nullptr ? actions.Subject()->Title() : StringView(u8"no page is active"),
+                                          reason.AsView()));
                     return Err(Format(u8"action '{}' is not enabled over the active page ({}) - "
                                       u8"page_open the page it needs, or select what it acts on",
                                       action.id.AsView(),
@@ -154,7 +162,7 @@ namespace editor::app
                 }
                 Array<String> suppressed;
                 {
-                    UnattendedDialogs unattended(seams.ui);
+                    UnattendedDialogs unattended(seams.dialogs);
                     const Status ran = actions.Execute(action.id.AsView());
                     if (!ran.IsOk())
                     {

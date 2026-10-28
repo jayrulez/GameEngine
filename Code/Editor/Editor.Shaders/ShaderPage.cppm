@@ -3,13 +3,16 @@
 
 // Editor::Shaders - the `:shader_page` partition: a custom shader's page.
 //
-// The shader's .hlsl (its asset's linked Sources/ file) in a code editor, checked as you type
-// (CheckShaderSource on each stage's base variant, a short pause after the last key) with the
-// errors as line markers, a list and a status line; beside it a sphere drawn with the text being
-// edited, its material laid out by the properties block exactly as a cooked material is, and the
-// asset's name and entry points. Save writes the file and the asset and recooks, which compiles
-// every variant; the preview draws under a name of its own, so a scene keeps the last cooked
-// shader until then.
+// The shader's .hlsl on the GUI from its markup (Data/Editor/ShaderPage.gml;
+// Documentation/Specs/editor-gui.md, 5.4, layer 6, part 4), on the code pages' base (the source
+// file, the shared HLSL colours, one history, the problems list): checked a moment after each edit
+// (CheckShaderSource on each stage's base variant), its file's errors on their lines and an
+// include's in the list; beside it a sphere drawn with the code being edited, its material laid out
+// by the properties block exactly as a cooked material is, over the asset's grid (its name and entry
+// points, each edit one undo step with the code's). While the code does not compile the preview
+// keeps the last version that did, and says so. Save writes the file and the asset and recooks,
+// which compiles every variant; the preview draws under a name of its own, so a scene keeps the
+// last cooked shader until then.
 
 module;
 #include "Core/Prelude.h"
@@ -26,9 +29,7 @@ import foundation.geometry;
 import foundation.shaders;
 import foundation.shaders.system;
 import foundation.materials;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
+import foundation.gui;
 import engine.render;
 import shaders.pipeline;
 import editor.core;
@@ -40,7 +41,6 @@ using namespace foundation::core;
 export namespace editor
 {
     namespace runtime = foundation::runtime;
-    namespace ui = foundation::ui;
 
     // A page's preview shader in the renderer's shader system, under the page's own name:
     // registered each time the text checks, removed once when the page closes. Released, it
@@ -79,81 +79,67 @@ export namespace editor
         String m_name;
     };
 
-    class ShaderEditorPage final : public app::UIEditorPage
+    class ShaderEditorPage final : public app::CodeAssetPage
     {
     public:
-        // `shaderLibrary`: the engine's Shaders/ folder, the include path a check compiles with.
-        ShaderEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                         ui::runtime::UIHost& uiHost, foundation::content::Instance& instance,
-                         StringView shaderLibrary);
-        ~ShaderEditorPage();
+        static constexpr StringView kPath = u8"Editor/ShaderPage.gml";
 
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] Status Save() override;
-        void OnUpdate(runtime::IApplicationHost&, f32 dt) override;
-        void OnRenderWindow(runtime::IApplicationHost&,
-                            foundation::graphics::FrameContext& frame) override;
+        /// `shaderLibrary`: the engine's Shaders/ folder, the include path a check compiles with.
+        ShaderEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance, StringView shaderLibrary);
+        ~ShaderEditorPage() override;
+
+        void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;
+        void OnRenderWindow(runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
+
+        // === For tests ===
+        /// What the last check said the shader is ("Lit surface shader", "Low-level shader"), empty while it does not compile.
+        [[nodiscard]] StringView Kind() const noexcept { return m_kind.AsView(); }
+        /// The properties block's count, as the last check that compiled read it.
+        [[nodiscard]] usize PropertyCount() const noexcept { return m_properties; }
+        /// Whether the preview shows an older version than the code (the code does not compile).
+        [[nodiscard]] bool PreviewStale() const noexcept { return m_stale; }
+
+    protected:
+        [[nodiscard]] Array<app::CodeProblem> CheckCode(StringView text) override;
+        void OnObjectChanged() override { CheckNow(); } // an entry point changes what compiles
 
     private:
         void BuildPreviewScene();
-        // Checks the text, puts the errors on the page, and on success redraws the preview.
-        void Check();
         void UpdatePreview(const pipeline::ShaderCheck& check);
+        void FramePreview();
 
-        EditorContext* m_context = nullptr;
         PreviewShaderSlot m_previewShader; // what the sphere draws with
-        String m_title;
         String m_shaderLibrary;
-        String m_sourcePath; // absolute path of the linked .hlsl
-        String m_fileName;   // its name as errors carry it
-        RefPtr<pipeline::ShaderAsset> m_asset; // the edited asset (Save writes it back)
-        String m_text;
-        f32 m_checkDelay = 0.0f;
         foundation::shaders::Compiler* m_compiler = nullptr; // reused by every check
-
-        UniquePtr<PreviewViewport> m_preview;
+        UniquePtr<app::PreviewPane> m_pane;
         foundation::scene::EntityHandle m_sphere{};
         RefPtr<foundation::geometry::StaticMesh> m_previewMesh;
         RefPtr<foundation::materials::Material> m_previewMaterial;
-
-        RefPtr<ui::View> m_content;
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<ui::toolkit::CodeEditView> m_editor;
-        RefPtr<ui::Label> m_status;
-        RefPtr<ui::EditText> m_errorView;
-        RefPtr<ui::toolkit::PropertyGrid> m_grid;
+        foundation::gui::Node* m_staleNote = nullptr;
+        String m_kind;
+        usize m_properties = 0;
+        bool m_compiled = false; // the preview shows a version that compiled
+        bool m_stale = false;
     };
 
     class ShaderEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        ShaderEditorPageFactory(runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost,
-                                StringView shaderLibrary)
-            : m_host(&host), m_uiHost(&uiHost), m_shaderLibrary(shaderLibrary)
-        {
-        }
-        [[nodiscard]] const TypeInfo* PrimaryType() const override
-        {
-            return &pipeline::ShaderAsset::StaticType();
-        }
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        ShaderEditorPageFactory(const app::AssetPageServicesSource& services, StringView shaderLibrary) : m_services(&services), m_shaderLibrary(shaderLibrary) {}
+        [[nodiscard]] const TypeInfo* PrimaryType() const override { return &pipeline::ShaderAsset::StaticType(); }
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        runtime::IApplicationHost* m_host;
-        ui::runtime::UIHost* m_uiHost;
+        const app::AssetPageServicesSource* m_services = nullptr;
         String m_shaderLibrary;
     };
 
-    /// The editor executable's entry point for the shader page. `shaderLibrary`: the engine's
+    /// The shader page's registration (from the editor's assembly). `shaderLibrary`: the engine's
     /// Shaders/ folder under the data root.
-    inline void RegisterShaderEditor(EditorContext& context, runtime::IApplicationHost& host,
-                                     ui::runtime::UIHost& uiHost, StringView shaderLibrary)
+    inline void RegisterShaderEditor(EditorContext& context, const app::AssetPageServicesSource& services, StringView shaderLibrary)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<ShaderEditorPageFactory>(host, uiHost, shaderLibrary),
-            editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<ShaderEditorPageFactory>(services, shaderLibrary), editor::EditorRootAllocator()));
     }
 }

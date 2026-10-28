@@ -1,19 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :page partition.
-//
-// SceneEditorPage: the scene document editor. Each page owns its OWN
-// live Scene (multi-scene rule - several pages open at once; everything scene-scoped is
-// per-page): a ViewportView renders the scene through the REAL renderer via CameraOverride into
-// the viewport's offscreen color target, an EditorCamera flies on the viewport's gated devices
-// (hover/focus-gated, so occluded/inactive-tab input can't leak), and open/save round-trip the
-// content DB through LoadScene/SaveScene. An empty scene shows a debug-draw ground grid + origin
-// axes so navigation reads immediately.
-//
-// RegisterSceneEditor is the module's RegisterEditor entry point: the EXECUTABLE calls it
-// (editor core/app never link this module); it registers the SceneDocument type, the page
-// factory, and the "Scene" asset creator (File > New Scene).
+// Editor::Scene - :page partition, the page's body (Documentation/Specs/editor-gui.md, 5.3,
+// layer 2). See ScenePage.cppm.
 
 module;
 #include "Core/Prelude.h"
@@ -22,764 +11,745 @@ module;
 module editor.scene;
 
 import foundation.core;
-import foundation.image; // the written capture, for its size
-import foundation.settings; // per-scene grid pref in the project editor settings store
-import :view_settings;       // SceneViewSettings + Load/SaveSceneGridPref helpers
 import foundation.content;
-import foundation.rhi;
-import foundation.graphics;
 import foundation.shell;
+import foundation.graphics;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.scene;
 import engine.scene;
 import foundation.scene.resource;
-import foundation.resource; // AsyncBindScope
 import foundation.render;
 import engine.render;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import engine.ui; // game-UI RenderTexture canvases (live in editing viewports)
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import engine.ui;
+import engine.gui;
+import foundation.gui;
+import foundation.gui.hosting;
+import foundation.gui.viewport;
 import editor.core;
 import editor.app;
 import editor.camera;
-import :camera_preview;
+import editor.viewporttools;
+import editor.propertyanimation; // the animation panel under the viewport
+import propertyanimation.pipeline; // CreatePropertyAnimationClip (the panel's New)
+import engine.animation;          // PropertyAnimatorComponent (a new clip given to it)
+import foundation.propertyanimation.resource;
+import :view_settings;
+import :view_gizmo;
 import :edit;
 import :gizmo;
+import :tools;
 import :component_gizmos;
+import :scene_page_interface;
+import :scene_loading;
+import :settings_profiles;
+import :actions;
+import :scene_viewport;
+import :scene_overlays;
+import :scene_view_state;
+import :scene_simulation;
+import :prefab_flows;
 import :hierarchy;
 import :inspector;
 
 using namespace foundation::core;
-namespace render = foundation::render;
-namespace rhi = foundation::rhi;
-namespace runtime = foundation::runtime;
+namespace gui = foundation::gui;
 namespace scene = foundation::scene;
-namespace ui = foundation::ui;
-namespace vg = foundation::vg;
+namespace runtime = foundation::runtime;
 
 namespace editor
 {
-    const TypeInfo* PrefabEditorPageFactory::PrimaryType() const
+    SceneEditorPage::SceneEditorPage(EditorContext& context, Services services, foundation::content::Instance& instance)
+        : app::UIEditorPage(context.Allocator()), m_context(&context), m_services(Move(services)), m_title(instance.Name())
     {
-        return &scene::PrefabDocument::StaticType();
+        // The id now, before the view state is read: the per-scene prefs are keyed by it.
+        SetInstanceId(instance.Id());
+        Provide<ISceneEditorPage>(*this); // what this page lets others act through
+        m_isPrefab = instance.TypeName() == StringView(u8"PrefabDocument");
+        Build(instance);
     }
 
-    UniquePtr<EditorPage> PrefabEditorPageFactory::CreatePage(EditorContext& context,
-                                                              foundation::content::Instance& instance)
+    void SceneEditorPage::Build(foundation::content::Instance& instance)
     {
-        return UniquePtr<EditorPage>(
-            editor::EditorRootAllocator().New<SceneEditorPage>(context, *m_host, *m_uiHost, instance),
-            editor::EditorRootAllocator());
-    }
-    void SceneEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
-    {
-        // A viewport capture recorded last frame: the GPU has to finish the copy.
-        m_capture.Complete(host.Graphics() != nullptr ? host.Graphics()->Raw() : nullptr,
-                           host.Ctx().Allocator());
-        EnsureViewportBound();
-        if (m_hostWindow == nullptr)
+        EditorContext& context = *m_context;
+        runtime::IApplicationHost* host = m_services.host;
+        SceneViewport::Services view;
+        if (host != nullptr)
         {
+            m_scenes = host->Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            view.render = host->Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+            view.gameUI = host->Ctx().GetSubsystem<engine::ui::UISubsystem>();
+            view.gameGui = host->Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
+        }
+        m_viewport = MakeUnique<SceneViewport>(Allocator(), Allocator(), view);
+
+        // Its own live scene in its own scene manager, registered with the subsystem so it ticks.
+        if (m_scenes != nullptr)
+        {
+            m_scenes->RegisterManager(&m_sceneManager);
+            // The page is edit-mode Simulate's run scope: its bus is set before the scene is made,
+            // so systems binding as it is assembled see it; OnUpdate drains it once a frame.
+            m_sceneManager.SetSceneEventBus(&m_pageEvents);
+            m_scene = m_sceneManager.CreateScene(instance.Name());
+            m_scene->SetSimulationEnabled(false); // edit mode is frozen; Simulate un-freezes it
+            SceneLoadTimes times;
+            const Status loaded = LoadEditorScene(context, instance, *m_scene, &times);
+            if (loaded.IsOk())
+                LOG_INFO(u8"Editor", u8"opened scene '{}': parse {} ms, bind {} ms, prefabs {} ms (UI thread)", m_title, times.parseMs, times.bindMs,
+                         times.prefabMs);
+            else if (loaded.Code() == ErrorCode::NotFound)
+                LOG_INFO(u8"Editor", u8"new scene '{}' (no scene stream yet)", m_title);
+            else
+            {
+                LOG_ERROR(u8"Editor", u8"scene '{}' failed to load", m_title);
+                m_loadFailed = true;
+            }
+        }
+
+        if (m_scene != nullptr)
+        {
+            m_editContext = MakeUnique<SceneEditContext>(Allocator(), *m_scene, Commands());
+            m_editContext->SetResources(context.Resources());
+            // A settings edit that lands in a profile (the block's source is a profile) is written
+            // to the profile's asset by the save flow, like any live asset edit.
+            {
+                EditorContext* profileContext = &context;
+                SceneEditContext* profileEdit = m_editContext.Get();
+                m_editContext->OnSettingsProfileEdited = [profileContext, profileEdit](const TypeInfo* type, const Guid& profile)
+                {
+                    if (scene::SceneSystem* system = profileEdit->FindSystemBySettingsType(type))
+                        QueueSettingsProfileEdit(*profileContext, *system, profile);
+                };
+            }
+            EditorContext* resolverContext = &context;
+            m_editContext->SetPrefabResolver(scene::PrefabPayloadResolver{[resolverContext](const Guid& prefabId) -> UniquePtr<IStream>
+                                                                          {
+                                                                              if (resolverContext->Project() == nullptr)
+                                                                                  return UniquePtr<IStream>{};
+                                                                              foundation::content::Instance* prefab =
+                                                                                  resolverContext->Project()->SourceDb().GetInstance(prefabId);
+                                                                              return prefab != nullptr ? prefab->ReadData(u8"scene") : UniquePtr<IStream>{};
+                                                                          }});
+            BuildTools(context);
+            RegisterBuiltinGizmoRenderers(m_componentGizmos);
+
+            PrefabFlows::Services flows;
+            flows.context = &context;
+            flows.edit = m_editContext.Get();
+            flows.scenes = m_scenes;
+            SceneEditorPage* self = this;
+            flows.pageAsset = [self]() { return self->InstanceId(); };
+            flows.confirm = [self](StringView title, StringView text, StringView verb, Function<void()> yes) { self->Confirm(title, text, verb, Move(yes)); };
+            flows.later = [self](Function<void()> work) { self->Later(Move(work)); };
+            if (m_services.refs != nullptr && m_services.refs->Pick)
+                flows.pickAsset = [self](Span<const String> types, Function<void(const Guid&)> chosen)
+                { self->m_services.refs->Pick(types, Guid{}, Move(chosen)); };
+            m_prefabs = MakeUnique<PrefabFlows>(Allocator(), Move(flows));
+        }
+
+        // The page from its markup: the bar over the hierarchy, the viewport and the inspector.
+        m_content = m_services.loadMarkup ? m_services.loadMarkup(StringView(kPath)) : RefPtr<gui::Node>{};
+        if (!m_content)
+            m_content = MakeRef<gui::Panel>(Allocator()); // no markup: still a page, with its viewport
+        gui::Node* pane = Find<gui::Node>(u8"scene-viewport");
+        (void)(pane != nullptr ? pane : m_content.Get())->AddChildAt(m_viewport->ViewNode().Get(), 0);
+        m_viewport->HostIn(m_services.gui);
+        if (m_editContext)
+        {
+            // The HUD over the viewport: the chips, the stats and the view gizmo, the tool's status.
+            SceneHud::Services hud;
+            hud.context = &context;
+            hud.edit = m_editContext.Get();
+            hud.camera = &m_viewport->Camera();
+            hud.overlays = &m_overlays;
+            hud.post = &m_postOverride;
+            hud.debugView = &m_debugView;
+            hud.tools = &m_viewportTools;
+            hud.selectTool = m_selectTool;
+            SceneEditorPage* self = this;
+            hud.gizmos = [self]() { return self->Gizmos(); };
+            if (engine::render::RenderSubsystem* renderer = m_viewport->Renderer())
+                hud.debugResources = [renderer](Array<foundation::render::DebugResourceInfo>& out) { renderer->GetDebugResources(out); };
+            if (m_services.pick)
+                hud.pick = [self](app::PickerRequest request) { self->m_services.pick(Move(request)); };
+            hud.overlaysChanged = [self]() { self->SaveViewState(); };
+            m_hud = MakeUnique<SceneHud>(Allocator(), Allocator(), Move(hud), [self](StringView id) { return self->Find<gui::Node>(id); });
+        }
+        if (m_editContext)
+            if (gui::Node* pane = Find<gui::Node>(u8"scene-viewport"))
+            {
+                // The camera preview at the HUD's bottom end: the selected or pinned camera's view.
+                SceneCameraPreview::Services preview;
+                preview.edit = m_editContext.Get();
+                preview.icons = m_services.icons;
+                preview.render = m_viewport->Renderer();
+                m_cameraPreview = MakeUnique<SceneCameraPreview>(Allocator(), Allocator(), preview, *pane);
+                m_cameraPreview->HostIn(m_services.gui);
+            }
+        if (m_editContext)
+        {
+            // The viewport tools on the bar, and the active one's panel over the view.
+            SceneTools::Services tools;
+            tools.context = &context;
+            tools.page = this;
+            tools.tools = &m_viewportTools;
+            tools.hostContext = m_toolHost;
+            tools.barEnd = Find<gui::Node>(u8"scene-tools-end");
+            tools.pane = Find<gui::Node>(u8"scene-viewport");
+            tools.zone = Find<gui::Node>(u8"hud-top-start");
+            SceneEditorPage* self = this;
+            tools.placeChanged = [self]() { self->SaveViewState(); };
+            m_tools = MakeUnique<SceneTools>(Allocator(), Allocator(), Move(tools));
+        }
+        {
+            SceneEditorPage* self = this;
+            m_bar = MakeUnique<SceneBar>(Allocator(), Allocator(), context.Actions(), *this,
+                                         [self](StringView id) { return self->Find<gui::ButtonBase>(id); },
+                                         Find<gui::Label>(u8"scene-simulate-state"), [self]() { return self->Gizmos(); });
+        }
+        // A prefab is marked as one: the same page edits both.
+        if (gui::Node* kind = Find<gui::Node>(u8"scene-kind"))
+            kind->SetDisplayed(m_isPrefab);
+        // A scene that did not load says so where it would show, not only in the log.
+        if (gui::Node* state = Find<gui::Node>(u8"scene-state"))
+            state->SetDisplayed(m_loadFailed || m_scene == nullptr);
+        if (auto* text = Find<gui::Label>(u8"scene-state-text"); text != nullptr && m_scene == nullptr)
+            text->SetText(u8"The editor has no scenes to show it in.");
+
+        // The hierarchy in its pane: the scene's tree, the page's selection.
+        if (m_editContext)
+            if (gui::Node* pane = Find<gui::Node>(u8"scene-hierarchy"))
+            {
+                SceneHierarchyView::Services tree;
+                tree.context = &context;
+                tree.page = this;
+                tree.icons = m_services.icons;
+                tree.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
+                SceneEditorPage* self = this;
+                tree.sceneName = [self]() { return self->m_title.AsView(); };
+                tree.frame = [self](const Guid& entity) { (void)self->FrameEntities(Span<const Guid>(&entity, 1u), true); };
+                tree.spawnPrefab = [self](const Guid& prefab, const Guid& parent) { return self->m_prefabs && self->m_prefabs->Spawn(prefab, parent); };
+                m_hierarchy = MakeUnique<SceneHierarchyView>(Allocator(), Allocator(), *m_editContext, Move(tree), *pane);
+            }
+
+        // The inspector in its pane: the selection's entities and components.
+        if (m_editContext)
+            if (gui::Node* pane = Find<gui::Node>(u8"scene-inspector"))
+            {
+                SceneInspectorView::Services inspector;
+                inspector.context = &context;
+                inspector.page = this;
+                inspector.icons = m_services.icons;
+                inspector.refs = m_services.refs;
+                inspector.pick = m_services.pick ? [self = this](app::PickerRequest request) { self->m_services.pick(Move(request)); }
+                                                 : Function<void(app::PickerRequest)>{};
+                SceneEditorPage* self = this;
+                inspector.pickEntity = [self](EntityPickRequest request) { (void)self->PickEntity(Move(request)); };
+                inspector.simulating = [self]() { return self->m_simulation.IsRunning(); };
+                inspector.sceneSelected = [self]() { return self->m_hierarchy && self->m_hierarchy->SceneSelected(); };
+                inspector.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
+                inspector.sceneName = [self]() { return self->m_title.AsView(); };
+                m_inspector = MakeUnique<SceneInspectorView>(Allocator(), Allocator(), *m_editContext, Move(inspector), *pane);
+            }
+
+        BuildAnimationPanel(context);
+        m_overlays.settings = SceneViewState::LoadOverlays(context.ProjectEditorSettings(), InstanceId(), m_overlays.settings);
+        RestoreViewState();
+    }
+
+    void SceneEditorPage::BuildAnimationPanel(EditorContext& context)
+    {
+        // Under the viewport, its pane out of the splitter until shown (a pane that goes gives its
+        // share to the viewport).
+        m_animationPane = RefPtr<gui::Node>(Find<gui::Node>(u8"scene-animation"));
+        if (!m_animationPane || m_scene == nullptr || !m_editContext || !m_services.loadMarkup)
+            return;
+        RefPtr<gui::Node> content = m_services.loadMarkup(PropertyAnimationPanel::kPath);
+        if (!content)
+            return;
+        m_animationPane->AddChild(content.Get());
+        m_animation = MakeUnique<PropertyAnimationPanel>(Allocator(), context, *m_scene, content);
+        SceneEditorPage* self = this;
+        m_animation->SelectedEntity = [self]() -> Guid
+        {
+            const Guid* primary = self->m_editContext->EntitySelection().Primary();
+            return primary != nullptr ? *primary : Guid{};
+        };
+        m_animation->GuardUnsaved = [self](Function<void()> proceed) { self->AskAboutClip(Move(proceed)); };
+        // Hidden: what it posed goes back, its clip stays open in it (unsaved or not) for next time.
+        m_animation->RequestClose = [self]() { self->Later([self]() { self->SetAnimationPanelShown(false); }); };
+        if (m_services.refs != nullptr && m_services.refs->Pick)
+            m_animation->RequestOpenClip = [self]()
+            {
+                const String types[] = {String(u8"PropertyAnimationClipAsset")};
+                self->m_services.refs->Pick(Span<const String>(types, 1u), self->m_animation->Document().ClipId(),
+                                            [self](const Guid& picked)
+                                            {
+                                                if (!picked.IsNil())
+                                                    self->m_animation->RequestEditClip(picked, Guid{});
+                                            });
+            };
+        // New: the clip named and placed in Create Asset (Animations and the entity's name to
+        // start), then opened; an animator on the entity with no clip yet plays it.
+        m_animation->RequestNewClip = [self]() { self->AskAboutClip([self]() { self->NewClip(); }); };
+        // Pick: the page's entity picker, the bound entity lit.
+        m_animation->RequestPickEntity = [self](const Guid& current, Function<void(const Guid&)> chosen)
+        {
+            EntityPickRequest request;
+            request.current = current;
+            request.chosen = Move(chosen);
+            (void)self->PickEntity(Move(request));
+        };
+        // A clip opened from the browser or a slot while this page is on screen: into the panel,
+        // shown, bound to the selected entity (the old page's), not a page of its own.
+        m_openClipInterceptor = context.AddOpenAssetInterceptor([self](foundation::content::Instance& instance) -> bool
+                                                                {
+                                                                    if (instance.TypeName() != StringView(u8"PropertyAnimationClipAsset") || !self->IsOnScreen())
+                                                                        return false;
+                                                                    self->SetAnimationPanelShown(true);
+                                                                    const Guid* primary = self->m_editContext->EntitySelection().Primary();
+                                                                    self->m_animation->RequestEditClip(instance.Id(), primary != nullptr ? *primary : Guid{});
+                                                                    return true;
+                                                                });
+        m_animationPane->GetParent()->RemoveChild(m_animationPane.Get()); // hidden until shown
+    }
+
+    void SceneEditorPage::NewClip()
+    {
+        foundation::content::Group* top = m_context->Project() != nullptr ? m_context->Project()->SourceDb().RootGroup() : nullptr;
+        if (top == nullptr)
+            return;
+        foundation::content::Group* animations = nullptr;
+        for (foundation::content::Group* child : top->Groups())
+            if (child->Name() == StringView(u8"Animations"))
+                animations = child;
+        const Guid entity = m_animation->BoundEntity();
+        const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : m_scene->FindEntity(entity);
+        // A name not taken where it starts.
+        const String base = handle.IsAssigned() ? Format(u8"{} Clip", m_scene->GetEntityName(handle)) : String(u8"Clip");
+        const String suggested = (animations != nullptr ? animations : top)->UniqueInstanceName(base.AsView());
+        SceneEditorPage* self = this;
+        const auto make = [self, entity](foundation::content::Group& group, StringView name)
+        {
+            foundation::content::Instance* made = pipeline::CreatePropertyAnimationClip(&group, name);
+            if (made == nullptr)
+            {
+                self->m_context->Notify(NoticeKind::Warning, u8"The clip could not be made; the Console says why.");
+                return;
+            }
+            (void)self->m_animation->LoadClip(made->Id());
+            self->GiveClipToAnimator(entity, made->Id());
+        };
+        if (m_services.createAsset)
+        {
+            m_services.createAsset(u8"New Clip", suggested.AsView(), animations, make);
             return;
         }
-        // A project with no launcher picture yet gets one from its default scene, once the view
-        // has been up a moment with nothing left loading (content pops in asynchronously).
+        // No dialog (a test): Animations, as suggested.
+        if (animations == nullptr)
+            animations = top->CreateGroup(u8"Animations");
+        if (animations != nullptr)
+            make(*animations, suggested.AsView()); // made unique there
+    }
+
+    void SceneEditorPage::GiveClipToAnimator(const Guid& entity, const Guid& clip)
+    {
+        // Only an animator with no clip: one that plays another keeps it (this is another clip).
+        auto* animators = m_scene->GetSystem<engine::animation::PropertyAnimatorComponentManager>();
+        const scene::EntityHandle handle = entity.IsNil() ? scene::EntityHandle{} : m_scene->FindEntity(entity);
+        engine::animation::PropertyAnimatorComponent* animator = animators != nullptr && handle.IsAssigned() ? animators->Get(handle) : nullptr;
+        if (animator == nullptr || !animator->clip.id.IsNil())
+            return;
+        m_editContext->SetComponentResourceRef<foundation::propertyanimation::PropertyAnimationClipResource>(
+            entity, &TypeOf<engine::animation::PropertyAnimatorComponent>(), "clip", clip, m_context->Resources());
+    }
+
+    void SceneEditorPage::AskAboutClip(Function<void()> proceed)
+    {
+        if (!m_animation || !m_animation->Document().IsDirty())
+        {
+            proceed();
+            return;
+        }
+        gui::Node* root = m_content ? m_content->GetRootNode() : nullptr;
+        if (root == nullptr)
+            return; // nothing to ask over: the clip stays
+        auto box = MakeRef<gui::MessageBox>(Allocator());
+        box->Configure(u8"Unsaved clip", Format(u8"The clip '{}' has unsaved changes.", m_animation->Document().Name()).AsView(), gui::MessageBox::Buttons::Ok);
+        box->ClearButtons();
+        (void)box->AddButton(u8"Discard", u8"discard", gui::DialogRole::Destructive);
+        (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+        (void)box->AddButton(u8"Save", u8"save", gui::DialogRole::Primary);
+        SceneEditorPage* self = this;
+        gui::MessageBox* raw = box.Get();
+        (void)box->AddEventListener(gui::EventType::Changed, [self, raw, proceed = Move(proceed)](const gui::Event&)
+                                    {
+                                        const StringView answer = raw->GetResultName().AsView();
+                                        if (answer == StringView(u8"save") && !self->m_animation->Save().IsOk())
+                                            return; // it said why
+                                        if (answer == StringView(u8"save") || answer == StringView(u8"discard"))
+                                            proceed();
+                                    });
+        box->OpenModal(*root);
+        m_confirm = box;
+    }
+
+    void SceneEditorPage::SetAnimationPanelShown(bool shown)
+    {
+        if (!m_animation || !m_animationPane || shown == m_animationShown)
+            return;
+        gui::Splitter* center = Find<gui::Splitter>(u8"scene-center");
+        if (center == nullptr)
+            return;
+        m_animationShown = shown;
+        if (shown)
+        {
+            center->AddChild(m_animationPane.Get());
+            const f32 weights[] = {0.68f, 0.32f};
+            center->SetWeights(Span<const f32>(weights, 2u));
+        }
+        else
+        {
+            m_animation->StopPreview(); // what it posed goes back with it
+            center->RemoveChild(m_animationPane.Get());
+        }
+    }
+
+    void SceneEditorPage::EditAnimationClip(const Guid& clip, const Guid& entity)
+    {
+        if (!m_animation)
+            return;
+        SetAnimationPanelShown(true);
+        if (!clip.IsNil())
+            m_animation->RequestEditClip(clip, entity);
+        else if (!entity.IsNil())
+            m_animation->BindEntity(entity);
+    }
+
+    void SceneEditorPage::ListUnsavedBesides(Array<String>& out) const
+    {
+        if (m_animation && m_animation->Document().IsDirty())
+            out.PushBack(Format(u8"The clip '{}'", m_animation->Document().Name()));
+    }
+
+    Status SceneEditorPage::SaveBesides()
+    {
+        return m_animation && m_animation->Document().IsDirty() ? m_animation->Save() : Status{};
+    }
+
+    void SceneEditorPage::BuildTools(EditorContext& context)
+    {
+        auto selectTool = MakeUnique<SelectTransformTool>(Allocator(), *m_editContext);
+        m_selectTool = selectTool.Get();
+        m_selectTool->SetPicker(&m_viewport->Picker()); // the GPU pick over this page's viewport
+        m_viewportTools.Add(Move(selectTool));        // the first added is the default tool
+        m_toolHost.scene = &m_editContext->Scene();
+        m_toolHost.commands = &m_editContext->Commands();
+        m_toolHost.entitySelection = &m_editContext->EntitySelection();
+        m_toolHost.picker = &m_viewport->Picker();
+        // A tool that edits a cooked product live (terrain sculpt) registers its write-back to the
+        // source on the context; the save flow drains it.
+        m_toolHost.assetEdits = &context;
+        m_toolHost.editorContext = &context; // a panel's asset-backed choices (thumbnails, names)
+        ViewportToolProviderRegistry::Get().CreateAll(m_viewportTools, m_toolHost);
+    }
+
+    void SceneEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
+    {
+        m_viewport->CompleteCapture(host); // a capture recorded last frame: the GPU finished the copy
+        // A project with no launcher picture gets one from its default scene, once the view has been
+        // up a moment with nothing left loading (content pops in asynchronously).
         if (!m_thumbnailChecked && IsProjectDefaultScene())
         {
             m_thumbnailWait += dt;
             const bool settled = m_context->Resources() == nullptr || m_context->Resources()->PendingCount() == 0;
-            if (m_thumbnailWait > 1.5f && settled)
+            if (m_thumbnailWait > 1.5f && settled && m_viewport->IsShown())
             {
                 m_thumbnailChecked = true;
                 if (!FileExists(ProjectThumbnailPath(m_context->Project()->Directory()).AsView()))
-                {
                     (void)RequestProjectThumbnail();
-                }
             }
         }
 
-        if (m_hierarchy)
-        {
-            m_hierarchy->Refresh();
-        } // scene revision -> tree rebuild
-        if (m_inspector)
-        {
-            m_inspector->Refresh();
-        } // selection/structure -> grid rebuild
-
-        m_viewport->SyncInputRegion();
-        // Same keyboard arbitration as the Game page: editor-UI focus elsewhere (a dialog
-        // field, the inspector) drops surface focus, so camera keys and Simulate input
-        // never fire while the user is typing into an editor widget.
-        m_router->SetExternalCapture(false, m_viewport->HostKeyboardFocusElsewhere());
-        m_router->Update();
-        // A press held on the viewport keeps it the input owner wherever the pointer goes (a look
-        // drag, its pointer locked and hidden, may drift off it).
-        const bool viewportActive = m_viewport->IsHovered() || m_viewport->IsFocused() ||
-                                    (m_viewport->Surface() != nullptr && m_viewport->Surface()->Captured());
-        if (viewportActive)
-        {
-            // First-consumer rule: a modal viewport tool (a brush) owns SHIFT + wheel to resize
-            // itself, so the camera must not ALSO dolly on that scroll; the bare wheel stays the
-            // camera's even while a brush is active (2026-09-23: zoom under the brush).
-            const bool modalToolActive =
-                m_viewportTools.ActiveTool() != nullptr && m_viewportTools.ActiveTool() != m_selectTool;
-            foundation::shell::IKeyboard* keyboard = m_viewport->Keyboard();
-            const bool shiftDown = keyboard != nullptr &&
-                                   (keyboard->IsKeyDown(foundation::shell::KeyCode::LeftShift) ||
-                                    keyboard->IsKeyDown(foundation::shell::KeyCode::RightShift));
-            m_camera.Update(keyboard, m_viewport->Mouse(), dt, !(modalToolActive && shiftDown));
-            // An orbit, look or pan drag: the pointer locked meanwhile, granted by the router to
-            // this surface alone and ended with the press.
-            if (foundation::shell::InputSurface* surface = m_viewport->Surface())
-            {
-                surface->SetPointerLock(m_camera.WantsPointerLock());
-            }
-            if (m_camera.zoomedThisUpdate)
-            {
-                m_zoomReadout.Zoomed();
-            }
-        }
-        else
-        {
-            // The I2 stuck-mouse fix: Tab-capture's ONLY off-switch lived inside the active
-            // branch, and relative mode makes losing activity easy - release the OS grab the
-            // moment the viewport stops being the input owner.
-            m_camera.ReleaseCapture(m_viewport->Mouse());
-            if (foundation::shell::InputSurface* surface = m_viewport->Surface())
-            {
-                surface->SetPointerLock(false);
-            }
-        }
-        // A frame glides on whether or not the viewport has the input (a hierarchy double-click
-        // frames while the mouse is over the hierarchy).
-        m_camera.Advance(dt);
-        (void)UpdateViewportTools(viewportActive, dt); // picking lives inside the select tool now
-        // Mount/clear the active tool's settings panel in the bottom dock (safe here - a frame
-        // boundary, never mid-event; the mount tears down the previous panel view).
-        if (m_toolPanelHost)
-        {
-            m_toolPanelHost->Sync();
-        }
-        if (m_propAnimPanel)
-        {
-            // Advances editor playback + gates preview to EDIT (no preview/playback under Simulate).
-            m_propAnimPanel->Tick(dt, m_isSimulating);
-        }
-        // The page is this scene's run scope: drain its bus once per frame (events emitted
-        // during last frame's Simulate tick arrive now). Cheap no-op when empty/not simulating.
+        if (m_animation && m_animationShown)
+            m_animation->Update(dt, m_simulation.IsRunning());
+        m_viewport->AdvanceScripted(dt); // a playtest's frame (viewport_run), before the view's input is read
+        // A modal tool (a brush) owns Shift + wheel to size itself, so the camera leaves that wheel
+        // to it; the bare wheel stays the camera's under a brush too.
+        const bool modalTool = m_viewportTools.ActiveTool() != nullptr && m_viewportTools.ActiveTool() != m_selectTool;
+        // Its Shift read with the pointer: the brush's panel, just used, may have the keys.
+        const bool active = m_viewport->UpdateCamera(dt, !(modalTool && m_viewport->ShiftHeld()));
+        if (active && m_viewport->ZoomedThisFrame() && m_hud)
+            m_hud->Zoomed();
+        if (m_editContext)
+            UpdateTools(active, dt);
+        // The page is this scene's run scope: its bus drains once a frame (events a Simulate tick
+        // emitted last frame arrive now).
         m_pageEvents.Drain();
 
-        // Per-scene debug draw (shows only where THIS scene renders; lists clear in
-        // EndRendering, so re-accumulate every frame): ground grid + origin axes + entity
-        // markers (selected = boxed and brighter) + gizmos.
-        // (None on the frame a project thumbnail is captured: the launcher shows the scene.)
-        if (m_render != nullptr && m_scene != nullptr && !CleanCaptureFrame())
+        // The overlays into this viewport's own debug list (the lists clear each frame, so they are
+        // drawn again every frame); none on the frame a project picture is captured.
+        if (foundation::render::debug::DebugDraw* dd = m_viewport->Overlay(); dd != nullptr && m_scene != nullptr && !m_viewport->CleanCaptureFrame())
         {
-            // Draw the editor overlay (grid + markers + gizmos) into THIS viewport's own keyed
-            // debug list, not the per-scene one - so it renders only in the main viewport, never in
-            // the camera-preview inset (a second view of the same scene). RenderScene below passes
-            // the matching viewportKey; the preview passes its own (empty) key. Task #118.
-            render::debug::DebugDraw& dd = m_render->DebugView(m_viewport.Get());
-            if (m_showGrid)
-            {
-                DrawSceneGrid(dd);
-                dd.DrawLine(Float3{0, 0, 0}, Float3{1, 0, 0}, Color{0.9f, 0.2f, 0.2f, 1.0f});
-                dd.DrawLine(Float3{0, 0, 0}, Float3{0, 1, 0}, Color{0.2f, 0.9f, 0.2f, 1.0f});
-                dd.DrawLine(Float3{0, 0, 0}, Float3{0, 0, 1}, Color{0.2f, 0.4f, 0.95f, 1.0f});
-            }
-            DrawEntityMarkers(dd);
-            DrawGizmos(dd);
-            if (m_propAnimPanel)
-            {
-                m_propAnimPanel->DrawOverlay(dd); // the live-preview entity marker
-            }
-            // The FPS readout (Overlays > FPS): top-right, clear of the tool status text in
-            // the top-left. Sampled over half-second windows of this page's update dt.
-            if (m_showFps)
-            {
-                m_fpsWindowSeconds += static_cast<f64>(dt);
-                m_fpsWindowFrames += 1;
-                if (m_fpsWindowSeconds >= 0.5 || m_fpsText.IsEmpty())
-                {
-                    m_fpsText = FrameRateOverlayText(m_fpsWindowSeconds, m_fpsWindowFrames);
-                    m_fpsWindowSeconds = 0.0;
-                    m_fpsWindowFrames = 0;
-                }
-                dd.DrawScreenTextRight(12.0f, 12.0f, m_fpsText.AsView(),
-                                       Color{0.85f, 0.85f, 0.85f, 1.0f});
-            }
-            else
-            {
-                m_fpsWindowSeconds = 0.0;
-                m_fpsWindowFrames = 0;
-                m_fpsText.Clear();
-            }
-            m_zoomReadout.Advance(dt);
-            if (const f32 opacity = m_zoomReadout.Opacity(); opacity > 0.0f)
-            {
-                DrawZoomReadout(dd, opacity);
-            }
-            DrawViewGizmo(dd);
+            SceneOverlayFrame frame;
+            frame.scene = m_scene;
+            frame.selection = m_editContext ? &m_editContext->EntitySelection() : nullptr;
+            frame.camera = &m_viewport->Camera();
+            frame.width = m_viewport->View().RenderWidth();
+            frame.height = m_viewport->View().RenderHeight();
+            frame.tools = &m_viewportTools;
+            frame.componentGizmos = &m_componentGizmos;
+            if (m_animation && m_animationShown && m_animation->Preview().IsPosing())
+                frame.previewed = m_animation->Preview().PosedEntity();
+            m_overlays.Draw(*dd, frame);
         }
-        UpdateCameraPreview(); // task #118: selection/pin -> preview visibility + target
-        SyncToolbar();
+        if (m_tools)
+            m_tools->Sync();
+        if (m_hud)
+            m_hud->Update(dt, m_viewport->View().RenderHeight());
+        if (m_cameraPreview)
+            m_cameraPreview->Update();
+        if (m_hierarchy)
+            m_hierarchy->Refresh(); // the scene changed: built again
+        if (m_inspector)
+            m_inspector->Refresh(); // the selection or its components changed: built again; else its values
+        // A move snapping by the grid's cell takes the cell where the camera is now.
+        if (GizmoController* gizmos = Gizmos(); gizmos != nullptr && gizmos->MoveSnapsToGrid())
+            gizmos->Gizmo().translateSnap = m_overlays.CurrentGridSpacing(m_viewport->Camera()).spacing;
+        if (m_bar)
+            m_bar->Sync();
     }
 
-    void SceneEditorPage::OnRenderWindow(runtime::IApplicationHost&,
-                                         foundation::graphics::FrameContext& frame)
+    void SceneEditorPage::UpdateTools(bool viewportActive, f32 deltaSeconds)
     {
-        if (!m_viewport->IsReady() || !frame.valid)
+        const EditorCamera& camera = m_viewport->Camera();
+        ViewportToolInput in;
+        in.deltaSeconds = deltaSeconds;
+        // The draw eye: under orthographic what lies behind the eye's own plane is in view too, and
+        // the gizmo's size and the marquee take a depth from here (the eye in perspective).
+        in.cameraPosition = camera.DrawEye();
+        in.cameraForward = camera.Forward();
+        in.cameraUp = camera.Up();
+        in.fovY = camera.fovY;
+        in.orthoHeight = camera.orthographic ? camera.OrthoHeight() : 0.0f;
+        // Simulate: edits are refused (the select tool's read-only gizmo); selecting still works.
+        in.editingLocked = m_simulation.IsRunning();
+        GizmoRay ray;
+        in.pointerValid = viewportActive && m_viewport->MouseRay(ray);
+        in.ray.origin = ray.origin;
+        in.ray.direction = ray.direction;
+        in.pointerOver = m_viewport->IsHovered();
+        if (!in.pointerValid)
         {
+            (void)m_viewportTools.Update(in);
             return;
         }
-        if (m_render == nullptr || !m_render->IsReady() || m_scene == nullptr)
+        foundation::shell::IMouse* mouse = m_viewport->Mouse();
+        foundation::shell::IKeyboard* keyboard = m_viewport->Keyboard();
+        // The pointer's pixel and the view's size: the GPU pick's input, in the render target's space.
+        in.pointerX = static_cast<i32>(mouse->X());
+        in.pointerY = static_cast<i32>(mouse->Y());
+        in.viewportWidth = m_viewport->View().RenderWidth();
+        in.viewportHeight = m_viewport->View().RenderHeight();
+        const bool cameraOwnsMouse = m_viewport->CameraOwnsInput();
+        if (!cameraOwnsMouse)
         {
-            return;
+            in.leftPressed = mouse->IsButtonPressed(foundation::shell::MouseButton::Left);
+            in.leftDown = mouse->IsButtonDown(foundation::shell::MouseButton::Left);
         }
-        const u32 w = m_viewport->RenderWidth();
-        const u32 h = m_viewport->RenderHeight();
-        if (w == 0 || h == 0)
+        // A release always reaches the tool, so a gesture can finish when a modifier goes down mid-drag.
+        in.leftReleased = mouse->IsButtonReleased(foundation::shell::MouseButton::Left) || !mouse->IsButtonDown(foundation::shell::MouseButton::Left);
+        if (keyboard != nullptr)
         {
-            return;
+            in.ctrl = keyboard->IsKeyDown(foundation::shell::KeyCode::LeftCtrl) || keyboard->IsKeyDown(foundation::shell::KeyCode::RightCtrl);
         }
-
-        // Skip hidden viewports (inactive dock tabs set Visibility=Gone up the ancestor
-        // chain) - no GPU work for content nobody can see (Sedulous does the same).
-        if (!m_viewport->IsEffectivelyVisible())
-        {
-            return;
-        }
-
-        if (!m_renderedOnce)
-        {
-            m_renderedOnce = true;
-            LOG_DEBUG(u8"Editor", u8"scene page '{}' first frame ({}x{})", m_title, w, h);
-        }
-
-        // RenderTexture canvases stay LIVE in editing viewports too (WYSIWYG - an
-        // in-world screen must not show stale/black content while its scene is being
-        // edited; Simulate renders through this same path). Same host seam as the
-        // player/Game tab; the subsystem draws at most once per UI frame, so several
-        // open pages (or a running Game tab) share one draw of every RT canvas.
-        if (m_gameUI != nullptr)
-        {
-            m_gameUI->RenderCanvasTextures(*frame.encoder, static_cast<i32>(frame.frameIndex));
-        }
-
-        render::ViewCamera camera;
-        camera.view = Float4x4::LookAtRH(m_camera.DrawEye(), m_camera.DrawEye() + m_camera.Forward(),
-                                         m_camera.Up());
-        camera.projection = m_camera.Projection(static_cast<f32>(w) / static_cast<f32>(h));
-        camera.position = m_camera.position;
-        camera.farZ = m_camera.DrawFar();
-        camera.pullBack = m_camera.DrawPullBack();
-
-        render::CameraOverride cameraOverride;
-        cameraOverride.camera = camera;
-        // The viewport's colour is a UI colour (sRGB); the render view takes linear.
-        const rhi::ClearColor clear = m_viewport->LinearClearColor();
-        cameraOverride.clearColor = Color{clear.r, clear.g, clear.b, clear.a};
-
-        // The graph imports the color target and owns its transitions: from the viewport's
-        // tracked state (Undefined right after create/resize) to ShaderRead for the UI's
-        // sampling - the Sandbox offscreen pattern.
-        render::TargetState targetState;
-        targetState.texture = m_viewport->ColorTexture();
-        targetState.currentState = m_viewport->ColorState();
-        targetState.finalState = rhi::ResourceState::ShaderRead;
-
-        m_render->RenderScene(*m_scene, m_viewport->ColorTargetView(), m_viewport->ColorFormat(), w,
-                              h, render::ViewportRect{0, 0, w, h}, &cameraOverride, targetState,
-                              &m_postOverride, /*viewportKey*/ m_viewport.Get(),
-                              CleanCaptureFrame() ? nullptr : &m_debugView);
-        m_viewport->SetColorState(rhi::ResourceState::ShaderRead);
-        m_renderedThisFrame = true; // OnAfterSceneRender captures this frame's image
-        m_captureWidth = w;
-        m_captureHeight = h;
-
-        RenderCameraPreview(); // task #118: a second RenderScene through the previewed camera
+        in.shift = m_viewport->ShiftHeld(); // with the pointer, focused or not (a brush's Shift + wheel)
+        in.wheelDelta = mouse->ScrollY();
+        // The tools' keys (the select tool's W/E/R/X) belong to the camera while it owns the input.
+        in.keyboard = cameraOwnsMouse ? nullptr : keyboard;
+        (void)m_viewportTools.Update(in);
     }
 
-    void SceneEditorPage::OnAfterSceneRender(runtime::IApplicationHost& host,
-                                             foundation::graphics::FrameContext& frame)
+    void SceneEditorPage::OnRenderWindow(runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        // The requested capture, recorded AFTER the scene renderer composed this frame:
-        // RenderScene only adds the view, and EndRendering (which runs before this hook)
-        // writes the image. A copy recorded in OnRenderWindow read the previous frame's image,
-        // or an empty target on the first frame a tab is shown. The target sits in ShaderRead,
-        // where the graph left it for the UI; OnUpdate completes the capture next frame.
-        const bool rendered = m_renderedThisFrame;
-        m_renderedThisFrame = false;
-        if (!rendered || !m_capture.Armed() || host.Graphics() == nullptr)
-        {
+        if (m_scene == nullptr)
             return;
-        }
-        m_capture.Record(host.Graphics()->Raw(), frame.encoder, m_viewport->ColorTexture(),
-                         m_viewport->ColorFormat(), m_captureWidth, m_captureHeight,
-                         rhi::ResourceState::ShaderRead);
-        m_cleanCapture = false;
+        m_viewport->Render(frame, *m_scene, &m_postOverride, m_viewport->CleanCaptureFrame() ? nullptr : &m_debugView);
+        if (m_cameraPreview)
+            m_cameraPreview->Render(frame);
     }
 
-    void SceneEditorPage::CreatePrefabFromEntity(const Guid& entityId)
+    void SceneEditorPage::OnAfterSceneRender(runtime::IApplicationHost& host, foundation::graphics::FrameContext& frame)
     {
-        if (m_scene == nullptr || m_context->Project() == nullptr)
-        {
-            return;
-        }
-        const scene::EntityHandle live = m_editContext->Resolve(entityId);
-        if (!live.IsAssigned())
-        {
-            return;
-        }
-
-        MemoryStream payload;
-        if (!scene::CapturePrefab(*m_scene, live, payload).IsOk())
-        {
-            m_context->Notify(editor::NoticeKind::Error, u8"Prefab capture failed.");
-            return;
-        }
-
-        foundation::content::Group* root = m_context->Project()->SourceDb().RootGroup();
-        foundation::content::Group* prefabs = root->GetGroup(u8"Prefabs");
-        if (prefabs == nullptr)
-        {
-            prefabs = root->CreateGroup(u8"Prefabs");
-        }
-        String base(m_scene->GetEntityName(live));
-        if (base.IsEmpty())
-        {
-            base = String(u8"Prefab");
-        }
-        const String name = prefabs->UniqueInstanceName(base.AsView());
-        foundation::content::Instance* asset =
-            prefabs->CreateInstance(name.AsView(), scene::PrefabDocument::StaticType());
-        if (asset == nullptr)
-        {
-            return;
-        }
-        scene::PrefabDocument doc;
-        doc.name = name;
-        if (!asset->WriteObject(doc).IsOk() ||
-            !asset->WriteData(u8"scene", payload.Bytes(),
-                              foundation::content::StreamEncoding::Text)
-                 .IsOk())
-        {
-            m_context->Notify(editor::NoticeKind::Error, u8"Prefab asset write failed.");
-            return;
-        }
-
-        Array<byte> bytes;
-        const Span<const byte> view = payload.Bytes();
-        bytes.Reserve(view.Size());
-        for (byte b : view)
-        {
-            bytes.PushBack(b);
-        }
-        const Guid instanceRoot =
-            m_editContext->ReplaceWithPrefabInstance(entityId, asset->Id(), Move(bytes));
-        if (!instanceRoot.IsNil())
-        {
-            String message(u8"Created prefab '");
-            message += name;
-            message += u8"'.";
-            m_context->Notify(editor::NoticeKind::Success, message.AsView());
-        }
+        m_viewport->AfterRender(host, frame);
     }
 
-    void SceneEditorPage::ApplyInstanceToPrefab(const Guid& rootId)
+    bool SceneEditorPage::PickEntity(EntityPickRequest request)
     {
-        if (m_scene == nullptr || m_context->Project() == nullptr || m_content->Context == nullptr)
+        gui::SceneRoot* root = m_content ? m_content->GetSceneRoot() : nullptr;
+        if (!m_editContext || root == nullptr || !m_services.loadMarkup)
+            return false;
+        if (!m_entityPicker)
         {
-            return;
+            EntityPickerWindow::Services services;
+            services.icons = m_services.icons;
+            services.sceneIcon = m_isPrefab ? StringView(u8"Editor/Icons/Types/PrefabDocument.svg") : StringView(u8"Editor/Icons/Types/SceneDocument.svg");
+            SceneEditorPage* self = this;
+            services.sceneName = [self]() { return self->m_title.AsView(); };
+            m_entityPicker = MakeUnique<EntityPickerWindow>(Allocator(), Allocator(), *m_editContext, Move(services),
+                                                            m_services.loadMarkup(StringView(EntityPickerWindow::kPath)));
         }
-        scene::Scene::PrefabInstanceState* state = m_scene->FindPrefabInstanceByRoot(rootId);
-        if (state == nullptr)
-        {
-            return;
-        }
-        foundation::content::Instance* asset =
-            m_context->Project()->SourceDb().GetInstance(state->prefabId);
-        if (asset == nullptr)
-        {
-            m_context->Notify(editor::NoticeKind::Warning,
-                              u8"The instance's prefab asset no longer exists.");
-            return;
-        }
-        scene::EntityHandle root = m_scene->FindEntity(rootId);
-        String message(u8"Apply '");
-        message += m_scene->GetEntityName(root);
-        message += u8"' to prefab '";
-        message += asset->Name();
-        message += u8"'? The prefab asset is rewritten and every instance in open scenes "
-                   u8"updates to match. This cannot be undone.";
-        SceneEditorPage* page = this;
-        RefPtr<foundation::ui::Dialog> dialog =
-            foundation::ui::Dialog::Confirm(Allocator(), u8"Apply to Prefab", message.AsView());
-        dialog->OnClosed.Add(
-            foundation::ui::Event<void(foundation::ui::Dialog*, foundation::ui::DialogResult)>::Handler{
-                [page, rootId](foundation::ui::Dialog*, foundation::ui::DialogResult result)
-                {
-                    if (result != foundation::ui::DialogResult::OK)
-                    {
-                        return;
-                    }
-                    // Deferred: rebuilding instances destroys + respawns entities (and
-                    // their hierarchy rows), never mid-event-dispatch.
-                    foundation::ui::UIContext* ctx = page->m_content->Context;
-                    if (ctx == nullptr)
-                    {
-                        return;
-                    }
-                    ctx->MutationQueueRef().QueueAction(Function<void()>{
-                        [page, rootId]() { page->ApplyInstanceToPrefabNow(rootId); }});
-                }});
-        dialog->Show(m_content->Context);
+        return m_entityPicker->Open(*root, Move(request));
     }
 
-    void SceneEditorPage::ApplyInstanceToPrefabNow(const Guid& rootId)
+    bool SceneEditorPage::IsOnScreen() const
     {
-        if (m_scene == nullptr || m_context->Project() == nullptr)
-        {
-            return;
-        }
-        scene::Scene::PrefabInstanceState* state = m_scene->FindPrefabInstanceByRoot(rootId);
-        if (state == nullptr)
-        {
-            return;
-        }
-        foundation::content::Instance* asset =
-            m_context->Project()->SourceDb().GetInstance(state->prefabId);
-        if (asset == nullptr)
-        {
-            m_context->Notify(editor::NoticeKind::Warning,
-                              u8"The instance's prefab asset no longer exists.");
-            return;
-        }
-        MemoryStream payload;
-        if (!scene::CaptureInstanceAsTemplate(*m_scene, *state, payload,
-                                              m_editContext->PrefabResolver())
-                 .IsOk() ||
-            !asset->WriteData(u8"scene", payload.Bytes(),
-                              foundation::content::StreamEncoding::Text)
-                 .IsOk())
-        {
-            m_context->Notify(editor::NoticeKind::Error, u8"Apply to Prefab failed.");
-            return;
-        }
-        Array<byte> bytes;
-        for (byte b : payload.Bytes())
-        {
-            bytes.PushBack(b);
-        }
-        const Guid prefabId = state->prefabId;
-        EditorContext* context = m_context;
-        if (m_scenes != nullptr)
-        {
-            m_scenes->ForEachScene(
-                [&](scene::Scene& scene)
-                {
-                    const u32 rebuilt = scene::RebuildPrefabInstances(
-                        scene, prefabId, Span<const byte>{bytes.Data(), bytes.Size()},
-                        m_editContext->PrefabResolver());
-                    if (rebuilt > 0 && context->Resources() != nullptr)
-                    {
-                        foundation::resource::AsyncBindScope asyncScope(*context->Resources());
-                        scene::ResolveSceneResources(scene, *context->Resources());
-                    }
-                });
-        }
-        // An open editor page on the prefab itself shows the TEMPLATE (plain entities,
-        // not an instance) - the rebuild above can't reach it; tell it to refresh.
-        (void)m_context->NotifyAssetExternallyModified(prefabId);
-        String message(u8"Applied to prefab '");
-        message += asset->Name();
-        message += u8"' (not undoable - the asset changed).";
-        m_context->Notify(editor::NoticeKind::Success, message.AsView());
+        return m_content && m_content->GetSceneRoot() != nullptr && m_content->IsTreeVisible();
     }
 
-    void SceneEditorPage::RevertInstance(const Guid& rootId)
+    void SceneEditorPage::OnClose()
     {
-        if (m_scene == nullptr || m_context->Project() == nullptr || m_content->Context == nullptr)
+        if (m_openClipInterceptor != 0)
         {
-            return;
+            m_context->RemoveOpenAssetInterceptor(m_openClipInterceptor);
+            m_openClipInterceptor = 0;
         }
-        if (m_scene->FindPrefabInstanceByRoot(rootId) == nullptr)
-        {
-            return;
-        }
-        scene::EntityHandle root = m_scene->FindEntity(rootId);
-        String message(u8"Revert '");
-        message += m_scene->GetEntityName(root);
-        message += u8"' to its prefab? All overrides on this instance are discarded, and "
-                   u8"any non-prefab entities parented under it are destroyed. This cannot "
-                   u8"be undone.";
-        SceneEditorPage* page = this;
-        RefPtr<foundation::ui::Dialog> dialog =
-            foundation::ui::Dialog::Confirm(Allocator(), u8"Revert Instance", message.AsView());
-        dialog->OnClosed.Add(
-            foundation::ui::Event<void(foundation::ui::Dialog*, foundation::ui::DialogResult)>::Handler{
-                [page, rootId](foundation::ui::Dialog*, foundation::ui::DialogResult result)
-                {
-                    if (result != foundation::ui::DialogResult::OK)
-                    {
-                        return;
-                    }
-                    // Deferred: the revert destroys entities (and their hierarchy rows),
-                    // never mid-event-dispatch.
-                    foundation::ui::UIContext* ctx = page->m_content->Context;
-                    if (ctx == nullptr)
-                    {
-                        return;
-                    }
-                    ctx->MutationQueueRef().QueueAction(
-                        Function<void()>{[page, rootId]() { page->RevertInstanceNow(rootId); }});
-                }});
-        dialog->Show(m_content->Context);
-    }
-
-    void SceneEditorPage::RevertInstanceNow(const Guid& rootId)
-    {
-        if (m_scene == nullptr || m_context->Project() == nullptr)
-        {
-            return;
-        }
-        scene::Scene::PrefabInstanceState* state = m_scene->FindPrefabInstanceByRoot(rootId);
-        if (state == nullptr)
-        {
-            return;
-        }
-        foundation::content::Instance* asset =
-            m_context->Project()->SourceDb().GetInstance(state->prefabId);
-        UniquePtr<IStream> payload =
-            (asset != nullptr) ? asset->ReadData(u8"scene") : UniquePtr<IStream>{};
-        if (payload.Get() == nullptr)
-        {
-            m_context->Notify(editor::NoticeKind::Warning,
-                              u8"The instance's prefab asset no longer exists.");
-            return;
-        }
-        Array<byte> bytes;
-        bytes.Resize(static_cast<usize>(payload->Size()));
-        (void)payload->Read(bytes.Data(), bytes.Size());
-        if (scene::RevertPrefabInstance(*m_scene, rootId,
-                                        Span<const byte>{bytes.Data(), bytes.Size()},
-                                        m_editContext->PrefabResolver()))
-        {
-            if (m_context->Resources() != nullptr)
-            {
-                foundation::resource::AsyncBindScope asyncScope(*m_context->Resources());
-                scene::ResolveSceneResources(*m_scene, *m_context->Resources());
-            }
-            m_context->Notify(editor::NoticeKind::Info,
-                              u8"Instance reverted to its prefab (not undoable).");
-        }
-    }
-
-    void SceneEditorPage::PickAndSpawnPrefab(const Guid& parent)
-    {
-        if (m_context->Project() == nullptr || m_content->Context == nullptr)
-        {
-            return;
-        }
-        Array<String> typeNames;
-        typeNames.PushBack(String(u8"PrefabDocument"));
-        auto dialog = MakeRef<editor::app::AssetPickerDialog>(
-            Allocator(), *m_context, Move(typeNames));
-        SceneEditorPage* page = this;
-        dialog->OnPicked = [page, parent](const Guid& picked)
-        {
-            if (picked.IsNil() || page->m_context->Project() == nullptr)
-            {
-                return;
-            }
-            foundation::content::Instance* prefab =
-                page->m_context->Project()->SourceDb().GetInstance(picked);
-            UniquePtr<IStream> payload =
-                (prefab != nullptr) ? prefab->ReadData(u8"scene") : UniquePtr<IStream>{};
-            if (payload.Get() == nullptr)
-            {
-                page->m_context->Notify(editor::NoticeKind::Warning,
-                                        u8"Prefab has no content yet (save it once first).");
-                return;
-            }
-            Array<byte> bytes;
-            bytes.Resize(static_cast<usize>(payload->Size()));
-            (void)payload->Read(bytes.Data(), bytes.Size());
-            if (picked == page->InstanceId())
-            {
-                page->m_context->Notify(editor::NoticeKind::Warning,
-                                        u8"A prefab cannot contain an instance of itself.");
-                return;
-            }
-            (void)page->m_editContext->SpawnPrefabInstance(picked, Move(bytes), parent);
-        };
-        dialog->Show(m_content->Context);
-    }
-
-    void SceneEditorPage::OnAssetExternallyModified()
-    {
-        if (m_scene == nullptr || m_context->Project() == nullptr)
-        {
-            return;
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return;
-        }
-        if (IsDirty())
-        {
-            String message(u8"'");
-            message += m_title;
-            message += u8"' changed on disk but has unsaved edits here - not refreshed.";
-            m_context->Notify(editor::NoticeKind::Warning, message.AsView());
-            return;
-        }
-
-        // Same-guid entities come back from the stream; undo history predates the reload
-        // and would replay onto the old content, so it goes.
-        while (m_scene->GetFirstRoot().IsAssigned())
-        {
-            m_scene->DestroyEntity(m_scene->GetFirstRoot());
-        }
-        m_scene->ClearPrefabInstances();
-        m_editContext->EntitySelection().Clear();
-        Commands().Clear();
-
-        if (scene::LoadScene(*instance, *m_scene).IsOk())
-        {
-            if (m_context->Resources() != nullptr)
-            {
-                scene::ResolveSceneResources(*m_scene, *m_context->Resources());
-            }
-            if (m_scene->PendingPrefabInstanceCount() > 0)
-            {
-                EditorContext* context = m_context;
-                scene::ResolveScenePrefabs(
-                    *m_scene,
-                    Function<UniquePtr<IStream>(const Guid&)>{
-                        [context](const Guid& prefabId) -> UniquePtr<IStream>
-                        {
-                            foundation::content::Instance* prefab =
-                                context->Project()->SourceDb().GetInstance(prefabId);
-                            return (prefab != nullptr) ? prefab->ReadData(u8"scene")
-                                                       : UniquePtr<IStream>{};
-                        }});
-                if (m_context->Resources() != nullptr)
-                {
-                    scene::ResolveSceneResources(*m_scene, *m_context->Resources());
-                }
-            }
-        }
-        ClearDirty(); // Commands().Clear() notifies OnChanged, which marks dirty
-    }
-
-    void SceneEditorPage::OnSavedAs(foundation::content::Instance& instance)
-    {
-        editor::EditorPage::OnSavedAs(instance);
-        m_title = String(instance.Name());
-        // SavePrefab stamps the document name from the scene, so the fork gets its own.
+        m_animation.Reset(); // what its preview posed goes back while the scene is here
+        m_entityPicker.Reset(); // it lets the scene's tree go before the scene does
+        m_cameraPreview.Reset(); // its picture's targets go with the viewports, before the scene
+        m_inspector.Reset(); // the grid lets its sources go before the scene does
+        m_hierarchy.Reset(); // it lets the selection and the tree go before the scene does
+        // Where the scene was left: the camera, the selection, the panes, for the next open.
+        if (m_scene != nullptr)
+            SaveViewState();
+        if (m_services.host != nullptr)
+            m_viewport->Close(*m_services.host);
         if (m_scene != nullptr)
         {
-            m_scene->SetName(instance.Name());
+            m_sceneManager.DestroyScene(m_scene); // aware subsystems are told OnSceneDestroyed
+            m_scene = nullptr;
         }
+        if (m_scenes != nullptr)
+            m_scenes->UnregisterManager(&m_sceneManager);
     }
 
     Status SceneEditorPage::Save()
     {
         if (m_scene == nullptr || m_context->Project() == nullptr)
-        {
             return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
+        foundation::content::Instance* instance = m_context->Project()->SourceDb().GetInstance(InstanceId());
         if (instance == nullptr)
-        {
             return Status{ErrorCode::NotFound};
+        // A scene that did not load is empty here: saving would write that over its source.
+        if (m_loadFailed)
+        {
+            m_context->Notify(NoticeKind::Warning, Format(u8"'{}' did not load, so it is not saved over: the Console says why.", m_title).AsView());
+            return Status{ErrorCode::NotSupported};
         }
-
         const bool isPrefab = instance->TypeName() == StringView(u8"PrefabDocument");
         if (isPrefab)
         {
-            usize rootCount = 0;
-            for (scene::EntityHandle r = m_scene->GetFirstRoot(); r.IsAssigned();
-                 r = m_scene->GetNextSibling(r))
+            if (const String refused = PrefabFlows::SaveRefusal(*m_scene, InstanceId()); !refused.IsEmpty())
             {
-                ++rootCount;
-            }
-            if (rootCount > 1)
-            {
-                m_context->Notify(editor::NoticeKind::Warning,
-                                  u8"A prefab needs exactly one root entity - parent "
-                                  u8"everything under a single root, then save.");
-                return Status{ErrorCode::InvalidArgument};
-            }
-            bool selfReference = false;
-            m_scene->ForEachPrefabInstance(
-                [&](scene::Scene::PrefabInstanceState& state)
-                {
-                    if (state.prefabId == InstanceId())
-                    {
-                        selfReference = true;
-                    }
-                });
-            if (selfReference)
-            {
-                m_context->Notify(editor::NoticeKind::Warning,
-                                  u8"A prefab cannot contain an instance of itself - "
-                                  u8"remove it, then save.");
+                m_context->Notify(NoticeKind::Warning, refused.AsView());
                 return Status{ErrorCode::InvalidArgument};
             }
         }
-        const Status saved = isPrefab ? scene::SavePrefab(*m_scene, *instance)
-                                      : scene::SaveScene(*m_scene, *instance);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            LOG_INFO(u8"Editor", u8"saved {} '{}'",
-                              isPrefab ? StringView(u8"prefab") : StringView(u8"scene"), m_title);
-            // The launcher's picture of the project follows its default scene as it is saved.
-            if (!isPrefab && IsProjectDefaultScene())
-            {
-                (void)RequestProjectThumbnail();
-            }
-            // Template changed: rebuild this prefab's instances in every OTHER open
-            // scene, preserving their deltas (capture -> respawn -> reapply).
-            if (isPrefab && m_scenes != nullptr)
-            {
-                UniquePtr<IStream> payload = instance->ReadData(u8"scene");
-                if (payload.Get() != nullptr)
-                {
-                    Array<byte> bytes;
-                    bytes.Resize(static_cast<usize>(payload->Size()));
-                    (void)payload->Read(bytes.Data(), bytes.Size());
-                    const Guid prefabId = InstanceId();
-                    scene::Scene* self = m_scene;
-                    EditorContext* context = m_context;
-                    m_scenes->ForEachScene(
-                        [&](scene::Scene& other)
-                        {
-                            if (&other == self)
-                            {
-                                return;
-                            }
-                            const u32 rebuilt = scene::RebuildPrefabInstances(
-                                other, prefabId, Span<const byte>{bytes.Data(), bytes.Size()},
-                                m_editContext->PrefabResolver());
-                            if (rebuilt > 0 && context->Resources() != nullptr)
-                            {
-                                scene::ResolveSceneResources(other, *context->Resources());
-                            }
-                        });
-                }
-            }
-        }
+        // What the animation panel posed is not the scene's: saved as it is, posed again after.
+        if (m_animation)
+            m_animation->StopPreview();
+        const Status saved = isPrefab ? scene::SavePrefab(*m_scene, *instance) : scene::SaveScene(*m_scene, *instance);
+        if (m_animation)
+            m_animation->Repose();
+        if (!saved.IsOk())
+            return saved;
+        ClearDirty();
+        LOG_INFO(u8"Editor", u8"saved {} '{}'", isPrefab ? StringView(u8"prefab") : StringView(u8"scene"), m_title);
+        // The launcher's picture of the project follows its default scene as it is saved.
+        if (!isPrefab && IsProjectDefaultScene())
+            (void)RequestProjectThumbnail();
+        // The template changed: its instances in every other open scene rebuild, their overrides kept.
+        if (isPrefab && m_prefabs)
+            m_prefabs->RebuildOtherInstances(*instance);
         return saved;
+    }
+
+    void SceneEditorPage::OnSavedAs(foundation::content::Instance& instance)
+    {
+        EditorPage::OnSavedAs(instance);
+        m_title = String(instance.Name());
+        // SavePrefab stamps the document's name from the scene, so the fork gets its own.
+        if (m_scene != nullptr)
+            m_scene->SetName(instance.Name());
+    }
+
+    void SceneEditorPage::OnAssetExternallyModified()
+    {
+        if (m_scene == nullptr || m_context->Project() == nullptr)
+            return;
+        foundation::content::Instance* instance = m_context->Project()->SourceDb().GetInstance(InstanceId());
+        if (instance == nullptr)
+            return;
+        if (IsDirty())
+        {
+            m_context->Notify(NoticeKind::Warning, Format(u8"'{}' changed on disk but has unsaved edits here - not refreshed.", m_title).AsView());
+            return;
+        }
+        // The same entities come back from the stream; the history predates the reload and would
+        // replay onto the old content, so it goes.
+        while (m_scene->GetFirstRoot().IsAssigned())
+            m_scene->DestroyEntity(m_scene->GetFirstRoot());
+        m_scene->ClearPrefabInstances();
+        m_editContext->EntitySelection().Clear();
+        Commands().Clear();
+        m_loadFailed = !LoadEditorScene(*m_context, *instance, *m_scene).IsOk() && instance->ReadData(u8"scene").Get() != nullptr;
+        if (gui::Node* state = Find<gui::Node>(u8"scene-state"))
+            state->SetDisplayed(m_loadFailed);
+        ClearDirty(); // Commands().Clear() told OnChanged, which marks it dirty
+    }
+
+    void SceneEditorPage::StartSimulation()
+    {
+        // The scene as it is, not as the animation panel posed it, is what the run starts from and
+        // what its end puts back.
+        if (m_animation)
+            m_animation->StopPreview();
+        if (m_scene == nullptr || !m_simulation.Start(*m_scene, Commands()))
+            return;
+        // Modal edit tools (terrain sculpt) share runtime state with the simulation (the collider):
+        // back to the default select tool for the run.
+        m_viewportTools.ActivateDefault();
+    }
+    void SceneEditorPage::PauseSimulation(bool paused)
+    {
+        if (m_scene != nullptr)
+            m_simulation.Pause(*m_scene, paused);
+    }
+    void SceneEditorPage::StopSimulation()
+    {
+        if (m_scene != nullptr)
+            m_simulation.Stop(*m_scene, Commands(), m_context->Resources());
+    }
+
+    void SceneEditorPage::SetMarkersShown(bool shown)
+    {
+        m_overlays.settings.showMarkers = shown;
+        SaveViewState();
+    }
+
+
+    bool SceneEditorPage::FrameEntities(Span<const Guid> entities, bool ease)
+    {
+        return m_scene != nullptr && m_viewport->Frame(*m_scene, entities, ease, Allocator());
+    }
+
+    Status SceneEditorPage::RequestProjectThumbnail()
+    {
+        if (m_context->Project() == nullptr)
+            return Status{ErrorCode::NotSupported};
+        const String path = ProjectThumbnailPath(m_context->Project()->Directory());
+        (void)CreateDirectories(PathParent(path.AsView()));
+        return m_viewport->RequestCapture(path.AsView(), true);
     }
 
     bool SceneEditorPage::IsProjectDefaultScene() const
@@ -788,1521 +758,100 @@ namespace editor
         return project != nullptr && !InstanceId().IsNil() && project->Settings().defaultSceneId == InstanceId();
     }
 
-    Status SceneEditorPage::RequestProjectThumbnail()
+    void SceneEditorPage::SaveViewState()
     {
-        if (m_context->Project() == nullptr)
+        // The whole pref (overlays, camera, selection, panes), so saving one never brings back
+        // another's default.
+        ScenePaneWeights panes;
+        ScenePaneWeights* shown = nullptr;
+        if (auto* body = Find<gui::Splitter>(u8"scene-body"))
         {
-            return Status{ErrorCode::NotSupported};
-        }
-        const String path = ProjectThumbnailPath(m_context->Project()->Directory());
-        (void)CreateDirectories(PathParent(path.AsView()));
-        const Status requested = RequestViewportCapture(path.AsView());
-        m_cleanCapture = requested.IsOk();
-        return requested;
-    }
-
-    bool SceneEditorPage::CameraOwnsInput() const noexcept
-    {
-        // Alt orbit, right-button fly, or the Tab-captured fly mode (which owns WASD too).
-        if (m_viewport.Get() == nullptr)
-        {
-            return m_camera.mouseCaptured;
-        }
-        foundation::shell::IMouse* mouse = m_viewport->Mouse();
-        foundation::shell::IKeyboard* kb = m_viewport->Keyboard();
-        return (kb != nullptr && (kb->IsKeyDown(foundation::shell::KeyCode::LeftAlt) ||
-                                  kb->IsKeyDown(foundation::shell::KeyCode::RightAlt))) ||
-               (mouse != nullptr && mouse->IsButtonDown(foundation::shell::MouseButton::Right)) ||
-               m_camera.mouseCaptured;
-    }
-
-    void SceneEditorPage::OnClose()
-    {
-        // Where the scene was left: the camera and the selection, for the next open.
-        if (m_scene != nullptr && m_toolbar.Get() != nullptr)
-        {
-            SaveViewPrefs();
-        }
-        // A closing page must stop claiming clip opens (the interceptor holds a raw `this`).
-        if (m_openAssetInterceptorId != 0)
-        {
-            m_context->RemoveOpenAssetInterceptor(m_openAssetInterceptorId);
-            m_openAssetInterceptorId = 0;
-        }
-        m_camera.ReleaseCapture(m_viewport ? m_viewport->Mouse() : nullptr); // never close captured
-
-        if (m_render != nullptr)
-        {
-            m_render->CancelPicks(m_viewport.Get()); // the key dies with the viewport
-        }
-        // GPU targets + external-texture registration go while device + VGRenderer live.
-        if (m_host->Graphics() != nullptr && m_host->Graphics()->Raw() != nullptr)
-        {
-            m_capture.Release(m_host->Graphics()->Raw()); // the readback buffer
-        }
-        m_viewport->Shutdown();
-        if (m_scene != nullptr)
-        {
-            m_sceneManager.DestroyScene(m_scene); // aware subsystems get OnSceneDestroyed
-            m_scene = nullptr;
-        }
-        if (m_scenes != nullptr)
-        {
-            m_scenes->UnregisterManager(&m_sceneManager);
-        }
-    }
-
-    u32 SceneEditorPage::ViewportPicker::RequestPick(i32 x, i32 y, u32 width, u32 height)
-    {
-        SceneEditorPage& page = *m_page;
-        if (page.m_render == nullptr || !page.m_render->IsReady() || page.m_viewport.Get() == nullptr)
-        {
-            return 0;
-        }
-        return page.m_render->RequestPick(page.m_viewport.Get(), x, y, width, height);
-    }
-
-    bool SceneEditorPage::ViewportPicker::TryTakePick(u32 request,
-                                                      Array<foundation::scene::EntityHandle>& hits)
-    {
-        SceneEditorPage& page = *m_page;
-        if (page.m_render == nullptr)
-        {
-            return false;
-        }
-        render::PickResult result;
-        if (!page.m_render->TryTakePickResult(request, result))
-        {
-            return false;
-        }
-        hits.Clear();
-        for (const render::PickHit& hit : result.hits)
-        {
-            hits.PushBack(foundation::scene::EntityHandle{hit.entityIndex, hit.generation});
-        }
-        return true;
-    }
-
-    bool SceneEditorPage::MakeMouseRay(GizmoRay& out) const
-    {
-        foundation::shell::IMouse* mouse = m_viewport->Mouse();
-        const u32 w = m_viewport->RenderWidth();
-        const u32 h = m_viewport->RenderHeight();
-        if (mouse == nullptr || w == 0 || h == 0)
-        {
-            return false;
-        }
-        const f32 ndcX = 2.0f * (mouse->X() / static_cast<f32>(w)) - 1.0f;
-        const f32 ndcY = 1.0f - 2.0f * (mouse->Y() / static_cast<f32>(h));
-        m_camera.RayThrough(ndcX, ndcY, static_cast<f32>(w) / static_cast<f32>(h), out.origin,
-                            out.direction);
-        return true;
-    }
-
-    void SceneEditorPage::BuildToolFloat()
-    {
-        // The toolkit FloatingPanel owns drag / resize / collapse / close (and clamps itself to the
-        // viewport frame). Closing it deactivates the active tool, which unmounts the panel via the
-        // tool-panel host's clear callback - so close reads as "put the brush away".
-        m_toolFloat = MakeRef<ui::toolkit::FloatingPanel>(Allocator(), StringView(u8"Brush"));
-        m_toolFloat->Visibility = ui::Visibility::Gone;
-        SceneEditorPage* page = this;
-        m_toolFloat->OnClose.Add([page]() { page->m_viewportTools.ActivateDefault(); });
-    }
-
-    void SceneEditorPage::MountToolPanel(foundation::ui::View* view, ToolPanelPlacement placement)
-    {
-        // Route by the provider's placement hint. Dock is implemented (the "Brush" bottom-dock tab);
-        // Float / ViewportOverlay are experiment slots - until they have a real presentation they fall
-        // back to the dock, so a provider can opt into them without the panel silently vanishing.
-        switch (placement)
-        {
-        case ToolPanelPlacement::ViewportOverlay:
-        {
-            // A themed HUD floating over the viewport - eyes stay on the terrain while brushing.
-            foundation::ui::Panel* overlay = m_toolOverlay.Get();
-            if (overlay == nullptr)
+            const Array<f32> weights = body->GetWeights();
+            if (weights.Size() == 3u)
             {
-                return;
-            }
-            while (overlay->ChildCount() > 0)
-            {
-                overlay->RemoveView(overlay->GetChildAt(0), true);
-            }
-            if (view != nullptr)
-            {
-                overlay->AddView(view);
-                overlay->Visibility = foundation::ui::Visibility::Visible;
-            }
-            else
-            {
-                overlay->Visibility = foundation::ui::Visibility::Gone;
-            }
-            break;
-        }
-        case ToolPanelPlacement::Float:
-        {
-            // A FloatingPanel over the viewport: drag / resize / collapse / close (see FloatingPanel).
-            if (m_toolFloat.Get() == nullptr)
-            {
-                return;
-            }
-            m_toolFloat->SetContent(RefPtr<foundation::ui::View>(view));
-            if (view != nullptr)
-            {
-                // Fresh mount = fresh chrome: adopt the ACTIVE tool's name (sculpt vs splat panels
-                // are otherwise indistinguishable) and un-collapse - a panel collapsed for the last
-                // tool returning as a bare title bar reads as "this tool has no panel".
-                if (editor::IViewportTool* tool = m_viewportTools.ActiveTool())
-                {
-                    m_toolFloat->SetTitle(tool->DisplayName());
-                }
-                m_toolFloat->SetCollapsed(false);
-            }
-            m_toolFloat->Visibility =
-                (view != nullptr) ? foundation::ui::Visibility::Visible : foundation::ui::Visibility::Gone;
-            break;
-        }
-        case ToolPanelPlacement::Dock:
-        default:
-        {
-            // A docked panel is a tab of its own, named for the tool's domain (its category,
-            // "Terrain"), else the tool; it goes when the panel does.
-            if (m_bottomDock.Get() == nullptr)
-            {
-                return;
-            }
-            if (!m_dockedToolTab.IsEmpty())
-            {
-                m_bottomDock->RemoveTab(m_dockedToolTab.AsView());
-                m_dockedToolTab = String{};
-            }
-            if (view != nullptr)
-            {
-                IViewportTool* tool = m_viewportTools.ActiveTool();
-                const StringView label = tool == nullptr             ? StringView(u8"Tool")
-                                         : tool->Category().IsEmpty() ? tool->DisplayName()
-                                                                      : tool->Category();
-                m_dockedToolTab = Format(u8"tool:{}", label);
-                m_bottomDock->AddTab(m_dockedToolTab.AsView(), label, view);
-                m_bottomDock->ActivateTab(m_dockedToolTab.AsView());
-            }
-            break;
-        }
-        }
-    }
-
-    bool SceneEditorPage::UpdateViewportTools(bool viewportActive, f32 deltaSeconds)
-    {
-        if (m_selectTool == nullptr)
-        {
-            return false;
-        }
-        ViewportToolInput in;
-        in.deltaSeconds = deltaSeconds;
-        // The draw eye: under orthographic what lies behind the eye's own plane is in view too, and
-        // the gizmo's size and the marquee take a depth from here (the eye in perspective).
-        in.cameraPosition = m_camera.DrawEye();
-        in.cameraForward = m_camera.Forward();
-        in.cameraUp = m_camera.Up();
-        in.fovY = m_camera.fovY;
-        in.orthoHeight = m_camera.orthographic ? m_camera.OrthoHeight() : 0.0f;
-        // Simulate: edits are refused (the select tool maps this to its read-only gizmo path -
-        // pose sync, no drags; drag commands are refused by the locked stack anyway). Selection
-        // picking still works: selecting is not an edit.
-        in.editingLocked = m_isSimulating;
-        GizmoRay ray;
-        in.pointerValid = viewportActive && MakeMouseRay(ray);
-        in.ray.origin = ray.origin;
-        in.ray.direction = ray.direction;
-        in.pointerOver = m_viewport->IsHovered();
-        if (!in.pointerValid)
-        {
-            return m_viewportTools.Update(in);
-        }
-
-        foundation::shell::IMouse* mouse = m_viewport->Mouse();
-        foundation::shell::IKeyboard* kb = m_viewport->Keyboard();
-        // The pointer's view pixel + the view's size: the GPU pick's input (same space as the
-        // RenderScene viewport rect: the full render target).
-        in.pointerX = static_cast<i32>(mouse->X());
-        in.pointerY = static_cast<i32>(mouse->Y());
-        in.viewportWidth = m_viewport->RenderWidth();
-        in.viewportHeight = m_viewport->RenderHeight();
-
-        const bool cameraOwnsMouse = CameraOwnsInput();
-        if (!cameraOwnsMouse)
-        {
-            in.leftPressed = mouse->IsButtonPressed(foundation::shell::MouseButton::Left);
-            in.leftDown = mouse->IsButtonDown(foundation::shell::MouseButton::Left);
-        }
-        // Release always reaches the tool so an in-flight gesture can finish even if a
-        // modifier goes down mid-drag.
-        in.leftReleased = mouse->IsButtonReleased(foundation::shell::MouseButton::Left) ||
-                          !mouse->IsButtonDown(foundation::shell::MouseButton::Left);
-        if (kb != nullptr)
-        {
-            in.ctrl = kb->IsKeyDown(foundation::shell::KeyCode::LeftCtrl) ||
-                      kb->IsKeyDown(foundation::shell::KeyCode::RightCtrl);
-            in.shift = kb->IsKeyDown(foundation::shell::KeyCode::LeftShift) ||
-                       kb->IsKeyDown(foundation::shell::KeyCode::RightShift);
-        }
-        in.wheelDelta = mouse->ScrollY();
-        // The orientation gizmo takes a click on one of its knobs before any tool sees it, and the
-        // rest of that press, so the select tool neither picks nor box-selects under it. (A press
-        // reaches here only when the camera does not own the mouse: Alt+drag still orbits.)
-        if (in.leftPressed && m_viewport->IsHovered())
-        {
-            const ViewGizmoLayout gizmo = ViewGizmo::LayoutFor(
-                m_camera.Right(), m_camera.Up(), m_camera.Forward(), static_cast<f32>(in.viewportWidth));
-            const f32 px = static_cast<f32>(in.pointerX);
-            const f32 py = static_cast<f32>(in.pointerY);
-            const i32 hit = ViewGizmo::Hit(gizmo, px, py);
-            if (hit >= 0)
-            {
-                f32 yaw = m_camera.yaw;
-                f32 pitch = m_camera.pitch;
-                ViewGizmo::SnapAngles(gizmo.poles[hit].axis, m_camera.yaw, yaw, pitch);
-                m_camera.autoOrthographic = AutoOrthographicViews(m_context->UserEditorSettings());
-                m_camera.SnapToAxis(yaw, pitch);
-                m_viewGizmoPressed = true;
-            }
-            else if (ViewGizmo::HitCentre(gizmo, px, py))
-            {
-                m_camera.SetOrthographic(!m_camera.orthographic);
-                m_viewGizmoPressed = true;
+                panes = ScenePaneWeights{weights[0], weights[1], weights[2]};
+                shown = &panes;
             }
         }
-        if (m_viewGizmoPressed)
-        {
-            const bool released = in.leftReleased;
-            in.leftPressed = false;
-            in.leftDown = false;
-            in.leftReleased = false;
-            m_viewGizmoPressed = !released;
-        }
-        // Tool hotkeys (the select tool's W/E/R/X) belong to the camera while it owns input.
-        in.keyboard = cameraOwnsMouse ? nullptr : kb;
-        return m_viewportTools.Update(in);
-    }
-
-    void SceneEditorPage::DrawViewGizmo(render::debug::DebugDraw& dd) const
-    {
-        if (!m_viewport || !m_viewport->IsReady() || m_viewport->RenderWidth() == 0)
-        {
-            return;
-        }
-        const ViewGizmoLayout gizmo =
-            ViewGizmo::LayoutFor(m_camera.Right(), m_camera.Up(), m_camera.Forward(),
-                                 static_cast<f32>(m_viewport->RenderWidth()));
-        i32 hovered = -1;
-        if (m_viewport->IsHovered() && m_viewport->Mouse() != nullptr)
-        {
-            hovered = ViewGizmo::Hit(gizmo, m_viewport->Mouse()->X(), m_viewport->Mouse()->Y());
-        }
-        // Back to front, so a knob pointing at the viewer covers the arms and knobs behind it; the
-        // positive axes have an arm from the centre, the negative ones a dimmer knob alone.
-        constexpr f32 kGlyph = static_cast<f32>(render::debug::kCharWidth);
-        constexpr f32 kGlyphHeight = static_cast<f32>(render::debug::kCharHeight);
-        const f32 half = 0.5f * ViewGizmo::kKnob;
-        for (i32 i = 0; i < 6; ++i)
-        {
-            const ViewGizmoPole& pole = gizmo.poles[i];
-            const Color color = ViewGizmo::ColorOf(pole, i == hovered);
-            if (pole.positive)
-            {
-                dd.DrawScreenLine(gizmo.center.x, gizmo.center.y, pole.screen.x, pole.screen.y, color,
-                                  2.0f);
-            }
-            dd.DrawScreenRect(pole.screen.x - half, pole.screen.y - half, ViewGizmo::kKnob,
-                              ViewGizmo::kKnob, color);
-            const StringView label = ViewGizmo::Label(pole);
-            const Color ink =
-                pole.positive ? Color{0.08f, 0.08f, 0.08f, 1.0f} : Color{0.9f, 0.9f, 0.9f, 1.0f};
-            dd.DrawScreenText(pole.screen.x - 0.5f * kGlyph * static_cast<f32>(label.Size()),
-                              pole.screen.y - 0.5f * kGlyphHeight, label, ink);
-        }
-        // The centre: a click switches the projection; under the tripod, which one is on.
-        const bool overCentre = m_viewport->IsHovered() && m_viewport->Mouse() != nullptr &&
-                                ViewGizmo::HitCentre(gizmo, m_viewport->Mouse()->X(),
-                                                     m_viewport->Mouse()->Y());
-        const f32 c = 0.5f * ViewGizmo::kCentre;
-        const Color centre = overCentre ? Color{1.0f, 1.0f, 1.0f, 1.0f} : Color{0.75f, 0.75f, 0.75f, 1.0f};
-        dd.DrawScreenRect(gizmo.center.x - c, gizmo.center.y - c, ViewGizmo::kCentre,
-                          ViewGizmo::kCentre, centre);
-        const StringView projection = ViewGizmo::ProjectionLabel(m_camera.orthographic);
-        dd.DrawScreenText(gizmo.center.x - 0.5f * kGlyph * static_cast<f32>(projection.Size()),
-                          gizmo.center.y + ViewGizmo::kArm + ViewGizmo::kKnob, projection,
-                          Color{0.85f, 0.85f, 0.85f, 1.0f});
-    }
-
-    f32 SceneEditorPage::GridViewHeight() const
-    {
-        if (m_camera.orthographic)
-        {
-            return m_camera.focusDistance;
-        }
-        return Abs(Dot(m_camera.position, AxesOf(m_gridPlane).normal));
-    }
-
-    GridSpacing SceneEditorPage::CurrentGridSpacing() const
-    {
-        return GridSpacingFor(GridViewHeight());
-    }
-
-    void SceneEditorPage::DrawSceneGrid(render::debug::DebugDraw& dd) const
-    {
-        const GridPlaneAxes axes = AxesOf(m_gridPlane);
-        const f32 height = GridViewHeight();
-        const GridSpacing step = GridSpacingFor(height);
-        // The camera's foot on the plane: the grid is centred under it, wherever it flies.
-        const Float3 foot = m_camera.position - axes.normal * Dot(m_camera.position, axes.normal);
-        if (!m_gridLines)
-        {
-            render::debug::GridPlaneDesc grid;
-            grid.origin = foot;
-            grid.fadeDistance = GridFadeDistance(height);
-            grid.extent = grid.fadeDistance;
-            grid.axisU = axes.u;
-            grid.axisV = axes.v;
-            grid.spacing = step.spacing;
-            grid.blend = step.blend;
-            grid.cameraPosition = m_camera.position;
-            dd.DrawGridPlane(grid);
-            return;
-        }
-        // The line grid, to compare: the same spacing, every tenth line brighter, a square 100
-        // cells each way snapped to the coarse spacing under the camera (so it does not swim), no
-        // fade and no blend between decades.
-        constexpr i32 kHalfCells = 100;
-        const f32 coarse = step.spacing * 10.0f;
-        const f32 cu = Floor(Dot(foot, axes.u) / coarse) * coarse;
-        const f32 cv = Floor(Dot(foot, axes.v) / coarse) * coarse;
-        const f32 half = step.spacing * static_cast<f32>(kHalfCells);
-        // sRGB, like every colour: a light grey that stays clear of the backdrop.
-        const Color minor{0.63f, 0.63f, 0.65f, 0.35f};
-        const Color major{0.63f, 0.63f, 0.65f, 1.0f};
-        for (i32 i = -kHalfCells; i <= kHalfCells; ++i)
-        {
-            const f32 t = static_cast<f32>(i) * step.spacing;
-            const Color color = (i % 10 == 0) ? major : minor;
-            const Float3 alongV = axes.u * (cu + t);
-            const Float3 alongU = axes.v * (cv + t);
-            dd.DrawLine(alongV + axes.v * (cv - half), alongV + axes.v * (cv + half), color);
-            dd.DrawLine(alongU + axes.u * (cu - half), alongU + axes.u * (cu + half), color);
-        }
-    }
-
-    void SceneEditorPage::DrawZoomReadout(render::debug::DebugDraw& dd, f32 opacity) const
-    {
-        if (!m_viewport || !m_viewport->IsReady() || m_viewport->RenderHeight() == 0)
-        {
-            return;
-        }
-        const f32 height = static_cast<f32>(m_viewport->RenderHeight());
-        const ScaleBar bar = ScaleBarAt(m_camera.focusDistance, m_camera.fovY, height);
-        const String focusText = Format(u8"{} to focus", FormatMetres(m_camera.focusDistance));
-        // The cell of the grid as drawn; whether the grid shows is the page's toggle.
-        const String cellText = Format(u8"grid cell {}", FormatMetres(CurrentGridSpacing().spacing));
-        const String barText = FormatMetres(bar.metres);
-
-        // Bottom-left, clear of the tool status (top-left) and the FPS readout (top-right):
-        // two lines of text over the bar, on a translucent backing.
-        constexpr f32 kMargin = 12.0f;
-        constexpr f32 kPad = 6.0f;
-        constexpr f32 kLine = static_cast<f32>(render::debug::kCharHeight) + 6.0f;
-        constexpr f32 kGlyph = static_cast<f32>(render::debug::kCharWidth);
-        const f32 textWidth =
-            kGlyph * static_cast<f32>(Max(focusText.Size(), cellText.Size()));
-        const f32 barWidth = bar.pixels + 6.0f + kGlyph * static_cast<f32>(barText.Size());
-        const f32 width = Max(textWidth, barWidth) + 2.0f * kPad;
-        const f32 boxHeight = 2.0f * kLine + 10.0f + 2.0f * kPad;
-        const f32 left = kMargin;
-        const f32 top = height - kMargin - boxHeight;
-        dd.DrawScreenRect(left, top, width, boxHeight, Color{0.0f, 0.0f, 0.0f, 0.45f * opacity});
-
-        const Color ink{0.85f, 0.85f, 0.85f, opacity};
-        const f32 x = left + kPad;
-        dd.DrawScreenText(x, top + kPad, focusText.AsView(), ink);
-        dd.DrawScreenText(x, top + kPad + kLine, cellText.AsView(), ink);
-        // The bar: a line the length of its round measure, with end ticks, its length beside it.
-        const f32 barY = top + kPad + 2.0f * kLine + 4.0f;
-        dd.DrawScreenRect(x, barY, bar.pixels, 2.0f, ink);
-        dd.DrawScreenRect(x, barY - 3.0f, 1.0f, 8.0f, ink);
-        dd.DrawScreenRect(x + bar.pixels - 1.0f, barY - 3.0f, 1.0f, 8.0f, ink);
-        dd.DrawScreenText(x + bar.pixels + 6.0f, barY - 3.0f, barText.AsView(), ink);
-    }
-
-    void SceneEditorPage::DrawGizmos(render::debug::DebugDraw& dd)
-    {
-        m_viewportTools.Draw(dd);
-        if (IViewportTool* active = m_viewportTools.ActiveTool(); active != nullptr)
-        {
-            const StringView status = active->StatusText();
-            if (!status.IsEmpty())
-            {
-                dd.DrawScreenText(12.0f, 12.0f, status, Color{0.85f, 0.85f, 0.85f, 1.0f});
-            }
-        }
-
-        // Component gizmos: full set for the selected entity; opted-in renderers for the rest.
-        if (!m_editContext)
-        {
-            return;
-        }
-        GizmoContext ctx;
-        ctx.debug = &dd;
-        ctx.scene = m_scene;
-        ctx.cameraPosition = m_camera.position;
-        // The viewport's camera for the LOD overlay's per-view pick - the same matrices the
-        // render path builds (aspect from the live render target when it exists).
-        render::ViewCamera gizmoCamera;
-        gizmoCamera.view = Float4x4::LookAtRH(m_camera.DrawEye(),
-                                              m_camera.DrawEye() + m_camera.Forward(), m_camera.Up());
-        const f32 gizmoAspect =
-            (m_viewport && m_viewport->IsReady() && m_viewport->RenderHeight() > 0)
-                ? static_cast<f32>(m_viewport->RenderWidth()) /
-                      static_cast<f32>(m_viewport->RenderHeight())
-                : 16.0f / 9.0f;
-        gizmoCamera.projection = m_camera.Projection(gizmoAspect);
-        gizmoCamera.position = m_camera.position;
-        gizmoCamera.farZ = m_camera.DrawFar();
-        gizmoCamera.pullBack = m_camera.DrawPullBack();
-        ctx.viewCamera = &gizmoCamera;
-        ctx.lodOverlay = m_showLodOverlay;
-        ctx.showColliders = m_showColliders;
-        Selection<Guid>& selection = m_editContext->EntitySelection();
-        m_scene->ForEachEntity(
-            [&](scene::EntityHandle e)
-            { m_componentGizmos.DrawEntity(e, selection.Contains(m_scene->GetEntityId(e)), ctx); });
-    }
-
-    void SceneEditorPage::ToggleViewportTool(StringView id, bool on)
-    {
-        if (on)
-        {
-            // A refusal (the tool has nothing to work on here) is said, not swallowed: the
-            // toggle / dropdown snaps back through SyncToolbar below.
-            if (!m_viewportTools.ActivateById(id))
-            {
-                if (IViewportTool* tool = m_viewportTools.FindById(id))
-                {
-                    m_context->Notify(editor::NoticeKind::Warning, tool->UnavailableReason());
-                }
-            }
-        }
-        else if (m_viewportTools.ActiveTool() != nullptr &&
-                 m_viewportTools.ActiveTool()->Id() == id)
-        {
-            m_viewportTools.ActivateDefault();
-        }
-        SyncToolbar();
-    }
-
-    void SceneEditorPage::ShowToolMenu(const ToolMenu& toolMenu, foundation::ui::View* anchor)
-    {
-        if (anchor == nullptr)
-        {
-            return;
-        }
-        auto menu = MakeRef<foundation::ui::ContextMenu>(Allocator());
-        SceneEditorPage* self = this;
-        IViewportTool* active = m_viewportTools.ActiveTool();
-        const StringView activeId = active != nullptr ? active->Id() : StringView{};
-        for (const String& id : toolMenu.ids)
-        {
-            IViewportTool* tool = m_viewportTools.FindById(id.AsView());
-            if (tool == nullptr)
-            {
-                continue;
-            }
-            const bool on = id.AsView() == activeId;
-            String text(on ? StringView(u8"[x] ") : StringView(u8"[ ] "));
-            text += tool->DisplayName();
-            String idCopy(id);
-            menu->AddItem(text.AsView(),
-                          [self, idCopy, on]() { self->ToggleViewportTool(idCopy.AsView(), !on); });
-        }
-        const Float2 pos = anchor->LocalToScreen(Float2{0.0f, anchor->Height()});
-        menu->Show(anchor->Context, pos.x, pos.y);
-    }
-
-    void SceneEditorPage::ShowOverlaysMenu(foundation::ui::View* anchor)
-    {
-        if (anchor == nullptr)
-        {
-            return;
-        }
-        auto menu = MakeRef<foundation::ui::ContextMenu>(Allocator());
-        SceneEditorPage* self = this;
-        const auto mark = [](bool on) { return on ? StringView(u8"[x] ") : StringView(u8"[ ] "); };
-        const auto add = [&](StringView label, bool SceneEditorPage::* field)
-        {
-            String text(mark(this->*field));
-            text += label;
-            menu->AddItem(text.AsView(),
-                          [self, field]()
-                          {
-                              self->*field = !(self->*field);
-                              self->SaveViewPrefs(); // persist per-scene
-                          });
-        };
-        // The editor's own debug draws into this viewport (never the scene, never the game):
-        // the ground grid + world axes; the origin cross on every entity (off for a large
-        // scene - the selected entity keeps its marker and bounds); the LOD overlay tinting
-        // each chained mesh by the level this camera selects; the edit-time physics collider
-        // gizmos (from component shapes, no world - distinct from the RUNTIME
-        // PhysicsSceneSettings.debugDraw).
-        add(u8"Grid", &SceneEditorPage::m_showGrid);
-        // The grid's plane, one checked; and the old debug-line grid, to compare the two.
-        const auto plane = [&](StringView label, GridPlane value)
-        {
-            String text(mark(m_gridPlane == value));
-            text += label;
-            menu->AddItem(text.AsView(),
-                          [self, value]()
-                          {
-                              self->m_gridPlane = value;
-                              self->SaveViewPrefs();
-                          });
-        };
-        plane(u8"Grid on XZ (ground)", GridPlane::XZ);
-        plane(u8"Grid on XY", GridPlane::XY);
-        plane(u8"Grid on YZ", GridPlane::YZ);
-        add(u8"Grid as lines (to compare)", &SceneEditorPage::m_gridLines);
-        add(u8"Entity markers", &SceneEditorPage::m_showMarkers);
-        menu->AddSeparator();
-        add(u8"LOD overlay", &SceneEditorPage::m_showLodOverlay);
-        add(u8"Colliders", &SceneEditorPage::m_showColliders);
-        menu->AddSeparator();
-        add(u8"FPS", &SceneEditorPage::m_showFps);
-        const Float2 pos = anchor->LocalToScreen(Float2{0.0f, anchor->Height()});
-        menu->Show(anchor->Context, pos.x, pos.y);
-    }
-
-    void SceneEditorPage::ShowPostFlagsMenu(foundation::ui::View* anchor)
-    {
-        if (anchor == nullptr)
-        {
-            return;
-        }
-        auto menu = MakeRef<foundation::ui::ContextMenu>(Allocator());
-        SceneEditorPage* self = this;
-        const auto mark = [](bool on) { return on ? StringView(u8"[x] ") : StringView(u8"[ ] "); };
-        const auto add = [&](StringView label, bool render::ViewPostOverride::* field)
-        {
-            String text(mark(m_postOverride.*field));
-            text += label;
-            menu->AddItem(text.AsView(), [self, field]()
-                          { self->m_postOverride.*field = !(self->m_postOverride.*field); });
-        };
-        add(u8"No Post (bloom/AO/SSR/AA off)", &render::ViewPostOverride::disablePost);
-        menu->AddSeparator();
-        add(u8"No Bloom", &render::ViewPostOverride::disableBloom);
-        add(u8"No AO", &render::ViewPostOverride::disableAo);
-        add(u8"No SSR", &render::ViewPostOverride::disableSsr);
-        add(u8"No SSGI", &render::ViewPostOverride::disableSsgi);
-        add(u8"No AA (crisp)", &render::ViewPostOverride::disableAa);
-        // Not post, but the same kind of thing: an ephemeral per-view "draw it all" for
-        // measuring what the frustum cull saves in this viewport.
-        add(u8"No frustum culling (draw everything)", &render::ViewPostOverride::disableCulling);
-        // Scene-pass MSAA: an INDEPENDENT off/2x/4x tri-state (not a bool - it forces the
-        // view's sample count). The count is capability-clamped by the render subsystem, so a 4x pick
-        // on a 2x device renders 2x. MSAA and TAA are independent; both can be on.
-        menu->AddSeparator();
-        const auto msaaItem = [&](StringView label, u8 count)
-        {
-            const bool on = (count <= 1) ? (self->m_postOverride.msaaOverride <= 1)
-                                         : (self->m_postOverride.msaaOverride == count);
-            String text(mark(on));
-            text += label;
-            menu->AddItem(text.AsView(),
-                          [self, count]() { self->m_postOverride.msaaOverride = count; });
-        };
-        // Levels from engine::render::kMsaaLevels (the single source of truth; add 8x there once).
-        for (u32 i = 0; i < engine::render::MsaaLevelCount(); ++i)
-        {
-            String label(u8"MSAA ");
-            label += engine::render::kMsaaLevels[i].label;
-            msaaItem(label.AsView(), static_cast<u8>(engine::render::kMsaaLevels[i].samples));
-        }
-        const Float2 pos = anchor->LocalToScreen(Float2{0.0f, anchor->Height()});
-        menu->Show(anchor->Context, pos.x, pos.y);
-    }
-
-    void SceneEditorPage::ShowDebugViewMenu(foundation::ui::View* anchor)
-    {
-        if (anchor == nullptr || m_render == nullptr)
-        {
-            return;
-        }
-        auto menu = MakeRef<foundation::ui::ContextMenu>(Allocator());
-        SceneEditorPage* self = this;
-        const auto mark = [](bool on) { return on ? StringView(u8"[x] ") : StringView(u8"[ ] "); };
-
-        const bool debugOff = m_debugView.resource.IsEmpty() &&
-                              m_debugView.semantic == render::ViewDebugSemantic::Off;
-        String finalText(mark(debugOff));
-        finalText += u8"Final (debug view off)";
-        menu->AddItem(finalText.AsView(),
-                      [self]()
-                      {
-                          self->m_debugView.resource.Clear();
-                          self->m_debugView.semantic = render::ViewDebugSemantic::Off;
-                      });
-        menu->AddSeparator();
-
-        // Semantic modes: the forward shader outputs the term itself (mesh materials only -
-        // sky and bespoke renderers draw normally), shown raw past tonemap.
-        struct SemanticEntry
-        {
-            StringView label;
-            render::ViewDebugSemantic mode;
-        };
-        static const SemanticEntry kSemantics[] = {
-            {u8"Albedo (base color)", render::ViewDebugSemantic::Albedo},
-            {u8"Normals (world, mapped)", render::ViewDebugSemantic::Normal},
-            {u8"Roughness", render::ViewDebugSemantic::Roughness},
-            {u8"Metallic", render::ViewDebugSemantic::Metallic},
-            {u8"Shadow cascades", render::ViewDebugSemantic::Cascades},
-            {u8"Light-cluster heatmap", render::ViewDebugSemantic::ClusterHeat},
-            {u8"Overbright / invalid", render::ViewDebugSemantic::Overbright},
-        };
-        for (const SemanticEntry& entry : kSemantics)
-        {
-            String text(mark(m_debugView.semantic == entry.mode &&
-                             m_debugView.resource.IsEmpty()));
-            text += entry.label;
-            const render::ViewDebugSemantic mode = entry.mode;
-            menu->AddItem(text.AsView(),
-                          [self, mode]()
-                          {
-                              self->m_debugView.resource.Clear(); // semantic + resource are exclusive
-                              self->m_debugView.semantic = mode;
-                          });
-        }
-        menu->AddSeparator();
-
-        // The renderer's last-frame graph-texture inventory. Multisampled sources can't
-        // bind to the blit (WebGPU Load rule) - list their resolved twins only.
-        Array<render::DebugResourceInfo> rows;
-        m_render->GetDebugResources(rows);
-        for (const render::DebugResourceInfo& row : rows)
-        {
-            if (row.samples > 1)
-            {
-                continue;
-            }
-            String text(mark(m_debugView.resource == row.name));
-            text += Format(u8"{}  {}x{}{}", row.name, row.width, row.height,
-                           row.isDepth ? StringView(u8" depth") : StringView(u8""));
-            String name(row.name);
-            menu->AddItem(text.AsView(),
-                          [self, name]()
-                          {
-                              self->m_debugView.resource = name;
-                              self->m_debugView.semantic = render::ViewDebugSemantic::Off;
-                              // Editor viewport camera planes for depth linearization.
-                              self->m_debugView.nearZ = 0.1f;
-                              self->m_debugView.farZ = 1000.0f;
-                          });
-        }
-
-        const Float2 pos = anchor->LocalToScreen(Float2{0.0f, anchor->Height()});
-        menu->Show(anchor->Context, pos.x, pos.y);
-    }
-
-    void SceneEditorPage::BuildViewportToolbar()
-    {
-        m_toolbar = MakeRef<ui::toolkit::Toolbar>(Allocator());
-        editor::app::EditorIcons& icons = editor::app::EditorIcons::Get();
-        GizmoController* gizmos = m_selectTool != nullptr ? &m_selectTool->Gizmos() : nullptr;
-        auto icon = [](foundation::ui::SVGDrawable* drawable)
-        {
-            return Function<void(foundation::ui::UIDrawContext&, Rectangle)>{
-                [drawable](foundation::ui::UIDrawContext& ctx, Rectangle rect)
-                {
-                    if (drawable != nullptr)
-                    {
-                        drawable->Draw(ctx, rect);
-                    }
-                }};
-        };
-
-        // The gizmo toggles are the scene editor's actions over THIS page (a checked toggle
-        // clicked again stays: SyncToolbar re-reads the registry's answer).
-        SceneEditorPage* page = this;
-        EditorActionRegistry* actions = &m_context->Actions();
-        const auto modeToggle = [&](StringView id, foundation::ui::SVGDrawable* drawable)
-        {
-            ui::toolkit::ToolbarToggle* toggle = m_toolbar->AddToggle(u8"");
-            toggle->SetIcon(icon(drawable));
-            const String actionId(id);
-            toggle->OnCheckedChanged.Add(
-                [page, actions, actionId](ui::toolkit::ToolbarToggle*, bool value)
-                {
-                    if (value)
-                    {
-                        (void)actions->Execute(actionId.AsView(), page);
-                    }
-                    page->SyncToolbar();
-                });
-            return toggle;
-        };
-        m_translateToggle = modeToggle(SceneActionIds::kGizmoTranslate, icons.translate.Get());
-        m_rotateToggle = modeToggle(SceneActionIds::kGizmoRotate, icons.rotate.Get());
-        m_scaleToggle = modeToggle(SceneActionIds::kGizmoScale, icons.scale.Get());
-
-        m_toolbar->AddSeparator();
-
-        // One toggle whose icon + label read the LIVE space (checked = world).
-        m_spaceToggle = m_toolbar->AddToggle(u8"World");
-        m_spaceToggle->SetIcon(Function<void(foundation::ui::UIDrawContext&, Rectangle)>{
-            [gizmos, &icons](foundation::ui::UIDrawContext& ctx, Rectangle rect)
-            {
-                foundation::ui::SVGDrawable* drawable = (gizmos->Space() == GizmoSpace::World)
-                                                          ? icons.worldSpace.Get()
-                                                          : icons.localSpace.Get();
-                if (drawable != nullptr)
-                {
-                    drawable->Draw(ctx, rect);
-                }
-            }});
-        m_spaceToggle->OnCheckedChanged.Add(
-            [page, actions](ui::toolkit::ToolbarToggle*, bool value)
-            {
-                // The action flips the space; a click that already shows the target state
-                // (a resync) is not a flip.
-                if (actions->IsChecked(SceneActionIds::kGizmoWorldSpace, page) != value)
-                {
-                    (void)actions->Execute(SceneActionIds::kGizmoWorldSpace, page);
-                }
-                page->SyncToolbar();
-            });
-        // Vertex snap for every move while checked (holding V does it for one drag).
-        m_vertexSnapToggle = m_toolbar->AddToggle(u8"Vertex Snap");
-        m_vertexSnapToggle->TooltipText = String(u8"Move the selection's pivot onto the vertex under the cursor "
-                                                 u8"(hold V for one drag)");
-        m_vertexSnapToggle->OnCheckedChanged.Add(
-            [page, actions](ui::toolkit::ToolbarToggle*, bool value)
-            {
-                if (actions->IsChecked(SceneActionIds::kGizmoVertexSnap, page) != value)
-                {
-                    (void)actions->Execute(SceneActionIds::kGizmoVertexSnap, page);
-                }
-                page->SyncToolbar();
-            });
-
-        m_toolbar->AddSeparator();
-
-        ScenePage_OverlaysInit();
-
-        // Post show-flags: ephemeral per-view overrides that strip effects for editing clarity
-        // (never written to the scene). A "Post" dropdown opens a checkable menu.
-        {
-            SceneEditorPage* self = this;
-            ui::toolkit::ToolbarMenuButton* postButton = m_toolbar->AddMenuButton(u8"Post");
-            postButton->OnClick.Add([self](ui::toolkit::ToolbarButton* btn)
-                                    { self->ShowPostFlagsMenu(btn); });
-            // Debug view: pick any render-graph texture to visualize in this viewport.
-            ui::toolkit::ToolbarMenuButton* debugButton = m_toolbar->AddMenuButton(u8"Debug");
-            debugButton->OnClick.Add([self](ui::toolkit::ToolbarButton* btn)
-                                     { self->ShowDebugViewMenu(btn); });
-        }
-
-        // Viewport tool palette (APPENDED after the built-ins so the fixed toolbar shape never
-        // shifts as tool plugins come and go). Index 0 is the default Select/gizmo tool, driven
-        // by the gizmo toggles. A category with two or more tools (Terrain, Vegetation) is ONE
-        // dropdown; a lone tool (Spline) is a toggle. Checking/picking one activates that
-        // tool - which docks its panel; unchecking (or picking the active one again) returns
-        // to the default. This is the entry point to the in-scene modes.
-        if (m_viewportTools.Count() > 1)
-        {
-            m_toolbar->AddSeparator();
-            Array<ViewportToolGroup> groups;
-            GroupViewportTools(m_viewportTools, groups);
-            for (ViewportToolGroup& group : groups)
-            {
-                if (group.category.IsEmpty() || group.toolIds.Size() < 2)
-                {
-                    for (const String& toolId : group.toolIds)
-                    {
-                        IViewportTool* tool = m_viewportTools.FindById(toolId.AsView());
-                        if (tool == nullptr)
-                        {
-                            continue;
-                        }
-                        String id(toolId);
-                        ui::toolkit::ToolbarToggle* toggle = m_toolbar->AddToggle(tool->DisplayName());
-                        toggle->OnCheckedChanged.Add(
-                            [this, id](ui::toolkit::ToolbarToggle*, bool value)
-                            { ToggleViewportTool(id.AsView(), value); });
-                        m_toolToggles.PushBack(ToolToggle{toggle, Move(id)});
-                    }
-                    continue;
-                }
-                ToolMenu menu;
-                menu.category = Move(group.category);
-                menu.ids = Move(group.toolIds);
-                menu.label = menu.category;
-                menu.button = m_toolbar->AddMenuButton(menu.label.AsView());
-                const usize menuIndex = m_toolMenus.Size();
-                menu.button->OnClick.Add(
-                    [this, menuIndex](ui::toolkit::ToolbarButton* btn)
-                    {
-                        if (menuIndex < m_toolMenus.Size())
-                        {
-                            ShowToolMenu(m_toolMenus[menuIndex], btn);
-                        }
-                    });
-                m_toolMenus.PushBack(Move(menu));
-            }
-        }
-
-        // The bottom panels that open from the bar: the Animation toggle is the
-        // scene.view.animationPanel action over THIS page.
-        m_toolbar->AddSeparator();
-        m_animationToggle = m_toolbar->AddToggle(u8"Animation");
-        m_animationToggle->OnCheckedChanged.Add(
-            [page, actions](ui::toolkit::ToolbarToggle*, bool value)
-            {
-                if (actions->IsChecked(SceneActionIds::kAnimationPanel, page) != value)
-                {
-                    (void)actions->Execute(SceneActionIds::kAnimationPanel, page);
-                }
-                page->SyncToolbar();
-            });
-
-        // Spacer pushes the simulation cluster to the right edge (Sedulous toolbar shape).
-        {
-            auto spacer = MakeRef<foundation::ui::Panel>(Allocator());
-            foundation::ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            m_toolbar->AddView(spacer.Get(), lp);
-        }
-
-        // === Simulate (snapshot -> run -> restore; phase-8a half of play-in-editor): the
-        // scene editor's actions over THIS page ===
-        SceneEditorPage* self = this;
-        EditorActionRegistry* simActions = &m_context->Actions();
-        m_playButton = m_toolbar->AddButton(u8"Play");
-        m_playButton->OnClick.Add([self, simActions](ui::toolkit::ToolbarButton*)
-                                  { (void)simActions->Execute(SceneActionIds::kSimulateStart, self); });
-        m_pauseToggle = m_toolbar->AddToggle(u8"Pause");
-        m_pauseToggle->OnCheckedChanged.Add(
-            [self, simActions](ui::toolkit::ToolbarToggle*, bool value)
-            {
-                if (simActions->IsChecked(SceneActionIds::kSimulatePause, self) != value)
-                {
-                    (void)simActions->Execute(SceneActionIds::kSimulatePause, self);
-                }
-                self->RefreshSimToolbar();
-            });
-        m_stopButton = m_toolbar->AddButton(u8"Stop");
-        m_stopButton->OnClick.Add([self, simActions](ui::toolkit::ToolbarButton*)
-                                  { (void)simActions->Execute(SceneActionIds::kSimulateStop, self); });
-        // The at-a-glance state readout (user report: Play gave no visual indication).
-        m_simLabel = MakeRef<foundation::ui::Label>(Allocator(), StringView(u8""));
-        m_simLabel->FontSize.SetValue(13.0f);
-        {
-            foundation::ui::LayoutStyle lp;
-            lp.Height = foundation::ui::SizeSpec::Match();
-            m_toolbar->AddView(m_simLabel.Get(), lp);
-        }
-        RefreshSimToolbar();
-    }
-
-    void SceneEditorPage::StartSimulation()
-    {
-        if (m_isSimulating || m_scene == nullptr)
-        {
-            return;
-        }
-        m_simSnapshot = scene::SceneSnapshot::Capture(*m_scene);
-        if (!m_simSnapshot)
-        {
-            LOG_ERROR(u8"Editor", u8"Simulate: scene snapshot capture failed");
-            return;
-        }
-        m_scene->Start();
-        m_scene->SetSimulationEnabled(true);
-        Commands().SetLocked(true);
-        // Modal edit tools (terrain sculpt) share runtime state with the simulation (the collider):
-        // drop back to the default select tool for the duration, and sync the palette toggles.
-        m_viewportTools.ActivateDefault();
-        SyncToolbar();
-        m_isSimulating = true;
-        m_isPaused = false;
-        RefreshSimToolbar();
-    }
-
-    void SceneEditorPage::PauseSimulation(bool paused)
-    {
-        if (!m_isSimulating || m_scene == nullptr)
-        {
-            return;
-        }
-        m_isPaused = paused;
-        m_scene->SetSimulationEnabled(!paused);
-        RefreshSimToolbar();
-    }
-
-    void SceneEditorPage::StopSimulation()
-    {
-        if (!m_isSimulating || m_scene == nullptr)
-        {
-            return;
-        }
-        m_scene->Stop();
-        if (m_simSnapshot)
-        {
-            foundation::resource::ResourceManager* resources =
-                (m_context != nullptr) ? m_context->Resources() : nullptr;
-            if (!m_simSnapshot->Restore(*m_scene, resources).IsOk())
-            {
-                LOG_ERROR(u8"Editor", u8"Simulate: snapshot restore failed");
-            }
-            m_simSnapshot = nullptr;
-        }
-        m_scene->SetSimulationEnabled(false);
-        Commands().SetLocked(false);
-        m_isSimulating = false;
-        m_isPaused = false;
-        // Hierarchy/inspector re-sync off the scene's revisions next frame (the restore
-        // drained + recreated every entity, which bumps them).
-        RefreshSimToolbar();
-    }
-
-    void SceneEditorPage::RefreshSimToolbar()
-    {
-        if (m_playButton == nullptr)
-        {
-            return;
-        }
-        const EditorActionRegistry& actions = m_context->Actions();
-        m_playButton->IsEnabled = actions.IsEnabled(SceneActionIds::kSimulateStart, this);
-        m_pauseToggle->IsEnabled = actions.IsEnabled(SceneActionIds::kSimulatePause, this);
-        m_stopButton->IsEnabled = actions.IsEnabled(SceneActionIds::kSimulateStop, this);
-        m_pauseToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kSimulatePause, this));
-        if (m_simLabel.Get() != nullptr)
-        {
-            if (!m_isSimulating)
-            {
-                m_simLabel->SetText(u8"");
-            }
-            else
-            {
-                m_simLabel->SetText(m_isPaused ? StringView(u8" PAUSED ")
-                                               : StringView(u8" SIMULATING "));
-                m_simLabel->TextColor.SetValue(
-                    Optional<Color>(m_isPaused ? Color{0.95f, 0.85f, 0.4f, 1.0f}     // amber
-                                               : Color{0.95f, 0.55f, 0.35f, 1.0f})); // orange
-            }
-        }
-        m_playButton->Invalidate();
-        m_pauseToggle->Invalidate();
-        m_stopButton->Invalidate();
-    }
-
-    void SceneEditorPage::ScenePage_OverlaysInit()
-    {
-        // One dropdown for the editor's debug draws (grid, markers, LOD overlay, colliders)
-        // instead of a toggle each: they are one kind of thing and the bar was full.
-        SceneEditorPage* self = this;
-        m_overlaysButton = m_toolbar->AddMenuButton(u8"Overlays");
-        m_overlaysButton->SetIcon(Function<void(foundation::ui::UIDrawContext&, Rectangle)>{
-            [](foundation::ui::UIDrawContext& ctx, Rectangle rect)
-            {
-                if (auto* drawable = editor::app::EditorIcons::Get().grid.Get())
-                {
-                    drawable->Draw(ctx, rect);
-                }
-            }});
-        m_overlaysButton->OnClick.Add([self](ui::toolkit::ToolbarButton* btn)
-                                      { self->ShowOverlaysMenu(btn); });
-        // Restore this scene's saved overlay state before the first SyncToolbar mirrors it.
-        LoadViewPrefs();
-    }
-
-    // Per-scene grid pref (keyed by the scene guid, in the per-project editor settings). Reading it
-    // just sets m_showGrid (SyncToolbar mirrors it to the toggle); an unsaved scene (nil guid) keeps
-    // the default. Loading never writes (only the user toggle persists).
-    void SceneEditorPage::LoadViewPrefs()
-    {
-        const SceneViewPref fallback{InstanceId(), m_showGrid, m_showLodOverlay, m_showColliders,
-                                     m_showMarkers, m_showFps};
-        const SceneViewPref p =
-            LoadSceneViewPref(m_context->ProjectEditorSettings(), InstanceId(), fallback);
-        m_showGrid = p.showGrid;
-        m_showLodOverlay = p.showLodOverlay;
-        m_showColliders = p.showColliders;
-        m_showMarkers = p.showMarkers;
-        m_showFps = p.showFps;
-        m_gridPlane = p.gridPlane <= static_cast<u8>(GridPlane::YZ)
-                          ? static_cast<GridPlane>(p.gridPlane)
-                          : GridPlane::XZ;
-        m_gridLines = p.gridLines;
-    }
-
-    void SceneEditorPage::SaveViewPrefs()
-    {
-        // Save the WHOLE pref (toggles + camera + selection + splits) so saving one never
-        // resurrects another's default. Runs on every toggle and when the page closes.
-        SceneViewPref pref{InstanceId(), m_showGrid, m_showLodOverlay, m_showColliders,
-                           m_showMarkers, m_showFps};
-        pref.gridPlane = static_cast<u8>(m_gridPlane);
-        pref.gridLines = m_gridLines;
-        pref.hasCamera = true;
-        pref.cameraPosition = m_camera.position;
-        pref.cameraYaw = m_camera.yaw;
-        pref.cameraPitch = m_camera.pitch;
-        pref.cameraFocusDistance = m_camera.focusDistance;
-        pref.cameraOrthographic = m_camera.orthographic;
-        if (m_hierarchySplit && m_inspectorSplit && m_viewportColumn)
-        {
-            pref.hasSplits = true;
-            pref.hierarchySplit = m_hierarchySplit->SplitRatio();
-            pref.inspectorSplit = m_inspectorSplit->SplitRatio();
-            pref.bottomDockSplit = m_viewportColumn->SplitRatio();
-        }
+        Array<Guid> selection;
         if (m_editContext)
-        {
             for (const Guid& id : m_editContext->EntitySelection().Items())
-            {
-                pref.selection.PushBack(id);
-            }
-        }
+                selection.PushBack(id);
+        const SceneViewPref pref =
+            SceneViewState::Capture(InstanceId(), m_overlays.settings, m_viewport->Camera(), shown, Span<const Guid>(selection.Data(), selection.Size()),
+                                    m_tools ? m_tools->Place() : nullptr);
         if (SaveSceneViewPref(m_context->ProjectEditorSettings(), pref))
-        {
             m_context->RequestProjectEditorSettingsSave();
-        }
     }
 
     void SceneEditorPage::RestoreViewState()
     {
-        const SceneViewPref none{InstanceId()};
-        const SceneViewPref p = LoadSceneViewPref(m_context->ProjectEditorSettings(), InstanceId(), none);
-        if (p.hasSplits && m_hierarchySplit && m_inspectorSplit && m_viewportColumn)
-        {
-            // The bottom dock's ratio applies when it opens (its pane starts collapsed).
-            m_hierarchySplit->SetSplitRatio(p.hierarchySplit);
-            m_inspectorSplit->SetSplitRatio(p.inspectorSplit);
-            m_viewportColumn->SetSplitRatio(p.bottomDockSplit);
-        }
-        if (!p.hasCamera)
-        {
-            return; // never saved by a page: the origin framing stands
-        }
-        m_camera.position = p.cameraPosition;
-        m_camera.yaw = p.cameraYaw;
-        m_camera.pitch = p.cameraPitch;
-        m_camera.focusDistance = p.cameraFocusDistance;
-        m_camera.SetOrthographic(p.cameraOrthographic);
-        if (m_editContext && m_scene != nullptr && !p.selection.IsEmpty())
-        {
-            // Only ids still in the scene (deleted since, or a Simulate-spawned entity that
-            // was selected at close) - the selection never names a ghost.
-            Array<Guid> live;
-            for (const Guid& id : p.selection)
+        const SceneViewPref pref = LoadSceneViewPref(m_context->ProjectEditorSettings(), InstanceId(), SceneViewPref{InstanceId()});
+        if (pref.hasSplits)
+            if (auto* body = Find<gui::Splitter>(u8"scene-body"))
             {
-                if (m_scene->FindEntity(id).IsAssigned())
-                {
-                    live.PushBack(id);
-                }
+                const ScenePaneWeights panes = SceneViewState::WeightsFromSplits(pref.hierarchySplit, pref.inspectorSplit);
+                const f32 weights[3] = {panes.hierarchy, panes.viewport, panes.inspector};
+                body->SetWeights(Span<const f32>(weights, 3u));
             }
+        if (m_tools)
+            m_tools->SetPlace(pref.hasToolPanelPlace ? &pref.toolPanelPlace : nullptr);
+        if (!SceneViewState::RestoreCamera(pref, m_viewport->Camera()))
+            return; // never saved by a page: the origin's framing stands
+        if (m_editContext && m_scene != nullptr)
+        {
+            const Array<Guid> live = SceneViewState::LiveSelection(pref, *m_scene);
             if (!live.IsEmpty())
-            {
                 m_editContext->EntitySelection().Set(Span<const Guid>{live.Data(), live.Size()});
-            }
         }
     }
 
-    void SceneEditorPage::SetAnimationPanelShown(bool shown)
+    void SceneEditorPage::Confirm(StringView title, StringView text, StringView verb, Function<void()> yes)
     {
-        if (m_bottomDock.Get() == nullptr)
-        {
-            return;
-        }
-        if (shown)
-        {
-            m_bottomDock->ActivateTab(kAnimationTab);
-            return;
-        }
-        if (!AnimationPanelShown())
-        {
-            return;
-        }
-        // Hidden: to the docked tool's tab when there is one, else the dock goes altogether.
-        if (!m_dockedToolTab.IsEmpty())
-        {
-            m_bottomDock->ActivateTab(m_dockedToolTab.AsView());
-        }
-        else
-        {
-            m_bottomDock->SetExpanded(false);
-        }
-    }
-
-    void SceneEditorPage::SyncToolbar()
-    {
-        if (m_toolbar.Get() == nullptr || m_selectTool == nullptr)
-        {
-            return;
-        }
-        const EditorActionRegistry& actions = m_context->Actions();
-        m_translateToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kGizmoTranslate, this));
-        m_rotateToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kGizmoRotate, this));
-        m_scaleToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kGizmoScale, this));
-        const bool world = actions.IsChecked(SceneActionIds::kGizmoWorldSpace, this);
-        m_spaceToggle->SetIsChecked(world);
-        m_spaceToggle->SetText(world ? StringView(u8"World") : StringView(u8"Local"));
-        m_vertexSnapToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kGizmoVertexSnap, this));
-        if (m_animationToggle != nullptr)
-        {
-            m_animationToggle->SetIsChecked(actions.IsChecked(SceneActionIds::kAnimationPanel, this));
-        }
-
-        IViewportTool* activeTool = m_viewportTools.ActiveTool();
-        const StringView activeId = activeTool != nullptr ? activeTool->Id() : StringView{};
-        for (const ToolToggle& tt : m_toolToggles)
-        {
-            if (tt.toggle != nullptr)
-            {
-                tt.toggle->SetIsChecked(tt.id.AsView() == activeId);
-            }
-        }
-        // A tool dropdown reads its active tool ("Terrain: Sculpt", highlighted) or just
-        // its category. SetText only when the label changes (this runs every frame).
-        for (ToolMenu& tm : m_toolMenus)
-        {
-            bool on = false;
-            for (const String& id : tm.ids)
-            {
-                if (id.AsView() == activeId)
-                {
-                    on = true;
-                    break;
-                }
-            }
-            String label(tm.category);
-            if (on && activeTool != nullptr)
-            {
-                label += u8": ";
-                label += activeTool->DisplayName();
-            }
-            if (tm.button != nullptr)
-            {
-                tm.button->SetIsChecked(on);
-                if (label.AsView() != tm.label.AsView())
-                {
-                    tm.label = Move(label);
-                    tm.button->SetText(tm.label.AsView());
-                }
-            }
-        }
-    }
-
-    bool SceneEditorPage::FrameEntities(Span<const Guid> entities, bool ease)
-    {
-        if (m_scene == nullptr || !m_viewport)
-        {
-            return false;
-        }
-        scene::Scene& scene = *m_scene;
-        AABB merged = AABB::Empty();
-        bool any = false;
-        for (const Guid& id : entities)
-        {
-            const scene::EntityHandle e = scene.FindEntity(id);
-            if (!scene.IsValid(e))
-            {
-                continue;
-            }
-            // The entity and everything under it, as the hierarchy shows it: a gameplay root's
-            // model hangs below it.
-            AABB box = AABB::Empty();
-            bool measured = false;
-            Array<scene::EntityHandle> pending(Allocator());
-            pending.PushBack(e);
-            while (!pending.IsEmpty())
-            {
-                const scene::EntityHandle current = pending[pending.Size() - 1];
-                pending.PopBack();
-                AABB part;
-                if (scene::EntityWorldBounds(scene, current, part))
-                {
-                    box = measured ? Merge(box, part) : part;
-                    measured = true;
-                }
-                for (scene::EntityHandle child = scene.GetFirstChild(current); scene.IsValid(child);
-                     child = scene.GetNextSibling(child))
-                {
-                    pending.PushBack(child);
-                }
-            }
-            if (!measured)
-            {
-                // Nothing in it measures (an empty, a light): its place, the marker's size.
-                const Float4x4 world = scene.GetWorldMatrix(e);
-                box = AABB::FromCenterExtents(Float3{world.m[3][0], world.m[3][1], world.m[3][2]},
-                                              Float3{0.35f, 0.35f, 0.35f});
-            }
-            merged = any ? Merge(merged, box) : box;
-            any = true;
-        }
-        if (!any)
-        {
-            return false;
-        }
-        m_camera.FrameSphere(merged.Center(), Length(merged.Extents()), m_camera.fovY, ease);
-        return true;
-    }
-
-    void SceneEditorPage::DrawEntityMarkers(render::debug::DebugDraw& dd)
-    {
-        if (!m_editContext)
-        {
-            return;
-        }
-        Selection<Guid>& selection = m_editContext->EntitySelection();
-        scene::Scene& scene = *m_scene;
-        scene.ForEachEntity(
-            [&](scene::EntityHandle e)
-            {
-                const Float4x4 world = scene.GetWorldMatrix(e);
-                const Float3 p{world.m[3][0], world.m[3][1], world.m[3][2]};
-                const bool selected = selection.Contains(scene.GetEntityId(e));
-                if (!selected && !m_showMarkers)
-                {
-                    return; // the "Markers" toggle: unselected origins draw nothing
-                }
-                const f32 s = 0.25f;
-                const Color color =
-                    selected ? Color{1.0f, 0.85f, 0.25f, 1.0f} : Color{0.75f, 0.75f, 0.80f, 1.0f};
-                dd.DrawLine(p - Float3{s, 0, 0}, p + Float3{s, 0, 0}, color);
-                dd.DrawLine(p - Float3{0, s, 0}, p + Float3{0, s, 0}, color);
-                dd.DrawLine(p - Float3{0, 0, s}, p + Float3{0, 0, s}, color);
-                if (!selected)
-                {
-                    return;
-                }
-
-                // What the scene's systems measure the entity as (meshes, colliders, ...), so the
-                // box drawn is the one F frames; a small box at the origin when none does.
-                AABB bounds;
-                if (scene::EntityWorldBounds(scene, e, bounds))
-                {
-                    dd.DrawWireBoxCenter(bounds.Center(), bounds.Extents(), color);
-                    return;
-                }
-                dd.DrawWireBoxCenter(p, Float3{0.35f, 0.35f, 0.35f}, color);
-            });
-    }
-
-    // === Camera preview (task #118) ===
-
-    void SceneEditorPage::BuildCameraPreview()
-    {
-        // Display-only viewport (input=nullptr at Initialize): it shows the previewed camera's
-        // view and never takes hover/focus/pick from the main viewport. Fixed 16:9 resolution so
-        // the aspect stays stable regardless of the floating panel's laid-out size.
-        m_previewViewport = MakeRef<ui::viewport::ViewportView>(Allocator());
-        m_previewViewport->ClearColor = rhi::ClearColor{0.0f, 0.0f, 0.0f, 1.0f};
-        m_previewViewport->SetFixedResolution(320, m_previewHeight);
-
-        m_previewPin = MakeRef<ui::Button>(Allocator(), StringView(u8"Pin"));
-        {
-            SceneEditorPage* self = this;
-            m_previewPin->OnClick.Add([self](ui::ButtonBase*) { self->ToggleCameraPin(); });
-        }
-
-        auto container = MakeRef<ui::FlexLayout>(Allocator());
-        container->Direction = ui::Orientation::Vertical;
-        container->Visibility = ui::Visibility::Gone; // idle until a camera is previewed
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(24.0f));
-            container->AddView(m_previewPin.Get(), lp);
-        }
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(320.0f));
-            lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(static_cast<f32>(m_previewHeight)));
-            container->AddView(m_previewViewport.Get(), lp);
-        }
-        m_previewContainer = container;
-    }
-
-    scene::EntityHandle SceneEditorPage::SelectedCameraEntity() const
-    {
-        if (!m_editContext || m_scene == nullptr)
-        {
-            return scene::EntityHandle{};
-        }
-        const Guid* primary = m_editContext->EntitySelection().Primary();
-        if (primary == nullptr)
-        {
-            return scene::EntityHandle{};
-        }
-        const scene::EntityHandle e = m_editContext->Resolve(*primary);
-        return IsLiveCamera(e) ? e : scene::EntityHandle{};
-    }
-
-    bool SceneEditorPage::IsLiveCamera(scene::EntityHandle entity) const
-    {
-        if (m_scene == nullptr || !entity.IsAssigned() || !m_scene->IsValid(entity))
-        {
-            return false;
-        }
-        auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>();
-        return cameras != nullptr && cameras->Get(entity) != nullptr;
-    }
-
-    void SceneEditorPage::UpdateCameraPreview()
-    {
-        if (!m_previewContainer)
-        {
-            return;
-        }
-        // SelectedCameraEntity() returns unassigned for a non-camera selection, so
-        // selection.IsAssigned() IS "a camera is selected" for the resolver.
-        const scene::EntityHandle selection = SelectedCameraEntity();
-        const CameraPreviewResolution res = ResolveCameraPreview(
-            selection, selection.IsAssigned(), m_pinnedCamera, IsLiveCamera(m_pinnedCamera));
-        if (res.unpin)
-        {
-            m_pinnedCamera = scene::EntityHandle{}; // a stale pin auto-clears
-        }
-        m_previewTarget = res.target;
-
-        const ui::Visibility vis = res.visible ? ui::Visibility::Visible : ui::Visibility::Gone;
-        if (m_previewContainer->Visibility != vis)
-        {
-            m_previewContainer->Visibility = vis;
-            m_previewContainer->Invalidate(); // visibility flip only - no view churn
-        }
-        if (m_previewPin)
-        {
-            const bool pinned =
-                m_pinnedCamera.IsAssigned() && m_previewTarget == m_pinnedCamera;
-            m_previewPin->SetText(pinned ? StringView(u8"Unpin") : StringView(u8"Pin"));
-        }
-    }
-
-    void SceneEditorPage::ToggleCameraPin()
-    {
-        if (m_pinnedCamera.IsAssigned() && m_pinnedCamera == m_previewTarget)
-        {
-            m_pinnedCamera = scene::EntityHandle{}; // unpin
-        }
-        else if (m_previewTarget.IsAssigned())
-        {
-            m_pinnedCamera = m_previewTarget; // pin the currently-previewed camera
-        }
-        UpdateCameraPreview();
-    }
-
-    void SceneEditorPage::RenderCameraPreview()
-    {
-        if (!m_previewViewport || !m_previewTarget.IsAssigned())
-        {
-            return;
-        }
-        if (!m_previewViewport->IsReady() || m_render == nullptr || !m_render->IsReady() ||
-            m_scene == nullptr || !m_previewViewport->IsEffectivelyVisible())
-        {
-            return;
-        }
-        const u32 w = m_previewViewport->RenderWidth();
-        const u32 h = m_previewViewport->RenderHeight();
-        if (w == 0 || h == 0)
-        {
-            return;
-        }
-        auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>();
-        if (cameras == nullptr)
-        {
-            return;
-        }
-        engine::render::CameraComponent* cam = cameras->Get(m_previewTarget);
-        if (cam == nullptr)
-        {
-            return;
-        }
-
-        const Float4x4 world = m_scene->GetWorldMatrix(m_previewTarget);
-        render::CameraOverride camOverride = BuildCameraPreviewOverride(*cam, world);
-
-        render::TargetState targetState;
-        targetState.texture = m_previewViewport->ColorTexture();
-        targetState.currentState = m_previewViewport->ColorState();
-        targetState.finalState = rhi::ResourceState::ShaderRead;
-
-        // Keyed by the PREVIEW viewport: its own (empty) debug list, so the editor's grid/gizmos -
-        // written to DebugView(m_viewport) - never appear here. This is the whole fix (task #118).
-        m_render->RenderScene(*m_scene, m_previewViewport->ColorTargetView(),
-                              m_previewViewport->ColorFormat(), w, h,
-                              render::ViewportRect{0, 0, w, h}, &camOverride, targetState,
-                              /*postOverride*/ nullptr, /*viewportKey*/ m_previewViewport.Get());
-        m_previewViewport->SetColorState(rhi::ResourceState::ShaderRead);
-    }
-
-    void SceneEditorPage::EnsureViewportBound()
-    {
-        foundation::ui::RootView* root = m_viewport->Root();
+        gui::Node* root = m_content ? m_content->GetRootNode() : nullptr;
         if (root == nullptr)
-        {
             return;
-        }
-        foundation::graphics::RenderWindow* window = m_uiHost->WindowForRoot(root);
-        if (window == nullptr || window == m_hostWindow)
-        {
-            return;
-        }
+        auto box = MakeRef<gui::MessageBox>(Allocator());
+        box->Configure(title, text, gui::MessageBox::Buttons::Ok);
+        box->ClearButtons();
+        (void)box->AddButton(u8"Cancel", u8"cancel", gui::DialogRole::Cancel);
+        (void)box->AddButton(verb, u8"yes", gui::DialogRole::Destructive);
+        gui::MessageBox* raw = box.Get();
+        (void)box->AddEventListener(gui::EventType::Changed, [raw, yes = Move(yes)](const gui::Event&)
+                                    {
+                                        if (raw->GetResultName().AsView() == StringView(u8"yes") && yes)
+                                            yes();
+                                    });
+        box->OpenModal(*root);
+        m_confirm = box;
+    }
 
-        vg::renderer::VGRenderer* renderer = m_uiHost->RendererFor(window);
-        if (renderer == nullptr)
-        {
-            return;
-        } // float's AttachWindow hasn't run yet
-
-        if (m_hostWindow == nullptr)
-        {
-            m_viewport->Initialize(m_host->Graphics()->Raw(), renderer, m_host->Shell()->Input(),
-                                   window->Window().Id());
-            if (m_viewport->Surface() != nullptr)
-            {
-                m_router->AddSurface(m_viewport->Surface());
-            }
-            // Display-only (input=nullptr): the preview never takes hover/focus/pick, it just
-            // shows the previewed camera's view. Same window + renderer as the main viewport.
-            if (m_previewViewport)
-            {
-                m_previewViewport->Initialize(m_host->Graphics()->Raw(), renderer, nullptr,
-                                              window->Window().Id());
-            }
-        }
+    void SceneEditorPage::Later(Function<void()> work)
+    {
+        gui::SceneRoot* root = m_content ? m_content->GetSceneRoot() : nullptr;
+        gui::MutationQueue* queue = root != nullptr ? root->GetMutationQueue() : nullptr;
+        if (queue == nullptr)
+            work();
         else
-        {
-            m_viewport->AttachToWindow(renderer, window->Window().Id());
-            if (m_previewViewport)
-            {
-                m_previewViewport->AttachToWindow(renderer, window->Window().Id());
-            }
-        }
-        m_hostWindow = window;
-    }
-    const TypeInfo* SceneEditorPageFactory::PrimaryType() const
-    {
-        return &scene::SceneDocument::StaticType();
+            queue->Enqueue(Move(work));
     }
 
-    UniquePtr<EditorPage> SceneEditorPageFactory::CreatePage(EditorContext& context,
-                                                             foundation::content::Instance& instance)
+    template <typename T>
+    T* SceneEditorPage::Find(StringView id) const
     {
-        return UniquePtr<EditorPage>(
-            editor::EditorRootAllocator().New<SceneEditorPage>(context, *m_host, *m_uiHost, instance),
-            editor::EditorRootAllocator());
+        if (!m_content)
+            return nullptr;
+        Array<gui::Node*> pending(Allocator());
+        pending.PushBack(m_content.Get());
+        while (!pending.IsEmpty())
+        {
+            gui::Node* node = pending.Back();
+            pending.PopBack();
+            if (auto* widget = Cast<gui::UIWidget>(node); widget != nullptr && widget->GetId() == id)
+                return Cast<T>(node);
+            for (usize i = 0; i < node->ChildCount(); ++i)
+                pending.PushBack(node->GetChildAt(i));
+        }
+        return nullptr;
     }
 }

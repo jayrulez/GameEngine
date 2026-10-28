@@ -3,661 +3,194 @@
 
 // Editor::Scene - :inspector partition.
 //
-// SceneInspectorView: the reflection-driven property inspector INSIDE a scene page (per-page,
-// like everything scene-scoped). A toolkit PropertyGrid rebuilt from the primary
-// selection: an Entity section (name / active), a Transform section (position / rotation-as-
-// euler-degrees / scale), and one category per component with rows auto-generated from the
-// component type's reflected properties (f32, ints, bool, String, Float3, Color, enums via the
-// PropertyInfo::address raw path). Every edit routes through the SceneEditContext commands, so
-// field scrubs merge into single undo entries. [+ Add Component] lists the scene's managers;
-// each component category ends with a Remove row.
-//
-// Rebuild vs refresh: a cheap per-frame SIGNATURE (selected entity + scene revision + which
-// managers have a component) decides structural rebuilds; otherwise per-editor refreshers pull
-// model values into the widgets (skipped while that editor has an active edit gesture), so
-// undo/redo and external changes (gizmos later) stay live.
+// SceneInspectorView: the inspector inside a scene page, one per page, on the GUI's property grid
+// (Documentation/Specs/editor-gui.md, 5.3, layer 4). It shows the page's selection: its head (the
+// type icon, the name, the kind; several selected say how many), and one grid of sections (the
+// editor's PropertySections): the entity's Active, its Transform (a reflected Transform, its
+// rotation in Euler degrees), then each component every selected entity has, its reflected rows
+// with the editors by hint (an asset reference a slot taking what the builders make, an entity
+// reference a slot over the scene's entities: EntityRef taken as a reference by its id). Several
+// entities are edited at once, a row differing among them shown mixed.
+//   - Every edit is one undo step on the page's stack: a component's as the reflected source's
+//     change (each entity's value before and after as text, restored on undo, the components found
+//     again by entity and type), the transform's and Active's through the edit context's commands.
+//   - A component's header has its verbs: copy, paste over it, reset to its defaults, revert to
+//     its prefab (while it overrides it), remove; Add Component is the picker over the component
+//     types the selection lacks, by category, each with its icon and its description.
+//   - A search narrows the rows. While the page simulates the grid is read only, and says so.
+//   - The scene selected (its hierarchy row), the scene's settings: a section per system's block,
+//     each property showing and editing where it lands (the block's own values, or its profile's
+//     while it uses one), a block's profile actions under its header (open it, make one from these
+//     values, copy its values into the scene).
+//   - Built again when the selection, the scene's shape or the components change; otherwise only
+//     the values are shown again, so a gizmo's drag or an undo shows as it happens.
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
-#include <limits>
-#include <initializer_list>
 
 export module editor.scene:inspector;
 
 import foundation.core;
-import foundation.content;
-import foundation.resource;
-import foundation.geometry;
-import foundation.animation;
-import foundation.materials;
-import foundation.texture.resource;
-import foundation.particles.resource;
 import foundation.scene;
-import engine.render;
-import foundation.physics;
-import foundation.physics.resource;
-import engine.physics;
-import foundation.audio;
-import foundation.audio.resource;
-import engine.audio;
-import foundation.ui.resource;
-import foundation.script.resource;
-import engine.script;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import :edit;
+import :entity_ref_editor;
+import :entity_picker_window;
+import :inspector_extras;
+import :scene_settings_source;
 
 using namespace foundation::core;
-namespace core = foundation::core;
 
 export namespace editor
 {
-    namespace ui = foundation::ui;
-    namespace scene = foundation::scene;
-
-    // The asset reference row is Editor.App's (every page uses it): typed at construction, and
-    // BindAsset wires pick, drop and clear to one assignment.
-    using editor::app::ResourceRefEditor;
-    using editor::app::PrettifyPropertyName; // a row's label from its property's name
-
-    // --- Property-attribute conventions (reflection PropAttribute metadata -> inspector) ---
-    //
-    //   "displayName"  String  - row label override (default: prettified property name)
-    //   "description"  String  - row tooltip
-    //   "range"        Float4  - {min, max, step, unused}: f32 rows become slider+field
-    //   "visibleWhen"  String  - "prop" (visible while prop is truthy) or "prop=1,2"
-    //                            (visible while prop's raw int value is in the list)
-
-    /// Parsed "visibleWhen" condition.
-    struct PropertyCondition
-    {
-        String prop;       // the dependent property's reflected name
-        Array<i64> values; // empty = truthy test
-    };
-
-    [[nodiscard]] inline bool ParsePropertyCondition(StringView spec, PropertyCondition& out)
-    {
-        const utf8char* d = spec.Data();
-        usize eq = spec.Size();
-        for (usize i = 0; i < spec.Size(); ++i)
-        {
-            if (d[i] == u8'=')
-            {
-                eq = i;
-                break;
-            }
-        }
-        if (eq == 0)
-        {
-            return false;
-        }
-        out.prop = String(spec.SubStr(0, eq));
-        out.values.Clear();
-        if (eq == spec.Size())
-        {
-            return true;
-        } // truthy form
-        i64 value = 0;
-        bool negative = false;
-        bool any = false;
-        for (usize i = eq + 1; i <= spec.Size(); ++i)
-        {
-            const utf8char c = (i < spec.Size()) ? d[i] : u8','; // sentinel comma flushes
-            if (c == u8',')
-            {
-                if (!any)
-                {
-                    return false;
-                }
-                out.values.PushBack(negative ? -value : value);
-                value = 0;
-                negative = false;
-                any = false;
-            }
-            else if (c == u8'-' && !any && !negative)
-            {
-                negative = true;
-            }
-            else if (c >= u8'0' && c <= u8'9')
-            {
-                value = value * 10 + (c - u8'0');
-                any = true;
-            }
-            else
-            {
-                return false;
-            }
-        }
-        return !out.values.IsEmpty();
-    }
-
-    [[nodiscard]] inline bool MatchesPropertyCondition(const PropertyCondition& condition, i64 raw)
-    {
-        if (condition.values.IsEmpty())
-        {
-            return raw != 0;
-        }
-        for (i64 v : condition.values)
-        {
-            if (v == raw)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Bespoke editor for the physics collision-group matrix (a shape reflection rows
-    // can't express): one row per named group - name field + a toggle per column group.
-    // Symmetric by construction (a toggle writes BOTH directions); every edit is one
-    // whole-block undoable command, and the inspector's structural rebuild re-reads.
-    class CollisionMatrixEditor final : public ui::toolkit::PropertyEditor
-    {
-        RTTI_OBJECT(CollisionMatrixEditor, ui::toolkit::PropertyEditor)
-    public:
-        Array<String> names; // display names (index = group)
-        Array<u32> matrix;   // parallel collide masks
-        // The last COMMITTED names, snapshotted at each grid build: the blur-commit path compares
-        // against these so leaving an untouched field pushes no undo entry, and an Enter-committed
-        // rename (whose rebuild refreshes this snapshot) is not committed a second time on the old
-        // field's focus loss.
-        Array<String> committedNames;
-        Function<void(usize, String)> OnRename;
-        Function<void(usize, usize)> OnToggle; // (row group, column group)
-        Function<void()> OnAddGroup;
-        Function<void(usize)> OnRemoveGroup; // remove group `index` (only the last is offered)
-
-        CollisionMatrixEditor(StringView name, StringView category)
-            : ui::toolkit::PropertyEditor(name, category)
-        {
-        }
-
-        void RefreshView() override {}
-
-        /// Rebuild the grid after a STRUCTURAL change (add group / rename / toggle). Deferred via the
-        /// UI mutation queue: the trigger is a button-click event, and rebuilding tears down the very
-        /// views dispatching it, which must not happen mid-event (UIContext mutation-queue rule).
-        void RequestRebuild();
-
-    protected:
-        RefPtr<ui::View> CreateEditorView() override;
-
-    private:
-        void BuildGrid(ui::FlexLayout& column); // the row/cell/add-button build (rerun on rebuild)
-        RefPtr<ui::FlexLayout> m_column;         // the editor view, kept so a rebuild can repopulate it
-    };
-
-    // A read-only inspector NOTICE row: a wrapped advisory label spanning the editor column (no value
-    // editing). Used for conditional hints like "RigidBody shape=Cooked but no collision shape set".
-    class NoticeEditor final : public ui::toolkit::PropertyEditor
-    {
-        RTTI_OBJECT(NoticeEditor, ui::toolkit::PropertyEditor)
-    public:
-        String message;
-        NoticeEditor(StringView name, StringView category)
-            : ui::toolkit::PropertyEditor(name, category)
-        {
-        }
-        void RefreshView() override {}
-
-    protected:
-        RefPtr<ui::View> CreateEditorView() override;
-    };
-
-    // The generic list-of-asset-slots editor (add icon + AssetPickerSlot rows with move/remove) now
-    // lives in the shared editor.app layer as editor::app::ContainerListEditor, so bespoke asset pages
-    // reuse the identical widget. Brought into this namespace below for the inspector's use sites.
-    using editor::app::ContainerListEditor;
-
-    // Raw integral value of a bool/enum/int property via the address escape hatch.
-    [[nodiscard]] inline i64 RawPropertyValue(const Instance& obj, const PropertyInfo& p)
-    {
-        void* address = (p.address != nullptr) ? p.address(obj) : nullptr;
-        return address != nullptr ? ReadEnumValue(address, *p.type) : 0;
-    }
-
-    // Applies the displayName/description/visibleWhen conventions to every row that `prop`'s row
-    // builder just added to `grid` (rows firstRow..end). `instance` is a copyable callable
-    // re-reading the owning object each frame so visibleWhen rows follow live edits (a plain
-    // lambda, NOT core::Function - that one is move-only and each row's refresher needs its own).
-template <typename GetInstance>
-void ApplyPropertyPresentation(ui::toolkit::PropertyGrid& grid,
-                               Array<Function<void()>>& refreshers, const TypeInfo* type,
-                               const PropertyInfo& prop, usize firstRow, GetInstance instance)
-    {
-        const core::Attribute* displayName = FindAttribute(prop, u8"displayName");
-        const core::Attribute* description = FindAttribute(prop, u8"description");
-        const core::Attribute* visibleWhen = FindAttribute(prop, u8"visibleWhen");
-
-        // Resolve the dependent property + condition once; refreshers share them.
-        const PropertyInfo* dependent = nullptr;
-        PropertyCondition condition;
-        if (visibleWhen != nullptr)
-        {
-            const String* spec = visibleWhen->value.TryGet<String>();
-            if (spec != nullptr && ParsePropertyCondition(spec->AsView(), condition))
-            {
-                for (const PropertyInfo& p : Properties(*type))
-                {
-                    if (StringView(reinterpret_cast<const utf8char*>(p.name)) ==
-                        condition.prop.AsView())
-                    {
-                        dependent = &p;
-                        break;
-                    }
-                }
-            }
-        }
-
-        for (usize i = firstRow; i < grid.PropertyCount(); ++i)
-        {
-            ui::toolkit::PropertyEditor* editor = grid.PropertyAt(i);
-            const String* label =
-                (displayName != nullptr) ? displayName->value.TryGet<String>() : nullptr;
-            editor->SetDisplayName(label != nullptr
-                                       ? label->AsView()
-                                       : PrettifyPropertyName(editor->Name()).AsView());
-            if (description != nullptr)
-            {
-                if (const String* s = description->value.TryGet<String>())
-                {
-                    editor->SetTooltip(s->AsView());
-                }
-            }
-            if (dependent != nullptr)
-            {
-                auto refresh = [editor, dependent, condition, get = instance]()
-                {
-                    const Instance obj = get();
-                    editor->SetRowVisible(
-                        !obj.IsEmpty() &&
-                        MatchesPropertyCondition(condition, RawPropertyValue(obj, *dependent)));
-                };
-                refresh();
-                refreshers.PushBack(Function<void()>{Move(refresh)});
-            }
-        }
-    }
-
-    // A settings block's section name: the displayName its type declares ("Post Processing"),
-    // else its type's name minus a trailing "Settings" ("EnvironmentSettings" -> "Environment").
-    [[nodiscard]] inline StringView SettingsCategoryName(const TypeInfo& type)
-    {
-        if (const Variant* display = FindAttribute(type, "displayName"))
-        {
-            if (const String* name = display->TryGet<String>(); name != nullptr && !name->IsEmpty())
-            {
-                return name->AsView();
-            }
-        }
-        StringView category(reinterpret_cast<const utf8char*>(type.name));
-        const StringView suffix = u8"Settings";
-        if (category.Size() > suffix.Size() &&
-            category.SubStr(category.Size() - suffix.Size(), suffix.Size()) == suffix)
-        {
-            category = category.SubStr(0, category.Size() - suffix.Size());
-        }
-        return category;
-    }
-
-    // === Settings rows: a reflected settings block's fields, wherever its values live ===
-    // The scene inspector's settings sections and a profile asset's page build the same rows
-    // (enum dropdowns, colour pickers, sliders from the reflected ranges, reference pickers):
-    // `values` answers where a field's value is now, and the setters are the host's undoable
-    // writes (the scene's settings commands, the page's asset edits). Ref-counted so its
-    // move-only hooks are shared by every row's closures.
-    struct SettingsAccess : public RefCounted
-    {
-        const TypeInfo* type = nullptr;
-        Function<void*(const char* property)> values; // null = nothing to show
-        Function<void(const char* property, const Variant& value)> set;
-        Function<void(const char* property, i64 raw)> setRaw; // enums, by their underlying value
-        Function<void(const char* property, const Guid& id)> setReference; // reference-shaped
-    };
-
-    class SettingsRows
+    class SceneInspectorView
     {
     public:
-        SettingsRows(EditorContext& editor, ui::toolkit::PropertyGrid& grid,
-                     Array<Function<void()>>& refreshers)
-            : m_editor(&editor), m_grid(&grid), m_refreshers(&refreshers)
+        struct Services
         {
-        }
-
-        /// `prop`'s row (a leaf field of access->type), presented by its attributes. A kind with
-        /// no row yet adds none.
-        void Build(const RefPtr<SettingsAccess>& access, const PropertyInfo& prop,
-                   StringView category);
-
-        /// A row of the host's own (a button), refreshed with the rest.
-        void AddEditor(ui::toolkit::PropertyEditor* editor, Function<void()> refresher);
-
-    private:
-        void BuildRow(const RefPtr<SettingsAccess>& access, const PropertyInfo& prop,
-                      StringView category);
-        void BuildReferenceRow(const RefPtr<SettingsAccess>& access, const PropertyInfo& prop,
-                               StringView category);
-
-        EditorContext* m_editor;
-        ui::toolkit::PropertyGrid* m_grid;
-        Array<Function<void()>>* m_refreshers;
-    };
-
-    class SceneInspectorView : public ui::ViewGroup
-    {
-        RTTI_OBJECT(SceneInspectorView, ui::ViewGroup)
-    public:
-        /// A script behavior's section in the grid: "Behavior N - <class>".
-        [[nodiscard]] static String ScriptBehaviorSection(usize index, StringView scriptName);
-
-        SceneInspectorView(EditorContext& editor, SceneEditContext& edit)
-            : m_editor(&editor), m_edit(&edit)
-        {
-            // Two tabs: Entity (the selected entity's sections + Add/Paste) and Scene (the scene's
-            // settings). The Scene tab makes scene-settings a first-class view reachable anytime,
-            // instead of requiring a deselect (empty-viewport click) to surface them.
-            m_tabView = MakeRef<ui::TabView>(MemoryAllocator());
-            m_tabView->TabsClosable.SetValue(false);
-            {
-                SceneInspectorView* self = this;
-                m_tabView->OnTabChanged.Add(
-                    [self](ui::TabView*, i32) { self->m_forceRebuild = true; });
-            }
-
-            // --- Entity tab ---
-            auto entityColumn = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            entityColumn->Direction = ui::Orientation::Vertical;
-            entityColumn->Padding = ui::Thickness{8, 6}; // inset off the panel edge (like hierarchy)
-
-            m_emptyLabel = MakeRef<ui::Label>(MemoryAllocator(),
-                                              StringView(u8"Select an entity to inspect."));
-            m_emptyLabel->FontSize.SetValue(12.0f);
-            m_emptyLabel->Visibility = ui::Visibility::Gone; // shown only when nothing is selected
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                entityColumn->AddView(m_emptyLabel.Get(), lp);
-            }
-
-            m_entityGrid = MakeRef<ui::toolkit::PropertyGrid>(MemoryAllocator());
-            {
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                entityColumn->AddView(m_entityGrid.Get(), grow);
-            }
-
-            m_addButton = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Add Component"));
-            {
-                SceneInspectorView* self = this;
-                m_addButton->OnClick.Add([self](ui::ButtonBase*) { self->ShowAddComponentMenu(); });
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                entityColumn->AddView(m_addButton.Get(), lp);
-            }
-
-            // Paste Component: below Add Component, shown only when the clipboard holds a component
-            // (UpdatePasteButton, run each Refresh). Pasting over an existing same-type component
-            // overwrites it, so that case asks for confirmation first.
-            m_pasteButton = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Paste Component"));
-            {
-                SceneInspectorView* self = this;
-                m_pasteButton->OnClick.Add([self](ui::ButtonBase*) { self->PasteSelectedComponent(); });
-                m_pasteButton->Visibility = ui::Visibility::Gone;
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Margin = ui::Thickness{0.0f, 6.0f, 0.0f, 0.0f}; // gap below Add Component
-                entityColumn->AddView(m_pasteButton.Get(), lp);
-            }
-
-            // --- Scene tab ---
-            auto sceneColumn = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            sceneColumn->Direction = ui::Orientation::Vertical;
-            sceneColumn->Padding = ui::Thickness{8, 6};
-            m_sceneGrid = MakeRef<ui::toolkit::PropertyGrid>(MemoryAllocator());
-            {
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                sceneColumn->AddView(m_sceneGrid.Get(), grow);
-            }
-
-            m_tabView->AddTab(u8"Entity", entityColumn.Get());
-            m_tabView->AddTab(u8"Scene", sceneColumn.Get());
-            m_grid = m_entityGrid; // the active grid; Rebuild re-points it to the selected tab
-
-            AddView(m_tabView.Get());
-        }
-
-        /// Per-frame: structural rebuild when the shape changed, else pull values into widgets.
-        void Refresh();
-
-        [[nodiscard]] ui::toolkit::PropertyGrid* Grid() const noexcept { return m_grid.Get(); }
-
-        // Fill the available space (wrap-to-children would collapse the scrolling grid).
-        void OnMeasure(ui::BoxConstraints constraints) override;
-        void OnLayout(f32, f32, f32 width, f32 height) override;
-
-    private:
-        // TypeOf<T> for a type nobody registered still exists, named "<value>" - such
-        // components (e.g. from a game module without reflection) can't be edited or even
-        // sensibly LISTED, so the Add menu skips them and sections fall back to the manager's
-        // serialization id when available.
-        [[nodiscard]] static bool IsRegisteredType(const TypeInfo* type);
-
-        [[nodiscard]] Guid SelectedEntity() const;
-
-        // Selected entity + scene revision + which managers have a component on it.
-        [[nodiscard]] u64 Signature();
-
-        void Rebuild();
-
-        void BuildEntitySection(const Guid& id);
-
-        void BuildTransformSection(const Guid& id);
-
-        void BuildSceneSettingsSections();
-
-        // The collision-group matrix (physics settings): a bespoke grid row editing the
-        // names + symmetric collide matrix through whole-block undoable commands.
-        void BuildCollisionMatrixRow(const TypeInfo* type, StringView category);
-
-        // A block whose values can come from a profile: Make Profile, Copy Into Scene and Open
-        // Profile, between the block's own fields (the source, the profile) and its values.
-        void BuildSettingsProfileRows(SettingsRows& rows, const TypeInfo* type, StringView category);
-        // The scene's settings block of `type` as a settings-rows access: values where an edit of
-        // each field lands (SceneEditContext::SettingsValuesFor), written through its commands.
-        [[nodiscard]] RefPtr<SettingsAccess> SceneSettingsAccess(const TypeInfo* type);
-
-        void BuildComponentSection(const Guid& id, scene::ComponentManagerBase& mgr);
-
-        // Raw integral value of a bool/enum/int property via the address escape hatch.
-        [[nodiscard]] static i64 RawIntValue(const Instance& obj, const PropertyInfo& p);
-
-        // Applies the displayName/description/visibleWhen conventions to every row that
-        // `prop`'s Build*Row call just added (rows firstRow..end). `instance` is a copyable
-        // callable re-reading the owning object each frame so visibleWhen rows follow live
-        // edits (a plain lambda, NOT core::Function - that one is move-only and each row's
-        // refresher needs its own copy).
-        template <typename GetInstance>
-        void ApplyPropertyPresentation(const TypeInfo* type, const PropertyInfo& prop,
-                                       usize firstRow, GetInstance instance)
-        {
-            editor::ApplyPropertyPresentation(*m_grid, m_refreshers, type, prop, firstRow,
-                                              Move(instance));
-        }
-
-        // `path` addresses the property's owner: the component (empty) or a struct element of one
-        // of its reflected container properties (BuildContainerRows' per-slot rows).
-        void BuildPropertyRow(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
-                              StringView category, ComponentPropertyPath path = {});
-
-        // Generic reflected CONTAINER property (a reflected list member): one grid row whose editor is
-        // a ContainerListEditor - a header add + a slot row per element (an asset-picker slot + move /
-        // remove icons). Slot text + the pick/add/remove/move callbacks are wired here to the reflection
-        // container ops via MutateComponent (one undo step each); a content-diff refresher forces a
-        // rebuild when the list changes (which Signature() does not track). Element pick is currently
-        // specialized to Ref<Material>; struct-element leaf editing + the polymorphic add-by-type menu
-        // are a follow-up.
-        // `path` set: the list is a field of that container element (a slot's own list).
-        void BuildContainerRows(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
-                                StringView category, ComponentPropertyPath path = {});
-
-        // Current target Guid of a Ref<T> property (nil when unset/unresolvable).
-        template <typename T>
-        [[nodiscard]] Guid RefTarget(const Guid& id, const TypeInfo* type, const char* propName,
-                                     const ComponentPropertyPath& path = {})
-        {
-            const TypeInfo* ownerType = nullptr;
-            const Instance owner = m_edit->ResolvePropertyOwner(id, type, path, &ownerType);
-            const PropertyInfo* p = (owner.IsEmpty() || ownerType == nullptr)
-                                        ? nullptr
-                                        : FindProperty(*ownerType, propName);
-            void* address = (p != nullptr && p->address != nullptr) ? p->address(owner) : nullptr;
-            return (address != nullptr) ? static_cast<foundation::resource::Ref<T>*>(address)->id
-                                        : Guid{};
-        }
-
-
-        /// The display names the slots editor renders - recomputed by its refresher to
-        /// detect shape/content changes (the inspector Signature only sees selection +
-        /// component PRESENCE, so a data-only slot mutation or its undo changes nothing it
-        /// watches).
-        [[nodiscard]] Array<String> MaterialSlotNames(const engine::render::MeshComponent& mc);
-
-        void BuildMaterialSlots(const Guid& id, StringView category);
-
-
-        // The cooked ScriptClass a behavior references (bound through the editor's
-        // resource manager so the harvested metadata is available; null when unset or
-        // not yet cooked).
-        [[nodiscard]] foundation::script::ScriptClass*
-        BehaviorClass(const engine::script::ScriptBehavior& behavior);
-
-        // Signature of the behavior list's SHAPE (count + script ids + enabled flags +
-        // override counts) - the refresher forces a rebuild when it changes, since the
-        // inspector's own Signature only watches selection + component presence.
-        [[nodiscard]] u64 ScriptBehaviorsSignature(const engine::script::ScriptComponent& c);
-
-        void BuildScriptBehaviors(const Guid& id, StringView category);
-
-        // A behavior's section, nested in the component's: its rows, with its move and remove
-        // icons in the header.
-        void BuildScriptBehaviorRows(const Guid& id, StringView componentCategory, usize index,
-                                     usize count);
-        // The live ScriptComponent of `id`, or null (re-resolved: component pools move).
-        [[nodiscard]] engine::script::ScriptComponent* LiveScript(const Guid& id);
-
-        // A property row's read/write hooks, so ONE set of row builders serves both the entity
-        // behavior tier (override lives on a ScriptComponent behavior) and the scene-script/Level
-        // tier (override lives on the scene's SceneScriptSettings). `effective` returns the current
-        // value (override or harvested default); `setOverride`/`removeOverride` are undoable writes.
-        // Ref-counted so the (move-only Function) hooks can be shared into multiple editor closures.
-        struct ScriptPropertyAccess : public RefCounted
-        {
-            Function<foundation::script::ScriptPropertyValue()> effective;
-            Function<void(const foundation::script::ScriptPropertyValue&)> setOverride;
-            Function<void()> removeOverride;
+            EditorContext* context = nullptr;
+            EditorPage* page = nullptr; // the page whose selection it shows (its actions, its simulation)
+            EditorIcons* icons = nullptr;
+            const app::ResourceRefServices* refs = nullptr; // the asset slots' (null: none)
+            /// Opens the picker for `request` (Add Component).
+            Function<void(app::PickerRequest request)> pick;
+            /// Opens the entity picker for `request` (an entity slot's pick).
+            Function<void(EntityPickRequest request)> pickEntity;
+            /// Whether the page simulates (the grid read only meanwhile).
+            Function<bool()> simulating;
+            /// Whether the scene's own row is selected (ruling 12: then the scene's settings show).
+            Function<bool()> sceneSelected;
+            /// The scene's icon (a prefab's or a scene's document) and name, for its head.
+            StringView sceneIcon;
+            Function<StringView()> sceneName;
         };
 
-        void BuildScriptPropertyRow(StringView category,
-                                    const foundation::script::ScriptPropertyDesc& property,
-                                    const RefPtr<ScriptPropertyAccess>& access);
+        /// The inspector over `edit`'s selection in `pane` (the markup's: `inspector-icon`,
+        /// `inspector-name`, `inspector-kind`, `inspector-search`, `inspector-add`,
+        /// `inspector-grid`, `inspector-state`, `inspector-note`, by id).
+        SceneInspectorView(IAllocator& allocator, SceneEditContext& edit, Services services, foundation::gui::Node& pane);
+        SceneInspectorView(const SceneInspectorView&) = delete;
+        SceneInspectorView& operator=(const SceneInspectorView&) = delete;
+        ~SceneInspectorView();
 
-        // Entity-typed property: a picker over the CURRENT scene's entities (a menu of
-        // names; the override stores the target's guid).
-        void BuildScriptEntityPropertyRow(StringView category,
-                                          const foundation::script::ScriptPropertyDesc& property,
-                                          const RefPtr<ScriptPropertyAccess>& access);
+        /// Once a frame: built again when what it shows changed; else its values shown again.
+        void Refresh();
+        /// The search over the rows, as typing it does.
+        void Search(StringView text);
+        /// Add Component's picker.
+        void OpenAddComponent();
+        /// What Add Component offers the selection now, by type name.
+        [[nodiscard]] Array<String> AddableComponents() const;
+        /// The same, the types (the picker's display names and categories).
+        [[nodiscard]] Array<const TypeInfo*> AddableTypes() const;
+        /// Adds a component of `type` (a type name) to every selected entity, one undo step each.
+        bool AddComponent(StringView type);
+        /// Whether a copied component waits on the clipboard for the entities selected (Paste
+        /// Component's button shows then).
+        [[nodiscard]] bool CanPasteComponent() const;
+        /// Paste Component: the copied component onto every selected entity, one undo step; when
+        /// one has that component already, asked first (it is overwritten). False: nothing to do.
+        bool PasteComponent();
+        /// The same without asking (the confirm's yes).
+        bool PasteComponentNow();
+        /// The overwrite question, while it is open.
+        [[nodiscard]] foundation::gui::MessageBox* PasteConfirm() const;
 
-        // Asset-typed property (asset:<TypeName>): an AssetPickerDialog over that
-        // asset type; the override stores the picked guid.
-        void BuildScriptAssetPropertyRow(StringView category,
-                                         const foundation::script::ScriptPropertyDesc& property,
-                                         const RefPtr<ScriptPropertyAccess>& access);
+        // === For tests ===
+        [[nodiscard]] foundation::gui::PropertyGrid* Grid() const noexcept { return m_grid; }
+        [[nodiscard]] app::PropertySections& Sections() noexcept { return m_sections; }
+        /// The sections' titles in order, by " | ".
+        [[nodiscard]] String SectionTitles() const;
+        /// The grid's path of `property` in the section titled `title` (empty: no such section).
+        [[nodiscard]] String PathOf(StringView title, StringView property) const;
+        /// The component a section's header path ("#Light") stands for; null: none.
+        [[nodiscard]] const TypeInfo* ComponentOf(StringView headerPath) const;
+        /// A header's menu as the grid builds it, at `headerPath`.
+        bool OpenHeaderMenu(StringView headerPath);
+        [[nodiscard]] StringView Kind() const;
+        /// A settings block's section by its title; null: none.
+        [[nodiscard]] SceneSettingsSource* SettingsOf(StringView title) const;
+        /// A settings block's profile action `name` ("Open Profile", "Make Profile", "Copy Into
+        /// Scene"): whether it shows now; Run runs it.
+        [[nodiscard]] bool ShowsProfileAction(StringView title, StringView name) const;
+        bool RunProfileAction(StringView title, StringView name);
+        /// A section's extras' row at `name` (a notice's text, an action's label); empty when
+        /// there is none or it is hidden.
+        [[nodiscard]] String ExtraText(StringView title, StringView name) const;
+        /// Runs a section's action `name`, as its button does.
+        bool RunExtra(StringView title, StringView name);
+        /// A section's extras' source `index` (a script component's behaviours, a block's
+        /// collision groups); null: none.
+        [[nodiscard]] foundation::gui::IPropertySource* ExtraSource(StringView title, usize index) const;
 
-        // The Level tier's property rows: harvested metadata of the scene's bound Level class,
-        // edited as overrides on the scene's SceneScriptSettings (committed as a settings blob).
-        void BuildSceneScriptPropertyRows(const TypeInfo* settingsType, StringView category);
-
-        [[nodiscard]] StringView AssetNameFor(const Guid& target);
-
-        template <typename T>
-        void BuildResourceRefRow(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
-                                 StringView category,
-                                 std::initializer_list<StringView> assetTypeNames,
-                                 ComponentPropertyPath path = {})
+    private:
+        // A component's extras: a bag under its header, its notices asked again as values show,
+        // its actions run on their rows' commits.
+        class Extras;
+        struct ComponentSection
         {
-            SceneInspectorView* self = this;
-            SceneEditContext* edit = m_edit;
-            const char* propName = prop.name;
-            const StringView name(reinterpret_cast<const utf8char*>(prop.name));
-            auto editor = MakeRef<ResourceRefEditor>(
-                MemoryAllocator(), name, AssetNameFor(RefTarget<T>(id, type, propName, path)),
-                category, Span<const StringView>{assetTypeNames.begin(), assetTypeNames.size()});
-            ResourceRefEditor* raw = editor.Get();
-            // Pick, drop and clear are the one undoable component write.
-            raw->BindAsset(
-                *m_editor,
-                [self, id, type, propName, path]()
-                { return self->RefTarget<T>(id, type, propName, path); },
-                [self, edit, id, type, propName, path](const Guid& target)
-                {
-                    if (self->m_editor->Project() != nullptr)
-                    {
-                        edit->SetComponentResourceRef<T>(id, type, path, propName, target,
-                                                         self->m_editor->Resources());
-                    }
-                });
-            AddEditor(raw, [raw]() { raw->Refresh(); });
-        }
+            String key;
+            String title;
+            const TypeInfo* type = nullptr;
+            UniquePtr<foundation::gui::ReflectedPropertySource> source;
+            UniquePtr<Extras> extras; // null: none
+        };
 
-        // A `boneName` string: a list of the animator's bones (false: no animator or skeleton yet,
-        // the caller builds the text field). Defined in the impl.
-        bool BuildBoneNameRow(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
-                              StringView category, ComponentPropertyPath path, StringView current);
-        // Entity-reference row: the entity-picker twin of BuildResourceRefRow. Same ResourceRefEditor
-        // widget, but the pick menu lists the CURRENT scene's entities (names; "(none)" clears) and
-        // the choice writes the component's EntityRef via SetComponentEntityRef. Defined in the impl.
-        void BuildEntityRefRow(const Guid& id, const TypeInfo* type, const PropertyInfo& prop,
-                               StringView category, ComponentPropertyPath path = {});
+        void Build();
+        void Clear();
+        void ShowPaste();
+        [[nodiscard]] u64 Signature() const;
+        void BuildHead();
+        void BuildTransform();
+        void BuildComponents();
+        void PullTransforms();
+        // A type's extras (a component's, a settings block's) under its section; null: none.
+        [[nodiscard]] UniquePtr<Extras> BuildExtras(const TypeInfo& type, StringView key, StringView title, usize objects);
+        void BuildScene();
+        [[nodiscard]] bool ShowsScene() const;
+        void RefreshExtras();
+        void HeaderMenu(foundation::gui::Menu& menu, const foundation::gui::PropertyRow& row);
+        void ComponentChanged(const TypeInfo* type, const foundation::gui::ReflectedChange& change);
+        [[nodiscard]] Array<foundation::core::Instance> InstancesOf(const TypeInfo& type) const;
+        [[nodiscard]] static String TitleOf(const TypeInfo& type);
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const;
 
-        // The "range" attribute's {min, max, step} payload, or null when absent/mistyped.
-        [[nodiscard]] static const Float4* RangeOf(const PropertyInfo& prop);
-
-        void AddEditor(ui::toolkit::PropertyEditor* editor, Function<void()> refresher);
-
-        [[nodiscard]] static Float3 EulerDegrees(Quaternion q);
-
-        void ShowAddComponentMenu();
-        // Paste the clipboard component onto the selected entity; if it already has that component
-        // type the paste OVERWRITES it, so confirm first (it is undoable either way).
-        void PasteSelectedComponent();
-        // Show/hide the Paste button based on whether the clipboard holds a component (per Refresh).
-        void UpdatePasteButton();
-
-        static constexpr i32 kEntityTab = 0;
-        static constexpr i32 kSceneTab = 1;
-
-        EditorContext* m_editor;  // borrowed (project + resources)
-        SceneEditContext* m_edit; // borrowed (the page owns it)
-        RefPtr<ui::TabView> m_tabView;
-        RefPtr<ui::toolkit::PropertyGrid> m_grid; // the ACTIVE tab's grid (re-pointed each Rebuild)
-        RefPtr<ui::toolkit::PropertyGrid> m_entityGrid;
-        RefPtr<ui::toolkit::PropertyGrid> m_sceneGrid;
-        RefPtr<ui::Label> m_emptyLabel; // "Select an entity to inspect." (Entity tab, no selection)
-        RefPtr<ui::Button> m_addButton;
-        RefPtr<ui::Button> m_pasteButton;
-        Array<Function<void()>> m_refreshers;
-        Guid m_lastSelectedForTab; // selection last seen (auto-switch to Entity tab on a new pick)
+        IAllocator& m_allocator;
+        SceneEditContext* m_edit;
+        Services m_services;
+        foundation::gui::Node* m_pane = nullptr;
+        RefPtr<foundation::gui::MessageBox> m_pasteConfirm; // Paste Component's overwrite question
+        foundation::gui::PropertyGrid* m_grid = nullptr;
+        app::PropertySections m_sections;
+        EntityRefEditor::Services m_entityRefs; // what the entity slots ask (the grid's registry holds it)
+        app::XmlPropertyTextFormat m_format;
+        // The selection it shows, in order.
+        Array<Guid> m_entities;
+        // Active: a value per entity.
+        UniquePtr<foundation::gui::PropertyBag> m_active;
+        // Transform: a copy of each entity's, the reflected source's objects; an edit sets it back.
+        Array<Transform> m_transforms;
+        UniquePtr<foundation::gui::ReflectedPropertySource> m_transform;
+        Array<UniquePtr<ComponentSection>> m_components;
+        // The scene's settings while it is selected: a source per block, a block's profile actions.
+        struct SettingsSection
+        {
+            String key;
+            String title;
+            UniquePtr<SceneSettingsSource> source;
+            UniquePtr<Extras> profile; // null: the block has no profile
+            UniquePtr<Extras> extras;  // null: none
+        };
+        Array<UniquePtr<SettingsSection>> m_settings;
+        RefPtr<foundation::gui::Menu> m_menu;
+        String m_filter;
         u64 m_signature = ~0ull;
-        bool m_forceRebuild = false; // set when a data-only mutation changed a section's SHAPE
+        bool m_readOnly = false;
+        u64 m_edits = 0; // transform edits made, each a group of its own
     };
-
-    // ResourceRefEditor's RTTI define moved with the class to editor.app (ResourceRefEditorImpl.cpp).
-    RTTI_DEFINE_OBJECT(NoticeEditor, "rtti::editor::editor")
-    RTTI_DEFINE_OBJECT(CollisionMatrixEditor, "rtti::editor::editor")
-    // ContainerListEditor's RTTI define moved with the class to editor.app (ContainerListEditorImpl.cpp).
-    RTTI_DEFINE_OBJECT(SceneInspectorView, "rtti::editor::editor")
 }

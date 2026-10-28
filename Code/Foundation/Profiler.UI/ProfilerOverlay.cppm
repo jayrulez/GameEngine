@@ -17,7 +17,6 @@ import foundation.core;
 import foundation.vg;
 import foundation.ui;
 import foundation.profiler;
-import :window;
 import :view;
 import :frame_time_graph;
 import :frame_stats;

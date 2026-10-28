@@ -130,110 +130,6 @@ namespace editor
             times.Sort([](f64 a, f64 b) { return a < b; });
         }
 
-        // ---- The timeline ----
-
-        Result<Float2, String> ReadPair(const JsonValue& value, usize i, StringView name)
-        {
-            if (!value.IsArray() || value.Count() != 2 || !value.At(0).IsNumber() ||
-                !value.At(1).IsNumber())
-            {
-                return Err(Format(u8"input[{}]: `{}` takes [x, y]", i, name));
-            }
-            return Float2{static_cast<f32>(value.At(0).AsNumber()),
-                          static_cast<f32>(value.At(1).AsNumber())};
-        }
-
-        Result<input::ScriptedInput, String> ParseInput(const JsonValue& entry, usize i)
-        {
-            input::ScriptedInput out;
-            if (!entry.IsObject())
-            {
-                return Err(Format(u8"input[{}]: an object", i));
-            }
-            const JsonValue at = entry.Get(u8"at");
-            if (!at.IsNumber() || at.AsNumber() < 0.0)
-            {
-                return Err(Format(u8"input[{}]: `at` takes run seconds from 0", i));
-            }
-            out.at = at.AsNumber();
-            out.down = entry.Get(u8"down").AsBool(true);
-            out.gamepad = static_cast<i32>(entry.Get(u8"gamepad").AsInt(0));
-
-            // The names are the enums' reflected case names, any case; type_info lists them.
-            if (entry.Has(u8"key"))
-            {
-                const String name = entry.Get(u8"key").AsString();
-                out.kind = input::ScriptedInputKind::Key;
-                if (!input::ScriptedInputSource::ParseKey(name.AsView(), out.key))
-                {
-                    return Err(Format(u8"input[{}]: no key '{}' (the KeyCode case names: "
-                                      u8"type_info KeyCode lists them)",
-                                      i, name.AsView()));
-                }
-                return out;
-            }
-            if (entry.Has(u8"mouseButton"))
-            {
-                const String name = entry.Get(u8"mouseButton").AsString();
-                out.kind = input::ScriptedInputKind::MouseButton;
-                if (!input::ScriptedInputSource::ParseMouseButton(name.AsView(), out.button))
-                {
-                    return Err(Format(u8"input[{}]: no mouse button '{}' (type_info MouseButton "
-                                      u8"lists them)",
-                                      i, name.AsView()));
-                }
-                return out;
-            }
-            if (entry.Has(u8"mouseMove") || entry.Has(u8"wheel"))
-            {
-                const bool move = entry.Has(u8"mouseMove");
-                const StringView name = move ? StringView(u8"mouseMove") : StringView(u8"wheel");
-                out.kind = move ? input::ScriptedInputKind::MouseMove
-                                : input::ScriptedInputKind::MouseWheel;
-                Result<Float2, String> pair = ReadPair(entry.Get(String(name)), i, name);
-                if (!pair.HasValue())
-                {
-                    return Err(Move(pair.Error()));
-                }
-                out.x = pair.Value().x;
-                out.y = pair.Value().y;
-                return out;
-            }
-            if (entry.Has(u8"button"))
-            {
-                const String name = entry.Get(u8"button").AsString();
-                out.kind = input::ScriptedInputKind::PadButton;
-                if (!input::ScriptedInputSource::ParsePadButton(name.AsView(), out.padButton))
-                {
-                    return Err(Format(u8"input[{}]: no gamepad button '{}' (type_info "
-                                      u8"GamepadButton lists them)",
-                                      i, name.AsView()));
-                }
-                return out;
-            }
-            if (entry.Has(u8"axis"))
-            {
-                const String name = entry.Get(u8"axis").AsString();
-                out.kind = input::ScriptedInputKind::PadAxis;
-                if (!input::ScriptedInputSource::ParsePadAxis(name.AsView(), out.padAxis))
-                {
-                    return Err(Format(u8"input[{}]: no gamepad axis '{}' (type_info GamepadAxis "
-                                      u8"lists them)",
-                                      i, name.AsView()));
-                }
-                const JsonValue value = entry.Get(u8"value");
-                if (!value.IsNumber() || value.AsNumber() < -1.0 || value.AsNumber() > 1.0)
-                {
-                    return Err(Format(u8"input[{}]: an axis takes `value` from -1 to 1", i));
-                }
-                out.value = static_cast<f32>(value.AsNumber());
-                return out;
-            }
-            return Err(Format(u8"input[{}]: name one of `key`, `mouseButton`, `mouseMove`, "
-                              u8"`wheel`, `button` or `axis`",
-                              i));
-        }
-
         // ---- Probes ----
 
         Result<JsonValue, String> ProbeValue(IPieInstancePage& pie, const Probe& probe)
@@ -606,29 +502,10 @@ namespace editor
                                                                  context.Allocator());
             if (args.Has(u8"input"))
             {
-                const JsonValue timeline = args.Get(u8"input");
-                if (!timeline.IsArray())
+                Result<usize, String> added = input::AddScriptedTimeline(args.Get(u8"input"), run.duration, *source);
+                if (!added.HasValue())
                 {
-                    return Err(String(u8"`input` takes an array of timeline entries"));
-                }
-                for (i64 i = 0; i < timeline.Count(); ++i)
-                {
-                    Result<input::ScriptedInput, String> entry =
-                        ParseInput(timeline.At(i), static_cast<usize>(i));
-                    if (!entry.HasValue())
-                    {
-                        return Err(Move(entry.Error()));
-                    }
-                    if (entry.Value().at > run.duration)
-                    {
-                        return Err(Format(u8"input[{}]: `at` {} is after the run's end ({})", i,
-                                          entry.Value().at, run.duration));
-                    }
-                    if (!source->Add(entry.Value()))
-                    {
-                        return Err(Format(u8"input[{}]: `gamepad` takes 0 to {}", i,
-                                          input::ScriptedInputSource::kMaxGamepads - 1));
-                    }
+                    return Err(Move(added.Error()));
                 }
             }
             run.inputCount = source->Count();

@@ -38,22 +38,22 @@ import foundation.image;
 import foundation.image.io;
 import foundation.resource; // ResourceManager (scene-thumbnail generators bind cooked products)
 import foundation.scene;    // Scene (the stage's persistent preview scene, populated by generators)
-import foundation.ui;
+import foundation.gui; // ImageDrawable (a thumbnail as the GUI draws it)
 import foundation.vfs;
 import editor.project; // EditorJobService
 
 using namespace foundation::core;
 namespace content = foundation::content;
 namespace image = foundation::image;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 export namespace editor
 {
     /// A thumbnail drawable that OWNS its pixels: the image lives exactly as long as the
     /// drawable, so the service's RAM map can drop entries freely while the UI still holds refs.
-    class OwnedThumbnailDrawable final : public ui::ImageDrawable
+    class OwnedThumbnailDrawable final : public gui::ImageDrawable
     {
-        RTTI_OBJECT(OwnedThumbnailDrawable, ui::ImageDrawable)
+        RTTI_OBJECT(OwnedThumbnailDrawable, gui::ImageDrawable)
     public:
         explicit OwnedThumbnailDrawable(image::Image pixels) : m_pixels(Move(pixels))
         {
@@ -252,7 +252,7 @@ export namespace editor
         /// The resolved thumbnail, or EMPTY when none exists yet (the caller keeps its type
         /// icon). A miss schedules load-or-generate on the light lane; OnThumbnailReady fires
         /// when the swap-in is ready. Main thread only.
-        [[nodiscard]] RefPtr<ui::Drawable> Get(const Guid& id)
+        [[nodiscard]] RefPtr<gui::Drawable> Get(const Guid& id)
         {
             if (id.IsNil() || m_jobs == nullptr || !m_resolve)
             {
@@ -260,7 +260,7 @@ export namespace editor
             }
             if (const Entry* entry = m_entries.Find(id))
             {
-                return RefPtr<ui::Drawable>(entry->drawable.Get());
+                return RefPtr<gui::Drawable>(entry->drawable.Get());
             }
             ScheduleLoad(id);
             return {};

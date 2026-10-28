@@ -260,6 +260,42 @@ TEST_CASE("RenderFrame: the bone pool starts small and grows the frame that need
     smallFrame.AddView(one, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256);
     smallFrame.End();
     CHECK(small.BonePoolSlotsPerFrame() == MeshRenderer::InitialBonePoolSlots());
+
+    // Two scenes in one frame (editor pages side by side): both skinned, not only the last drawn.
+    // Uploaded one scene at a time, each upload lost the one before it, and every page but the last
+    // drew its creatures in their bind pose.
+    Array<Float4x4> otherPalette; // a skeleton of its own, in neither of the scenes above
+    otherPalette.Resize(kBones, Float4x4::Identity());
+    ExtractedScene other{DefaultAllocator()};
+    MeshRenderData* otherRd = other.Add<MeshRenderData>();
+    otherRd->world = Float4x4::Identity();
+    otherRd->mesh = skinned.Get();
+    otherRd->material = material.Get();
+    otherRd->category = RenderCategories::Opaque;
+    otherRd->boneMatrices = otherPalette.Data();
+    otherRd->boneCount = kBones;
+    smallFrame.Begin(*h.encoder, 1);
+    smallFrame.AddView(one, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256);
+    smallFrame.AddView(other, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256);
+    smallFrame.End();
+    CHECK(small.IsSkinUploaded(palettes[0].Data()));
+    CHECK(small.IsSkinUploaded(otherPalette.Data()));
+
+    // And when the second scene is the one that makes the pool grow, the first is not lost with the
+    // old pool: the pool is sized for both before either is written.
+    MeshRenderer grower(DefaultAllocator(), h.device, shaderSystem, psoCache, materialSystem, 2);
+    REQUIRE(grower.Initialize().IsOk());
+    RendererRegistry growerRegistry;
+    growerRegistry.Register(&grower);
+    RenderFrame growerFrame(DefaultAllocator(), h.device, growerRegistry, 2);
+    growerFrame.Begin(*h.encoder, 0);
+    growerFrame.AddView(other, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256);
+    growerFrame.AddView(scene, camera, settings, h.colorView, rhi::TextureFormat::BGRA8Unorm, 256, 256); // 40 casters
+    growerFrame.End();
+    CHECK(grower.BonePoolSlotsPerFrame() == 8192u);
+    CHECK(grower.IsSkinUploaded(otherPalette.Data())); // the first scene's, drawn before the growth
+    for (u32 c = 0; c < kCasters; ++c)
+        CHECK(grower.IsSkinUploaded(palettes[c].Data()));
 }
 
 namespace

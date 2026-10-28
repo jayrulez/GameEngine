@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// TextureEditorPage tests (headless): the factory routes TextureAsset through the page
-// registry (nearest-type dispatch), and the whole-asset blob snapshot the page's undo
-// commands ride round-trips every import setting. The page's widget tree needs a live UI
-// context, so it is exercised in the editor app, not here.
+// TextureEditorPage tests: the factory routes TextureAsset through the page registry
+// (nearest-type dispatch), the asset's serialized state round-trips every import setting (what a
+// preset's undo step keeps), the presets and the cook policy; then the page from the image pages'
+// markup over a texture in a project: a preset from its bar's menu one undo step, Usage setting the
+// colour space with it, the notice when they disagree, and its facts.
 
 #include <doctest/doctest.h>
 
@@ -18,23 +19,23 @@ import foundation.texture;
 import texture.pipeline;
 import texture.compression;
 import foundation.rhi;
+import foundation.content;
+import foundation.image.io;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
+import editor.app;
 import editor.texture;
 
 using namespace foundation::core;
 namespace texture = foundation::texture;
 namespace image = foundation::image;
 
-TEST_CASE("TextureEditorPageFactory reports the TextureAsset primary type")
-{
-    editor::TextureEditorPageFactory factory;
-    CHECK(factory.PrimaryType() == &pipeline::TextureAsset::StaticType());
-}
-
 TEST_CASE("TextureEditor registers a factory that the registry routes for TextureAsset")
 {
+    const editor::app::AssetPageServicesSource none; // no services: the registration only, before the context it outlives
     editor::EditorContext context{DefaultAllocator()};
-    editor::RegisterTextureEditor(context);
+    editor::RegisterTextureEditor(context, none);
 
     editor::IEditorPageFactory* found =
         context.Pages().FindFactory(pipeline::TextureAsset::StaticType());
@@ -138,24 +139,122 @@ TEST_CASE("the Cooks-to row's policy expectations (desktop profile)")
                                   rgba8) == foundation::rhi::TextureFormat::BC7RGBAUnorm);
 }
 
-TEST_CASE("usage implies color space (the page's derivation + lint contract)")
+namespace
 {
-    // The page derives colorSpace from usage in ONE mutation and lints the mismatch. The
-    // mapping is the contract; pin it here so a page edit cannot silently drop it.
-    const auto derived = [](texcomp::TextureUsage usage)
-    {
-        return usage == texcomp::TextureUsage::Color ? image::ImageColorSpace::Srgb
-                                                     : image::ImageColorSpace::Linear;
-    };
-    CHECK(derived(texcomp::TextureUsage::Color) == image::ImageColorSpace::Srgb);
-    CHECK(derived(texcomp::TextureUsage::Normal) == image::ImageColorSpace::Linear);
-    CHECK(derived(texcomp::TextureUsage::Mask) == image::ImageColorSpace::Linear);
-    CHECK(derived(texcomp::TextureUsage::HDR) == image::ImageColorSpace::Linear);
+    namespace gui = foundation::gui;
 
-    // The lint predicate: warn exactly when data is stored as sRGB.
-    const auto lints = [](texcomp::TextureUsage usage, image::ImageColorSpace cs)
-    { return usage != texcomp::TextureUsage::Color && cs == image::ImageColorSpace::Srgb; };
-    CHECK(lints(texcomp::TextureUsage::Normal, image::ImageColorSpace::Srgb));
-    CHECK(!lints(texcomp::TextureUsage::Normal, image::ImageColorSpace::Linear));
-    CHECK(!lints(texcomp::TextureUsage::Color, image::ImageColorSpace::Srgb));
+    RefPtr<gui::Node> LoadMarkup(StringView relative)
+    {
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), relative);
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        gui::RegisterGuiElements();
+        gui::RegisterToolkitElements();
+        static const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+
+    // A project with a 4x4 opaque picture ("bricks.png") under a colour texture ("Bricks").
+    struct Bed
+    {
+        String dir = String(u8"scratch_texture_page_project");
+        UniquePtr<editor::EditorProject> project;
+        editor::EditorContext context{DefaultAllocator()};
+        foundation::content::Instance* bricks = nullptr;
+
+        Bed()
+        {
+            pipeline::RegisterTextureAsset(); // read back by its type, as the editor registers it
+            (void)RemoveDirectoryRecursive(dir.AsView());
+            REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
+            project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());
+            REQUIRE(static_cast<bool>(project));
+            context.SetProject(project.Get());
+            image::Image picture(4, 4, image::PixelFormat::RGBA8);
+            Span<u8> pixels = picture.PixelDataMut();
+            for (usize i = 0; i < pixels.Size(); ++i)
+                pixels[i] = (i % 4) == 3 ? 255 : static_cast<u8>(i * 7);
+            REQUIRE(image::io::SaveImage(picture, PathJoin(project->SourcesRoot().AsView(), u8"bricks.png").AsView(), image::io::ImageFileFormat::PNG).IsOk());
+            bricks = project->SourceDb().RootGroup()->CreateInstance(u8"Bricks", pipeline::TextureAsset::StaticType());
+            REQUIRE(bricks != nullptr);
+            pipeline::TextureAsset asset;
+            asset.fileName = foundation::vfs::SourcePath(u8"bricks.png");
+            asset.SetupFor3D();
+            REQUIRE(bricks->WriteObject(asset).IsOk());
+        }
+        ~Bed()
+        {
+            context.SetProject(nullptr);
+            project.Reset();
+            (void)RemoveDirectoryRecursive(dir.AsView());
+        }
+        UniquePtr<editor::TextureEditorPage> Open()
+        {
+            editor::app::AssetPageServices services;
+            services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
+            return MakeUnique<editor::TextureEditorPage>(DefaultAllocator(), context, Move(services), *bricks);
+        }
+    };
+}
+
+TEST_CASE("texture page: a preset from the bar's menu is one undo step however many settings it moves")
+{
+    Bed bed;
+    UniquePtr<editor::TextureEditorPage> page = bed.Open();
+    REQUIRE_FALSE(page->LoadFailed());
+    REQUIRE(page->PresetButton() != nullptr);
+    CHECK(page->PresetButton()->GetMenu().ItemCount() == editor::TextureEditorPage::Presets().Size());
+    auto* asset = Cast<pipeline::TextureAsset>(page->Object());
+    REQUIRE(asset != nullptr);
+    CHECK(asset->generateMipmaps);
+    CHECK(asset->wrapU == texture::TextureWrap::Repeat);
+
+    REQUIRE(page->ApplyPreset(u8"UI"));
+    CHECK_FALSE(asset->generateMipmaps);
+    CHECK(asset->wrapU == texture::TextureWrap::ClampToEdge);
+    CHECK(page->IsDirty());
+    CHECK(page->Fact(u8"Mip Levels") == StringView(u8"1"));
+    page->Commands().Undo();
+    CHECK(asset->generateMipmaps);
+    CHECK(asset->wrapU == texture::TextureWrap::Repeat);
+    CHECK(page->Fact(u8"Mip Levels") == StringView(u8"3")); // 4x4, 2x2, 1x1
+    CHECK_FALSE(page->Commands().CanUndo());
+    CHECK_FALSE(page->ApplyPreset(u8"No Such Preset"));
+}
+
+TEST_CASE("texture page: Usage sets the colour space in the same step; a texture whose two disagree says so")
+{
+    Bed bed;
+    UniquePtr<editor::TextureEditorPage> page = bed.Open();
+    auto* asset = Cast<pipeline::TextureAsset>(page->Object());
+    REQUIRE(asset != nullptr);
+    CHECK(asset->colorSpace == image::ImageColorSpace::Srgb);
+    CHECK(page->Notice(u8"colorSpace").IsEmpty());
+
+    gui::PropertyWrite usage;
+    usage.Value = gui::Variant(static_cast<i64>(texcomp::TextureUsage::Normal));
+    page->Edit(u8"usage", usage);
+    CHECK(asset->usage == texcomp::TextureUsage::Normal);
+    CHECK(asset->colorSpace == image::ImageColorSpace::Linear);
+    CHECK(page->Notice(u8"colorSpace").IsEmpty());
+
+    // The colour space overridden to sRGB on a normal map: the notice says why not.
+    gui::PropertyWrite colorSpace;
+    colorSpace.Value = gui::Variant(static_cast<i64>(image::ImageColorSpace::Srgb));
+    page->Edit(u8"colorSpace", colorSpace);
+    CHECK_FALSE(page->Notice(u8"colorSpace").IsEmpty());
+
+    // Each was one step: two undos put both back.
+    page->Commands().Undo();
+    CHECK(asset->colorSpace == image::ImageColorSpace::Linear);
+    CHECK(page->Notice(u8"colorSpace").IsEmpty());
+    page->Commands().Undo();
+    CHECK(asset->usage == texcomp::TextureUsage::Color);
+    CHECK(asset->colorSpace == image::ImageColorSpace::Srgb);
+    CHECK_FALSE(page->Commands().CanUndo());
+
+    CHECK(page->SourceFile() == StringView(u8"bricks.png"));
+    CHECK(page->Fact(u8"Size") == StringView(u8"4 x 4  (LDR)"));
+    CHECK_FALSE(page->Fact(u8"Cooks To").IsEmpty());
 }

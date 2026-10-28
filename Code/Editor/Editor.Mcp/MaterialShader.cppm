@@ -18,6 +18,7 @@ import foundation.core;
 import foundation.json;
 import foundation.mcp;
 import foundation.content;
+import foundation.materials;
 import foundation.materials.resource;
 import foundation.shaders.resource;
 import materials.pipeline;
@@ -41,12 +42,12 @@ export namespace editor::mcp
             u8"Put a material on a shader, as the material page's Shader row does: `shader` is a "
             u8"custom shader asset's guid (the material laid out by its cooked properties, every "
             u8"value whose name, type and size fit kept; the shader must have cooked: asset_cook "
-            u8"first), or `pbr` / `unlit` for a built-in. Saves the material; asset_cook to see it. "
+            u8"first), or `pbr`, `unlit` or `phong` for a built-in. Saves the material; asset_cook to see it. "
             u8"Returns the material's properties after. Use this, not asset_data_write of its "
             u8"shaderId, which leaves the material in its old layout.",
             SchemaBuilder()
                 .Str(u8"material", u8"the material asset's guid", true)
-                .Str(u8"shader", u8"a shader asset's guid, or `pbr` or `unlit`", true)
+                .Str(u8"shader", u8"a shader asset's guid, or `pbr`, `unlit` or `phong`", true)
                 .Build(),
             foundation::mcp::ToolAnnotations::Overwrites(),
             [s](const JsonValue& args) -> ToolResult
@@ -73,17 +74,17 @@ export namespace editor::mcp
                                       materialText.AsView()));
                 }
 
-                if (shaderText.AsView() == u8"pbr" || shaderText.AsView() == u8"unlit")
+                if (const foundation::materials::BuiltinShadingInfo* builtin =
+                        foundation::materials::FindBuiltinShadingByShortName(shaderText.AsView()))
                 {
-                    pipeline::SetMaterialBuiltInShader(material->source,
-                                                       shaderText.AsView() == u8"unlit");
+                    pipeline::SetMaterialBuiltInShader(material->source, builtin->shading);
                 }
                 else
                 {
                     Guid shaderId;
                     if (!Guid::TryParse(shaderText.AsView(), shaderId))
                     {
-                        return Err(Format(u8"'{}' is neither a shader asset's guid nor pbr or unlit",
+                        return Err(Format(u8"'{}' is neither a shader asset's guid nor pbr, unlit or phong",
                                           shaderText.AsView()));
                     }
                     foundation::content::Instance* shaderAsset =

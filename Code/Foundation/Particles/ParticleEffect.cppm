@@ -4,7 +4,7 @@
 // foundation.particles:effect - the particle object model, ported from Sedulous.Particles
 // (ParticleEmitter.bf, ParticleSystem.bf, ParticleEffect.bf, ParticleEffectInstance.bf).
 //
-//   ParticleEffect        - asset definition: a list of systems + sub-emitter links.
+//   ParticleEffect        - asset definition: a list of systems (each its sub-emitter links).
 //   ParticleSystem        - the workhorse: emitter + initializers + behaviors + streams +
 //                           simulator; runs the per-frame Update loop, spawn, LOD, events.
 //   ParticleEmitter       - spawn timing only (continuous rate / bursts); returns a count.
@@ -180,6 +180,9 @@ export namespace foundation::particles
         Float3 prevPosition{0.0f, 0.0f, 0.0f};
 
         ParticleEmitter emitter;
+        // Sub-emitters: on this system's particles' births or deaths, each spawns into the
+        // effect's system it names (a spark that leaves smoke, a shell that bursts).
+        Array<SubEmitterLink> subEmitters;
 
         explicit ParticleSystem(i32 maxParticles, u64 seed = 0x9E3779B97F4A7C15ull)
             : m_maxParticles(maxParticles), m_streams(maxParticles),
@@ -774,20 +777,33 @@ export namespace foundation::particles
             return ref;
         }
 
-        void AddSubEmitterLink(SubEmitterLink link) { m_links.PushBack(link); }
-
         // Remove a system by index / drop everything (editor authoring + blob-restore rebuilds).
+        // The systems' sub-emitters follow: one into the removed system does nothing (-1), one into
+        // a system after it names that system's new place.
         void RemoveSystem(i32 index)
         {
             if (index >= 0 && static_cast<usize>(index) < m_systems.Size())
             {
                 m_systems.RemoveAt(static_cast<usize>(index));
+                for (UniquePtr<ParticleSystem>& system : m_systems)
+                {
+                    for (SubEmitterLink& link : system->subEmitters)
+                    {
+                        if (link.childSystemIndex == index)
+                        {
+                            link.childSystemIndex = -1;
+                        }
+                        else if (link.childSystemIndex > index)
+                        {
+                            --link.childSystemIndex;
+                        }
+                    }
+                }
             }
         }
         void Clear()
         {
             m_systems.Clear();
-            m_links.Clear();
         }
 
         [[nodiscard]] i32 SystemCount() const noexcept
@@ -802,14 +818,9 @@ export namespace foundation::particles
             }
             return m_systems[static_cast<usize>(index)].Get();
         }
-        [[nodiscard]] Span<const SubEmitterLink> SubEmitterLinks() const noexcept
-        {
-            return Span<const SubEmitterLink>{m_links.Data(), m_links.Size()};
-        }
 
     private:
         Array<UniquePtr<ParticleSystem>> m_systems;
-        Array<SubEmitterLink> m_links;
     };
 
     // ---- ParticleEffectInstance (runtime) ----------------------------------------------------
@@ -899,25 +910,20 @@ export namespace foundation::particles
         }
 
     private:
+        // Each system's sub-emitters, from its own births or deaths into the system each names.
         void RouteSubEmitterEvents()
         {
-            const Span<const SubEmitterLink> links = m_effect->SubEmitterLinks();
             const i32 systemCount = m_effect->SystemCount();
-            for (usize li = 0; li < links.Size(); ++li)
+            for (i32 s = 0; s < systemCount; ++s)
             {
-                const SubEmitterLink& link = links[li];
-                if (link.childSystemIndex < 0 || link.childSystemIndex >= systemCount)
+                ParticleSystem* parent = m_effect->GetSystem(s);
+                for (const SubEmitterLink& link : parent->subEmitters)
                 {
-                    continue;
-                }
-                ParticleSystem* child = m_effect->GetSystem(link.childSystemIndex);
-                for (i32 s = 0; s < systemCount; ++s)
-                {
-                    if (s == link.childSystemIndex)
+                    if (link.childSystemIndex < 0 || link.childSystemIndex >= systemCount || link.childSystemIndex == s)
                     {
-                        continue;
-                    } // don't route a system into itself
-                    ParticleSystem* parent = m_effect->GetSystem(s);
+                        continue; // nothing, or itself: a system never spawns into itself
+                    }
+                    ParticleSystem* child = m_effect->GetSystem(link.childSystemIndex);
                     const Span<const ParticleEvent> events =
                         (link.trigger == ParticleEventType::OnDeath) ? parent->DeathEvents()
                                                                      : parent->BirthEvents();

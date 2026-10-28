@@ -184,6 +184,5 @@ export namespace pipeline
     void RegisterRenderCreators(AssetCreatorRegistry& registry);
 
     RTTI_DEFINE_OBJECT(SettingsProfileAsset, "rtti::pipeline::render")
-    RTTI_DEFINE_OBJECT(EnvironmentProfileAsset, "rtti::pipeline::render")
-    RTTI_DEFINE_OBJECT(PostProcessProfileAsset, "rtti::pipeline::render")
+    // The concrete profiles' reflection (their display names) is in RenderProfileAssetImpl.cpp.
 }

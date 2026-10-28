@@ -368,8 +368,11 @@ export namespace foundation::render
         // Pre-pass: write this frame's skinning matrices into the renderer's persistent bone pool ONCE
         // (current + previous slab per distinct skeleton instance) and copy staging->device on `encoder`.
         // Called once per frame after PrepareFrame and BEFORE the render graph executes, so the forward
-        // and shadow passes share one device-local bone buffer (no per-pass re-upload). Default no-op.
-        virtual void UploadSkinning(const ExtractedScene& scene, rhi::CommandEncoder& encoder);
+        // and shadow passes share one device-local bone buffer (no per-pass re-upload). `scenes` is every
+        // distinct scene the frame draws (editor pages side by side), given at once: the pool is sized
+        // and filled for all of them together, and what one scene uploaded is never lost to the next.
+        // Default no-op.
+        virtual void UploadSkinning(Span<const ExtractedScene* const> scenes, rhi::CommandEncoder& encoder);
 
         virtual void FinishFrame() {}
 
@@ -873,6 +876,7 @@ export namespace foundation::render
         Array<UniquePtr<SceneShadowCtx>>
             m_sceneShadowPool;       // slot k = k-th distinct scene this frame
         Array<u32> m_viewSceneIndex; // per view: index into the pool (~0u = no scene)
+        Array<const ExtractedScene*> m_frameScenes; // the pool's scenes, in order: what the skinning upload is given
         Array<GpuLocalShadow>
             m_localShadows; // scenes' entries CONCATENATED, caster order per scene
         Array<AtlasDraw>

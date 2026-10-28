@@ -11,7 +11,7 @@
 	<string name="nativeModule"/>
 	<string name="defaultInputMapId">1355798c-5464-445e-9d1a-080da9df3f94</string>
 	<string name="defaultBusLayoutId">00000000-0000-0000-0000-000000000000</string>
-	<string name="defaultUiThemeId">00ca65a6-2e65-47fa-9f57-1fa6a0b6254a</string>
+	<string name="defaultUiThemeId">00000000-0000-0000-0000-000000000000</string>
 	<string name="startupScriptId">a0fc4c0d-73bd-471f-8357-ae28b52393ef</string>
 	<string name="defaultUiFontId">251f1cd5-5bbf-4c9f-9511-1b5bb77e0b1d</string>
 	<string name="loadingDocumentId">00000000-0000-0000-0000-000000000000</string>
@@ -26,4 +26,9 @@
 	<u32 name="windowHeight">720</u32>
 	<u8 name="windowMode">0</u8>
 	<bool name="windowResizable">true</bool>
+	<i32 name="orientation">0</i32>
+	<array name="guiStyleSheetIds" count="1">
+		<string>fff23f74-5710-40c0-84d8-b97cd8e66be4</string>
+	</array>
+	<string name="guiLoadingDocumentId">00000000-0000-0000-0000-000000000000</string>
 </root>

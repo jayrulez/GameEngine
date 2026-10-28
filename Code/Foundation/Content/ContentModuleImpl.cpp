@@ -152,6 +152,7 @@ namespace foundation::content
 
     void Group::ResortChildren()
     {
+        m_db->Touch(); // a child renamed
         m_groups.Sort([](Group* a, Group* b) { return NameLess(a->Name(), b->Name()); });
         m_instances.Sort([](Instance* a, Instance* b)
                          { return NameLess(a->Name(), b->Name()); });
@@ -159,6 +160,7 @@ namespace foundation::content
 
     void Group::RemoveInstance(Instance* instance)
     {
+        m_db->Touch();
         for (usize i = 0; i < m_instances.Size(); ++i)
         {
             if (m_instances[i] == instance)
@@ -706,6 +708,83 @@ namespace foundation::content
         return Status{};
     }
 
+    Status ContentDatabase::MoveInstance(const Guid& id, Group& to)
+    {
+        Instance* instance = GetInstance(id);
+        if (instance == nullptr)
+        {
+            return Status{ErrorCode::NotFound};
+        }
+        Group& from = instance->OwningGroup();
+        if (&from == &to)
+        {
+            return Status{ErrorCode::InvalidArgument};
+        }
+        if (to.GetInstance(instance->Name()) != nullptr)
+        {
+            return Status{ErrorCode::AlreadyExists};
+        }
+        IWritableFileSystem* writable = m_mount->AsWritable();
+        if (writable == nullptr)
+        {
+            return Status{ErrorCode::NotSupported};
+        }
+
+        const String fromFolder = from.Path();
+        const String toFolder = to.Path();
+        const String oldEnvelope = instance->EnvelopePath();
+        if (!toFolder.IsEmpty() && !m_mount->Exists(toFolder.AsView()))
+        {
+            (void)writable->CreateDirectory(toFolder.AsView());
+        }
+        // Sidecars first (prefix scan, as a rename does): "<name>.<stream>.<suffix>" each moves.
+        if (IEnumerableFileSystem* enumerable = m_mount->AsEnumerable())
+        {
+            String prefix(instance->Name());
+            prefix.PushBack(utf8char('.'));
+            Array<DirEntry> entries;
+            if (enumerable->Enumerate(fromFolder.AsView(), entries).IsOk())
+            {
+                for (const DirEntry& entry : entries)
+                {
+                    if (entry.isDirectory || entry.name.Size() <= prefix.Size() ||
+                        entry.name.AsView().SubStr(0, prefix.Size()) != prefix.AsView() ||
+                        SidecarSuffixSize(entry.name.AsView()) == 0)
+                    {
+                        continue;
+                    }
+                    (void)writable->Move(JoinPath(fromFolder.AsView(), entry.name.AsView()).AsView(),
+                                         JoinPath(toFolder.AsView(), entry.name.AsView()).AsView());
+                }
+            }
+        }
+
+        // Out of its group and into the other, in its name order (the envelope may not exist
+        // yet: an instance created and never written).
+        from.RemoveInstance(instance);
+        instance->m_group = &to;
+        usize at = to.m_instances.Size();
+        for (usize i = 0; i < to.m_instances.Size(); ++i)
+        {
+            if (Group::NameLess(instance->Name(), to.m_instances[i]->Name()))
+            {
+                at = i;
+                break;
+            }
+        }
+        to.m_instances.Insert(at, instance);
+        Touch();
+        if (m_mount->Exists(oldEnvelope.AsView()))
+        {
+            const Status moved = writable->Move(oldEnvelope.AsView(), instance->EnvelopePath().AsView());
+            if (!moved.IsOk())
+            {
+                return moved;
+            }
+        }
+        return Status{};
+    }
+
     Status ContentDatabase::RenameGroup(Group& group, StringView newName)
     {
         if (group.Parent() == nullptr)
@@ -843,6 +922,7 @@ namespace foundation::content
         }
 
         // Unregister from the parent and the pool, then destroy.
+        Touch();
         Group* parent = group.Parent();
         for (usize i = 0; i < parent->m_groups.Size(); ++i)
         {

@@ -460,10 +460,6 @@ namespace editor
             EndStroke(); // gesture-end guarantee: never leave a half-open stroke on a tool switch
         }
         m_hasHover = false;
-        // The panel is activation-scoped but the tool is manager-owned: drop the radius-sync
-        // callback so wheel resizes stop writing into the dead panel's detached FloatEditor
-        // (the next activation re-binds a fresh one).
-        OnRadiusChanged = {};
     }
 
     void TerrainSplatTool::Draw(render::debug::DebugDraw& drawList)
@@ -498,13 +494,13 @@ namespace editor
     {
         m_status =
             m_smooth
-                ? Format(u8"Paint Splat [SMOOTH]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
+                ? Format(u8"Paint Layers [SMOOTH]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
                          static_cast<i32>(m_radius + 0.5f))
             : m_erase
-                ? Format(u8"Paint Splat [ERASER]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
+                ? Format(u8"Paint Layers [ERASER]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
                          static_cast<i32>(m_radius + 0.5f))
-                : Format(u8"Paint Splat [layer {}]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
-                         static_cast<i32>(m_paletteIndex),
+                : Format(u8"Paint Layers [layer {}]  radius {}  (1-9 layer, 0 eraser, - smooth, Shift+wheel size)",
+                         static_cast<i32>(m_paletteIndex) + 1, // from 1, as its key and the panel
                          static_cast<i32>(m_radius + 0.5f));
     }
 }

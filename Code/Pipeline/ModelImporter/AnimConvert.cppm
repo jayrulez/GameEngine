@@ -4,10 +4,11 @@
 /// Pipeline::ModelImporter:anim_convert - Model IR skin/animation -> animation *Source.
 ///
 /// Converts a model's skin (joints + inverse-bind matrices + the bone hierarchy) into a
-/// SkeletonSource, and its animation channels into AnimationClipSources. The skeleton's
-/// bone order IS the skin's JOINT order (so a skinned vertex's joint indices address the
-/// skeleton directly), and parent links + animation target bones are remapped from model
-/// bone indices into joint indices (NodeToBoneMapping).
+/// SkeletonSource, and its animation channels into AnimationClipSources. The skeleton's joints
+/// are the skin's, in its order (so a skinned vertex's joint indices address the skeleton
+/// directly), then the bones the skin's joints hang from (SkeletonJoints: a helper bone with no
+/// vertices of its own, whose animation is part of the pose); parent links + animation target
+/// bones are remapped from model bone indices into joint indices.
 
 module;
 #include "Core/Prelude.h"
@@ -26,11 +27,59 @@ namespace animation = foundation::animation;
 export namespace pipeline
 {
 
-    // model bone index -> skeleton joint index (the skin's joint order). -1 for bones not in the skin.
-    [[nodiscard]] inline HashMap<i32, i32> BuildBoneToJoint(const model::ModelSkin& skin)
+    // The model node the joints `joints` hang from: the parent of their first root (a joint whose
+    // parent is not among them), -1 when that root has no parent, -2 with no joints. Several roots
+    // under different nodes take the first root's (the skeleton has one model space).
+    [[nodiscard]] inline i32 JointsParentNode(const model::Model& model, Span<const i32> joints)
+    {
+        const Span<model::ModelBone* const> bones = model.bones();
+        const auto among = [&](i32 bone)
+        {
+            for (const i32 joint : joints)
+                if (joint == bone)
+                    return true;
+            return false;
+        };
+        for (const i32 joint : joints)
+        {
+            if (joint < 0 || static_cast<usize>(joint) >= bones.Size())
+                continue;
+            const i32 parent = bones[static_cast<usize>(joint)]->parentIndex;
+            if (parent < 0 || static_cast<usize>(parent) >= bones.Size())
+                return -1;
+            if (!among(parent))
+                return parent;
+        }
+        return -2;
+    }
+
+    // The skeleton's joints, as model bone indices: the skin's, in its order (a skinned vertex's
+    // joint indices address them), then each node the skeleton hangs from while the file makes it
+    // a bone (ModelBone::isSkeletonBone). 3ds Max hangs a skeleton from a Dummy helper bone with no
+    // vertices of its own, and animates it with the pose (a creature's bob): it is a joint, its
+    // channels played. An empty node above (Blender's armature object, whose animation is the
+    // character's travel) stays outside: the node the skeleton hangs from, its channels the clip's
+    // model tracks. Appended after the skin's joints, so no vertex's joint index moves.
+    [[nodiscard]] inline Array<i32> SkeletonJoints(const model::Model& model, const model::ModelSkin& skin)
+    {
+        Array<i32> joints;
+        for (const i32 joint : skin.joints())
+            joints.PushBack(joint);
+        const Span<model::ModelBone* const> bones = model.bones();
+        for (usize guard = 0; guard < bones.Size(); ++guard) // a malformed cycle cannot loop for ever
+        {
+            const i32 hang = JointsParentNode(model, joints.AsSpan());
+            if (hang < 0 || static_cast<usize>(hang) >= bones.Size() || !bones[static_cast<usize>(hang)]->isSkeletonBone)
+                break;
+            joints.PushBack(hang);
+        }
+        return joints;
+    }
+
+    // model bone index -> skeleton joint index (`joints`' order, SkeletonJoints). -1 for bones not in it.
+    [[nodiscard]] inline HashMap<i32, i32> BuildBoneToJoint(Span<const i32> joints)
     {
         HashMap<i32, i32> map;
-        const Span<const i32> joints = skin.joints();
         for (usize j = 0; j < joints.Size(); ++j)
         {
             map.InsertOrAssign(joints[j], static_cast<i32>(j));
@@ -38,41 +87,21 @@ export namespace pipeline
         return map;
     }
 
-    // The model node the skeleton hangs from: the parent of the skin's first root joint (a joint
-    // whose parent is not in the skin), -1 when that root has no parent, -2 for a skin with no
-    // joints. A skin with several roots under different nodes takes the first root's (the
-    // skeleton has one model space).
-    [[nodiscard]] inline i32 SkeletonParentNode(const model::Model& model, const model::ModelSkin& skin,
-                                                const HashMap<i32, i32>& boneToJoint)
+    // The model node the skeleton hangs from: the node above its joints (SkeletonJoints), -1 the
+    // scene root, -2 no joints. Its channels are the clip's model tracks.
+    [[nodiscard]] inline i32 SkeletonParentNode(const model::Model& model, Span<const i32> joints)
     {
-        const Span<model::ModelBone* const> bones = model.bones();
-        for (const i32 joint : skin.joints())
-        {
-            if (joint < 0 || static_cast<usize>(joint) >= bones.Size())
-            {
-                continue;
-            }
-            const i32 parent = bones[static_cast<usize>(joint)]->parentIndex;
-            if (parent < 0 || static_cast<usize>(parent) >= bones.Size())
-            {
-                return -1;
-            }
-            if (!boneToJoint.Contains(parent))
-            {
-                return parent;
-            }
-        }
-        return -2;
+        return JointsParentNode(model, joints);
     }
 
-    // Build a SkeletonSource from a skin: one bone per joint (joint order), local bind TRS from the
-    // model bone, inverse-bind from the skin, parent remapped into joint space.
+    // Build a SkeletonSource from a skin's skeleton joints (SkeletonJoints): one bone per joint (their
+    // order), local bind TRS from the model bone, inverse-bind from the skin (identity for a bone the
+    // skin's joints hang from: no vertex is bound to it), parent remapped into joint space.
     inline void SkeletonSourceFromModel(const model::Model& model, const model::ModelSkin& skin,
-                                        const HashMap<i32, i32>& boneToJoint,
+                                        Span<const i32> joints, const HashMap<i32, i32>& boneToJoint,
                                         animation::SkeletonSource& out)
     {
         out.name = String(u8"skeleton");
-        const Span<const i32> joints = skin.joints();
         const Span<const Float4x4> ibms = skin.inverseBindMatrices();
         const Span<model::ModelBone* const> bones = model.bones();
 

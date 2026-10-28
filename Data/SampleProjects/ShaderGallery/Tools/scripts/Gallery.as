@@ -10,7 +10,10 @@
 // GENERATED from Tools/scripts/Gallery.as.in by Tools/ui.py, which fills in the lessons' handlers
 // from Tools/lessons.py: edit the template and the table, not the generated copy.
 const float kPi = 3.14159265f;
-Guid kGalleryDoc = Guid("{{UI:Gallery}}");
+const string kGalleryDoc = "{{{GUI:Gallery}}}"; // the lesson list's document, by its asset id
+
+// A GUI event's handler (a row's click).
+funcdef bool EventHandler(GuiEvent e);
 
 // Smooth start and stop for the glide: 0 to 1 over t in 0 to 1.
 float SmoothGlide(float t)
@@ -51,18 +54,21 @@ class Gallery
     {
         m_yaw = startYaw;
         m_pitch = startPitch;
-        UIScreen@ s = ui::push(kGalleryDoc);
-        s.findButton("lesson-1").onClick(Action(this.onLesson1));
-        s.findButton("lesson-2").onClick(Action(this.onLesson2));
-        s.findButton("lesson-3").onClick(Action(this.onLesson3));
-        s.findButton("lesson-4").onClick(Action(this.onLesson4));
-        s.findButton("lesson-5").onClick(Action(this.onLesson5));
-        s.findButton("lesson-6").onClick(Action(this.onLesson6));
-        s.findButton("lesson-7").onClick(Action(this.onLesson7));
-        s.findButton("lesson-8").onClick(Action(this.onLesson8));
-        s.findButton("lesson-9").onClick(Action(this.onLesson9));
-        s.findButton("lesson-10").onClick(Action(this.onLesson10));
-        s.findButton("lesson-11").onClick(Action(this.onLesson11));
+        // The lesson list on the GUI's screen stack, over the hall (its document says it blocks none
+        // of the hall's input).
+        ScreenStack::of(gui::root().find("screens")).push(kGalleryDoc);
+        gui::root().find("gallery-caption").visible = false; // until a lesson is picked
+        gui::root().find("lesson-1").on("click", EventHandler(this.onLesson1));
+        gui::root().find("lesson-2").on("click", EventHandler(this.onLesson2));
+        gui::root().find("lesson-3").on("click", EventHandler(this.onLesson3));
+        gui::root().find("lesson-4").on("click", EventHandler(this.onLesson4));
+        gui::root().find("lesson-5").on("click", EventHandler(this.onLesson5));
+        gui::root().find("lesson-6").on("click", EventHandler(this.onLesson6));
+        gui::root().find("lesson-7").on("click", EventHandler(this.onLesson7));
+        gui::root().find("lesson-8").on("click", EventHandler(this.onLesson8));
+        gui::root().find("lesson-9").on("click", EventHandler(this.onLesson9));
+        gui::root().find("lesson-10").on("click", EventHandler(this.onLesson10));
+        gui::root().find("lesson-11").on("click", EventHandler(this.onLesson11));
         place(self.worldPosition());
     }
 
@@ -72,8 +78,8 @@ class Gallery
         if (Input::wasPressed("TogglePanel"))
         {
             m_panelShown = !m_panelShown;
-            ui::find("gallery-panel").setVisible(m_panelShown);
-            ui::find("gallery-caption").setVisible(m_panelShown && m_captioned);
+            gui::root().find("gallery-panel").visible = m_panelShown;
+            gui::root().find("gallery-caption").visible = m_panelShown && m_captioned;
         }
 
         // Looking: the mouse while its right button is held, or the right stick.
@@ -129,11 +135,11 @@ class Gallery
         string id = (n < 10 ? "0" : "") + n;
         Entity@ view = self.scene.find("View" + id);
         Entity@ exhibit = self.scene.find("Lesson" + id);
-        ui::findLabel("gallery-title").setText(n + ". " + title);
-        ui::findLabel("gallery-about").setText(summary);
-        ui::findLabel("gallery-file").setText(file);
+        Label::of(gui::root().find("gallery-title")).text = n + ". " + title;
+        Label::of(gui::root().find("gallery-about")).text = summary;
+        Label::of(gui::root().find("gallery-file")).text = file;
         m_captioned = true;
-        ui::find("gallery-caption").setVisible(m_panelShown);
+        gui::root().find("gallery-caption").visible = m_panelShown;
         if (view is null || !view.isValid() || exhibit is null || !exhibit.isValid())
         {
             return;
@@ -166,15 +172,15 @@ class Gallery
         self.setRotationEuler(m_pitch, m_yaw, 0.0f);
     }
 
-    private void onLesson1() { showLesson(1, "Unlit Colour", "The smallest shader: a properties block and Surface().", "Sources/01_UnlitColour.hlsl"); }
-    private void onLesson2() { showLesson(2, "Textured", "A texture and its sampler, the uv, the vertex colour; lit by the scene.", "Sources/02_Textured.hlsl"); }
-    private void onLesson3() { showLesson(3, "Lava", "Time() makes it move; emission makes it glow.", "Sources/03_Lava.hlsl"); }
-    private void onLesson4() { showLesson(4, "Hologram", "viewDir makes a fresnel rim, screenPos scanlines; alpha on a blended material.", "Sources/04_Hologram.hlsl"); }
-    private void onLesson5() { showLesson(5, "Triplanar Rock", "Mapped by world position, no uv; a normal map turned into tangent space.", "Sources/05_TriplanarRock.hlsl"); }
-    private void onLesson6() { showLesson(6, "Dissolve", "alpha on a masked material cuts holes, in the shadow too; a burning edge.", "Sources/06_Dissolve.hlsl"); }
-    private void onLesson7() { showLesson(7, "Waves", "Vertex() moves the vertices into waves; the shadow and the light follow.", "Sources/07_Waves.hlsl"); }
-    private void onLesson8() { showLesson(8, "Wind", "Vertex() by localPosition: the hoist stays on the pole, the fly end flaps.", "Sources/08_Wind.hlsl"); }
-    private void onLesson9() { showLesson(9, "Built-in PBR", "The engine's own material written as a surface: the reference to start from.", "Sources/09_BuiltInPbr.hlsl"); }
-    private void onLesson10() { showLesson(10, "Toon", "Both stages written out: the light in bands, a shadow colour, a rim.", "Sources/10_Toon.hlsl"); }
-    private void onLesson11() { showLesson(11, "Custom Lighting", "Walking the lights itself (LightsAt, LightAt, ShadowOf): half-Lambert and Blinn-Phong.", "Sources/11_CustomLighting.hlsl"); }
+    private bool onLesson1(GuiEvent e) { showLesson(1, "Unlit Colour", "The smallest shader: a properties block and Surface().", "Sources/01_UnlitColour.hlsl"); return true; }
+    private bool onLesson2(GuiEvent e) { showLesson(2, "Textured", "A texture and its sampler, the uv, the vertex colour; lit by the scene.", "Sources/02_Textured.hlsl"); return true; }
+    private bool onLesson3(GuiEvent e) { showLesson(3, "Lava", "Time() makes it move; emission makes it glow.", "Sources/03_Lava.hlsl"); return true; }
+    private bool onLesson4(GuiEvent e) { showLesson(4, "Hologram", "viewDir makes a fresnel rim, screenPos scanlines; alpha on a blended material.", "Sources/04_Hologram.hlsl"); return true; }
+    private bool onLesson5(GuiEvent e) { showLesson(5, "Triplanar Rock", "Mapped by world position, no uv; a normal map turned into tangent space.", "Sources/05_TriplanarRock.hlsl"); return true; }
+    private bool onLesson6(GuiEvent e) { showLesson(6, "Dissolve", "alpha on a masked material cuts holes, in the shadow too; a burning edge.", "Sources/06_Dissolve.hlsl"); return true; }
+    private bool onLesson7(GuiEvent e) { showLesson(7, "Waves", "Vertex() moves the vertices into waves; the shadow and the light follow.", "Sources/07_Waves.hlsl"); return true; }
+    private bool onLesson8(GuiEvent e) { showLesson(8, "Wind", "Vertex() by localPosition: the hoist stays on the pole, the fly end flaps.", "Sources/08_Wind.hlsl"); return true; }
+    private bool onLesson9(GuiEvent e) { showLesson(9, "Built-in PBR", "The engine's own material written as a surface: the reference to start from.", "Sources/09_BuiltInPbr.hlsl"); return true; }
+    private bool onLesson10(GuiEvent e) { showLesson(10, "Toon", "Both stages written out: the light in bands, a shadow colour, a rim.", "Sources/10_Toon.hlsl"); return true; }
+    private bool onLesson11(GuiEvent e) { showLesson(11, "Custom Lighting", "Walking the lights itself (LightsAt, LightAt, ShadowOf): half-Lambert and Blinn-Phong.", "Sources/11_CustomLighting.hlsl"); return true; }
 }

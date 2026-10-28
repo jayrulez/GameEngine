@@ -61,7 +61,8 @@ export namespace pipeline{
         void Serialize(ISerializer& ar) override
         {
             pipeline::Asset::Serialize(ar); // fileName (unused for authored effects)
-            SerializeEffect(ar, m_effect);          // the authored effect graph
+            // the authored effect graph; a version 0 asset's effect-level links read onto its systems
+            SerializeEffect(ar, m_effect, ar.Mode() == SerializeMode::Read && ar.Version() < 1);
             core::Serialize(ar, "texturePaths", m_systemTexturePaths); // edit-time soft refs
         }
 
@@ -87,8 +88,37 @@ export namespace pipeline{
         // v4 (2026-08-18): materialRef -> materialRefs list (per-submesh, slot 0 = whole-mesh material).
         // v5 (2026-10-21): curves of Core's keys and gradients; size over lifetime is `size`,
         // `separateAxes` and `sizeY` (the cooked resource's data version 1).
+        // v6 (2026-10-27): each system its sub-emitters (the cooked resource's data version 2).
         // Bumped so stale products re-cook with the new format (the strict reader needs the new keys).
-        [[nodiscard]] u32 Version() const override { return 5; }
+        [[nodiscard]] u32 Version() const override { return 6; }
+        // What each system draws with is a runtime REFERENCE (the factory binds it at load): its
+        // texture, its mesh and its materials, by id, or a texture by its edit-time path. Declared
+        // so a cook of the effect cooks them too (a scene's first cook reached the effect but not
+        // its texture), and asset_uses and the export's reach see them.
+        void ScanDependencies(const pipeline::Asset& asset, pipeline::AssetBuildContext& ctx, pipeline::AssetDependencies& out) override
+        {
+            const ParticleEffectAsset& pa = static_cast<const ParticleEffectAsset&>(asset);
+            const ParticleEffect& fx = pa.Effect();
+            const auto add = [&out](const Guid& id)
+            {
+                if (!id.IsNil())
+                    out.references.PushBack(id);
+            };
+            for (i32 s = 0; s < fx.SystemCount(); ++s)
+            {
+                const ParticleSystem* system = const_cast<ParticleEffect&>(fx).GetSystem(s);
+                if (system == nullptr)
+                    continue;
+                add(system->textureRef);
+                add(system->meshRef);
+                for (const Guid& material : system->materialRefs)
+                    add(material);
+                const StringView path = pa.SystemTexturePath(s);
+                if (!path.IsEmpty() && ctx.db != nullptr)
+                    if (content::Instance* named = ctx.db->GetInstance(path))
+                        add(named->Id());
+            }
+        }
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override
         {
@@ -131,10 +161,14 @@ export namespace pipeline{
 
     // Data version 0: the curve layout of 2026-10-21 (Core's keys, gradients, size as one curve)
     // moved by re-saving every sample through Tools.Mcp, version 0 having no legacy floor to keep.
-    RTTI_DEFINE_OBJECT(ParticleEffectAsset, "rtti::pipeline::particles")
+    // Data version 1 (2026-10-27): each system owns its sub-emitters; version 0's effect-level
+    // links are read onto the systems (the legacy reader, SerializeEffect's effectLinks).
 
     /// A new effect's content: one continuous fountain system.
     void SeedDefaultParticleEffect(foundation::particles::ParticleEffect& effect);
+    /// Adds the default system (a continuous fountain: a lifetime, a velocity, a size, a colour and
+    /// gravity) after the effect's others; what the seed and the editor's Add System make.
+    foundation::particles::ParticleSystem& AddDefaultParticleSystem(foundation::particles::ParticleEffect& effect);
     /// File > New's particle creator (pipeline.registration composes every domain's).
     void RegisterParticleCreators(AssetCreatorRegistry& registry);
 }

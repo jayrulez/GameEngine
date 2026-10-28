@@ -1,22 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Audio - the `editor.audio` module.
-//
-// AudioClipPage: the audition page. Opens an AudioClipAsset with a peak
-// waveform (decoded from the copied source file - the same container bytes the cook
-// writes through) and Play/Stop that audition through the RUNTIME CONTEXT's
-// AudioSubsystem - the GAME's engine, buses, and voice pool, so what you hear IS what
-// the game plays (the "cook says fine, ears say nothing" gap this page closes).
-// Auditioning honors the asset's loop intent; a playhead tracks the voice.
+// Editor::Audio - the audio clip page's implementation (see AudioClipPage.cppm).
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
+#include "Core/Reflection/Reflect.h"
 
 module editor.audio;
-
-import :sound_cue_page;
 
 import foundation.core;
 import foundation.content;
@@ -24,235 +16,203 @@ import foundation.runtime.client;
 import foundation.audio;
 import audio.pipeline;
 import engine.audio;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
 namespace audio = foundation::audio;
 namespace runtime = foundation::runtime;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace editor
 {
-    Status AudioClipEditorPage::Save()
-    {
-        return Status{};
-    } // audition-only (options edit via inspector)
+    RTTI_DEFINE_OBJECT(WaveformView, "rtti::editor::audio")
 
-    void AudioClipEditorPage::OnUpdate(runtime::IApplicationHost&, f32)
+    AudioClipEditorPage::AudioClipEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::AudioClipAsset::StaticType(), kPath)
     {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh(); // the transport follows the audition each frame
-        }
-        // Playhead: the voice's TRUE cursor (VoiceStatus::cursorSeconds) - honors
-        // pitch and loop wraps, unlike the old elapsed-time approximation. The
-        // voice handle going invalid (finished/stolen) parks the head.
-        if (!m_voice.IsValid() || m_audio == nullptr || m_audio->Engine() == nullptr)
-        {
-            return;
-        }
-        audio::VoiceStatus status;
-        if (!m_audio->Engine()->GetVoiceStatus(m_voice, status) || !status.active)
-        {
-            StopAudition(); // finished or stolen
-            return;
-        }
-        if (status.paused)
-        {
-            return; // a paused audition holds its playhead
-        }
-        const f32 duration = m_clip.Get() != nullptr ? m_clip->durationSeconds : 0.0f;
-        if (duration <= 0.0f)
-        {
-            return;
-        }
-        f32 fraction = status.cursorSeconds / duration;
-        if (m_loop)
-        {
-            fraction = fraction - static_cast<f32>(static_cast<i64>(fraction));
-        }
-        m_waveform->SetPlayheadFraction(Min(fraction, 1.0f));
-        String text = Format(u8"Playing...  {} s", FormatFixed(status.cursorSeconds, 1));
-        m_status->SetText(text.AsView());
+        Provide<IPlaybackPage>(*this);
+        m_voice = MakeUnique<AuditionVoice>(Allocator(), Services().host != nullptr ? Services().host->Ctx().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr);
+        m_stage = Find<gui::Node>(u8"audio-stage");
+        m_empty = Find<gui::Node>(u8"audio-empty");
+        m_emptyText = Find<gui::Label>(u8"audio-empty-text");
+        m_state = Find<gui::Label>(u8"audio-state");
+        m_volume = Find<gui::Slider>(u8"audio-volume");
+        m_waveform = MakeRef<WaveformView>(Allocator());
+        if (m_stage != nullptr)
+            m_stage->AddChild(m_waveform.Get());
+        // The kit's transport: the playback actions over this page, as every page's transport is.
+        BindAction(Find<gui::ButtonBase>(u8"audio-restart"), u8"playback.restart");
+        BindAction(Find<gui::ButtonBase>(u8"audio-play"), u8"playback.play");
+        BindAction(Find<gui::ButtonBase>(u8"audio-stop"), u8"playback.stop");
+        AudioClipEditorPage* self = this;
+        if (m_volume != nullptr)
+            m_volume->SetOnValueChanging([self](f64 volume) { self->SetAuditionVolume(static_cast<f32>(volume)); });
+        LoadClip();
+        ShowState(u8"stopped", u8"Stopped");
     }
 
-    void AudioClipEditorPage::LoadClip(foundation::content::Instance& instance)
+    AudioClipEditorPage::~AudioClipEditorPage()
     {
-        RefPtr<ISerializable> object = instance.ReadObject();
-        auto* asset = Cast<pipeline::AudioClipAsset>(object.Get());
-        if (asset == nullptr || m_context->Project() == nullptr)
-        {
+        StopAudition();
+    }
+
+    StringView AudioClipEditorPage::State() const
+    {
+        return m_state != nullptr ? m_state->GetText() : StringView{};
+    }
+
+    void AudioClipEditorPage::ShowState(StringView state, StringView text)
+    {
+        ShowTransportState(m_state, state, text);
+    }
+
+    void AudioClipEditorPage::ShowEmpty(StringView why)
+    {
+        m_clip = nullptr;
+        if (m_waveform)
+            m_waveform->SetPeaks(Array<f32>{});
+        if (m_stage != nullptr)
+            m_stage->SetDisplayed(false);
+        if (m_empty != nullptr)
+            m_empty->SetDisplayed(true);
+        if (m_emptyText != nullptr)
+            m_emptyText->SetText(why);
+    }
+
+    void AudioClipEditorPage::LoadClip()
+    {
+        StopAudition();
+        const auto* asset = ObjectAs<pipeline::AudioClipAsset>();
+        if (asset == nullptr)
             return;
-        }
-        m_loop = asset->loop;
-        const String path =
-            PathJoin(m_context->Project()->SourcesRoot().AsView(), asset->fileName.View());
-        Result<Array<byte>> bytes = ReadFile(path.AsView());
-        if (!bytes.HasValue())
+        m_loadedFile = String(asset->fileName.View());
+        if (asset->fileName.IsEmpty() || Context().Project() == nullptr)
         {
-            LOG_WARNING(u8"Editor", u8"audio source missing: {}", path);
+            ShowEmpty(u8"This clip names no source file.");
             return;
         }
         audio::AudioClipMetadata metadata;
-        if (!audio::ProbeAudioClipMetadata(
-                Span<const byte>(bytes.Value().Data(), bytes.Value().Size()), metadata))
+        m_clip = ReadAuditionClip(Allocator(), *Context().Project(), *asset, &metadata);
+        if (m_clip.Get() == nullptr)
         {
+            LOG_WARNING(u8"Editor", u8"audio source missing or undecodable: {}", asset->fileName.View());
+            ShowEmpty(Format(u8"{} is missing or did not decode.", asset->fileName.View()).AsView());
             return;
         }
-        m_clip = MakeRef<audio::AudioClip>(Allocator());
-        m_clip->channels = metadata.channels;
-        m_clip->sampleRate = metadata.sampleRate;
-        m_clip->frameCount = metadata.frameCount;
-        m_clip->durationSeconds = metadata.durationSeconds;
+        Array<f32> peaks;
+        if (audio::BuildWaveformPeaks(Span<const byte>(m_clip->encodedData.Data(), m_clip->encodedData.Size()), kPeakBuckets, peaks))
+            m_waveform->SetPeaks(Move(peaks));
+        if (m_stage != nullptr)
+            m_stage->SetDisplayed(true);
+        if (m_empty != nullptr)
+            m_empty->SetDisplayed(false);
+        SetFact(u8"Channels", metadata.channels == 1 ? StringView(u8"Mono") : metadata.channels == 2 ? StringView(u8"Stereo")
+                                                                                                       : Format(u8"{}", metadata.channels).AsView());
+        SetFact(u8"Sample Rate", Format(u8"{} Hz", metadata.sampleRate).AsView());
+        SetFact(u8"Length", Format(u8"{} s ({} frames)", FormatFixed(metadata.durationSeconds, 2), metadata.frameCount).AsView());
+    }
+
+    void AudioClipEditorPage::ApplyOptions()
+    {
+        const auto* asset = ObjectAs<pipeline::AudioClipAsset>();
+        if (asset == nullptr || m_clip.Get() == nullptr)
+            return;
         m_clip->gain = asset->gain;
         m_clip->loop = asset->loop;
         m_clip->loopStartFrame = asset->loopStartFrame;
         m_clip->loopEndFrame = asset->loopEndFrame;
-        m_clip->encodedData = Move(bytes.Value());
     }
 
-    void AudioClipEditorPage::RefreshInfo()
+    void AudioClipEditorPage::OnObjectChanged()
     {
-        if (m_clip.Get() == nullptr)
-        {
-            m_info->SetText(u8"Source file missing or undecodable.");
-            return;
-        }
-        String text = Format(u8"{} ch  |  {} Hz  |  {} s{}", m_clip->channels, m_clip->sampleRate,
-                             FormatFixed(m_clip->durationSeconds, 2),
-                             m_loop ? StringView(u8"  |  loops") : StringView(u8""));
-        m_info->SetText(text.AsView());
-        Array<f32> peaks;
-        if (audio::BuildWaveformPeaks(
-                Span<const byte>(m_clip->encodedData.Data(), m_clip->encodedData.Size()), 256,
-                peaks))
-        {
-            m_waveform->SetPeaks(Move(peaks));
-        }
+        const auto* asset = ObjectAs<pipeline::AudioClipAsset>();
+        if (asset != nullptr && asset->fileName.View() != m_loadedFile.AsView())
+            LoadClip(); // another source: read again
+        else
+            ApplyOptions(); // the next play takes them
     }
 
     void AudioClipEditorPage::Audition()
     {
-        if (m_clip.Get() == nullptr || m_audio == nullptr || m_audio->Engine() == nullptr)
-        {
-            return;
-        }
         StopAudition();
+        if (!CanPlay())
+            return;
         audio::AudioPlayParams params;
-        params.loop = m_loop;
-        params.allowDedupe = false; // rapid re-audition must restart, never merge
-        m_voice = m_audio->Engine()->Play(m_clip, params);
-        if (m_voice.IsValid())
+        params.loop = m_clip->loop;
+        if (!m_voice->Start(m_clip, params))
         {
-            m_audio->Engine()->SetVoiceVolume(m_voice, m_auditionVolume); // honor the audition slider
-        }
-        m_paused = false;
-        m_status->SetText(m_voice.IsValid() ? StringView(u8"Playing...")
-                                            : StringView(u8"No voice (engine headless?)"));
-    }
-
-    void AudioClipEditorPage::TogglePause()
-    {
-        if (m_audio == nullptr || m_audio->Engine() == nullptr || !m_voice.IsValid())
-        {
+            ShowState(u8"faulted", u8"No voice: the audio engine did not start one");
             return;
         }
-        m_paused = !m_paused;
-        m_audio->Engine()->SetPaused(m_voice, m_paused);
-        m_status->SetText(m_paused ? StringView(u8"Paused") : StringView(u8"Playing..."));
+        ShowState(u8"playing", u8"Playing");
     }
 
     void AudioClipEditorPage::Play()
     {
-        if (!m_voice.IsValid())
+        if (!m_voice->IsActive())
         {
             Audition();
+            return;
         }
-        else if (m_paused)
-        {
-            TogglePause();
-        }
+        m_voice->SetPaused(false);
+        ShowState(u8"playing", u8"Playing");
     }
 
     void AudioClipEditorPage::Pause()
     {
-        if (m_voice.IsValid() && !m_paused)
-        {
-            TogglePause();
-        }
+        if (!m_voice->IsPlaying())
+            return;
+        m_voice->SetPaused(true);
+        ShowState(u8"paused", u8"Paused");
     }
 
     void AudioClipEditorPage::SetAuditionVolume(f32 volume)
     {
-        m_auditionVolume = volume < 0.0f ? 0.0f : volume;
-        if (m_audio != nullptr && m_audio->Engine() != nullptr && m_voice.IsValid())
-        {
-            m_audio->Engine()->SetVoiceVolume(m_voice, m_auditionVolume); // live while auditioning
-        }
+        m_voice->SetVolume(volume); // heard as it moves
+        if (m_volume != nullptr && m_volume->GetValue() != static_cast<f64>(m_voice->Volume()))
+            m_volume->SetValue(m_voice->Volume());
     }
 
     void AudioClipEditorPage::StopAudition()
     {
-        if (m_audio != nullptr && m_audio->Engine() != nullptr && m_voice.IsValid())
-        {
-            m_audio->Engine()->Stop(m_voice);
-        }
-        m_voice = audio::VoiceHandle{};
-        m_paused = false;
-        m_waveform->SetPlayheadFraction(-1.0f);
-        m_status->SetText(u8"");
+        if (m_voice)
+            m_voice->Stop();
+        if (m_waveform)
+            m_waveform->SetPlayhead(-1.0f);
+        ShowState(u8"stopped", u8"Stopped");
     }
+
+    void AudioClipEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
+    {
+        app::AssetObjectPage::OnUpdate(host, dt); // the bar, the transport with it, each frame
+        if (!m_voice->IsActive())
+            return;
+        f32 cursor = 0.0f;
+        if (!m_voice->Poll(cursor))
+        {
+            StopAudition(); // finished, or its voice taken
+            return;
+        }
+        const f32 duration = m_clip.Get() != nullptr ? m_clip->durationSeconds : 0.0f;
+        if (m_voice->IsPaused() || duration <= 0.0f)
+            return; // a paused audition holds its playhead
+        f32 fraction = cursor / duration;
+        if (m_clip->loop)
+            fraction -= static_cast<f32>(static_cast<i64>(fraction));
+        m_waveform->SetPlayhead(Min(fraction, 1.0f));
+        ShowState(u8"playing", Format(u8"Playing {} s", FormatFixed(cursor, 1)).AsView());
+    }
+
     const TypeInfo* AudioClipPageFactory::PrimaryType() const
     {
         return &pipeline::AudioClipAsset::StaticType();
     }
 
-    UniquePtr<EditorPage> AudioClipPageFactory::CreatePage(EditorContext& context,
-                                                           foundation::content::Instance& instance)
+    UniquePtr<EditorPage> AudioClipPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<AudioClipEditorPage>(context, *m_host, instance);
+        auto* page = editor::EditorRootAllocator().New<AudioClipEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
-    }
-    void WaveformView::SetPeaks(Array<f32> peaks)
-    {
-        m_peaks = Move(peaks);
-        Invalidate();
-    }
-
-    void WaveformView::SetPlayheadFraction(f32 fraction)
-    {
-        if (m_playhead != fraction)
-        {
-            m_playhead = fraction;
-            Invalidate();
-        }
-    }
-
-    void WaveformView::OnDraw(ui::UIDrawContext& ctx)
-    {
-        const Rectangle bounds{0.0f, 0.0f, Width(), Height()};
-        ctx.VG().FillRect(bounds, Color{0.10f, 0.11f, 0.13f, 1.0f});
-        if (m_peaks.IsEmpty() || bounds.width <= 2.0f || bounds.height <= 2.0f)
-        {
-            return;
-        }
-        const f32 mid = bounds.height * 0.5f;
-        const f32 barWidth = bounds.width / static_cast<f32>(m_peaks.Size());
-        const Color barColor{64.0f / 255.0f, 200.0f / 255.0f, 190.0f / 255.0f, 0.9f};
-        for (usize i = 0; i < m_peaks.Size(); ++i)
-        {
-            const f32 half = Max(1.0f, m_peaks[i] * (mid - 2.0f));
-            ctx.VG().FillRect(Rectangle{static_cast<f32>(i) * barWidth, mid - half,
-                                        Max(1.0f, barWidth - 1.0f), half * 2.0f},
-                              barColor);
-        }
-        if (m_playhead >= 0.0f && m_playhead <= 1.0f)
-        {
-            ctx.VG().FillRect(
-                Rectangle{m_playhead * bounds.width - 1.0f, 0.0f, 2.0f, bounds.height},
-                Color{0.95f, 0.85f, 0.4f, 1.0f});
-        }
     }
 }

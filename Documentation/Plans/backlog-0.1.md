@@ -29,6 +29,41 @@
 - **The editor theme gives nothing elevation** (UI survey 2026-10-14): RoundedDark puts no shadow
   on popups, menus or floating panels, though the framework draws a good analytic shadow. Add
   elevation to what floats.
+- **Scene and prefab thumbnails never draw** (user 2026-10-26; the old editor too): the assets
+  browser and the pickers show a scene's and a prefab's icon, never a picture, while meshes and
+  materials draw. The generators exist (Editor.Scene's AssetThumbnailsImpl.cpp: Prefab- and
+  SceneThumbnailGenerator) and are registered with the scene editor; they are the two that stage
+  into a private scene (`NeedsPrivateScene`), which the thumbnail stage creates on its own scene
+  manager (Editor.Preview's ThumbnailStageImpl.cpp), whose installer the scene subsystem does set.
+  Not yet found: whether their jobs are queued at all, whether their Stage fails (the prefab
+  payload read, the spawn, the scene load) or times out waiting on meshes, or whether the private
+  scene renders empty. Their failures log nothing today: a warning on a failed thumbnail would
+  have shown which.
+- **The assets browser's slow-click rename and a typed guid selecting** (X8 parity check, gap 8;
+  user 2026-10-27: evaluate later): the old browser started a rename on a slow second click
+  (AssetsView.cppm:330 at 4fe177db2) and selected the asset a whole typed guid names, so Enter or
+  a double click opened it (AssetsViewImpl.cpp:733); the new one renames by F2 or the menu (GUI
+  ItemView begins an edit only on F2 or BeginEdit) and only filters by the guid. Decide whether
+  either comes back.
+- **An asset or entity dropped on a list appends to it** (X8 parity check, gap 3; tabled by the
+  user 2026-10-27): the old ContainerListEditor (ContainerListEditorImpl.cpp:26-76 at 4fe177db2)
+  took a drop on a list of references (mesh materials, reflected lists, project fonts, particle
+  materials, behaviours) as a new element, a wrong type refused with the types it takes. GUI.Toolkit's
+  ListPropertyEditor appends only by Add. Needs a design: the list asking its element's editor
+  whether it takes the payload, and the insert and the write as one undo step.
+- **Curves and gradients edited in a popup, not on the row** (X8 parity check; user 2026-10-27:
+  discuss later): the old particle page edited a curve or a gradient on its row; the toolkit shows
+  a preview row that opens an editor in a popup (where a stop's colour can now be edited too).
+- **A Composite 2D binding's four keys as a keyboard cross, not rows** (X8 parity check; user
+  2026-10-28: backlog): the old input map page drew the four keys as they sit on a keyboard, up
+  over left, down and right, each a keycap that captured its own key (InputMapPageImpl.cpp:872-890
+  at 4fe177db2); the new page shows them as four rows. Decide which reads better.
+
+- **The editor's accessibility pass** (editor-gui X9; user 2026-10-28: backlog): every control
+  reached by the keyboard in a sensible order, focus always shown, every icon-only button named
+  (a tooltip at least), the token pairs' contrast checked in both schemes and high contrast, and
+  reduced motion honoured everywhere. The keyboard and focus parts are testable; the looks are the
+  user's.
 
 ## Engine
 
@@ -91,16 +126,24 @@
   baked per pixel at import. FBX (`FbxLoader.cppm`, the legacy Lambert/Phong path): metallic 0 and
   roughness 0.8, the specular colour, its texture and the shininess never read. Bistro's FBX binds
   its `*_Specular.dds` to Phong's SpecularColor slot, and its README says those maps pack occlusion
-  (R), roughness (G) and metalness (B), so all of its maps are dropped. Wanted: an import option to
-  read that slot as packed ORM (not the default: a true Phong specular map would turn to metal),
-  and the spec-gloss style conversion for real specular maps. Test against Bistro v5.2 (FBX only)
-  at `~/Downloads/Bistro_v5_2`.
+  (R), roughness (G) and metalness (B), so all of its maps are dropped. Wanted: the spec-gloss
+  style conversion for real specular maps. The FBX half is now `Specs/phong-material.md`: legacy
+  Phong and Lambert materials import as authored, onto a built-in Phong material that keeps their
+  specular. The import option once wanted here, to read Phong's specular slot as packed ORM, is
+  dropped (user, 2026-10-27: no importer case for one asset's convention); Bistro's materials are
+  fixed by a script outside the engine (rebuilt as PBR with the packed maps wired as such) so it
+  imports normally. Test data: Bistro v5.2 (FBX only) at `~/Downloads/Bistro_v5_2`.
 - **A slot's own depth and shadow program.** The forward pass draws each submesh with its slot's
   material (2026-10-15), but the depth prepass, shadows and picking still draw a mesh (and an
   instanced set) whole with its first material (`MeshRenderer::DepthLikeFor` over `md.material`):
   a custom shader that moves its vertices or cuts out, on any slot but the first, casts and
   occludes as if it did neither. Wanted: per-submesh depth draws where a slot's material has its
   own depth program, wind, or a cutout.
+- **Pausing a run from the Game tab stops its clock too** (user 2026-10-26, playing Sky Hopper in the
+  editor): with the run paused from the Game tab's bar, the level clock on Sky Hopper's HUD keeps
+  counting. Not looked into yet: whether the clock's script reads time that a paused scene still
+  advances, or the HUD's canvas runs apart from the scene it shows. A paused run should hold every
+  clock a game reads.
 
 ### UI framework: gaps and bugs found by the UI survey (2026-10-14)
 

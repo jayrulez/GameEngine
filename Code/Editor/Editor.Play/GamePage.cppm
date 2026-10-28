@@ -10,6 +10,12 @@
 // from scratch (fresh Scene + resolve + Start) and Stop tears it all down - total cleanup IS
 // the restore. Renders through the scene's own primary camera (RenderScene with no override;
 // EnsureCamera frames the origin when the scene ships none, like the player).
+//
+// On the GUI (Documentation/Specs/editor-gui.md, 5.3, layer 7, part 3), from its markup
+// (Data/Editor/Game.gml): the kit's transport (Restart, Play, Pause, Stop, the state named beside
+// them and the scene it runs, a Play waiting for the cook said so), the resolution and the phone,
+// the debugger's toggle; the game on GUI.Viewport, which keeps every key while it runs and has
+// the focus (Shift+F1 gives them back), the script debugger beside it.
 
 module;
 #include "Core/Prelude.h"
@@ -30,11 +36,9 @@ import foundation.runtime.client;
 import foundation.graphics;
 import engine.scene;
 import foundation.rhi;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.vg.renderer;
-import foundation.ui.viewport;
+import foundation.gui;
+import foundation.gui.hosting;
+import foundation.gui.viewport;
 import foundation.script;
 import foundation.script.resource;  // ScriptClass (the cooked game script, bound from the content DB)
 import engine.script; // ScriptSubsystem / ScriptRunHost (debugger wiring)
@@ -84,136 +88,47 @@ export namespace editor
     [[nodiscard]] bool HearAllGameInstances(const EditorContext& context);
 
     namespace runtime = foundation::runtime;
-    namespace ui = foundation::ui;
     namespace scene = foundation::scene;
     namespace render = foundation::render;
-    namespace vg = foundation::vg;
     namespace script = foundation::script;
 
-    // The debugger panel: a Break/Continue/StepInto/StepOver toolbar, a
-    // call-stack list, and a locals tree with one level of lazy object expansion. It consumes
-    // ONLY the neutral IScriptDebugger + the snapshot types - no in-process assumptions - so the
-    // same panel would drive a remote debugger. It never mutates views mid-event-dispatch: the
-    // Game page rebuilds it from OnUpdate (top level); a locals-expand click only flags dirty.
+    // The debugger panel beside the game (its markup in Game.gml): Continue, Step Into, Step
+    // Over and Break; the call stack; the locals, an object's members one level under it. It
+    // consumes ONLY the neutral IScriptDebugger and its snapshot types, so the same panel would
+    // drive a remote debugger. The Game page rebuilds it from OnUpdate, never mid-script-dispatch.
     class DebuggerPanel
     {
     public:
-        DebuggerPanel()
-        {
-            auto column = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 4.0f;
-            column->Padding = ui::Thickness{6, 6};
+        DebuggerPanel() = default;
+        DebuggerPanel(const DebuggerPanel&) = delete;
+        DebuggerPanel& operator=(const DebuggerPanel&) = delete;
+        ~DebuggerPanel();
 
-            auto bar = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-            bar->Direction = ui::Orientation::Horizontal;
-            bar->Spacing = 4.0f;
-            DebuggerPanel* self = this;
-            AddToolButton(*bar, u8"Continue",
-                          [self]()
-                          {
-                              if (self->m_debugger)
-                              {
-                                  self->m_debugger->Continue();
-                              }
-                          });
-            AddToolButton(*bar, u8"Step Into",
-                          [self]()
-                          {
-                              if (self->m_debugger)
-                              {
-                                  self->m_debugger->StepInto();
-                              }
-                          });
-            AddToolButton(*bar, u8"Step Over",
-                          [self]()
-                          {
-                              if (self->m_debugger)
-                              {
-                                  self->m_debugger->StepOver();
-                              }
-                          });
-            AddToolButton(*bar, u8"Break",
-                          [self]()
-                          {
-                              if (self->m_debugger)
-                              {
-                                  self->m_debugger->Break();
-                              }
-                          });
-            column->AddView(bar.Get(), MatchWidth());
-
-            m_status =
-                MakeRef<ui::Label>(editor::EditorRootAllocator(), StringView(u8"Debugger: not running"));
-            m_status->FontSize.SetValue(12.0f);
-            column->AddView(m_status.Get(), MatchWidth());
-
-            column->AddView(
-                MakeRef<ui::Label>(editor::EditorRootAllocator(), StringView(u8"Call Stack")).Get(),
-                MatchWidth());
-            m_stackList = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-            m_stackList->Direction = ui::Orientation::Vertical;
-            column->AddView(m_stackList.Get(), MatchWidth());
-
-            column->AddView(MakeRef<ui::Label>(editor::EditorRootAllocator(), StringView(u8"Locals")).Get(),
-                            MatchWidth());
-            m_localsList = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-            m_localsList->Direction = ui::Orientation::Vertical;
-            {
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.Width = ui::SizeSpec::Match();
-                column->AddView(m_localsList.Get(), lp);
-            }
-            m_root = column;
-        }
-
-        [[nodiscard]] ui::View* RootView() const noexcept { return m_root.Get(); }
+        /// Over `pane` (the markup's `game-debugger-continue`, `-step-into`, `-step-over`,
+        /// `-break`, `-state`, `-stack` and `-locals`, by id).
+        void Bind(foundation::gui::Node& pane);
 
         /// The active debugger for the run (null when not debugging). Clears the panel.
         void SetDebugger(script::IScriptDebugger* debugger);
         [[nodiscard]] script::IScriptDebugger* Debugger() const noexcept { return m_debugger; }
-
-        /// Rebuild the stack + locals from the debugger (called at a break, from OnUpdate).
+        /// Rebuild the stack and locals from the debugger (at a break, from OnUpdate).
         void Refresh();
-
         void Clear();
-
         void SetIdle();
 
-        /// A locals-expand click flagged a rebuild (consumed by the Game page's OnUpdate, so the
-        /// view tree is never mutated mid-event-dispatch).
-        [[nodiscard]] bool ConsumeDirty() noexcept;
+        // === What it shows (for tests) ===
+        [[nodiscard]] StringView State() const;
+        [[nodiscard]] usize StackCount() const;
 
     private:
-        [[nodiscard]] static ui::LayoutStyle MatchWidth();
-
-        template <typename Fn>
-        void AddToolButton(ui::FlexLayout& bar, StringView label, Fn onClick)
-        {
-            auto button = MakeRef<ui::Button>(editor::EditorRootAllocator(), label);
-            button->FontSize.SetValue(12.0f);
-            button->OnClick.Add([onClick](ui::ButtonBase*) { onClick(); });
-            bar.AddView(button.Get());
-        }
-
-        void AddRow(ui::FlexLayout& list, StringView text, f32 indent);
-
-        void AddLocalRow(const script::ScriptVariable& variable, f32 indent);
-
-        [[nodiscard]] bool IsExpanded(u64 ref) const;
-
-        void ToggleExpand(u64 ref);
-
         static void AppendInt(String& out, i32 value);
 
-        RefPtr<ui::View> m_root;
-        RefPtr<ui::Label> m_status;
-        RefPtr<ui::FlexLayout> m_stackList;
-        RefPtr<ui::FlexLayout> m_localsList;
+        foundation::gui::Label* m_status = nullptr;
+        foundation::gui::TreeView* m_stack = nullptr;
+        foundation::gui::TreeView* m_locals = nullptr;
+        foundation::gui::TreeModel m_stackModel;
+        foundation::gui::TreeModel m_localsModel;
         script::IScriptDebugger* m_debugger = nullptr; // borrowed (owned by the run host)
-        Array<u64> m_expanded;                         // expanded object refs (per break)
-        bool m_dirty = false;
     };
 
     // The Game page's debugger sink: it never touches views (that would be mid-script-dispatch);
@@ -237,7 +152,7 @@ export namespace editor
     class GameViewportInputSource final : public foundation::input::IInputSourceProvider
     {
     public:
-        ui::viewport::ViewportView* viewport = nullptr;       // borrowed
+        foundation::gui::Viewport* viewport = nullptr;         // borrowed
         foundation::shell::IInputManager* shellInput = nullptr; // borrowed (count only)
 
         [[nodiscard]] foundation::shell::IKeyboard* Keyboard() override;
@@ -261,126 +176,27 @@ export namespace editor
                                  public IGameRunPage
     {
     public:
+        static constexpr const char8_t* kPath = u8"Editor/Game.gml";
+
+        /// What the tab asks of the editor.
+        struct Services
+        {
+            foundation::gui::GuiHost* gui = nullptr; // hosts its viewport (null: none, a test)
+            /// Its markup by its path under the data root (unset: a bare panel, a test).
+            Function<RefPtr<foundation::gui::Node>(StringView path)> loadMarkup;
+        };
+
         /// `pieId` names the tab: the id its dock panel persists under and the PIE tools address
         /// it by (`game-page`, then `game-page-1`, ...).
-        GameEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                       ui::runtime::UIHost& uiHost, engine::runtime::DefaultApplication* embeddedApp,
-                       engine::runtime::GameInstance* instance, StringView pieId)
-            : app::UIEditorPage(context.Allocator()),
-              m_context(&context), m_host(&host), m_uiHost(&uiHost), m_app(embeddedApp),
-              m_gameInstance(instance), m_pieId(pieId)
-        {
-            Provide<IPieInstancePage>(*this); // what the PIE tools act through
-            Provide<IGameScenePage>(*this);   // what the scene tools read of the run
-            Provide<IGameRunPage>(*this);     // what the editor stops before a native reload
-            m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-            m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
-            m_audio = host.Ctx().GetSubsystem<engine::audio::AudioSubsystem>();
-            m_input = host.Ctx().GetSubsystem<engine::input::InputSubsystem>();
-            m_shellInput = host.Shell() != nullptr ? host.Shell()->Input() : nullptr;
+        GameEditorPage(EditorContext& context, runtime::IApplicationHost& host, Services services, engine::runtime::DefaultApplication* embeddedApp,
+                       engine::runtime::GameInstance* instance, StringView pieId);
 
-            m_viewport = MakeRef<ui::viewport::ViewportView>(Allocator());
-            m_viewport->ClearColor = rhi::ClearColor{0.248f, 0.248f, 0.272f, 1.0f};
-            // The finished game, as the player draws it into its sRGB window: 8-bit sRGB rather
-            // than the viewports' float default, so the Game tab matches the player and its screen
-            // UI can blend encoded values through the target's UNORM view (RenderOverlays).
-            m_viewport->SetFormats(rhi::TextureFormat::RGBA8UnormSrgb, m_viewport->DepthFormat());
-
-            // THIS instance's exit request stops THIS tab's run, whichever tab it is: the
-            // script asking fires inside the embedded app's update, which runs before the
-            // pages, so the stop is deferred to this page's next OnUpdate, no script call on
-            // the stack.
-            if (m_gameInstance != nullptr)
-            {
-                m_gameInstance->RunBinding().requestExit = Function<void(i32)>{
-                    [this](i32 code)
-                    {
-                        LOG_INFO(u8"Editor", u8"Game: '{}' requested exit({})", m_pieId, code);
-                        m_exitRequested = true;
-                    }};
-            }
-
-            // Toolbar: Play / Stop / Restart + the run-state readout.
-            GameEditorPage* self = this;
-            m_toolbar = MakeRef<ui::toolkit::Toolbar>(Allocator());
-            m_playButton = m_toolbar->AddButton(u8"Play");
-            m_playButton->OnClick.Add([self](ui::toolkit::ToolbarButton*) { self->Play(); });
-            m_pauseToggle = m_toolbar->AddToggle(u8"Pause");
-            m_pauseToggle->OnCheckedChanged.Add(
-                [self](ui::toolkit::ToolbarToggle*, bool paused)
-                {
-                    if (self->m_scene != nullptr && self->m_running)
-                    {
-                        self->m_scene->SetSimulationEnabled(!paused);
-                    }
-                });
-            m_stopButton = m_toolbar->AddButton(u8"Stop");
-            m_stopButton->OnClick.Add([self](ui::toolkit::ToolbarButton*) { self->Stop(); });
-            m_restartButton = m_toolbar->AddButton(u8"Restart");
-            m_restartButton->OnClick.Add(
-                [self](ui::toolkit::ToolbarButton*)
-                {
-                    self->Stop();
-                    self->Play();
-                });
-            // The script debugger beside the viewport: off by default (it takes room the game
-            // wants); opened here, or by a breakpoint or step that pauses the run.
-            m_debuggerToggle = m_toolbar->AddToggle(u8"Debugger");
-            m_debuggerToggle->OnCheckedChanged.Add(
-                [self](ui::toolkit::ToolbarToggle*, bool shown)
-                {
-                    ui::View* panel = self->m_debuggerPanel.RootView();
-                    panel->Visibility = shown ? ui::Visibility::Visible : ui::Visibility::Gone;
-                    panel->Invalidate(); // the stage gives the viewport the room back
-                });
-            m_statusLabel = MakeRef<foundation::ui::Label>(Allocator(), StringView(u8""));
-            m_statusLabel->FontSize.SetValue(13.0f);
-            // The resolution the game draws at, the project's by default (mouse and touch map
-            // through the same fit).
-            CreateResolutionCombo();
-            {
-                foundation::ui::LayoutStyle lp;
-                lp.Height = foundation::ui::SizeSpec::Match();
-                m_toolbar->AddView(m_statusLabel.Get(), lp);
-            }
-
-            auto column = MakeRef<foundation::ui::FlexLayout>(Allocator());
-            column->Direction = foundation::ui::Orientation::Vertical;
-            {
-                foundation::ui::LayoutStyle lp;
-                lp.Width = foundation::ui::SizeSpec::Match();
-                lp.Height = foundation::ui::SizeSpec::Fixed(foundation::ui::Unit::Dp(30));
-                column->AddView(m_toolbar.Get(), lp);
-            }
-            // The play stage: the game viewport (grows) beside the debugger panel (fixed).
-            auto stage = MakeRef<ui::FlexLayout>(Allocator());
-            stage->Direction = ui::Orientation::Horizontal;
-            {
-                foundation::ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.Height = foundation::ui::SizeSpec::Match();
-                stage->AddView(m_viewport.Get(), lp);
-            }
-            {
-                foundation::ui::LayoutStyle lp;
-                lp.Width = foundation::ui::SizeSpec::Fixed(foundation::ui::Unit::Dp(300));
-                lp.Height = foundation::ui::SizeSpec::Match();
-                stage->AddView(m_debuggerPanel.RootView(), lp);
-                m_debuggerPanel.RootView()->Visibility = ui::Visibility::Gone; // until shown
-            }
-            {
-                foundation::ui::LayoutStyle lp;
-                lp.Width = foundation::ui::SizeSpec::Match();
-                lp.FlexGrow = 1.0f;
-                column->AddView(stage.Get(), lp);
-            }
-            m_content = column;
-            RefreshToolbar();
-        }
-
-        [[nodiscard]] StringView Title() const override { return u8"Game"; }
+        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
+        /// A Game tab's name from its play id: the first "Game", Play New Instance's "Game 2",
+        /// "Game 3" (its id's number and one), so tabs side by side are told apart.
+        [[nodiscard]] static String TitleFor(StringView pieId);
         [[nodiscard]] Status Save() override { return Status{}; } // nothing here is a document
-        [[nodiscard]] foundation::ui::View* ContentView() override { return m_content.Get(); }
+        [[nodiscard]] RefPtr<foundation::gui::Node> Content() override { return m_content; }
 
         // The scene group this tab's game scene belongs to: the embedded app's GameInstance manager
         // so the game scene groups + ticks + is bound to the instance's run
@@ -456,12 +272,11 @@ export namespace editor
         [[nodiscard]] StringView ResolutionKey() const noexcept override { return m_resolutionKey.AsView(); }
         bool SelectResolution(StringView key) override;
         [[nodiscard]] bool PhonePreview() const noexcept override { return m_phonePreview; }
+        /// The game's view (for tests: its focus and capture).
+        [[nodiscard]] foundation::gui::Viewport* View() const noexcept { return m_viewport.Get(); }
+        /// Whether the script debugger is beside the game now.
+        [[nodiscard]] bool DebuggerShown() const;
         void SelectPhonePreview(bool on) override;
-
-        // Bind (and re-bind after dock/float moves) the viewport to the window hosting it -
-        // the same RendererFor dance as ScenePage. Without this the viewport never gets a
-        // DEVICE: no color target, IsReady() false, and the tab renders only its clear color.
-        void EnsureViewportBound();
 
         void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;
 
@@ -513,7 +328,10 @@ export namespace editor
 
         // The resolution dropdown (:game_resolution): built once, its choices refreshed when
         // what they come from changes (looked at once a second), the choice kept per project.
-        void CreateResolutionCombo();
+        // The bar from the markup: the transport, the resolutions and the phone, the debugger.
+        void BindBar();
+        void BindResolution();
+        [[nodiscard]] i32 SelectedResolution() const;
         void TickResolution(f32 dt);
         void RefreshResolutionChoices(bool force);
         // The chosen size, fitted by the project's render fit; the panel's own size stretches,
@@ -538,7 +356,11 @@ export namespace editor
         void SetPhonePreview(bool on);
         void SaveResolutionKey();
 
+        // The transport as the run is now: what is enabled, the state named, the scene beside it.
         void RefreshToolbar();
+        void ShowDebugger(bool shown);
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const;
 
         // The deferred half of Play(): the actual boot (script launch + default scene),
         // run by OnUpdate once the cook is idle.
@@ -557,12 +379,10 @@ export namespace editor
 
         EditorContext* m_context = nullptr;
         runtime::IApplicationHost* m_host = nullptr;
-        ui::runtime::UIHost* m_uiHost = nullptr;
+        Services m_services;
         engine::runtime::DefaultApplication* m_app = nullptr; // the embedded game application (v3)
         engine::runtime::GameInstance* m_gameInstance =
             nullptr; // THIS tab's running game (its own run host + scenes)
-        foundation::graphics::RenderWindow* m_hostWindow =
-            nullptr; // borrowed; tracks dock/float moves
         engine::scene::SceneSubsystem* m_scenes = nullptr;
         engine::render::RenderSubsystem* m_render = nullptr;
         engine::audio::AudioSubsystem* m_audio = nullptr; // the run's sound: stop, pause, focus
@@ -571,14 +391,19 @@ export namespace editor
         foundation::shell::IInputManager* m_shellInput = nullptr;
         GameViewportInputSource m_viewportSource;
 
-        RefPtr<foundation::ui::View> m_content;
-        RefPtr<ui::toolkit::Toolbar> m_toolbar;
-        ui::toolkit::ToolbarButton* m_playButton = nullptr;
-        ui::toolkit::ToolbarButton* m_stopButton = nullptr;
-        ui::toolkit::ToolbarToggle* m_pauseToggle = nullptr;
-        ui::toolkit::ToolbarToggle* m_debuggerToggle = nullptr; // shows the script debugger
-        ui::toolkit::ToolbarButton* m_restartButton = nullptr;
-        RefPtr<ui::ComboBox> m_resolutionCombo;
+        RefPtr<foundation::gui::Node> m_content;
+        foundation::gui::ButtonBase* m_restartButton = nullptr;
+        foundation::gui::ButtonBase* m_playButton = nullptr;
+        foundation::gui::ButtonBase* m_pauseToggle = nullptr;
+        foundation::gui::ButtonBase* m_stopButton = nullptr;
+        foundation::gui::Label* m_stateLabel = nullptr; // the transport's state: Playing, Paused, Script error
+        foundation::gui::Label* m_sceneLabel = nullptr; // the scene it runs
+        foundation::gui::Label* m_cookBadge = nullptr;  // while a Play waits for the cook
+        foundation::gui::ButtonBase* m_debuggerToggle = nullptr; // shows the script debugger
+        RefPtr<foundation::gui::Node> m_debuggerPane; // held while it is out of the split
+        foundation::gui::Splitter* m_stage = nullptr;  // the game beside the debugger (the markup's)
+        f32 m_debuggerShare = 0.22f;                    // its share of the split, kept while it is off
+        foundation::gui::ComboBox* m_resolutionCombo = nullptr;
         Array<GameResolutionChoice> m_resolutionChoices;
         String m_resolutionSignature; // what the choices were built from
         String m_resolutionKey;       // the chosen entry, kept across rebuilds, saved per project
@@ -592,20 +417,18 @@ export namespace editor
         // previews a phone held upright (Specs/present-transform.md).
         ScreenOrientation m_orientation = ScreenOrientation::Any;
         bool m_phonePreview = false;
-        ui::toolkit::ToolbarToggle* m_phoneToggle = nullptr;
+        foundation::gui::ButtonBase* m_phoneToggle = nullptr;
         GameScriptErrorSink m_scriptErrors;
         DebuggerPanel m_debuggerPanel;      // the debugger UI (contract-only)
         GameDebugListener m_debugListener;  // debugger state sink (drained in OnUpdate)
         bool m_simPausedByDebugger = false; // we disabled sim for a breakpoint
         Array<EditorContext::ScriptBreakpoint> m_appliedBreakpoints; // mirror on the debugger
-        RefPtr<foundation::ui::Label> m_statusLabel;
-        RefPtr<ui::viewport::ViewportView> m_viewport;
-        UniquePtr<foundation::shell::InputRouter>
-            m_router;                         // gates the viewport surface (hover/focus)
+        RefPtr<foundation::gui::Viewport> m_viewport;
         scene::SceneManager m_fallbackScenes{Allocator()}; // no-embedded-app placeholder group (see SceneGroup)
 
         String m_sceneTitle;
         String m_pieId;                // IPieInstancePage::PieId
+        String m_title;                // TitleFor(m_pieId)
         u64 m_frameCount = 0;          // frames rendered since the run started
         f64 m_stoppedRunTime = 0.0;    // the run time a stopped run ended at
         UniquePtr<foundation::input::ScriptedInputSource> m_scripted; // while a run scripts this tab

@@ -14,21 +14,17 @@ import foundation.content;
 import foundation.image;
 import foundation.image.io;
 import image.pipeline;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
 namespace image = foundation::image;
-namespace ui = foundation::ui;
 
 namespace editor
 {
     namespace
     {
-        constexpr StringView kColorSpaceItems[] = {u8"sRGB", u8"Linear"};
-
         [[nodiscard]] StringView PixelFormatLabel(image::PixelFormat format)
         {
             switch (format)
@@ -49,256 +45,40 @@ namespace editor
         }
     } // namespace
 
-    ImageEditorPage::ImageEditorPage(EditorContext& context, foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_title(instance.Name())
+    ImageEditorPage::ImageEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::ImageAsset::StaticType(), kPath)
     {
-        SetInstanceId(instance.Id());
-
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset = RefPtr<pipeline::ImageAsset>(Cast<pipeline::ImageAsset>(object.Get()));
-        if (m_asset.Get() == nullptr)
-        {
-            LOG_ERROR(u8"Editor", u8"image '{}' failed to read - page opens empty",
-                               m_title);
-        }
-        else
-        {
-            LoadPreview();
-        }
-        m_undoBaseline = Snapshot();
-
-        // Left: source facts label + the preview image (fit-centered).
-        m_image = MakeRef<ui::ImageView>(Allocator());
-        m_image->ScaleType.SetValue(ui::ScaleType::FitCenter);
-        m_image->SetImage(m_preview.Get());
-
-        m_info = MakeRef<ui::Label>(Allocator(), StringView(u8""));
-        m_info->FontSize.SetValue(12.0f);
-
-        auto previewColumn = MakeRef<ui::FlexLayout>(Allocator());
-        previewColumn->Direction = ui::Orientation::Vertical;
-        previewColumn->Spacing = 6.0f;
-        previewColumn->Padding = ui::Thickness{8, 6};
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            previewColumn->AddView(m_info.Get(), lp);
-        }
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.FlexGrow = 1.0f;
-            previewColumn->AddView(m_image.Get(), lp);
-        }
-
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        BuildGrid();
-
-        auto gridColumn = MakeRef<ui::FlexLayout>(Allocator());
-        gridColumn->Direction = ui::Orientation::Vertical;
-        gridColumn->Padding = ui::Thickness{8, 6};
-        {
-            ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            gridColumn->AddView(m_grid.Get(), lp);
-        }
-
-        auto split = MakeRef<ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.6f);
-        split->SetPanes(previewColumn.Get(), gridColumn.Get());
-
-        // The page action bar (Save / Undo / Redo / Discard) above the split.
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        auto pageColumn = MakeRef<ui::FlexLayout>(Allocator());
-        pageColumn->Direction = ui::Orientation::Vertical;
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            pageColumn->AddView(m_toolbar.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            pageColumn->AddView(split.Get(), grow);
-        }
-        m_content = pageColumn;
-
-        RefreshInfo();
+        if (Content())
+            m_preview = MakeUnique<app::ImagePreview>(Allocator(), *Content());
+        LoadPreview();
     }
 
     void ImageEditorPage::LoadPreview()
     {
-        if (m_asset.Get() == nullptr || m_asset->fileName.IsEmpty() ||
-            m_context->Project() == nullptr)
+        const pipeline::ImageAsset* asset = ObjectAs<pipeline::ImageAsset>();
+        if (asset == nullptr)
+            return;
+        if (asset->fileName.IsEmpty() || Context().Project() == nullptr)
         {
+            if (m_preview)
+                m_preview->ShowNone(u8"This image names no source file.");
             return;
         }
-        const String path =
-            PathJoin(m_context->Project()->SourcesRoot().AsView(), m_asset->fileName.View());
+        const String path = PathJoin(Context().Project()->SourcesRoot().AsView(), asset->fileName.View());
         image::Image source;
-        const Status loaded = image::io::LoadImage(path.AsView(), source);
-        if (!loaded.IsOk())
+        if (!image::io::LoadImage(path.AsView(), source).IsOk() || source.Width() == 0 || source.Height() == 0)
         {
             LOG_WARNING(u8"Editor", u8"image source missing or undecodable: {}", path);
+            if (m_preview)
+                m_preview->ShowNone(Format(u8"{} is missing or did not decode.", asset->fileName.View()).AsView());
             return;
         }
-        m_sourceFormat = source.Format();
-        m_sourceBytes = source.PixelData().Size();
-        // Display path is 8-bit: convert through the image library (floats clamp).
-        const image::Image display = (source.Format() == image::PixelFormat::RGBA8)
-                                         ? Move(source)
-                                         : source.ConvertFormat(image::PixelFormat::RGBA8);
-        if (display.Width() == 0 || display.Height() == 0)
-        {
-            return;
-        }
-        m_preview = MakeUnique<image::OwnedImageData>(Allocator(), display.Width(),
-                                                      display.Height(), image::PixelFormat::RGBA8,
-                                                      display.PixelData(), m_asset->colorSpace);
-    }
-
-    void ImageEditorPage::RefreshInfo()
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            m_info->SetText(u8"Image failed to load.");
-            return;
-        }
-        if (m_preview.Get() == nullptr)
-        {
-            m_info->SetText(u8"No preview (source file missing or undecodable).");
-            return;
-        }
-        String text(m_asset->fileName.View());
-        text.Append(Format(u8"  |  {} x {}  |  {}  |  {} KiB", m_preview->Width(),
-                           m_preview->Height(), PixelFormatLabel(m_sourceFormat),
-                           m_sourceBytes / 1024)
-                        .AsView());
-        m_info->SetText(text.AsView());
-    }
-
-    void ImageEditorPage::BuildGrid()
-    {
-        m_grid->Clear();
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        ImageEditorPage* self = this;
-
-        // The one authored field: how consumers interpret the pixels.
-        auto colorSpace = MakeRef<ui::toolkit::EnumEditor>(
-            Allocator(), u8"Color Space", static_cast<i32>(m_asset->colorSpace),
-            Span<const StringView>{kColorSpaceItems, 2},
-            Function<void(i32)>{[self](i32 v)
-                                {
-                                    self->m_asset->colorSpace =
-                                        static_cast<image::ImageColorSpace>(v);
-                                    Array<byte> after = self->Snapshot();
-                                    (void)self->Commands().Execute(UniquePtr<IEditorCommand>(
-                                        self->Allocator().New<EditImageCommand>(
-                                            *self, u8"color-space", self->m_undoBaseline, after),
-                                        self->Allocator()));
-                                    self->m_undoBaseline = Move(after);
-                                    self->MarkDirty();
-                                }},
-            u8"Import");
-        m_colorSpaceRow = colorSpace.Get();
-        m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(colorSpace.Get()));
-
-        // Read-only source facts.
-        auto stat = [&](StringView name, String value)
-        {
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::StringEditor>(Allocator(), name, value.AsView(),
-                                                   Function<void(StringView)>{}, u8"Source")
-                    .Get()));
-        };
-        stat(u8"File", String(m_asset->fileName.View()));
-        if (m_preview.Get() != nullptr)
-        {
-            stat(u8"Dimensions", Format(u8"{} x {}", m_preview->Width(), m_preview->Height()));
-            stat(u8"Pixel Format", String(PixelFormatLabel(m_sourceFormat)));
-            stat(u8"Data Size", Format(u8"{} KiB", m_sourceBytes / 1024));
-        }
-    }
-
-    Array<byte> ImageEditorPage::Snapshot() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        m_asset->Serialize(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void ImageEditorPage::ApplyBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        Array<byte> current = Snapshot();
-        if (current.Size() == blob.Size())
-        {
-            bool same = true;
-            for (usize i = 0; i < blob.Size(); ++i)
-            {
-                if (current[i] != blob[i])
-                {
-                    same = false;
-                    break;
-                }
-            }
-            if (same)
-            {
-                return;
-            }
-        }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        m_asset->Serialize(ar);
-        m_undoBaseline = blob;
-        // One editable row: re-pull it (no grid rebuild needed).
-        if (m_colorSpaceRow != nullptr)
-        {
-            m_colorSpaceRow->SetValue(static_cast<i32>(m_asset->colorSpace));
-        }
-        MarkDirty();
-    }
-
-    Status ImageEditorPage::Save()
-    {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false);
-            LOG_INFO(u8"Editor", u8"saved image '{}'", m_title);
-        }
-        return saved;
+        SetFact(u8"Dimensions", Format(u8"{} x {}", source.Width(), source.Height()).AsView());
+        SetFact(u8"Pixel Format", PixelFormatLabel(source.Format()));
+        SetFact(u8"Data Size", Format(u8"{} KiB", source.PixelData().Size() / 1024).AsView());
+        // The display is 8-bit: converted through the image library (floats clamp).
+        if (m_preview)
+            m_preview->Show(source.Format() == image::PixelFormat::RGBA8 ? Move(source) : source.ConvertFormat(image::PixelFormat::RGBA8));
     }
 
     const TypeInfo* ImageEditorPageFactory::PrimaryType() const
@@ -306,10 +86,9 @@ namespace editor
         return &pipeline::ImageAsset::StaticType();
     }
 
-    UniquePtr<EditorPage> ImageEditorPageFactory::CreatePage(EditorContext& context,
-                                                             foundation::content::Instance& instance)
+    UniquePtr<EditorPage> ImageEditorPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<ImageEditorPage>(context, instance);
+        auto* page = editor::EditorRootAllocator().New<ImageEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 }

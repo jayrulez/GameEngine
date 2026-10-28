@@ -3,322 +3,231 @@
 
 // Editor::App - :project_manager_view partition.
 //
-// The PROJECT MANAGER screen (built into the single editor exe): shown at startup when no
-// project was given on the command line, and returned to by File > Close Project.
+// The project manager (Documentation/Specs/editor-gui.md, 5.1, layer 13): the window's whole
+// screen at startup with no project given, and after File > Close Project. Its frame is markup
+// (Data/Editor/ProjectManager.gml), New Project and Open Folder first, then every recent project as
+// a row (its picture, name, folder and engine, Open, a menu) or a tile of its picture. There is no
+// selection: an action is one click on the project it is for. Each project is probed as it is
+// shown: one whose folder no longer holds it is dimmed with no Open; one saved by a newer engine
+// is named in the warning colour. The status line under the head says what went wrong.
 //
-// Design: no selection state at all. The standalone entry points (New Project... /
-// Open Folder...) sit at the top and are always available; below them, every recent
-// project is a CARD carrying its own [Open] and [Remove] buttons - the action is always
-// one click, and an empty list shows a friendly empty state instead of dangling
-// selection-dependent buttons. Rows are live-probed on every Rebuild (missing manifests
-// render dim with no Open; newer-engine stamps render amber) - the list never lies about
-// what Open will find.
-//
-// Everything with project consequences goes through callbacks the application binds (and
-// defers through the UI mutation queue - opening detaches THIS view mid-dispatch):
-//   OnOpenProject(dir)         - open an existing project (the app runs the version gate)
-//   OnCreateProject(dir, name) - scaffold + open a new project at dir
-//   OnStoreChanged()           - the registry changed; persist the settings store
-// Remove is view-internal (registry mutation + list rebuild) but still queues its rebuild:
-// the button lives in the very row the rebuild destroys.
-
+// Everything with consequences for the project goes through the services the application binds:
+// opening (the application runs the version check), creating, and saving the list after a change.
+// A change to the list it shows is made again at the GUI's next drain, never inside the click that
+// asked (the clicked button is in what goes).
 module;
 #include "Core/Prelude.h"
-#include "Core/Reflection/Reflect.h"
 
 export module editor.app:project_manager_view;
 
 import foundation.core;
-import foundation.settings;
 import foundation.shell;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.fonts; // TextAlignment (the version column)
-import engine.project;
-import editor.core;
+import foundation.gui;
 import foundation.image;
 import foundation.image.io;
-import :editor_icons;
-import :view_mode_toggles;
+import engine.project;
+import editor.core;
 import :project_picture;
 
 using namespace foundation::core;
-using namespace foundation;
-namespace shell = foundation::shell;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
-    namespace fonts = foundation::fonts;
-    namespace project = engine::project;
+    namespace gui = foundation::gui;
 
-    class ProjectManagerView final
+    class ProjectManagerView
     {
     public:
-        // The allocator (required - the editor app passes its tagged root) backs the
-        // manager screen's whole view tree.
-        /// `logo` (LoadEditorLogo) heads the screen; null shows the product's name as text.
-        explicit ProjectManagerView(IAllocator& allocator, ui::DrawablePtr logo = {}) noexcept
-            : m_allocator(&allocator), m_logo(Move(logo))
+        /// Its frames, under the data root.
+        static constexpr const char8_t* kPath = u8"Editor/ProjectManager.gml";
+        static constexpr const char8_t* kNewProjectPath = u8"Editor/NewProject.gml";
+
+        struct Services
         {
-        }
+            editor::ProjectManagerController* controller = nullptr;
+            foundation::shell::IDialogService* dialogs = nullptr; // null: no folder or file dialogs
+            /// Open the project in this folder (the application checks its engine first).
+            Function<void(StringView)> open;
+            /// Make a project named `name` in `directory`, then open it.
+            Function<void(StringView directory, StringView name)> create;
+            /// The recent list or its layout changed: the store is saved.
+            Function<void()> storeChanged;
+            /// A dialog's markup by its path (New Project's).
+            Function<RefPtr<gui::Node>(StringView)> loadMarkup;
+        };
 
-        [[nodiscard]] IAllocator& Allocator() const noexcept { return *m_allocator; }
-
-        Function<void(StringView)> OnOpenProject;
-        Function<void(StringView, StringView)> OnCreateProject;
-        Function<void()> OnStoreChanged;
-
-        ProjectManagerView() = default;
-        ProjectManagerView(const ProjectManagerView&) = delete;
-        ProjectManagerView& operator=(const ProjectManagerView&) = delete;
-
-        void Build(editor::ProjectManagerController& controller,
-                   shell::IDialogService* dialogs, ui::UIContext* uiContext, u32 width,
-                   u32 height)
+        ProjectManagerView(IAllocator& allocator, Services services, RefPtr<gui::Node> content)
+            : m_allocator(allocator), m_services(Move(services)), m_content(Move(content)), m_pictures(allocator), m_shown(allocator)
         {
-            m_controller = &controller;
-            m_dialogs = dialogs;
-            m_uiContext = uiContext;
-            m_root = MakeRef<ui::RootView>(Allocator());
-            m_root->ViewportSize = Float2{static_cast<f32>(width), static_cast<f32>(height)};
-            m_root->DpiScale = 1.0f;
-
-            // Center a fixed-width column: [spacer][column 720][spacer].
-            auto outer = MakeRef<ui::FlexLayout>(Allocator());
-            outer->Direction = ui::Orientation::Horizontal;
-            auto leftSpacer = MakeRef<ui::FlexLayout>(Allocator());
-            auto rightSpacer = MakeRef<ui::FlexLayout>(Allocator());
-            auto column = MakeRef<ui::FlexLayout>(Allocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 12;
-            column->Padding = ui::Thickness{0, 28};
-            {
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                outer->AddView(leftSpacer.Get(), grow);
-            }
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(720.0f));
-                lp.Height = ui::SizeSpec::Match();
-                outer->AddView(column.Get(), lp);
-            }
-            {
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                outer->AddView(rightSpacer.Get(), grow);
-            }
-
-            // Header: the logo (else the name) + engine version (the manager IS the version
-            // disambiguator).
-            {
-                auto header = MakeRef<ui::FlexLayout>(Allocator());
-                header->Direction = ui::Orientation::Horizontal;
-                header->Spacing = 12;
-                header->AlignItems = ui::Align::Center;
-                if (m_logo.Get() != nullptr)
-                {
-                    constexpr f32 kLogoHeight = 44.0f;
-                    auto logo = MakeRef<ui::DrawableView>(Allocator(), m_logo, kLogoHeight * 931.0f / 200.0f,
-                                                          kLogoHeight);
-                    header->AddView(logo.Get());
-                }
-                else
-                {
-                    auto title = MakeRef<ui::Label>(Allocator());
-                    title->SetText(u8"AssiduousEngine");
-                    title->FontSize.SetValue(24.0f);
-                    header->AddView(title.Get());
-                }
-                auto version = MakeRef<ui::Label>(Allocator());
-                String v(u8"engine ");
-                v += project::kEngineVersionString;
-                version->SetText(v.AsView());
-                version->FontSize.SetValue(12.0f);
-                version->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-                header->AddView(version.Get());
-                column->AddView(header.Get());
-            }
-
-            // Standalone entry points - always available, independent of the list below.
-            {
-                auto actions = MakeRef<ui::FlexLayout>(Allocator());
-                actions->Direction = ui::Orientation::Horizontal;
-                actions->Spacing = 8;
-                ProjectManagerView* self = this;
-                auto create =
-                    MakeRef<ui::Button>(Allocator(), StringView(u8"New Project..."));
-                create->OnClick.Add([self](ui::ButtonBase*) { self->ShowCreateDialog(); });
-                actions->AddView(create.Get());
-                auto browse =
-                    MakeRef<ui::Button>(Allocator(), StringView(u8"Open Folder..."));
-                browse->OnClick.Add([self](ui::ButtonBase*) { self->BrowseAndOpen(); });
-                actions->AddView(browse.Get());
-                column->AddView(actions.Get());
-            }
-
-            // "Recent projects", and the List / Grid toggle (remembered with the projects).
-            {
-                auto bar = MakeRef<ui::FlexLayout>(Allocator());
-                bar->Direction = ui::Orientation::Horizontal;
-                bar->AlignItems = ui::Align::Center;
-                auto caption = MakeRef<ui::Label>(Allocator());
-                caption->SetText(u8"Recent projects");
-                caption->FontSize.SetValue(13.0f);
-                caption->TextColor.SetValue(Optional<Color>(Color{0.72f, 0.72f, 0.72f, 1.0f}));
-                ui::LayoutStyle grow;
-                grow.FlexGrow = 1.0f;
-                bar->AddView(caption.Get(), grow);
-                m_viewToggles = MakeRef<ViewModeToggles>(Allocator());
-                m_viewToggles->SetGridMode(m_controller->GridView());
-                ProjectManagerView* self = this;
-                m_viewToggles->OnModeChanged = [self](bool grid) { self->SetGridView(grid); };
-                bar->AddView(m_viewToggles.Get());
-                ui::LayoutStyle match;
-                match.Width = ui::SizeSpec::Match();
-                column->AddView(bar.Get(), match);
-            }
-
-            // The projects: rows, or tiles that wrap; rebuilt whole.
-            m_listColumn = MakeRef<ui::FlexLayout>(Allocator());
-            m_listColumn->Direction = ui::Orientation::Vertical;
-            m_listColumn->Spacing = 6;
-            auto scroll = MakeRef<ui::ScrollView>(Allocator());
-            scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-            scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
-            // The bar takes its own room beside the projects rather than lying over them (user).
-            scroll->ScrollBarMode.SetValue(ui::ScrollBarModeValue::Reserved);
-            m_listColumn->Padding = ui::Thickness{0, 0, 8, 0}; // a gap before the bar
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                scroll->AddView(m_listColumn.Get(), lp);
-            }
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.FlexGrow = 1.0f;
-                column->AddView(scroll.Get(), lp);
-            }
-
-            m_status = MakeRef<ui::Label>(Allocator());
-            m_status->FontSize.SetValue(12.0f);
-            m_status->TextColor.SetValue(Optional<Color>(Color{0.7f, 0.7f, 0.7f, 1.0f}));
-            column->AddView(m_status.Get());
-
-            m_root->AddView(outer.Get());
+            if (!m_content)
+                return;
+            ProjectManagerView* self = this;
+            if (auto* create = Find<gui::Button>(u8"manager-new"))
+                create->SetOnClick([self]() { self->ShowCreateDialog(); });
+            if (auto* open = Find<gui::Button>(u8"manager-open"))
+                open->SetOnClick([self]() { self->BrowseAndOpen(); });
+            if (auto* list = Find<gui::Button>(u8"manager-list"))
+                list->SetOnClick([self]() { self->SetGridView(false); });
+            if (auto* grid = Find<gui::Button>(u8"manager-grid"))
+                grid->SetOnClick([self]() { self->SetGridView(true); });
+            if (auto* engine = Find<gui::Label>(u8"manager-engine"))
+                engine->SetText(Format(u8"engine {}", engine::project::kEngineVersionString).AsView());
             Rebuild();
         }
+        ProjectManagerView(const ProjectManagerView&) = delete;
+        ProjectManagerView& operator=(const ProjectManagerView&) = delete;
+        ~ProjectManagerView() { CloseDialog(); }
 
-        [[nodiscard]] ui::RootView* Root() const noexcept { return m_root.Get(); }
+        [[nodiscard]] RefPtr<gui::Node> Content() const { return m_content; }
 
-        void SetStatus(StringView text) { m_status->SetText(text); }
+        /// The status line (empty hides it).
+        void SetStatus(StringView text)
+        {
+            if (auto* status = Find<gui::Label>(u8"manager-status"))
+            {
+                status->SetText(text);
+                status->SetDisplayed(!text.IsEmpty());
+            }
+        }
+        [[nodiscard]] StringView Status() const
+        {
+            const auto* status = Find<gui::Label>(u8"manager-status");
+            return status != nullptr ? status->GetText() : StringView{};
+        }
 
-        // Re-read the registry + live-probe every entry, then rebuild the projects as rows or
-        // tiles. Call on every return to the manager; registry mutations queue a rebuild themselves.
+        /// The projects again, each probed now.
         void Rebuild()
         {
-            m_listColumn->RemoveAllViews();
-            m_thumbnails.Clear(); // the views showing them went with the rows
-            const bool grid = m_controller->GridView();
-            m_listColumn->Direction = grid ? ui::Orientation::Horizontal : ui::Orientation::Vertical;
-            m_listColumn->Wrap = grid;
-            m_listColumn->Spacing = grid ? 14.0f : 6.0f;
-            m_listColumn->LineSpacing = grid ? 14.0f : 0.0f; // between the grid's rows
-            m_shownCards.Clear();
-
-            const RecentProjectsSettings& reg = m_controller->Entries();
-            if (reg.entries.IsEmpty())
+            gui::Node* list = Find<gui::Node>(u8"manager-projects");
+            if (list == nullptr || m_services.controller == nullptr)
+                return;
+            while (list->ChildCount() > 0)
+                list->RemoveChild(list->GetChildAt(list->ChildCount() - 1));
+            m_pictures.Clear();
+            m_shown.Clear();
+            const bool grid = m_services.controller->GridView();
+            if (auto* asList = Find<gui::Button>(u8"manager-list"))
+                asList->SetChecked(!grid);
+            if (auto* asGrid = Find<gui::Button>(u8"manager-grid"))
+                asGrid->SetChecked(grid);
+            if (auto* view = Cast<gui::UIWidget>(list))
             {
-                m_listColumn->Direction = ui::Orientation::Vertical;
-                auto empty = MakeRef<ui::Label>(Allocator());
-                empty->SetText(u8"No projects yet. Create a new project, or open an existing "
-                               u8"project folder.");
-                empty->FontSize.SetValue(13.0f);
-                empty->TextColor.SetValue(Optional<Color>(Color{0.5f, 0.5f, 0.5f, 1.0f}));
-                empty->WordWrap.SetValue(true);
-                auto pad = MakeRef<ui::FlexLayout>(Allocator());
-                pad->Padding = ui::Thickness{4, 16};
-                pad->AddView(empty.Get());
-                m_listColumn->AddView(pad.Get());
+                if (grid)
+                    view->AddClass(u8"grid");
+                else
+                    view->RemoveClass(u8"grid");
+            }
+            const editor::RecentProjectsSettings& recent = m_services.controller->Entries();
+            if (recent.entries.IsEmpty())
+            {
+                RefPtr<gui::Label> empty = MakeRef<gui::Label>(m_allocator);
+                empty->AddClass(u8"manager-empty");
+                empty->SetText(u8"No projects yet. Make a new project, or open a project's folder.");
+                list->AddChild(empty.Get());
                 return;
             }
-
-            for (const RecentProjectEntry& entry : reg.entries)
+            for (const editor::RecentProjectEntry& entry : recent.entries)
             {
                 Card card;
                 card.path = entry.path;
                 card.name = entry.name;
                 card.engineVersion = entry.engineVersion;
                 engine::project::ProjectSettings probed;
-                if (ProbeProject(entry.path.AsView(), probed).IsOk())
+                if (editor::ProbeProject(entry.path.AsView(), probed).IsOk())
                 {
                     card.name = probed.name;
                     card.engineVersion = probed.engineVersion;
-                    card.relation = CompareProjectEngineVersion(probed.engineVersion.AsView());
+                    card.newer = editor::CompareProjectEngineVersion(probed.engineVersion.AsView()) == editor::EngineVersionRelation::ProjectNewer;
                 }
                 else
-                {
                     card.missing = true;
-                }
-                if (grid)
-                {
-                    AddTile(card);
-                }
-                else
-                {
-                    AddRow(card);
-                }
-                m_shownCards.PushBack(Move(card));
+                list->AddChild((grid ? Tile(card) : Row(card)).Get());
+                m_shown.PushBack(Move(card));
             }
         }
 
-        /// For tests: the layout shown, the projects shown, and whether one has its picture.
-        [[nodiscard]] bool IsGridView() { return m_controller->GridView(); }
+        // The list's layout: a grid of the pictures, else rows (kept in the store).
+        [[nodiscard]] bool IsGridView() const { return m_services.controller != nullptr && m_services.controller->GridView(); }
         void SetGridView(bool grid)
         {
-            if (grid == m_controller->GridView())
-            {
+            if (m_services.controller == nullptr || grid == m_services.controller->GridView())
                 return;
-            }
-            m_controller->SetGridView(grid);
-            if (m_viewToggles.Get() != nullptr)
-            {
-                m_viewToggles->SetGridMode(grid);
-            }
-            if (OnStoreChanged)
-            {
-                OnStoreChanged();
-            }
-            QueueRebuild();
+            m_services.controller->SetGridView(grid);
+            if (m_services.storeChanged)
+                m_services.storeChanged();
+            Later([](ProjectManagerView& self) { self.Rebuild(); });
         }
-        [[nodiscard]] usize CardCount() const noexcept { return m_shownCards.Size(); }
-        [[nodiscard]] usize ThumbnailCount() const noexcept { return m_thumbnails.Size(); }
-        /// The row menu's items for a project, as its "more" button shows them (tests).
-        [[nodiscard]] Array<String> MenuItemsFor(StringView path) const
+
+        /// The projects shown, and how many show their thumbnail (a test's).
+        [[nodiscard]] usize ShownCount() const noexcept { return m_shown.Size(); }
+        [[nodiscard]] usize ThumbnailCount() const noexcept { return m_pictures.Size(); }
+        /// What a project's menu offers.
+        [[nodiscard]] static Array<String> MenuItemsFor(StringView path)
         {
             Array<String> items;
             const bool missing = !FileExists(PathJoin(path, u8"Project.xml").AsView());
             if (!missing)
-            {
                 items.PushBack(String(u8"Open"));
-            }
             items.PushBack(String(u8"Show in Folder"));
             items.PushBack(String(u8"Copy Path"));
             if (!missing)
             {
                 items.PushBack(String(u8"Choose Thumbnail Image..."));
-                if (FileExists(ProjectThumbnailPath(path).AsView()))
-                {
+                if (FileExists(editor::ProjectThumbnailPath(path).AsView()))
                     items.PushBack(String(u8"Clear Thumbnail"));
-                }
             }
             items.PushBack(String(u8"Remove from List"));
             return items;
         }
-        /// Use `image` (any picture the editor reads) as the project's thumbnail, saved as a PNG
-        /// in its editor folder. False when it does not read.
+        /// Runs one of a project's menu items.
+        void Run(StringView path, StringView item)
+        {
+            const String where(path);
+            if (item == StringView(u8"Open"))
+                Open(where.AsView());
+            else if (item == StringView(u8"Show in Folder"))
+            {
+                if (m_services.dialogs != nullptr)
+                    m_services.dialogs->OpenPath(where.AsView());
+            }
+            else if (item == StringView(u8"Copy Path"))
+            {
+                gui::EventDispatcher* dispatcher = m_content ? m_content->GetEventDispatcher() : nullptr;
+                if (dispatcher != nullptr && dispatcher->GetClipboard() != nullptr)
+                {
+                    dispatcher->GetClipboard()->SetText(where.AsView());
+                    SetStatus(u8"Copied the project's path.");
+                }
+            }
+            else if (item == StringView(u8"Choose Thumbnail Image..."))
+            {
+                if (m_services.dialogs == nullptr)
+                    return;
+                static constexpr foundation::shell::FileFilter kImages[] = {{u8"Images", u8"png;jpg;jpeg;bmp;tga"}};
+                ProjectManagerView* self = this;
+                m_services.dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{[self, where](Span<const String> paths)
+                                                                                         {
+                                                                                             if (paths.Size() > 0) // none: cancelled
+                                                                                                 (void)self->SetThumbnailFromImage(where.AsView(), paths[0].AsView());
+                                                                                         }},
+                                                 Span<const foundation::shell::FileFilter>(kImages, 1));
+            }
+            else if (item == StringView(u8"Clear Thumbnail"))
+            {
+                (void)FileDelete(editor::ProjectThumbnailPath(where.AsView()).AsView());
+                Later([](ProjectManagerView& self) { self.Rebuild(); });
+            }
+            else if (item == StringView(u8"Remove from List"))
+            {
+                if (m_services.controller == nullptr || !m_services.controller->Remove(where.AsView()))
+                    return;
+                if (m_services.storeChanged)
+                    m_services.storeChanged();
+                Later([](ProjectManagerView& self) { self.Rebuild(); });
+            }
+        }
+        /// `image` (any picture the editor reads) as the project's thumbnail, saved as a PNG in its
+        /// editor folder. False, said in the status line, when it does not read or save.
         bool SetThumbnailFromImage(StringView projectPath, StringView image)
         {
             foundation::image::Image picture;
@@ -327,562 +236,275 @@ export namespace editor::app
                 SetStatus(u8"That image could not be read.");
                 return false;
             }
-            const String target = ProjectThumbnailPath(projectPath);
+            const String target = editor::ProjectThumbnailPath(projectPath);
             (void)CreateDirectories(PathParent(target.AsView()));
-            if (!foundation::image::io::SaveImage(picture, target.AsView(), foundation::image::io::ImageFileFormat::PNG)
-                     .IsOk())
+            if (!foundation::image::io::SaveImage(picture, target.AsView(), foundation::image::io::ImageFileFormat::PNG).IsOk())
             {
                 SetStatus(u8"The thumbnail could not be saved (an 8-bit image is needed).");
                 return false;
             }
-            QueueRebuild();
+            Later([](ProjectManagerView& self) { self.Rebuild(); });
             return true;
         }
 
-        /// What a grid tile shows on hover for the project at `path`: the whole name, the engine
-        /// it was made with (or why it will not open) and the path the tile has no room for, with
-        /// the actions worth a click from there. Interactive, so the pointer can reach its buttons.
-        /// Null when no card shows the project.
-        [[nodiscard]] RefPtr<ui::View> TileTooltipFor(StringView path)
+        /// New Project: a name and the folder it is made in; Create waits for both.
+        void ShowCreateDialog()
         {
-            const Card* card = nullptr;
-            for (const Card& shown : m_shownCards)
-            {
-                if (shown.path.AsView() == path)
-                {
-                    card = &shown;
-                }
-            }
-            if (card == nullptr)
-            {
-                return {};
-            }
-            auto box = MakeRef<ui::FlexLayout>(Allocator());
-            box->Direction = ui::Orientation::Vertical;
-            box->Spacing = 3;
-            box->Padding = ui::Thickness{2, 2};
-            auto name = MakeRef<ui::Label>(Allocator(), card->name.IsEmpty() ? StringView(u8"(unnamed)") : card->name.AsView());
-            name->FontSize.SetValue(14.0f);
-            name->TextColor.SetValue(Optional<Color>(TitleColor(*card)));
-            box->AddView(name.Get());
-            String detail;
-            if (card->missing)
-            {
-                detail = String(u8"Missing: there is no project in this folder now");
-            }
-            else
-            {
-                detail = card->engineVersion.IsEmpty() ? String(u8"Engine version unknown")
-                                                       : Format(u8"Engine {}", card->engineVersion.AsView());
-                if (card->relation == EngineVersionRelation::ProjectNewer)
-                {
-                    detail += u8", newer than this editor";
-                }
-            }
-            auto detailLabel = MakeRef<ui::Label>(Allocator(), detail.AsView());
-            detailLabel->FontSize.SetValue(11.5f);
-            detailLabel->TextColor.SetValue(Optional<Color>(Color{0.6f, 0.6f, 0.6f, 1.0f}));
-            box->AddView(detailLabel.Get());
-            auto pathLabel = MakeRef<ui::Label>(Allocator(), card->path.AsView());
-            pathLabel->FontSize.SetValue(11.5f);
-            pathLabel->TextColor.SetValue(Optional<Color>(Color{0.75f, 0.75f, 0.75f, 1.0f}));
-            box->AddView(pathLabel.Get());
-
-            auto actions = MakeRef<ui::FlexLayout>(Allocator());
-            actions->Direction = ui::Orientation::Horizontal;
-            actions->Spacing = 6;
-            actions->Padding = ui::Thickness{0, 6, 0, 0};
+            gui::SceneRoot* root = m_content ? Cast<gui::SceneRoot>(m_content->GetRootNode()) : nullptr;
+            RefPtr<gui::Node> body = m_services.loadMarkup ? m_services.loadMarkup(kNewProjectPath) : RefPtr<gui::Node>();
+            if (root == nullptr || !body || (m_dialog && m_dialog->IsOpen()))
+                return;
+            m_dialog = MakeRef<gui::Window>(m_allocator);
+            m_dialog->SetTitle(u8"New Project");
+            m_dialog->SetSize(Float2{kDialogWidth, kDialogHeight});
+            m_dialog->GetContent()->AddChild(body.Get());
+            auto* name = Cast<gui::TextField>(FindIn(*body, u8"new-project-name"));
+            auto* parent = Cast<gui::TextField>(FindIn(*body, u8"new-project-parent"));
+            auto* where = Cast<gui::Label>(FindIn(*body, u8"new-project-where"));
+            auto* create = Cast<gui::Button>(FindIn(*body, u8"new-project-create"));
+            auto* browse = Cast<gui::Button>(FindIn(*body, u8"new-project-browse"));
+            auto* cancel = Cast<gui::Button>(FindIn(*body, u8"new-project-cancel"));
+            if (name == nullptr || parent == nullptr || create == nullptr)
+                return;
             ProjectManagerView* self = this;
-            const String projectPath = card->path;
-            static constexpr StringView kActions[] = {u8"Open", u8"Show in Folder", u8"Copy Path"};
-            for (const StringView item : kActions)
+            gui::Window* dialog = m_dialog.Get();
+            // Create waits for both fields; the line under them says where the project goes.
+            const auto refresh = [name, parent, where, create]()
             {
-                if (item == u8"Open" && card->missing)
-                {
-                    continue;
-                }
-                auto button = MakeRef<ui::Button>(Allocator(), item);
-                button->OnClick.Add([self, projectPath, which = String(item)](ui::ButtonBase*)
-                                    { self->RunCardMenuItem(projectPath, which.AsView()); });
-                ui::LayoutStyle height;
-                height.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(26.0f));
-                actions->AddView(button.Get(), height);
-            }
-            box->AddView(actions.Get());
-            return RefPtr<ui::View>(box.Get());
+                const bool ready = !name->GetText().IsEmpty() && !parent->GetText().IsEmpty();
+                create->SetEnabled(ready);
+                if (where != nullptr)
+                    where->SetText(ready ? PathJoin(parent->GetText(), name->GetText()).AsView() : StringView{});
+            };
+            name->SetOnTextChanging([refresh](StringView) { refresh(); });
+            parent->SetOnTextChanging([refresh](StringView) { refresh(); });
+            create->SetOnClick([self, dialog, name, parent]()
+                               {
+                                   const String projectName(name->GetText());
+                                   const String directory = PathJoin(parent->GetText(), projectName.AsView());
+                                   if (projectName.IsEmpty() || parent->GetText().IsEmpty())
+                                       return;
+                                   dialog->Close();
+                                   if (self->m_services.create)
+                                       self->m_services.create(directory.AsView(), projectName.AsView());
+                               });
+            if (browse != nullptr)
+                browse->SetOnClick([self, parent, refresh]()
+                                   {
+                                       if (self->m_services.dialogs == nullptr)
+                                           return;
+                                       self->m_services.dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{[parent, refresh](Span<const String> paths)
+                                                                                                                         {
+                                                                                                                             if (paths.Size() > 0)
+                                                                                                                             {
+                                                                                                                                 parent->SetText(paths[0].AsView());
+                                                                                                                                 refresh();
+                                                                                                                             }
+                                                                                                                         }});
+                                   });
+            if (cancel != nullptr)
+                cancel->SetOnClick([dialog]() { dialog->Close(); });
+            refresh();
+            m_dialog->OpenModal(*root);
+            name->RequestFocus();
         }
+        /// New Project's window while it is open (a test's).
+        [[nodiscard]] gui::Window* CreateDialog() const noexcept { return m_dialog && m_dialog->IsOpen() ? m_dialog.Get() : nullptr; }
 
     private:
-        // A tile's picture: a click opens the project, a hover shows TileTooltipFor.
-        class TileButton final : public ui::Button, public ui::ITooltipProvider
-        {
-        public:
-            TileButton(ProjectManagerView& owner, StringView path)
-                : ui::Button(StringView(u8"")), m_owner(owner), m_path(path)
-            {
-                IsTooltipInteractive = true;
-            }
-            [[nodiscard]] ui::ITooltipProvider* AsTooltipProvider() override { return this; }
-            [[nodiscard]] RefPtr<ui::View> CreateTooltipContent() override
-            {
-                return m_owner.TileTooltipFor(m_path.AsView());
-            }
-
-        private:
-            ProjectManagerView& m_owner;
-            String m_path;
-        };
+        static constexpr f32 kDialogWidth = 480.0f;
+        static constexpr f32 kDialogHeight = 220.0f;
 
         struct Card
         {
             String path;
             String name;
             String engineVersion;
-            EngineVersionRelation relation = EngineVersionRelation::Same;
             bool missing = false;
+            bool newer = false;
         };
 
-        // The card's title colour and suffix: missing dims, a newer engine warns.
-        [[nodiscard]] static Color TitleColor(const Card& card)
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const
         {
-            return card.missing ? Color{0.5f, 0.5f, 0.5f, 1.0f}
-                   : card.relation == EngineVersionRelation::ProjectNewer ? Color{0.95f, 0.75f, 0.3f, 1.0f}
-                                                                          : Color{0.9f, 0.9f, 0.9f, 1.0f};
+            return m_content ? Cast<T>(FindIn(*m_content, id)) : nullptr;
         }
-        [[nodiscard]] static String Subtitle(const Card& card)
+        static gui::Node* FindIn(gui::Node& node, StringView id)
         {
-            String text(card.engineVersion.IsEmpty() ? StringView(u8"") : card.engineVersion.AsView());
-            if (card.missing)
-            {
-                text += text.IsEmpty() ? u8"missing" : u8" \u00b7 missing";
-            }
-            else if (card.relation == EngineVersionRelation::ProjectNewer)
-            {
-                text += u8" \u00b7 newer engine";
-            }
-            return text;
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
         }
 
-        // The project's picture (its thumbnail, else a tile with its initial), `w` x `h`.
-        RefPtr<ui::View> Picture(const Card& card, f32 w, f32 h, f32 radius)
+        // `work` at the GUI's next drain (the clicked button is in what a rebuild takes away); at
+        // once in no GUI.
+        void Later(void (*work)(ProjectManagerView&))
         {
-            return MakeProjectPicture(Allocator(), card.missing ? StringView() : card.path.AsView(),
-                                      card.name.AsView(), w, h, radius, m_thumbnails);
-        }
-
-        // The "more" button: the project's menu.
-        RefPtr<ui::IconButton> MoreButton(const Card& card)
-        {
-            auto more = MakeRef<ui::IconButton>(Allocator(), EditorIcons::Get().more.Get(), 16.0f);
-            more->TooltipText = String(u8"More for this project");
-            // A button's surface, so it reads as one beside Open: a quiet rounded fill.
-            auto look = MakeRef<ui::StateListDrawable>(Allocator());
-            const auto fill = [this](f32 alpha)
+            gui::MutationQueue* queue = m_content ? m_content->GetMutationQueue() : nullptr;
+            if (queue == nullptr)
             {
-                return ui::DrawablePtr(
-                    MakeRef<ui::RoundedRectDrawable>(Allocator(), Color{1.0f, 1.0f, 1.0f, alpha}, 4.0f).Get());
-            };
-            look->Set(ui::ControlState::Normal, fill(0.045f));
-            look->Set(ui::ControlState::Hover, fill(0.09f));
-            look->Set(ui::ControlState::Pressed, fill(0.13f));
-            more->SetStyle(ui::StyleProperty::Background, ui::DrawablePtr(look.Get()));
-            ProjectManagerView* self = this;
-            const String path = card.path;
-            ui::IconButton* raw = more.Get();
-            more->OnClick.Add([self, path, raw](ui::ButtonBase*) { self->ShowCardMenu(path, *raw); });
-            return more;
-        }
-
-        void OpenCard(const String& path)
-        {
-            if (OnOpenProject)
-            {
-                OnOpenProject(path.AsView());
-            }
-        }
-
-        void AddRow(const Card& card)
-        {
-            constexpr f32 kButtonHeight = 28.0f;
-            auto row = MakeRef<ui::FlexLayout>(Allocator());
-            row->Direction = ui::Orientation::Horizontal;
-            row->AlignItems = ui::Align::Center;
-            row->Spacing = 12;
-            row->Padding = ui::Thickness{10, 8};
-            row->AddView(Picture(card, 76.0f, 43.0f, 4.0f).Get());
-
-            // The name (and what is wrong with the project, if anything) over the dim path; both
-            // take only the room left and end in an ellipsis rather than run under the buttons.
-            auto text = MakeRef<ui::FlexLayout>(Allocator());
-            text->Direction = ui::Orientation::Vertical;
-            text->Spacing = 2;
-            {
-                ui::LayoutStyle line;
-                line.Width = ui::SizeSpec::Match();
-                auto nameLabel = MakeRef<ui::Label>(Allocator());
-                String title(card.name.IsEmpty() ? StringView(u8"(unnamed)") : card.name.AsView());
-                if (card.missing)
-                {
-                    title += u8"   (missing)";
-                }
-                else if (card.relation == EngineVersionRelation::ProjectNewer)
-                {
-                    title += u8"   (newer engine)";
-                }
-                nameLabel->SetText(title.AsView());
-                nameLabel->FontSize.SetValue(14.0f);
-                nameLabel->Ellipsis.SetValue(true);
-                nameLabel->TextColor.SetValue(Optional<Color>(TitleColor(card)));
-                text->AddView(nameLabel.Get(), line);
-
-                auto pathLabel = MakeRef<ui::Label>(Allocator());
-                pathLabel->SetText(card.path.AsView());
-                pathLabel->FontSize.SetValue(11.0f);
-                pathLabel->Ellipsis.SetValue(true);
-                pathLabel->TooltipText = card.path;
-                pathLabel->TextColor.SetValue(Optional<Color>(Color{0.5f, 0.5f, 0.5f, 1.0f}));
-                text->AddView(pathLabel.Get(), line);
-            }
-            {
-                ui::LayoutStyle rest; // no width of its own (basis 0): the room the others leave
-                rest.FlexBasis = ui::Unit::Dp(0.0f);
-                rest.FlexGrow = 1.0f;
-                row->AddView(text.Get(), rest);
-            }
-
-            // The engine version in its own column, so the rows' versions line up.
-            {
-                auto version = MakeRef<ui::Label>(Allocator(), card.engineVersion.AsView());
-                version->FontSize.SetValue(11.5f);
-                version->HAlign.SetValue(fonts::TextAlignment::Right);
-                version->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-                ui::LayoutStyle fixed;
-                fixed.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(56.0f));
-                row->AddView(version.Get(), fixed);
-            }
-
-            ui::LayoutStyle button;
-            button.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(kButtonHeight));
-            if (!card.missing)
-            {
-                auto open = MakeRef<ui::Button>(Allocator(), StringView(u8"Open"));
-                ProjectManagerView* self = this;
-                const String path = card.path;
-                open->OnClick.Add([self, path](ui::ButtonBase*) { self->OpenCard(path); });
-                ui::LayoutStyle wide = button;
-                wide.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(64.0f));
-                row->AddView(open.Get(), wide);
-            }
-            {
-                ui::LayoutStyle square = button; // as tall as Open
-                square.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(kButtonHeight));
-                row->AddView(MoreButton(card).Get(), square);
-            }
-
-            // The card surface: a themed Panel (the stylesheet's "panel" class = the
-            // palette's Surface color) so rows read as cards against the window background.
-            auto surface = MakeRef<ui::Panel>(Allocator());
-            surface->AddClass(u8"panel");
-            {
-                ui::LayoutStyle rowLp;
-                rowLp.Width = ui::SizeSpec::Match();
-                surface->AddView(row.Get(), rowLp);
-            }
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            m_listColumn->AddView(surface.Get(), lp);
-        }
-
-        // A tile: the project's picture, then its name and engine with the "more" button; a click
-        // on the picture opens it.
-        void AddTile(const Card& card)
-        {
-            // Three to a row in the launcher's 720 px column, less the scrollbar and its gap.
-            constexpr f32 kTileWidth = 220.0f;
-            constexpr f32 kPictureHeight = 115.0f; // the picture 204 wide: about 16:9
-            auto tile = MakeRef<ui::FlexLayout>(Allocator());
-            tile->Direction = ui::Orientation::Vertical;
-            tile->Spacing = 6;
-            tile->Padding = ui::Thickness{8, 8};
-
-            auto picture = MakeRef<TileButton>(Allocator(), *this, card.path.AsView());
-            picture->SetStyle(ui::StyleProperty::Padding, ui::Thickness{0.0f, 0.0f});
-            picture->SetStyle(ui::StyleProperty::Background,
-                              ui::DrawablePtr(MakeRef<ui::RoundedRectDrawable>(Allocator(), Color{0, 0, 0, 0}, 6.0f).Get()));
-            // The tile shows no path, so its tooltip does (two projects of one name tell apart).
-            // A missing project's picture stays enabled for that tooltip (Show in Folder and Copy
-            // Path still apply), and a click on it does nothing.
-            if (!card.missing)
-            {
-                ProjectManagerView* self = this;
-                const String path = card.path;
-                picture->OnClick.Add([self, path](ui::ButtonBase*) { self->OpenCard(path); });
-            }
-            auto pictureStack = MakeRef<ui::Panel>(Allocator());
-            pictureStack->AddView(Picture(card, kTileWidth - 16.0f, kPictureHeight, 6.0f).Get());
-            pictureStack->AddView(picture.Get()); // the click target over the picture
-            tile->AddView(pictureStack.Get());
-
-            auto line = MakeRef<ui::FlexLayout>(Allocator());
-            line->Direction = ui::Orientation::Horizontal;
-            line->AlignItems = ui::Align::Center;
-            line->Spacing = 6;
-            auto text = MakeRef<ui::FlexLayout>(Allocator());
-            text->Direction = ui::Orientation::Vertical;
-            text->Spacing = 1;
-            auto nameLabel = MakeRef<ui::Label>(Allocator());
-            nameLabel->SetText(card.name.IsEmpty() ? StringView(u8"(unnamed)") : card.name.AsView());
-            nameLabel->FontSize.SetValue(13.5f);
-            nameLabel->Ellipsis.SetValue(true);
-            nameLabel->TooltipText = card.path;
-            nameLabel->TextColor.SetValue(Optional<Color>(TitleColor(card)));
-            {
-                ui::LayoutStyle match;
-                match.Width = ui::SizeSpec::Match();
-                text->AddView(nameLabel.Get(), match);
-            }
-            auto sub = MakeRef<ui::Label>(Allocator(), Subtitle(card).AsView());
-            sub->FontSize.SetValue(11.0f);
-            sub->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-            text->AddView(sub.Get());
-            ui::LayoutStyle grow; // the room the "more" button leaves (basis 0), names cut short
-            grow.FlexBasis = ui::Unit::Dp(0.0f);
-            grow.FlexGrow = 1.0f;
-            line->AddView(text.Get(), grow);
-            line->AddView(MoreButton(card).Get());
-            ui::LayoutStyle match;
-            match.Width = ui::SizeSpec::Match();
-            tile->AddView(line.Get(), match);
-
-            auto surface = MakeRef<ui::Panel>(Allocator());
-            surface->AddClass(u8"panel");
-            surface->AddView(tile.Get());
-            ui::LayoutStyle fixed;
-            fixed.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(kTileWidth));
-            m_listColumn->AddView(surface.Get(), fixed);
-        }
-
-        void ShowCardMenu(const String& path, ui::View& anchor)
-        {
-            if (m_uiContext == nullptr)
-            {
+                work(*this);
                 return;
             }
-            auto menu = MakeRef<ui::ContextMenu>(Allocator());
+            ProjectManagerView* self = this;
+            queue->Enqueue([self, work]() { work(*self); });
+        }
+
+        void Open(StringView path)
+        {
+            if (m_services.open)
+                m_services.open(path);
+        }
+        void BrowseAndOpen()
+        {
+            if (m_services.dialogs == nullptr)
+                return;
+            ProjectManagerView* self = this;
+            m_services.dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{[self](Span<const String> paths)
+                                                                                       {
+                                                                                           if (paths.Size() == 0)
+                                                                                               return; // cancelled
+                                                                                           engine::project::ProjectSettings probed;
+                                                                                           if (!editor::ProbeProject(paths[0].AsView(), probed).IsOk())
+                                                                                           {
+                                                                                               self->SetStatus(u8"Not a project (no Project.xml there). New Project makes one.");
+                                                                                               return;
+                                                                                           }
+                                                                                           self->Open(paths[0].AsView());
+                                                                                       }});
+        }
+
+        // The menu of a project, under `anchor`.
+        void ShowMenu(const String& path, gui::Node& anchor)
+        {
+            m_menu = MakeRef<gui::Menu>(m_allocator);
             ProjectManagerView* self = this;
             for (const String& item : MenuItemsFor(path.AsView()))
             {
-                const StringView label = item.AsView();
-                if (label == u8"Remove from List")
-                {
-                    menu->AddSeparator();
-                }
-                menu->AddItem(label,
-                              [self, path, which = String(label)]()
-                              { self->RunCardMenuItem(path, which.AsView()); });
+                if (item.AsView() == StringView(u8"Remove from List"))
+                    m_menu->AddSeparator();
+                (void)m_menu->AddItem(item.AsView(), [self, path, item]() { self->Run(path.AsView(), item.AsView()); });
             }
-            const Float2 at = anchor.LocalToScreen(Float2{0.0f, anchor.Height()});
-            menu->Show(m_uiContext, at.x, at.y);
+            gui::Node* root = anchor.GetRootNode();
+            if (root != nullptr)
+                m_menu->OpenBelow(*root, anchor);
         }
 
-        void RunCardMenuItem(const String& path, StringView item)
+        [[nodiscard]] RefPtr<gui::Label> Text(StringView text, StringView classes)
         {
-            if (item == u8"Open")
+            RefPtr<gui::Label> label = MakeRef<gui::Label>(m_allocator);
+            label->AddClasses(classes);
+            label->SetText(text);
+            return label;
+        }
+        [[nodiscard]] RefPtr<gui::Button> MoreButton(const String& path)
+        {
+            RefPtr<gui::Button> more = MakeRef<gui::Button>(m_allocator);
+            more->AddClass(u8"slot-button");
+            more->SetIconSource(String(u8"Editor/Icons/more.svg"));
+            more->SetTooltip(u8"More");
+            ProjectManagerView* self = this;
+            gui::Button* raw = more.Get();
+            more->SetOnClick([self, path, raw]() { self->ShowMenu(path, *raw); });
+            return more;
+        }
+        [[nodiscard]] String Title(const Card& card) const
+        {
+            if (card.missing)
+                return Format(u8"{} (missing)", card.name);
+            if (card.newer)
+                return Format(u8"{} (newer engine)", card.name);
+            return card.name;
+        }
+
+        [[nodiscard]] RefPtr<gui::Node> Row(const Card& card)
+        {
+            RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+            row->AddClass(u8"manager-row");
+            if (card.missing)
+                row->AddClass(u8"missing");
+            if (card.newer)
+                row->AddClass(u8"newer");
+            row->AddChild(ProjectPicture::Make(m_allocator, card.missing ? StringView{} : card.path.AsView(), card.name.AsView(), u8"manager-row-picture",
+                                               m_pictures)
+                              .Get());
+            RefPtr<gui::Panel> text = MakeRef<gui::Panel>(m_allocator);
+            text->AddClass(u8"manager-text");
+            text->AddChild(Text(Title(card).AsView(), u8"manager-name").Get());
+            RefPtr<gui::Label> path = Text(card.path.AsView(), u8"manager-path");
+            path->SetTooltip(card.path.AsView());
+            text->AddChild(path.Get());
+            row->AddChild(text.Get());
+            row->AddChild(Text(card.engineVersion.AsView(), u8"manager-version").Get());
+            // Open in a slot of its own, empty for a missing project: every row's columns line up.
+            RefPtr<gui::Panel> slot = MakeRef<gui::Panel>(m_allocator);
+            slot->AddClass(u8"manager-open-slot");
+            if (!card.missing)
             {
-                OpenCard(path);
-            }
-            else if (item == u8"Show in Folder")
-            {
-                if (m_dialogs != nullptr)
-                {
-                    m_dialogs->OpenPath(path.AsView());
-                }
-            }
-            else if (item == u8"Copy Path")
-            {
-                if (m_uiContext != nullptr && m_uiContext->Clipboard() != nullptr)
-                {
-                    (void)m_uiContext->Clipboard()->SetText(path.AsView());
-                    SetStatus(u8"Copied the project's path.");
-                }
-            }
-            else if (item == u8"Choose Thumbnail Image...")
-            {
-                if (m_dialogs == nullptr)
-                {
-                    return;
-                }
-                static constexpr foundation::shell::FileFilter kImages[] = {{u8"Images", u8"png;jpg;jpeg;bmp;tga"}};
+                RefPtr<gui::Button> open = MakeRef<gui::Button>(m_allocator);
+                open->SetText(u8"Open");
                 ProjectManagerView* self = this;
-                m_dialogs->ShowOpenFile(foundation::shell::DialogResultCallback{
-                                            [self, path](Span<const String> paths)
-                                            {
-                                                if (paths.Size() > 0) // none: cancelled
-                                                {
-                                                    (void)self->SetThumbnailFromImage(path.AsView(), paths[0].AsView());
-                                                }
-                                            }},
-                                        Span<const foundation::shell::FileFilter>(kImages, 1));
+                const String where = card.path;
+                open->SetOnClick([self, where]() { self->Open(where.AsView()); });
+                slot->AddChild(open.Get());
             }
-            else if (item == u8"Clear Thumbnail")
-            {
-                (void)FileDelete(ProjectThumbnailPath(path.AsView()).AsView());
-                QueueRebuild();
-            }
-            else if (item == u8"Remove from List")
-            {
-                RemoveEntry(path);
-            }
+            row->AddChild(slot.Get());
+            row->AddChild(MoreButton(card.path).Get());
+            return RefPtr<gui::Node>(row);
         }
 
-        // Rebuild after the click that asked for it is over (the clicked view is in what the
-        // rebuild destroys); at once when not in a UI yet (tests).
-        void QueueRebuild()
+        [[nodiscard]] RefPtr<gui::Node> Tile(const Card& card)
         {
-            if (m_uiContext == nullptr)
-            {
-                Rebuild();
-                return;
-            }
+            RefPtr<gui::Panel> tile = MakeRef<gui::Panel>(m_allocator);
+            tile->AddClass(u8"manager-tile");
+            if (card.missing)
+                tile->AddClass(u8"missing");
+            if (card.newer)
+                tile->AddClass(u8"newer");
+            // The picture opens it: a flat button holding it.
+            RefPtr<gui::Button> picture = MakeRef<gui::Button>(m_allocator);
+            picture->AddClass(u8"manager-tile-open"); // its hover rings the picture evenly
+            picture->AddChild(ProjectPicture::Make(m_allocator, card.missing ? StringView{} : card.path.AsView(), card.name.AsView(), u8"manager-tile-picture",
+                                                   m_pictures)
+                                  .Get());
+            picture->SetTooltip(card.path.AsView());
+            picture->SetEnabled(!card.missing);
             ProjectManagerView* self = this;
-            m_uiContext->MutationQueueRef().QueueAction(Function<void()>{[self]() { self->Rebuild(); }});
+            const String where = card.path;
+            picture->SetOnClick([self, where]() { self->Open(where.AsView()); });
+            tile->AddChild(picture.Get());
+            RefPtr<gui::Panel> foot = MakeRef<gui::Panel>(m_allocator);
+            foot->AddClass(u8"manager-tile-foot");
+            RefPtr<gui::Panel> text = MakeRef<gui::Panel>(m_allocator);
+            text->AddClass(u8"manager-text");
+            text->AddChild(Text(card.name.AsView(), u8"manager-name").Get());
+            const String subtitle = card.missing ? Format(u8"{}, missing", card.engineVersion)
+                                    : card.newer ? Format(u8"{}, newer engine", card.engineVersion)
+                                                 : card.engineVersion;
+            text->AddChild(Text(subtitle.AsView(), u8"manager-path").Get());
+            foot->AddChild(text.Get());
+            foot->AddChild(MoreButton(card.path).Get());
+            tile->AddChild(foot.Get());
+            return RefPtr<gui::Node>(tile);
         }
 
-        void RemoveEntry(const String& path)
+        void CloseDialog()
         {
-            if (!m_controller->Remove(path.AsView()))
-            {
-                return;
-            }
-            if (OnStoreChanged)
-            {
-                OnStoreChanged();
-            }
-            // The menu that asked lives in the row the rebuild destroys - defer (the
-            // mutation-queue rule: never mutate the tree mid-event-dispatch).
-            QueueRebuild();
+            if (m_dialog && m_dialog->IsOpen())
+                m_dialog->Close();
+            if (m_menu && m_menu->IsOpen())
+                m_menu->Close();
         }
 
-        void BrowseAndOpen()
-        {
-            if (m_dialogs == nullptr)
-            {
-                return;
-            }
-            ProjectManagerView* self = this;
-            m_dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{
-                [self](Span<const String> paths)
-                {
-                    if (paths.Size() == 0)
-                    {
-                        return; // cancelled
-                    }
-                    engine::project::ProjectSettings probed;
-                    if (!ProbeProject(paths[0].AsView(), probed).IsOk())
-                    {
-                        self->SetStatus(
-                            u8"Not a project (no Project.xml there). Use New Project to start "
-                            u8"one.");
-                        return;
-                    }
-                    if (self->OnOpenProject)
-                    {
-                        self->OnOpenProject(paths[0].AsView());
-                    }
-                }});
-        }
-
-        void ShowCreateDialog()
-        {
-            RefPtr<ui::Dialog> dialog =
-                MakeRef<ui::Dialog>(Allocator(), StringView(u8"New Project"));
-            auto column = MakeRef<ui::FlexLayout>(Allocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 6;
-
-            auto nameEdit = MakeRef<ui::EditText>(Allocator());
-            nameEdit->SetPlaceholder(u8"Project name");
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                column->AddView(nameEdit.Get(), lp);
-            }
-
-            auto dirRow = MakeRef<ui::FlexLayout>(Allocator());
-            dirRow->Direction = ui::Orientation::Horizontal;
-            dirRow->Spacing = 6;
-            auto dirEdit = MakeRef<ui::EditText>(Allocator());
-            dirEdit->SetPlaceholder(u8"Parent directory (the project is created inside it)");
-            {
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                dirRow->AddView(dirEdit.Get(), lp);
-            }
-            auto browse = MakeRef<ui::Button>(Allocator(), StringView(u8"Browse..."));
-            {
-                ProjectManagerView* self = this;
-                ui::EditText* dirRaw = dirEdit.Get();
-                browse->OnClick.Add(
-                    [self, dirRaw](ui::ButtonBase*)
-                    {
-                        if (self->m_dialogs == nullptr)
-                        {
-                            return;
-                        }
-                        self->m_dialogs->ShowOpenFolder(foundation::shell::DialogResultCallback{
-                            [dirRaw](Span<const String> paths)
-                            {
-                                if (paths.Size() > 0)
-                                {
-                                    dirRaw->SetText(paths[0].AsView());
-                                }
-                            }});
-                    });
-            }
-            dirRow->AddView(browse.Get());
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                column->AddView(dirRow.Get(), lp);
-            }
-            dialog->SetContent(column.Get());
-            dialog->MinWidth.SetValue(460.0f);
-
-            ui::Dialog* rawDialog = dialog.Get();
-            ui::EditText* nameRaw = nameEdit.Get();
-            ui::EditText* dirRaw = dirEdit.Get();
-            ProjectManagerView* self = this;
-            ui::Button* create = dialog->AddButton(u8"Create", ui::DialogResult::None);
-            create->OnClick.Add(
-                [self, rawDialog, nameRaw, dirRaw](ui::ButtonBase*)
-                {
-                    const StringView name = nameRaw->Text();
-                    const StringView parent = dirRaw->Text();
-                    if (name.IsEmpty() || parent.IsEmpty())
-                    {
-                        return; // both fields required; dialog stays up
-                    }
-                    rawDialog->Close(ui::DialogResult::OK);
-                    if (self->OnCreateProject)
-                    {
-                        self->OnCreateProject(PathJoin(parent, name).AsView(), name);
-                    }
-                });
-            dialog->AddButton(u8"Cancel", ui::DialogResult::Cancel);
-            dialog->Show(m_uiContext);
-        }
-
-        editor::ProjectManagerController* m_controller = nullptr;
-        shell::IDialogService* m_dialogs = nullptr;
-        ui::UIContext* m_uiContext = nullptr;
-        RefPtr<ui::RootView> m_root;
-        RefPtr<ui::FlexLayout> m_listColumn;
-        RefPtr<ui::Label> m_status;
-        RefPtr<ViewModeToggles> m_viewToggles;
-        Array<UniquePtr<foundation::image::Image>> m_thumbnails; // the pictures the cards borrow
-        Array<Card> m_shownCards; // what the list shows, in order (a tile's tooltip reads its own)
-    
-        IAllocator* m_allocator;
-        ui::DrawablePtr m_logo; // the screen's heading (null: the name as text)
+        IAllocator& m_allocator;
+        Services m_services;
+        RefPtr<gui::Node> m_content;
+        RefPtr<gui::Window> m_dialog; // New Project
+        RefPtr<gui::Menu> m_menu;     // a project's
+        Array<UniquePtr<foundation::image::Image>> m_pictures; // what the pictures show
+        Array<Card> m_shown;
     };
 }

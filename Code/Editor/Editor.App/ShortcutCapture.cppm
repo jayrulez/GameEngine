@@ -4,10 +4,10 @@
 // Editor::App - :shortcut_capture partition.
 //
 // ShortcutCaptureButton: a button that shows a chord and, once clicked, takes the next key the
-// user presses as the new one (modifiers normalised to Ctrl / Shift / Alt / Gui, the way a
-// declaration spells them). Escape cancels the capture, Backspace or Delete chooses "no
-// shortcut", a modifier alone is not a chord, and losing focus cancels. What Preferences >
-// Shortcuts puts in every row.
+// user presses as the new one, with the modifiers held. While it waits its focus captures every
+// key (Node::SetCapturesAllKeys), so no binding runs the chord instead. Escape cancels the
+// capture, Backspace or Delete chooses "no shortcut", a modifier alone is not a chord, and losing
+// focus cancels. What Preferences > Shortcuts puts in every row.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -15,34 +15,35 @@ module;
 export module editor.app:shortcut_capture;
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
 
-    class ShortcutCaptureButton final : public ui::Button
+    class ShortcutCaptureButton final : public gui::Button
     {
-        RTTI_OBJECT(ShortcutCaptureButton, ui::Button)
+        RTTI_OBJECT(ShortcutCaptureButton, gui::Button)
     public:
-        explicit ShortcutCaptureButton(EditorShortcut chord) : ui::Button(StringView()), m_chord(chord)
+        ShortcutCaptureButton()
         {
+            AddClass(u8"shortcut-capture");
             ShowChord();
             ShortcutCaptureButton* self = this;
-            OnClick.Add([self](ui::ButtonBase*) { self->BeginCapture(); });
+            SetOnClick([self]() { self->BeginCapture(); });
         }
 
-        /// Fired with the chord the user chose (unset = no shortcut). The button shows it.
-        Function<void(EditorShortcut)> OnChordChosen;
+        /// Told the chord the user chose (unset: no shortcut). The button shows it.
+        void SetOnChordChosen(Function<void(EditorShortcut)> chosen) { m_onChosen = foundation::core::Move(chosen); }
 
         [[nodiscard]] EditorShortcut Chord() const noexcept { return m_chord; }
         void SetChord(EditorShortcut chord)
         {
             m_chord = chord;
-            m_capturing = false;
+            StopCapture();
             ShowChord();
         }
         [[nodiscard]] bool IsCapturing() const noexcept { return m_capturing; }
@@ -50,83 +51,75 @@ export namespace editor::app
         void BeginCapture()
         {
             if (m_capturing)
-            {
                 return;
-            }
             m_capturing = true;
-            SetText(u8"Press a chord... (Esc cancels, Del clears)");
-            if (Context != nullptr)
-            {
-                Context->GetFocusManager()->SetFocus(this);
-            }
+            AddClass(u8"capturing");
+            SetText(u8"Press the keys (Esc cancels, Del clears)");
+            RequestFocus();
+            SetCapturesAllKeys(true);
         }
         void CancelCapture()
         {
             if (!m_capturing)
-            {
                 return;
-            }
-            m_capturing = false;
+            StopCapture();
             ShowChord();
         }
 
-        void OnKeyDown(ui::KeyEventArgs& e) override
+    protected:
+        void OnKeyDown(const gui::KeyEvent& event) override
         {
             if (!m_capturing)
             {
-                ui::Button::OnKeyDown(e); // Return / Space click, which begins a capture
+                gui::Button::OnKeyDown(event); // Return or Space click it, which begins a capture
                 return;
             }
-            e.Handled = true;
-            switch (e.Key)
-            {
-            case ui::KeyCode::Escape:
+            event.Handled = true;
+            const auto key = static_cast<gui::KeyCode>(event.KeyCode);
+            if (key == gui::KeyCode::Escape && event.Modifiers == 0)
                 CancelCapture();
-                return;
-            case ui::KeyCode::Backspace:
-            case ui::KeyCode::Delete:
+            else if ((key == gui::KeyCode::Backspace || key == gui::KeyCode::Delete) && event.Modifiers == 0)
                 Choose(EditorShortcut{});
-                return;
-            case ui::KeyCode::LeftCtrl:
-            case ui::KeyCode::LeftShift:
-            case ui::KeyCode::LeftAlt:
-            case ui::KeyCode::LeftGui:
-            case ui::KeyCode::RightCtrl:
-            case ui::KeyCode::RightShift:
-            case ui::KeyCode::RightAlt:
-            case ui::KeyCode::RightGui:
-            case ui::KeyCode::Unknown: // a key the shell could not name is no chord either
-                return; // a modifier alone is not a chord: keep waiting
-            default:
-                Choose(EditorShortcut{e.Key, ui::Shortcut::Normalize(e.Modifiers)});
-                return;
+            else if (key != gui::KeyCode::Unknown && gui::ModifierOfKey(key) == gui::KeyModNone)
+            {
+                EditorShortcut chord;
+                chord.stroke = gui::Keystroke{event.KeyCode, event.Modifiers & (gui::KeyModShift | gui::KeyModCtrl | gui::KeyModAlt | gui::KeyModSuper), false};
+                Choose(chord);
             }
+            // a modifier alone, or a key the shell could not name, is no chord: it keeps waiting
         }
         void OnFocusLost() override
         {
             CancelCapture();
-            ui::Button::OnFocusLost();
+            gui::Button::OnFocusLost();
         }
 
     private:
+        void StopCapture()
+        {
+            if (!m_capturing)
+                return;
+            m_capturing = false;
+            RemoveClass(u8"capturing");
+            SetCapturesAllKeys(false);
+        }
         void Choose(EditorShortcut chord)
         {
-            m_capturing = false;
+            StopCapture();
             m_chord = chord;
             ShowChord();
-            if (OnChordChosen)
-            {
-                OnChordChosen(chord);
-            }
+            if (m_onChosen)
+                m_onChosen(chord);
         }
         void ShowChord()
         {
             const String text = FormatShortcut(m_chord);
-            SetText(text.IsEmpty() ? StringView(u8"(none)") : text.AsView());
+            SetText(text.IsEmpty() ? StringView(u8"Not set") : text.AsView());
         }
 
         EditorShortcut m_chord;
         bool m_capturing = false;
+        Function<void(EditorShortcut)> m_onChosen;
     };
 
     RTTI_DEFINE_OBJECT(ShortcutCaptureButton, "rtti::editor::editor::app")

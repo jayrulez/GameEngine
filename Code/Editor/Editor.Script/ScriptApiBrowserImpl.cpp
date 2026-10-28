@@ -3,11 +3,8 @@
 
 // Editor::Script - the `editor.script` module.
 //
-// ScriptApiBrowserView implementation: the openable API panel on a script page. A filter
-// box over a TreeView of the language's bound API (namespace/class > members), built by
-// BuildScriptApiTree from the page's shared ScriptApiSurface. Double-clicking a row hands
-// its insert text to OnInsert. Rebuilds are DEFERRED: filter edits mark dirty, Update()
-// (the page's OnUpdate) does the TreeView::SetAdapter churn outside event dispatch.
+// BuildScriptApiTree: the API browser's tree of the language's bound API (namespace/class >
+// members) from the page's shared ScriptApiSurface, filtered by its search.
 
 module;
 #include "Core/Prelude.h"
@@ -15,11 +12,9 @@ module;
 module editor.script;
 
 import foundation.core;
-import foundation.ui;
 import foundation.script;
 
 using namespace foundation::core;
-namespace ui = foundation::ui;
 
 namespace editor
 {
@@ -106,156 +101,5 @@ namespace editor
             }
         }
         return tree;
-    }
-
-    // Node ids ARE indices into m_tree.nodes; -1 is the virtual root.
-    class ScriptApiBrowserView::TreeAdapter final : public ui::ITreeAdapter
-    {
-    public:
-        explicit TreeAdapter(ScriptApiBrowserView& owner) : m_owner(&owner) {}
-
-        [[nodiscard]] i32 RootCount() const override
-        {
-            return static_cast<i32>(m_owner->m_tree.roots.Size());
-        }
-        [[nodiscard]] i32 GetChildCount(i32 nodeId) const override
-        {
-            if (nodeId == -1)
-            {
-                return RootCount();
-            }
-            return InRange(nodeId) ? static_cast<i32>(Node(nodeId).children.Size()) : 0;
-        }
-        [[nodiscard]] i32 GetChildId(i32 parentId, i32 childIndex) const override
-        {
-            if (childIndex < 0)
-            {
-                return -1;
-            }
-            if (parentId == -1)
-            {
-                return childIndex < RootCount()
-                           ? m_owner->m_tree.roots[static_cast<usize>(childIndex)]
-                           : -1;
-            }
-            if (!InRange(parentId))
-            {
-                return -1;
-            }
-            const Array<i32>& kids = Node(parentId).children;
-            return childIndex < static_cast<i32>(kids.Size())
-                       ? kids[static_cast<usize>(childIndex)]
-                       : -1;
-        }
-        [[nodiscard]] i32 GetDepth(i32 nodeId) const override
-        {
-            return InRange(nodeId) ? Node(nodeId).depth : 0;
-        }
-        [[nodiscard]] bool HasChildren(i32 nodeId) const override
-        {
-            return GetChildCount(nodeId) > 0;
-        }
-        [[nodiscard]] RefPtr<ui::View> CreateView(i32) override
-        {
-            auto row = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-            auto label = MakeRef<ui::Label>(editor::EditorRootAllocator());
-            label->FontSize.SetValue(12.0f);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            row->AddView(label.Get(), grow);
-            return RefPtr<ui::View>(row.Get());
-        }
-        void BindView(ui::View* view, i32 nodeId, i32 depth, bool) override
-        {
-            auto* row = Cast<ui::FlexLayout>(view);
-            if (row == nullptr || row->ChildCount() == 0 || !InRange(nodeId))
-            {
-                return;
-            }
-            auto* label = Cast<ui::Label>(row->GetChildAt(0));
-            label->SetText(Node(nodeId).label.AsView());
-            // Left-pad past the chevron column; ContentInset tracks the tree's IndentWidth.
-            row->Padding = ui::Thickness{m_owner->m_treeView->ContentInset(depth), 0, 0, 0};
-        }
-
-    private:
-        [[nodiscard]] bool InRange(i32 nodeId) const
-        {
-            return nodeId >= 0 && nodeId < static_cast<i32>(m_owner->m_tree.nodes.Size());
-        }
-        [[nodiscard]] const ScriptApiTreeNode& Node(i32 nodeId) const
-        {
-            return m_owner->m_tree.nodes[static_cast<usize>(nodeId)];
-        }
-
-        ScriptApiBrowserView* m_owner;
-    };
-
-    ScriptApiBrowserView::ScriptApiBrowserView()
-    {
-        auto column = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-        column->Direction = ui::Orientation::Vertical;
-        column->Spacing = 4.0f;
-
-        m_filter = MakeRef<ui::EditText>(editor::EditorRootAllocator());
-        m_filter->SetPlaceholder(u8"Filter API");
-        ScriptApiBrowserView* self = this;
-        m_filter->OnTextChanged.Add([self](ui::EditText*) { self->m_dirty = true; });
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            column->AddView(m_filter.Get(), lp);
-        }
-
-        m_treeView = MakeRef<ui::TreeView>(editor::EditorRootAllocator());
-        m_treeView->OnItemClick.Add(
-            [self](ui::TreeView::ItemClickInfo info)
-            {
-                if (info.ClickCount < 2 || !self->OnInsert)
-                {
-                    return;
-                }
-                if (info.NodeId >= 0 &&
-                    info.NodeId < static_cast<i32>(self->m_tree.nodes.Size()))
-                {
-                    self->OnInsert(
-                        self->m_tree.nodes[static_cast<usize>(info.NodeId)].insertText.AsView());
-                }
-            });
-        {
-            ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            lp.Width = ui::SizeSpec::Match();
-            column->AddView(m_treeView.Get(), lp);
-        }
-
-        m_adapter = UniquePtr<TreeAdapter>(editor::EditorRootAllocator().New<TreeAdapter>(*this),
-                                           editor::EditorRootAllocator());
-        m_root = column;
-    }
-
-    ScriptApiBrowserView::~ScriptApiBrowserView()
-    {
-        // The view must never outlive the adapter it borrows.
-        m_treeView->SetAdapter(nullptr);
-    }
-
-    void ScriptApiBrowserView::Update()
-    {
-        // A hidden panel neither builds the surface nor the tree; opening it (the toggle
-        // flips Visibility only) makes the next Update pay the one-time build.
-        if (!m_dirty || m_root->Visibility != ui::Visibility::Visible ||
-            m_surface == nullptr)
-        {
-            return;
-        }
-        m_dirty = false;
-        Rebuild();
-    }
-
-    void ScriptApiBrowserView::Rebuild()
-    {
-        m_tree = BuildScriptApiTree(m_surface->Types(), m_filter->Text());
-        m_treeView->SetAdapter(m_adapter.Get()); // rebuilds the flat list + rows
     }
 }

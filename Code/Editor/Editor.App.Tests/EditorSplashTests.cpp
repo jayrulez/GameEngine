@@ -8,7 +8,6 @@
 
 import foundation.core;
 import foundation.shell;
-import foundation.ui;
 import editor.app;
 
 using namespace foundation::core;
@@ -131,8 +130,7 @@ TEST_CASE("splash: the logo, the status line and the progress bar, drawn on the 
 
 TEST_CASE("splash: the editor's logo and window icon load from the branding files")
 {
-    CHECK(app::LoadEditorLogo(DataRoot().AsView(), DefaultAllocator()).Get() != nullptr);
-    CHECK(app::LoadEditorLogo(u8"/nowhere", DefaultAllocator()).Get() == nullptr);
+    CHECK(FileExists(PathJoin(DataRoot().AsView(), StringView(app::kEditorLogoPath)).AsView()));
 
     IconWindow window;
     REQUIRE(app::ApplyEditorWindowIcon(window, DataRoot().AsView()));

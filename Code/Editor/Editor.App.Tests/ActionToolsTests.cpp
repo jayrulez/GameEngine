@@ -9,7 +9,7 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import foundation.json;
 import foundation.mcp;
 import editor.core;
@@ -19,7 +19,7 @@ using namespace foundation::core;
 using namespace foundation::mcp;
 using namespace editor;
 namespace json = foundation::json;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 using json::JsonValue;
 
 namespace
@@ -77,10 +77,8 @@ namespace
 TEST_CASE("action-tools: list and state over the active page, execute through the funnel with "
           "its refusals, and the unattended scope reporting a suppressed dialog")
 {
-    ui::UIContext uiContext{DefaultAllocator()};
-    auto root = MakeRef<ui::RootView>(DefaultAllocator());
-    root->ViewportSize = Float2{800.0f, 600.0f};
-    uiContext.AddRootView(root.Get());
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{800.0f, 600.0f});
 
     EditorContext context{DefaultAllocator()};
     EditorActionRegistry& actions = context.Actions();
@@ -99,8 +97,9 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
         d.id = String(u8"page.flip");
         d.label = String(u8"Flip");
         d.kind = EditorActionKind::Toggle;
-        d.shortcut = EditorShortcut{ui::KeyCode::F, ui::KeyModifiers::Ctrl};
+        d.shortcut = EditorShortcut::Of(u8"ctrl-f");
         d.enabled = [](EditorPage* page) { return page != nullptr; };
+        d.disabledReason = [](EditorPage*) { return String(u8"Open a page to flip."); };
         d.checked = [](EditorPage* page)
         { return page != nullptr && static_cast<TogglePage*>(page)->on; }; // asked disabled too
         d.execute = [](EditorPage* page)
@@ -110,20 +109,20 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
         };
         REQUIRE(actions.Register(Move(d)));
     }
-    ui::UIContext* uiPtr = &uiContext;
+    gui::SceneRoot* over = root.Get();
     bool asked = false;
     {
         EditorActionDeclaration d;
         d.id = String(u8"project.close");
         d.label = String(u8"Close Project");
         d.readOnly = false;
-        d.execute = [uiPtr, &asked](EditorPage*)
+        d.execute = [over, &asked](EditorPage*)
         {
             // The flow asks before it acts; dismissed, it acts not.
-            auto dialog = MakeRef<ui::Dialog>(DefaultAllocator(), StringView(u8"Unsaved changes"));
-            dialog->OnClosed.Add([&asked](ui::Dialog*, ui::DialogResult result)
-                                 { asked = result == ui::DialogResult::OK; });
-            dialog->Show(uiPtr);
+            auto box = MakeRef<gui::MessageBox>(DefaultAllocator());
+            box->Configure(u8"Unsaved changes", u8"Close anyway?", gui::MessageBox::Buttons::OkCancel);
+            box->SetOnResult([&asked](gui::MessageBox::Result result) { asked = result == gui::MessageBox::Result::Ok; });
+            box->OpenModal(*over);
         };
         REQUIRE(actions.Register(Move(d)));
     }
@@ -131,7 +130,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     McpServer server;
     app::ActionToolSeams seams;
     seams.context = &context;
-    seams.ui = &uiContext;
+    seams.dialogs = root->GetEventDispatcher();
     app::RegisterActionTools(server, Move(seams));
     CHECK(server.ToolCount() == app::kActionToolCount);
 
@@ -144,6 +143,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(found.Get(u8"kind").AsString() == StringView(u8"toggle"));
     CHECK(found.Get(u8"shortcut").AsString() == StringView(u8"Ctrl+F"));
     CHECK_FALSE(found.Get(u8"enabled").AsBool());
+    CHECK(found.Get(u8"disabledReason").AsString() == StringView(u8"Open a page to flip.")); // said where it has one
     CHECK_FALSE(found.Get(u8"checked").AsBool());
     REQUIRE(FindById(listed.payload.Get(u8"actions"), u8"file.exit", found) != nullptr);
     CHECK(found.Get(u8"menuPath").AsString() == StringView(u8"File/Exit"));
@@ -157,7 +157,7 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(exits == 1u);
     Answer refused = Call(server, u8"action_execute", u8"{\"id\":\"page.flip\"}");
     CHECK_FALSE(refused.ok);
-    CHECK(refused.error.AsView().StartsWith(u8"action 'page.flip' is not enabled over the active page (no page is active)"));
+    CHECK(refused.error == String(u8"action 'page.flip' is not enabled over the active page (no page is active): Open a page to flip."));
     Answer unknown = Call(server, u8"action_execute", u8"{\"id\":\"nobody.home\"}");
     CHECK_FALSE(unknown.ok);
     CHECK(unknown.error.AsView().StartsWith(u8"no action 'nobody.home'"));
@@ -184,7 +184,8 @@ TEST_CASE("action-tools: list and state over the active page, execute through th
     CHECK(closed.payload.Get(u8"suppressedDialogs").At(0).AsString() == StringView(u8"Unsaved changes"));
     CHECK(closed.payload.Has(u8"note"));
     CHECK_FALSE(asked);
-    CHECK_FALSE(static_cast<bool>(uiContext.DialogInterceptor)); // the scope restored it
+    CHECK(root->GetEventDispatcher()->PopupCount() == 0u);           // never shown
+    CHECK_FALSE(static_cast<bool>(root->GetEventDispatcher()->TakeModalInterceptor())); // the scope restored it
 
     context.ClosePage(page);
 }

@@ -311,7 +311,6 @@ namespace editor
             EndStroke();
         }
         m_hasHover = false;
-        OnRadiusChanged = {};
     }
 
     void VegetationScatterTool::Draw(render::debug::DebugDraw& drawList)
@@ -331,11 +330,11 @@ namespace editor
         const i32 radius = static_cast<i32>(m_radius + 0.5f);
         m_status = Format(u8"Paint Props [{} layer {}]  radius {}  (1-9 layer, 0 erase, Shift+wheel size)",
                           m_erase ? StringView(u8"ERASE") : StringView(u8"paint"),
-                          static_cast<i32>(m_layer), radius);
+                          static_cast<i32>(m_layer) + 1, radius); // from 1, as its key and the panel
         if (!m_erase && !m_layerHasMesh)
         {
             m_status = Format(u8"{}  - layer {} has no mesh: props place but nothing draws",
-                              m_status.AsView(), static_cast<i32>(m_layer));
+                              m_status.AsView(), static_cast<i32>(m_layer) + 1);
         }
     }
 }

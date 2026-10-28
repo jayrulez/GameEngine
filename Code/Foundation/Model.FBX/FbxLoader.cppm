@@ -323,7 +323,30 @@ export namespace foundation::model::fbx
                 }
                 else
                 {
-                    // Legacy FBX (Lambert/Phong): map to PBR.
+                    // Legacy FBX (Lambert, Phong) and a classic OBJ .mtl: imported as authored
+                    // (Specs/phong-material.md). Phong and the .mtl's Kd/Ks/Ns keep their highlight,
+                    // Lambert has none; a legacy material of another kind (a shader the engine has
+                    // no built-in for) stays the PBR approximation below. Blender's exports are
+                    // their own kind (it labels every material Phong) and take the PBR branch above.
+                    const bool phong = mat->shader_type == UFBX_SHADER_FBX_PHONG || mat->shader_type == UFBX_SHADER_WAVEFRONT_MTL;
+                    if (phong || mat->shader_type == UFBX_SHADER_FBX_LAMBERT)
+                        material->shadingModel = phong ? ShadingModel::Phong : ShadingModel::Lambert;
+                    if (phong)
+                    {
+                        if (mat->fbx.specular_color.has_value)
+                        {
+                            // The colour times its factor, as the file lights it, then as sRGB.
+                            const auto c = mat->fbx.specular_color.value_vec4;
+                            const f64 factor = mat->fbx.specular_factor.has_value ? mat->fbx.specular_factor.value_real : 1.0;
+                            const Float4 specular = SrgbColor(c.x * factor, c.y * factor, c.z * factor, 1.0);
+                            material->specularColor = Float3(specular.x, specular.y, specular.z);
+                        }
+                        if (mat->fbx.specular_color.texture)
+                            material->specularTextureIndex = getOrCreateTextureIndex(mat->fbx.specular_color.texture, model);
+                        if (mat->fbx.specular_exponent.has_value)
+                            material->shininess = static_cast<f32>(mat->fbx.specular_exponent.value_real);
+                    }
+
                     if (mat->fbx.diffuse_color.has_value)
                     {
                         // The colour alone: DiffuseFactor is ignored, as glTF has none. Blender
@@ -363,7 +386,7 @@ export namespace foundation::model::fbx
                         material->emissiveTextureIndex =
                             getOrCreateTextureIndex(mat->fbx.emission_color.texture, model);
 
-                    // Non-PBR defaults.
+                    // The PBR approximation's (what a legacy material of another kind is drawn as).
                     material->metallicFactor = 0.0f;
                     material->roughnessFactor = 0.8f;
                 }
@@ -1185,6 +1208,9 @@ export namespace foundation::model::fbx
                     // Note: skin index may be set later when loadSkins runs.
                 }
 
+                // A limb or root node of the file's skeleton (ufbx's bone attribute), not an empty.
+                bone->isSkeletonBone = node->bone != nullptr;
+
                 i32 boneIdx = model.addBone(bone);
                 m_nodeToBoneIndex.InsertOrAssign(node->element.typed_id, boneIdx);
             }
@@ -1303,8 +1329,26 @@ export namespace foundation::model::fbx
                         continue;
                     i32 boneIdx = *bit;
 
+                    // A channel the take holds constant is kept when it holds the node somewhere
+                    // other than its default pose (the skeleton's bind pose, which a clip with no
+                    // track for it plays): a 3ds Max take often poses a bone and leaves it there, a
+                    // head turned for the whole idle. One key says it; one at the default says
+                    // nothing and is left out.
+                    const ufbx_node* sourceNode = bakedNode->typed_id < m_scene->nodes.count ? m_scene->nodes.data[bakedNode->typed_id] : nullptr;
+                    const ufbx_transform rest = sourceNode != nullptr ? sourceNode->local_transform : ufbx_identity_transform;
+                    const auto heldAway = [](ufbx_vec3 held, ufbx_vec3 restValue)
+                    { return Abs(held.x - restValue.x) > 1e-5 || Abs(held.y - restValue.y) > 1e-5 || Abs(held.z - restValue.z) > 1e-5; };
+                    const auto turnedAway = [](ufbx_quat held, ufbx_quat restValue)
+                    { return Abs(held.x * restValue.x + held.y * restValue.y + held.z * restValue.z + held.w * restValue.w) < 1.0 - 1e-7; };
+                    const bool keepTranslation = bakedNode->translation_keys.count > 0 &&
+                                                 (!bakedNode->constant_translation || heldAway(bakedNode->translation_keys.data[0].value, rest.translation));
+                    const bool keepRotation = bakedNode->rotation_keys.count > 0 &&
+                                              (!bakedNode->constant_rotation || turnedAway(bakedNode->rotation_keys.data[0].value, rest.rotation));
+                    const bool keepScale = bakedNode->scale_keys.count > 0 &&
+                                           (!bakedNode->constant_scale || heldAway(bakedNode->scale_keys.data[0].value, rest.scale));
+
                     // Translation channel.
-                    if (bakedNode->translation_keys.count > 0 && !bakedNode->constant_translation)
+                    if (keepTranslation)
                     {
                         auto* channel = new AnimationChannel();
                         channel->targetBone = boneIdx;
@@ -1324,7 +1368,7 @@ export namespace foundation::model::fbx
                     }
 
                     // Rotation channel.
-                    if (bakedNode->rotation_keys.count > 0 && !bakedNode->constant_rotation)
+                    if (keepRotation)
                     {
                         auto* channel = new AnimationChannel();
                         channel->targetBone = boneIdx;
@@ -1344,7 +1388,7 @@ export namespace foundation::model::fbx
                     }
 
                     // Scale channel.
-                    if (bakedNode->scale_keys.count > 0 && !bakedNode->constant_scale)
+                    if (keepScale)
                     {
                         auto* channel = new AnimationChannel();
                         channel->targetBone = boneIdx;

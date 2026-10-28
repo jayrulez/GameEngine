@@ -151,7 +151,7 @@ TEST_CASE("versioning: a type with a legacy reader accepts an older concrete ver
     // the strict reader (Process/CONVENTIONS.md, user 2026-09-23). Versions below the floor and
     // above the current one are still refused; a base entry must still match exactly.
     TypeInfo aware = MakeTypeInfo<Soldier>("SoldierLegacyAware", "rtti::test", nullptr, 3);
-    aware.minReadDataVersion = 2;
+    KeepLegacyReader(aware, 2);
     Soldier value;
     value.health = 12.0f;
 
@@ -176,6 +176,11 @@ TEST_CASE("versioning: a type with a legacy reader accepts an older concrete ver
     CHECK(reported == 2u);
     CHECK_FALSE(readWith(1, reported)); // below the floor
     CHECK_FALSE(readWith(4, reported)); // a newer build's data
-    aware.minReadDataVersion = 0;       // no legacy reader: the current version only
+    aware.readsLegacyData = false; // no legacy reader: the current version only
     CHECK_FALSE(readWith(2, reported));
+    // A reader of never-versioned data: a floor of 0 is a floor too.
+    KeepLegacyReader(aware, 0);
+    CHECK(readWith(0, reported));
+    CHECK(reported == 0u);
+    CHECK(readWith(2, reported));
 }

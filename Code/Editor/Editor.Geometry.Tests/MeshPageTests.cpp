@@ -1,17 +1,24 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// MeshEditorPage tests (headless): the viewer's stat-line readout is a free, pure function so
-// it is covered here without a live host/renderer. The page's GPU orbit preview + product
-// binding + viewport lifecycle need a live application host (like MaterialPage/SceneEditorPage)
-// and are exercised in the editor app, not here.
+// MeshEditorPage tests: the viewer's stat-line readout, a free, pure function; then the page from
+// the preview pages' markup over a mesh in a project, without a host (so no viewport, no cooked
+// product): the preview's place says the mesh is not cooked, the preview's own choices sit on its
+// bar, and the preview's material is kept for the mesh with the project.
 
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
 
 import foundation.core;
+import foundation.content;
+import foundation.settings;
 import foundation.geometry;
+import geometry.pipeline;
+import foundation.gui;
+import foundation.gui.toolkit;
+import editor.core;
+import editor.app;
 import editor.geometry;
 
 using namespace foundation::core;
@@ -126,4 +133,94 @@ TEST_CASE("MeshStatLines reports the LOD chain (levels, per-level triangles, thr
     {
         CHECK(line.AsView() != StringView(u8"LOD levels: 1"));
     }
+}
+
+namespace
+{
+    namespace gui = foundation::gui;
+
+    RefPtr<gui::Node> LoadMarkup(StringView relative)
+    {
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), relative);
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        gui::RegisterGuiElements();
+        gui::RegisterToolkitElements();
+        static const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+
+    // A project with a static mesh asset ("Crate"), nothing cooked, and its editor settings.
+    struct Bed
+    {
+        String dir = String(u8"scratch_mesh_page_project");
+        UniquePtr<editor::EditorProject> project;
+        foundation::settings::Settings store{DefaultAllocator()};
+        editor::app::AssetPageServicesSource none; // the registration's: no services, outliving the context below
+        editor::EditorContext context{DefaultAllocator()};
+        foundation::content::Instance* crate = nullptr;
+
+        Bed()
+        {
+            pipeline::RegisterMeshAssets(); // read back by its type, as the editor registers it
+            editor::RegisterMeshEditor(context, none); // and the prefs' section
+            (void)RemoveDirectoryRecursive(dir.AsView());
+            REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
+            project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());
+            REQUIRE(static_cast<bool>(project));
+            context.SetProject(project.Get());
+            context.SetProjectEditorSettings(&store);
+            crate = project->SourceDb().RootGroup()->CreateInstance(u8"Crate", pipeline::StaticMeshAsset::StaticType());
+            REQUIRE(crate != nullptr);
+            pipeline::StaticMeshAsset asset;
+            REQUIRE(crate->WriteObject(asset).IsOk());
+        }
+        ~Bed()
+        {
+            context.SetProjectEditorSettings(nullptr);
+            context.SetProject(nullptr);
+            project.Reset();
+            (void)RemoveDirectoryRecursive(dir.AsView());
+        }
+        UniquePtr<editor::MeshEditorPage> Open()
+        {
+            editor::app::AssetPageServices services;
+            services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
+            return MakeUnique<editor::MeshEditorPage>(DefaultAllocator(), context, Move(services), *crate, pipeline::StaticMeshAsset::StaticType());
+        }
+    };
+}
+
+TEST_CASE("mesh page: not cooked, said in the preview's place; its choices on the preview's bar; its material kept with the project")
+{
+    Bed bed;
+    REQUIRE(bed.context.Pages().FindFactory(pipeline::StaticMeshAsset::StaticType()) != nullptr);
+    REQUIRE(bed.context.Pages().FindFactory(pipeline::SkinnedMeshAsset::StaticType()) != nullptr);
+
+    UniquePtr<editor::MeshEditorPage> page = bed.Open();
+    REQUIRE_FALSE(page->LoadFailed());
+    REQUIRE(page->Pane() != nullptr);
+    CHECK(page->Pane()->Viewport() == nullptr); // no host here
+    CHECK_FALSE(page->Pane()->Showing());
+    CHECK(editor::app::FindById<gui::Node>(*page->Content(), u8"preview-empty")->IsDisplayed());
+    CHECK(editor::app::FindById<gui::Label>(*page->Content(), u8"preview-empty-title")->GetText() == StringView(u8"Not cooked yet"));
+    CHECK(page->Fact(u8"Status") == StringView(u8"Not cooked yet"));
+
+    // The material slot and the LOD choice follow the bar's own separator, the LOD hidden for a
+    // mesh with no chain.
+    REQUIRE(page->MaterialSlot() != nullptr);
+    gui::Node* own = editor::app::FindById<gui::Node>(*page->Content(), u8"preview-own");
+    REQUIRE(own != nullptr);
+    gui::Node* bar = own->GetParent();
+    CHECK(bar->GetChildIndex(page->MaterialSlot()) == bar->GetChildIndex(own) + 1);
+    CHECK(bar->GetChildIndex(page->LodChoice()) == bar->GetChildIndex(own) + 2);
+    CHECK_FALSE(page->LodChoice()->IsDisplayed());
+
+    const Guid wood{0x12, 0x34};
+    page->SetPreviewMaterial(wood);
+    CHECK(page->PreviewMaterial() == wood);
+    page.Reset();
+    UniquePtr<editor::MeshEditorPage> again = bed.Open();
+    CHECK(again->PreviewMaterial() == wood); // kept for this mesh
 }

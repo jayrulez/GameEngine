@@ -3,17 +3,17 @@
 
 // Editor::Texture - the `editor.texture` module.
 //
-// TextureEditorPage: the import-settings surface over
-// TextureAsset. A CPU preview of the source image on the left (decoded through the same
-// stb path the cook rides, so what you see is what gets cooked) and the GPU-texture intent
-// on the right - color space, shape, sampler filters/wraps, mipmaps, anisotropy - plus the
-// Sedulous presets (UI / Sprite / 3D / skybox). The authored TextureAsset IS the cook input,
-// so Save writes the object back and requests a re-cook; every live proxy bound to the cooked
-// product then hot-swaps (the same reload path material/mesh edits ride).
-//
-// Edits are BLOB-SNAPSHOT commands (the whole serialized TextureAsset before/after - it is
-// tiny), giving exact undo without per-field command code and letting a preset (which moves
-// many fields at once) collapse to one undo entry.
+// TextureEditorPage: the import-settings surface over TextureAsset. On the GUI from the image
+// pages' markup (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md, 5.4, layer 2): the
+// source image (decoded through the same stb path the cook rides, so what you see is what gets
+// cooked; a model's embedded texture from its "pixels" stream) to zoom, pan and read pixels in,
+// beside the GPU-texture intent: usage, colour space, compression, shape, sampler filters and
+// wraps, mipmaps, anisotropy. Usage sets the colour space with it (data is linear, colour sRGB),
+// one undo step; a texture whose two disagree says so in a notice. The presets (UI, Sprite, 3D
+// Surface, Normal Map, Data Mask, the skies) are actions in a menu on the page's bar, each one
+// undo step however many settings it moves. What it cooks to, its size and mips are read-only
+// facts. The authored TextureAsset IS the cook input, so Save writes it back and requests a
+// re-cook; every live proxy bound to the cooked product then hot-swaps.
 
 module;
 #include "Core/Prelude.h"
@@ -28,131 +28,73 @@ import foundation.image;
 import foundation.image.io;
 import foundation.texture;
 import texture.pipeline;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
+import foundation.gui.toolkit; // ToolMenuButton
 import editor.core;
 import editor.app;
-import foundation.runtime.client;
-import foundation.runtime.client;
 
 using namespace foundation::core;
 
 export namespace editor
 {
-    namespace ui = foundation::ui;
-    namespace image = foundation::image;
-    namespace texture = foundation::texture;
-
-    // Import-settings + preview page for a TextureAsset.
-    class TextureEditorPage final : public app::UIEditorPage
+    class TextureEditorPage final : public app::AssetObjectPage
     {
     public:
-        TextureEditorPage(EditorContext& context, foundation::content::Instance& instance);
+        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
 
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
-
-        void OnUpdate(foundation::runtime::IApplicationHost&, f32) override
+        /// A preset: what its menu item says, and what it sets.
+        struct Preset
         {
-            if (m_toolbar.Get() != nullptr)
-            {
-                m_toolbar->Refresh(); // sync Save/Discard/Undo/Redo enabled state each frame
-            }
-        }
-        [[nodiscard]] Status Save() override;
+            StringView label;
+            void (pipeline::TextureAsset::*setup)();
+        };
+        /// The presets, in their menu's order.
+        [[nodiscard]] static Span<const Preset> Presets();
+
+        TextureEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
+
+        /// Applies the preset `label`, one undo step; false when there is none by that name.
+        bool ApplyPreset(StringView label);
+        /// "Cooks to": the compression policy for desktop (and mobile when it differs) from the
+        /// asset's usage, colour space and compression and the source's facts.
+        [[nodiscard]] String ResolvedFormatText() const;
+
+        // === For tests ===
+        [[nodiscard]] app::ImagePreview* Preview() const noexcept { return m_preview.Get(); }
+        [[nodiscard]] foundation::gui::ToolMenuButton* PresetButton() const noexcept { return m_presets.Get(); }
+
+    protected:
+        bool FollowEdit(StringView path, ISerializable& object) override;
+        void OnObjectChanged() override { ShowFacts(); }
 
     private:
-        // Decode the source image (external file, or the embedded "pixels" stream) into an
-        // RGBA8 CPU buffer kept alive for the ImageView. Leaves m_preview null on failure.
+        // Decodes the source image (the external file, or the embedded "pixels" stream) and shows it.
         void LoadPreview(foundation::content::Instance& instance);
+        void ShowFacts();
+        void AddPresets();
 
-        // Build the property rows (color space / shape / sampler / mips / anisotropy + presets).
-        void BuildGrid();
-
-        // Refresh the source-facts label from the decoded preview + the asset's color space.
-        void RefreshInfo();
-
-        // === undo: whole-asset blob snapshots ===
-
-        // Run one edit as an undoable command: snapshot -> mutate -> snapshot -> push.
-        void ApplyEdit(StringView mergeKey, Function<void(pipeline::TextureAsset&)> mutate);
-        [[nodiscard]] Array<byte> Snapshot() const;
-        void ApplyBlob(const Array<byte>& blob);
-
-        // Add an editor row plus a refresher that re-pulls its value (unless the user is
-        // mid-edit) - so undo/redo and presets reflow every row without rebuilding the grid.
-        void AddEditor(ui::toolkit::PropertyEditor* editor, Function<void()> refresher);
-        /// The "Cooks to:" text: the compression policy evaluated for desktop (+ mobile when
-        /// it differs) from the asset's authored usage/colorSpace/compression + source facts.
-        [[nodiscard]] String ResolvedFormatText() const;
-        /// The profile BUTTONS (an action, not a property): each applies sampler + shape +
-        /// usage + colorSpace coherently as one undo entry.
-        void BuildProfileRow(foundation::ui::FlexLayout& row);
-
-        // Whole-asset snapshot command: before/after blobs + a merge key (consecutive edits
-        // of the same field collapse; the first command keeps the original `before`).
-        class EditTextureCommand final : public IEditorCommand
-        {
-        public:
-            EditTextureCommand(TextureEditorPage& page, StringView mergeKey, Array<byte> before,
-                               Array<byte> after)
-                : m_page(&page), m_mergeKey(mergeKey), m_before(Move(before)), m_after(Move(after))
-            {
-            }
-
-            [[nodiscard]] bool Execute() override
-            {
-                m_page->ApplyBlob(m_after);
-                return true;
-            }
-            void Undo() override { m_page->ApplyBlob(m_before); }
-            [[nodiscard]] StringView TypeId() const override { return u8"edit_texture"; }
-            [[nodiscard]] bool MergeInto(IEditorCommand& previous) override
-            {
-                auto& prev = static_cast<EditTextureCommand&>(previous);
-                if (prev.m_page != m_page || prev.m_mergeKey.AsView() != m_mergeKey.AsView())
-                {
-                    return false;
-                }
-                prev.m_after = Move(m_after);
-                return true;
-            }
-
-        private:
-            TextureEditorPage* m_page;
-            String m_mergeKey;
-            Array<byte> m_before;
-            Array<byte> m_after;
-        };
-
-        EditorContext* m_context = nullptr;
-        String m_title;
-        RefPtr<pipeline::TextureAsset> m_asset;
-        UniquePtr<image::OwnedImageData> m_preview; // kept alive for the ImageView (borrowed ptr)
-        image::PixelFormat m_sourceFormat = image::PixelFormat::RGBA8; // pre-preview source format
-
-        RefPtr<ui::View> m_content;
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<ui::ImageView> m_image;
-        RefPtr<ui::Label> m_info;
-        RefPtr<ui::toolkit::PropertyGrid> m_grid;
-        Array<Function<void()>> m_refreshers;
+        UniquePtr<app::ImagePreview> m_preview;
+        RefPtr<foundation::gui::ToolMenuButton> m_presets;
+        foundation::image::PixelFormat m_sourceFormat = foundation::image::PixelFormat::RGBA8; // before the preview's conversion
     };
 
     class TextureEditorPageFactory final : public IEditorPageFactory
     {
     public:
+        explicit TextureEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+
+    private:
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    inline void RegisterTextureEditor(EditorContext& context)
+    /// The page (asking for its services when it is made) and the texture thumbnails: one
+    /// composition entry point per domain, no pipeline links in Editor.App.
+    inline void RegisterTextureEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<TextureEditorPageFactory>(), editor::EditorRootAllocator()));
-        // The domain's thumbnail generator registers with its page:
-        // one composition entry point per domain, no pipeline links in Editor.App.
+            editor::EditorRootAllocator().New<TextureEditorPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
         {
             RegisterTextureThumbnailGenerator(*context.Thumbnails());

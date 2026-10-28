@@ -6,7 +6,7 @@ add_executable(Input.Tests
     InputKindTests.cpp)
 
 target_link_libraries(Input.Tests PRIVATE
-    Foundation::Input Foundation::Shell Foundation::Xml.Serialization Foundation::Settings doctest::doctest)
+    Foundation::Input Foundation::Json Foundation::Shell Foundation::Xml.Serialization Foundation::Settings doctest::doctest)
 
 target_compile_definitions(Input.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

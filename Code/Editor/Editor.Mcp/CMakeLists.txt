@@ -10,6 +10,7 @@ target_link_libraries(Editor.Mcp PUBLIC
     Pipeline::Script Foundation::Script.Resource # script_validate: the language-cook registry
     Foundation::Script # script_create: backend registry (language -> file extension)
     Pipeline::Shaders Foundation::Shaders # shader_validate: the shader cook's check
+    Pipeline::GUI Foundation::GUI # gui_validate: the GUI cooks' check
     Pipeline::Materials Foundation::Materials.Resource # material_set_shader: a material on a shader
     Engine::Composition # the FULL manager set for scene_validate's scratch (full payload validation)
                          # and the scene format reference's composed example (every manager + settings block)
@@ -36,6 +37,7 @@ target_sources(Editor.Mcp
             McpResources.cppm
             ScriptValidate.cppm
             ShaderValidate.cppm
+            GuiValidate.cppm
             MaterialShader.cppm
             ScriptCreate.cppm
             ProjectExport.cppm

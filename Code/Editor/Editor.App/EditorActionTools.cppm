@@ -2,20 +2,21 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App - :mcp_action_tools partition.
 //
-// The MCP bridge over the editor's ACTIONS - one generic surface for everything a user can do
-// by command: action_list (every declaration with its state over the active page),
-// action_state (one) and action_execute (through the registry, the one funnel). An agent
-// never waits for a human: action_execute runs UNATTENDED - every dialog the action would
-// open is kept off the screen and closed as cancelled (the accident-preventing answer), and
-// the result names what was suppressed, with the note that the action then most likely did
-// nothing and a dedicated tool or the user is the way forward (ezEngine's contract).
+// The MCP bridge over the editor's ACTIONS (Documentation/Specs/editor-gui.md, 5.1, layer 15) -
+// one generic surface for everything a user can do by command: action_list (every declaration
+// with its state over the active page), action_state (one) and action_execute (through the
+// registry, the one funnel). An agent never waits for a human: action_execute runs UNATTENDED -
+// every modal window the action would open is refused by the GUI's dispatcher and answered as
+// cancelled (the accident-preventing answer), and the result names what was suppressed, with the
+// note that the action then most likely did nothing and a dedicated tool or the user is the way
+// forward (ezEngine's contract).
 module;
 #include "Core/Prelude.h"
 
 export module editor.app:mcp_action_tools;
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import foundation.json;
 import foundation.mcp;
 import editor.core;
@@ -24,41 +25,38 @@ using namespace foundation::core;
 
 export namespace editor::app
 {
-    /// The live editor the action tools see: the registry through the context, and the UI
-    /// context whose dialogs an unattended call suppresses (null = nothing to suppress, a
+    /// The live editor the action tools see: the registry through the context, and the GUI's
+    /// dispatcher whose modal windows an unattended call refuses (null = nothing to refuse, a
     /// headless test).
     struct ActionToolSeams
     {
         editor::EditorContext* context = nullptr;
-        foundation::ui::UIContext* ui = nullptr;
+        foundation::gui::EventDispatcher* dialogs = nullptr;
     };
 
-    /// The unattended scope: while alive, every dialog shown through `ui` is suppressed and
-    /// recorded by title. Installs the context's DialogInterceptor and restores what was
-    /// there (scopes nest).
+    /// The unattended scope: while alive, every modal window opened through `dialogs` is refused
+    /// (answered as cancelled) and recorded by its title. Installs the dispatcher's modal
+    /// interceptor and restores what was there (scopes nest).
     class UnattendedDialogs
     {
     public:
-        explicit UnattendedDialogs(foundation::ui::UIContext* ui) : m_ui(ui)
+        explicit UnattendedDialogs(foundation::gui::EventDispatcher* dialogs) : m_dialogs(dialogs)
         {
-            if (m_ui == nullptr)
-            {
+            if (m_dialogs == nullptr)
                 return;
-            }
-            m_previous = Move(m_ui->DialogInterceptor);
+            m_previous = m_dialogs->TakeModalInterceptor();
             UnattendedDialogs* self = this;
-            m_ui->DialogInterceptor = [self](foundation::ui::Dialog& dialog)
-            {
-                self->m_suppressed.PushBack(dialog.Title);
-                return false;
-            };
+            m_dialogs->SetModalInterceptor([self](foundation::gui::Node& window)
+                                           {
+                                               const auto* titled = Cast<foundation::gui::Window>(&window);
+                                               self->m_suppressed.PushBack(titled != nullptr ? String(titled->GetTitle()) : String(u8"(untitled)"));
+                                               return false;
+                                           });
         }
         ~UnattendedDialogs()
         {
-            if (m_ui != nullptr)
-            {
-                m_ui->DialogInterceptor = Move(m_previous);
-            }
+            if (m_dialogs != nullptr)
+                m_dialogs->SetModalInterceptor(Move(m_previous));
         }
         UnattendedDialogs(const UnattendedDialogs&) = delete;
         UnattendedDialogs& operator=(const UnattendedDialogs&) = delete;
@@ -69,8 +67,8 @@ export namespace editor::app
         }
 
     private:
-        foundation::ui::UIContext* m_ui;
-        Function<bool(foundation::ui::Dialog&)> m_previous;
+        foundation::gui::EventDispatcher* m_dialogs;
+        Function<bool(foundation::gui::Node&)> m_previous;
         Array<String> m_suppressed;
     };
 

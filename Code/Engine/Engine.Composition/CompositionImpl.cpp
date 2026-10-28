@@ -33,6 +33,7 @@ import engine.spline;
 import engine.input;
 import engine.ui.script;
 import engine.gameinstance;
+import engine.gui; // the engine's GUI on foundation.gui, beside the UI domain while both live
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -61,6 +62,7 @@ namespace
         &engine::net::NetDomain(),               &engine::spline::SplineDomain(),
         &kPrefabsDomain,                         &engine::input::InputDomain(),
         &engine::uiscript::UiScriptDomain(),     &engine::runtime::RunDomain(),
+        &engine::gui::GuiDomain(),
     };
 }
 
@@ -77,7 +79,11 @@ namespace engine
 
     void AddAllSceneManagers(scene::Scene& scene) { FullComposition().Scene().Instantiate(scene); }
 
-    void RegisterAllSceneComponentReflection() { FullComposition().RegisterReflection(); }
+    void RegisterAllSceneComponentReflection()
+    {
+        scene::RegisterEntityRefReflection(); // what components' entity references are, by their id
+        FullComposition().RegisterReflection();
+    }
 
     void RegisterAllResourceTypes() { FullComposition().RegisterResourceTypes(); }
 

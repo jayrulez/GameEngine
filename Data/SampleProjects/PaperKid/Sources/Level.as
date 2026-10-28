@@ -22,6 +22,16 @@ const float kHurryMusicRate = 1.2f;    // 20% faster
 const float kHurryMusicEase = 0.6f;    // seconds to get there
 const float kTicksFrom = 10.0f;
 
+// A HUD element: the top screen's first, then any (a HUD just replaced is still in the tree while it
+// leaves, with the same ids, and would be found first).
+Node@ hud(string id)
+{
+    ScreenStack@ stack = ScreenStack::of(gui::root().find("screens"));
+    Screen@ top = stack !is null ? stack.top() : null;
+    Node@ n = top !is null ? top.find(id) : null;
+    return n !is null ? n : gui::root().find(id);
+}
+
 class Level
 {
     private Scene@ scene;
@@ -43,6 +53,7 @@ class Level
     private bool m_trafficSet = false;
     private bool m_hurried = false;
     private int m_lastTick = -1; // the whole second last ticked
+    private bool m_dimmed = false; // the clock dimmed by the blink
 
     Level(Scene@ s) { @scene = s; }
 
@@ -135,10 +146,9 @@ class Level
             Audio::playOneShot(kHurrySound, AudioBus::Effects);
             Audio::setVoicePitch(Audio::musicVoice(), kHurryMusicRate, kHurryMusicEase);
         }
-        UILabel@ time = ui::findLabel("hud-time");
         if (m_timeLeft > kTicksFrom)
         {
-            time.setOpacity(1.0f);
+            blink(false);
             return;
         }
         int second = int(m_timeLeft);
@@ -148,13 +158,25 @@ class Level
             Audio::playOneShot(kTickSound, AudioBus::Effects, 0.7f);
         }
         // Dim for the second half of every second: a blink in step with the ticks.
-        time.setOpacity((m_timeLeft - float(second)) < 0.5f ? 0.35f : 1.0f);
+        blink((m_timeLeft - float(second)) < 0.5f);
+    }
+
+    // The clock dimmed or not, set when it changes.
+    private void blink(bool dim)
+    {
+        Node@ time = hud("hud-time");
+        if (time is null || dim == m_dimmed)
+        {
+            return;
+        }
+        m_dimmed = dim;
+        time.tween("opacity", dim ? "0.35" : "1", 0.0f, "linear");
     }
 
     private void end(bool cleared, int reason)
     {
         m_ended = true;
-        ui::findLabel("hud-time").setOpacity(1.0f); // not left dim by the blink
+        blink(false); // not left dim by the blink
         updateHud();
         if (cleared)
         {
@@ -168,8 +190,12 @@ class Level
 
     private void updateHud()
     {
-        ui::findLabel("hud-time").setText("" + int(m_timeLeft + 0.99f));
-        ui::findLabel("hud-papers").setText("" + m_papersLeft);
-        ui::findLabel("hud-deliveries").setText("" + m_delivered + " / " + quota);
+        if (hud("hud-time") is null)
+        {
+            return; // the HUD is not up
+        }
+        Label::of(hud("hud-time")).text = "" + int(m_timeLeft + 0.99f);
+        Label::of(hud("hud-papers")).text = "" + m_papersLeft;
+        Label::of(hud("hud-deliveries")).text = "" + m_delivered + " / " + quota;
     }
 }

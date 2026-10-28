@@ -3,13 +3,13 @@
 
 // Editor::Image - the `editor.image` module.
 //
-// ImageEditorPage (the Texture page's source-side sibling): the inspect +
-// intent surface over an ImageAsset - the raw source image that Texture assets (and future
-// consumers) build on. A CPU preview of the decoded file on the left (the same decode the cook
-// rides, converted to RGBA8 for display) and the small authored surface on the right: the
-// COLOR-SPACE intent, plus read-only source facts (file, dimensions, pixel format, data size).
-// Edits are whole-asset blob-snapshot undo commands (the asset is tiny); Save writes the object
-// back and requests a re-cook so bound products hot-swap.
+// ImageEditorPage (the Texture page's source-side sibling): the inspect + intent surface over an
+// ImageAsset, the raw source image that Texture assets (and future consumers) build on. On the GUI
+// from the image pages' markup (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md, 5.4,
+// layer 2): the decoded file (the same decode the cook rides, as RGBA8 for display) to zoom, pan and
+// read pixels in, beside the grid: its source file and colour-space intent, then the source's facts
+// read only (its size, pixel format and data size). Each edit is one undo step; Save writes the asset and
+// asks for a cook so bound products hot-swap.
 
 module;
 #include "Core/Prelude.h"
@@ -22,108 +22,46 @@ import foundation.content;
 import foundation.image;
 import foundation.image.io;
 import image.pipeline;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
 import editor.core;
 import editor.app;
-import foundation.runtime.client;
-import foundation.runtime.client;
 
 using namespace foundation::core;
 
 export namespace editor
 {
-    namespace ui = foundation::ui;
-    namespace image = foundation::image;
-
-    // Inspect + color-space page for an ImageAsset.
-    class ImageEditorPage final : public app::UIEditorPage
+    class ImageEditorPage final : public app::AssetObjectPage
     {
     public:
-        ImageEditorPage(EditorContext& context, foundation::content::Instance& instance);
+        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
 
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
+        ImageEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 
-        void OnUpdate(foundation::runtime::IApplicationHost&, f32) override
-        {
-            if (m_toolbar.Get() != nullptr)
-            {
-                m_toolbar->Refresh(); // sync Save/Discard/Undo/Redo enabled state each frame
-            }
-        }
-        [[nodiscard]] Status Save() override;
+        // === For tests ===
+        [[nodiscard]] app::ImagePreview* Preview() const noexcept { return m_preview.Get(); }
 
     private:
-        // Decode the source file into an RGBA8 CPU buffer kept alive for the ImageView.
+        // Decodes the source file and shows it, with its facts.
         void LoadPreview();
-        void BuildGrid();
-        void RefreshInfo();
 
-        [[nodiscard]] Array<byte> Snapshot() const;
-        void ApplyBlob(const Array<byte>& blob);
-
-        class EditImageCommand final : public IEditorCommand
-        {
-        public:
-            EditImageCommand(ImageEditorPage& page, StringView mergeKey, Array<byte> before,
-                             Array<byte> after)
-                : m_page(&page), m_mergeKey(mergeKey), m_before(Move(before)), m_after(Move(after))
-            {
-            }
-
-            [[nodiscard]] bool Execute() override
-            {
-                m_page->ApplyBlob(m_after);
-                return true;
-            }
-            void Undo() override { m_page->ApplyBlob(m_before); }
-            [[nodiscard]] StringView TypeId() const override { return u8"edit_image"; }
-            [[nodiscard]] bool MergeInto(IEditorCommand& previous) override
-            {
-                auto& prev = static_cast<EditImageCommand&>(previous);
-                if (prev.m_page != m_page || prev.m_mergeKey.AsView() != m_mergeKey.AsView())
-                {
-                    return false;
-                }
-                prev.m_after = Move(m_after);
-                return true;
-            }
-
-        private:
-            ImageEditorPage* m_page;
-            String m_mergeKey;
-            Array<byte> m_before;
-            Array<byte> m_after;
-        };
-
-        EditorContext* m_context = nullptr;
-        String m_title;
-        RefPtr<pipeline::ImageAsset> m_asset;
-        UniquePtr<image::OwnedImageData> m_preview; // kept alive for the ImageView (borrowed ptr)
-        image::PixelFormat m_sourceFormat = image::PixelFormat::RGBA8;
-        usize m_sourceBytes = 0;
-
-        RefPtr<ui::View> m_content;
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<ui::ImageView> m_image;
-        RefPtr<ui::Label> m_info;
-        RefPtr<ui::toolkit::PropertyGrid> m_grid;
-        ui::toolkit::EnumEditor* m_colorSpaceRow = nullptr; // borrowed (grid owns)
-        Array<byte> m_undoBaseline;
+        UniquePtr<app::ImagePreview> m_preview;
     };
 
     class ImageEditorPageFactory final : public IEditorPageFactory
     {
     public:
+        explicit ImageEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+
+    private:
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    inline void RegisterImageEditor(EditorContext& context)
+    /// A page asks for its services when it is made (the window exists by then).
+    inline void RegisterImageEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<ImageEditorPageFactory>(), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<ImageEditorPageFactory>(services), editor::EditorRootAllocator()));
     }
 }

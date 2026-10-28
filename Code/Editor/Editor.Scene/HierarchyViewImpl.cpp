@@ -1,512 +1,463 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Scene - :hierarchy partition.
-//
-// SceneHierarchyView: the entity tree INSIDE a scene page (multi-scene rule - one per page,
-// never a global panel). A DraggableTreeView over a rebuilt snapshot of the live scene
-// (Scene::Revision() gates the rebuild, so command execute/undo/redo all refresh it for free),
-// wired to the page's SceneEditContext:
-//   - click selects (per-page Guid selection, synced both ways with the tree's SelectionModel);
-//   - right-click context menu: Create Child / Rename / Delete on rows, Create Entity on empty;
-//   - rows are EditableLabels: a slow second click renames in place, a double-click frames the
-//     entity in the viewport (OnFrameEntity) (single clicks pass
-//     through to selection by design), F2 / context-menu Rename triggers the same edit,
-//     Delete deletes;
-//   - drag a row INTO another = reparent; drag to a row EDGE = sibling reorder (insert-before
-//     boundary, incl. top of the list and end-of-root-list below the last row);
-//   - a header row holds [+] (create root entity - always reachable even when rows fill the
-//     pane and swallow every right-click) and a filter box (matches keep their ancestors).
+// Editor::Scene - :hierarchy partition, its body (Documentation/Specs/editor-gui.md, 5.3,
+// layer 3). See HierarchyView.cppm.
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Reflection/Reflect.h"
 
 module editor.scene;
 
 import foundation.core;
-import foundation.fonts;
 import foundation.scene;
-import foundation.ui;
-import foundation.ui.toolkit;
-import editor.app; // AssetPickerSlot::EntityItemKind() (a dragged row names its entity)
+import foundation.scene.resource;
+import foundation.gui;
 import editor.core;
+import editor.app;
 import :edit;
 import :actions;
+import :scene_tree;
+import :hierarchy;
 
 using namespace foundation::core;
+namespace gui = foundation::gui;
 namespace scene = foundation::scene;
-namespace ui = foundation::ui;
 
 namespace editor
 {
-    bool SceneHierarchyView::CopyEntityId(const Guid& id)
+    namespace
     {
-        ui::IClipboard* clipboard = Context != nullptr ? Context->Clipboard() : nullptr;
-        if (clipboard == nullptr || id == Guid{})
+        constexpr gui::ItemId kSceneRowId = SceneTreeModel::kSceneRowId;
+
+        template <typename T>
+        T* FindIn(gui::Node& node, StringView id)
         {
-            return false;
+            if (auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return Cast<T>(&node);
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (T* found = FindIn<T>(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
         }
-        const String text = Format(u8"{}", id);
-        if (m_editor != nullptr)
+    }
+
+    SceneHierarchyView::SceneHierarchyView(IAllocator& allocator, SceneEditContext& edit, Services services, gui::Node& pane)
+        : m_allocator(allocator), m_edit(&edit), m_services(Move(services)), m_model(*this, allocator), m_known(allocator)
+    {
+        SceneHierarchyView* self = this;
+        m_tree = FindIn<gui::TreeView>(pane, u8"hierarchy-tree");
+        m_search = FindIn<gui::TextField>(pane, u8"hierarchy-search");
+        m_clear = FindIn<gui::Button>(pane, u8"hierarchy-clear");
+        if (m_services.context != nullptr && m_services.page != nullptr)
         {
-            return m_editor->CopyText(clipboard, text.AsView(), u8"entity ID"); // with its toast
+            m_bar = MakeUnique<app::PageActionBar>(m_allocator, m_allocator, m_services.context->Actions(), *m_services.page);
+            m_bar->Bind(FindIn<gui::ButtonBase>(pane, u8"hierarchy-add"), SceneActionIds::kEntityCreate);
         }
-        return clipboard->SetText(text.AsView()).IsOk();
+        if (m_search != nullptr)
+            m_search->SetOnTextChanging([self](StringView text) { self->Search(text); });
+        if (m_clear != nullptr)
+        {
+            m_clear->SetVisible(false);
+            m_clear->SetOnClick([self]()
+                                {
+                                    if (self->m_search != nullptr)
+                                        self->m_search->SetText(StringView{});
+                                    self->Search(StringView{});
+                                });
+        }
+        if (m_tree != nullptr)
+        {
+            m_tree->SetSelectionMode(gui::SelectionMode::Multi);
+            m_tree->SetModel(&m_model);
+            m_tree->SetOnSelectionChanged([self](gui::ModelIndex) { self->SyncSelectionFromTree(); });
+            m_tree->SetOnActivated([self](gui::ModelIndex index)
+                                   {
+                                       const Guid entity = self->m_model.EntityOfNode(index.InternalId);
+                                       if (!entity.IsNil() && self->m_services.frame)
+                                           self->m_services.frame(entity);
+                                   });
+            m_tree->SetDragType(String(EntityDrag::kType));
+            m_tree->SetOnDragPayload([self](gui::DragPayload& payload, Span<const gui::ItemId> ids)
+                                     {
+                                         Array<Guid> entities(self->m_allocator);
+                                         for (const gui::ItemId id : ids)
+                                             if (const Guid entity = self->m_model.EntityOfId(id); !entity.IsNil())
+                                                 entities.PushBack(entity);
+                                         if (!entities.IsEmpty())
+                                             payload = self->DragOf(Span<const Guid>(entities.Data(), entities.Size()));
+                                     });
+            (void)m_tree->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
+                                           {
+                                               const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                               self->ShowMenu(self->m_tree->ItemAt(at), at);
+                                               e.Handled = true;
+                                           });
+            (void)m_tree->AddEventListener(gui::EventType::KeyDown, [self](const gui::Event& e)
+                                           {
+                                               const auto& key = static_cast<const gui::KeyEvent&>(e);
+                                               if (static_cast<gui::KeyCode>(key.KeyCode) == gui::KeyCode::Delete && key.Modifiers == 0 && !self->m_tree->IsEditing())
+                                               {
+                                                   self->RunAction(SceneActionIds::kEntityDelete);
+                                                   e.Handled = true;
+                                               }
+                                           });
+        }
+        // The page's selection into the tree (a viewport pick, a marquee, an undo).
+        m_edit->EntitySelection().OnChanged = [self]()
+        {
+            if (!self->m_syncing)
+                self->SyncSelectionToTree();
+        };
+        Refresh();
+    }
+
+    SceneHierarchyView::~SceneHierarchyView()
+    {
+        m_edit->EntitySelection().OnChanged = {};
+        if (m_tree != nullptr)
+            m_tree->SetModel(nullptr);
     }
 
     void SceneHierarchyView::Refresh()
     {
-        if (m_edit->Scene().Revision() != m_revision)
+        if (!m_built || m_edit->Scene().Revision() != m_revision)
         {
             m_revision = m_edit->Scene().Revision();
-            RebuildSnapshot();
+            Build();
         }
+        if (m_bar)
+            m_bar->Sync();
     }
 
-    void SceneHierarchyView::BeginRename(const Guid& entity)
+    void SceneHierarchyView::Search(StringView text)
     {
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        if (flat == nullptr)
-        {
+        if (m_filter.AsView() == text && m_built)
             return;
-        }
-        for (i32 pos = 0; pos < flat->ItemCount(); ++pos)
+        m_filter = String(text);
+        if (m_clear != nullptr)
+            m_clear->SetVisible(!m_filter.IsEmpty());
+        // A whole guid asks for that entity: shown with its way open, selected and scrolled to.
+        Guid wanted;
+        const bool whole = FilterAsGuid(m_filter.AsView(), wanted) && m_edit->Scene().IsValid(m_edit->Scene().FindEntity(wanted));
+        Build();
+        if (whole)
         {
-            if (GuidOfNode(flat->GetNodeId(pos)) == entity)
-            {
-                m_tree->InternalTreeView()->InternalListView()->ScrollToPosition(pos);
-                if (auto* row = static_cast<Row*>(
-                        m_tree->InternalTreeView()->InternalListView()->GetActiveView(pos)))
-                {
-                    row->BeginEdit();
-                }
-                return;
-            }
+            OpenWayTo(wanted);
+            m_edit->EntitySelection().Set(wanted);
         }
     }
 
-    void SceneHierarchyView::OnMouseDown(ui::MouseEventArgs& e)
+    void SceneHierarchyView::Build()
     {
-        if (e.Button == ui::MouseButton::Right && Context != nullptr)
-        {
-            auto menu = MakeRef<ui::ContextMenu>(MemoryAllocator());
-            if (m_actions != nullptr)
-            {
-                const StringView ids[] = {SceneActionIds::kEntityCreate,
-                                          SceneActionIds::kEntitySpawnPrefab,
-                                          SceneActionIds::kEntityPaste};
-                (void)AppendActionItems(*menu, *m_actions, m_subject, Span<const StringView>(ids, 3));
-            }
-            const Float2 screenPos = LocalToScreen(Float2{e.X, e.Y});
-            menu->Show(Context, screenPos.x, screenPos.y);
-            e.Handled = true;
-        }
-    }
-
-    void SceneHierarchyView::OnMeasure(ui::BoxConstraints constraints)
-    {
-        for (usize i = 0; i < ChildCount(); ++i)
-        {
-            GetChildAt(i)->Measure(constraints);
-        }
-        MeasuredSize = Float2{constraints.MaxWidth, constraints.MaxHeight};
-    }
-
-    void SceneHierarchyView::OnLayout(f32, f32, f32 width, f32 height)
-    {
-        for (usize i = 0; i < ChildCount(); ++i)
-        {
-            GetChildAt(i)->Layout(0, 0, width, height);
-        }
-    }
-
-    void SceneHierarchyView::DecorateDrag(ui::toolkit::TreeDragData& data)
-    {
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        if (flat == nullptr || data.SourcePosition < 0 || data.SourcePosition >= flat->ItemCount())
-        {
-            return;
-        }
-        const Guid id = GuidOfNode(flat->GetNodeId(data.SourcePosition));
-        if (id.IsNil())
-        {
-            return;
-        }
-        data.ItemKind = String(editor::app::AssetPickerSlot::EntityItemKind());
-        data.ItemId = id;
-        const scene::EntityHandle h = m_edit->Scene().FindEntity(id);
-        if (h.IsAssigned())
-        {
-            data.ItemName = String(m_edit->Scene().GetEntityName(h));
-        }
-    }
-
-    void SceneHierarchyView::WireEvents()
-    {
-        ui::TreeView* tree = m_tree->InternalTreeView();
-        SceneHierarchyView* self = this;
-
-        // A dragged row names its entity, so an inspector's entity slot can take it.
-        m_tree->OnDecorateDragData = [self](ui::toolkit::TreeDragData& data)
-        { self->DecorateDrag(data); };
-
-        tree->OnItemClick.Add(
-            [self](ui::TreeView::ItemClickInfo info)
-            {
-                if (self->m_syncing)
-                {
-                    return;
-                }
-                const Guid id = self->GuidOfNode(info.NodeId);
-                if (id != Guid{})
-                {
-                    self->m_syncing = true;
-                    self->m_edit->EntitySelection().Set(id);
-                    self->m_syncing = false;
-                    if (info.ClickCount >= 2 && self->OnFrameEntity)
-                    {
-                        self->OnFrameEntity(id);
-                    }
-                }
-            });
-
-        // Sync the inspector on ANY selection change - crucially keyboard nav (arrow keys move the
-        // ListView selection without firing OnItemClick). Guarded by m_syncing so the scene->tree sync
-        // (SyncSelectionToTree) does not loop back. Covers click too (harmless double-set, idempotent).
-        m_tree->Selection().OnSelectionChanged.Add(
-            [self]()
-            {
-                if (self->m_syncing)
-                {
-                    return;
-                }
-                const i32 pos = self->m_tree->Selection().FirstSelected();
-                const Guid id = (pos >= 0) ? self->GuidAtFlat(pos) : Guid{};
-                if (id != Guid{})
-                {
-                    self->m_syncing = true;
-                    self->m_edit->EntitySelection().Set(id);
-                    self->m_syncing = false;
-                }
-            });
-
-        tree->OnItemRightClick.Add(
-            [self](i32 nodeId, f32 x, f32 y)
-            {
-                const Guid id = self->GuidOfNode(nodeId);
-                if (id == Guid{} || self->Context == nullptr)
-                {
-                    return;
-                }
-                self->m_edit->EntitySelection().Set(id);
-
-                auto menu = MakeRef<ui::ContextMenu>(self->MemoryAllocator());
-                // The scene editor's actions over the page (the right-click selected this
-                // entity, so they act on it), with the view's own items between.
-                if (self->m_actions != nullptr)
-                {
-                    const StringView head[] = {SceneActionIds::kEntityCreateChild};
-                    (void)AppendActionItems(*menu, *self->m_actions, self->m_subject,
-                                            Span<const StringView>(head, 1));
-                }
-                menu->AddItem(u8"Rename", [self, id]() { self->BeginRename(id); });
-                menu->AddItem(u8"Copy ID", [self, id]() { (void)self->CopyEntityId(id); });
-                if (self->m_actions != nullptr)
-                {
-                    menu->AddSeparator();
-                    const StringView entity[] = {SceneActionIds::kEntityDuplicate,
-                                                 SceneActionIds::kEntityCreatePrefab,
-                                                 SceneActionIds::kEntitySpawnPrefabAsChild,
-                                                 SceneActionIds::kEntitySpawnPrefab};
-                    (void)AppendActionItems(*menu, *self->m_actions, self->m_subject,
-                                            Span<const StringView>(entity, 4));
-                    if (self->m_actions->IsEnabled(SceneActionIds::kPrefabApply, self->m_subject))
-                    {
-                        menu->AddSeparator();
-                        const StringView prefab[] = {SceneActionIds::kPrefabApply,
-                                                     SceneActionIds::kPrefabRevert};
-                        (void)AppendActionItems(*menu, *self->m_actions, self->m_subject,
-                                                Span<const StringView>(prefab, 2));
-                    }
-                    menu->AddSeparator();
-                    const StringView clipboard[] = {SceneActionIds::kEntityCopy,
-                                                    SceneActionIds::kEntityPasteAsChild};
-                    (void)AppendActionItems(*menu, *self->m_actions, self->m_subject,
-                                            Span<const StringView>(clipboard, 2));
-                    menu->AddSeparator();
-                    const StringView tail[] = {SceneActionIds::kEntityDelete};
-                    (void)AppendActionItems(*menu, *self->m_actions, self->m_subject,
-                                            Span<const StringView>(tail, 1));
-                }
-                const Float2 screenPos =
-                    self->m_tree->InternalTreeView()->LocalToScreen(Float2{x, y});
-                menu->Show(self->Context, screenPos.x, screenPos.y);
-            });
-
-        // Right-click on empty space below the rows: the ListView consumes ALL right-clicks
-        // (its contract) and routes background ones here - the OnMouseDown fallback on this
-        // view never fires while the tree fills the pane.
-        tree->InternalListView()->OnBackgroundRightClicked.Add(
-            [self](f32 x, f32 y)
-            {
-                if (self->Context == nullptr)
-                {
-                    return;
-                }
-                auto menu = MakeRef<ui::ContextMenu>(self->MemoryAllocator());
-                if (self->m_actions != nullptr)
-                {
-                    const StringView ids[] = {SceneActionIds::kEntityCreate,
-                                              SceneActionIds::kEntitySpawnPrefab,
-                                              SceneActionIds::kEntityPaste};
-                    (void)AppendActionItems(*menu, *self->m_actions, self->m_subject,
-                                            Span<const StringView>(ids, 3));
-                }
-                const Float2 screenPos =
-                    self->m_tree->InternalTreeView()->InternalListView()->LocalToScreen(
-                        Float2{x, y});
-                menu->Show(self->Context, screenPos.x, screenPos.y);
-            });
-
-        tree->OnItemKeyDown.Add(
-            [self](i32 nodeId, ui::KeyEventArgs& e)
-            {
-                const Guid id = self->GuidOfNode(nodeId);
-                if (id == Guid{})
-                {
-                    return;
-                }
-                if (e.Key == ui::KeyCode::F2)
-                {
-                    self->BeginRename(id);
-                    e.Handled = true;
-                }
-                else if (e.Key == ui::KeyCode::Delete)
-                {
-                    self->m_edit->DestroyEntity(id);
-                    e.Handled = true;
-                }
-            });
-
-        m_filterEdit->OnTextChanged.Add(
-            [self](ui::EditText* edit)
-            {
-                self->m_filter = String(edit->Text());
-                // A whole guid asks for that entity: shown with its ancestors open, selected (the
-                // inspector and the gizmo follow) and scrolled to.
-                Guid wanted;
-                const bool whole = FilterAsGuid(self->m_filter.AsView(), wanted) &&
-                                   self->m_edit->Scene().IsValid(self->m_edit->Scene().FindEntity(wanted));
-                self->RebuildSnapshot(); // filter changes rebuild regardless of revision
-                if (whole)
-                {
-                    self->ExpandAncestorsOf(wanted);
-                    self->m_edit->EntitySelection().Set(wanted);
-                    self->RevealEntity(wanted);
-                }
-            });
-
-        // Tree selection -> context selection is on click above; context -> tree here.
-        m_edit->EntitySelection().OnChanged = [self]()
-        {
-            if (self->m_syncing)
-            {
-                return;
-            }
-            self->SyncSelectionToTree();
-        };
-    }
-
-    bool SceneHierarchyView::SubtreeMatches(scene::Scene& scene, scene::EntityHandle e) const
-    {
-        if (NameOrGuidMatches(scene.GetEntityName(e), scene.GetEntityId(e), m_filter.AsView()))
-        {
-            return true;
-        }
-        for (scene::EntityHandle c = scene.GetFirstChild(e); c.IsAssigned();
-             c = scene.GetNextSibling(c))
-        {
-            if (SubtreeMatches(scene, c))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void SceneHierarchyView::CaptureCollapseState()
-    {
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        if (flat == nullptr)
-        {
-            return;
-        }
-        for (usize i = 0; i < m_nodes.Size(); ++i)
-        {
-            if (m_nodes[i].children.IsEmpty())
-            {
-                continue;
-            }
-            if (flat->IsExpanded(static_cast<i32>(i)))
-            {
-                m_collapsed.Remove(m_nodes[i].id);
-            }
-            else
-            {
-                m_collapsed.Insert(m_nodes[i].id);
-            }
-        }
-    }
-
-    void SceneHierarchyView::RebuildSnapshot()
-    {
-        CaptureCollapseState();
-        m_nodes.Clear();
-        m_roots.Clear();
+        m_built = true;
         scene::Scene& scene = m_edit->Scene();
-
-        // Roots in LIST order (the order reorder edits maintain and serialization
-        // preserves), then depth-first children. With a filter, keep nodes whose subtree
-        // contains a match.
-        for (scene::EntityHandle r = scene.GetFirstRoot(); r.IsAssigned();
-             r = scene.GetNextSibling(r))
+        const String name = m_services.sceneName ? String(m_services.sceneName()) : String(scene.Name());
+        m_model.Build(scene, name.AsView(), m_services.sceneIcon, m_services.icons, m_filter.AsView());
+        // The scene's row is always open. The scene opens with its top level shown (a model's
+        // skeleton stays closed); after that an entity seen with children for the first time
+        // opens (what an edit makes shows), and one the user closed stays closed.
+        if (m_tree != nullptr)
         {
-            if (SubtreeMatches(scene, r))
+            m_tree->SetIdExpanded(kSceneRowId, true);
+            const bool first = !m_opened;
+            m_opened = true;
+            for (const SceneTreeModel::Row& row : m_model.Rows())
             {
-                m_roots.PushBack(AddNode(scene, r, 0));
+                if (row.entity.IsNil() || row.children.IsEmpty())
+                    continue;
+                const gui::ItemId id = SceneTreeModel::IdOfEntity(row.entity);
+                if (!m_known.Contains(id))
+                {
+                    if (!first)
+                        m_tree->SetIdExpanded(id, true);
+                    (void)m_known.Insert(id);
+                }
             }
+            // A search opens every way to its matches.
+            if (!m_filter.IsEmpty())
+                for (const SceneTreeModel::Row& row : m_model.Rows())
+                    if (!row.entity.IsNil() && !row.children.IsEmpty())
+                        m_tree->SetIdExpanded(SceneTreeModel::IdOfEntity(row.entity), true);
         }
-
-        // Rebuild the flat view (SetAdapter recreates the flattened tree). New entities
-        // default to expanded so structural edits stay visible; entities the user collapsed
-        // stay collapsed (state captured above, keyed by Guid).
-        m_tree->SetAdapter(m_adapter.Get());
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        for (usize i = 0; i < m_nodes.Size(); ++i)
-        {
-            if (m_nodes[i].children.IsEmpty())
-            {
-                continue;
-            }
-            if (!m_collapsed.Contains(m_nodes[i].id))
-            {
-                flat->Expand(static_cast<i32>(i));
-            }
-        }
-        m_tree->InternalTreeView()->InternalListView()->NotifyDataChanged();
+        m_model.Reset();
         SyncSelectionToTree();
-    }
-
-    i32 SceneHierarchyView::AddNode(scene::Scene& scene, scene::EntityHandle e, i32 depth)
-    {
-        const i32 nodeId = static_cast<i32>(m_nodes.Size());
-        Node node;
-        node.id = scene.GetEntityId(e);
-        node.name = String(scene.GetEntityName(e));
-        if (node.name.IsEmpty())
-        {
-            node.name = String(u8"(unnamed)");
-        }
-        node.depth = depth;
-        m_nodes.PushBack(Move(node));
-
-        for (scene::EntityHandle c = scene.GetFirstChild(e); c.IsAssigned();
-             c = scene.GetNextSibling(c))
-        {
-            if (!SubtreeMatches(scene, c))
-            {
-                continue;
-            }
-            const i32 child = AddNode(scene, c, depth + 1);
-            m_nodes[static_cast<usize>(nodeId)].children.PushBack(child);
-        }
-        return nodeId;
-    }
-
-    Guid SceneHierarchyView::GuidOfNode(i32 nodeId) const
-    {
-        return (nodeId >= 0 && nodeId < static_cast<i32>(m_nodes.Size()))
-                   ? m_nodes[static_cast<usize>(nodeId)].id
-                   : Guid{};
-    }
-
-    Guid SceneHierarchyView::GuidAtFlat(i32 flatPosition) const
-    {
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        return (flat != nullptr) ? GuidOfNode(flat->GetNodeId(flatPosition)) : Guid{};
-    }
-
-    i32 SceneHierarchyView::FlatCount() const
-    {
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        return (flat != nullptr) ? flat->ItemCount() : 0;
-    }
-
-    void SceneHierarchyView::ExpandAncestorsOf(const Guid& entity)
-    {
-        // In the tree as built (its collapse state is re-read from it on every rebuild, so the
-        // remembered set alone would not hold), and so remembered.
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        scene::Scene& scene = m_edit->Scene();
-        bool opened = false;
-        for (scene::EntityHandle e = scene.GetParent(scene.FindEntity(entity)); scene.IsValid(e);
-             e = scene.GetParent(e))
-        {
-            const Guid ancestor = scene.GetEntityId(e);
-            m_collapsed.Remove(ancestor);
-            for (usize i = 0; flat != nullptr && i < m_nodes.Size(); ++i)
-            {
-                if (m_nodes[i].id == ancestor && !flat->IsExpanded(static_cast<i32>(i)))
-                {
-                    flat->Expand(static_cast<i32>(i));
-                    opened = true;
-                }
-            }
-        }
-        if (opened)
-        {
-            m_tree->InternalTreeView()->InternalListView()->NotifyDataChanged();
-        }
-    }
-
-    void SceneHierarchyView::RevealEntity(const Guid& entity)
-    {
-        ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter();
-        if (flat == nullptr)
-        {
-            return;
-        }
-        for (i32 pos = 0; pos < flat->ItemCount(); ++pos)
-        {
-            if (GuidOfNode(flat->GetNodeId(pos)) == entity)
-            {
-                m_tree->InternalTreeView()->InternalListView()->ScrollToPosition(pos);
-                return;
-            }
-        }
     }
 
     void SceneHierarchyView::SyncSelectionToTree()
     {
-        const Guid* primary = m_edit->EntitySelection().Primary();
-        ui::SelectionModel& sel = m_tree->Selection();
+        if (m_tree == nullptr)
+            return;
+        Array<gui::ItemId> ids(m_allocator);
+        for (const Guid& entity : m_edit->EntitySelection().Items())
+            ids.PushBack(SceneTreeModel::IdOfEntity(entity));
         m_syncing = true;
-        if (primary == nullptr)
+        m_tree->SetSelectedIds(Span<const gui::ItemId>(ids.Data(), ids.Size()));
+        m_syncing = false;
+    }
+
+    void SceneHierarchyView::SyncSelectionFromTree()
+    {
+        if (m_syncing || m_tree == nullptr)
+            return;
+        Array<gui::ItemId> ids(m_allocator);
+        m_tree->GetSelectedIds(ids);
+        Array<Guid> entities(m_allocator);
+        for (const gui::ItemId id : ids)
+            if (const Guid entity = m_model.EntityOfId(id); !entity.IsNil())
+                entities.PushBack(entity);
+        m_syncing = true;
+        if (entities.IsEmpty())
+            m_edit->EntitySelection().Clear(); // the scene's row, or nothing: no entity
+        else
+            m_edit->EntitySelection().Set(Span<const Guid>(entities.Data(), entities.Size()));
+        m_syncing = false;
+    }
+
+    bool SceneHierarchyView::SceneSelected() const
+    {
+        return m_tree != nullptr && m_tree->IsIdSelected(kSceneRowId);
+    }
+
+    void SceneHierarchyView::OpenWayTo(const Guid& entity)
+    {
+        if (m_tree == nullptr)
+            return;
+        scene::Scene& scene = m_edit->Scene();
+        for (scene::EntityHandle e = scene.GetParent(scene.FindEntity(entity)); scene.IsValid(e); e = scene.GetParent(e))
+            m_tree->SetIdExpanded(SceneTreeModel::IdOfEntity(scene.GetEntityId(e)), true);
+    }
+
+    void SceneHierarchyView::BeginRename(const Guid& entity)
+    {
+        if (m_tree == nullptr)
+            return;
+        OpenWayTo(entity);
+        if (const i32 item = ItemOf(entity); item >= 0)
+            (void)m_tree->BeginEdit(item);
+    }
+
+    void SceneHierarchyView::ShowMenu(i32 item, Float2 at)
+    {
+        if (m_tree == nullptr || m_services.context == nullptr)
+            return;
+        EditorActionRegistry& actions = m_services.context->Actions();
+        EditorPage* page = m_services.page;
+        SceneHierarchyView* self = this;
+        m_menu = MakeRef<gui::Menu>(m_allocator);
+        const Guid entity = EntityAt(item);
+        if (entity.IsNil())
         {
-            sel.ClearSelection();
+            // The scene's row or the background: what makes a root.
+            const StringView ids[] = {SceneActionIds::kEntityCreate, SceneActionIds::kEntitySpawnPrefab, SceneActionIds::kEntityPaste};
+            (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(ids, 3));
         }
-        else if (ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter())
+        else
         {
-            for (i32 pos = 0; pos < flat->ItemCount(); ++pos)
+            // A press on a row not selected selects it alone first, so the actions act on it.
+            if (!m_edit->EntitySelection().Contains(entity))
+                m_edit->EntitySelection().Set(entity);
+            const StringView head[] = {SceneActionIds::kEntityCreateChild};
+            (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(head, 1));
+            (void)m_menu->AddItem(u8"Rename", [self, entity]() { self->BeginRename(entity); })->SetShortcut(u8"F2");
+            (void)m_menu->AddItem(u8"Copy ID", [self, entity]()
+                                  {
+                                      gui::EventDispatcher* dispatcher = self->m_tree->GetEventDispatcher();
+                                      if (self->m_services.context != nullptr)
+                                          (void)self->m_services.context->CopyText(dispatcher != nullptr ? dispatcher->GetClipboard() : nullptr,
+                                                                                   Format(u8"{}", entity).AsView(), u8"entity ID");
+                                  });
+            m_menu->AddSeparator();
+            const StringView entityIds[] = {SceneActionIds::kEntityDuplicate, SceneActionIds::kEntityCreatePrefab, SceneActionIds::kEntitySpawnPrefabAsChild,
+                                            SceneActionIds::kEntitySpawnPrefab};
+            (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(entityIds, 4));
+            if (actions.IsEnabled(SceneActionIds::kPrefabApply, page))
             {
-                if (GuidOfNode(flat->GetNodeId(pos)) == *primary)
+                m_menu->AddSeparator();
+                const StringView prefab[] = {SceneActionIds::kPrefabApply, SceneActionIds::kPrefabRevert};
+                (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(prefab, 2));
+            }
+            m_menu->AddSeparator();
+            const StringView clipboard[] = {SceneActionIds::kEntityCopy, SceneActionIds::kEntityPasteAsChild};
+            (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(clipboard, 2));
+            m_menu->AddSeparator();
+            const StringView tail[] = {SceneActionIds::kEntityDelete};
+            (void)AppendActionItems(*m_menu, actions, page, Span<const StringView>(tail, 1));
+        }
+        m_menu->Open(*m_tree, at);
+    }
+
+    void SceneHierarchyView::RunAction(StringView id)
+    {
+        if (m_services.context == nullptr)
+            return;
+        const Status ran = m_services.context->Actions().Execute(id, m_services.page);
+        // Refused (while simulating, say): said, not swallowed.
+        if (!ran.IsOk() && ran.Code() == ErrorCode::NotSupported)
+            m_services.context->SetStatus(u8"Not while the scene simulates: stop it first.");
+    }
+
+    String SceneHierarchyView::Rows() const
+    {
+        String out;
+        if (m_tree == nullptr)
+            return out;
+        for (i32 item = 0; item < static_cast<i32>(m_tree->GetItemCount()); ++item)
+        {
+            if (!out.IsEmpty())
+                out += u8" | ";
+            for (i32 depth = m_tree->ItemDepth(item); depth > 0; --depth)
+                out += u8"  ";
+            out += m_tree->GetItemText(item);
+        }
+        return out;
+    }
+
+    Guid SceneHierarchyView::EntityAt(i32 item) const
+    {
+        if (m_tree == nullptr || item < 0 || item >= static_cast<i32>(m_tree->GetItemCount()))
+            return Guid{};
+        return m_model.EntityOfNode(m_tree->GetItemIndex(item).InternalId);
+    }
+
+    i32 SceneHierarchyView::ItemOf(const Guid& entity) const
+    {
+        if (m_tree == nullptr)
+            return -1;
+        for (i32 item = 0; item < static_cast<i32>(m_tree->GetItemCount()); ++item)
+            if (EntityAt(item) == entity && !entity.IsNil())
+                return item;
+        return -1;
+    }
+
+    gui::ModelIndex SceneHierarchyView::IndexOf(const Guid& entity) const { return m_model.IndexOf(entity); }
+
+    gui::DragPayload SceneHierarchyView::DragOf(Span<const Guid> entities) const
+    {
+        const scene::EntityHandle first = entities.IsEmpty() ? scene::EntityHandle{} : m_edit->Scene().FindEntity(entities[0]);
+        return EntityDrag::Payload(entities, first.IsAssigned() ? m_edit->Scene().GetEntityName(first) : StringView{});
+    }
+
+    bool SceneHierarchyView::DropTarget(const gui::ModelDrop& drop, Guid& parent, Guid& before) const
+    {
+        parent = Guid{};
+        before = Guid{};
+        if (!drop.Index.IsValid())
+            return true; // below the rows: the end of the roots
+        const Guid target = m_model.EntityOfNode(drop.Index.InternalId);
+        if (target.IsNil() || drop.Place == gui::DropPlace::On)
+        {
+            parent = target; // onto an entity: under it; onto the scene's row: a root
+            return true;
+        }
+        scene::Scene& scene = m_edit->Scene();
+        const scene::EntityHandle e = scene.FindEntity(target);
+        if (!scene.IsValid(e))
+            return false;
+        const scene::EntityHandle up = scene.GetParent(e);
+        parent = scene.IsValid(up) ? scene.GetEntityId(up) : Guid{};
+        if (drop.Place == gui::DropPlace::Before)
+            before = target;
+        else
+        {
+            const scene::EntityHandle next = scene.GetNextSibling(e);
+            before = scene.IsValid(next) ? scene.GetEntityId(next) : Guid{};
+        }
+        return true;
+    }
+
+    bool SceneHierarchyView::CanTake(const gui::ModelDrop& drop) const
+    {
+        String reason;
+        return m_model.CanDrop(drop, reason) != gui::DropEffect::None;
+    }
+    bool SceneHierarchyView::Take(const gui::ModelDrop& drop)
+    {
+        return CanTake(drop) && m_model.Drop(drop);
+    }
+
+    // === The model ===
+
+    bool SceneHierarchyView::Model::IsEditable(const gui::ModelIndex& index) const
+    {
+        return !EntityOfNode(index.InternalId).IsNil();
+    }
+    bool SceneHierarchyView::Model::SetData(const gui::ModelIndex& index, const gui::Variant& value)
+    {
+        const Guid entity = EntityOfNode(index.InternalId);
+        const String name = value.ToString();
+        if (entity.IsNil() || name.IsEmpty())
+            return false;
+        m_view.m_edit->RenameEntity(entity, name.AsView());
+        return true;
+    }
+    gui::DropEffect SceneHierarchyView::Model::CanDrop(const gui::ModelDrop& drop, String& reason) const
+    {
+        Guid parent;
+        Guid before;
+        if (!m_view.DropTarget(drop, parent, before))
+            return gui::DropEffect::None;
+        // The hierarchy's own rows move: never inside themselves.
+        if (drop.Source == this && !drop.Ids.IsEmpty())
+        {
+            for (const gui::ItemId id : drop.Ids)
+            {
+                const Guid entity = EntityOfId(id);
+                if (entity.IsNil())
                 {
-                    sel.Select(pos);
-                    break;
+                    reason = String(u8"The scene stays where it is");
+                    return gui::DropEffect::None;
+                }
+                if (!parent.IsNil() && m_view.m_edit->IsSelfOrAncestor(parent, entity))
+                {
+                    reason = String(u8"An entity cannot go inside itself");
+                    return gui::DropEffect::None;
                 }
             }
+            return gui::DropEffect::Move;
         }
-        m_syncing = false;
+        // Prefabs from the assets: an instance of each, there.
+        Array<app::AssetDrag> assets;
+        if (drop.Payload != nullptr && app::AssetDrag::ReadAll(*drop.Payload, assets) && m_view.m_services.spawnPrefab)
+        {
+            for (const app::AssetDrag& asset : assets)
+                if (asset.TypeName.AsView() != StringView(u8"PrefabDocument"))
+                {
+                    reason = String(u8"Only a prefab goes into the scene");
+                    return gui::DropEffect::None;
+                }
+            return gui::DropEffect::Copy;
+        }
+        return gui::DropEffect::None;
+    }
+    bool SceneHierarchyView::Model::Drop(const gui::ModelDrop& drop)
+    {
+        String reason;
+        if (CanDrop(drop, reason) == gui::DropEffect::None)
+            return false;
+        Guid parent;
+        Guid before;
+        (void)m_view.DropTarget(drop, parent, before);
+        SceneEditContext& edit = *m_view.m_edit;
+        if (drop.Source == this && !drop.Ids.IsEmpty())
+        {
+            for (const gui::ItemId id : drop.Ids)
+            {
+                const Guid entity = EntityOfId(id);
+                if (entity == before || entity == parent)
+                    continue;
+                if (!before.IsNil() || parent.IsNil())
+                    edit.MoveEntityBefore(entity, before); // nil before a root: the end of the roots
+                else
+                    edit.ReparentEntity(entity, parent); // the end of the parent's children
+            }
+            return true;
+        }
+        Array<app::AssetDrag> assets;
+        (void)app::AssetDrag::ReadAll(*drop.Payload, assets);
+        bool spawned = false;
+        for (const app::AssetDrag& asset : assets)
+            spawned = m_view.m_services.spawnPrefab(asset.Id, parent) || spawned;
+        return spawned;
     }
 }

@@ -6,9 +6,6 @@ Code/Editor/Editor.Project/ProjectManager.cppm
 Code/Editor/Editor.Project/ProjectRegistry.cppm
 Code/Editor/Editor.Core/ThumbnailService.cppm
 Code/Editor/Editor.Scene/ComponentGizmos.cppm
-Code/Editor/Editor.Scene/EntityPickerDialog.cppm
-Code/Editor/Editor.Script.AngelScript/AngelScriptEditorUIImpl.cpp
-Code/Editor/Editor.Script.Luau/LuauEditorUIImpl.cpp
 Code/Engine/Engine.Animation/AnimationComponents.cppm
 Code/Engine/Engine.Audio/AudioSubsystem.cppm
 Code/Engine/Engine.DefaultApp/DefaultApplicationImpl.cpp
@@ -23,12 +20,6 @@ Code/Engine/Engine.Player/WebMain.cpp
 Code/Engine/Engine.Script/ScriptSubsystem.cppm
 Code/Engine/Engine.Terrain/TerrainSubsystem.cppm
 Code/Engine/Engine.UI.Script/UiScriptImpl.cpp
-Code/Experimental/GUI/Markup/MarkupLoader.cppm
-Code/Experimental/GUI/Styling/StyleApplier.cppm
-Code/Experimental/GUI/Styling/StyleManager.cppm
-Code/Experimental/GUI/Styling/Transition.cppm
-Code/Experimental/GUI.VFS/VfsResourceProvider.cppm
-Code/Experimental/GUI/Widgets/Tooltip.cppm
 Code/Extensions/Imgui/ImguiSubsystem.cppm
 Code/Foundation/Animation/AnimationClip.cppm
 Code/Foundation/Core/Containers/Array.cppm
@@ -97,7 +88,7 @@ Code/Samples/AudioPlayground/main.cpp
 Code/Samples/CustomShader/main.cpp
 Code/Samples/Framework/SampleApp.cppm
 Code/Samples/GameUiSandbox/main.cpp
-Code/Experimental/GUI.Sandbox/Main.cpp
+Code/Samples/GUISandbox/Main.cpp
 Code/Samples/InputActions/main.cpp
 Code/Samples/MultiWindow/main.cpp
 Code/Samples/ParticleFX/main.cpp

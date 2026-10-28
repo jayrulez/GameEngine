@@ -247,17 +247,23 @@ export namespace foundation::input
             {
                 m_setEnabled[i] = 1u;
             }
+            ++m_bindingsVersion;
         }
         [[nodiscard]] const InputMap& Map() const noexcept { return m_map; }
+        /// Counts up whenever what a binding resolves to may have changed (a map installed, a set
+        /// enabled or disabled, an exclusive set pushed or popped): a reader of the bindings (a GUI's
+        /// prompts) reads them again when it moves, rather than each frame.
+        [[nodiscard]] u64 BindingsVersion() const noexcept { return m_bindingsVersion; }
 
         // ---- sets ----
         void EnableSet(StringView name, bool enabled = true)
         {
             for (usize i = 0; i < m_map.sets.Size(); ++i)
             {
-                if (m_map.sets[i].name.AsView() == name)
+                if (m_map.sets[i].name.AsView() == name && (m_setEnabled[i] != 0u) != enabled)
                 {
                     m_setEnabled[i] = enabled ? 1u : 0u;
+                    ++m_bindingsVersion;
                 }
             }
         }
@@ -283,6 +289,7 @@ export namespace foundation::input
         {
             m_exclusiveStack.PushBack(String(name));
             m_latchHeldOnce = true;
+            ++m_bindingsVersion;
         }
         void PopExclusiveSet()
         {
@@ -290,6 +297,7 @@ export namespace foundation::input
             {
                 m_exclusiveStack.PopBack();
                 m_latchHeldOnce = true;
+                ++m_bindingsVersion;
             }
         }
         [[nodiscard]] usize ExclusiveDepth() const noexcept { return m_exclusiveStack.Size(); }
@@ -1094,6 +1102,7 @@ export namespace foundation::input
         f32 m_timeScale = 1.0f;
         ConsumptionMask m_consumed;
         bool m_latchHeldOnce = false; // set by exclusive push/pop, consumed next Update
+        u64 m_bindingsVersion = 0; // BindingsVersion
 
         struct RumbleRequest
         {

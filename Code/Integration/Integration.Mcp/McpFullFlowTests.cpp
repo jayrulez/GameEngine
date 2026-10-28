@@ -817,6 +817,8 @@ TEST_CASE("integration.mcp: an agent sets the project's settings")
 
     // A list setting (Sedulous 39147576): uiFontIds takes the whole list, each a FontAsset, once.
     CHECK(FfCall(server, u8"project_info", JsonValue::MakeObject()).Get(u8"settings").Get(u8"uiFontIds").Count() == 0);
+    // The engine GUI's sheets: a list setting of its own, empty until set (gui-lab-evolution-3.md E9b).
+    CHECK(FfCall(server, u8"project_info", JsonValue::MakeObject()).Get(u8"settings").Get(u8"guiStyleSheetIds").Count() == 0);
     (void)FfCall(server, u8"asset_import",
                  FfStr(JsonValue::MakeObject(), u8"source",
                        PathJoin(foundation::vfs::FindDataRoot().AsView(), u8"Assets/fonts/roboto/Roboto-Bold.ttf")
@@ -1195,6 +1197,13 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
         FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"pbr"));
     CHECK(onPbr.Get(u8"properties").Count() == 16);
     CHECK(onPbr.Get(u8"shaderName").AsString() == StringView(u8"forward"));
+
+    // On the built-in Phong: its eleven (six values, four maps, the sampler).
+    const JsonValue onPhong = FfCall(
+        server, u8"material_set_shader",
+        FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"phong"));
+    CHECK(onPhong.Get(u8"properties").Count() == 11);
+    CHECK(onPhong.Get(u8"shaderName").AsString() == StringView(u8"phong"));
 
     std::filesystem::remove_all("mcp_material_shader_project", ec);
 }

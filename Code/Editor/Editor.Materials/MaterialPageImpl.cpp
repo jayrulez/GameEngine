@@ -1,34 +1,21 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Materials - :page partition.
-//
-// MaterialEditorPage (Sedulous MaterialEditorPage shape): edits a MaterialAsset - a preview
-// sphere lit by a default sun + procedural sky on the left, the material's parameters on the
-// right. The authored form IS the runtime source (MaterialSource), so Save just writes the
-// object back and requests a re-cook; every live proxy bound to the cooked product then
-// hot-swaps (the same reload path texture/mesh edits ride).
-//
-// Edits are BLOB-SNAPSHOT commands: each edit captures the whole serialized MaterialSource
-// before/after (it is tiny) - robust against the source's parallel-array layout, exact undo,
-// and consecutive scrubs of the same field merge into one entry. Every apply rebuilds the
-// preview's runtime material in place, so scrubbing reads live on the sphere.
-//
-// RegisterMaterialEditor is the module's RegisterEditor entry point: registers the
-// MaterialAsset page factory and the "PBR Material" / "Unlit Material" creators (presets).
+// Editor::Materials - :page partition, its body. See MaterialPage.cppm.
 
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
+#include "Core/Reflection/Reflect.h"
 
 module editor.materials;
 
 import foundation.core;
 import foundation.vfs;
+import foundation.settings;
 import foundation.content;
 import foundation.rhi;
 import foundation.graphics;
-import foundation.shell;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.scene;
@@ -43,14 +30,11 @@ import foundation.shaders;
 import foundation.shaders.resource;
 import foundation.render;
 import engine.render;
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
-import foundation.ui.viewport;
-import foundation.vg.renderer;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
-import editor.preview;   // PreviewViewport (shared viewport + preview scene + camera + render loop)
+import editor.preview;
 
 using namespace foundation::core;
 namespace core = foundation::core;
@@ -59,99 +43,169 @@ namespace render = foundation::render;
 namespace rhi = foundation::rhi;
 namespace runtime = foundation::runtime;
 namespace scene = foundation::scene;
-namespace ui = foundation::ui;
-namespace vg = foundation::vg;
+namespace gui = foundation::gui;
 
 namespace editor
 {
     using app::PrettifyPropertyName; // a row's label from its property's name
-    using app::ResourceRefEditor;    // the picker row
 
-    MaterialEditorPage::MaterialEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                                           ui::runtime::UIHost& uiHost,
-                                           foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_host(&host), m_uiHost(&uiHost), m_title(instance.Name())
+    namespace
     {
-        // The edited object: the instance's MaterialAsset (kept live; Save writes it back).
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset = RefPtr<pipeline::MaterialAsset>(Cast<pipeline::MaterialAsset>(object.Get()));
-        StringView missing;
-        if (m_asset.Get() != nullptr &&
-            !materials::ForwardMaterialSourceIsComplete(m_asset->source, &missing))
+        constexpr StringView kBlendItems[] = {u8"Opaque", u8"Masked", u8"AlphaBlend", u8"Additive", u8"Multiply", u8"PremultipliedAlpha"};
+        constexpr StringView kDepthItems[] = {u8"Disabled", u8"ReadWrite", u8"ReadOnly", u8"WriteOnly"};
+        constexpr StringView kCullItems[] = {u8"None", u8"Back", u8"Front"};
+
+        // The pipeline state rows: their path, label, choices and the byte each writes. The render
+        // state fields are typed enums (each `: u8`), edited through that identical byte.
+        struct PipelineRow
         {
-            LOG_ERROR(u8"Editor",
-                      u8"material '{}' is missing the forward shader property '{}' (a stale "
-                      u8"source) - re-create it; the runtime refuses to build it",
-                      m_title, missing);
+            StringView path;
+            StringView label;
+            Span<const StringView> items;
+            u8& (*field)(materials::MaterialSource&);
+        };
+        const PipelineRow kPipelineRows[] = {
+            {u8"blend", u8"Blend", Span<const StringView>(kBlendItems, 6), [](materials::MaterialSource& s) -> u8& { return reinterpret_cast<u8&>(s.blendMode); }},
+            {u8"depth", u8"Depth", Span<const StringView>(kDepthItems, 4), [](materials::MaterialSource& s) -> u8& { return reinterpret_cast<u8&>(s.depthMode); }},
+            {u8"cull", u8"Cull", Span<const StringView>(kCullItems, 3), [](materials::MaterialSource& s) -> u8& { return reinterpret_cast<u8&>(s.cullMode); }},
+        };
+
+        String GuidText(const Guid& id)
+        {
+            if (id.IsNil())
+                return String{};
+            utf8char text[37];
+            id.ToChars(text);
+            return String(StringView(text, 36));
         }
-        if (m_asset.Get() == nullptr)
+        Guid GuidOf(const gui::Variant& value)
         {
-            LOG_ERROR(u8"Editor", u8"material '{}' failed to read - page opens empty", m_title);
+            Guid id;
+            const StringView text = Trim(value.AsString());
+            if (!text.IsEmpty())
+                (void)Guid::TryParse(text, id);
+            return id;
+        }
+        void AddChoices(gui::PropertyInfo& info, Span<const StringView> items)
+        {
+            for (usize i = 0; i < items.Size(); ++i)
+                info.Choices.PushBack(gui::PropertyChoice{String(items[i]), static_cast<i64>(i)});
+        }
+        // A number's part by its name in a group (x, y, z, w); -1 when it is none.
+        i32 PartIndex(StringView part)
+        {
+            const StringView names[] = {u8"x", u8"y", u8"z", u8"w"};
+            for (i32 i = 0; i < 4; ++i)
+                if (part == names[i])
+                    return i;
+            return -1;
+        }
+    }
+
+    MaterialEditorPage::MaterialEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::MaterialAsset::StaticType(), kPath)
+    {
+        // Its source reflects as arrays no one edits by hand: the rows are the material's own.
+        HideAssetRows();
+        m_materialRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_propertyRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_textureRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        if (Content())
+        {
+            m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"material.preview");
+            MaterialEditorPage* self = this;
+            m_pane->OnFrame = [self]() { self->FramePreview(); };
+            if (PreviewViewport* preview = m_pane->Viewport())
+            {
+                // The scene's clock runs only while it simulates: a material on a shader that
+                // animates with Time() (a scrolling surface, moving vertices, wind) moves.
+                preview->SetSimulationEnabled(true);
+                preview->Camera().position = Float3{0.0f, 0.9f, 2.6f};
+                preview->Camera().LookAt(Float3{0.0f, 0.0f, 0.0f});
+            }
+            AddPreviewControls();
         }
         BindShader(); // a material on a shader asset shows the shader's current properties
-
-        // Shared preview substrate (viewport + preview scene + fly camera + render loop).
-        m_preview =
-            MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"material.preview");
-        // The scene's clock runs only while it simulates: a material on a shader that animates
-        // with Time() (a scrolling surface, moving vertices, wind) moves in its preview.
-        m_preview->SetSimulationEnabled(true);
-        m_preview->Camera().position = Float3{0.0f, 0.9f, 2.6f};
-        m_preview->Camera().LookAt(Float3{0.0f, 0.0f, 0.0f});
-
         BuildPreviewScene();
-
-        // The context assigns the page's instance id AFTER construction (OpenPage), but the
-        // preview-pref restore below keys on it - set it from the instance now (the context's
-        // later SetInstanceId writes the same value).
-        SetInstanceId(instance.Id());
-
-        // Restore this material's saved preview choice (shape or mesh asset) before the grid
-        // builds its rows, so the Shape/Mesh rows show the persisted state.
-        LoadPreviewPref();
+        LoadPreviewPref(); // the shape or mesh this material was last shown on
         if (m_previewShape != 0 || !m_previewMeshGuid.IsNil())
-        {
             ApplyPreviewMesh();
-        }
-
-        m_grid = MakeRef<foundation::ui::toolkit::PropertyGrid>(Allocator());
-        RebuildGrid();
-
-        // Inset the property grid off the pane edge (matches the scene inspector / hierarchy).
-        auto gridColumn = MakeRef<foundation::ui::FlexLayout>(Allocator());
-        gridColumn->Direction = foundation::ui::Orientation::Vertical;
-        gridColumn->Padding = foundation::ui::Thickness{8, 6};
-        {
-            foundation::ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            gridColumn->AddView(m_grid.Get(), grow);
-        }
-
-        auto split = MakeRef<foundation::ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.62f);
-        split->SetPanes(m_preview->View(), gridColumn.Get());
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *split);
-
+        BuildRows();
+        ShowNotices();
         RebuildPreviewMaterial();
+        if (m_pane && Asset() != nullptr)
+            m_pane->Show();
     }
 
     MaterialEditorPage::~MaterialEditorPage() = default;
 
-    void MaterialEditorPage::OnUpdate(runtime::IApplicationHost&, f32 dt)
+    const materials::MaterialSource* MaterialEditorPage::Source() const
     {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh(); // sync the page's actions to it each frame
-        }
-        if (m_preview)
-        {
-            m_preview->Update(dt);
-        }
+        return Asset() != nullptr ? &Asset()->source : nullptr;
+    }
 
-        // Texture hot-reload watchdog: rebuild the preview material when any bound
-        // texture's live view no longer matches what the material captured.
+    void MaterialEditorPage::AddPreviewControls()
+    {
+        MaterialEditorPage* self = this;
+        m_shapeChoice = MakeRef<gui::ComboBox>(Allocator());
+        m_shapeChoice->AddClass(u8"preview-shape");
+        m_shapeChoice->SetTooltip(u8"The shape the preview shows the material on");
+        String items;
+        for (const StringView shape : kShapes)
+        {
+            if (!items.IsEmpty())
+                items.Append(StringView(u8"|"));
+            items.Append(shape);
+        }
+        m_shapeChoice->SetItemsText(items);
+        // The user's pick only: a selection set from code (the page showing the kept shape) must not
+        // count as a shape picked, which would put the kept mesh away.
+        (void)m_shapeChoice->AddEventListener(gui::EventType::Changed, [self](const gui::Event&)
+                                              { self->SetPreviewShape(static_cast<u32>(Max(0, self->m_shapeChoice->GetSelectedIndex()))); });
+        m_pane->AddControl(*m_shapeChoice);
+
+        // Or a mesh from the project, its real UVs (an imported model), in place of the shape.
+        m_meshSlot = MakeRef<app::AssetPickerSlot>(Allocator());
+        m_meshSlot->AddClass(u8"preview-slot");
+        m_meshSlot->SetTooltip(u8"A mesh from the project to show the material on, in place of the shape");
+        const app::ResourceRefServices* refs = Services().refs;
+        if (refs != nullptr && refs->AcceptedTypes)
+            m_meshSlot->SetAcceptedTypes(refs->AcceptedTypes(foundation::geometry::StaticMesh::StaticType()));
+        if (refs != nullptr && refs->Pick)
+            m_meshSlot->SetOnPick([self, refs]()
+                                  {
+                                      refs->Pick(self->m_meshSlot->AcceptedTypes(), self->m_previewMeshGuid,
+                                                 [self](const Guid& picked) { self->SetPreviewMesh(picked); });
+                                  });
+        m_meshSlot->SetOnClear([self]() { self->SetPreviewMesh(Guid{}); });
+        m_meshSlot->SetOnDropped([self](const Guid& dropped) { self->SetPreviewMesh(dropped); });
+        m_pane->AddControl(*m_meshSlot);
+    }
+
+    void MaterialEditorPage::SetPreviewShape(u32 shape)
+    {
+        m_previewShape = shape < static_cast<u32>(sizeof(kShapes) / sizeof(kShapes[0])) ? shape : 0u;
+        m_previewMeshGuid = Guid{}; // a shape picked takes over from a mesh
+        ApplyPreviewMesh();
+        SavePreviewPref();
+        m_reshow = true;
+    }
+
+    void MaterialEditorPage::SetPreviewMesh(const Guid& mesh)
+    {
+        m_previewMeshGuid = mesh;
+        ApplyPreviewMesh();
+        SavePreviewPref();
+        m_reshow = true;
+    }
+
+    void MaterialEditorPage::OnUpdate(runtime::IApplicationHost& host, f32 dt)
+    {
+        app::AssetObjectPage::OnUpdate(host, dt);
+        if (m_pane)
+            m_pane->Update(dt);
+        // Texture hot-reload watchdog: rebuild the preview material when any bound texture's live
+        // view no longer matches what the material captured.
         for (usize i = 0; i < m_previewTextures.Size(); ++i)
         {
             rhi::TextureView* live = m_previewTextures[i] ? m_previewTextures[i]->View() : nullptr;
@@ -161,144 +215,526 @@ namespace editor
                 break;
             }
         }
-
         // The shader asset recooked (its properties may have changed): re-lay the material by it.
         if (m_shader && m_shader->Version() != m_shaderVersion)
         {
             BindShader();
             RebuildPreviewMaterial();
         }
-        if (m_gridDirty)
-        {
-            m_gridDirty = false;
-            RebuildGrid();
-        }
-
-        for (const Function<void()>& refresher : m_refreshers)
-        {
-            refresher();
-        }
     }
 
-    void MaterialEditorPage::OnRenderWindow(runtime::IApplicationHost&,
-                                            foundation::graphics::FrameContext& frame)
+    void MaterialEditorPage::Refresh()
     {
-        if (m_preview)
-        {
-            m_preview->RenderFrame(frame);
-        }
+        app::AssetObjectPage::Refresh();
+        if (m_rowsDirty)
+            BuildRows();
+        else if (m_reshow)
+            ShowValues();
+        m_rowsDirty = false;
+        m_reshow = false;
     }
 
-    Status MaterialEditorPage::Save()
+    void MaterialEditorPage::OnRenderWindow(runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
     {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            // Refresh the cooked product so every scene's proxy hot-swaps to the new look.
-            m_context->RequestCook(false);
-            LOG_INFO(u8"Editor", u8"saved material '{}'", m_title);
-        }
-        return saved;
+        if (m_pane)
+            m_pane->Render(frame);
     }
 
     void MaterialEditorPage::OnClose()
     {
-        if (m_preview)
+        if (m_pane)
+            m_pane->Close();
+    }
+
+    // === The rows ===
+
+    void MaterialEditorPage::BuildRows()
+    {
+        MaterialEditorPage* self = this;
+        ClearSections();
+        m_materialRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_propertyRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_textureRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        if (Asset() == nullptr)
+            return;
+        const materials::MaterialSource& src = Asset()->source;
+
+        // The shader: a shader asset, or a built-in (PBR, Unlit or Phong) while it is on none.
         {
-            m_preview->Shutdown();
+            gui::PropertyInfo& shader = m_materialRows->Add(u8"shader", gui::PropertyKind::Reference);
+            shader.DisplayName = String(u8"Shader");
+            shader.Description = String(u8"A shader asset the material is drawn with; cleared, a built-in");
+            shader.ReferenceType = &foundation::shaders::ShaderResource::StaticType();
+            gui::PropertyInfo& builtIn = m_materialRows->Add(u8"builtIn", gui::PropertyKind::Enum);
+            builtIn.DisplayName = String(u8"Built-in");
+            for (const materials::BuiltinShadingInfo& builtin : materials::kBuiltinShadings)
+                builtIn.Choices.PushBack(gui::PropertyChoice{String(builtin.label), static_cast<i64>(builtin.shading)});
+            for (const PipelineRow& row : kPipelineRows)
+            {
+                gui::PropertyInfo& info = m_materialRows->Add(row.path, gui::PropertyKind::Enum);
+                info.DisplayName = String(row.label);
+                AddChoices(info, row.items);
+            }
+        }
+
+        // Each value its shader declares, by its type.
+        for (usize i = 0; i < src.propertyNames.Size() && i < src.propertyTypes.Size(); ++i)
+        {
+            const auto type = static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]);
+            const MaterialPropertyRow row = MaterialPropertyRowFor(type);
+            const StringView name = src.propertyNames[i].AsView();
+            const String shown = PrettifyPropertyName(name);
+            gui::PropertyBag& rows = row == MaterialPropertyRow::Texture ? *m_textureRows : *m_propertyRows;
+            gui::PropertyInfo* info = nullptr;
+            switch (row)
+            {
+            case MaterialPropertyRow::None:
+                continue; // a sampler has no value to edit (the material system binds it)
+            case MaterialPropertyRow::Number:
+            {
+                info = &rows.Add(name, gui::PropertyKind::Float);
+                // A shader asset's property declares its range; the standard PBR factors are 0..1
+                // (the normal scale 0..2); any other float is unbounded.
+                bool ranged = false;
+                for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
+                    if (p.name.AsView() == name && p.hasRange)
+                    {
+                        info->HasRange = true;
+                        info->Min = p.rangeMin;
+                        info->Max = p.rangeMax;
+                        ranged = true;
+                    }
+                const bool zeroToOne = name == u8"Metallic" || name == u8"Roughness" || name == u8"OcclusionStrength" || name == u8"AlphaCutoff";
+                if (!ranged && (zeroToOne || name == u8"NormalScale"))
+                {
+                    info->HasRange = true;
+                    info->Min = 0.0;
+                    info->Max = zeroToOne ? 1.0 : 2.0;
+                }
+                info->Step = 0.01;
+                if (info->HasRange)
+                    info->Hint = String(u8"slider"); // over its range, as the old page's were
+                break;
+            }
+            case MaterialPropertyRow::Numbers2:
+            case MaterialPropertyRow::Numbers3:
+            case MaterialPropertyRow::Numbers4:
+            {
+                const i32 count = row == MaterialPropertyRow::Numbers2 ? 2 : row == MaterialPropertyRow::Numbers3 ? 3 : 4;
+                info = &rows.Add(name, gui::PropertyKind::Group);
+                info->Hint = Format(u8"Float{}", count);
+                const StringView parts[] = {u8"x", u8"y", u8"z", u8"w"};
+                for (i32 p = 0; p < count; ++p)
+                    rows.Add(gui::JoinPropertyPath(name, parts[p]).AsView(), gui::PropertyKind::Float).Step = 0.01;
+                break;
+            }
+            case MaterialPropertyRow::Integer:
+            {
+                info = &rows.Add(name, gui::PropertyKind::Integer);
+                for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
+                    if (p.name.AsView() == name && p.hasRange)
+                    {
+                        info->HasRange = true;
+                        info->Min = p.rangeMin;
+                        info->Max = p.rangeMax;
+                    }
+                break;
+            }
+            case MaterialPropertyRow::Color:
+                info = &rows.Add(name, gui::PropertyKind::Color);
+                break;
+            case MaterialPropertyRow::ColorWithIntensity:
+            {
+                // A colour that may pass white: its colour as entered, its intensity in w (the
+                // grid's HDR colour, as a reflected one's parts are named).
+                info = &rows.Add(name, gui::PropertyKind::Group);
+                info->Hint = String(u8"ColorHdr");
+                rows.Add(gui::JoinPropertyPath(name, u8"color").AsView(), gui::PropertyKind::Color).ShowsAlpha = false;
+                gui::PropertyInfo& intensity = rows.Add(gui::JoinPropertyPath(name, u8"intensity").AsView(), gui::PropertyKind::Float);
+                intensity.HasRange = true;
+                intensity.Min = 0.0;
+                intensity.Max = 1e6;
+                intensity.Step = 0.05;
+                break;
+            }
+            case MaterialPropertyRow::Texture:
+                // A texture or a render texture (a monitor's screen, a mirror): what makes a
+                // Texture, asked of the builders.
+                info = &rows.Add(name, gui::PropertyKind::Reference);
+                info->ReferenceType = &foundation::texture::Texture::StaticType();
+                break;
+            }
+            if (info != nullptr)
+                info->DisplayName = shown;
+        }
+        gui::PropertyBag* const bags[] = {m_materialRows.Get(), m_propertyRows.Get(), m_textureRows.Get()};
+        for (gui::PropertyBag* rows : bags)
+        {
+            rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
+                              {
+                                  if (!commit.After.IsEmpty())
+                                      self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
+                              });
+            // A gesture's previews shown live, as the old page's were: written to the source, the
+            // preview material built again, no undo step until the commit.
+            rows->SetOnPreview([self, rows](StringView path)
+                               {
+                                   self->m_previewing = true;
+                                   const bool reshow = self->m_reshow;
+                                   self->Committed(*rows, path, rows->GetValue(path, 0));
+                                   self->m_reshow = reshow; // the rows hold the preview already
+                                   self->m_previewing = false;
+                               });
+            rows->SetOnCancel([self](StringView) { self->CancelGesture(); });
+        }
+        ShowValues();
+        AddSection(u8"material", u8"Material", *m_materialRows);
+        AddSection(u8"properties", u8"Properties", *m_propertyRows);
+        AddSection(u8"textures", u8"Textures", *m_textureRows);
+    }
+
+    void MaterialEditorPage::ShowValues()
+    {
+        if (Asset() == nullptr)
+            return;
+        const materials::MaterialSource& src = Asset()->source;
+        const auto show = [](gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+        {
+            if (rows.FindInfo(path) == nullptr)
+                return;
+            const gui::Variant now = rows.GetValue(path, 0);
+            if (now.GetType() != value.GetType() || now.Compare(value) != 0)
+                rows.SetValue(path, 0, value);
+        };
+        show(*m_materialRows, u8"shader", gui::Variant(GuidText(src.shaderId)));
+        const materials::BuiltinShadingInfo* builtin = materials::FindBuiltinShadingByShader(src.shaderName.AsView());
+        show(*m_materialRows, u8"builtIn", gui::Variant(static_cast<i64>(builtin != nullptr ? builtin->shading : materials::BuiltinShading::Pbr)));
+        if (gui::PropertyInfo* builtIn = m_materialRows->FindInfo(u8"builtIn"); builtIn != nullptr && builtIn->Visible != src.shaderId.IsNil())
+        {
+            builtIn->Visible = src.shaderId.IsNil(); // a built-in only while it is on no shader asset
+            m_materialRows->PropertiesChanged();
+        }
+        for (const PipelineRow& row : kPipelineRows)
+            show(*m_materialRows, row.path, gui::Variant(static_cast<i64>(row.field(const_cast<materials::MaterialSource&>(src)))));
+        for (usize i = 0; i < src.propertyNames.Size() && i < src.propertyTypes.Size(); ++i)
+        {
+            const StringView name = src.propertyNames[i].AsView();
+            switch (MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i])))
+            {
+            case MaterialPropertyRow::Number:
+            {
+                f32 v = 0.0f;
+                ReadUniform(name, &v, sizeof(v));
+                show(*m_propertyRows, name, gui::Variant(static_cast<f64>(v)));
+                break;
+            }
+            case MaterialPropertyRow::Numbers2:
+            case MaterialPropertyRow::Numbers3:
+            case MaterialPropertyRow::Numbers4:
+            {
+                Float4 v{0, 0, 0, 0};
+                const auto row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]));
+                const i32 count = row == MaterialPropertyRow::Numbers2 ? 2 : row == MaterialPropertyRow::Numbers3 ? 3 : 4;
+                ReadUniform(name, &v, sizeof(f32) * static_cast<usize>(count));
+                const f32 parts[] = {v.x, v.y, v.z, v.w};
+                const StringView names[] = {u8"x", u8"y", u8"z", u8"w"};
+                for (i32 p = 0; p < count; ++p)
+                    show(*m_propertyRows, gui::JoinPropertyPath(name, names[p]).AsView(), gui::Variant(static_cast<f64>(parts[p])));
+                break;
+            }
+            case MaterialPropertyRow::Integer:
+            {
+                i32 v = 0;
+                ReadUniform(name, &v, sizeof(v));
+                show(*m_propertyRows, name, gui::Variant(static_cast<i64>(v)));
+                break;
+            }
+            case MaterialPropertyRow::Color:
+            {
+                Float4 v{1, 1, 1, 1};
+                ReadUniform(name, &v, sizeof(v));
+                show(*m_propertyRows, name, gui::Variant(Color{v.x, v.y, v.z, v.w}));
+                break;
+            }
+            case MaterialPropertyRow::ColorWithIntensity:
+            {
+                Float4 v{1, 1, 1, 1};
+                ReadUniform(name, &v, sizeof(v));
+                show(*m_propertyRows, gui::JoinPropertyPath(name, u8"color").AsView(), gui::Variant(Color{v.x, v.y, v.z, 1.0f}));
+                show(*m_propertyRows, gui::JoinPropertyPath(name, u8"intensity").AsView(), gui::Variant(static_cast<f64>(v.w)));
+                break;
+            }
+            case MaterialPropertyRow::Texture:
+            {
+                Guid bound;
+                for (usize t = 0; t < src.textureSlots.Size() && t < src.textureIds.Size(); ++t)
+                    if (src.textureSlots[t].AsView() == name)
+                        bound = src.textureIds[t];
+                show(*m_textureRows, name, gui::Variant(GuidText(bound)));
+                break;
+            }
+            default:
+                break;
+            }
+        }
+        // The preview bar's choices.
+        if (m_shapeChoice && m_shapeChoice->GetSelectedIndex() != static_cast<i32>(m_previewShape))
+            m_shapeChoice->SetSelectedIndex(static_cast<i32>(m_previewShape));
+        if (m_meshSlot)
+        {
+            app::ResourceRefShown shown;
+            const app::ResourceRefServices* refs = Services().refs;
+            if (!m_previewMeshGuid.IsNil() && refs != nullptr && refs->Describe && refs->Describe(m_previewMeshGuid, shown))
+            {
+                m_meshSlot->SetValue(shown.Name.AsView());
+                m_meshSlot->SetGlyph(shown.Glyph.AsView(), shown.GlyphClass.AsView());
+            }
+            else
+                m_meshSlot->SetValue(StringView{});
         }
     }
 
-    void MaterialEditorPage::ApplySourceBlob(const Array<byte>& blob)
+    void MaterialEditorPage::EditRow(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
     {
-        if (m_asset.Get() == nullptr)
+        rows.SetValue(path, 0, value); // as the grid's commit leaves it
+        Committed(rows, path, value);
+    }
+
+    void MaterialEditorPage::Committed(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+    {
+        if (Asset() == nullptr)
+            return;
+        MaterialEditorPage* self = this;
+        m_reshow = true; // what the edit did, or did not, shown
+        if (&rows == m_materialRows.Get())
         {
+            if (path == u8"shader")
+            {
+                SwitchShader(GuidOf(value));
+                return;
+            }
+            if (path == u8"builtIn")
+            {
+                const i64 chosen = value.AsInt();
+                if (chosen >= 0 && static_cast<usize>(chosen) < materials::kBuiltinShadingCount)
+                    SwitchToBuiltIn(static_cast<materials::BuiltinShading>(chosen));
+                return;
+            }
+            for (const PipelineRow& row : kPipelineRows)
+                if (path == row.path)
+                {
+                    const u8 index = static_cast<u8>(value.AsInt());
+                    auto* field = row.field;
+                    ApplyEdit(row.path, [field, index](materials::MaterialSource& s) { field(s) = index; });
+                }
             return;
         }
+        if (&rows == m_textureRows.Get())
+        {
+            const String slot(path);
+            const Guid picked = GuidOf(value);
+            // Pick, drop and clear are one write: nil removes the slot's binding.
+            ApplyEdit(path, [slot, picked](materials::MaterialSource& s)
+                      {
+                          for (usize i = 0; i < s.textureSlots.Size(); ++i)
+                          {
+                              if (s.textureSlots[i].AsView() != slot.AsView())
+                                  continue;
+                              if (picked.IsNil())
+                              {
+                                  s.textureSlots.RemoveAt(i);
+                                  s.textureIds.RemoveAt(i);
+                              }
+                              else
+                                  s.textureIds[i] = picked;
+                              return;
+                          }
+                          if (!picked.IsNil())
+                          {
+                              s.textureSlots.PushBack(slot);
+                              s.textureIds.PushBack(picked);
+                          }
+                      });
+            return;
+        }
+        // A property, or one part of it ("Tint.x", "Emissive.intensity").
+        const StringView name = gui::ParentPropertyPath(path).IsEmpty() ? path : gui::ParentPropertyPath(path);
+        const StringView part = name.Size() == path.Size() ? StringView{} : path.SubStr(name.Size() + 1, path.Size() - name.Size() - 1);
+        const materials::MaterialSource& src = Asset()->source;
+        MaterialPropertyRow row = MaterialPropertyRow::None;
+        for (usize i = 0; i < src.propertyNames.Size() && i < src.propertyTypes.Size(); ++i)
+            if (src.propertyNames[i].AsView() == name)
+                row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]));
+        const String key(name);
+        switch (row)
+        {
+        case MaterialPropertyRow::Number:
+        {
+            const f32 v = static_cast<f32>(value.AsFloat());
+            ApplyEdit(name, [self, key, v](materials::MaterialSource& s) { self->WriteUniform(s, key.AsView(), &v, sizeof(v)); });
+            break;
+        }
+        case MaterialPropertyRow::Integer:
+        {
+            const i32 v = static_cast<i32>(value.AsInt());
+            ApplyEdit(name, [self, key, v](materials::MaterialSource& s) { self->WriteUniform(s, key.AsView(), &v, sizeof(v)); });
+            break;
+        }
+        case MaterialPropertyRow::Numbers2:
+        case MaterialPropertyRow::Numbers3:
+        case MaterialPropertyRow::Numbers4:
+        {
+            const usize count = row == MaterialPropertyRow::Numbers2 ? 2u : row == MaterialPropertyRow::Numbers3 ? 3u : 4u;
+            const i32 index = PartIndex(part);
+            if (index < 0 || static_cast<usize>(index) >= count)
+                break;
+            f32 v[4] = {0, 0, 0, 0};
+            ReadUniform(name, v, sizeof(f32) * count);
+            v[index] = static_cast<f32>(value.AsFloat());
+            const Float4 all{v[0], v[1], v[2], v[3]};
+            ApplyEdit(name, [self, key, all, count](materials::MaterialSource& s) { self->WriteUniform(s, key.AsView(), &all, sizeof(f32) * count); });
+            break;
+        }
+        case MaterialPropertyRow::Color:
+        {
+            const Color c = value.AsColor();
+            const Float4 v{c.r, c.g, c.b, c.a};
+            ApplyEdit(name, [self, key, v](materials::MaterialSource& s) { self->WriteUniform(s, key.AsView(), &v, sizeof(v)); });
+            break;
+        }
+        case MaterialPropertyRow::ColorWithIntensity:
+        {
+            Float4 v{1, 1, 1, 1};
+            ReadUniform(name, &v, sizeof(v));
+            if (part == u8"color")
+            {
+                const Color c = value.AsColor();
+                v = Float4{c.r, c.g, c.b, v.w};
+            }
+            else if (part == u8"intensity")
+                v.w = static_cast<f32>(value.AsFloat());
+            ApplyEdit(name, [self, key, v](materials::MaterialSource& s) { self->WriteUniform(s, key.AsView(), &v, sizeof(v)); });
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
+    void MaterialEditorPage::ShowNotices()
+    {
+        if (Asset() == nullptr)
+            return;
+        StringView missing;
+        const bool complete = !Asset()->source.shaderId.IsNil() || materials::ForwardMaterialSourceIsComplete(Asset()->source, &missing);
+        SetNotice(u8"stale", complete ? StringView{}
+                                      : Format(u8"This material lacks the forward shader's {}: it was made by an older editor. Make it again; the game refuses to build it.", missing).AsView());
+        SetNotice(u8"shader", !Asset()->source.shaderId.IsNil() && m_shaderTable.IsEmpty()
+                                  ? StringView(u8"Its shader has not cooked (or has errors): its rows are its own until it does.")
+                                  : StringView{});
+    }
+
+    // === Edits and undo ===
+
+    void MaterialEditorPage::ApplySourceBlob(const Array<byte>& blob)
+    {
+        pipeline::MaterialAsset* asset = Asset();
+        if (asset == nullptr)
+            return;
         MemoryStream stream;
         (void)stream.Write(blob.Data(), blob.Size());
         (void)stream.Seek(0, SeekOrigin::Begin);
-        const Guid shaderBefore = m_asset->source.shaderId;
+        const Guid shaderBefore = asset->source.shaderId;
         Array<String> namesBefore;
-        for (const String& name : m_asset->source.propertyNames)
-        {
+        for (const String& name : asset->source.propertyNames)
             namesBefore.PushBack(String(name.AsView()));
-        }
         BinarySerializer ar(stream, SerializeMode::Read);
-        m_asset->source.Serialize(ar);
+        asset->source.Serialize(ar);
         // A shader switched (or its switch undone) changes the rows and what the preview binds.
-        if (m_asset->source.shaderId != shaderBefore)
-        {
+        if (asset->source.shaderId != shaderBefore)
             BindShader();
-        }
-        bool sameRows = namesBefore.Size() == m_asset->source.propertyNames.Size();
+        bool sameRows = namesBefore.Size() == asset->source.propertyNames.Size();
         for (usize i = 0; sameRows && i < namesBefore.Size(); ++i)
-        {
-            sameRows = namesBefore[i].AsView() == m_asset->source.propertyNames[i].AsView();
-        }
-        m_gridDirty = m_gridDirty || !sameRows;
+            sameRows = namesBefore[i].AsView() == asset->source.propertyNames[i].AsView();
+        m_rowsDirty = m_rowsDirty || !sameRows;
+        m_reshow = true;
+        ShowNotices();
         RebuildPreviewMaterial();
     }
 
     Array<byte> MaterialEditorPage::SnapshotSource() const
     {
         Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
+        if (Asset() == nullptr)
             return blob;
-        }
         MemoryStream stream;
         BinarySerializer ar(stream, SerializeMode::Write);
-        const_cast<materials::MaterialSource&>(m_asset->source).Serialize(ar);
+        Asset()->source.Serialize(ar);
         const Span<const byte> bytes = stream.Bytes();
         blob.Reserve(bytes.Size());
         for (byte b : bytes)
-        {
             blob.PushBack(b);
-        }
         return blob;
     }
 
-    void MaterialEditorPage::ApplyEdit(StringView mergeKey,
-                                       Function<void(materials::MaterialSource&)> mutate)
+    void MaterialEditorPage::ApplyEdit(StringView mergeKey, Function<void(materials::MaterialSource&)> mutate)
     {
-        if (m_asset.Get() == nullptr)
+        if (Asset() == nullptr)
+            return;
+        if (m_previewing)
         {
+            // A preview: written to the source and shown, the source before the gesture kept.
+            if (!m_inGesture)
+            {
+                m_gestureBefore = SnapshotSource();
+                m_inGesture = true;
+            }
+            mutate(Asset()->source);
+            RebuildPreviewMaterial();
             return;
         }
-        Array<byte> before = SnapshotSource();
-        mutate(m_asset->source);
+        // The gesture's one step starts from the source before its previews.
+        Array<byte> before = m_inGesture ? Move(m_gestureBefore) : SnapshotSource();
+        m_inGesture = false;
+        // The rows follow a change of what the material holds (a built-in switched): the command's
+        // Execute below applies `after` over itself, so it cannot see that change.
+        Array<String> namesBefore;
+        for (const String& name : Asset()->source.propertyNames)
+            namesBefore.PushBack(String(name.AsView()));
+        mutate(Asset()->source);
+        bool sameRows = namesBefore.Size() == Asset()->source.propertyNames.Size();
+        for (usize i = 0; sameRows && i < namesBefore.Size(); ++i)
+            sameRows = namesBefore[i].AsView() == Asset()->source.propertyNames[i].AsView();
+        m_rowsDirty = m_rowsDirty || !sameRows;
         Array<byte> after = SnapshotSource();
         // The mutation already ran; Execute() re-applies `after` (idempotent).
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditMaterialCommand>(*this, mergeKey, Move(before), Move(after)),
-            Allocator()));
+        (void)Commands().Execute(UniquePtr<IEditorCommand>(Allocator().New<EditMaterialCommand>(*this, mergeKey, Move(before), Move(after)), Allocator()));
     }
+
+    void MaterialEditorPage::CancelGesture()
+    {
+        if (!m_inGesture)
+            return;
+        m_inGesture = false;
+        ApplySourceBlob(m_gestureBefore); // the previews taken back, the preview with them
+        m_gestureBefore.Clear();
+    }
+
+    // === The preview ===
 
     void MaterialEditorPage::BuildPreviewScene()
     {
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
+        scene::Scene* scenePtr = m_pane && m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
         if (scenePtr == nullptr)
         {
             return;
         }
 
-        m_sphere = scenePtr->CreateEntity(u8"PreviewSphere");
+        m_shape = scenePtr->CreateEntity(u8"PreviewShape");
         m_previewMesh = foundation::geometry::Primitives::Sphere(Allocator(), 1.0f, 48, 24);
         if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
         {
-            engine::render::MeshComponent& mc = meshes->Add(m_sphere);
+            engine::render::MeshComponent& mc = meshes->Add(m_shape);
             mc.mesh = m_previewMesh.Get(); // direct override (runtime-built, not an asset)
         }
 
@@ -316,12 +752,12 @@ namespace editor
 
     void MaterialEditorPage::RebuildPreviewMaterial()
     {
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        if (m_asset.Get() == nullptr || scenePtr == nullptr || !m_sphere.IsAssigned())
+        scene::Scene* scenePtr = m_pane && m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
+        if (Asset() == nullptr || scenePtr == nullptr || !m_shape.IsAssigned())
         {
             return;
         }
-        const materials::MaterialSource& src = m_asset->source;
+        const materials::MaterialSource& src = Asset()->source;
 
         // A shader asset draws under its resource's name (binding it registered the source).
         const StringView shaderName =
@@ -331,7 +767,7 @@ namespace editor
 
         m_previewTextures.Clear();
         m_previewTextureViews.Clear();
-        if (m_context->Resources() != nullptr)
+        if (Context().Resources() != nullptr)
         {
             for (usize i = 0; i < src.textureSlots.Size() && i < src.textureIds.Size(); ++i)
             {
@@ -340,7 +776,7 @@ namespace editor
                     continue;
                 }
                 foundation::resource::Proxy<foundation::texture::Texture> tex =
-                    m_context->Resources()->Bind<foundation::texture::Texture>(src.textureIds[i]);
+                    Context().Resources()->Bind<foundation::texture::Texture>(src.textureIds[i]);
                 // Track the proxy + the RAW view captured into the material: a texture
                 // hot-reload (cook) destroys that view under us, so OnUpdate watches for
                 // the proxy's view changing and rebuilds the preview material (otherwise
@@ -357,7 +793,7 @@ namespace editor
         m_previewMaterial = material;
         if (auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>())
         {
-            if (engine::render::MeshComponent* mc = meshes->Get(m_sphere))
+            if (engine::render::MeshComponent* mc = meshes->Get(m_shape))
             {
                 mc->SetMaterial(RefPtr<foundation::materials::Material>(
                     m_previewMaterial.Get())); // direct override
@@ -367,7 +803,7 @@ namespace editor
 
     void MaterialEditorPage::LoadPreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
+        foundation::settings::Settings* store = Context().ProjectEditorSettings();
         if (store == nullptr)
         {
             return;
@@ -388,7 +824,7 @@ namespace editor
 
     void MaterialEditorPage::SavePreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
+        foundation::settings::Settings* store = Context().ProjectEditorSettings();
         if (store == nullptr)
         {
             return;
@@ -411,30 +847,30 @@ namespace editor
                 MaterialPreviewPref{InstanceId(), m_previewShape, m_previewMeshGuid});
         }
         store->MarkChanged<MaterialPreviewSettings>();
-        m_context->RequestProjectEditorSettingsSave();
+        Context().RequestProjectEditorSettingsSave();
     }
 
     void MaterialEditorPage::ApplyPreviewMesh()
     {
-        scene::Scene* scenePtr = m_preview ? m_preview->Scene() : nullptr;
-        if (scenePtr == nullptr || !m_sphere.IsAssigned())
+        scene::Scene* scenePtr = m_pane && m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
+        if (scenePtr == nullptr || !m_shape.IsAssigned())
         {
             return;
         }
         auto* meshes = scenePtr->GetSystem<engine::render::MeshComponentManager>();
-        engine::render::MeshComponent* mc = (meshes != nullptr) ? meshes->Get(m_sphere) : nullptr;
+        engine::render::MeshComponent* mc = (meshes != nullptr) ? meshes->Get(m_shape) : nullptr;
         if (mc == nullptr)
         {
             return;
         }
 
-        if (!m_previewMeshGuid.IsNil() && m_context->Resources() != nullptr)
+        if (!m_previewMeshGuid.IsNil() && Context().Resources() != nullptr)
         {
             m_previewMesh = nullptr;
             mc->mesh.SetDirect(core::RefPtr<foundation::geometry::StaticMesh>{});
             mc->mesh.SetId(m_previewMeshGuid);
-            mc->mesh.Bind(*m_context->Resources());
-            FramePreview(mc->mesh.Get());
+            mc->mesh.Bind(*Context().Resources());
+            FramePreview();
             return;
         }
 
@@ -462,11 +898,15 @@ namespace editor
         }
         mc->mesh.SetId(Guid{});
         mc->mesh = m_previewMesh.Get(); // direct override (runtime-built, not an asset)
-        FramePreview(m_previewMesh.Get());
+        FramePreview();
     }
 
-    void MaterialEditorPage::FramePreview(const foundation::geometry::StaticMesh* mesh)
+    void MaterialEditorPage::FramePreview()
     {
+        scene::Scene* scenePtr = m_pane && m_pane->Viewport() != nullptr ? m_pane->Viewport()->Scene() : nullptr;
+        auto* meshes = scenePtr != nullptr ? scenePtr->GetSystem<engine::render::MeshComponentManager>() : nullptr;
+        engine::render::MeshComponent* mc = meshes != nullptr ? meshes->Get(m_shape) : nullptr;
+        const foundation::geometry::StaticMesh* mesh = mc != nullptr ? mc->mesh.Get() : nullptr;
         f32 radius = 1.0f;
         Float3 center{0.0f, 0.0f, 0.0f};
         if (mesh != nullptr && mesh->VertexCount() > 0)
@@ -474,428 +914,13 @@ namespace editor
             center = mesh->bounds.Center();
             radius = core::Max(0.25f, Length(mesh->bounds.Extents()));
         }
-        if (m_preview)
-        {
-            m_preview->Camera().FrameBounds(center, radius);
-        }
-    }
-
-    void MaterialEditorPage::RebuildGrid()
-    {
-        m_grid->Clear();
-        m_refreshers.Clear();
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        MaterialEditorPage* self = this;
-        const materials::MaterialSource& src = m_asset->source;
-
-        // --- Material: shader + pipeline state ---
-        // The shader: a shader asset, or nil for a built-in (PBR or Unlit, picked below).
-        {
-            const StringView shaderTypes[] = {u8"ShaderAsset"};
-            auto shader = MakeRef<ResourceRefEditor>(Allocator(), StringView(u8"Shader"),
-                                                     AssetNameFor(src.shaderId),
-                                                     StringView(u8"Material"),
-                                                     Span<const StringView>{shaderTypes, 1});
-            shader->SetEmptyText(u8"(built-in)");
-            ResourceRefEditor* raw = shader.Get();
-            raw->BindAsset(
-                *m_context,
-                [self]() -> Guid
-                { return self->m_asset.Get() != nullptr ? self->m_asset->source.shaderId : Guid{}; },
-                [self](const Guid& picked) { self->SwitchShader(picked); });
-            AddEditor(raw, [raw]() { raw->Refresh(); });
-        }
-        if (src.shaderId.IsNil())
-        {
-            static constexpr StringView kBuiltIns[] = {u8"PBR", u8"Unlit"};
-            auto builtIn = MakeRef<ui::toolkit::EnumEditor>(
-                Allocator(), StringView(u8"Built-in"),
-                src.shaderName.AsView() == u8"unlit" ? 1 : 0, Span<const StringView>{kBuiltIns, 2},
-                Function<void(i32)>{[self](i32 index) { self->SwitchToBuiltIn(index == 1); }},
-                StringView(u8"Material"));
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(builtIn.Get()));
-        }
-
-        // --- Preview: geometry the material is shown on (page-local, not saved) ---
-        {
-            static constexpr StringView kShapes[] = {u8"Sphere",   u8"Cube",  u8"Plane",
-                                                     u8"Cylinder", u8"Torus", u8"Cone"};
-            auto shape = MakeRef<ui::toolkit::EnumEditor>(
-                Allocator(), StringView(u8"Shape"), static_cast<i32>(m_previewShape),
-                Span<const StringView>{kShapes, 6},
-                Function<void(i32)>{[self](i32 index)
-                                    {
-                                        self->m_previewShape =
-                                            static_cast<u32>(core::Max(0, index));
-                                        self->m_previewMeshGuid =
-                                            Guid{}; // shape picks override an asset mesh
-                                        self->ApplyPreviewMesh();
-                                        self->SavePreviewPref();
-                                    }},
-                StringView(u8"Preview"));
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(shape.Get()));
-
-            // The preview mesh: nil is the primitive shape above.
-            const StringView meshTypes[] = {u8"StaticMeshAsset", u8"SkinnedMeshAsset"};
-            auto meshRow = MakeRef<ResourceRefEditor>(Allocator(), StringView(u8"Mesh"),
-                                                      StringView(u8"(primitive)"),
-                                                      StringView(u8"Preview"),
-                                                      Span<const StringView>{meshTypes, 2});
-            meshRow->SetEmptyText(u8"(primitive)");
-            meshRow->BindAsset(*m_context, [self]() { return self->m_previewMeshGuid; },
-                               [self](const Guid& picked)
-                               {
-                                   self->m_previewMeshGuid = picked;
-                                   self->ApplyPreviewMesh();
-                                   self->SavePreviewPref();
-                               });
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(meshRow.Get()));
-        }
-
-        static constexpr StringView kBlendItems[] = {u8"Opaque",     u8"Masked",
-                                                     u8"AlphaBlend", u8"Additive",
-                                                     u8"Multiply",   u8"PremultipliedAlpha"};
-        static constexpr StringView kDepthItems[] = {u8"Disabled", u8"ReadWrite", u8"ReadOnly",
-                                                     u8"WriteOnly"};
-        static constexpr StringView kCullItems[] = {u8"None", u8"Back", u8"Front"};
-        // These render-state fields are now typed enums (each `: u8`); this bespoke dropdown edits
-        // the index in place, so it aliases the enum byte through its identical u8 representation.
-        // (A future reflection-first material page would use the reflected enum directly.)
-        AddPipelineEnumRow(u8"Blend", Span<const StringView>{kBlendItems, 6},
-                           [](materials::MaterialSource& s) -> u8& {
-                               return reinterpret_cast<u8&>(s.blendMode);
-                           });
-        AddPipelineEnumRow(u8"Depth", Span<const StringView>{kDepthItems, 4},
-                           [](materials::MaterialSource& s) -> u8& {
-                               return reinterpret_cast<u8&>(s.depthMode);
-                           });
-        AddPipelineEnumRow(u8"Cull", Span<const StringView>{kCullItems, 3},
-                           [](materials::MaterialSource& s) -> u8& {
-                               return reinterpret_cast<u8&>(s.cullMode);
-                           });
-
-        // --- Properties: the source's uniform table (Float, Float4, Color, ColorHdr) ---
-        for (usize i = 0; i < src.propertyNames.Size(); ++i)
-        {
-            const auto type = static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]);
-            const MaterialPropertyRow row = MaterialPropertyRowFor(type);
-            const String name = src.propertyNames[i]; // copy: the grid outlives rebuilds of src arrays
-            if (row == MaterialPropertyRow::Number)
-            {
-                auto value = [self, name]() -> f64
-                {
-                    f32 v = 0.0f;
-                    self->ReadUniform(name.AsView(), &v, sizeof(v));
-                    return static_cast<f64>(v);
-                };
-                auto write = [self, name](f32 f)
-                {
-                    self->ApplyEdit(name.AsView(),
-                                    Function<void(materials::MaterialSource&)>{
-                                        [self, name, f](materials::MaterialSource&)
-                                        { self->WriteUniform(name.AsView(), &f, sizeof(f)); }});
-                };
-                // The standard PBR factors are all 0..1 - slider+field like the scene
-                // inspector's range rows; unknown floats keep the unbounded field.
-                // A shader asset's property declares its own range.
-                f32 lo = 0.0f;
-                f32 hi = 1.0f;
-                bool ranged = false;
-                for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
-                {
-                    if (p.name.AsView() == name.AsView() && p.hasRange)
-                    {
-                        lo = p.rangeMin;
-                        hi = p.rangeMax;
-                        ranged = true;
-                    }
-                }
-                const bool zeroToOne =
-                    name.AsView() == u8"Metallic" || name.AsView() == u8"Roughness" ||
-                    name.AsView() == u8"OcclusionStrength" || name.AsView() == u8"AlphaCutoff";
-                const bool zeroToTwo = name.AsView() == u8"NormalScale";
-                if (!ranged && zeroToTwo)
-                {
-                    hi = 2.0f;
-                }
-                if (ranged || zeroToOne || zeroToTwo)
-                {
-                    auto editor = MakeRef<ui::toolkit::RangeEditor>(
-                        Allocator(), name.AsView(), static_cast<f32>(value()), lo, hi, 0.01f,
-                        Function<void(f32)>{[write](f32 v) { write(v); }},
-                        StringView(u8"Properties"));
-                    editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                    AddEditor(editor.Get(), [value, raw = editor.Get()]()
-                              { raw->SetValue(static_cast<f32>(value())); });
-                }
-                else
-                {
-                    auto editor = MakeRef<ui::toolkit::FloatEditor>(
-                        Allocator(), name.AsView(), value(), 0.0, 1e9, 0.01, 3,
-                        Function<void(f64)>{[write](f64 v) { write(static_cast<f32>(v)); }},
-                        StringView(u8"Properties"));
-                    editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                    AddEditor(editor.Get(),
-                              [value, raw = editor.Get()]() { raw->SetValue(value()); });
-                }
-            }
-            else if (row == MaterialPropertyRow::Numbers2)
-            {
-                auto read = [self, name]() -> Float2
-                {
-                    Float2 v{0, 0};
-                    self->ReadUniform(name.AsView(), &v, sizeof(v));
-                    return v;
-                };
-                auto editor = MakeRef<ui::toolkit::Float2Editor>(
-                    Allocator(), name.AsView(), read(), -100000.0f, 100000.0f, 0.01f,
-                    Function<void(Float2)>{[self, name](Float2 v)
-                                           {
-                                               self->ApplyEdit(
-                                                   name.AsView(),
-                                                   Function<void(materials::MaterialSource&)>{
-                                                       [self, name, v](materials::MaterialSource&)
-                                                       { self->WriteUniform(name.AsView(), &v, sizeof(v)); }});
-                                           }},
-                    StringView(u8"Properties"));
-                editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                AddEditor(editor.Get(), [read, raw = editor.Get()]() { raw->SetValue(read()); });
-            }
-            else if (row == MaterialPropertyRow::Numbers3)
-            {
-                auto read = [self, name]() -> Float3
-                {
-                    Float3 v{0, 0, 0};
-                    self->ReadUniform(name.AsView(), &v, sizeof(v));
-                    return v;
-                };
-                auto editor = MakeRef<ui::toolkit::Float3Editor>(
-                    Allocator(), name.AsView(), read(), -100000.0f, 100000.0f, 0.01f,
-                    Function<void(Float3)>{[self, name](Float3 v)
-                                           {
-                                               self->ApplyEdit(
-                                                   name.AsView(),
-                                                   Function<void(materials::MaterialSource&)>{
-                                                       [self, name, v](materials::MaterialSource&)
-                                                       { self->WriteUniform(name.AsView(), &v, sizeof(v)); }});
-                                           }},
-                    StringView(u8"Properties"));
-                editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                AddEditor(editor.Get(), [read, raw = editor.Get()]() { raw->SetValue(read()); });
-            }
-            else if (row == MaterialPropertyRow::Integer)
-            {
-                auto read = [self, name]() -> i64
-                {
-                    i32 v = 0;
-                    self->ReadUniform(name.AsView(), &v, sizeof(v));
-                    return static_cast<i64>(v);
-                };
-                // A shader asset's int may declare its range.
-                i64 lo = static_cast<i64>(-2147483647 - 1);
-                i64 hi = static_cast<i64>(2147483647);
-                for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
-                {
-                    if (p.name.AsView() == name.AsView() && p.hasRange)
-                    {
-                        lo = static_cast<i64>(p.rangeMin);
-                        hi = static_cast<i64>(p.rangeMax);
-                    }
-                }
-                auto editor = MakeRef<ui::toolkit::IntEditor>(
-                    Allocator(), name.AsView(), read(), lo, hi,
-                    Function<void(i64)>{[self, name](i64 value)
-                                        {
-                                            const i32 v = static_cast<i32>(value);
-                                            self->ApplyEdit(
-                                                name.AsView(),
-                                                Function<void(materials::MaterialSource&)>{
-                                                    [self, name, v](materials::MaterialSource&)
-                                                    { self->WriteUniform(name.AsView(), &v, sizeof(v)); }});
-                                        }},
-                    StringView(u8"Properties"));
-                editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                AddEditor(editor.Get(), [read, raw = editor.Get()]() { raw->SetValue(read()); });
-            }
-            else if (row == MaterialPropertyRow::Numbers4 || row == MaterialPropertyRow::Color ||
-                     row == MaterialPropertyRow::ColorWithIntensity)
-            {
-                auto read = [self, name]() -> Float4
-                {
-                    Float4 v{1, 1, 1, 1};
-                    self->ReadUniform(name.AsView(), &v, sizeof(v));
-                    return v;
-                };
-                auto write = [self, name](Float4 v)
-                {
-                    self->ApplyEdit(name.AsView(),
-                                    Function<void(materials::MaterialSource&)>{
-                                        [self, name, v](materials::MaterialSource&)
-                                        { self->WriteUniform(name.AsView(), &v, sizeof(v)); }});
-                };
-                if (row == MaterialPropertyRow::Numbers4)
-                {
-                    // Plain numbers: only a declared colour property gets a colour picker.
-                    auto editor = MakeRef<ui::toolkit::Float4Editor>(
-                        Allocator(), name.AsView(), read(), -100000.0f, 100000.0f, 0.01f,
-                        Function<void(Float4)>{[write](Float4 v) { write(v); }},
-                        StringView(u8"Properties"));
-                    editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                    AddEditor(editor.Get(), [read, raw = editor.Get()]() { raw->SetValue(read()); });
-                    continue;
-                }
-                // The colour as entered (sRGB, what the picker shows). A ColorHdr keeps its
-                // intensity in w, edited on its own row, so the picker's alpha is not it.
-                const bool hdr = row == MaterialPropertyRow::ColorWithIntensity;
-                auto colorOf = [read, hdr]() -> Color
-                {
-                    const Float4 v = read();
-                    return Color{v.x, v.y, v.z, hdr ? 1.0f : v.w};
-                };
-                auto editor = MakeRef<ui::toolkit::ColorEditor>(
-                    Allocator(), name.AsView(), colorOf(),
-                    Function<void(Color)>{[read, write, hdr](Color c)
-                                          { write(Float4{c.r, c.g, c.b, hdr ? read().w : c.a}); }},
-                    StringView(u8"Properties"));
-                editor->SetDisplayName(PrettifyPropertyName(name.AsView()).AsView());
-                AddEditor(editor.Get(), [colorOf, raw = editor.Get()]() { raw->SetValue(colorOf()); });
-                if (hdr)
-                {
-                    String intensityName = name;
-                    intensityName += u8"Intensity";
-                    auto intensity = MakeRef<ui::toolkit::FloatEditor>(
-                        Allocator(), intensityName.AsView(), static_cast<f64>(read().w), 0.0, 1e6,
-                        0.05, 3,
-                        Function<void(f64)>{[read, write](f64 i)
-                                            {
-                                                Float4 v = read();
-                                                v.w = static_cast<f32>(i);
-                                                write(v);
-                                            }},
-                        StringView(u8"Properties"));
-                    intensity->SetDisplayName(PrettifyPropertyName(intensityName.AsView()).AsView());
-                    AddEditor(intensity.Get(), [read, raw = intensity.Get()]()
-                              { raw->SetValue(static_cast<f64>(read().w)); });
-                }
-            }
-            else if (row == MaterialPropertyRow::Texture)
-            {
-                AddTextureRow(name);
-            }
-            // A sampler has no value to edit (the material system binds it); no matrix rows.
-        }
-    }
-
-    void MaterialEditorPage::AddPipelineEnumRow(StringView label, Span<const StringView> items,
-                                                u8& (*field)(materials::MaterialSource&))
-    {
-        MaterialEditorPage* self = this;
-        auto read = [self, field]() -> i32
-        {
-            return (self->m_asset.Get() != nullptr) ? static_cast<i32>(field(self->m_asset->source))
-                                                    : 0;
-        };
-        const String key(label);
-        auto editor = MakeRef<ui::toolkit::EnumEditor>(
-            Allocator(), label, read(), items,
-            Function<void(i32)>{[self, field, key](i32 index)
-                                {
-                                    self->ApplyEdit(key.AsView(),
-                                                    Function<void(materials::MaterialSource&)>{
-                                                        [field, index](materials::MaterialSource& s)
-                                                        { field(s) = static_cast<u8>(index); }});
-                                }},
-            StringView(u8"Material"));
-        AddEditor(editor.Get(), [read, raw = editor.Get()]() { raw->SetValue(read()); });
-    }
-
-    void MaterialEditorPage::AddTextureRow(const String& slot)
-    {
-        MaterialEditorPage* self = this;
-        auto target = [self, slot]() -> Guid
-        {
-            if (self->m_asset.Get() == nullptr)
-            {
-                return Guid{};
-            }
-            const materials::MaterialSource& s = self->m_asset->source;
-            for (usize i = 0; i < s.textureSlots.Size() && i < s.textureIds.Size(); ++i)
-            {
-                if (s.textureSlots[i].AsView() == slot.AsView())
-                {
-                    return s.textureIds[i];
-                }
-            }
-            return Guid{};
-        };
-        // A render texture samples like any texture (a monitor's screen, a mirror).
-        const StringView textureTypes[] = {u8"TextureAsset", u8"RenderTextureAsset"};
-        auto editor = MakeRef<ResourceRefEditor>(Allocator(), slot.AsView(),
-                                                 AssetNameFor(target()), StringView(u8"Textures"),
-                                                 Span<const StringView>{textureTypes, 2});
-        editor->SetDisplayName(PrettifyPropertyName(slot.AsView()).AsView());
-        ResourceRefEditor* raw = editor.Get();
-        // Pick, drop and clear are one write: nil removes the slot's binding.
-        raw->BindAsset(
-            *m_context, target,
-            [self, slot](const Guid& picked)
-            {
-                self->ApplyEdit(slot.AsView(),
-                                Function<void(materials::MaterialSource&)>{
-                                    [slot, picked](materials::MaterialSource& s)
-                                    {
-                                        for (usize i = 0; i < s.textureSlots.Size(); ++i)
-                                        {
-                                            if (s.textureSlots[i].AsView() != slot.AsView())
-                                            {
-                                                continue;
-                                            }
-                                            if (picked.IsNil())
-                                            {
-                                                s.textureSlots.RemoveAt(i);
-                                                s.textureIds.RemoveAt(i);
-                                            }
-                                            else
-                                            {
-                                                s.textureIds[i] = picked;
-                                            }
-                                            return;
-                                        }
-                                        if (!picked.IsNil())
-                                        {
-                                            s.textureSlots.PushBack(String(slot.AsView()));
-                                            s.textureIds.PushBack(picked);
-                                        }
-                                    }});
-            });
-        AddEditor(raw, [raw]() { raw->Refresh(); });
-    }
-
-    StringView MaterialEditorPage::AssetNameFor(const Guid& target)
-    {
-        return m_context->AssetNameFor(target);
-    }
-
-    void MaterialEditorPage::AddEditor(foundation::ui::toolkit::PropertyEditor* editor,
-                                       Function<void()> refresher)
-    {
-        m_grid->AddProperty(RefPtr<foundation::ui::toolkit::PropertyEditor>(editor));
-        foundation::ui::toolkit::PropertyEditor* raw = editor;
-        m_refreshers.PushBack(Function<void()>{[raw, pull = Move(refresher)]()
-                                               {
-                                                   if (!raw->IsEditing())
-                                                   {
-                                                       pull();
-                                                   }
-                                               }});
+        if (m_pane && m_pane->Viewport() != nullptr)
+            m_pane->Viewport()->Frame(center, radius);
     }
 
     void MaterialEditorPage::ReadUniform(StringView name, void* out, usize bytes) const
     {
-        const materials::MaterialSource& s = m_asset->source;
+        const materials::MaterialSource& s = Asset()->source;
         for (usize i = 0; i < s.propertyNames.Size(); ++i)
         {
             if (s.propertyNames[i].AsView() != name)
@@ -911,9 +936,8 @@ namespace editor
         }
     }
 
-    void MaterialEditorPage::WriteUniform(StringView name, const void* value, usize bytes)
+    void MaterialEditorPage::WriteUniform(materials::MaterialSource& s, StringView name, const void* value, usize bytes)
     {
-        materials::MaterialSource& s = m_asset->source;
         for (usize i = 0; i < s.propertyNames.Size(); ++i)
         {
             if (s.propertyNames[i].AsView() != name)
@@ -931,11 +955,11 @@ namespace editor
 
     RefPtr<foundation::shaders::ShaderSource> MaterialEditorPage::ReadShader(const Guid& shader) const
     {
-        if (m_context->Project() == nullptr || shader.IsNil())
+        if (Context().Project() == nullptr || shader.IsNil())
         {
             return {};
         }
-        foundation::content::Instance* product = m_context->Project()->CookedDb().GetInstance(shader);
+        foundation::content::Instance* product = Context().Project()->CookedDb().GetInstance(shader);
         RefPtr<ISerializable> object =
             product != nullptr ? product->ReadObject() : RefPtr<ISerializable>{};
         return RefPtr<foundation::shaders::ShaderSource>(
@@ -944,21 +968,21 @@ namespace editor
 
     void MaterialEditorPage::SwitchShader(const Guid& shader)
     {
-        if (m_asset.Get() == nullptr || shader == m_asset->source.shaderId)
+        if (Asset() == nullptr || shader == Asset()->source.shaderId)
         {
             return;
         }
         if (shader.IsNil())
         {
-            SwitchToBuiltIn(false);
+            SwitchToBuiltIn(materials::BuiltinShading::Pbr);
             return;
         }
         RefPtr<foundation::shaders::ShaderSource> table = ReadShader(shader);
         if (table.Get() == nullptr)
         {
-            m_context->Notify(NoticeKind::Warning,
-                              u8"That shader has not cooked yet - save it (or fix its errors), "
-                              u8"then pick it again");
+            Context().Notify(NoticeKind::Warning,
+                              u8"That shader has not cooked yet: save it (or fix its errors), then pick it again");
+            m_reshow = true; // the row shows the shader it still has
             return;
         }
         ApplyEdit(u8"Shader", Function<void(materials::MaterialSource&)>{
@@ -966,20 +990,20 @@ namespace editor
                                   { pipeline::SetMaterialShader(s, shader, *table); }});
     }
 
-    void MaterialEditorPage::SwitchToBuiltIn(bool unlit)
+    void MaterialEditorPage::SwitchToBuiltIn(materials::BuiltinShading shading)
     {
-        if (m_asset.Get() == nullptr)
+        if (Asset() == nullptr)
         {
             return;
         }
-        const materials::MaterialSource& current = m_asset->source;
-        if (current.shaderId.IsNil() && (current.shaderName.AsView() == u8"unlit") == unlit)
+        const materials::MaterialSource& current = Asset()->source;
+        if (current.shaderId.IsNil() && current.shaderName.AsView() == materials::BuiltinShadingOf(shading).shaderName)
         {
             return;
         }
         ApplyEdit(u8"Shader", Function<void(materials::MaterialSource&)>{
-                                  [unlit](materials::MaterialSource& s)
-                                  { pipeline::SetMaterialBuiltInShader(s, unlit); }});
+                                  [shading](materials::MaterialSource& s)
+                                  { pipeline::SetMaterialBuiltInShader(s, shading); }});
     }
 
     void MaterialEditorPage::BindShader()
@@ -987,31 +1011,29 @@ namespace editor
         m_shader = {};
         m_shaderVersion = 0;
         m_shaderTable.Clear();
-        if (m_asset.Get() == nullptr || m_asset->source.shaderId.IsNil())
+        if (Asset() == nullptr || Asset()->source.shaderId.IsNil())
         {
             return;
         }
-        const Guid id = m_asset->source.shaderId;
-        if (m_context->Resources() != nullptr)
+        const Guid id = Asset()->source.shaderId;
+        if (Context().Resources() != nullptr)
         {
-            m_shader = m_context->Resources()->Bind<foundation::shaders::ShaderResource>(id);
+            m_shader = Context().Resources()->Bind<foundation::shaders::ShaderResource>(id);
             m_shaderVersion = m_shader ? m_shader->Version() : 0;
         }
         RefPtr<foundation::shaders::ShaderSource> table = ReadShader(id);
         if (table.Get() == nullptr)
         {
-            LOG_WARNING(u8"Editor",
-                        u8"material '{}': its shader has not cooked - its rows are its own until "
-                        u8"it does",
-                        m_title);
+            LOG_WARNING(u8"Editor", u8"material '{}': its shader has not cooked - its rows are its own until it does", Title());
+            m_rowsDirty = true;
             return;
         }
         m_shaderTable = table->Properties();
         // Not an edit: the material follows its shader, as the cook lays it out.
         materials::MaterialSource laid;
-        pipeline::LayOutMaterialByShader(m_asset->source, *table, laid);
-        pipeline::AssignMaterialSource(m_asset->source, laid);
-        m_gridDirty = true;
+        pipeline::LayOutMaterialByShader(Asset()->source, *table, laid);
+        pipeline::AssignMaterialSource(Asset()->source, laid);
+        m_rowsDirty = true;
     }
 
     const TypeInfo* MaterialEditorPageFactory::PrimaryType() const
@@ -1019,12 +1041,9 @@ namespace editor
         return &pipeline::MaterialAsset::StaticType();
     }
 
-    UniquePtr<EditorPage>
-    MaterialEditorPageFactory::CreatePage(EditorContext& context,
-                                          foundation::content::Instance& instance)
+    UniquePtr<EditorPage> MaterialEditorPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        MaterialEditorPage* page =
-            editor::EditorRootAllocator().New<MaterialEditorPage>(context, *m_host, *m_uiHost, instance);
+        auto* page = editor::EditorRootAllocator().New<MaterialEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 }

@@ -33,30 +33,15 @@ export namespace editor
     namespace settings = foundation::settings;
     namespace vfs = foundation::vfs;
 
-    // Editor-level FONT preferences (a Settings section): explicit .ttf paths for the UI
-    // and mono families. Empty (the default) = the built-in resolution chain (the dev-tree
-    // compile define, then the exe-embedded fallback face).
-    class EditorFontSettings final : public ISerializable
-    {
-        RTTI_OBJECT(EditorFontSettings, ISerializable)
-    public:
-        String fontPath;     // UI family override ("" = built-in chain)
-        String monoFontPath; // mono family override ("" = built-in chain)
-
-        void Serialize(ISerializer& ar) override
-        {
-            foundation::core::Serialize(ar, "fontPath", fontPath);
-            foundation::core::Serialize(ar, "monoFontPath", monoFontPath);
-        }
-    };
-
     // The UI scale preference's range: 50% (a dense layout on a large monitor) to 200%.
     inline constexpr f32 kUiScaleMin = 0.5f;
     inline constexpr f32 kUiScaleMax = 2.0f;
 
     // Editor-level UI preferences (a Settings section). uiScale multiplies the window's
     // OS content scale for the whole editor UI (layout + fonts + baked icons) - both an
-    // accessibility knob and the way to exercise the DPI path without a scaled monitor.
+    // accessibility knob and the way to exercise the DPI path without a scaled monitor. The look's
+    // inputs (Documentation/Specs/editor-gui.md, 3.1; rulings 6, 7, 13) sit beside it: the scheme,
+    // the accent, the density and less motion.
     class EditorUiSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorUiSettings, ISerializable)
@@ -65,11 +50,19 @@ export namespace editor
         // Snapping a scene view to an axis (the orientation gizmo) turns it orthographic, and
         // orbiting away turns it back (Specs/orthographic-views.md).
         bool autoOrthographic = true;
+        String scheme{u8"dark"};      // "dark" or "light"
+        String accent{u8"#2f6fdf"};   // a fill white text reads on, as #rrggbb (azure)
+        String density{u8"compact"};  // "compact", "default" or "comfortable"
+        bool reduceMotion = false;    // what moves, still
 
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "uiScale", uiScale);
             foundation::core::SerializeAppended(ar, "autoOrthographic", autoOrthographic);
+            foundation::core::SerializeAppended(ar, "scheme", scheme);          // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "accent", accent);          // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "density", density);        // added 2026-10-24
+            foundation::core::SerializeAppended(ar, "reduceMotion", reduceMotion); // added 2026-10-24
         }
     };
 
@@ -143,25 +136,73 @@ export namespace editor
         return String(StringView(text, 36));
     }
 
-    // One shortcut the user rebound: the action's id and the chord (an unset chord - key 0 -
-    // is "no shortcut", on purpose, distinct from the declaration's default).
+    namespace detail
+    {
+        // A chord the settings kept before they wrote keys as text: foundation.ui's key code
+        // (the USB HID usage) and modifier bits, as the binding text the keymap reads ("ctrl-t");
+        // empty for a key it did not name.
+        inline String LegacyChordKeys(u32 key, u32 modifiers)
+        {
+            static constexpr const char8_t* kNamed[][2] = {
+                {u8"40", u8"return"},  {u8"41", u8"escape"},    {u8"42", u8"backspace"},  {u8"43", u8"tab"},
+                {u8"44", u8"space"},   {u8"45", u8"minus"},     {u8"46", u8"equals"},     {u8"47", u8"leftbracket"},
+                {u8"48", u8"rightbracket"}, {u8"49", u8"backslash"}, {u8"51", u8"semicolon"}, {u8"52", u8"apostrophe"},
+                {u8"53", u8"grave"},   {u8"54", u8"comma"},     {u8"55", u8"period"},     {u8"56", u8"slash"},
+                {u8"73", u8"insert"},  {u8"74", u8"home"},      {u8"75", u8"pageup"},     {u8"76", u8"delete"},
+                {u8"77", u8"end"},     {u8"78", u8"pagedown"},  {u8"79", u8"right"},      {u8"80", u8"left"},
+                {u8"81", u8"down"},    {u8"82", u8"up"},
+            };
+            String name;
+            if (key >= 4 && key <= 29)
+                name.PushBack(static_cast<utf8char>(u8'a' + (key - 4)));
+            else if (key >= 30 && key <= 38)
+                name.PushBack(static_cast<utf8char>(u8'1' + (key - 30)));
+            else if (key == 39)
+                name.PushBack(u8'0');
+            else if (key >= 58 && key <= 69)
+                name = Format(u8"f{}", key - 57);
+            else
+                for (const auto& named : kNamed)
+                    if (Format(u8"{}", key).AsView() == StringView(named[0]))
+                        name = String(named[1]);
+            if (name.IsEmpty())
+                return {};
+            String keys;
+            if ((modifiers & 0x00C0u) != 0)
+                keys += u8"ctrl-";
+            if ((modifiers & 0x0300u) != 0)
+                keys += u8"alt-";
+            if ((modifiers & 0x0003u) != 0)
+                keys += u8"shift-";
+            keys += name.AsView();
+            return keys;
+        }
+    }
+
+    // One shortcut the user rebound: the action's id and the chord as a binding writes it
+    // ("ctrl-shift-z"; empty is "no shortcut", on purpose, distinct from the declaration's
+    // default). A section written before the chord was text kept a key code and modifier bits:
+    // read, they become the text.
     struct ShortcutOverrideEntry
     {
         String id;
-        u32 key = 0;
-        u32 modifiers = 0;
+        String keys;
 
         void Serialize(ISerializer& ar)
         {
             foundation::core::Serialize(ar, "id", id);
-            foundation::core::Serialize(ar, "key", key);
-            foundation::core::Serialize(ar, "modifiers", modifiers);
+            if (ar.Mode() == SerializeMode::Read && ar.HasKey("key"))
+            {
+                u32 key = 0;
+                u32 modifiers = 0;
+                foundation::core::Serialize(ar, "key", key);
+                foundation::core::Serialize(ar, "modifiers", modifiers);
+                keys = detail::LegacyChordKeys(key, modifiers);
+                return;
+            }
+            foundation::core::Serialize(ar, "keys", keys);
         }
-        [[nodiscard]] EditorShortcut Chord() const noexcept
-        {
-            return EditorShortcut{static_cast<foundation::ui::KeyCode>(key),
-                                  static_cast<foundation::ui::KeyModifiers>(modifiers)};
-        }
+        [[nodiscard]] EditorShortcut Chord() const { return EditorShortcut::Of(keys.AsView()); }
     };
     inline void Serialize(ISerializer& ar, ShortcutOverrideEntry& e)
     {
@@ -323,8 +364,7 @@ export namespace editor
                 out.overrides.PushBack(Move(fresh));
                 entry = &out.overrides[out.overrides.Size() - 1];
             }
-            entry->key = static_cast<u32>(chord.key);
-            entry->modifiers = static_cast<u32>(chord.modifiers);
+            entry->keys = chord.Keys();
         }
         return out.overrides.Size();
     }
@@ -494,8 +534,6 @@ export namespace editor
         // silently dropping the sections after it - the empty-project-list incident.
         GlobalTypeRegistry().Register(EditorExportSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<EditorExportSettings>();
-        GlobalTypeRegistry().Register(EditorFontSettings::StaticType(), TypeDomain(u8"Editor"));
-        RegisterSerializable<EditorFontSettings>();
         GlobalTypeRegistry().Register(EditorUiSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<EditorUiSettings>();
         GlobalTypeRegistry().Register(EditorMcpSettings::StaticType(), TypeDomain(u8"Editor"));
@@ -549,7 +587,6 @@ export namespace editor
         return SaveEditorSettings(*fs.AsWritable(), in);
     }
 
-    RTTI_DEFINE_OBJECT_VERSIONED(EditorFontSettings, "rtti::editor::editor", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorUiSettings, "rtti::editor::editor", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorMcpSettings, "rtti::editor::editor", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorShortcutSettings, "rtti::editor::editor", 1)

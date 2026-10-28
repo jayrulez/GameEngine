@@ -161,3 +161,250 @@ TEST_CASE("fbx.obj: a missing .mtl is not an error")
     CHECK(model.meshes().Size() == 1u);
     std::remove("scratch_fbx_nomtl.obj");
 }
+
+// Imported as authored (Specs/phong-material.md): an FBX Phong material keeps its highlight (its
+// specular colour times its factor, as sRGB, and its exponent), a Lambert one has none; both are
+// told apart from PBR by the shading model the file names.
+TEST_CASE("fbx: a Phong material keeps its highlight, a Lambert one is diffuse alone")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	Material: 1000, "Material::Shiny", "" {
+		Version: 102
+		ShadingModel: "phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",1,1,1
+			P: "SpecularColor", "Color", "", "A",0.2140,0.2140,0.2140
+			P: "SpecularFactor", "Number", "", "A",1
+			P: "ShininessExponent", "Number", "", "A",32
+		}
+	}
+	Material: 1001, "Material::Matte", "" {
+		Version: 102
+		ShadingModel: "lambert"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.2140,0.2140,0.2140
+		}
+	}
+}
+Connections:  {
+}
+)";
+    WriteText("scratch_fbx_phong.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_phong.fbx")), model) == ModelLoadResult::Ok);
+    const ModelMaterial* shiny = nullptr;
+    const ModelMaterial* matte = nullptr;
+    for (const ModelMaterial* m : model.materials())
+    {
+        if (m->name() == StringView{u8"Shiny"})
+            shiny = m;
+        if (m->name() == StringView{u8"Matte"})
+            matte = m;
+    }
+    REQUIRE(shiny != nullptr);
+    REQUIRE(matte != nullptr);
+    CHECK(shiny->shadingModel == ShadingModel::Phong);
+    CHECK(shiny->specularColor.x == doctest::Approx(0.5f).epsilon(0.002)); // linear 0.2140 is sRGB 0.5
+    CHECK(shiny->shininess == doctest::Approx(32.0f));
+    CHECK(matte->shadingModel == ShadingModel::Lambert);
+    CHECK(matte->specularColor.x == 0.0f);
+    CHECK(matte->baseColorFactor.x == doctest::Approx(0.5f).epsilon(0.002));
+    std::remove("scratch_fbx_phong.fbx");
+}
+
+TEST_CASE("fbx.obj: a classic .mtl (Kd, Ks, Ns) is Phong; one with PBR keys stays PBR")
+{
+    WriteText("scratch_fbx_classic.obj", kQuadObj);
+    WriteText("welded.mtl", "newmtl red\nKd 1 0 0\nKs 0.2140 0.2140 0.2140\nNs 50\n");
+    {
+        Model model;
+        fbx::FbxLoader loader;
+        REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_classic.obj")), model) == ModelLoadResult::Ok);
+        REQUIRE(model.materials().Size() >= 1u);
+        const ModelMaterial* red = model.materials()[0];
+        CHECK(red->shadingModel == ShadingModel::Phong);
+        CHECK(red->specularColor.x == doctest::Approx(0.5f).epsilon(0.002));
+        CHECK(red->shininess == doctest::Approx(50.0f));
+    }
+    WriteText("welded.mtl", "newmtl red\nKd 1 0 0\nPr 0.4\nPm 0.0\n");
+    {
+        Model model;
+        fbx::FbxLoader loader;
+        REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_classic.obj")), model) == ModelLoadResult::Ok);
+        REQUIRE(model.materials().Size() >= 1u);
+        CHECK(model.materials()[0]->shadingModel == ShadingModel::Pbr);
+    }
+    std::remove("scratch_fbx_classic.obj");
+    std::remove("welded.mtl");
+}
+
+TEST_CASE("fbx: Blender's export stays PBR, though it names every material Phong")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+	Creator: "Blender (stable FBX IO) - 4.2.0 - 5.12.3"
+}
+Creator: "Blender (stable FBX IO) - 4.2.0 - 5.12.3"
+Objects:  {
+	Material: 1000, "Material::Painted", "" {
+		Version: 102
+		ShadingModel: "Phong"
+		Properties70:  {
+			P: "DiffuseColor", "Color", "", "A",0.8,0.8,0.8
+			P: "SpecularColor", "Color", "", "A",0.8,0.8,0.8
+			P: "ShininessExponent", "Number", "", "A",25
+		}
+	}
+}
+Connections:  {
+}
+)";
+    WriteText("scratch_fbx_blender.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_blender.fbx")), model) == ModelLoadResult::Ok);
+    REQUIRE(model.materials().Size() >= 1u);
+    CHECK(model.materials()[0]->shadingModel == ShadingModel::Pbr);
+    std::remove("scratch_fbx_blender.fbx");
+}
+
+// A limb node is a bone of the file's skeleton, an empty (null) node is not: what tells 3ds Max's
+// Dummy helper bone, animated with the pose, from Blender's armature object.
+TEST_CASE("fbx: a limb node is a skeleton bone, a null node is not")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	NodeAttribute: 10, "NodeAttribute::Dummy", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1, "Model::Dummy001", "LimbNode" {
+		Version: 232
+	}
+	NodeAttribute: 11, "NodeAttribute::Armature", "Null" {
+		TypeFlags: "Null"
+	}
+	Model: 2, "Model::Armature", "Null" {
+		Version: 232
+	}
+}
+Connections:  {
+	C: "OO",1,0
+	C: "OO",10,1
+	C: "OO",2,0
+	C: "OO",11,2
+}
+)";
+    WriteText("scratch_fbx_limb.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_limb.fbx")), model) == ModelLoadResult::Ok);
+    const ModelBone* dummy = nullptr;
+    const ModelBone* armature = nullptr;
+    for (const ModelBone* b : model.bones())
+    {
+        if (b->name() == StringView{u8"Dummy001"})
+            dummy = b;
+        if (b->name() == StringView{u8"Armature"})
+            armature = b;
+    }
+    REQUIRE(dummy != nullptr);
+    REQUIRE(armature != nullptr);
+    CHECK(dummy->isSkeletonBone);
+    CHECK_FALSE(armature->isSkeletonBone);
+    std::remove("scratch_fbx_limb.fbx");
+}
+
+// A take that holds a bone somewhere other than its default pose for the whole clip (3ds Max poses a
+// head and leaves it there) keeps that as a channel: skipped as constant, the bone played its default
+// pose and the head never turned. One held at its default still says nothing.
+TEST_CASE("fbx: a channel the take holds constant away from the default pose is kept")
+{
+    constexpr const char* kFbx = R"(; FBX 7.4.0 project file
+FBXHeaderExtension:  {
+	FBXHeaderVersion: 1003
+	FBXVersion: 7400
+}
+Objects:  {
+	NodeAttribute: 10, "NodeAttribute::Head", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 1, "Model::Head", "LimbNode" {
+		Version: 232
+	}
+	NodeAttribute: 11, "NodeAttribute::Tail", "LimbNode" {
+		TypeFlags: "Skeleton"
+	}
+	Model: 2, "Model::Tail", "LimbNode" {
+		Version: 232
+	}
+	AnimationStack: 100, "AnimStack::idle", "" {
+		Properties70:  {
+			P: "LocalStop", "KTime", "Time", "",46186158000
+			P: "ReferenceStop", "KTime", "Time", "",46186158000
+		}
+	}
+	AnimationLayer: 101, "AnimLayer::BaseLayer", "" {
+	}
+	AnimationCurveNode: 102, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",45
+		}
+	}
+	AnimationCurveNode: 103, "AnimCurveNode::R", "" {
+		Properties70:  {
+			P: "d|X", "Number", "", "A",0
+			P: "d|Y", "Number", "", "A",0
+			P: "d|Z", "Number", "", "A",0
+		}
+	}
+}
+Connections:  {
+	C: "OO",1,0
+	C: "OO",10,1
+	C: "OO",2,0
+	C: "OO",11,2
+	C: "OO",101,100
+	C: "OO",102,101
+	C: "OO",103,101
+	C: "OP",102,1, "Lcl Rotation"
+	C: "OP",103,2, "Lcl Rotation"
+}
+)";
+    WriteText("scratch_fbx_held.fbx", kFbx);
+    Model model;
+    fbx::FbxLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>("scratch_fbx_held.fbx")), model) == ModelLoadResult::Ok);
+    REQUIRE(model.animations().Size() == 1u);
+    i32 head = -1;
+    for (usize b = 0; b < model.bones().Size(); ++b)
+        if (model.bones()[b]->name() == StringView{u8"Head"})
+            head = static_cast<i32>(b);
+    REQUIRE(head >= 0);
+    const ModelAnimation& idle = *model.animations()[0];
+    usize rotations = 0;
+    for (const AnimationChannel* channel : idle.channels())
+    {
+        if (channel->path != AnimationPath::Rotation)
+            continue;
+        ++rotations;
+        CHECK(channel->targetBone == head); // the tail, held at its default, has none
+        REQUIRE_FALSE(channel->keyframes().IsEmpty());
+        CHECK(channel->keyframes()[0].value.z == doctest::Approx(0.38268f).epsilon(0.001)); // 45 degrees about z
+    }
+    CHECK(rotations == 1u);
+    std::remove("scratch_fbx_held.fbx");
+}

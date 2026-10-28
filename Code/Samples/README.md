@@ -41,9 +41,7 @@ runs the cooked WGSL shaders the browser uses, on desktop WebGPU.
 |---|---|
 | `VG/VGSandbox` | The vector graphics stack (paths, strokes, gradients, SVG, text) in a NanoVG-style demo. |
 | `UI/UISandbox` | The UI framework: a themed view tree laid out and drawn through the vector graphics renderer. |
-
-The experimental retained-mode UI framework has its sandbox beside it, in
-`Code/Experimental/GUI.Sandbox`.
+| `GUISandbox` | The GUI (foundation.gui): its widgets, sheets, markup and scripts, page by page, and the game menu showcase. |
 
 ## RHI
 

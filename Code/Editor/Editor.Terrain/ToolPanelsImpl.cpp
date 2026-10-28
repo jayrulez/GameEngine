@@ -1,17 +1,12 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Terrain - tool-panel providers (the FIRST consumers of the viewport-tool-panel seam,
-// editor.app:tool_panel). A provider builds the on-screen settings panel for a terrain brush tool;
-// the scene page's ViewportToolPanelHost mounts it in the active tool's FloatingPanel.
+// Editor::Terrain - :tool_panels partition, its body. See ToolPanels.cppm.
 //
-// UI lives HERE (ui.toolkit), out of the UI-free :sculpt/:splat tool partitions. Each provider
-// downcasts the active IViewportTool to its concrete tool (the id matched, so the type is known -
-// the framework contract) to read/write the brush params the UI-free tool cannot expose.
-//
-// UX: the mode / layer choices are a segmented row of exclusive TOGGLE icon buttons (the active one
-// stays lit), and the Radius field tracks the tool live (Shift + wheel resizes the brush, and the
-// tool's OnRadiusChanged pushes the new value back into the field).
+// Each provider downcasts the active IViewportTool to its concrete tool (the id matched, so the
+// type is known - the panel seam's contract) to read and write the brush's settings the UI-free
+// tool cannot expose; the panel's kit asks them again each frame, so the tool's keys (1 to 4, Shift
+// + wheel) show in it.
 
 module;
 #include "Core/Prelude.h"
@@ -19,385 +14,194 @@ module;
 module editor.terrain;
 
 import foundation.core;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
 import foundation.scene;    // Scene, ComponentManagerBase, EntityHandle
-import foundation.content;  // Instance::Name (swatch name tooltips)
+import foundation.content;  // Instance::Name (a layer's tooltip)
 import engine.terrain;      // TerrainComponent(Manager)
-import foundation.terrain;  // TerrainResource + Layer (albedo Ref)
-import editor.core;          // EditorContext, ThumbnailService (splat layer thumbnails)
-import editor.app;          // IViewportToolPanelProvider, ViewportToolPanelRegistry, EditorIcons
-import editor.viewporttools; // IViewportTool + ViewportToolHostContext
+import foundation.terrain;  // TerrainResource and its layers' albedo
+import editor.core;          // EditorContext, ThumbnailService
+import editor.app;          // the panel seam and its kit
+import editor.viewporttools; // IViewportTool, ViewportToolHostContext
+import :sculpt;
+import :splat;
+import :hole;
+import :splatmap_thumbnail;
+import :tool_panels;
 
 using namespace foundation::core;
 
 namespace editor
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
     namespace scene = foundation::scene;
 
     namespace
     {
-        // A tintable SVG glyph as a leaf view (for icon content inside a ToggleButton). ImageView is
-        // raster-only, so this small view renders a shared BakedSVGDrawable at its bounds.
-        class IconGlyph final : public ui::View
-        {
-        public:
-            IconGlyph(ui::SVGDrawable* icon, f32 size) : m_icon(icon), m_size(size) {}
-
-        protected:
-            void OnMeasure(ui::BoxConstraints c) override
-            {
-                MeasuredSize = Float2{c.ConstrainWidth(m_size), c.ConstrainHeight(m_size)};
-            }
-            void OnDraw(ui::UIDrawContext& ctx) override
-            {
-                if (m_icon == nullptr)
-                {
-                    return;
-                }
-                const Color tint =
-                    ResolveStyleColor(ui::StyleProperty::TextColor, Color{0.88f, 0.9f, 0.94f, 1.0f});
-                const Optional<Color> prev = m_icon->TintColor;
-                m_icon->TintColor = Optional<Color>(tint);
-                m_icon->Draw(ctx, Rectangle{0, 0, Width(), Height()});
-                m_icon->TintColor = prev;
-            }
-
-        private:
-            ui::SVGDrawable* m_icon; // borrowed (owned by EditorIcons; outlives the panel)
-            f32 m_size;
-        };
-
-        // A live texture-thumbnail swatch for a terrain layer albedo. ThumbnailService::Get is async
-        // (empty now, fills in later), so OnDraw re-queries every frame (cheap - a cache hit or a
-        // cached negative) and falls back to the texture asset icon until the thumbnail is ready.
-        class LayerSwatch final : public ui::View
-        {
-        public:
-            LayerSwatch(ThumbnailService* thumbs, Guid albedoId, ui::Drawable* fallback, f32 size)
-                : m_thumbs(thumbs), m_id(albedoId), m_fallback(fallback), m_size(size)
-            {
-            }
-
-        protected:
-            void OnMeasure(ui::BoxConstraints c) override
-            {
-                MeasuredSize = Float2{c.ConstrainWidth(m_size), c.ConstrainHeight(m_size)};
-            }
-            void OnDraw(ui::UIDrawContext& ctx) override
-            {
-                RefPtr<ui::Drawable> thumb = (m_thumbs != nullptr && !m_id.IsNil())
-                                                 ? m_thumbs->Get(m_id)
-                                                 : RefPtr<ui::Drawable>{};
-                ui::Drawable* d = thumb ? thumb.Get() : m_fallback;
-                if (d != nullptr)
-                {
-                    d->Draw(ctx, Rectangle{0, 0, Width(), Height()});
-                }
-            }
-
-        private:
-            ThumbnailService* m_thumbs; // borrowed (app-owned)
-            Guid m_id;
-            ui::Drawable* m_fallback;   // borrowed (EditorIcons texture icon)
-            f32 m_size;
-        };
-
-        // The layers driving the splat picker: albedo Guids of the FIRST terrain in the scene. The
-        // tool paints whichever terrain is under the cursor; the panel scopes its labels to the
-        // primary terrain (the common one-terrain case). count is the terrain's real LayerCount.
+        // The layers the Paint Layers panel offers: the FIRST terrain's in the scene. The brush
+        // paints whichever terrain is under the cursor; the panel names the first one's (the one
+        // terrain of most scenes).
         struct LayerSet
         {
-            u32 count = 0;   // palette layer count (unbounded)
-            Guid baseId;     // the BASE layer's albedo asset (separate, never painted)
-            Array<Guid> ids; // palette albedo asset guids
+            u32 count = 0;   // its palette's, unbounded
+            Array<Guid> ids; // each palette layer's albedo
+            Guid baseId;     // the base layer's albedo, never painted (erasing reveals it)
         };
-        // The albedo asset's NAME for a swatch tooltip - grayscale maps (a displacement picked in
-        // place of its diffuse sibling) are indistinguishable at swatch size, so the name is the
-        // disambiguator (the ImportTest/TerrainProject white-paint hunt).
-        String SwatchAssetName(EditorContext* ctx, const Guid& id)
-        {
-            if (id.IsNil())
-            {
-                return String(u8"(no albedo)");
-            }
-            if (ctx != nullptr && ctx->Project() != nullptr)
-            {
-                if (auto* inst = ctx->Project()->SourceDb().GetInstance(id))
-                {
-                    return String(inst->Name());
-                }
-            }
-            return String(u8"(missing)");
-        }
 
         LayerSet ResolveLayers(scene::Scene& sc)
         {
             LayerSet out;
-            scene::ComponentManagerBase* base =
-                sc.FindManagerByComponentType(TypeOf<engine::terrain::TerrainComponent>());
-            auto* mgr = static_cast<engine::terrain::TerrainComponentManager*>(base);
+            auto* mgr = static_cast<engine::terrain::TerrainComponentManager*>(
+                sc.FindManagerByComponentType(TypeOf<engine::terrain::TerrainComponent>()));
             if (mgr == nullptr)
-            {
                 return out;
-            }
-            mgr->ForEach(
-                [&](engine::terrain::TerrainComponent& c, scene::EntityHandle)
-                {
-                    if (out.count > 0)
-                    {
-                        return; // first terrain with layers wins
-                    }
-                    foundation::terrain::TerrainResource* res = c.terrain.Get();
-                    if (res == nullptr)
-                    {
-                        return;
-                    }
-                    out.baseId = res->base.albedo.id;
-                    const u32 n = res->PaletteCount();
-                    for (u32 i = 0; i < n; ++i)
-                    {
-                        out.ids.PushBack(res->palette[i].albedo.id);
-                    }
-                    out.count = n;
-                });
+            mgr->ForEach([&](engine::terrain::TerrainComponent& c, scene::EntityHandle)
+                         {
+                             foundation::terrain::TerrainResource* res = c.terrain.Get();
+                             if (out.count > 0 || res == nullptr)
+                                 return; // the first terrain with layers
+                             for (u32 i = 0; i < res->PaletteCount(); ++i)
+                                 out.ids.PushBack(res->palette[i].albedo.id);
+                             out.count = res->PaletteCount();
+                             out.baseId = res->base.albedo.id;
+                         });
             return out;
         }
 
-        // The panel widget kit lives in editor.app:tool_panel_widgets (shared with the
-        // vegetation brush); the terrain-only pieces above (swatches, the layer set) stay here.
-        using app::SegmentedToggle;
-        using app::MakeToolPanelRoot;
-        using app::MakeToolPanelRow;
-        using app::AddToolPanelFloat;
-        using app::AddToolPanelGrid;
+        // A layer's albedo by its asset's name: at a swatch's size a displacement map picked in
+        // place of its diffuse looks the same, the name tells them apart.
+        String AlbedoName(EditorContext* ctx, const Guid& id)
+        {
+            if (id.IsNil())
+                return String(u8"no albedo");
+            if (ctx != nullptr && ctx->Project() != nullptr)
+                if (foundation::content::Instance* instance = ctx->Project()->SourceDb().GetInstance(id))
+                    return String(instance->Name());
+            return String(u8"its albedo is missing");
+        }
 
-        // ---- Sculpt panel: mode icon toggles + radius + strength ---------------------------------
+        app::ToolPanelBody::Choice Word(StringView label, StringView tooltip)
+        {
+            app::ToolPanelBody::Choice choice;
+            choice.label = String(label);
+            choice.tooltip = String(tooltip);
+            return choice;
+        }
+
         class SculptPanelProvider final : public IViewportToolPanelProvider
         {
         public:
             [[nodiscard]] StringView ToolId() const override { return u8"terrain.sculpt"; }
-            [[nodiscard]] ToolPanelPlacement Placement() const override
+            [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool& tool, const ViewportToolHostContext&) override
             {
-                return ToolPanelPlacement::Float;
-            }
-
-            [[nodiscard]] RefPtr<ui::View> CreatePanel(IViewportTool& tool,
-                                                       const ViewportToolHostContext&) override
-            {
-                TerrainSculptTool* t = static_cast<TerrainSculptTool*>(&tool); // id matched -> type known
-                app::EditorIcons& icons = app::EditorIcons::Get();
-                ui::SVGDrawable* modeIcons[4] = {icons.brushRaise.Get(), icons.brushLower.Get(),
-                                                 icons.brushSmooth.Get(), icons.brushFlatten.Get()};
-
-                auto root = MakeToolPanelRoot();
-                root->AddView(MakeToolPanelRow(u8"Sculpt mode", 12.0f).Get());
-
-                auto modes = MakeRef<SegmentedToggle>(editor::EditorRootAllocator());
-                modes->Build(
-                    4,
-                    [modeIcons](i32 i) -> RefPtr<ui::View> {
-                        return RefPtr<ui::View>(
-                            MakeRef<IconGlyph>(editor::EditorRootAllocator(), modeIcons[i], 16.0f).Get());
-                    },
-                    [t](i32 i) { t->SetMode(static_cast<TerrainSculptTool::Mode>(i)); },
-                    [t]() { return static_cast<i32>(t->GetMode()); },
-                    [](i32 i) -> StringView {
-                        static constexpr StringView kNames[4] = {u8"Raise", u8"Lower", u8"Smooth",
-                                                                 u8"Flatten"};
-                        return kNames[i];
-                    });
-                root->AddView(modes.Get());
-
-                auto grid = MakeRef<ui::toolkit::PropertyGrid>(editor::EditorRootAllocator());
-                RefPtr<ui::toolkit::FloatEditor> radiusFe =
-                    AddToolPanelFloat(*grid, u8"Radius", static_cast<f64>(t->Radius()), 0.5, 128.0, 1.0, 1,
-                             [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
-                AddToolPanelFloat(*grid, u8"Strength", static_cast<f64>(t->Strength()), 0.0, 50.0, 0.5, 1,
-                         [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
-                // Shift + wheel resizes the brush; mirror it into the field. SetValue is edit-guarded, so
-                // this won't re-fire the setter. The RefPtr keeps the field alive for the callback.
-                t->OnRadiusChanged = [radiusFe](f32 r) { radiusFe->SetValue(static_cast<f64>(r)); };
-
-                AddToolPanelGrid(*root, grid);
-                return root;
+                TerrainSculptTool* t = static_cast<TerrainSculptTool*>(&tool);
+                auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
+                Array<app::ToolPanelBody::Choice> modes;
+                modes.PushBack(Word(u8"Raise", u8"Push the surface up (1)"));
+                modes.PushBack(Word(u8"Lower", u8"Push it down (2)"));
+                modes.PushBack(Word(u8"Smooth", u8"Even out bumps toward their neighbours (3)"));
+                modes.PushBack(Word(u8"Flatten", u8"Pull toward the height Ctrl+click picked (4)"));
+                body->AddChoices({}, Move(modes), [t]() { return static_cast<i32>(t->GetMode()); },
+                                 [t](i32 i) { t->SetMode(static_cast<TerrainSculptTool::Mode>(i)); });
+                body->AddSlider(u8"Radius", 0.5, 128.0, 0.5, [t]() { return static_cast<f64>(t->Radius()); },
+                                [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
+                body->AddSlider(u8"Strength", 0.0, 50.0, 0.5, [t]() { return static_cast<f64>(t->Strength()); },
+                                [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
+                body->AddHelp(u8"Drag to sculpt. 1 to 4 pick the mode, Shift+wheel sizes the brush, Ctrl+click picks Flatten's height.");
+                body->Sync();
+                return body;
             }
         };
 
-        // ---- Hole panel: Cut / Fill + radius (Specs/terrain-holes.md) ----------------------------
         class HolePanelProvider final : public IViewportToolPanelProvider
         {
         public:
             [[nodiscard]] StringView ToolId() const override { return u8"terrain.hole"; }
-            [[nodiscard]] ToolPanelPlacement Placement() const override
+            [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool& tool, const ViewportToolHostContext&) override
             {
-                return ToolPanelPlacement::Float;
-            }
-
-            [[nodiscard]] RefPtr<ui::View> CreatePanel(IViewportTool& tool,
-                                                       const ViewportToolHostContext&) override
-            {
-                TerrainHoleTool* t = static_cast<TerrainHoleTool*>(&tool); // id matched -> type known
-                auto root = MakeToolPanelRoot();
-                root->AddView(MakeToolPanelRow(u8"Mode", 12.0f).Get());
-                auto modes = MakeRef<SegmentedToggle>(editor::EditorRootAllocator());
-                modes->Build(
-                    2,
-                    [](i32 i) -> RefPtr<ui::View>
-                    {
-                        const StringView text = i == 0 ? StringView(u8"Cut") : StringView(u8"Fill");
-                        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), text);
-                        label->FontSize.SetValue(Optional<f32>{12.0f});
-                        return RefPtr<ui::View>(label.Get());
-                    },
-                    [t](i32 i) { t->SetMode(i == 0 ? TerrainHoleTool::Mode::Cut : TerrainHoleTool::Mode::Fill); },
-                    [t]() -> i32 { return t->GetMode() == TerrainHoleTool::Mode::Cut ? 0 : 1; },
-                    [](i32 i) -> StringView
-                    {
-                        return i == 0 ? StringView(u8"Cut the surface under the brush: nothing draws, "
-                                                   u8"collides, walks or grows there")
-                                      : StringView(u8"Fill a cut back in");
-                    });
-                root->AddView(modes.Get());
-                auto grid = MakeRef<ui::toolkit::PropertyGrid>(editor::EditorRootAllocator());
-                RefPtr<ui::toolkit::FloatEditor> radiusFe =
-                    AddToolPanelFloat(*grid, u8"Radius", static_cast<f64>(t->Radius()), 0.5, 128.0, 1.0, 1,
-                                      [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
-                t->OnRadiusChanged = [radiusFe](f32 r) { radiusFe->SetValue(static_cast<f64>(r)); };
-                AddToolPanelGrid(*root, grid);
-                return root;
+                TerrainHoleTool* t = static_cast<TerrainHoleTool*>(&tool);
+                auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
+                Array<app::ToolPanelBody::Choice> modes;
+                modes.PushBack(Word(u8"Cut", u8"Cut the surface under the brush: nothing draws, collides, walks or grows there (1)"));
+                modes.PushBack(Word(u8"Fill", u8"Fill a cut back in (2)"));
+                body->AddChoices({}, Move(modes), [t]() { return t->GetMode() == TerrainHoleTool::Mode::Cut ? 0 : 1; },
+                                 [t](i32 i) { t->SetMode(i == 0 ? TerrainHoleTool::Mode::Cut : TerrainHoleTool::Mode::Fill); });
+                body->AddSlider(u8"Radius", 0.5, 128.0, 0.5, [t]() { return static_cast<f64>(t->Radius()); },
+                                [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
+                body->AddHelp(u8"Drag to cut or fill. 1 cuts, 2 fills, Shift+wheel sizes the brush.");
+                body->Sync();
+                return body;
             }
         };
 
-        // ---- Splat panel: layer toggles + radius + strength --------------------------------------
         class SplatPanelProvider final : public IViewportToolPanelProvider
         {
         public:
             [[nodiscard]] StringView ToolId() const override { return u8"terrain.splat"; }
-            [[nodiscard]] ToolPanelPlacement Placement() const override
-            {
-                return ToolPanelPlacement::Float;
-            }
-
-            [[nodiscard]] RefPtr<ui::View> CreatePanel(IViewportTool& tool,
-                                                       const ViewportToolHostContext& ctx) override
+            [[nodiscard]] RefPtr<gui::Node> CreatePanel(IViewportTool& tool, const ViewportToolHostContext& ctx) override
             {
                 TerrainSplatTool* t = static_cast<TerrainSplatTool*>(&tool);
-                ThumbnailService* thumbs =
-                    (ctx.editorContext != nullptr) ? ctx.editorContext->Thumbnails() : nullptr;
-                const LayerSet ls = (ctx.scene != nullptr) ? ResolveLayers(*ctx.scene) : LayerSet{};
-                // The BASE swatch shows separately (labeled, NOT selectable - the base is never
-                // painted; erase reveals it). The palette row is the paint choices + the ERASER as
-                // the last slot (top-K model). Thumbnails when resolvable; numbered fallback.
-                const bool useThumbs = ls.count > 0 && thumbs != nullptr;
-                ui::Drawable* fallbackIcon = app::EditorIcons::Get().texture.Get();
+                ThumbnailService* thumbs = ctx.editorContext != nullptr ? ctx.editorContext->Thumbnails() : nullptr;
+                const LayerSet layers = ctx.scene != nullptr ? ResolveLayers(*ctx.scene) : LayerSet{};
+                auto body = MakeRef<app::ToolPanelBody>(EditorRootAllocator());
 
-                // Name tooltips per swatch (thumbnails alone cannot tell a displacement map from
-                // its diffuse sibling); owned Strings, copied into TooltipText at Build.
-                EditorContext* ectx = ctx.editorContext;
-                Array<String> layerNames;
-                for (u32 li = 0; li < ls.count; ++li)
+                // The base, shown and never chosen: it is never painted, erasing reveals it.
+                if (layers.count > 0)
                 {
-                    layerNames.PushBack(SwatchAssetName(ectx, ls.ids[li]));
+                    app::ToolPanelBody::Choice base;
+                    base.tooltip = Format(u8"The base layer: {}. It is never painted; Erase reveals it.", AlbedoName(ctx.editorContext, layers.baseId));
+                    base.icon = String(u8"Editor/Icons/texture.svg");
+                    if (thumbs != nullptr && !layers.baseId.IsNil())
+                        base.picture = [thumbs, baseId = layers.baseId]() { return thumbs->Get(baseId); };
+                    body->AddPicture(u8"Base (erase to reveal)", Move(base));
                 }
 
-                auto root = MakeToolPanelRoot();
-                if (thumbs != nullptr && ls.count > 0)
+                // The layers, numbered from 1 as their keys are (and the Terrain page names them),
+                // each its albedo's picture once there is one. With no terrain resolved, four.
+                const u32 count = layers.count > 0 ? layers.count : 4u;
+                Array<app::ToolPanelBody::Choice> choices;
+                for (u32 i = 0; i < count; ++i)
                 {
-                    root->AddView(MakeToolPanelRow(u8"Base (erase to reveal)", 11.0f).Get());
-                    auto baseSwatch = MakeRef<LayerSwatch>(editor::EditorRootAllocator(), thumbs, ls.baseId,
-                                                           fallbackIcon, 24.0f);
-                    baseSwatch->TooltipText = SwatchAssetName(ectx, ls.baseId);
-                    root->AddView(baseSwatch.Get());
-                }
-                root->AddView(MakeToolPanelRow(u8"Paint layer", 12.0f).Get());
-
-                // Slots 0..N-1 = palette layers; slot N = the eraser; slot N+1 = smooth (blur).
-                // The palette is UNBOUNDED: the resolved terrain's real count always wins
-                // (numbered labels when thumbnails are unavailable); 4 numbered slots only when
-                // no terrain resolved at all.
-                const i32 paletteCount = ls.count > 0 ? static_cast<i32>(ls.count) : 4;
-                auto layers = MakeRef<SegmentedToggle>(editor::EditorRootAllocator());
-                layers->Build(
-                    paletteCount + 2,
-                    [useThumbs, thumbs, ls, fallbackIcon, paletteCount](i32 i) -> RefPtr<ui::View> {
-                        if (i >= paletteCount)
-                        {
-                            const StringView text =
-                                i == paletteCount ? StringView(u8"E") : StringView(u8"S");
-                            auto lbl = MakeRef<ui::Label>(editor::EditorRootAllocator(), text);
-                            lbl->FontSize.SetValue(Optional<f32>{12.0f});
-                            return RefPtr<ui::View>(lbl.Get());
-                        }
-                        if (useThumbs)
-                        {
-                            return RefPtr<ui::View>(MakeRef<LayerSwatch>(editor::EditorRootAllocator(), thumbs,
-                                                                        ls.ids[i], fallbackIcon, 24.0f)
-                                                        .Get());
-                        }
-                        const String num = Format(u8"{}", i);
-                        auto lbl = MakeRef<ui::Label>(editor::EditorRootAllocator(), num.AsView());
-                        lbl->FontSize.SetValue(Optional<f32>{12.0f});
-                        return RefPtr<ui::View>(lbl.Get());
-                    },
-                    [t, paletteCount](i32 i)
+                    app::ToolPanelBody::Choice choice;
+                    choice.label = Format(u8"{}", i + 1);
+                    const Guid albedo = i < layers.ids.Size() ? layers.ids[i] : Guid{};
+                    choice.tooltip = layers.count > 0 ? Format(u8"Layer {}: {}{}", i + 1, AlbedoName(ctx.editorContext, albedo), i < 9 ? Format(u8" ({})", i + 1) : String{})
+                                                      : Format(u8"Layer {}", i + 1);
+                    if (thumbs != nullptr && !albedo.IsNil())
                     {
-                        if (i == paletteCount)
-                        {
-                            t->SetEraser(true);
-                        }
-                        else if (i == paletteCount + 1)
-                        {
-                            t->SetSmooth(true);
-                        }
-                        else
-                        {
-                            t->SetPaletteIndex(static_cast<u32>(i));
-                        }
-                    },
-                    [t, paletteCount]()
-                    {
-                        return t->IsEraser()   ? paletteCount
-                               : t->IsSmooth() ? paletteCount + 1
-                                               : static_cast<i32>(t->PaletteIndex());
-                    },
-                    [paletteCount, names = Move(layerNames)](i32 i) -> StringView {
-                        if (i == paletteCount)
-                        {
-                            return u8"Eraser (reveals base)";
-                        }
-                        if (i == paletteCount + 1)
-                        {
-                            return u8"Smooth (feathers painted seams)";
-                        }
-                        return (i >= 0 && static_cast<usize>(i) < names.Size())
-                                   ? names[static_cast<usize>(i)].AsView()
-                                   : StringView(u8"Paint layer");
-                    });
-                root->AddView(layers.Get());
-
-                auto grid = MakeRef<ui::toolkit::PropertyGrid>(editor::EditorRootAllocator());
-                RefPtr<ui::toolkit::FloatEditor> radiusFe =
-                    AddToolPanelFloat(*grid, u8"Radius", static_cast<f64>(t->Radius()), 0.5, 128.0, 1.0, 1,
-                             [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
-                AddToolPanelFloat(*grid, u8"Strength", static_cast<f64>(t->Strength()), 0.0, 1.0, 0.05, 2,
-                         [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
-                // Spacing = stamp density along the stroke (fraction of the radius): low + low
-                // strength = smooth soft blending; high = discrete dabs.
-                AddToolPanelFloat(*grid, u8"Stamp spacing", static_cast<f64>(t->Spacing()), 0.05, 1.0, 0.05, 2,
-                         [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
-                // Airbrush = time-cadence stamps while HOLDING (build-up by hovering).
-                {
-                    auto ab = MakeRef<ui::toolkit::BoolEditor>(
-                        editor::EditorRootAllocator(), StringView(u8"Airbrush"), t->IsAirbrush(),
-                        Function<void(bool)>{[t](bool v) { t->SetAirbrush(v); }});
-                    grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(ab.Get()));
+                        choice.icon = String(u8"Editor/Icons/texture.svg");
+                        choice.picture = [thumbs, albedo]() { return thumbs->Get(albedo); };
+                    }
+                    choices.PushBack(Move(choice));
                 }
-                t->OnRadiusChanged = [radiusFe](f32 r) { radiusFe->SetValue(static_cast<f64>(r)); };
-
-                AddToolPanelGrid(*root, grid);
-                return root;
+                body->AddChoices(u8"Layer", Move(choices), [t]() { return static_cast<i32>(t->PaletteIndex()); },
+                                 [t](i32 i) { t->SetPaletteIndex(static_cast<u32>(i)); });
+                Array<app::ToolPanelBody::Choice> modes;
+                modes.PushBack(Word(u8"Paint", u8"Paint the layer"));
+                modes.PushBack(Word(u8"Erase", u8"Fade what was painted, revealing the base layer (0)"));
+                modes.PushBack(Word(u8"Smooth", u8"Feather painted seams without repainting either side (-)"));
+                body->AddChoices(u8"Mode", Move(modes), [t]() { return t->IsEraser() ? 1 : t->IsSmooth() ? 2 : 0; },
+                                 [t](i32 i)
+                                 {
+                                     if (i == 0)
+                                         t->SetPaletteIndex(t->PaletteIndex()); // back to painting it
+                                     else if (i == 1)
+                                         t->SetEraser(true);
+                                     else
+                                         t->SetSmooth(true);
+                                 });
+                body->AddSlider(u8"Radius", 0.5, 128.0, 0.5, [t]() { return static_cast<f64>(t->Radius()); },
+                                [t](f64 v) { t->SetRadius(static_cast<f32>(v)); });
+                body->AddSlider(u8"Strength", 0.0, 1.0, 0.05, [t]() { return static_cast<f64>(t->Strength()); },
+                                [t](f64 v) { t->SetStrength(static_cast<f32>(v)); });
+                // Spacing: how close the stamps fall along a stroke, a share of the radius (low and
+                // soft blends smoothly; high leaves dabs).
+                body->AddSlider(u8"Spacing", 0.05, 1.0, 0.05, [t]() { return static_cast<f64>(t->Spacing()); },
+                                [t](f64 v) { t->SetSpacing(static_cast<f32>(v)); });
+                // Airbrush: stamps on a clock while held, building up where the brush rests.
+                body->AddCheck(u8"Airbrush", [t]() { return t->IsAirbrush(); }, [t](bool on) { t->SetAirbrush(on); });
+                body->AddHelp(u8"Drag to paint. 1 to 9 pick a layer, 0 erases, - smooths, Shift+wheel sizes the brush.");
+                body->Sync();
+                return body;
             }
         };
     }
@@ -410,5 +214,13 @@ namespace editor
         ViewportToolPanelRegistry::Get().Register(&sculptPanel);
         ViewportToolPanelRegistry::Get().Register(&splatPanel);
         ViewportToolPanelRegistry::Get().Register(&holePanel);
+    }
+
+    void RegisterTerrainSceneTools(EditorContext& context)
+    {
+        RegisterTerrainViewportTools();
+        RegisterTerrainToolPanels();
+        if (context.Thumbnails() != nullptr)
+            RegisterSplatmapThumbnailGenerator(*context.Thumbnails());
     }
 }

@@ -21,7 +21,7 @@ import foundation.terrain.resource;
 import foundation.vegetation.resource;
 import foundation.vegetation;
 import foundation.render;
-import foundation.ui;
+import foundation.gui;
 import engine.terrain;
 import engine.vegetation;
 import pipeline.core;
@@ -183,7 +183,7 @@ TEST_CASE("vegetation paint: a stroke raises the selected plane along the drag; 
         bool named = false;
         for (usize i = 0; i + 13 <= status.Size(); ++i)
         {
-            named |= status.SubStr(i, 13) == StringView(u8"ERASE plane 0");
+            named |= status.SubStr(i, 13) == StringView(u8"ERASE plane 1");
         }
         CHECK(named);
     }
@@ -360,13 +360,23 @@ TEST_CASE("vegetation tool panel: the provider registers for the brush id and bu
     editor::ViewportToolHostContext ctx;
     ctx.scene = &fx.scene;
     ctx.commands = &commands;
-    RefPtr<foundation::ui::View> panel = provider->CreatePanel(tool, ctx);
-    CHECK(panel.Get() != nullptr);
-    CHECK(tool.Plane() == 1u);
-    // The radius field tracks a wheel resize through the tool's callback.
-    REQUIRE(tool.OnRadiusChanged);
+    RefPtr<foundation::gui::Node> node = provider->CreatePanel(tool, ctx);
+    auto* panel = Cast<editor::app::ToolPanelBody>(node.Get());
+    REQUIRE(panel != nullptr);
+    // The planes from 1, the chosen one checked; a wheel resize shows after a Sync.
+    REQUIRE(panel->ChoiceCount(0) >= 2u);
+    CHECK(panel->ChoiceAt(0, 0)->GetText() == StringView(u8"1"));
+    CHECK(panel->ChoiceAt(0, 1)->IsChecked());
     tool.SetRadius(12.0f);
-    CHECK(tool.Radius() == 12.0f);
+    panel->Sync();
+    CHECK(panel->NumberAt(0)->GetValue() == doctest::Approx(12.0));
+    // The mode: Erase, then Smooth, each one at a time.
+    REQUIRE(panel->ChoiceCount(1) == 3u);
+    panel->ChoiceAt(1, 1)->HandleActivate();
+    CHECK(tool.IsEraser());
+    panel->ChoiceAt(1, 2)->HandleActivate();
+    CHECK(tool.IsSmooth());
+    CHECK_FALSE(tool.IsEraser());
 }
 
 TEST_CASE("vegetation paint: the wheel resizes the brush only with Shift (the bare wheel is the camera's)")

@@ -3,15 +3,19 @@
 
 // Editor::Physics - the `editor.physics` module (tooling).
 //
-// CollisionShapeEditorPage: the bespoke authoring page for a CollisionShapeAsset. It replaces the
-// generic asset form (a raw guid row) with a TYPED mesh picker (no guid string), a cook-kind toggle
-// (convex hull / triangle mesh), a "Cook now" action, and a one-line status naming the source mesh.
-// Save writes the asset back and requests a re-cook so a shape=Cooked body picks up the new collider.
+// CollisionShapeEditorPage: the bespoke authoring page for a CollisionShapeAsset. On the GUI from
+// the preview pages' markup (Data/Editor/PreviewPage.gml; Documentation/Specs/editor-gui.md, 5.4,
+// layer 3): the cooked collider's outline as a wireframe in the preview, framed when it first
+// shows and when a cook changes it, beside the asset's rows: its source mesh (an asset slot taking
+// what a mesh cooks to, static or skinned), the cook mode and the hull's tolerance. Each edit is
+// one undo step, where the page had changed the asset with no undo at all; a shape with no mesh
+// says so in a notice, and shows no collider (a collider cooked before its mesh was cleared is not
+// one it can make now). Save writes the asset back and requests a re-cook, so a shape=Cooked body
+// picks up the new collider; the old page's Cook now is the bar's Cook, as every asset page has it.
 // Never linked by the runtime.
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h"
 
 export module editor.physics;
 
@@ -25,9 +29,7 @@ import foundation.resource;
 import physics.pipeline;             // CollisionShapeAsset + CollisionCookKind
 import foundation.physics.resource;  // CollisionShape product (cooked outline)
 import foundation.graphics;          // FrameContext
-import foundation.ui;
-import foundation.ui.runtime;
-import foundation.ui.toolkit;        // SplitView
+import foundation.gui;
 import editor.core;
 import editor.app;
 import editor.preview;               // PreviewViewport (+ EditorCamera)
@@ -36,53 +38,48 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    namespace ui = foundation::ui;
     namespace runtime = foundation::runtime;
     namespace resource = foundation::resource;
     namespace physics = foundation::physics;
 
-    // Authoring page for a CollisionShapeAsset (pick a mesh, choose the cook, cook it).
-    class CollisionShapeEditorPage final : public app::UIEditorPage
+    class CollisionShapeEditorPage final : public app::AssetObjectPage
     {
     public:
-        CollisionShapeEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                                 ui::runtime::UIHost& uiHost,
-                                 foundation::content::Instance& instance);
+        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
 
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] Status Save() override;
-        void DiscardChanges() override;
+        CollisionShapeEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
 
         // 3D preview: draw the cooked outline wireframe, drive the orbit camera, hot-swap on re-cook.
-        void OnUpdate(runtime::IApplicationHost&, f32 dt) override;
-        void OnRenderWindow(runtime::IApplicationHost&,
-                            foundation::graphics::FrameContext& frame) override;
+        void OnUpdate(runtime::IApplicationHost& host, f32 dt) override;
+        void OnRenderWindow(runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
-        /// The label a cook kind shows in the page's combo (headless; a test reads it).
+        /// What a cook kind is called (headless; a test reads it).
         [[nodiscard]] static StringView CookLabel(pipeline::CollisionCookKind kind);
+        /// Whether the preview shows the cooked collider: there is one, and the asset still names
+        /// a mesh to make it from (cleared, the last cook's collider is one it can no longer make).
+        [[nodiscard]] static bool ShowsCollider(const Guid& sourceMesh, const physics::CollisionShape* shape)
+        {
+            return !sourceMesh.IsNil() && shape != nullptr && shape->outline.Size() >= 3;
+        }
+
+        // === For tests ===
+        [[nodiscard]] app::PreviewPane* Pane() const noexcept { return m_pane.Get(); }
+
+    protected:
+        void OnObjectChanged() override { ShowStatus(); }
 
     private:
-        void RefreshStatus();
+        // The notice and the facts: what it cooks from and how; the preview or why there is none.
+        void ShowStatus();
         void DrawOutline(); // immediate-mode wireframe of the outline triangles (per frame)
+        void FrameOutline();
         [[nodiscard]] String MeshName(const Guid& id) const;
-
-        EditorContext* m_context = nullptr;
-        runtime::IApplicationHost* m_host = nullptr;
-        ui::runtime::UIHost* m_uiHost = nullptr;
-        String m_title;
-        RefPtr<pipeline::CollisionShapeAsset> m_asset;
-        RefPtr<ui::View> m_content;
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<app::ResourceRefEditor> m_meshRow; // the source mesh row
-        RefPtr<ui::Button> m_cookButton;
-        RefPtr<ui::Label> m_status;
 
         // Preview: the shared substrate + the bound cooked product (the Proxy auto-follows re-cooks,
         // so DrawOutline always reads the current outline). m_framedCount reframes the camera when
         // the outline first appears and whenever a re-cook changes its vertex count.
-        UniquePtr<PreviewViewport> m_preview;
+        UniquePtr<app::PreviewPane> m_pane;
         resource::Proxy<physics::CollisionShape> m_shape;
         usize m_framedCount = 0;
     };
@@ -90,37 +87,24 @@ export namespace editor
     class CollisionShapeEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        CollisionShapeEditorPageFactory(runtime::IApplicationHost& host,
-                                        ui::runtime::UIHost& uiHost)
-            : m_host(&host), m_uiHost(&uiHost)
-        {
-        }
-
-        [[nodiscard]] const TypeInfo* PrimaryType() const override
-        {
-            return &pipeline::CollisionShapeAsset::StaticType();
-        }
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override
+        explicit CollisionShapeEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
+        [[nodiscard]] const TypeInfo* PrimaryType() const override { return &pipeline::CollisionShapeAsset::StaticType(); }
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override
         {
             return UniquePtr<EditorPage>(
-                editor::EditorRootAllocator().New<CollisionShapeEditorPage>(context, *m_host, *m_uiHost,
-                                                                 instance),
+                editor::EditorRootAllocator().New<CollisionShapeEditorPage>(context, m_services->Make(), instance),
                 editor::EditorRootAllocator());
         }
 
     private:
-        runtime::IApplicationHost* m_host;
-        ui::runtime::UIHost* m_uiHost;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    inline void RegisterCollisionShapeEditor(EditorContext& context,
-                                             runtime::IApplicationHost& host,
-                                             ui::runtime::UIHost& uiHost)
+    /// The page (asking for its services when it is made) and the collision thumbnails.
+    inline void RegisterCollisionShapeEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<CollisionShapeEditorPageFactory>(host, uiHost),
-            editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<CollisionShapeEditorPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
         {
             RegisterCollisionThumbnailGenerator(*context.Thumbnails());

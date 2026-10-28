@@ -12,37 +12,18 @@ module editor.generic;
 import foundation.core;
 import foundation.content;
 import foundation.runtime.client;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace editor
 {
     namespace
     {
-        // Push the type's CURRENT data-version chain (concrete + versioned bases) WITHOUT
-        // serializing header noise - scans/replays run against the live object, which is at
-        // the current version by definition. Mirrors BeginVersionedPayload's chain shape.
-        u32 PushCurrentVersions(ISerializer& ar, const TypeInfo& type)
-        {
-            SerializedDataVersion chain[16];
-            u32 count = 0;
-            chain[count++] = SerializedDataVersion{type.id, type.dataVersion};
-            for (const TypeInfo* base = type.base; base != nullptr && count < 16; base = base->base)
-            {
-                if (base->dataVersion > 0)
-                {
-                    chain[count++] = SerializedDataVersion{base->id, base->dataVersion};
-                }
-            }
-            ar.PushVersionScope(chain, count);
-            return count;
-        }
-
         // Widen a raw scalar into the field's storage / narrow it back out.
         void ReadScalarInto(AssetFormField& field, const void* value, ScalarKind kind)
         {
@@ -353,7 +334,7 @@ namespace editor
     {
         outFields.Clear();
         FormScanSerializer scanner(outFields);
-        PushCurrentVersions(scanner, *object.GetType());
+        app::PushCurrentDataVersions(scanner, *object.GetType());
         object.Serialize(scanner);
         scanner.PopVersionScope();
         return scanner.GetStatus();
@@ -367,7 +348,7 @@ namespace editor
             return Status{ErrorCode::InvalidArgument};
         }
         FormReplaySerializer replayer(fields, index, newValue);
-        PushCurrentVersions(replayer, *object.GetType());
+        app::PushCurrentDataVersions(replayer, *object.GetType());
         object.Serialize(replayer);
         replayer.PopVersionScope();
         return replayer.GetStatus();
@@ -392,10 +373,72 @@ namespace editor
 
     // ============================ Page ======================================================
 
-    GenericAssetEditorPage::GenericAssetEditorPage(EditorContext& context,
+    namespace
+    {
+        // An integer field's range, by its width (a 64-bit one as far as a double counts exactly).
+        void IntegerRange(ScalarKind kind, gui::PropertyInfo& info)
+        {
+            info.HasRange = true;
+            switch (kind)
+            {
+            case ScalarKind::Int8: info.Min = -128.0; info.Max = 127.0; break;
+            case ScalarKind::UInt8: info.Min = 0.0; info.Max = 255.0; break;
+            case ScalarKind::Int16: info.Min = -32768.0; info.Max = 32767.0; break;
+            case ScalarKind::UInt16: info.Min = 0.0; info.Max = 65535.0; break;
+            case ScalarKind::Int32: info.Min = -2147483648.0; info.Max = 2147483647.0; break;
+            case ScalarKind::UInt32: info.Min = 0.0; info.Max = 4294967295.0; break;
+            case ScalarKind::UInt64: info.Min = 0.0; info.Max = 9007199254740992.0; break;
+            default: info.Min = -9007199254740992.0; info.Max = 9007199254740992.0; break;
+            }
+        }
+
+        String GuidText(const Guid& id)
+        {
+            if (id.IsNil())
+                return String{};
+            utf8char buffer[37];
+            id.ToChars(buffer);
+            return String(StringView{buffer, 36});
+        }
+
+        // What a field's row shows.
+        gui::Variant ValueOf(const AssetFormField& field)
+        {
+            switch (field.kind)
+            {
+            case AssetFormFieldKind::Text: return gui::Variant(field.textValue.AsView());
+            case AssetFormFieldKind::Guid: return gui::Variant(GuidText(field.guidValue));
+            case AssetFormFieldKind::Blob: return gui::Variant(Format(u8"{} bytes", field.blobValue.Size()));
+            default: break;
+            }
+            if (field.scalarKind == ScalarKind::Bool)
+                return gui::Variant(field.intValue != 0);
+            if (field.scalarKind == ScalarKind::Float32 || field.scalarKind == ScalarKind::Float64)
+                return gui::Variant(field.floatValue);
+            return gui::Variant(field.intValue);
+        }
+
+        gui::PropertyKind KindOf(const AssetFormField& field)
+        {
+            switch (field.kind)
+            {
+            case AssetFormFieldKind::Text:
+            case AssetFormFieldKind::Blob: return gui::PropertyKind::String;
+            case AssetFormFieldKind::Guid: return gui::PropertyKind::Reference;
+            default: break;
+            }
+            if (field.scalarKind == ScalarKind::Bool)
+                return gui::PropertyKind::Bool;
+            if (field.scalarKind == ScalarKind::Float32 || field.scalarKind == ScalarKind::Float64)
+                return gui::PropertyKind::Float;
+            return gui::PropertyKind::Integer;
+        }
+    }
+
+    GenericAssetEditorPage::GenericAssetEditorPage(EditorContext& context, app::AssetPageServices services,
                                                    foundation::content::Instance& instance)
         : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_title(instance.Name())
+          m_context(&context), m_services(Move(services)), m_title(instance.Name()), m_fields(Allocator()), m_paths(Allocator())
     {
         SetInstanceId(instance.Id());
 
@@ -411,186 +454,180 @@ namespace editor
         }
         m_undoBaseline = Snapshot();
 
-        m_info = MakeRef<ui::Label>(Allocator(), StringView(u8""));
-        m_info->FontSize.SetValue(12.0f);
-        if (m_object.Get() != nullptr)
+        m_content = m_services.loadMarkup ? m_services.loadMarkup(kPath) : RefPtr<gui::Node>{};
+        if (m_content)
         {
-            String text(StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)));
-            text.Append(u8"  (generic editor)");
-            m_info->SetText(text.AsView());
+            m_bar = MakeUnique<app::PageActionBar>(Allocator(), Allocator(), context.Actions(), *this);
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-save"), u8"file.save");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-undo"), u8"edit.undo");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-redo"), u8"edit.redo");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-discard"), u8"page.discardChanges");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-cook"), u8"build.cookPage");
+            m_bar->Bind(Find<gui::ButtonBase>(u8"form-rebuild"), u8"build.rebuildPage");
+            if (auto* kind = Find<gui::Label>(u8"form-kind"); kind != nullptr && m_object.Get() != nullptr)
+                kind->SetText(TypeAttrString(*m_object->GetType(), "displayName", StringView(reinterpret_cast<const utf8char*>(m_object->GetType()->name)))); // its display name, as every page's
+            if (gui::Node* state = Find<gui::Node>(u8"form-state"))
+                state->SetDisplayed(m_object.Get() == nullptr);
+            m_grid = Find<gui::PropertyGrid>(u8"form-grid");
+            if (m_grid != nullptr)
+            {
+                m_grid->SetDisplayed(m_object.Get() != nullptr);
+                if (m_services.refs != nullptr)
+                    app::ResourceRefEditor::Register(m_grid->GetEditors(), *m_services.refs);
+            }
+            if (auto* search = Find<gui::TextField>(u8"form-search"))
+            {
+                GenericAssetEditorPage* self = this;
+                search->SetOnTextChanging([self](StringView text)
+                                         {
+                                             if (self->m_grid != nullptr)
+                                                 self->m_grid->SetFilter(text);
+                                         });
+            }
         }
+        BuildBag();
+    }
 
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        BuildGrid();
-
-        auto column = MakeRef<ui::FlexLayout>(Allocator());
-        column->Direction = ui::Orientation::Vertical;
-        column->Spacing = 6.0f;
-        column->Padding = ui::Thickness{8, 6};
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            column->AddView(m_info.Get(), lp);
-        }
-        {
-            ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            lp.Width = ui::SizeSpec::Match();
-            column->AddView(m_grid.Get(), lp);
-        }
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *column);
+    GenericAssetEditorPage::~GenericAssetEditorPage()
+    {
+        if (m_grid != nullptr)
+            m_grid->SetSource(nullptr);
     }
 
     void GenericAssetEditorPage::OnUpdate(foundation::runtime::IApplicationHost&, f32)
     {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh(); // sync Save/Discard/Undo/Redo to this page each frame
-        }
+        Refresh();
     }
 
-    void GenericAssetEditorPage::BuildGrid()
+    void GenericAssetEditorPage::Refresh()
     {
-        m_grid->Clear();
-        // Each ARRAY's rows group under a default-collapsed expander (they carry the outermost
-        // array key as category) - a bulk section (a model manifest's ~1300 decomposed node
-        // fields) costs no layout/draw until the user opens it. Top-level scalars stay visible.
-        for (usize i = 0; i < m_fields.Size(); ++i)
-        {
-            if (!m_fields[i].category.IsEmpty())
-            {
-                m_grid->SetCategoryDefaultCollapsed(m_fields[i].category.AsView());
-            }
-        }
-        GenericAssetEditorPage* self = this;
+        if (m_bar)
+            m_bar->Sync();
+        if (m_rebuild)
+            BuildBag();
+        else if (m_reshow)
+            ShowValues();
+        m_rebuild = false;
+        m_reshow = false;
+    }
+
+    StringView GenericAssetEditorPage::PathOf(usize index) const
+    {
+        return index < m_paths.Size() ? m_paths[index].AsView() : StringView{};
+    }
+
+    void GenericAssetEditorPage::BuildBag()
+    {
+        UniquePtr<gui::PropertyBag> bag = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_paths.Clear();
+        // An array's fields under one group, by the outermost array's key, in the order the
+        // arrays come; a group's path is its ordinal, so what is open survives a rebuild of the
+        // same shape.
+        Array<String> groups(Allocator());
         for (usize i = 0; i < m_fields.Size(); ++i)
         {
             const AssetFormField& field = m_fields[i];
-            const usize index = i;
-            const StringView cat =
-                field.category.IsEmpty() ? StringView(u8"Properties") : field.category.AsView();
             if (field.kind == AssetFormFieldKind::ArrayCount)
             {
-                continue; // structural, not authorable
-            }
-            if (field.kind == AssetFormFieldKind::Blob)
-            {
-                String label(field.label.AsView());
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::StringEditor>(
-                        Allocator(), label.AsView(),
-                        Format(u8"(blob, {} bytes)", field.blobValue.Size()).AsView(),
-                        Function<void(StringView)>{}, cat)
-                        .Get()));
+                m_paths.PushBack(String{}); // structural, not authorable
                 continue;
             }
-            if (field.kind == AssetFormFieldKind::Text)
+            String parent;
+            if (!field.category.IsEmpty())
             {
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::StringEditor>(
-                        Allocator(), field.label.AsView(), field.textValue.AsView(),
-                        Function<void(StringView)>{[self, index](StringView v)
-                                                   {
-                                                       AssetFormField patch = self->m_fields[index];
-                                                       patch.textValue = String(v);
-                                                       self->ApplyFieldEdit(index, patch);
-                                                   }},
-                        cat)
-                        .Get()));
-                continue;
+                usize group = groups.Size();
+                for (usize g = 0; g < groups.Size(); ++g)
+                    if (groups[g] == field.category)
+                        group = g;
+                parent = Format(u8"g{}", group);
+                if (group == groups.Size())
+                {
+                    groups.PushBack(field.category);
+                    gui::PropertyInfo& info = bag->Add(parent.AsView(), gui::PropertyKind::Group);
+                    info.DisplayName = gui::ReadablePropertyName(field.category.AsView());
+                    info.Description = field.category;
+                }
             }
-            if (field.kind == AssetFormFieldKind::Guid)
-            {
-                // The asset slot (untyped: the form does not know what the guid names, so any
-                // asset picks and drops), plus the canonical string row for a guid that names no
-                // asset, TryParse-validated.
-                const StringView anyAsset[] = {app::AssetPickerSlot::AnyAssetType()};
-                auto slot = MakeRef<app::ResourceRefEditor>(Allocator(), field.label.AsView(),
-                                                            StringView(u8"(none)"), cat,
-                                                            Span<const StringView>{anyAsset, 1});
-                slot->BindAsset(
-                    *m_context,
-                    [self, index]()
-                    {
-                        return index < self->m_fields.Size() ? self->m_fields[index].guidValue
-                                                             : Guid{};
-                    },
-                    [self, index](const Guid& picked)
-                    {
-                        AssetFormField patch = self->m_fields[index];
-                        patch.guidValue = picked;
-                        self->ApplyFieldEdit(index, patch);
-                    });
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(slot.Get()));
-                utf8char buffer[37];
-                field.guidValue.ToChars(buffer);
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::StringEditor>(
-                        Allocator(), Format(u8"{} id", field.label).AsView(),
-                        StringView{buffer, 36},
-                        Function<void(StringView)>{[self, index](StringView v)
-                                                   {
-                                                       Guid parsed{};
-                                                       if (!Guid::TryParse(v, parsed))
-                                                       {
-                                                           return; // invalid: keep the old value
-                                                       }
-                                                       AssetFormField patch = self->m_fields[index];
-                                                       patch.guidValue = parsed;
-                                                       self->ApplyFieldEdit(index, patch);
-                                                   }},
-                        cat)
-                        .Get()));
-                continue;
-            }
-            // Scalars.
-            switch (field.scalarKind)
-            {
-            case ScalarKind::Bool:
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::BoolEditor>(
-                        Allocator(), field.label.AsView(), field.intValue != 0,
-                        Function<void(bool)>{[self, index](bool v)
-                                             {
-                                                 AssetFormField patch = self->m_fields[index];
-                                                 patch.intValue = v ? 1 : 0;
-                                                 self->ApplyFieldEdit(index, patch);
-                                             }},
-                        cat)
-                        .Get()));
-                break;
-            case ScalarKind::Float32:
-            case ScalarKind::Float64:
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::FloatEditor>(
-                        Allocator(), field.label.AsView(), field.floatValue, -1e12, 1e12,
-                        0.01, 4,
-                        Function<void(f64)>{[self, index](f64 v)
-                                            {
-                                                AssetFormField patch = self->m_fields[index];
-                                                patch.floatValue = v;
-                                                self->ApplyFieldEdit(index, patch);
-                                            }},
-                        cat)
-                        .Get()));
-                break;
-            default:
-                m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                    MakeRef<ui::toolkit::IntEditor>(
-                        Allocator(), field.label.AsView(), field.intValue,
-                        -9007199254740992ll, 9007199254740992ll,
-                        Function<void(i64)>{[self, index](i64 v)
-                                            {
-                                                AssetFormField patch = self->m_fields[index];
-                                                patch.intValue = v;
-                                                self->ApplyFieldEdit(index, patch);
-                                            }},
-                        cat)
-                        .Get()));
-                break;
-            }
+            const String path = gui::JoinPropertyPath(parent.AsView(), Format(u8"f{}", i).AsView());
+            gui::PropertyInfo& info = bag->Add(path.AsView(), KindOf(field), ValueOf(field));
+            info.DisplayName = gui::ReadablePropertyName(field.label.AsView());
+            info.Description = field.label; // the key as it is saved
+            info.ReadOnly = !field.Editable();
+            if (info.Kind == gui::PropertyKind::Integer)
+                IntegerRange(field.scalarKind, info);
+            m_paths.PushBack(path);
         }
+        GenericAssetEditorPage* self = this;
+        bag->SetOnCommit([self](const gui::PropertyBag::Commit& commit) { self->Committed(commit); });
+        if (m_grid != nullptr)
+            m_grid->SetSource(bag.Get());
+        m_bag = Move(bag); // after the grid let go of the old one
+    }
+
+    void GenericAssetEditorPage::ShowValues()
+    {
+        if (!m_bag)
+            return;
+        for (usize i = 0; i < m_fields.Size() && i < m_paths.Size(); ++i)
+        {
+            if (m_paths[i].IsEmpty())
+                continue;
+            const gui::Variant value = ValueOf(m_fields[i]);
+            const gui::Variant shown = m_bag->GetValue(m_paths[i].AsView(), 0);
+            if (shown.GetType() != value.GetType() || shown.Compare(value) != 0)
+                m_bag->SetValue(m_paths[i].AsView(), 0, value);
+        }
+    }
+
+    void GenericAssetEditorPage::Edit(StringView path, const gui::Variant& value)
+    {
+        gui::PropertyBag::Commit commit;
+        commit.Path = String(path);
+        commit.Before.PushBack(m_bag ? m_bag->GetValue(path, 0) : gui::Variant{});
+        commit.After.PushBack(value);
+        if (m_bag)
+            m_bag->SetValue(path, 0, value); // as the grid's commit leaves it
+        Committed(commit);
+    }
+
+    void GenericAssetEditorPage::Committed(const gui::PropertyBag::Commit& commit)
+    {
+        usize index = m_paths.Size();
+        for (usize i = 0; i < m_paths.Size(); ++i)
+            if (m_paths[i] == commit.Path)
+                index = i;
+        if (index >= m_fields.Size() || commit.After.IsEmpty())
+            return;
+        const gui::Variant& value = commit.After[0];
+        AssetFormField patch = m_fields[index];
+        switch (patch.kind)
+        {
+        case AssetFormFieldKind::Text:
+            patch.textValue = String(value.AsString());
+            break;
+        case AssetFormFieldKind::Guid:
+        {
+            Guid parsed{};
+            if (!value.AsString().IsEmpty() && !Guid::TryParse(value.AsString(), parsed))
+            {
+                m_reshow = true; // not a guid: the row shows the old one again
+                return;
+            }
+            patch.guidValue = parsed;
+            break;
+        }
+        case AssetFormFieldKind::Scalar:
+            if (patch.scalarKind == ScalarKind::Bool)
+                patch.intValue = value.AsBool() ? 1 : 0;
+            else if (patch.scalarKind == ScalarKind::Float32 || patch.scalarKind == ScalarKind::Float64)
+                patch.floatValue = value.AsFloat();
+            else
+                patch.intValue = value.AsInt();
+            break;
+        default:
+            return; // blobs and counts are not edited
+        }
+        ApplyFieldEdit(index, patch);
     }
 
     void GenericAssetEditorPage::ApplyFieldEdit(usize index, const AssetFormField& newValue)
@@ -611,21 +648,16 @@ namespace editor
         m_undoBaseline = Move(after);
         MarkDirty();
 
-        // Re-scan: a conditional-branch shape change rebuilds the grid (deferred - never
-        // mid-scrub); a same-shape patch just refreshes the stored fields.
+        // Re-scan: a conditional-branch shape change rebuilds the rows; a same-shape patch shows
+        // the values again (the replay may have narrowed one, a u8 past 255).
         Array<AssetFormField> rescanned;
         (void)ScanAssetForm(*m_object, rescanned);
         const bool sameShape = AssetFormShapeEquals(m_fields, rescanned);
         m_fields = Move(rescanned);
-        if (!sameShape)
-        {
-            GenericAssetEditorPage* self = this;
-            if (ui::UIContext* ctx = Ctx())
-            {
-                ctx->MutationQueueRef().QueueAction(
-                    Function<void()>{[self]() { self->BuildGrid(); }});
-            }
-        }
+        if (sameShape)
+            m_reshow = true;
+        else
+            m_rebuild = true;
     }
 
     Array<byte> GenericAssetEditorPage::Snapshot() const
@@ -637,7 +669,7 @@ namespace editor
         }
         MemoryStream stream;
         BinarySerializer ar(stream, SerializeMode::Write);
-        PushCurrentVersions(ar, *m_object->GetType()); // include version-gated fields
+        app::PushCurrentDataVersions(ar, *m_object->GetType()); // include version-gated fields
         m_object->Serialize(ar);
         ar.PopVersionScope();
         const Span<const byte> bytes = stream.Bytes();
@@ -676,26 +708,18 @@ namespace editor
         (void)stream.Write(blob.Data(), blob.Size());
         (void)stream.Seek(0, SeekOrigin::Begin);
         BinarySerializer ar(stream, SerializeMode::Read);
-        PushCurrentVersions(ar, *m_object->GetType());
+        app::PushCurrentDataVersions(ar, *m_object->GetType());
         m_object->Serialize(ar);
         ar.PopVersionScope();
         m_undoBaseline = blob;
-        (void)ScanAssetForm(*m_object, m_fields);
-        GenericAssetEditorPage* self = this;
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(Function<void()>{[self]() { self->BuildGrid(); }});
-        }
+        Array<AssetFormField> rescanned;
+        (void)ScanAssetForm(*m_object, rescanned);
+        if (AssetFormShapeEquals(m_fields, rescanned))
+            m_reshow = true;
         else
-        {
-            BuildGrid();
-        }
+            m_rebuild = true;
+        m_fields = Move(rescanned);
         MarkDirty();
-    }
-
-    ui::UIContext* GenericAssetEditorPage::Ctx() const
-    {
-        return (m_grid.Get() != nullptr) ? m_grid->Context : nullptr;
     }
 
     Status GenericAssetEditorPage::Save()
@@ -730,7 +754,8 @@ namespace editor
     UniquePtr<EditorPage> GenericAssetPageFactory::CreatePage(EditorContext& context,
                                                               foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<GenericAssetEditorPage>(context, instance);
+        auto* page = editor::EditorRootAllocator().New<GenericAssetEditorPage>(
+            context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 }

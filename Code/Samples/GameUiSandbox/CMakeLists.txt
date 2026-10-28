@@ -1,5 +1,5 @@
-# GameUiSandbox - the game-UI-kit widgets (MenuList / Bar / Ticker / Toast / ButtonPrompt) on screen,
-# pushed onto the UISubsystem's screen-tier ScreenStack from a DefaultApplication.
+# GameUiSandbox - a game's screens on the engine GUI (a menu, a bar, a rolling score, a prompt, toasts),
+# pushed onto its screen stack from a DefaultApplication.
 add_executable(GameUiSandbox main.cpp)
 
 target_link_libraries(GameUiSandbox PRIVATE
@@ -9,7 +9,7 @@ target_link_libraries(GameUiSandbox PRIVATE
     Foundation::Graphics Foundation::Graphics.Gpu
     Engine::DefaultApp
     Foundation::Scene Engine::Scene Engine::Render
-    Engine::UI Foundation::UI Foundation::UI.Gamekit
+    Engine::GUI Foundation::GUI Foundation::GUI.Gamekit Foundation::GUI.Resources # the screens, the prompt, the toasts
     Foundation::Input
     Foundation::Policy)
 util_copy_sdl3_dll(GameUiSandbox)

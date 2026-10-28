@@ -2165,17 +2165,87 @@ TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's p
     model::ModelSkin skin;
     skin.addJoint(spine, Float4x4::Identity());
     skin.addJoint(hips, Float4x4::Identity());
-    CHECK(pipeline::SkeletonParentNode(m, skin, pipeline::BuildBoneToJoint(skin)) == armature);
+    CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, skin).AsSpan()) == armature);
 
     // A root joint at the top of the file has no parent node: the scene root (-1).
     model::ModelSkin top;
     top.addJoint(scene, Float4x4::Identity());
     top.addJoint(armature, Float4x4::Identity());
-    CHECK(pipeline::SkeletonParentNode(m, top, pipeline::BuildBoneToJoint(top)) == -1);
+    CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, top).AsSpan()) == -1);
 
     // No joints: unknown (-2), and the prefab keeps the file's placement.
     model::ModelSkin empty;
-    CHECK(pipeline::SkeletonParentNode(m, empty, pipeline::BuildBoneToJoint(empty)) == -2);
+    CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, empty).AsSpan()) == -2);
+}
+
+TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, its animation played; an empty one does not")
+{
+    // 3ds Max hangs a skeleton from a Dummy helper bone with no vertices of its own and animates it
+    // with the pose (a creature bobbing as it idles). Left outside the skeleton, as Blender's
+    // armature object is, the bob was a model track the pose never played.
+    for (const bool helperIsBone : {true, false})
+    {
+        model::Model m;
+        auto bone = [&](StringView name, i32 parent, bool isBone)
+        {
+            auto* b = new model::ModelBone();
+            b->setName(name);
+            b->parentIndex = parent;
+            b->isSkeletonBone = isBone;
+            return m.addBone(b);
+        };
+        const i32 root = bone(u8"300024", -1, false);
+        const i32 dummy = bone(u8"Dummy001", root, helperIsBone);
+        const i32 spine = bone(u8"Bone001", dummy, true);
+        const i32 arm = bone(u8"Bone002", spine, true);
+        model::ModelSkin skin;
+        skin.addJoint(spine, Float4x4::Identity());
+        skin.addJoint(arm, Float4x4::Identity());
+
+        model::ModelAnimation idle;
+        idle.duration = 1.0f;
+        auto* bob = new model::AnimationChannel();
+        bob->targetBone = dummy;
+        bob->path = model::AnimationPath::Translation;
+        bob->addKeyframe(0.0f, Float4{0.0f, 1.0f, 0.0f, 0.0f});
+        bob->addKeyframe(1.0f, Float4{0.0f, 1.6f, 0.0f, 0.0f});
+        idle.addChannel(bob);
+        auto* wave = new model::AnimationChannel();
+        wave->targetBone = arm;
+        wave->path = model::AnimationPath::Rotation;
+        wave->addKeyframe(0.0f, Float4{0.0f, 0.0f, 0.0f, 1.0f});
+        idle.addChannel(wave);
+
+        const Array<i32> joints = pipeline::SkeletonJoints(m, skin);
+        const HashMap<i32, i32> boneToJoint = pipeline::BuildBoneToJoint(joints.AsSpan());
+        foundation::animation::SkeletonSource skeleton;
+        pipeline::SkeletonSourceFromModel(m, skin, joints.AsSpan(), boneToJoint, skeleton);
+        const i32 hangsFrom = pipeline::SkeletonParentNode(m, joints.AsSpan());
+        foundation::animation::AnimationClipSource clip;
+        pipeline::AnimationClipSourceFromModel(idle, boneToJoint, u8"idle", clip, hangsFrom);
+        REQUIRE(clip.trackBone.Size() == 2u);
+        if (helperIsBone)
+        {
+            // Appended after the skin's joints (no vertex's joint index moves), the skin's root
+            // joint under it, the mesh's placement node above it, and its bob a track of the pose.
+            REQUIRE(joints.Size() == 3u);
+            CHECK(joints[2] == dummy);
+            CHECK(skeleton.boneNames[2] == String(u8"Dummy001"));
+            CHECK(skeleton.parentIndices[0] == 2);
+            CHECK(skeleton.parentIndices[2] == -1);
+            CHECK(hangsFrom == root);
+            CHECK(clip.trackBone[0] == 2);
+        }
+        else
+        {
+            // An empty node: the node the skeleton hangs from, its channel the clip's model track.
+            CHECK(joints.Size() == 2u);
+            CHECK(skeleton.parentIndices[0] == -1);
+            CHECK(hangsFrom == dummy);
+            CHECK(clip.trackBone[0] == -1);
+        }
+        CHECK(clip.trackBone[1] == 1); // the arm, wherever the helper went
+    }
 }
 
 TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and rest, and a re-import keeps its root motion")
@@ -2302,4 +2372,86 @@ TEST_CASE("model-import: a clip keeps the armature's channels, its skeleton and 
     REQUIRE(run != nullptr);
     CHECK(run->source.rootMotion.horizontal);
     CHECK(run->source.rootMotion.yaw);
+}
+
+// Each material made on the built-in its shading model names, as its file authored it
+// (Specs/phong-material.md), by the one function both cooks make materials with.
+TEST_CASE("model import: a material is made on the built-in its shading model names, its maps wired")
+{
+    model::Model mdl;
+    const auto add = [&](model::ShadingModel shading) -> model::ModelMaterial&
+    {
+        auto* material = new model::ModelMaterial();
+        material->shadingModel = shading;
+        material->baseColorTextureIndex = 0;
+        material->normalTextureIndex = 1;
+        (void)mdl.addMaterial(material);
+        return *material;
+    };
+    model::ModelMaterial& phong = add(model::ShadingModel::Phong);
+    phong.specularColor = Float3{0.5f, 0.25f, 0.125f};
+    phong.specularTextureIndex = 2;
+    phong.shininess = 32.0f;
+    model::ModelMaterial& lambert = add(model::ShadingModel::Lambert);
+    lambert.specularColor = Float3{0.5f, 0.5f, 0.5f}; // a Lambert material has no highlight, whatever it says
+    lambert.specularTextureIndex = 2;
+    (void)add(model::ShadingModel::Unlit);
+    model::ModelMaterial& pbr = add(model::ShadingModel::Pbr);
+    pbr.separateRoughnessTextureIndex = 3;
+    pbr.occlusionTextureIndex = 4;
+
+    Array<Guid> textures;
+    for (u64 t = 1; t <= 5; ++t)
+        textures.PushBack(Guid{t, t});
+    i32 bakes = 0;
+    const Function<Guid(i32, i32)> packed = [&](i32, i32)
+    {
+        ++bakes;
+        return Guid{9ull, 9ull};
+    };
+    const auto build = [&](usize i, pipeline::MaterialAsset& asset) { pipeline::BuildModelMaterial(mdl, *mdl.materials()[i], u8"m", textures, packed, asset); };
+    const auto slots = [](const pipeline::MaterialAsset& asset)
+    {
+        String out;
+        for (const String& slot : asset.source.textureSlots)
+        {
+            if (!out.IsEmpty())
+                out += u8" ";
+            out += slot.AsView();
+        }
+        return out;
+    };
+    const auto uniform = [](const pipeline::MaterialAsset& asset, StringView name) -> Float4
+    {
+        Float4 value{};
+        for (usize i = 0; i < asset.source.propertyNames.Size(); ++i)
+            if (asset.source.propertyNames[i].AsView() == name)
+                MemCopy(&value, asset.source.uniformDefaults.Data() + asset.source.propertyOffsets[i],
+                        Min<usize>(sizeof(value), asset.source.propertySizes[i]));
+        return value;
+    };
+
+    pipeline::MaterialAsset onPhong;
+    build(0, onPhong);
+    CHECK(onPhong.source.shaderName == u8"phong");
+    CHECK(slots(onPhong) == String(u8"AlbedoMap NormalMap SpecularMap"));
+    CHECK(uniform(onPhong, u8"SpecularColor").y == doctest::Approx(0.25f));
+    CHECK(uniform(onPhong, u8"Shininess").x == doctest::Approx(32.0f));
+
+    pipeline::MaterialAsset onLambert;
+    build(1, onLambert);
+    CHECK(onLambert.source.shaderName == u8"phong");
+    CHECK(slots(onLambert) == String(u8"AlbedoMap NormalMap")); // no highlight, so no specular map
+    CHECK(uniform(onLambert, u8"SpecularColor").x == 0.0f);
+
+    pipeline::MaterialAsset onUnlit;
+    build(2, onUnlit);
+    CHECK(onUnlit.source.shaderName == u8"unlit");
+    CHECK(slots(onUnlit) == String(u8"AlbedoMap"));
+
+    pipeline::MaterialAsset onPbr;
+    build(3, onPbr);
+    CHECK(onPbr.source.shaderName == u8"forward");
+    CHECK(slots(onPbr) == String(u8"AlbedoMap NormalMap OcclusionMap MetallicRoughnessMap"));
+    CHECK(bakes == 1); // its separate rough map baked into the packed one by the caller
 }

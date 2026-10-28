@@ -256,31 +256,30 @@ export namespace editor
         // Apply this frame's input from explicit (gated) devices.
         /// `allowZoom` is false while a modal viewport tool owns the wheel (a brush resizes on
         /// Shift + wheel): the first-consumer rule keeps that scroll from ALSO dollying the camera.
+        /// `kb` is null while the view has no keyboard focus: the mouse still works it (the wheel
+        /// over a view that was not clicked into zooms it), the keys wait for the focus.
         void Update(foundation::shell::IKeyboard* kb, foundation::shell::IMouse* mouse, f32 dt,
                     bool allowZoom = true)
         {
             namespace shell = foundation::shell;
             zoomedThisUpdate = false;
             m_wantsLock = false;
-            if (kb == nullptr)
-            {
-                return;
-            }
+            const auto down = [kb](shell::KeyCode key) { return kb != nullptr && kb->IsKeyDown(key); };
+            const auto pressed = [kb](shell::KeyCode key) { return kb != nullptr && kb->IsKeyPressed(key); };
 
             if (mouse != nullptr)
             {
-                if (kb->IsKeyPressed(shell::KeyCode::Tab))
+                if (pressed(shell::KeyCode::Tab))
                 {
                     mouseCaptured = !mouseCaptured;
                     mouse->SetRelativeMode(mouseCaptured);
                     mouse->SetCursorVisible(!mouseCaptured);
                 }
-                if (mouseCaptured && kb->IsKeyPressed(shell::KeyCode::Escape))
+                if (mouseCaptured && pressed(shell::KeyCode::Escape))
                 {
                     ReleaseCapture(mouse); // in-flight escape hatch (I2)
                 }
-                const bool alt = kb->IsKeyDown(shell::KeyCode::LeftAlt) ||
-                                 kb->IsKeyDown(shell::KeyCode::RightAlt);
+                const bool alt = down(shell::KeyCode::LeftAlt) || down(shell::KeyCode::RightAlt);
                 m_wantsLock = !mouseCaptured && ((alt && mouse->IsButtonDown(shell::MouseButton::Left)) ||
                                                  mouse->IsButtonDown(shell::MouseButton::Right) ||
                                                  mouse->IsButtonDown(shell::MouseButton::Middle));
@@ -335,7 +334,7 @@ export namespace editor
             // (the editor convention: with RMB up, W/E/R/X belong to the gizmo shortcuts).
             const bool flying = mouseCaptured || (mouse != nullptr &&
                                                   mouse->IsButtonDown(shell::MouseButton::Right));
-            if (!flying)
+            if (!flying || kb == nullptr)
             {
                 return;
             }

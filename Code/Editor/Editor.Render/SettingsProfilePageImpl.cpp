@@ -6,6 +6,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
+#include "Core/Reflection/Reflect.h"
 
 module editor.render;
 
@@ -15,31 +16,31 @@ import foundation.graphics;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.scene;
+import foundation.scene.resource; // SceneDocument, what the preview's scene slot takes
 import foundation.settings; // the project's editor store (the kept preview scene)
 import foundation.resource;
 import foundation.geometry;
 import foundation.materials;
 import engine.render;
 import render.pipeline; // SettingsProfileAsset
-import foundation.ui;
-import foundation.ui.toolkit;
-import foundation.ui.runtime;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 import editor.preview;
-import editor.scene; // SettingsRows (a scene's settings rows), LoadEditorScene, SceneWorldBounds, LoadSceneViewPref
+import editor.scene; // LoadEditorScene, SceneWorldBounds, LoadSceneViewPref
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace editor
 {
     namespace
     {
-        [[nodiscard]] pipeline::SettingsProfileAsset* AssetOf(const RefPtr<ISerializable>& object)
+        [[nodiscard]] pipeline::SettingsProfileAsset* AssetOf(ISerializable* object)
         {
-            return Cast<pipeline::SettingsProfileAsset>(object.Get());
+            return Cast<pipeline::SettingsProfileAsset>(object);
         }
     }
 
@@ -93,168 +94,204 @@ namespace editor
         return ApplySettingsProfileToScene(profileAsset, target, resources);
     }
 
-    SettingsProfilePage::SettingsProfilePage(EditorContext& context,
-                                             foundation::runtime::IApplicationHost& host,
-                                             ui::runtime::UIHost& uiHost,
-                                             foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()), m_context(&context), m_title(instance.Name())
+    // The profile's values as the grid shows them: the settings type's reflection, the block's own
+    // fields left out (nested ones, and those marked `sceneOnly`: the source, the profile
+    // reference), which are a scene's and not a profile's.
+    class SettingsProfilePage::ValuesSource final : public gui::IPropertySource, private gui::IPropertySourceClient
     {
-        m_asset = instance.ReadObject();
-        if (AssetOf(m_asset) == nullptr)
+    public:
+        ValuesSource(IAllocator& allocator, gui::IPropertyTextFormat& format) : m_inner(allocator), m_skipped(allocator)
         {
-            LOG_ERROR(u8"Editor", u8"profile '{}' failed to read - page opens empty", m_title);
-            m_asset = {};
+            m_inner.SetTextFormat(&format);
+            m_inner.SetClient(this);
         }
-        SetInstanceId(instance.Id());
+        ~ValuesSource() override { m_inner.SetClient(nullptr); }
 
-        m_preview = MakeUnique<PreviewViewport>(Allocator(), host, uiHost, u8"profile.preview");
+        /// Over `values` of `type` (null: none).
+        void Bind(void* values, const TypeInfo* type)
+        {
+            m_skipped.Clear();
+            if (values == nullptr || type == nullptr)
+            {
+                m_inner.SetObjects(Span<const Instance>{});
+                return;
+            }
+            for (const PropertyInfo& property : foundation::core::Properties(*type)) // not the page's Properties()
+                if (IsNested(property) || FindAttribute(property, u8"sceneOnly") != nullptr)
+                    m_skipped.PushBack(String(StringView(reinterpret_cast<const utf8char*>(property.name))));
+            const Instance object(values, type);
+            m_inner.SetObjects(Span<const Instance>(&object, 1u));
+        }
+        [[nodiscard]] gui::ReflectedPropertySource& Inner() noexcept { return m_inner; }
+        /// Told whenever the values change under it: a gesture's previews (written in place as
+        /// they go), its cancel, a commit, an undo; the page's preview follows them.
+        Function<void()> OnValuesWritten;
+        void Refresh() { m_inner.Refresh(); }
+
+        [[nodiscard]] usize ObjectCount() const override { return m_inner.ObjectCount(); }
+        void GetProperties(StringView parent, Array<gui::PropertyInfo>& out) const override
+        {
+            if (!parent.IsEmpty())
+            {
+                m_inner.GetProperties(parent, out);
+                return;
+            }
+            Array<gui::PropertyInfo> all;
+            m_inner.GetProperties(parent, all);
+            for (gui::PropertyInfo& info : all)
+            {
+                bool skipped = false;
+                for (const String& name : m_skipped)
+                    skipped = skipped || name == info.Name;
+                if (!skipped)
+                    out.PushBack(Move(info));
+            }
+        }
+        [[nodiscard]] gui::Variant GetValue(StringView path, usize object) const override { return m_inner.GetValue(path, object); }
+        void BeginEdit(StringView path) override { m_inner.BeginEdit(path); }
+        void PreviewEdit(StringView path, const gui::PropertyWrite& write) override { m_inner.PreviewEdit(path, write); }
+        void CommitEdit(StringView path, const gui::PropertyWrite& write) override { m_inner.CommitEdit(path, write); }
+        void CancelEdit(StringView path) override { m_inner.CancelEdit(path); }
+        bool EditList(StringView path, const gui::ListEdit& edit) override { return m_inner.EditList(path, edit); }
+        [[nodiscard]] gui::Variant GetDefault(StringView path, usize object) const override { return m_inner.GetDefault(path, object); }
+        bool Revert(StringView path) override { return m_inner.Revert(path); }
+        [[nodiscard]] String GetRevertText(StringView path) const override { return m_inner.GetRevertText(path); }
+        [[nodiscard]] String CopyValue(StringView path) const override { return m_inner.CopyValue(path); }
+        bool PasteValue(StringView path, StringView text, String& reason) override { return m_inner.PasteValue(path, text, reason); }
+
+    private:
+        void OnPropertiesChanged() override { NotifyPropertiesChanged(); }
+        void OnValuesChanged() override
+        {
+            NotifyValuesChanged();
+            if (OnValuesWritten)
+                OnValuesWritten();
+        }
+
+        mutable gui::ReflectedPropertySource m_inner;
+        Array<String> m_skipped;
+    };
+
+    SettingsProfilePage::SettingsProfilePage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::SettingsProfileAsset::StaticType(), kPath), m_format(context.Allocator())
+    {
+        // The asset reflects its wrapper; the rows are its values', as a scene's settings show them.
+        HideAssetRows();
+        m_values = MakeUnique<ValuesSource>(Allocator(), Allocator(), m_format);
+        SettingsProfilePage* self = this;
+        m_values->Inner().SetOnChange([self](const gui::ReflectedChange& change)
+                                      {
+                                          pipeline::SettingsProfileAsset* asset = AssetOf(self->Object());
+                                          if (asset == nullptr)
+                                              return;
+                                          (void)self->Commands().Execute(UniquePtr<IEditorCommand>(
+                                              EditorRootAllocator().New<app::ReflectedEditCommand>(
+                                                  *asset->ValuesType(),
+                                                  [self]() -> void*
+                                                  {
+                                                      pipeline::SettingsProfileAsset* a = AssetOf(self->Object());
+                                                      return a != nullptr ? a->Values() : nullptr;
+                                                  },
+                                                  change, self->m_format, u8"edit_settings_profile",
+                                                  [self]()
+                                                  {
+                                                      self->m_values->Refresh(); // an undo wrote it behind the source
+                                                      self->ApplyPreview();
+                                                  }),
+                                              EditorRootAllocator()));
+                                      });
+        // The preview scene follows the values as they change, a slider's drag included (the old
+        // page's did; the commit alone left the scene still until the release).
+        m_values->OnValuesWritten = [self]() { self->ApplyPreview(); };
+        BindValues();
+        if (pipeline::SettingsProfileAsset* asset = AssetOf(Object()))
+            AddSection(u8"values", TypeAttrString(*asset->ValuesType(), "displayName", u8"Values"), *m_values);
+        if (Content())
+        {
+            m_pane = MakeUnique<app::PreviewPane>(Allocator(), *Content(), Services(), u8"profile.preview");
+            m_pane->OnFrame = [self]()
+            {
+                AABB bounds;
+                if (self->Preview() != nullptr && self->Preview()->Scene() != nullptr && SceneWorldBounds(*self->Preview()->Scene(), bounds))
+                    self->Preview()->Frame(bounds.Center(), Length(bounds.Extents()));
+            };
+            // The scene the profile is previewed on: the built-in one, or one of the project's.
+            m_sceneSlot = MakeRef<app::AssetPickerSlot>(Allocator());
+            m_sceneSlot->AddClass(u8"preview-slot");
+            m_sceneSlot->SetTooltip(u8"A scene of the project to preview the profile in (the built-in one when none); kept for this profile");
+            const app::ResourceRefServices* refs = Services().refs;
+            if (refs != nullptr && refs->AcceptedTypes)
+                m_sceneSlot->SetAcceptedTypes(refs->AcceptedTypes(scene::SceneDocument::StaticType()));
+            if (refs != nullptr && refs->Pick)
+                m_sceneSlot->SetOnPick([self, refs]()
+                                       {
+                                           refs->Pick(self->m_sceneSlot->AcceptedTypes(), self->m_previewSceneId,
+                                                      [self](const Guid& picked) { self->SetPreviewScene(picked); });
+                                       });
+            m_sceneSlot->SetOnClear([self]() { self->SetPreviewScene(Guid{}); });
+            m_sceneSlot->SetOnDropped([self](const Guid& dropped) { self->SetPreviewScene(dropped); });
+            m_pane->AddControl(*m_sceneSlot);
+        }
         LoadPreviewPref();
         LoadPreviewContent();
-
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        RebuildGrid();
-
-        auto gridColumn = MakeRef<ui::FlexLayout>(Allocator());
-        gridColumn->Direction = ui::Orientation::Vertical;
-        gridColumn->Padding = ui::Thickness{8, 6}; // inset like the scene inspector
-        {
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            gridColumn->AddView(m_grid.Get(), grow);
-        }
-        auto split = MakeRef<ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.62f);
-        split->SetPanes(m_preview->View(), gridColumn.Get());
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *split);
+        ShowScene();
+        if (m_pane && !LoadFailed())
+            m_pane->Show();
     }
 
     SettingsProfilePage::~SettingsProfilePage() = default;
 
-    void SettingsProfilePage::OnUpdate(foundation::runtime::IApplicationHost&, f32 dt)
+    gui::IPropertySource& SettingsProfilePage::Rows() noexcept
     {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh();
-        }
-        if (m_preview)
-        {
-            m_preview->Update(dt);
-        }
-        for (const Function<void()>& refresher : m_refreshers)
-        {
-            refresher();
-        }
+        return *m_values;
     }
 
-    void SettingsProfilePage::OnRenderWindow(foundation::runtime::IApplicationHost&,
-                                             foundation::graphics::FrameContext& frame)
+    void SettingsProfilePage::EditValue(StringView path, const gui::PropertyWrite& write)
     {
-        if (m_preview)
-        {
-            m_preview->RenderFrame(frame);
-        }
+        m_values->BeginEdit(path);
+        m_values->CommitEdit(path, write);
     }
 
-    Status SettingsProfilePage::Save()
+    void SettingsProfilePage::BindValues()
     {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false); // every scene using the profile takes the new values
-            LOG_INFO(u8"Editor", u8"saved profile '{}'", m_title);
-        }
-        return saved;
+        pipeline::SettingsProfileAsset* asset = AssetOf(Object());
+        m_values->Bind(asset != nullptr ? asset->Values() : nullptr, asset != nullptr ? asset->ValuesType() : nullptr);
+    }
+
+    void SettingsProfilePage::OnObjectChanged()
+    {
+        BindValues(); // read again: the values live in another object now
+        ApplyPreview();
+    }
+
+    void SettingsProfilePage::OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)
+    {
+        app::AssetObjectPage::OnUpdate(host, dt);
+        if (m_pane)
+            m_pane->Update(dt);
+    }
+
+    void SettingsProfilePage::OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame)
+    {
+        if (m_pane)
+            m_pane->Render(frame);
     }
 
     void SettingsProfilePage::OnClose()
     {
-        if (m_preview)
-        {
-            m_preview->Shutdown();
-        }
+        if (m_pane)
+            m_pane->Close();
     }
 
     void SettingsProfilePage::OnAssetExternallyModified()
     {
         // A scene's save wrote a profile-mode edit to the asset: show what is stored now.
-        foundation::content::Instance* instance =
-            m_context->Project() != nullptr ? m_context->Project()->SourceDb().GetInstance(InstanceId())
-                                            : nullptr;
-        RefPtr<ISerializable> object = instance != nullptr ? instance->ReadObject() : RefPtr<ISerializable>{};
-        if (AssetOf(object) == nullptr)
-        {
-            return;
-        }
-        m_asset = Move(object);
-        Commands().Clear();
-        ClearDirty();
-        ApplyPreview();
-    }
-
-    void SettingsProfilePage::ApplyAssetBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        m_asset->Serialize(ar);
-        ApplyPreview();
-    }
-
-    Array<byte> SettingsProfilePage::SnapshotAsset() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        m_asset->Serialize(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void SettingsProfilePage::ApplyEdit(StringView mergeKey, Function<void(void* values)> mutate)
-    {
-        pipeline::SettingsProfileAsset* asset = AssetOf(m_asset);
-        if (asset == nullptr)
-        {
-            return;
-        }
-        Array<byte> before = SnapshotAsset();
-        mutate(asset->Values());
-        Array<byte> after = SnapshotAsset();
-        // The mutation already ran; Execute re-applies `after` (and refreshes the preview).
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditProfileCommand>(*this, mergeKey, Move(before), Move(after)),
-            Allocator()));
+        (void)ReadAgain();
     }
 
     void SettingsProfilePage::BuildPreviewScene()
     {
-        scene::Scene* preview = m_preview ? m_preview->Scene() : nullptr;
+        scene::Scene* preview = Preview() != nullptr ? Preview()->Scene() : nullptr;
         auto* meshes =
             preview != nullptr ? preview->GetSystem<engine::render::MeshComponentManager>() : nullptr;
         if (meshes == nullptr)
@@ -310,57 +347,70 @@ namespace editor
 
     void SettingsProfilePage::ApplyPreview()
     {
-        scene::Scene* preview = m_preview ? m_preview->Scene() : nullptr;
-        if (preview != nullptr && m_asset.Get() != nullptr)
-        {
-            (void)PreviewSettingsProfileInScene(*m_asset, *preview, m_context->Resources());
-        }
+        ++m_previewsApplied;
+        scene::Scene* preview = Preview() != nullptr ? Preview()->Scene() : nullptr;
+        if (preview != nullptr && Object() != nullptr)
+            (void)PreviewSettingsProfileInScene(*Object(), *preview, Context().Resources());
     }
 
     void SettingsProfilePage::SetPreviewScene(const Guid& sceneId)
     {
         if (sceneId == m_previewSceneId)
-        {
             return;
-        }
         m_previewSceneId = sceneId;
         LoadPreviewContent();
         SavePreviewPref();
+        ShowScene();
+    }
+
+    void SettingsProfilePage::ShowScene()
+    {
+        if (!m_sceneSlot)
+            return;
+        app::ResourceRefShown shown;
+        const app::ResourceRefServices* refs = Services().refs;
+        if (!m_previewSceneId.IsNil() && refs != nullptr && refs->Describe && refs->Describe(m_previewSceneId, shown))
+        {
+            m_sceneSlot->SetValue(shown.Name.AsView());
+            m_sceneSlot->SetGlyph(shown.Glyph.AsView(), shown.GlyphClass.AsView());
+            return;
+        }
+        m_sceneSlot->SetValue(StringView{}); // the built-in scene
     }
 
     void SettingsProfilePage::LoadPreviewContent()
     {
-        if (!m_preview)
+        if (Preview() == nullptr)
         {
             return;
         }
         m_previewContent.Clear();
-        scene::Scene* preview = m_preview->ResetScene();
+        scene::Scene* preview = Preview()->ResetScene();
         if (preview == nullptr)
         {
             return;
         }
         foundation::content::Instance* sceneDocument =
-            (!m_previewSceneId.IsNil() && m_context->Project() != nullptr)
-                ? m_context->Project()->SourceDb().GetInstance(m_previewSceneId)
+            (!m_previewSceneId.IsNil() && Context().Project() != nullptr)
+                ? Context().Project()->SourceDb().GetInstance(m_previewSceneId)
                 : nullptr;
         bool loaded = false;
         if (sceneDocument != nullptr)
         {
-            loaded = LoadEditorScene(*m_context, *sceneDocument, *preview).IsOk();
+            loaded = LoadEditorScene(Context(), *sceneDocument, *preview).IsOk();
             if (!loaded)
             {
                 LOG_WARNING(u8"Editor", u8"profile '{}': preview scene '{}' did not load - showing the built-in one",
-                            m_title, sceneDocument->Name());
-                preview = m_preview->ResetScene();
+                            Title(), sceneDocument->Name());
+                preview = Preview()->ResetScene();
             }
         }
-        EditorCamera& camera = m_preview->Camera();
+        EditorCamera& camera = Preview()->Camera();
         if (loaded)
         {
             // From where that scene's page left its camera, else the whole scene in view.
             const SceneViewPref view =
-                LoadSceneViewPref(m_context->ProjectEditorSettings(), m_previewSceneId, SceneViewPref{});
+                LoadSceneViewPref(Context().ProjectEditorSettings(), m_previewSceneId, SceneViewPref{});
             AABB bounds;
             if (view.hasCamera)
             {
@@ -385,7 +435,7 @@ namespace editor
 
     void SettingsProfilePage::LoadPreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
+        foundation::settings::Settings* store = Context().ProjectEditorSettings();
         if (store == nullptr)
         {
             return;
@@ -405,7 +455,7 @@ namespace editor
 
     void SettingsProfilePage::SavePreviewPref()
     {
-        foundation::settings::Settings* store = m_context->ProjectEditorSettings();
+        foundation::settings::Settings* store = Context().ProjectEditorSettings();
         if (store == nullptr)
         {
             return;
@@ -426,87 +476,7 @@ namespace editor
             section.prefs.PushBack(ProfilePreviewPref{InstanceId(), m_previewSceneId});
         }
         store->MarkChanged<ProfilePreviewSettings>();
-        m_context->RequestProjectEditorSettingsSave();
-    }
-
-    void SettingsProfilePage::RebuildGrid()
-    {
-        m_grid->Clear();
-        m_refreshers.Clear();
-        pipeline::SettingsProfileAsset* asset = AssetOf(m_asset);
-        if (asset == nullptr)
-        {
-            return;
-        }
-        SettingsProfilePage* page = this;
-        const TypeInfo* type = asset->ValuesType();
-        auto access = MakeRef<SettingsAccess>(Allocator());
-        access->type = type;
-        access->values = [page](const char*) -> void*
-        {
-            pipeline::SettingsProfileAsset* a = AssetOf(page->m_asset);
-            return a != nullptr ? a->Values() : nullptr;
-        };
-        access->set = [page, type](const char* property, const Variant& value)
-        {
-            page->ApplyEdit(StringView(reinterpret_cast<const utf8char*>(property)),
-                            [type, property, value](void* values)
-                            {
-                                if (const PropertyInfo* p = FindProperty(*type, property))
-                                {
-                                    (void)SetProperty(*p, Instance{values, type}, value);
-                                }
-                            });
-        };
-        access->setRaw = [page, type](const char* property, i64 raw)
-        {
-            page->ApplyEdit(StringView(reinterpret_cast<const utf8char*>(property)),
-                            [type, property, raw](void* values)
-                            {
-                                const PropertyInfo* p = FindProperty(*type, property);
-                                if (p != nullptr && p->address != nullptr)
-                                {
-                                    WriteEnumValue(p->address(Instance{values, type}), *p->type, raw);
-                                }
-                            });
-        };
-        access->setReference = [page, type](const char* property, const Guid& id)
-        {
-            page->ApplyEdit(StringView(reinterpret_cast<const utf8char*>(property)),
-                            [type, property, id](void* values)
-                            {
-                                const PropertyInfo* p = FindProperty(*type, property);
-                                if (p != nullptr && p->address != nullptr &&
-                                    p->type->reference != nullptr)
-                                {
-                                    p->type->reference->SetId(p->address(Instance{values, type}), id);
-                                }
-                            });
-        };
-
-        // The scene the profile is previewed on (page-local: not the profile's data, remembered
-        // per profile in the project's editor store).
-        {
-            const StringView sceneTypes[] = {u8"SceneDocument"};
-            auto sceneRow = MakeRef<ResourceRefEditor>(Allocator(), StringView(u8"Scene"), StringView(u8"(built-in)"),
-                                                       StringView(u8"Preview"), Span<const StringView>{sceneTypes, 1});
-            sceneRow->SetEmptyText(u8"(built-in)");
-            sceneRow->BindAsset(*m_context, [page]() { return page->m_previewSceneId; },
-                                [page](const Guid& picked) { page->SetPreviewScene(picked); });
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(sceneRow.Get()));
-        }
-
-        SettingsRows rows(*m_context, *m_grid, m_refreshers);
-        const StringView category = SettingsCategoryName(*type);
-        for (const PropertyInfo& prop : Properties(*type))
-        {
-            // A scene's own fields (its source, its profile) are not a profile's.
-            if (IsNested(prop) || FindAttribute(prop, u8"sceneOnly") != nullptr)
-            {
-                continue;
-            }
-            rows.Build(access, prop, category);
-        }
+        Context().RequestProjectEditorSettingsSave();
     }
 
     const TypeInfo* SettingsProfilePageFactory::PrimaryType() const
@@ -514,23 +484,18 @@ namespace editor
         return &pipeline::SettingsProfileAsset::StaticType();
     }
 
-    UniquePtr<EditorPage> SettingsProfilePageFactory::CreatePage(EditorContext& context,
-                                                                 foundation::content::Instance& instance)
+    UniquePtr<EditorPage> SettingsProfilePageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        SettingsProfilePage* page = editor::EditorRootAllocator().New<SettingsProfilePage>(
-            context, *m_host, *m_uiHost, instance);
+        auto* page = editor::EditorRootAllocator().New<SettingsProfilePage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
     }
 
-    void RegisterSettingsProfileEditor(EditorContext& context,
-                                       foundation::runtime::IApplicationHost& host,
-                                       ui::runtime::UIHost& uiHost)
+    void RegisterSettingsProfileEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         // The preview-choice section (registered before the app loads the per-project store).
         GlobalTypeRegistry().Register(ProfilePreviewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<ProfilePreviewSettings>();
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<SettingsProfilePageFactory>(host, uiHost),
-            editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<SettingsProfilePageFactory>(services), editor::EditorRootAllocator()));
     }
 }

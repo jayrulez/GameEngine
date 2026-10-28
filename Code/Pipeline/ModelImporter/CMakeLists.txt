@@ -18,6 +18,8 @@ target_link_libraries(ModelImporter
         Foundation::Physics   Foundation::Physics.Resource  Pipeline::Physics)
 
 target_sources(ModelImporter
+    PRIVATE
+        ModelImporterImpl.cpp # the manifest's reflection
     PUBLIC
         FILE_SET modelimporter_modules TYPE CXX_MODULES FILES
             FileImport.cppm

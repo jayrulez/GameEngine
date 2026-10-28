@@ -6,7 +6,8 @@
 // The scene subsystem's editor plugin: SceneEditorPage (per-page live Scene +
 // ViewportView through the real renderer + EditorCamera), its page factory, and the
 // RegisterSceneEditor entry point the editor EXECUTABLE calls - the editor core/app never link
-// this module.
+// this module. On the GUI in parts (Documentation/Specs/editor-gui.md, 5.3): the partitions still
+// on foundation.ui (the picker dialogs) come back with their layers.
 
 export module editor.scene;
 
@@ -28,8 +29,27 @@ export import :gizmo;
 export import :tools;
 export import :component_gizmos;
 export import :asset_thumbnails;
+export import :services;
+export import :scene_overlays;
+export import :scene_view_state;
+export import :scene_simulation;
+export import :prefab_flows;
+export import :scene_tree;
 export import :hierarchy;
+export import :entity_picker_window;
+export import :entity_ref_editor;
+export import :bone_name_editor;
+export import :collision_matrix_editor;
+export import :inspector_extras;
+export import :script_behaviors_source;
+export import :scene_settings_source;
+export import :settings_extra_sources;
+export import :builtin_inspector_extras;
 export import :inspector;
-export import :entity_picker_dialog;
-export import :component_picker_dialog;
+export import :scene_bar;
+export import :scene_hud;
+export import :scene_camera_preview;
+export import :scene_tools;
+export import :scene_viewport;
 export import :page;
+export import :registration;

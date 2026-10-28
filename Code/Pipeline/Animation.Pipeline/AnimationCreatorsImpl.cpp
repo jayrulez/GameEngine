@@ -64,4 +64,20 @@ namespace pipeline
             registry.Register(Move(creator));
         }
     }
+
+    // The asset types' reflection: their display names (the editor shows them as the asset's kind).
+    REFLECT_MEMBERS(SkeletonAsset, "rtti::pipeline::animation")
+    {
+        builder.Attribute("displayName", String(u8"Skeleton"));
+    }
+
+    REFLECT_MEMBERS(AnimationClipAsset, "rtti::pipeline::animation")
+    {
+        builder.Attribute("displayName", String(u8"Animation Clip"));
+    }
+
+    REFLECT_MEMBERS(AnimationGraphAsset, "rtti::pipeline::animation")
+    {
+        builder.Attribute("displayName", String(u8"Animation Graph"));
+    }
 }

@@ -9,7 +9,6 @@ target_link_libraries(Profiler.UI PUBLIC Foundation::Profiler Foundation::UI Fou
 target_sources(Profiler.UI
     PUBLIC
         FILE_SET profiler_ui_modules TYPE CXX_MODULES FILES
-            ProfileWindow.cppm
             ProfilerView.cppm
             FrameTimeGraph.cppm
             FrameStats.cppm

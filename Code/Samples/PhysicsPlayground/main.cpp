@@ -30,9 +30,9 @@ import extensions.imgui;
 import foundation.physics;
 import foundation.physics.resource;
 import engine.physics;
-import foundation.ui;
-import foundation.ui.resource;
-import engine.ui;
+import foundation.gui;
+import foundation.gui.resources; // GuiDocument (the documents made in code)
+import engine.gui;
 
 #include "../Common/FlyCamera.h" // after the imports: uses foundation::core/runtime types
 
@@ -43,6 +43,7 @@ namespace shell = foundation::shell;
 namespace scene = foundation::scene;
 namespace physics = foundation::physics;
 namespace imgui = extensions::imgui;
+namespace gui = foundation::gui;
 
 namespace
 {
@@ -162,29 +163,18 @@ namespace
             // HUD button binding (once the subsystem instantiated the tree).
             if (!m_hudBound && m_scene != nullptr)
             {
-                if (auto* canvases = m_scene->GetSystem<engine::ui::UICanvasComponentManager>())
+                if (auto* canvases = m_scene->GetSystem<engine::gui::GuiCanvasComponentManager>())
                 {
-                    if (auto* canvas = canvases->Get(m_hudEntity);
-                        canvas != nullptr && canvas->root.Get() != nullptr)
+                    if (auto* canvas = canvases->Get(m_hudEntity); canvas != nullptr && canvas->root)
                     {
-                        if (auto* button = core::Cast<foundation::ui::ViewGroup>(canvas->root.Get())
-                                               ->FindByName<foundation::ui::Button>(u8"hud-btn"))
+                        if (auto* button = core::Cast<gui::Button>(FindById(*canvas->root, u8"hud-btn")))
                         {
                             PlaygroundApp* self = this;
-                            foundation::ui::Button* raw = button;
-                            button->OnClick.Add(
-                                [self, raw](foundation::ui::ButtonBase*)
+                            button->SetOnClick(
+                                [self, button]()
                                 {
                                     ++self->m_hudClicks;
-                                    core::String text(u8"Clicks: ");
-                                    const core::u32 n = self->m_hudClicks;
-                                    if (n >= 10)
-                                    {
-                                        text.PushBack(
-                                            static_cast<core::utf8char>('0' + n / 10 % 10));
-                                    }
-                                    text.PushBack(static_cast<core::utf8char>('0' + n % 10));
-                                    raw->SetText(text.AsView());
+                                    button->SetText(core::Format(u8"Clicks: {}", self->m_hudClicks).AsView());
                                     core::ConsoleWrite(u8"HUD button clicked\n");
                                 });
                             m_hudBound = true;
@@ -194,30 +184,18 @@ namespace
             }
             if (!m_kioskBound && m_scene != nullptr)
             {
-                if (auto* panels = m_scene->GetSystem<engine::ui::UIWorldPanelComponentManager>())
+                if (auto* panels = m_scene->GetSystem<engine::gui::GuiWorldPanelComponentManager>())
                 {
-                    if (auto* panel = panels->Get(m_kioskEntity);
-                        panel != nullptr && panel->renderRoot.Get() != nullptr)
+                    if (auto* panel = panels->Get(m_kioskEntity); panel != nullptr && panel->root)
                     {
-                        if (auto* button =
-                                core::Cast<foundation::ui::ViewGroup>(panel->renderRoot.Get())
-                                    ->FindByName<foundation::ui::Button>(u8"kiosk-btn"))
+                        if (auto* button = core::Cast<gui::Button>(FindById(*panel->root, u8"kiosk-btn")))
                         {
                             PlaygroundApp* self = this;
-                            foundation::ui::Button* raw = button;
-                            button->OnClick.Add(
-                                [self, raw](foundation::ui::ButtonBase*)
+                            button->SetOnClick(
+                                [self, button]()
                                 {
                                     ++self->m_kioskTaps;
-                                    core::String text(u8"Taps: ");
-                                    const core::u32 n = self->m_kioskTaps;
-                                    if (n >= 10)
-                                    {
-                                        text.PushBack(
-                                            static_cast<core::utf8char>('0' + n / 10 % 10));
-                                    }
-                                    text.PushBack(static_cast<core::utf8char>('0' + n % 10));
-                                    raw->SetText(text.AsView());
+                                    button->SetText(core::Format(u8"Taps: {}", self->m_kioskTaps).AsView());
                                     core::ConsoleWrite(u8"Kiosk panel tapped\n");
                                 });
                             m_kioskBound = true;
@@ -228,8 +206,8 @@ namespace
 
             // Crosshair shove: ray along the camera forward; impulse along the ray.
             // Gated on UI consumption: a click that lands ON the HUD never shoves.
-            auto* gameUi = host.Ctx().GetSubsystem<engine::ui::UISubsystem>();
-            const bool uiAte = gameUi != nullptr && gameUi->PointerOverUI();
+            auto* gameGui = host.Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
+            const bool uiAte = gameGui != nullptr && gameGui->PointerOverGui();
             if (!uiAte && input->Mouse()->IsButtonPressed(shell::MouseButton::Left) &&
                 m_physics != nullptr && m_physics->World() != nullptr)
             {
@@ -314,6 +292,17 @@ namespace
         }
 
     private:
+        // The node under `node` with `id` (a GUI tree from markup), or null.
+        [[nodiscard]] static gui::Node* FindById(gui::Node& node, core::StringView id)
+        {
+            if (const auto* widget = core::Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (core::usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindById(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
+
         void BuildWorld()
         {
             auto* bodies = m_scene->GetSystem<engine::physics::RigidBodyComponentManager>();
@@ -420,20 +409,18 @@ namespace
                 hero.maxStrength = 6000.0f;
 
                 // Billboard proof: a nameplate riding the character, distance-scaled.
-                m_nameplateDocument =
-                    core::MakeRef<foundation::ui::UIDocument>(AppRoot());
+                m_nameplateDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
                 m_nameplateDocument->markup = core::String(
-                    u8"<Panel padding=\"4\""
-                    u8"       style=\"background: rounded-rect(rgb(20, 24, 30), radius=4);\">"
+                    u8"<Panel padding=\"4\" background-color=\"rgb(20, 24, 30)\" border-radius=\"4\">"
                     u8"  <Label text=\"Hero\" font-size=\"13\"/>"
                     u8"</Panel>");
-                auto* billboards = m_scene->GetSystem<engine::ui::UIBillboardComponentManager>();
+                auto* billboards = m_scene->GetSystem<engine::gui::GuiBillboardComponentManager>();
                 if (billboards != nullptr)
                 {
-                    engine::ui::UIBillboardComponent& plate = billboards->Add(m_hero);
+                    engine::gui::GuiBillboardComponent& plate = billboards->Add(m_hero);
                     plate.document = m_nameplateDocument;
                     plate.offset = core::Float3{0.0f, 1.4f, 0.0f}; // above the capsule
-                    plate.scaleMode = engine::ui::BillboardScale::Distance;
+                    plate.scaleMode = engine::gui::GuiBillboardScale::Distance;
                     plate.referenceDistance = 12.0f;
                 }
             }
@@ -443,19 +430,17 @@ namespace
             {
                 scene::EntityHandle e = m_scene->CreateEntity(u8"kiosk");
                 m_scene->SetLocalPosition(e, core::Float3{4.0f, 1.6f, -6.0f});
-                m_kioskDocument = core::MakeRef<foundation::ui::UIDocument>(AppRoot());
+                m_kioskDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
                 m_kioskDocument->markup = core::String(
-                    u8"<Panel padding=\"14\""
-                    u8" style=\"background: rounded-rect(rgb(28, 32, 40), radius=10);\">"
-                    u8"  <Flex direction=\"vertical\" spacing=\"10\">"
-                    u8"    <Label text=\"KIOSK\" font-size=\"22\"/>"
-                    u8"    <Button id=\"kiosk-btn\" text=\"Taps: 0\" width=\"260\" height=\"56\"/>"
-                    u8"  </Flex>"
+                    u8"<Panel flex-direction=\"column\" gap=\"10\" padding=\"14\""
+                    u8"       background-color=\"rgb(28, 32, 40)\" border-radius=\"10\">"
+                    u8"  <Label text=\"KIOSK\" font-size=\"22\"/>"
+                    u8"  <Button id=\"kiosk-btn\" text=\"Taps: 0\" width=\"260\" height=\"56\"/>"
                     u8"</Panel>");
-                auto* panels = m_scene->GetSystem<engine::ui::UIWorldPanelComponentManager>();
+                auto* panels = m_scene->GetSystem<engine::gui::GuiWorldPanelComponentManager>();
                 if (panels != nullptr)
                 {
-                    engine::ui::UIWorldPanelComponent& panel = panels->Add(e);
+                    engine::gui::GuiWorldPanelComponent& panel = panels->Add(e);
                     panel.document = m_kioskDocument;
                     panel.sizeMeters = core::Float2{1.6f, 1.0f};
                     panel.pixelsPerMeter = 220.0f;
@@ -481,25 +466,21 @@ namespace
             // asset path is exercised by the editor flow). The button proves CONSUMPTION:
             // clicking it must NOT fire the crosshair shove.
             {
-                m_hudDocument = core::MakeRef<foundation::ui::UIDocument>(AppRoot());
-                // The proven UISandbox pause-menu vocabulary: kebab-case attributes,
-                // EXPLICIT sizes (an unsized child in a root Flex stretches to a bar).
+                m_hudDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
+                // Styled through the markup's inline CSS, as WebScene's HUD is.
                 m_hudDocument->markup = core::String(
-                    u8"<Flex direction=\"vertical\" align=\"start\" padding=\"12\" spacing=\"8\">"
-                    u8"  <Panel padding=\"12\" width=\"220\""
-                    u8"         style=\"background: rounded-rect(rgb(28, 32, 40), radius=8);\">"
-                    u8"    <Flex direction=\"vertical\" spacing=\"8\">"
-                    u8"      <Label id=\"hud-title\" text=\"PhysicsPlayground\" font-size=\"18\"/>"
-                    u8"      <Button id=\"hud-btn\" text=\"Clicks: 0\" width=\"180\" "
-                    u8"height=\"36\"/>"
-                    u8"    </Flex>"
+                    u8"<Panel flex-direction=\"column\" align-items=\"end\" padding=\"12\">" // top right: the ImGui panel is top left
+                    u8"  <Panel flex-direction=\"column\" gap=\"8\" padding=\"12\" width=\"220\""
+                    u8"         background-color=\"rgb(28, 32, 40)\" border-radius=\"8\">"
+                    u8"    <Label id=\"hud-title\" text=\"PhysicsPlayground\" font-size=\"18\"/>"
+                    u8"    <Button id=\"hud-btn\" text=\"Clicks: 0\" width=\"180\" height=\"36\"/>"
                     u8"  </Panel>"
-                    u8"</Flex>");
+                    u8"</Panel>");
                 scene::EntityHandle e = m_scene->CreateEntity(u8"hud");
-                auto* canvases = m_scene->GetSystem<engine::ui::UICanvasComponentManager>();
+                auto* canvases = m_scene->GetSystem<engine::gui::GuiCanvasComponentManager>();
                 if (canvases != nullptr)
                 {
-                    engine::ui::UICanvasComponent& canvas = canvases->Add(e);
+                    engine::gui::GuiCanvasComponent& canvas = canvases->Add(e);
                     canvas.document = m_hudDocument;
                     m_hudEntity = e;
                 }
@@ -613,10 +594,10 @@ namespace
         scene::EntityHandle m_boulder;
         scene::EntityHandle m_hero;
         scene::EntityHandle m_hudEntity;
-        core::RefPtr<foundation::ui::UIDocument> m_hudDocument;
-        core::RefPtr<foundation::ui::UIDocument> m_nameplateDocument;
+        core::RefPtr<gui::GuiDocument> m_hudDocument;
+        core::RefPtr<gui::GuiDocument> m_nameplateDocument;
         bool m_hudBound = false;
-        core::RefPtr<foundation::ui::UIDocument> m_kioskDocument;
+        core::RefPtr<gui::GuiDocument> m_kioskDocument;
         scene::EntityHandle m_kioskEntity{};
         bool m_kioskBound = false;
         core::u32 m_kioskTaps = 0;

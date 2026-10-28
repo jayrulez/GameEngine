@@ -54,7 +54,9 @@ UDP), a player-side server armed by a flag, and the panel choosing its source.
 
 ## The GUI lab after E9: stability first, then the decision (user 2026-10-17)
 
-The lab's evolution (`Specs/gui-lab-evolution.md`) is built through E9. Before anyone thinks about
+The lab's evolution is built through E17 (`Specs/gui-lab-evolution.md`, E1 to E9, and
+`Specs/gui-lab-evolution-2.md`, E10 to E17); round three, its satellite libraries (hosting, the
+viewport, docking), is `Specs/gui-lab-evolution-3.md`. Before anyone thinks about
 it replacing foundation.ui, it has to be shown as stable as foundation.ui is (the user,
 2026-10-17: "a lot of testing"). In order:
 
@@ -77,21 +79,29 @@ Gaps the phases left, by area (each phase's own notes say more):
   collapsing to its logical end; a right-to-left line's clamp ellipsis on its right; full UAX #29
   (Hangul jamo, Indic conjuncts) and words from the shaper; a password taking no composition; a
   link with no pointer cursor; HarfBuzz as the lab's default shaper outside the sandbox.
-- **Direction.** A right-to-left horizontal scroller starts at its left, not its inline start.
-- **Accessibility.** Item views expose only the rows they have made, not every item (rows need
-  a model of their own); the platform adapters (UI Automation, NSAccessibility, AT-SPI) and real
-  text to speech are host work.
+- **Accessibility.** The platform adapters (UI Automation, NSAccessibility, AT-SPI) and real text to
+  speech are host work; a table's cells are not nodes of their own.
 - **Layout.** A container's baseline is its content box's bottom, not its first child's; grid and
-  stack place `baseline` as start; text is not snapped to the pixel grid; `z-index` is parsed but
-  orders neither drawing nor hit testing; no `calc()`; a node scrolling on both axes gives `fr`
-  columns their content's width.
-- **Styling.** Parts take no motion and no text properties; `inherit` on a non-inherited property
+  stack place `baseline` as start; text is not snapped to the pixel grid; no `calc()`; a node
+  scrolling on both axes gives `fr` columns their content's width.
+- **Keyboard.** A menu's arrows, Return and Escape are handled in widget code, so a player cannot
+  rebind them through the keymap; there is no way to capture the next key before the keymap sees
+  it (a rebinding screen); no punctuation or keypad key codes, tab index or Tab passing through.
+- **Styling.** The built-in themes write their colours directly, not through a palette of custom
+  properties (E3's design); parts take no motion and no text properties; `inherit` on a non-inherited property
   takes the parent's cascaded value, not its live one; attribute selectors read reflected
   properties only; a reflected property code set before the sheet first styled the node loses
   to the sheet.
 - **Overlays.** No OS popup windows (a popup never leaves its root), modality per root;
   type-ahead by first letter only; a shrunk menu clips rather than scrolls; tooltips for the
   pointer only, never interactive; no Alt mnemonics; scripts cannot build a menu.
+- **Press, drag and release in menus (to evaluate; user 2026-10-19).** The lab's menus, combo
+  boxes and menu buttons open on a click, as the web-style toolkits do (RmlUi, gpui, aui), so a
+  menu bar cannot be pressed, dragged onto an item and released, as native desktop menus can
+  (Godot and eepp do it; foundation.ui opens on press but picks on press too). Skipped for now; weigh
+  it, for the menu bar only, when the editor moves onto the lab. Godot's design is the reference:
+  the title opens on press, items take the release, a release within 400 ms of opening is ignored
+  (a quick click leaves the menu open), touch keeps opening on a tap's release.
 - **Controls.** The range is a base class (a progress bar carries a page it hides); every radio
   and every tab is a tab stop; type-ahead reads keys, not text input; a tree resets on every
   model range.
@@ -99,14 +109,13 @@ Gaps the phases left, by area (each phase's own notes say more):
   by taking it; the scroll band and hover delay are dispatcher settings, not styles; an OS file
   shows nothing while dragged over; the pad's d-pad moves focus during a keyboard drag inside a
   list; a tree takes a drop as a reset; a copy of a tree's own nodes is not taken.
-- **Events and the rest.** Escape closing a popup is the dispatcher's special case; click
-  thresholds are device pixels, not scaled; the stress page's turning boxes keep drawing out of
-  view (a rotation about the centre could be bounded).
+- **Events and the rest.** Escape closing a popup is the dispatcher's special case; the stress
+  page's turning boxes keep drawing out of view (a rotation about the centre could be bounded).
 
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 
 The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API
-over the core (`experimental.gui.inspector`: the tree, a node described with its states, box,
+over the core (`foundation.gui.inspector`: the tree, a node described with its states, box,
 reflected properties, commands and listeners, a selector query, a property set as markup sets
 it, and `StyleManager::ExplainStyle` for where each style came from). Serve the same answers as
 MCP tools, as eepp's server and LunarSong's tools do, so an agent can read and drive a running
@@ -121,6 +130,16 @@ What custom shaders left after 0.1 (`Specs/custom-shaders.md`, phase 8): a toggl
 page showing the cooked SPIR-V or WGSL of a chosen variant (the parity doc's "live disassembly",
 from the cook's own output), and a project's own `.hlsli` include files with their dependency
 tracking (today `#include` reaches the engine's shader library only).
+
+## A sound cue's thumbnail: its variants' waveforms stacked (user 2026-10-26)
+
+A sound cue shows only its type icon in the assets browser and the pickers; no editor ever drew it
+a thumbnail (the one audio thumbnail, Editor.Audio's AudioClipThumbnailGenerator, takes clips
+alone). A cue's thumbnail would draw each variant's clip as a band of its waveform, one under the
+other, so cues tell apart at a glance. The clip generator's pattern: read each variant's clip from
+its source (the audio pages' `ReadAuditionClip`), its peaks into a band. Decide: an empty variant's
+band, whether the weights show (a band's height or shade), and refreshing when a variant's clip
+changes (the thumbnail's recipe hashing the clips' sources).
 
 ## Android: a native player and its export (user 2026-10-11)
 

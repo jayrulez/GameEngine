@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// GameUiSandbox - the game-UI-kit widgets on screen. A DefaultApplication (same host as
-// ScriptPlayground / PhysicsPlayground: UISubsystem + rendering + input come for free) that pushes a
-// game UIScreen onto the UISubsystem's screen-tier ScreenStack and fills it with the gamekit widgets:
-//   - a MenuList whose items drive the demo (pad/arrow navigate, Enter/A activates),
-//   - a Bar that drains/heals with a smooth animation,
-//   - a Ticker that rolls the score up,
-//   - a Toast on "Show toast" (via a ToastHost overlay),
-//   - a ButtonPrompt resolving the "Deliver" action's binding through foundation.input.
-// "Pause menu" pushes a second (Modal) screen to show ScreenStack push/pop. Esc exits.
+// GameUiSandbox - a game's screens on the engine GUI (Engine.GUI, GUI.Gamekit). A DefaultApplication
+// (same host as ScriptPlayground / PhysicsPlayground: the GUI, rendering and input come with it) that
+// builds two screens from markup and pushes them on the GUI's screen stack:
+//   - a HUD: a menu of buttons (the arrows or the pad move through it, Enter or South presses), a
+//     health bar that drains and heals with a tween, a score that rolls up through a data tween
+//     (a whole number, so it rolls in whole steps), a prompt naming the key or button bound to the
+//     "Deliver" action, and toasts on "Show toast";
+//   - a pause menu pushed over it, blocking it, which back (Escape) pops.
+// The old game kit's MenuList, Bar and Ticker have no widget here (Specs/gui-lab-evolution-3.md,
+// section K): markup, navigation and commands make the menu, a progress bar and a tween the bar, a
+// data tween the ticker. Escape on the HUD exits.
 
 #include "Core/Prelude.h"
 #include "Runtime.Client/AppMain.h"
@@ -26,18 +28,17 @@ import foundation.scene;
 import engine.scene;
 import engine.render;
 import engine.defaultapp;
-import engine.ui;             // UISubsystem (screen tier: Screens() + ScreenRoot())
-import foundation.ui;         // RootView / FlexLayout / Label / Thickness / SizeSpec
-import foundation.ui.gamekit; // UIScreen / ScreenStack / MenuList / Bar / Ticker / ButtonPrompt / ToastHost
-import foundation.input;      // InputMap (for ButtonPrompt)
+import engine.gui;            // GuiSubsystem (the screen tier: Screens(), ScreenRoot())
+import foundation.gui;           // the widgets, the toasts
+import foundation.gui.resources; // GuiDocument (the documents made in code)
+import foundation.gui.gamekit; // Screen, ScreenStack
+import foundation.input;      // InputMap
 
 namespace core = foundation::core;
 namespace runtime = foundation::runtime;
-namespace graphics = foundation::graphics;
 namespace shell = foundation::shell;
 namespace scene = foundation::scene;
-namespace ui = foundation::ui;
-namespace gamekit = foundation::ui::gamekit;
+namespace gui = foundation::gui;
 namespace input = foundation::input;
 
 namespace
@@ -49,9 +50,6 @@ namespace
     }
 }
 
-
-
-
 using core::f32;
 using core::i64;
 using core::RefPtr;
@@ -60,20 +58,49 @@ using core::StringView;
 
 namespace
 {
-    [[nodiscard]] RefPtr<ui::FlexLayout> Row(f32 spacing)
-    {
-        auto row = core::MakeRef<ui::FlexLayout>(AppRoot());
-        row->Direction = ui::Orientation::Horizontal;
-        row->AlignItems = ui::Align::Center;
-        row->Spacing = spacing;
-        return row;
-    }
+    // The HUD: the title, the prompt, the score and the health (bound to the GUI's data), the menu.
+    constexpr StringView kHudMarkup =
+        u8"<Panel flex-direction=\"column\" gap=\"16\" padding=\"40 48\" flex-grow=\"1\" background-color=\"rgb(18, 20, 26)\">"
+        u8"  <Label text=\"Game UI Sandbox\" font-size=\"28\"/>"
+        u8"  <Panel flex-direction=\"row\" align-items=\"center\" gap=\"8\">"
+        u8"    <Prompt action=\"Deliver\"/><Label text=\"Deliver\"/>"
+        u8"  </Panel>"
+        u8"  <Panel flex-direction=\"row\" align-items=\"center\" gap=\"8\">"
+        u8"    <Label text=\"Score\" width=\"64\"/><Label text=\"{{score}}\" font-size=\"20\"/>"
+        u8"  </Panel>"
+        u8"  <Panel flex-direction=\"row\" align-items=\"center\" gap=\"8\">"
+        u8"    <Label text=\"Health\" width=\"64\"/><ProgressBar id=\"health\" width=\"220\" value=\"{{health}}\"/>"
+        u8"  </Panel>"
+        u8"  <Panel flex-direction=\"column\" gap=\"6\" width=\"240\">"
+        u8"    <Button id=\"menu-score\" text=\"Score +250\"/>"
+        u8"    <Button id=\"menu-damage\" text=\"Take damage\"/>"
+        u8"    <Button id=\"menu-heal\" text=\"Heal\"/>"
+        u8"    <Button id=\"menu-toast\" text=\"Show toast\"/>"
+        u8"    <Button id=\"menu-pause\" text=\"Pause menu\"/>"
+        u8"    <Button id=\"menu-quit\" text=\"Quit\"/>"
+        u8"  </Panel>"
+        u8"</Panel>";
 
-    [[nodiscard]] RefPtr<ui::Label> Text(StringView s, f32 size = 16.0f)
+    // The pause menu: a scrim over the HUD, a card in its middle.
+    constexpr StringView kPauseMarkup =
+        u8"<Panel background-color=\"rgba(0, 0, 0, 0.55)\" justify-content=\"center\" align-items=\"center\">"
+        u8"  <Panel flex-direction=\"column\" align-items=\"center\" gap=\"16\" padding=\"28 40\""
+        u8"         background-color=\"rgba(31, 33, 43, 0.98)\" border-radius=\"8\">"
+        u8"    <Label text=\"Paused\" font-size=\"26\"/>"
+        u8"    <Button id=\"pause-resume\" text=\"Resume\" width=\"200\"/>"
+        u8"    <Button id=\"pause-quit\" text=\"Quit\" width=\"200\"/>"
+        u8"  </Panel>"
+        u8"</Panel>";
+
+    // The node under `node` with `id`, or null.
+    [[nodiscard]] gui::Node* FindById(gui::Node& node, StringView id)
     {
-        auto label = core::MakeRef<ui::Label>(AppRoot(), s);
-        label->FontSize.SetValue(size);
-        return label;
+        if (const auto* widget = core::Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+            return &node;
+        for (core::usize i = 0; i < node.ChildCount(); ++i)
+            if (gui::Node* found = FindById(*node.GetChildAt(i), id))
+                return found;
+        return nullptr;
     }
 
     class GameUiSandbox final : public engine::runtime::DefaultApplication
@@ -82,68 +109,53 @@ namespace
         void OnLaunch(runtime::IApplicationHost& host) override
         {
             if (host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>() == nullptr)
-            {
                 return;
-            }
-            // A minimal scene + camera so a frame renders; the Opaque screen covers it as a backdrop.
+            // A minimal scene and camera so a frame renders; the HUD covers it.
             m_scene = PrimaryScenes().CreateScene(u8"gameui");
             m_camera = m_scene->CreateEntity(u8"camera");
             if (auto* cameras = m_scene->GetSystem<engine::render::CameraComponentManager>())
-            {
                 cameras->Add(m_camera);
-            }
             m_scene->Start();
 
-            m_ui = host.Ctx().GetSubsystem<engine::ui::UISubsystem>();
-            if (m_ui == nullptr)
-            {
+            m_gui = host.Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
+            if (m_gui == nullptr || m_gui->ScreenRoot() == nullptr || m_gui->Screens() == nullptr)
                 return;
-            }
+            gui::SceneRoot& root = *m_gui->ScreenRoot();
 
-            // Toast overlay: a ToastHost on the screen-tier root, above the pushed screens.
-            m_toasts = core::MakeRef<gamekit::ToastHost>(AppRoot());
-            m_ui->ScreenRoot()->AddView(m_toasts.Get());
-
+            // The game's bindings, which the prompt names (the engine's GUI reads the game's runtime).
             BuildInputMap();
-            m_ui->Screens().Push(BuildHudScreen());
+            Instance().InputRuntime().SetMap(m_map);
 
-            core::ConsoleWrite(u8"GameUiSandbox: Up/Down (or pad) move the menu, Enter/A activate. "
-                               u8"Esc exits.\n");
+            // The values the HUD shows: a whole score (so its tween rolls in whole steps), the health.
+            root.GetContext().GetData().Set(u8"score", core::Variant::From<i64>(0));
+            root.GetContext().GetData().Set(u8"health", core::Variant::From<core::f64>(1.0));
+
+            // Toasts over the screens.
+            m_toasts = core::MakeRef<gui::ToastHost>(AppRoot());
+            root.AddChild(m_toasts.Get());
+
+            PushHud();
+            core::ConsoleWrite(u8"GameUiSandbox: the arrows (or the pad) move through the menu, Enter or South presses. "
+                               u8"Escape backs out of the pause menu, else exits.\n");
         }
 
         void OnUpdate(runtime::IApplicationHost& host, f32 dt) override
         {
-            engine::runtime::DefaultApplication::OnUpdate(host, dt); // ticks the UISubsystem (animations)
-            if (m_toasts)
-            {
-                m_toasts->Update(dt); // ages timed toasts
-            }
+            engine::runtime::DefaultApplication::OnUpdate(host, dt);
             if (m_quit)
             {
                 host.RequestExit(0);
                 return;
             }
             auto* in = host.Shell() != nullptr ? host.Shell()->Input() : nullptr;
-            if (in == nullptr)
-            {
+            if (in == nullptr || m_gui == nullptr || m_gui->Screens() == nullptr)
                 return;
-            }
-            if (in->Keyboard()->IsKeyPressed(shell::KeyCode::Escape))
-            {
-                // Escape backs out of the pause screen first, else exits.
-                if (!m_ui->Screens().HandleBack())
-                {
-                    host.RequestExit(0);
-                }
-            }
-            // The "Deliver" action the ButtonPrompt advertises: E fires it (a toast, for the demo).
-            if (in->Keyboard()->IsKeyPressed(shell::KeyCode::E) && m_toasts)
-            {
-                gamekit::ToastRequest r;
-                r.message = String(u8"Delivered!");
-                r.durationSeconds = 1.5f;
-                m_toasts->Show(core::Move(r));
-            }
+            // Escape backs out of the pause menu first, else exits.
+            if (in->Keyboard()->IsKeyPressed(shell::KeyCode::Escape) && m_gui->Screens()->Count() <= 1)
+                host.RequestExit(0);
+            // The "Deliver" action the prompt names: E fires it (a toast, for the demo).
+            if (in->Keyboard()->IsKeyPressed(shell::KeyCode::E))
+                Toast(u8"Delivered!", gui::ToastSeverity::Info, 1.5f);
         }
 
     private:
@@ -165,149 +177,81 @@ namespace
             m_map.sets.PushBack(core::Move(set));
         }
 
-        [[nodiscard]] RefPtr<gamekit::UIScreen> BuildHudScreen()
+        // A screen built from `markup` and pushed: the pushed screen, or null.
+        gui::Screen* PushMarkup(StringView markup, RefPtr<gui::GuiDocument>& document)
         {
-            auto screen = core::MakeRef<gamekit::UIScreen>(AppRoot());
-            screen->SetMode(gamekit::ScreenMode::Opaque);
-            screen->SetTransition(gamekit::TransitionDesc{gamekit::TransitionKind::Fade, 0.2f});
-
-            auto column = core::MakeRef<ui::FlexLayout>(AppRoot());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 16.0f;
-            column->Padding = ui::Thickness{48.0f, 40.0f};
-
-            column->AddView(Text(u8"Game UI Kit Sandbox", 28.0f).Get());
-
-            auto prompt = core::MakeRef<gamekit::ButtonPrompt>(AppRoot());
-            prompt->SetFromAction(m_map, u8"Deliver", u8"Deliver");
-            column->AddView(prompt.Get());
-
-            {
-                auto row = Row(8.0f);
-                row->AddView(Text(u8"Score").Get());
-                auto ticker = core::MakeRef<gamekit::Ticker>(AppRoot());
-                ticker->FontSize.SetValue(20.0f);
-                m_score = ticker.Get();
-                row->AddView(ticker.Get());
-                column->AddView(row.Get());
-            }
-            {
-                auto row = Row(8.0f);
-                row->AddView(Text(u8"Health").Get());
-                auto bar = core::MakeRef<gamekit::Bar>(AppRoot());
-                bar->SetFill(1.0f);
-                m_health = bar.Get();
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Px(220));
-                row->AddView(bar.Get(), lp);
-                column->AddView(row.Get());
-            }
-
-            auto menu = core::MakeRef<gamekit::MenuList>(AppRoot());
-            GameUiSandbox* self = this;
-            menu->AddItem(u8"Score +250",
-                          [self]()
-                          {
-                              self->m_scoreValue += 250;
-                              if (self->m_score)
-                              {
-                                  self->m_score->AnimateTo(self->m_scoreValue);
-                              }
-                          });
-            menu->AddItem(u8"Take damage",
-                          [self]()
-                          {
-                              self->m_healthValue = core::Max(0.0f, self->m_healthValue - 0.2f);
-                              if (self->m_health)
-                              {
-                                  self->m_health->AnimateTo(self->m_healthValue);
-                              }
-                          });
-            menu->AddItem(u8"Heal",
-                          [self]()
-                          {
-                              self->m_healthValue = core::Min(1.0f, self->m_healthValue + 0.3f);
-                              if (self->m_health)
-                              {
-                                  self->m_health->AnimateTo(self->m_healthValue);
-                              }
-                          });
-            menu->AddItem(u8"Show toast",
-                          [self]()
-                          {
-                              if (!self->m_toasts)
-                              {
-                                  return;
-                              }
-                              gamekit::ToastRequest r;
-                              r.message = String(u8"Objective complete!");
-                              r.severity = gamekit::ToastSeverity::Success;
-                              r.durationSeconds = 3.0f;
-                              self->m_toasts->Show(core::Move(r));
-                          });
-            menu->AddItem(u8"Pause menu", [self]() { self->m_ui->Screens().Push(self->BuildPauseScreen()); });
-            menu->AddItem(u8"Quit", [self]() { self->m_quit = true; });
-            column->AddView(menu.Get());
-
-            screen->AddView(column.Get());
-            return screen;
+            document = core::MakeRef<gui::GuiDocument>(AppRoot());
+            document->markup = String(markup);
+            RefPtr<gui::Node> tree = m_gui->BuildDocument(*document);
+            return tree ? m_gui->Screens()->Push(*tree) : nullptr;
         }
 
-        [[nodiscard]] RefPtr<gamekit::UIScreen> BuildPauseScreen()
+        void OnClick(gui::Node& screen, StringView id, core::Function<void()> click)
         {
-            auto screen = core::MakeRef<gamekit::UIScreen>(AppRoot());
-            screen->SetMode(gamekit::ScreenMode::Modal); // shields the HUD below, keeps it visible
-            screen->SetTransition(gamekit::TransitionDesc{gamekit::TransitionKind::Scale, 0.18f});
+            if (auto* button = core::Cast<gui::Button>(FindById(screen, id)))
+                button->SetOnClick(core::Move(click));
+        }
 
-            // Scrim: a full-screen semi-transparent black behind the card, dimming the frozen HUD.
-            // UIScreen lays out each child to fill, so a bare ColorView covers the whole screen; it is
-            // added FIRST so it draws behind the centered card.
-            auto scrim = core::MakeRef<ui::ColorView>(
-                AppRoot(), core::Color{0.0f, 0.0f, 0.0f, 0.55f}, 0.0f, 0.0f);
-            screen->AddView(scrim.Get());
-
-            // Center a solid CARD over the dimmed HUD so the menu reads clearly instead of
-            // jumbling over the text beneath it.
-            auto center = core::MakeRef<ui::FlexLayout>(AppRoot());
-            center->Direction = ui::Orientation::Vertical;
-            center->JustifyContent = ui::Justify::Center;
-            center->AlignItems = ui::Align::Center;
-
-            auto card = core::MakeRef<ui::Panel>(AppRoot());
-            card->SetStyle(ui::StyleProperty::Background,
-                           core::RefPtr<ui::Drawable>(core::MakeRef<ui::ColorDrawable>(
-                               AppRoot(), core::Color{0.12f, 0.13f, 0.17f, 0.98f})));
-
-            // Padding lives on the inner FlexLayout (it honours Padding); the Panel wraps it + paints
-            // the background behind it.
-            auto content = core::MakeRef<ui::FlexLayout>(AppRoot());
-            content->Direction = ui::Orientation::Vertical;
-            content->AlignItems = ui::Align::Center;
-            content->Spacing = 16.0f;
-            content->Padding = ui::Thickness{40.0f, 28.0f};
-
-            content->AddView(Text(u8"Paused", 26.0f).Get());
-            auto menu = core::MakeRef<gamekit::MenuList>(AppRoot());
+        void PushHud()
+        {
+            gui::Screen* hud = PushMarkup(kHudMarkup, m_hudDocument);
+            if (hud == nullptr)
+                return;
+            hud->SetCovers(true);  // over the scene, whole
+            hud->SetBack(String(u8"none")); // back on the HUD is the host's (Escape exits)
             GameUiSandbox* self = this;
-            menu->AddItem(u8"Resume", [self]() { self->m_ui->Screens().Pop(); });
-            menu->AddItem(u8"Quit", [self]() { self->m_quit = true; });
-            content->AddView(menu.Get());
+            gui::SceneRoot& root = *m_gui->ScreenRoot();
+            OnClick(*hud, u8"menu-score", [self, &root]()
+                    {
+                        self->m_score += 250;
+                        root.GetContext().AnimateData(u8"score", static_cast<core::f64>(self->m_score), 0.6f);
+                    });
+            OnClick(*hud, u8"menu-damage", [self, &root]()
+                    {
+                        self->m_health = core::Max(0.0f, self->m_health - 0.2f);
+                        root.GetContext().AnimateData(u8"health", self->m_health, 0.35f);
+                    });
+            OnClick(*hud, u8"menu-heal", [self, &root]()
+                    {
+                        self->m_health = core::Min(1.0f, self->m_health + 0.3f);
+                        root.GetContext().AnimateData(u8"health", self->m_health, 0.35f);
+                    });
+            OnClick(*hud, u8"menu-toast", [self]() { self->Toast(u8"Objective complete!", gui::ToastSeverity::Success, 3.0f); });
+            OnClick(*hud, u8"menu-pause", [self]() { self->PushPause(); });
+            OnClick(*hud, u8"menu-quit", [self]() { self->m_quit = true; });
+        }
 
-            card->AddView(content.Get());
-            center->AddView(card.Get());
-            screen->AddView(center.Get());
-            return screen;
+        void PushPause()
+        {
+            gui::Screen* pause = PushMarkup(kPauseMarkup, m_pauseDocument);
+            if (pause == nullptr)
+                return;
+            pause->SetBlocks(true); // the HUD under it shows, and takes no input
+            GameUiSandbox* self = this;
+            OnClick(*pause, u8"pause-resume", [self]() { (void)self->m_gui->Screens()->Pop(); });
+            OnClick(*pause, u8"pause-quit", [self]() { self->m_quit = true; });
+        }
+
+        void Toast(StringView message, gui::ToastSeverity severity, f32 seconds)
+        {
+            if (!m_toasts)
+                return;
+            gui::ToastRequest r;
+            r.Title = String(message);
+            r.Severity = severity;
+            r.Duration = seconds;
+            (void)m_toasts->Post(core::Move(r));
         }
 
         scene::Scene* m_scene = nullptr;
         scene::EntityHandle m_camera{};
-        engine::ui::UISubsystem* m_ui = nullptr;
-        RefPtr<gamekit::ToastHost> m_toasts;
-        gamekit::Bar* m_health = nullptr;
-        gamekit::Ticker* m_score = nullptr;
+        engine::gui::GuiSubsystem* m_gui = nullptr;
+        RefPtr<gui::ToastHost> m_toasts;
+        RefPtr<gui::GuiDocument> m_hudDocument;
+        RefPtr<gui::GuiDocument> m_pauseDocument;
         input::InputMap m_map;
-        i64 m_scoreValue = 0;
-        f32 m_healthValue = 1.0f;
+        i64 m_score = 0;
+        f32 m_health = 1.0f;
         bool m_quit = false;
     };
 }

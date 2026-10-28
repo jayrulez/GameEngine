@@ -1,49 +1,39 @@
-# GUI - an eepp-derived UI framework (Experimental, parked)
+# GUI - foundation.gui, the retained-mode GUI
 
 > Status: CURRENT
-> Verified: 2026-08-12 @ 12114827
+> Verified: 2026-10-23 (the move out of Experimental)
 > Track: [[gui-port]]
 
-An EXPERIMENTAL, PARKED alternative UI framework: a fresh `experimental.gui` (`Code/Experimental/GUI`)
-built bottom-up on the engine's own infra (VG + Fonts + Core + viewport-input), progressively slicing
-eepp's UI design rather than lifting it wholesale. This is a separate module and NOT the engine's UI -
-the shipped `foundation.ui` (Sedulous-derived, [[ui-port]]) is the real one; GUI borrows eepp's
-VG/Drawable and CSS RECIPES, not its code, and is parked in the Experimental role.
+`foundation.gui` is a retained-mode GUI built on the engine's own stack (VG for drawing, Fonts for
+text, Core's reflection for scripts), designed concern by concern from a survey of eepp, RmlUi,
+Godot, browsers and others rather than ported from one. It began as an experimental lab
+(`Code/Experimental`, 2026-10) and moved into Foundation once the engine hosted it. It lives beside
+foundation.ui (the Sedulous-derived framework the editor and Engine.UI still use) until the games,
+samples and editor have moved onto it.
 
-## What is built (bottom-up, on-screen)
+## Where it is
 
-The progressive slice reached a working, CSS-driven, on-screen framework:
-- **Skeleton + type adapters** (`experimental.gui`), **Transformable + Node**, and the **render seam**
-  `DrawContext` over VG + core drawables (there is no immediate-mode GL as in eepp; the seam was
-  invented against VG).
-- **SceneNode + coordinator + actions** (`ActionManager`), the platform-agnostic `EventDispatcher`
-  (Inject* API), and the `experimental.gui.shell` input bridge (`GuiInputBridge`, fed by the shell).
-- **Text/Font** (`Text` over `foundation.fonts`), **UINode / UIWidget** chrome (padding, control state).
-- **A CSS engine, essentially complete**: parsing + `StyleManager` (StyleSheet + MediaContext +
-  per-widget resolved-style cache), `:hover` re-resolution driving transitions through the
-  ActionManager live (`hovering a widget re-resolves :hover and drives its transition`), transitions
-  (`Styling/Transition.cppm`). The GUISandbox drives a Button through the dispatcher (click, control
-  state) styled via CSS, on-screen through VG -> VGRenderer -> RHI, input from a fullscreen
-  `InputSurface`.
+- `Code/Foundation/GUI` (`foundation.gui`): nodes and widgets, layout (flex, grid, stack), the CSS
+  engine (selectors, cascade, variables, transitions and animations, media queries), markup
+  (`.gml`), text (shaping, bidi, rich text), events and input, data binding, localization, the
+  script surface (every widget reflected; the `gui` facade).
+- Satellites, each `foundation.gui.<name>` in `Code/Foundation/GUI.<Name>`: `Shell` (the platform
+  input bridge), `Hosting` (windows, roots, renderers; drawing into a caller's pass), `Toolkit`
+  (editor widgets), `Code` (the code editor), `Docking`, `Viewport` (3D content in a node),
+  `Gamekit` (a game's screens and prompts), `Inspector`, `Testing`, `VFS`, `Resources` (cooked
+  documents and sheets). Each has a `.Tests` suite beside it; `GUI.Fuzz.Tests` fuzzes the parsers.
+- `Code/Pipeline/GUI.Pipeline` (`gui.pipeline`): `.gml` documents and `.css` sheets as validated,
+  linked-source assets.
+- `Code/Engine/Engine.GUI` (`engine.gui`): the engine's GUI (screen and scene tiers, components,
+  the resource provider by guid, the overlays, the script surface); `Code/Editor/Editor.GUI`: the
+  editor's pages for the assets.
+- `Code/Samples/GUISandbox`: the sandbox, a page per area, and the game menu showcase;
+  `Code/Integration/Integration.GuiScript`: the script backends driving all of it.
 
-Per the track memory: ~16 widgets, 3 layouts, popups, and the CSS engine landed before parking.
+## The design record
 
-## Why progressive-slice (not wholesale-lift)
-
-A wholesale lift of eepp's `ui` (~118k LOC) is a trap: its dependency cone is most of the engine
-(graphics/system/scene/core/window/math), there is NO renderer seam (it draws through immediate-mode GL /
-`GlobalBatchRenderer`), and it clashes on every constraint (STL + exceptions + RTTI + raw-pointer
-ownership vs named modules / `-fno-exceptions` / `-fno-rtti` / own containers / `Object` reflection). The
-slice builds green feedback the whole way.
-
-## Status: parked
-
-The framework is parked in the Experimental role. Remaining (if resumed): heavy widgets (CodeEditor,
-HTML/Markdown, Terminal) opt-in; keyboard/text input breadth; markup + tools (XML/CSS layout loading on
-`foundation.xml`); `background-image -> Drawable*` / `font-family -> Font*` resource resolution + CSS
-hot-reload; and eepp's HarfBuzz + bidi (its unique strength) deferred until rich-text widgets need it.
-
----
-
-The eepp reference analysis (the dependency-cone census, the namespace map, the wholesale-lift trap in
-full) is in `Documentation/Archive/gui-port-design-history.md`.
+The design and its rulings are in the specs, in order: `Specs/vg-and-gui-lab.md`,
+`Specs/gui-lab-evolution.md`, `Specs/gui-lab-evolution-2.md` and `Specs/gui-lab-evolution-3.md`
+(section E: the engine's GUI, the move out of Experimental and what follows). They name the code
+by its paths and modules at the time (`Code/Experimental`, `experimental.gui`). The early eepp
+analysis is in `Documentation/Archive/gui-port-design-history.md`.

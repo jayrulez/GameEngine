@@ -179,7 +179,7 @@ namespace
 
 TEST_CASE("i18n.table: an entry short of its locales' cells fails the read and leaves the table safe to ask")
 {
-    // Found by the GUI lab's string table fuzzer: the read failed, but kept the short entry, and a
+    // Found by the GUI's string table fuzzer: the read failed, but kept the short entry, and a
     // caller that did not check asked a locale past its cells.
     RegisterStringTableType();
     MemoryStream stream;

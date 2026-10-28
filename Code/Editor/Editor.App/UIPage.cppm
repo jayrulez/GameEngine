@@ -4,7 +4,7 @@
 // Editor::App - :ui_page partition.
 //
 // UIEditorPage: the UI-side extension of the headless editor::EditorPage - a page that owns a
-// foundation.ui content view (docked as a closable center tab by EditorApplication) and receives
+// GUI node, its content (docked as a closable center tab by EditorApplication), and receives
 // the app's frame hooks so it can drive per-page work (viewport binding, camera, offscreen
 // rendering). Every IEditorPageFactory registered into THIS app's context must produce
 // UIEditorPages (EditorApplication static_casts on open) - the headless EditorPage stays UI-free
@@ -18,7 +18,7 @@ export module editor.app:ui_page;
 import foundation.core;
 import foundation.graphics;
 import foundation.runtime.client;
-import foundation.ui;
+import foundation.gui; // Node (a page's content)
 import editor.core;
 
 using namespace foundation::core;
@@ -33,8 +33,9 @@ export namespace editor::app
         {
         }
 
-        /// The view docked into the center document area (owned by the page).
-        [[nodiscard]] virtual foundation::ui::View* ContentView() = 0;
+        /// Its content, docked into the center document area: the page holds it, and gives the
+        /// same node each time it is asked (the dock asks again when it shows the panel anew).
+        [[nodiscard]] virtual RefPtr<foundation::gui::Node> Content() = 0;
 
         /// Per-frame hook, after the UI laid out (viewport rects are current).
         virtual void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt)

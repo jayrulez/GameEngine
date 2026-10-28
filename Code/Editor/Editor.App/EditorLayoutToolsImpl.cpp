@@ -9,8 +9,7 @@ module editor.app;
 import foundation.core;
 import foundation.json;
 import foundation.mcp;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui.docking;
 import editor.core;
 
 using namespace foundation::core;
@@ -18,121 +17,113 @@ using foundation::json::JsonValue;
 using foundation::mcp::SchemaBuilder;
 using foundation::mcp::ToolAnnotations;
 using foundation::mcp::ToolResult;
-namespace toolkit = foundation::ui::toolkit;
+namespace gui = foundation::gui;
 
 namespace editor::app
 {
     namespace
     {
-        JsonValue PanelJson(const toolkit::DockablePanel& panel)
+        JsonValue PanelJson(const gui::DockController& dock, StringView panel)
         {
+            const gui::DockPanelDescription* description = dock.Describe(panel);
             JsonValue out = JsonValue::MakeObject();
-            out.Set(u8"panel", JsonValue::MakeString(String(panel.PersistenceId())));
-            out.Set(u8"title", JsonValue::MakeString(String(panel.Title())));
+            out.Set(u8"panel", JsonValue::MakeString(String(panel)));
+            out.Set(u8"title", JsonValue::MakeString(description != nullptr && !description->Title.IsEmpty() ? description->Title : String(panel)));
             return out;
         }
 
-        // A node of the dock tree: a split with its two sides, or a tab group with its panels.
-        JsonValue NodeJson(const foundation::ui::View* node)
+        // A node of the dock tree: a split with its children and their weights, or a stack of tabs.
+        JsonValue NodeJson(const gui::DockController& dock, gui::DockNodeId id)
         {
-            if (const auto* split = Cast<toolkit::DockSplit>(node))
-            {
-                JsonValue out = JsonValue::MakeObject();
-                out.Set(u8"split", JsonValue::MakeString(split->Orientation() == foundation::ui::Orientation::Horizontal
-                                                             ? u8"horizontal"
-                                                             : u8"vertical"));
-                out.Set(u8"share", JsonValue::MakeNumber(split->SplitRatio()));
-                out.Set(u8"first", NodeJson(split->First()));
-                out.Set(u8"second", NodeJson(split->Second()));
-                return out;
-            }
-            if (const auto* group = Cast<toolkit::DockTabGroup>(node))
-            {
-                JsonValue tabs = JsonValue::MakeArray();
-                for (i32 i = 0; i < group->PanelCount(); ++i)
-                {
-                    tabs.Add(PanelJson(*group->GetPanel(i)));
-                }
-                JsonValue out = JsonValue::MakeObject();
-                out.Set(u8"tabs", Move(tabs));
-                if (const toolkit::DockablePanel* active = group->SelectedPanel())
-                {
-                    out.Set(u8"active", JsonValue::MakeString(String(active->PersistenceId())));
-                }
-                return out;
-            }
-            if (const auto* panel = Cast<toolkit::DockablePanel>(node))
-            {
-                JsonValue tabs = JsonValue::MakeArray();
-                tabs.Add(PanelJson(*panel));
-                JsonValue out = JsonValue::MakeObject();
-                out.Set(u8"tabs", Move(tabs));
-                out.Set(u8"active", JsonValue::MakeString(String(panel->PersistenceId())));
-                return out;
-            }
-            return JsonValue{};
-        }
-
-        // In the tree: in a tab group, or the tree's node itself.
-        bool IsDocked(const toolkit::DockManager& dock, const toolkit::DockablePanel& panel)
-        {
-            return Cast<toolkit::DockTabGroup>(panel.Parent) != nullptr || Cast<toolkit::DockSplit>(panel.Parent) != nullptr ||
-                   (panel.Parent == &dock && dock.RootNode() == &panel);
-        }
-
-        JsonValue LayoutJson(toolkit::DockManager& dock)
-        {
-            JsonValue floating = JsonValue::MakeArray();
-            JsonValue hidden = JsonValue::MakeArray();
-            for (i32 i = 0; i < dock.RegisteredPanelCount(); ++i)
-            {
-                const toolkit::DockablePanel* panel = dock.RegisteredPanelAt(i);
-                if (panel == nullptr || panel->IsPendingDeletion || IsDocked(dock, *panel))
-                {
-                    continue;
-                }
-                if (Cast<toolkit::DockableWindow>(panel->Parent) != nullptr)
-                {
-                    floating.Add(PanelJson(*panel));
-                }
-                else
-                {
-                    hidden.Add(PanelJson(*panel)); // a tool panel closed for now
-                }
-            }
+            const gui::DockNode* node = dock.GetLayout().FindNode(id);
+            if (node == nullptr)
+                return JsonValue{};
             JsonValue out = JsonValue::MakeObject();
-            out.Set(u8"root", NodeJson(dock.RootNode()));
+            if (node->IsStack())
+            {
+                JsonValue tabs = JsonValue::MakeArray();
+                for (const String& panel : node->Panels)
+                    tabs.Add(PanelJson(dock, panel.AsView()));
+                out.Set(u8"tabs", Move(tabs));
+                if (!node->Panels.IsEmpty())
+                    out.Set(u8"active", JsonValue::MakeString(node->Panels[Min(static_cast<usize>(node->Active), node->Panels.Size() - 1)]));
+                return out;
+            }
+            out.Set(u8"split", JsonValue::MakeString(node->Axis == gui::DockAxis::Horizontal ? u8"horizontal" : u8"vertical"));
+            JsonValue children = JsonValue::MakeArray();
+            JsonValue weights = JsonValue::MakeArray();
+            for (usize i = 0; i < node->Children.Size(); ++i)
+            {
+                children.Add(NodeJson(dock, node->Children[i]));
+                weights.Add(JsonValue::MakeNumber(i < node->Weights.Size() ? node->Weights[i] : 0.0f));
+            }
+            out.Set(u8"children", Move(children));
+            out.Set(u8"weights", Move(weights));
+            return out;
+        }
+
+        void CollectPanels(const gui::DockController& dock, gui::DockNodeId id, JsonValue& into)
+        {
+            const gui::DockNode* node = dock.GetLayout().FindNode(id);
+            if (node == nullptr)
+                return;
+            if (node->IsStack())
+            {
+                for (const String& panel : node->Panels)
+                    into.Add(PanelJson(dock, panel.AsView()));
+                return;
+            }
+            for (gui::DockNodeId child : node->Children)
+                CollectPanels(dock, child, into);
+        }
+
+        JsonValue LayoutJson(const gui::DockController& dock)
+        {
+            const gui::DockLayout& layout = dock.GetLayout();
+            JsonValue floating = JsonValue::MakeArray();
+            for (const gui::DockSurface& surface : layout.Surfaces())
+                if (surface.Kind == gui::DockSurfaceKind::Floating)
+                    CollectPanels(dock, surface.Root, floating);
+            // Hidden: closed with their place kept, and registered panels the layout never placed.
+            JsonValue hidden = JsonValue::MakeArray();
+            for (const gui::DockHidden& closed : layout.Hidden())
+                hidden.Add(PanelJson(dock, closed.Panel.AsView()));
+            for (const gui::DockPanelDescription& description : dock.Panels())
+                if (layout.StackOf(description.Id.AsView()) == gui::kNoDock && layout.FindHidden(description.Id.AsView()) == nullptr)
+                    hidden.Add(PanelJson(dock, description.Id.AsView()));
+            JsonValue out = JsonValue::MakeObject();
+            const gui::DockSurface* main = layout.FindSurface(layout.MainSurface());
+            out.Set(u8"root", main != nullptr ? NodeJson(dock, main->Root) : JsonValue{});
             out.Set(u8"floating", Move(floating));
             out.Set(u8"hidden", Move(hidden));
             return out;
         }
 
-        Result<toolkit::DockPosition, String> ParsePosition(StringView text)
+        enum class Position : u8
+        {
+            Side,
+            Center,
+            Float,
+        };
+        struct Where
+        {
+            Position Kind = Position::Side;
+            gui::DockSide Side = gui::DockSide::End;
+        };
+        Result<Where, String> ParsePosition(StringView text)
         {
             if (text == u8"left")
-            {
-                return toolkit::DockPosition::Left;
-            }
+                return Where{Position::Side, gui::DockSide::Start};
             if (text == u8"right")
-            {
-                return toolkit::DockPosition::Right;
-            }
+                return Where{Position::Side, gui::DockSide::End};
             if (text == u8"top")
-            {
-                return toolkit::DockPosition::Top;
-            }
+                return Where{Position::Side, gui::DockSide::Top};
             if (text == u8"bottom")
-            {
-                return toolkit::DockPosition::Bottom;
-            }
+                return Where{Position::Side, gui::DockSide::Bottom};
             if (text == u8"center")
-            {
-                return toolkit::DockPosition::Center;
-            }
+                return Where{Position::Center, gui::DockSide::End};
             if (text == u8"float")
-            {
-                return toolkit::DockPosition::Float;
-            }
+                return Where{Position::Float, gui::DockSide::End};
             return Err(Format(u8"unknown position '{}' (left, right, top, bottom, center or float)", text));
         }
 
@@ -141,108 +132,99 @@ namespace editor::app
             static constexpr StringView kNames[] = {u8"left", u8"right", u8"top", u8"bottom", u8"center", u8"float"};
             Array<String> choices(editor::EditorRootAllocator());
             for (StringView name : kNames)
-            {
                 choices.PushBack(String(name));
-            }
             return choices;
         }
 
-        toolkit::DockablePanel* FindLivePanel(toolkit::DockManager& dock, StringView id)
+        // A panel the tools may name: registered, or placed by the layout.
+        [[nodiscard]] bool Known(const gui::DockController& dock, StringView id)
         {
-            toolkit::DockablePanel* panel = id.IsEmpty() ? nullptr : dock.FindPanelById(id);
-            return panel != nullptr && !panel->IsPendingDeletion ? panel : nullptr;
+            return !id.IsEmpty() && (dock.Describe(id) != nullptr || dock.GetLayout().StackOf(id) != gui::kNoDock);
         }
+
+        // A float's size when the tool makes one: where a drag out of the window would put it.
+        constexpr Rectangle kFloatBounds{120.0f, 120.0f, 640.0f, 420.0f};
     }
 
-    void RegisterLayoutTools(foundation::mcp::McpServer& server, toolkit::DockManager& dock)
+    void RegisterLayoutTools(foundation::mcp::McpServer& server, gui::DockController& dock)
     {
-        toolkit::DockManager* docks = &dock;
+        gui::DockController* docks = &dock;
 
         server.RegisterTool(
             u8"layout_get",
             u8"The editor's dock layout: `root`, a tree whose nodes are splits ({split: horizontal "
-            u8"(first left, second right) or vertical (first above), share: the first side's "
-            u8"fraction, first, second}) or tab groups ({tabs: [{panel, title}], active}), and the "
-            u8"`floating` and `hidden` (closed tool) panels. A panel is named by its id: a page's "
-            u8"asset guid, a Game tab's PIE id (game-page, game-page-1, ...), or a tool panel's "
-            u8"(welcome is Project; assets, console, profiler). panel_dock moves them.",
+            u8"(children left to right) or vertical (top to bottom), children: [nodes], weights: "
+            u8"[each child's share, summing to one]}) or stacks of tabs ({tabs: [{panel, title}], "
+            u8"active}), and the `floating` and `hidden` (closed) panels. A panel is named by its id: "
+            u8"a page's asset guid, a Game tab's PIE id (game-page, game-page-1, ...), or a shared "
+            u8"panel's (welcome is Project; assets, console, profiler). panel_dock moves them.",
             SchemaBuilder().Build(), ToolAnnotations::ReadOnly(),
             [docks](const JsonValue&) -> ToolResult { return LayoutJson(*docks); });
 
         server.RegisterTool(
             u8"panel_dock",
             u8"Move a panel, as dragging its tab does: to the `left`, `right`, `top` or `bottom` of "
-            u8"another panel's tab group (`relativeTo`; default: the whole window), into that group "
-            u8"as a tab (`center`), or into a window of its own (`float`). A hidden tool panel docks "
-            u8"again the same way. `share` (0.05 to 0.95, default 0.5) is the moved panel's "
-            u8"fraction of the split a side position makes. Two Game tabs side by side for a "
-            u8"networked playtest: {panel: game-page-1, position: right, relativeTo: game-page}. "
-            u8"Returns the layout as layout_get gives it. Ids come from layout_get.",
+            u8"another panel's stack (`relativeTo`; default: along the whole window's edge), into "
+            u8"that stack as a tab (`center`; default: the documents' stack), or into a window of its "
+            u8"own (`float`). A hidden panel docks again the same way. `share` (0.05 to 0.95, default "
+            u8"0.5) is the moved panel's fraction of the room a side position splits. Two Game tabs "
+            u8"side by side for a networked playtest: {panel: game-page-1, position: right, "
+            u8"relativeTo: game-page}. Returns the layout as layout_get gives it. Ids come from "
+            u8"layout_get.",
             SchemaBuilder()
                 .Str(u8"panel", u8"the panel to move, by its id", true)
                 .Enum(u8"position", PositionChoices(), u8"where it goes", true)
-                .Str(u8"relativeTo", u8"the panel whose tab group it goes beside or into (default: the window)")
-                .Number(u8"share", u8"the moved panel's fraction of the split (side positions; default 0.5)")
+                .Str(u8"relativeTo", u8"the panel whose stack it goes beside or into (default: the window)")
+                .Number(u8"share", u8"the moved panel's fraction of the room (side positions; default 0.5)")
                 .Build(),
             ToolAnnotations::Adjusts(),
             [docks](const JsonValue& args) -> ToolResult
             {
                 const String id = args.Get(u8"panel").AsString();
-                toolkit::DockablePanel* panel = FindLivePanel(*docks, id.AsView());
-                if (panel == nullptr)
-                {
+                if (!Known(*docks, id.AsView()))
                     return Err(Format(u8"no panel '{}' (layout_get lists them)", id.AsView()));
-                }
-                Result<toolkit::DockPosition, String> position = ParsePosition(args.Get(u8"position").AsString().AsView());
-                if (!position.HasValue())
-                {
-                    return Err(Move(position.Error()));
-                }
-                const bool side = position.Value() != toolkit::DockPosition::Center &&
-                                  position.Value() != toolkit::DockPosition::Float;
+                Result<Where, String> where = ParsePosition(args.Get(u8"position").AsString().AsView());
+                if (!where.HasValue())
+                    return Err(Move(where.Error()));
+                const bool side = where.Value().Kind == Position::Side;
                 const bool hasShare = args.Get(u8"share").IsNumber();
                 const f32 share = static_cast<f32>(args.Get(u8"share").AsNumber(0.5));
                 if (hasShare && (!side || share < 0.05f || share > 0.95f))
-                {
                     return Err(String(u8"share is a side position's fraction, 0.05 to 0.95"));
-                }
+                const gui::DockLayout& layout = docks->GetLayout();
                 const String relativeId = args.Get(u8"relativeTo").AsString();
-                toolkit::DockablePanel* relativeTo = nullptr;
+                gui::DockNodeId target = gui::kNoDock;
                 if (!relativeId.IsEmpty())
                 {
-                    relativeTo = FindLivePanel(*docks, relativeId.AsView());
-                    if (relativeTo == nullptr)
-                    {
+                    if (!Known(*docks, relativeId.AsView()))
                         return Err(Format(u8"no panel '{}' (layout_get lists them)", relativeId.AsView()));
-                    }
-                    if (relativeTo == panel)
-                    {
+                    if (relativeId == id)
                         return Err(String(u8"a panel cannot go beside or into itself"));
-                    }
-                    if (!IsDocked(*docks, *relativeTo))
+                    target = layout.StackOf(relativeId.AsView());
+                    if (target == gui::kNoDock)
+                        return Err(Format(u8"panel '{}' is not docked (it is hidden); dock it first", relativeId.AsView()));
+                }
+                const bool docked = layout.StackOf(id.AsView()) != gui::kNoDock;
+                const StringView panel = id.AsView();
+                const gui::DockSide sideOf = where.Value().Side;
+                const Position kind = where.Value().Kind;
+                const gui::DockOutcome done = docks->Edit(
+                    [&](gui::DockLayout& edit) -> gui::DockOutcome
                     {
-                        return Err(Format(u8"panel '{}' is not docked (it floats or is hidden); dock it first",
-                                          relativeId.AsView()));
-                    }
-                }
-                if (relativeTo != nullptr)
-                {
-                    docks->DockPanelRelativeTo(panel, position.Value(), relativeTo);
-                }
-                else
-                {
-                    docks->DockPanel(panel, position.Value());
-                }
-                if (side)
-                {
-                    // The new split holds the panel's own group on one side.
-                    foundation::ui::View* group = panel->Parent;
-                    if (auto* split = group != nullptr ? Cast<toolkit::DockSplit>(group->Parent) : nullptr)
-                    {
-                        split->SetSplitRatio(split->First() == group ? share : 1.0f - share);
-                    }
-                }
-                docks->ActivatePanel(panel);
+                        if (kind == Position::Float)
+                            return edit.Float(panel, kFloatBounds);
+                        if (kind == Position::Center)
+                        {
+                            const gui::DockNodeId stack = target != gui::kNoDock ? target : edit.CentralStack();
+                            return docked ? edit.MoveToTab(panel, stack) : edit.InsertTab(panel, stack);
+                        }
+                        if (target != gui::kNoDock)
+                            return docked ? edit.MoveBeside(panel, target, sideOf, share) : edit.InsertBeside(panel, target, sideOf, share);
+                        return docked ? edit.MoveToEdge(panel, edit.MainSurface(), sideOf, share) : edit.InsertAtEdge(panel, edit.MainSurface(), sideOf, share);
+                    });
+                if (!done.Ok())
+                    return Err(Format(u8"'{}' cannot go there: {}", panel, done.Refused));
+                (void)docks->Edit([panel](gui::DockLayout& edit) { return edit.Activate(panel); });
                 return LayoutJson(*docks);
             });
     }

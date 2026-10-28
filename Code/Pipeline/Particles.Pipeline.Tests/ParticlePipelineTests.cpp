@@ -6,11 +6,13 @@
 // back through the ResourceManager + factory and confirm it round-trips + simulates. Mirrors
 // TexturePipelineTests, adapted for an AUTHORED (not imported) asset.
 #include <doctest/doctest.h>
+#include <string>
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 import foundation.core;
 import foundation.vfs;
 import foundation.content;
+import foundation.xml.serialization; // XmlSerializerFactory (a version 0 asset read as the editor reads it)
 import foundation.resource;
 import pipeline.core;
 import foundation.rhi;
@@ -172,4 +174,81 @@ TEST_CASE("particles.pipeline: Build resolves a texture path ref -> cooked GUID 
     FileDelete(u8"scratch_pfx_ref_db/smoketex.data.bin");
     FileDelete(u8"scratch_pfx_ref_db/effect.rasset");
     RemoveDirectory(u8"scratch_pfx_ref_db");
+}
+
+TEST_CASE("particles.pipeline: a version 0 asset's effect links are read onto its systems")
+{
+    // FireworksV0.xasset is an effect as it was saved before a system owned its sub-emitters:
+    // Shells and Sparks, and the effect's one link, into Sparks. Read through its envelope as an
+    // editor reads it, the link is the shells' own; the sparks have none.
+    RegisterParticleEffectAsset();
+    const String fixture = PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Code/Pipeline/Particles.Pipeline.Tests/FireworksV0.xasset");
+    Result<Array<byte>> bytes = ReadFile(fixture.AsView());
+    REQUIRE(bytes.HasValue());
+    String text(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+
+    (void)RemoveDirectoryRecursive(u8"scratch_pfx_v0_db");
+    (void)CreateDirectory(u8"scratch_pfx_v0_db");
+    {
+        NativeFileSystem mount(u8"scratch_pfx_v0_db", DefaultAllocator());
+        foundation::content::ContentDatabase db(DefaultAllocator(), mount, foundation::xml::XmlSerializerFactory(), u8".xasset");
+        auto* inst = db.RootGroup()->CreateInstance(u8"Fireworks", ParticleEffectAsset::StaticType());
+        REQUIRE(inst != nullptr);
+        // The fixture's own id is another's: the instance's in its place.
+        utf8char id[37];
+        inst->Id().ToChars(id);
+        const StringView old(u8"38dc5399-3e9d-4863-b7af-b61c991a4875");
+        const StringView all = text.AsView();
+        usize at = 0;
+        while (at + old.Size() <= all.Size() && all.SubStr(at, old.Size()) != old)
+            ++at;
+        REQUIRE(at + old.Size() <= all.Size());
+        String envelope(all.SubStr(0, at));
+        envelope.Append(StringView(id, 36));
+        envelope.Append(all.SubStr(at + old.Size(), all.Size() - at - old.Size()));
+        MemoryStream stream;
+        (void)stream.Write(envelope.CStr(), envelope.Size());
+        (void)stream.Seek(0, SeekOrigin::Begin);
+        Result<RefPtr<ISerializable>, String> read = inst->ReadObjectFrom(stream);
+        if (!read.HasValue())
+            MESSAGE(std::string(reinterpret_cast<const char*>(read.Error().CStr())));
+        REQUIRE(read.HasValue());
+        auto* asset = Cast<ParticleEffectAsset>(read.Value().Get());
+        REQUIRE(asset != nullptr);
+        ParticleEffect& fx = asset->Effect();
+        REQUIRE(fx.SystemCount() == 2);
+        REQUIRE(fx.GetSystem(0)->subEmitters.Size() == 1u);
+        CHECK(fx.GetSystem(0)->subEmitters[0].childSystemIndex == 1);
+        CHECK(fx.GetSystem(0)->subEmitters[0].spawnCount == 40);
+        CHECK(fx.GetSystem(1)->subEmitters.IsEmpty());
+    }
+    (void)RemoveDirectoryRecursive(u8"scratch_pfx_v0_db");
+}
+
+TEST_CASE("particles.pipeline: an effect declares what its systems draw with as references, so a cook of it cooks them")
+{
+    ParticleEffectAsset asset;
+    ParticleEffect& fx = asset.Effect();
+    (void)fx.AddSystem(64);
+    (void)fx.AddSystem(64);
+    ParticleSystem* sparks = fx.GetSystem(0);
+    ParticleSystem* debris = fx.GetSystem(1);
+    REQUIRE(sparks != nullptr);
+    REQUIRE(debris != nullptr);
+    const Guid texture{0x11u, 0x1u};
+    const Guid mesh{0x22u, 0x2u};
+    const Guid material{0x33u, 0x3u};
+    sparks->textureRef = texture;
+    debris->meshRef = mesh;
+    debris->materialRefs.PushBack(Guid{});
+    debris->materialRefs.PushBack(material);
+    ParticleEffectAssetBuilder builder;
+    AssetBuildContext ctx{DefaultAllocator()};
+    AssetDependencies deps;
+    builder.ScanDependencies(asset, ctx, deps);
+    REQUIRE(deps.references.Size() == 3u); // the empty slot left out
+    CHECK(deps.references[0] == texture);
+    CHECK(deps.references[1] == mesh);
+    CHECK(deps.references[2] == material);
+    CHECK(deps.reads.IsEmpty()); // runtime references: an edit of them re-cooks nothing
 }

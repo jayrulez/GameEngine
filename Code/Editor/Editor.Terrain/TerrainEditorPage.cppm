@@ -1,26 +1,29 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Terrain - the `editor.terrain` module.
+// Editor::Terrain - the `:page` partition.
 //
-// TerrainEditorPage (TerrainPage): the COMPOSITION + PREVIEW surface for a
-// TerrainAsset. Left = a 3D orbit preview of the cooked terrain product (a TerrainComponent bound by
-// the asset guid, on the shared PreviewViewport substrate - mesh/material precedent). Right = the
-// authored fields: the heightfield + splatmap references (pickers), the layer list (albedo + normal +
-// ORM + height + mask refs + tile scale per layer), castShadows, the height-blend contrast, and stats. Editing rewrites the asset, pushes a merge-keyed undo
-// command, and Save writes it back + re-cooks so the bound TerrainResource hot-swaps. Brushes NEVER
-// live here: sculpt + splat paint are scene-viewport IViewportTools; this
-// page keeps ONE input-routing path by staying a composition + preview surface.
+// TerrainEditorPage: a terrain on the GUI from the preview pages' markup (Data/Editor/PreviewPage.gml;
+// Documentation/Specs/editor-gui.md, 5.4, layer 7). The cooked terrain on a preview lit by a sun
+// (its self-shadowing shown), beside its rows. The asset keeps its layers in parallel arrays, so
+// the rows are the page's own, not its reflection's: under Terrain the heightfield and the splat
+// weights it is painted with, whether it casts shadows, how soft the height blend is and the size
+// every layer's textures are packed at; under Base layer what shows wherever no paint covers (its
+// albedo, normal, ORM and height maps and its tiling); under Paint layers a list, each layer a
+// group of its maps (albedo, normal, ORM, height, coverage mask) and its tiling. A layer's place in
+// the list is its channel in the splat weights, so the list adds and removes but does not reorder;
+// a layer removed frees its weights and moves those above it down. A terrain with no splat weights
+// gets new ones from the bar's New Splat Weights (the paint tool only edits weights that exist).
+// What the cooked terrain is (its grid, world size, chunks) are read-only rows under Source.
 //
-// GCC module hygiene: the heavy engine.terrain / engine.render / engine.scene imports stay in the
-// impl unit (interface stays lean - see PreviewViewport.cppm's note).
+// Each edit is one undo step (the whole asset before and after: it is small). Save writes it and
+// asks for a cook, after which the preview follows the new product. Brushes never live here:
+// sculpting and painting are the scene view's tools.
 
 module;
 #include "Core/Prelude.h"
 
-export module editor.terrain;
-
-export import :splatmap_thumbnail;
+export module editor.terrain:page;
 
 import foundation.core;
 import foundation.content;
@@ -28,159 +31,96 @@ import foundation.graphics;
 import foundation.runtime;
 import foundation.runtime.client;
 import foundation.resource;
-import foundation.scene; // EntityHandle
-import foundation.ui;
-import foundation.ui.runtime;
-import foundation.ui.toolkit; // PropertyEditor (the reference rows)
-import terrain.pipeline;          // pipeline::TerrainAsset (the authored fields)
-import foundation.terrain.resource; // TerrainResource (the cooked product for the preview + stats)
+import foundation.scene;
+import foundation.gui;
+import foundation.gui.toolkit;
+import foundation.terrain.resource; // TerrainResource (the preview's product, the facts)
+import terrain.pipeline;            // TerrainAsset
 import editor.core;
 import editor.app;
-import editor.preview; // PreviewViewport (shared viewport + preview scene + camera + render loop)
-
-export import :sculpt; // the scene-viewport terrain sculpt brush (IViewportTool) + the provider
-export import :splat;  // the scene-viewport terrain splat (layer-weight) brush
-export import :hole;   // the scene-viewport terrain hole brush (Specs/terrain-holes.md)
 
 using namespace foundation::core;
 
 export namespace editor
 {
-    namespace runtime = foundation::runtime;
-    namespace ui = foundation::ui;
-    namespace resource = foundation::resource;
     namespace terrain = foundation::terrain;
 
-    class TerrainEditorPage final : public app::UIEditorPage
+    /// What a cooked terrain is, as the page's read-only rows say it: each a name and its value.
+    struct TerrainFact
+    {
+        String name;
+        String value;
+    };
+    /// The facts of `product` (its grid, world size, chunks, layers, shadows). Pure, so tested
+    /// without a host.
+    [[nodiscard]] Array<TerrainFact> TerrainFacts(const terrain::TerrainResource& product);
+
+    class TerrainEditorPage final : public app::AssetObjectPage
     {
     public:
-        /// Paint layer `index`'s section in the layers grid: "Layer N".
-        [[nodiscard]] static String LayerSection(u32 index);
+        static constexpr StringView kPath = u8"Editor/PreviewPage.gml";
+        /// The sizes New Splat Weights offers, in its menu's order.
+        static constexpr i32 kSplatSizes[] = {512, 1024, 2048};
 
-        TerrainEditorPage(EditorContext& context, runtime::IApplicationHost& host,
-                          ui::runtime::UIHost& uiHost, foundation::content::Instance& instance);
+        TerrainEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
+        ~TerrainEditorPage() override;
 
-        [[nodiscard]] foundation::ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] Status Save() override;
-
-        void OnUpdate(runtime::IApplicationHost&, f32 dt) override;
-        void OnRenderWindow(runtime::IApplicationHost&,
-                            foundation::graphics::FrameContext& frame) override;
+        void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) override;
+        void OnRenderWindow(foundation::runtime::IApplicationHost&, foundation::graphics::FrameContext& frame) override;
         void OnClose() override;
 
+        /// The rows' sections: the terrain's, its base layer's, its paint layers'.
+        [[nodiscard]] foundation::gui::PropertyBag& TerrainRows() noexcept { return *m_terrainRows; }
+        [[nodiscard]] foundation::gui::PropertyBag& BaseRows() noexcept { return *m_baseRows; }
+        [[nodiscard]] foundation::gui::PropertyBag& LayerRows() noexcept { return *m_layerRows; }
+        /// Writes `value` to row `path` of `rows` as the grid commits an edit (one undo step).
+        void EditRow(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
+        /// A list edit of the paint layers as the grid makes one (an add, a remove).
+        void EditLayers(const foundation::gui::ListEdit& edit);
+        /// New splat weights of `size` texels a side, made beside the terrain and given to it (one
+        /// undo step for the terrain; the new asset stays). False when it has some already.
+        bool CreateSplatWeights(i32 size);
+
+        // === For tests ===
+        [[nodiscard]] const pipeline::TerrainAsset* Asset() const { return ObjectAs<pipeline::TerrainAsset>(); }
+        [[nodiscard]] foundation::gui::ToolMenuButton* SplatButton() const noexcept { return m_splat.Get(); }
+
+    protected:
+        void OnObjectChanged() override;
+
     private:
-        void BuildPreviewScene();       // one TerrainComponent entity + a seeded sun
-        void BindTerrain();             // (re)bind the cooked product by asset guid + reframe + stats
-        void PointComponentAtTerrain(terrain::TerrainResource* product);
-        void FramePreview(terrain::TerrainResource* product);
-        void RebuildFields();           // (re)build the right pane from the current asset
-        void RebuildFieldsDeferred();   // safe from inside a UI event (defers via the mutation queue)
+        void BuildRows();
+        void ShowRows();
+        void ShowFacts();
+        void AddSplatButton();
+        void Committed(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
+        void RemapWeightsOnRemove(u32 removed);
 
-        // A labelled asset slot for a reference: pick, drop and clear land through `apply` (a
-        // callback, so layer-index safety survives array edits), then commit + rebind + rebuild.
-        void AddReference(StringView label, StringView assetTypeName, StringView mergeKey,
-                          Function<Guid()> current, Function<void(const Guid&)> apply);
-        void AddLayer();
-        void RemoveLayer(u32 index);
-        enum class PaletteMap { Normal, Orm, Height, Mask };         // which optional per-layer map
-        void SetPaletteMap(PaletteMap map, u32 index, const Guid& g); // set per-layer normal/ORM/height/mask
-        [[nodiscard]] Guid PaletteMapId(PaletteMap map, u32 index) const;
-        [[nodiscard]] Array<Guid>& PaletteMapIds(PaletteMap map) const; // the map's id array
-        // An asset row for a reference, in `category` (the pane's own rows have none).
-        [[nodiscard]] RefPtr<ui::toolkit::PropertyEditor> MakeReference(
-            StringView label, StringView assetTypeName, StringView mergeKey, StringView category,
-            Function<Guid()> current, Function<void(const Guid&)> apply);
-        [[nodiscard]] RefPtr<ui::toolkit::PropertyEditor> MakeMapReference(
-            u32 index, StringView mapLabel, PaletteMap map, StringView mergeKey,
-            StringView category);
-        void RemapWeightsOnRemove(u32 removedIndex); // frees removed-layer slots; decrements above
-        void CreateSplatmap(i32 size); // author + assign a new blank splatmap asset (composition)
+        void BuildPreviewScene();
+        void PointPreviewAt(terrain::TerrainResource* product);
+        void FramePreview();
 
-        // Undo/save (heightfield-page pattern): snapshot the asset to bytes, push a merge-keyed command.
-        [[nodiscard]] Array<byte> Snapshot() const;
-        void ApplyBlob(const Array<byte>& blob);
-        void CommitEdit(StringView mergeKey);
-
-        class EditCommand final : public IEditorCommand
-        {
-        public:
-            EditCommand(TerrainEditorPage& page, StringView mergeKey, Array<byte> before,
-                        Array<byte> after)
-                : m_page(&page), m_mergeKey(mergeKey), m_before(Move(before)), m_after(Move(after))
-            {
-            }
-            [[nodiscard]] bool Execute() override
-            {
-                m_page->ApplyBlob(m_after);
-                return true;
-            }
-            void Undo() override { m_page->ApplyBlob(m_before); }
-            [[nodiscard]] StringView TypeId() const override { return u8"edit_terrain"; }
-            [[nodiscard]] bool MergeInto(IEditorCommand& previous) override
-            {
-                auto& prev = static_cast<EditCommand&>(previous);
-                if (prev.m_page != m_page || prev.m_mergeKey.AsView() != m_mergeKey.AsView())
-                {
-                    return false;
-                }
-                prev.m_after = Move(m_after);
-                return true;
-            }
-
-        private:
-            TerrainEditorPage* m_page;
-            String m_mergeKey;
-            Array<byte> m_before;
-            Array<byte> m_after;
-        };
-
-        EditorContext* m_context = nullptr;
-        runtime::IApplicationHost* m_host = nullptr;
-        ui::runtime::UIHost* m_uiHost = nullptr;
-        String m_title;
-
-        RefPtr<pipeline::TerrainAsset> m_asset;
-        UniquePtr<PreviewViewport> m_preview;
+        UniquePtr<foundation::gui::PropertyBag> m_terrainRows;
+        UniquePtr<foundation::gui::PropertyBag> m_baseRows;
+        UniquePtr<foundation::gui::PropertyBag> m_layerRows;
+        RefPtr<foundation::gui::ToolMenuButton> m_splat;
+        UniquePtr<app::PreviewPane> m_pane;
         foundation::scene::EntityHandle m_entity;
-        resource::Proxy<terrain::TerrainResource> m_terrainProxy; // cooked product (follows reloads)
-        const void* m_lastProduct = nullptr;                      // product identity - detects cook
-
-        RefPtr<foundation::ui::FlexLayout> m_fields; // the right pane (rebuilt on structural edits)
-        Array<RefPtr<ui::toolkit::PropertyEditor>> m_referenceRows; // the pane's own slot rows
-        RefPtr<foundation::ui::View> m_content;
-        RefPtr<app::PageToolbar> m_toolbar;
-        Array<byte> m_undoBaseline;
+        foundation::resource::Proxy<terrain::TerrainResource> m_product; // the cooked terrain (follows reloads)
+        const void* m_shownProduct = nullptr;                            // what the preview and facts show
     };
 
     class TerrainEditorPageFactory final : public IEditorPageFactory
     {
     public:
-        TerrainEditorPageFactory(runtime::IApplicationHost& host, ui::runtime::UIHost& uiHost)
-            : m_host(&host), m_uiHost(&uiHost)
-        {
-        }
-        [[nodiscard]] const TypeInfo* PrimaryType() const override
-        {
-            return &pipeline::TerrainAsset::StaticType();
-        }
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        explicit TerrainEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
+        [[nodiscard]] const TypeInfo* PrimaryType() const override { return &pipeline::TerrainAsset::StaticType(); }
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
 
     private:
-        runtime::IApplicationHost* m_host;
-        ui::runtime::UIHost* m_uiHost;
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    // Human-readable stat lines for a cooked terrain (grid size / chunks / layers / cast shadows).
-    // Free + pure so it is unit-tested without a live host (MeshStatLines precedent).
-    [[nodiscard]] Array<String> TerrainStatLines(const terrain::TerrainResource& product);
-
-    void RegisterTerrainEditor(EditorContext& context, runtime::IApplicationHost& host,
-                               ui::runtime::UIHost& uiHost);
-
-    /// Register the terrain brush TOOL PANELS (sculpt + splat) into the viewport-tool-panel registry
-    /// (editor.app:tool_panel) - the on-screen brush settings the scene page's ViewportToolPanelHost
-    /// mounts while a terrain tool is active. Call once at editor start (alongside the tool provider).
-    void RegisterTerrainToolPanels();
+    /// The terrain page (asking for its services when it is made).
+    void RegisterTerrainEditor(EditorContext& context, const app::AssetPageServicesSource& services);
 }

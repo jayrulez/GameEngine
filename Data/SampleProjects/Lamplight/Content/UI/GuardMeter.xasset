@@ -1,12 +1,12 @@
 <root>
-	<string name="guid">743c57b6-8d1c-4d9e-9731-13b328247e18</string>
-	<string name="typeNamespace">rtti::pipeline::ui</string>
-	<string name="typeName">UIDocumentAsset</string>
+	<string name="guid">6c039b5e-0f8d-4fcc-bf97-4455acadc5d1</string>
+	<string name="typeNamespace">rtti::pipeline::gui</string>
+	<string name="typeName">GuiDocumentAsset</string>
 	<array name="dataVersions" count="1">
-		<u64 name="type">6477862957065698361</u64>
-		<u32 name="version">2</u32>
+		<u64 name="type">4454064819806775415</u64>
+		<u32 name="version">0</u32>
 	</array>
 	<object name="payload">
-		<string name="fileName">GuardMeter.sml</string>
+		<string name="fileName">GuardMeter.gml</string>
 	</object>
 </root>

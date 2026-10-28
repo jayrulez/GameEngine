@@ -118,6 +118,23 @@ export namespace editor
 
         [[nodiscard]] EditorCommandStack& Commands() noexcept { return m_commands; }
 
+        /// Unsaved work the page holds that is not its asset (a clip its animation panel edits,
+        /// with a history and a Save of its own; any panel of its like): each named for the prompts
+        /// ("The clip 'Bounce'"), none when all is saved. The page's unsaved mark never covers it;
+        /// closing the page and leaving the editor name each beside the page's own changes.
+        virtual void ListUnsavedBesides(Array<String>& out) const { (void)out; }
+        /// Saves all of that work; what the saves said (the first that failed).
+        virtual Status SaveBesides() { return Status{}; }
+        /// The page's changes or that work unsaved: what the close and the exit ask about.
+        [[nodiscard]] bool HasUnsavedWork() const
+        {
+            if (IsDirty())
+                return true;
+            Array<String> besides;
+            ListUnsavedBesides(besides);
+            return !besides.IsEmpty();
+        }
+
         /// The asset this page edits changed OUTSIDE the page (apply-to-prefab, re-import).
         /// Default no-op; pages that cache loaded content override to refresh themselves.
         virtual void OnAssetExternallyModified() {}

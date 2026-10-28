@@ -375,3 +375,17 @@ TEST_CASE("effective active: created under nothing = active; invalid handle answ
     scene.DestroyEntity(e);
     CHECK_FALSE(scene.IsEffectivelyActive(e));
 }
+
+TEST_CASE("entity ref: reflected by its id, so tooling finds what it names by property")
+{
+    foundation::scene::RegisterEntityRefReflection();
+    foundation::scene::RegisterEntityRefReflection(); // again: idempotent
+    const foundation::core::TypeInfo& type = foundation::core::TypeOf<foundation::scene::EntityRef>();
+    const foundation::core::PropertyInfo* id = foundation::core::FindProperty(type, "id");
+    REQUIRE(id != nullptr);
+    CHECK(id->type == &foundation::core::TypeOf<foundation::core::Guid>());
+    REQUIRE(id->address != nullptr);
+    foundation::scene::EntityRef ref(foundation::core::Guid{0x5u, 0x9u});
+    const void* at = id->address(foundation::core::Instance(&ref, &type));
+    CHECK(*static_cast<const foundation::core::Guid*>(at) == ref.id);
+}

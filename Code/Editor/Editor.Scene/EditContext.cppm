@@ -85,6 +85,11 @@ export namespace editor
         /// nothing renders until the next scene load runs the resolve pass.
         void SetResources(foundation::resource::ResourceManager* resources) noexcept;
         void ResolveRestoredResources();
+        /// `entity`'s component of `componentType` bound to what its references name now (an edit
+        /// that wrote a reference's id through reflection: the mesh it names shows at once).
+        void ResolveComponentResources(const Guid& entity, const TypeInfo* componentType);
+        /// A settings block's references bound to what they name now, likewise.
+        void ResolveSettingsResources(const TypeInfo* settingsType);
 
         /// Payload resolver for NESTED prefab records (wired by the page from the source DB).
         /// Without it, spawning a prefab that contains other prefabs skips the nested parts.

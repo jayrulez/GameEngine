@@ -911,3 +911,85 @@ TEST_CASE("content: an object reads from its file in a few large reads")
     (void)db.DeleteInstance(id);
     RemoveDirectory(dir);
 }
+
+TEST_CASE("content: the revision moves with each change to the tree's shape, and not with an instance's content")
+{
+    GlobalTypeRegistry().Register(MaterialResource::StaticType());
+    RegisterSerializable<MaterialResource>();
+    const StringView dir = u8"scratch_content_revision_db";
+    RemoveTree(dir);
+    NativeFileSystem mount(dir, DefaultAllocator());
+    ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".xasset");
+
+    u64 seen = db.Revision();
+    const auto moved = [&db, &seen]()
+    {
+        const bool changed = db.Revision() != seen;
+        seen = db.Revision();
+        return changed;
+    };
+    Group* materials = db.RootGroup()->CreateGroup(u8"materials");
+    CHECK(moved()); // a group added
+    foundation::content::Instance* steel = materials->CreateInstance(u8"steel", MaterialResource::StaticType());
+    REQUIRE(steel != nullptr);
+    CHECK(moved()); // an instance added
+    MaterialResource res;
+    REQUIRE(steel->WriteObject(res).IsOk());
+    CHECK_FALSE(moved()); // its content: not the shape
+    REQUIRE(db.RenameInstance(steel->Id(), u8"bronze").IsOk());
+    CHECK(moved());
+    REQUIRE(db.RenameGroup(*materials, u8"metals").IsOk());
+    CHECK(moved());
+    REQUIRE(db.DeleteInstance(steel->Id()).IsOk());
+    CHECK(moved());
+    REQUIRE(db.DeleteGroup(*materials).IsOk());
+    CHECK(moved());
+    RemoveTree(dir);
+}
+
+TEST_CASE("content: MoveInstance moves the envelope and its sidecars to another group's folder, its guid and name kept")
+{
+    GlobalTypeRegistry().Register(MaterialResource::StaticType());
+    RegisterSerializable<MaterialResource>();
+    const StringView dir = u8"scratch_content_move_db";
+    (void)RemoveDirectoryRecursive(dir); // its two folders whole: a run cut short leaves them
+    NativeFileSystem mount(dir, DefaultAllocator());
+    ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".xasset");
+    Group* materials = db.RootGroup()->CreateGroup(u8"materials");
+    Group* metals = db.RootGroup()->CreateGroup(u8"metals"); // no folder yet: the move makes it
+    foundation::content::Instance* steel = materials->CreateInstance(u8"steel", MaterialResource::StaticType());
+    REQUIRE(steel != nullptr);
+    const Guid id = steel->Id();
+    MaterialResource res;
+    res.shininess = 7;
+    REQUIRE(steel->WriteObject(res).IsOk());
+    const byte extra[] = {byte{1}, byte{2}};
+    REQUIRE(steel->WriteData(u8"extra", Span<const byte>(extra, 2)).IsOk());
+
+    const u64 before = db.Revision();
+    REQUIRE(db.MoveInstance(id, *metals).IsOk());
+    CHECK(db.Revision() != before);
+    CHECK(&steel->OwningGroup() == metals);
+    CHECK(materials->GetInstance(u8"steel") == nullptr);
+    CHECK(metals->GetInstance(u8"steel") == steel);
+    CHECK(db.GetInstance(id) == steel);
+    CHECK(steel->Path() == u8"metals/steel");
+    CHECK_FALSE(mount.Exists(u8"materials/steel.xasset"));
+    CHECK(mount.Exists(u8"metals/steel.xasset"));
+    CHECK_FALSE(mount.Exists(u8"materials/steel.extra.bin"));
+    CHECK(mount.Exists(u8"metals/steel.extra.bin"));
+    {
+        RefPtr<ISerializable> object = steel->ReadObject();
+        auto* loaded = Cast<MaterialResource>(object.Get());
+        REQUIRE(loaded != nullptr);
+        CHECK(loaded->shininess == 7);
+    }
+
+    // Already there, and a name taken there: refused, nothing moved.
+    CHECK(db.MoveInstance(id, *metals).Code() == ErrorCode::InvalidArgument);
+    foundation::content::Instance* other = materials->CreateInstance(u8"steel", MaterialResource::StaticType());
+    REQUIRE(other != nullptr);
+    CHECK(db.MoveInstance(other->Id(), *metals).Code() == ErrorCode::AlreadyExists);
+    CHECK(&other->OwningGroup() == materials);
+    (void)RemoveDirectoryRecursive(dir);
+}

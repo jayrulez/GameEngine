@@ -1,12 +1,12 @@
 <root>
-	<string name="guid">3f75887a-3307-46a8-9a26-cb67ff50b552</string>
-	<string name="typeNamespace">rtti::pipeline::ui</string>
-	<string name="typeName">UIDocumentAsset</string>
+	<string name="guid">2ec13757-466e-4b94-bcdc-56b9c2c86cce</string>
+	<string name="typeNamespace">rtti::pipeline::gui</string>
+	<string name="typeName">GuiDocumentAsset</string>
 	<array name="dataVersions" count="1">
-		<u64 name="type">6477862957065698361</u64>
-		<u32 name="version">2</u32>
+		<u64 name="type">4454064819806775415</u64>
+		<u32 name="version">0</u32>
 	</array>
 	<object name="payload">
-		<string name="fileName">LevelClear.sml</string>
+		<string name="fileName">LevelClear.gml</string>
 	</object>
 </root>

@@ -21,8 +21,10 @@ export module editor.scene:scene_page_interface;
 
 import foundation.core;
 import foundation.scene;
+import foundation.input; // ScriptedInputSource (viewport_run)
 import editor.core;
 import editor.camera;
+import editor.viewporttools;
 import :edit;
 import :gizmo;
 
@@ -90,6 +92,9 @@ export namespace editor
         [[nodiscard]] virtual bool IsSimulating() const noexcept = 0;
         [[nodiscard]] virtual bool IsPaused() const noexcept = 0;
 
+        /// The page's viewport tools (the select tool and the domains'); null on a page without a
+        /// viewport. The tool actions toggle through it.
+        [[nodiscard]] virtual ViewportToolManager* ViewportTools() noexcept = 0;
         /// The select tool's gizmo (mode, space); null on a page without a viewport.
         [[nodiscard]] virtual GizmoController* Gizmos() noexcept = 0;
         /// True while the viewport camera has the input (Alt orbit, right-button or captured
@@ -106,6 +111,9 @@ export namespace editor
         /// bottom dock takes no space at all.
         [[nodiscard]] virtual bool AnimationPanelShown() const noexcept = 0;
         virtual void SetAnimationPanelShown(bool shown) = 0;
+        /// The panel shown editing the clip `clip` (nil: the one it has) and animating `entity`
+        /// (nil: the one it binds), an unsaved clip asked about first (an animator's Edit Clip).
+        virtual void EditAnimationClip(const Guid& clip, const Guid& entity) = 0;
 
         /// The viewport's free-fly camera - the pose the scene is looked at from, which an agent
         /// moves to look from somewhere specific; null on a page without a viewport.
@@ -126,6 +134,17 @@ export namespace editor
         [[nodiscard]] virtual Status RequestProjectThumbnail() = 0;
         /// The latest request's state, as it advances frame by frame.
         [[nodiscard]] virtual const ViewportCapture& LastViewportCapture() const noexcept = 0;
+
+        /// A playtest of the viewport (viewport_run): `source` stands for the devices over it from
+        /// now (its mouse in the viewport's render pixels, its keys as if the viewport had the
+        /// focus), advanced by each frame's time. False on a page without a viewport.
+        virtual bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource> source) = 0;
+        /// Ends it: what is held is let go for a frame, then the devices are the viewport's again.
+        virtual void EndScriptedInput() = 0;
+        /// Seconds the playtest has run; negative when none does.
+        [[nodiscard]] virtual f64 ScriptedInputTime() const noexcept = 0;
+        /// The viewport's render size in pixels, the scripted mouse's space (0 x 0 without one).
+        [[nodiscard]] virtual Float2 ViewportPixels() const noexcept = 0;
 
         /// The prefab flows the page owns (they open the page's dialogs and write assets):
         /// a prefab asset from an entity subtree; an instance spawned under `parent` (nil =

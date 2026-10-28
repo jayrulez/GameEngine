@@ -1,151 +1,102 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// AssetPickerSlot tests. The composite slot is pure widget logic and
-// exercises headlessly: affordances render only when their callback is WIRED (the
-// entity-ref twin degrades to a plain name button), Edit/Clear/preview disable while the
-// slot is empty, and each affordance fires its callback exactly once per click.
+// The asset slot: a verb shows once wired (open, reveal and clear only with something referenced), an
+// empty slot says None, each verb runs once per click, a click on the slot picks, and a dragged
+// asset of a type it takes is dropped on it while one it does not take is refused, saying why.
 
 #include <doctest/doctest.h>
-
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
-import editor.core;
+import foundation.gui;
 import editor.app;
 
 using namespace foundation::core;
-using namespace editor;
-namespace ui = foundation::ui;
+using editor::app::AssetDrag;
+using editor::app::AssetPickerSlot;
+namespace gui = foundation::gui;
 
-TEST_CASE("asset-slot: affordances render only when wired")
+TEST_CASE("asset-slot: the verbs show once wired; open, reveal and clear only with something referenced; empty says None")
 {
-    // Nothing wired: a plain name button (the entity-ref degradation).
-    auto bare = MakeRef<app::AssetPickerSlot>(DefaultAllocator(), StringView(u8"Thing"));
-    bare->SetValue(u8"Thing", true);
-    CHECK(bare->EditButton()->Visibility == ui::Visibility::Gone);
-    CHECK(bare->ClearButton()->Visibility == ui::Visibility::Gone);
-    CHECK(bare->PreviewButton()->Visibility == ui::Visibility::Gone);
-    CHECK(bare->BodyButton()->Visibility == ui::Visibility::Visible);
+    RefPtr<AssetPickerSlot> slot = MakeRef<AssetPickerSlot>(DefaultAllocator());
+    CHECK(slot->ShownName() == StringView(u8"Not set"));
+    CHECK(slot->HasClass(u8"empty"));
+    CHECK_FALSE(slot->PickButton()->IsDisplayed());
+    int picks = 0;
+    int opens = 0;
+    int reveals = 0;
+    int clears = 0;
+    slot->SetOnPick([&picks]() { ++picks; });
+    slot->SetOnOpen([&opens]() { ++opens; });
+    slot->SetOnReveal([&reveals]() { ++reveals; });
+    slot->SetOnClear([&clears]() { ++clears; });
+    CHECK(slot->PickButton()->IsDisplayed());
+    CHECK_FALSE(slot->OpenButton()->IsDisplayed()); // nothing to open yet
+    CHECK_FALSE(slot->RevealButton()->IsDisplayed());
+    CHECK_FALSE(slot->ClearButton()->IsDisplayed());
 
-    // Fully wired: everything visible.
-    auto slot = MakeRef<app::AssetPickerSlot>(DefaultAllocator());
-    slot->OnPick = []() {};
-    slot->OnEdit = []() {};
-    slot->OnClear = []() {};
-    slot->OnReveal = []() {};
-    slot->SetValue(u8"MyClip", true);
-    CHECK(slot->EditButton()->Visibility == ui::Visibility::Visible);
-    CHECK(slot->ClearButton()->Visibility == ui::Visibility::Visible);
-    CHECK(slot->PreviewButton()->Visibility == ui::Visibility::Visible);
-}
+    slot->SetValue(u8"Wood");
+    CHECK_FALSE(slot->HasClass(u8"empty"));
+    CHECK(slot->ShownName() == StringView(u8"Wood"));
+    CHECK(slot->OpenButton()->IsDisplayed());
+    CHECK(slot->RevealButton()->IsDisplayed());
+    CHECK(slot->ClearButton()->IsDisplayed());
 
-TEST_CASE("asset-slot: Edit/Clear/preview inert while empty, body always live")
-{
-    auto slot = MakeRef<app::AssetPickerSlot>(DefaultAllocator());
-    slot->OnPick = []() {};
-    slot->OnEdit = []() {};
-    slot->OnClear = []() {};
-    slot->OnReveal = []() {};
-
-    slot->SetValue({}, false);
-    CHECK(slot->BodyButton()->Text.Value() == StringView(u8"(none)")); // no text at all
-    slot->SetValue(u8"Default", false); // a row's own empty text shows (Sedulous eeaa5376)
-    CHECK(slot->BodyButton()->Text.Value() == StringView(u8"Default"));
-    CHECK(!slot->ClearButton()->IsEnabled); // still empty: nothing to clear
-    slot->SetValue({}, false);
-    CHECK(slot->BodyButton()->IsEnabled); // picking an EMPTY slot is the point
-    CHECK(!slot->EditButton()->IsEnabled);
-    CHECK(!slot->ClearButton()->IsEnabled);
-    CHECK(!slot->PreviewButton()->IsEnabled);
-
-    slot->SetValue(u8"MyClip", true);
-    CHECK(slot->EditButton()->IsEnabled);
-    CHECK(slot->ClearButton()->IsEnabled);
-    CHECK(slot->PreviewButton()->IsEnabled);
-}
-
-TEST_CASE("asset-slot: each affordance fires exactly once per click")
-{
-    auto slot = MakeRef<app::AssetPickerSlot>(DefaultAllocator());
-    int picks = 0, edits = 0, clears = 0, reveals = 0;
-    slot->OnPick = [&picks]() { ++picks; };
-    slot->OnEdit = [&edits]() { ++edits; };
-    slot->OnClear = [&clears]() { ++clears; };
-    slot->OnReveal = [&reveals]() { ++reveals; };
-    slot->SetValue(u8"MyClip", true);
-
-    slot->BodyButton()->FireClick();
-    slot->EditButton()->FireClick();
-    slot->ClearButton()->FireClick();
-    slot->PreviewButton()->FireClick();
-    CHECK(picks == 1); // the name body IS the pick affordance
-    CHECK(edits == 1);
-    CHECK(clears == 1);
+    CHECK(slot->PickButton()->HandleActivate());
+    CHECK(slot->OpenButton()->HandleActivate());
+    CHECK(slot->RevealButton()->HandleActivate());
+    CHECK(slot->ClearButton()->HandleActivate());
+    CHECK(picks == 1);
+    CHECK(opens == 1);
     CHECK(reveals == 1);
+    CHECK(clears == 1);
 }
 
-TEST_CASE("asset-slot: empty text renders the (none) placeholder")
+TEST_CASE("asset-slot: a dragged asset of a type it takes drops on it; another type is refused, saying why")
 {
-    auto slot = MakeRef<app::AssetPickerSlot>(DefaultAllocator());
-    slot->SetValue({}, false);
-    CHECK(slot->BodyButton()->Text.Value().AsView() == StringView(u8"(none)"));
-    slot->SetValue(u8"Grass", true);
-    CHECK(slot->BodyButton()->Text.Value().AsView() == StringView(u8"Grass"));
-}
-
-TEST_CASE("asset-slot: drop accepts matching types and rejects mismatches")
-{
-    auto slot = MakeRef<app::AssetPickerSlot>(DefaultAllocator());
-    Array<String> accepted;
-    accepted.PushBack(String(u8"TextureAsset"));
-    slot->SetAcceptedTypes(Move(accepted));
-
-    Guid assigned{};
-    int assigns = 0, rejects = 0;
-    String rejectedType;
-    slot->OnAssignDropped = [&](const Guid& id)
+    RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    root->SetSize(Float2{400.0f, 200.0f});
+    RefPtr<AssetPickerSlot> slot = MakeRef<AssetPickerSlot>(DefaultAllocator());
+    slot->EditLayoutStyle([](gui::LayoutStyle& s)
     {
-        assigned = id;
-        ++assigns;
-    };
-    slot->OnRejectedDrop = [&](StringView, StringView typeName)
+        s.Width = gui::LayoutLength::Px(200.0f);
+        s.Height = gui::LayoutLength::Px(24.0f);
+    });
+    root->AddChild(slot.Get());
+    Array<String> materials;
+    materials.PushBack(String(u8"MaterialAsset"));
+    slot->SetAcceptedTypes(Move(materials));
+    Array<Guid> dropped;
+    slot->SetOnDropped([&dropped](const Guid& id) { dropped.PushBack(id); });
+    (void)root->UpdateLayout();
+
+    // A source the drags start from.
+    RefPtr<gui::Panel> source = MakeRef<gui::Panel>(DefaultAllocator());
+    root->AddChild(source.Get());
+    (void)root->UpdateLayout();
+    gui::EventDispatcher& d = *root->GetEventDispatcher();
+    const gui::Rect at = slot->GetScreenBounds();
+    const Float2 over{at.x + 20.0f, at.y + 12.0f};
+    const auto drag = [&](gui::DragPayload payload)
     {
-        ++rejects;
-        rejectedType = String(typeName);
+        gui::DragRequest request;
+        request.Payload = Move(payload);
+        d.InjectMouseMove(over);
+        d.StartDrag(*source, Move(request));
+        d.RequeryDrag();
     };
 
-    // Not a drop target without accepted types; a drop target with them.
-    CHECK(slot->AsDropTarget() == slot.Get());
+    const Guid wood{0x1234u, 0x5678u};
+    drag(AssetDrag::Payload(wood, u8"MaterialAsset", u8"Wood"));
+    CHECK(d.GetDropTarget() == slot.Get());
+    CHECK(d.GetDropReason() == StringView(u8"Use Wood"));
+    d.InjectMouseUp(over, gui::MouseButton::Left);
+    REQUIRE(dropped.Size() == 1u);
+    CHECK(dropped[0] == wood);
 
-    // Matching type: hover accepts, drop assigns exactly once.
-    const Guid id{0x1234, 0x5678};
-    auto match = MakeRef<app::AssetDragData>(DefaultAllocator(), id, StringView(u8"TextureAsset"),
-                                             StringView(u8"Grass"));
-    CHECK(slot->CanAcceptDrop(match.Get(), 0, 0) == ui::DragDropEffects::Link);
-    CHECK(slot->OnDrop(match.Get(), 0, 0) == ui::DragDropEffects::Link);
-    CHECK(assigns == 1);
-    CHECK(assigned == id);
-    CHECK(rejects == 0);
-
-    // Wrong type: hover still engages (so OnDrop can warn), drop REJECTS - no assign.
-    auto wrong = MakeRef<app::AssetDragData>(DefaultAllocator(), Guid{0x9abc, 0xdef0},
-                                             StringView(u8"AudioClipAsset"),
-                                             StringView(u8"Boom"));
-    CHECK(slot->CanAcceptDrop(wrong.Get(), 0, 0) == ui::DragDropEffects::Link);
-    CHECK(slot->OnDrop(wrong.Get(), 0, 0) == ui::DragDropEffects::None);
-    CHECK(assigns == 1);
-    CHECK(rejects == 1);
-    CHECK(rejectedType.AsView() == StringView(u8"AudioClipAsset"));
-
-    // A non-asset payload never engages.
-    auto foreign = MakeRef<ui::DragData>(DefaultAllocator(), StringView(u8"view/reorder"));
-    CHECK(slot->CanAcceptDrop(foreign.Get(), 0, 0) == ui::DragDropEffects::None);
-}
-
-TEST_CASE("asset-slot: no accepted types = not a drop target")
-{
-    auto slot = MakeRef<app::AssetPickerSlot>(DefaultAllocator());
-    CHECK(slot->AsDropTarget() == nullptr);
+    drag(AssetDrag::Payload(Guid{0x9u, 0x9u}, u8"TextureAsset", u8"Brick"));
+    CHECK(d.GetDropReason() == StringView(u8"Brick is a TextureAsset, not one this takes"));
+    d.InjectMouseUp(over, gui::MouseButton::Left);
+    CHECK(dropped.Size() == 1u); // refused: nothing assigned
 }

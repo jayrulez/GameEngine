@@ -53,9 +53,15 @@ export namespace editor
         [[nodiscard]] static ViewGizmoLayout LayoutFor(Float3 right, Float3 up, Float3 forward,
                                                        f32 viewportWidth)
         {
+            return LayoutAround(right, up, forward,
+                                Float2{viewportWidth - kMargin - kArm - 0.5f * kKnob, kTop + kArm + 0.5f * kKnob});
+        }
+
+        /// The knobs around `center` (the HUD's widget, its own middle).
+        [[nodiscard]] static ViewGizmoLayout LayoutAround(Float3 right, Float3 up, Float3 forward, Float2 center)
+        {
             ViewGizmoLayout layout;
-            layout.center =
-                Float2{viewportWidth - kMargin - kArm - 0.5f * kKnob, kTop + kArm + 0.5f * kKnob};
+            layout.center = center;
             const Float3 axes[6] = {Float3{1, 0, 0},  Float3{0, 1, 0},  Float3{0, 0, 1},
                                     Float3{-1, 0, 0}, Float3{0, -1, 0}, Float3{0, 0, -1}};
             for (u32 i = 0; i < 6; ++i)

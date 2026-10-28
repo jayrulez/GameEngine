@@ -27,55 +27,37 @@ module;
 export module editor.core:actions;
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui; // Keystroke (a chord), Observable (what changes), Menu (action items)
 import :page;
 
 using namespace foundation::core;
 
 export namespace editor
 {
-    /// A keyboard chord: unset (no key) means the action has no shortcut.
+    /// A keyboard chord, the GUI keymap's keystroke: unset (no key) means the action has no
+    /// shortcut. Written as a binding writes it ("ctrl-shift-z": Of, Keys), the form the keymap
+    /// binds and the settings keep.
     struct EditorShortcut
     {
-        foundation::ui::KeyCode key = foundation::ui::KeyCode::Unknown;
-        foundation::ui::KeyModifiers modifiers = foundation::ui::KeyModifiers::None;
+        foundation::gui::Keystroke stroke{};
 
-        [[nodiscard]] constexpr bool IsSet() const noexcept
+        /// The chord `keys` names ("ctrl-s", "f5", "shift-delete"); unset when it names none.
+        [[nodiscard]] static EditorShortcut Of(StringView keys)
         {
-            return key != foundation::ui::KeyCode::Unknown;
+            const Optional<foundation::gui::Keystroke> parsed = foundation::gui::ParseKeystroke(keys);
+            return parsed.HasValue() ? EditorShortcut{parsed.Value()} : EditorShortcut{};
         }
-        [[nodiscard]] constexpr bool operator==(const EditorShortcut& other) const noexcept
-        {
-            return key == other.key && modifiers == other.modifiers;
-        }
+        [[nodiscard]] bool IsSet() const noexcept { return stroke.Code != 0; }
+        [[nodiscard]] bool operator==(const EditorShortcut&) const noexcept = default;
+        /// As a binding writes it ("ctrl-shift-z"); empty when unset.
+        [[nodiscard]] String Keys() const { return IsSet() ? foundation::gui::KeystrokeName(stroke) : String{}; }
     };
 
-    /// The chord as a shortcut column or a tool result shows it: "Ctrl+Shift+Z", "F5",
-    /// "Delete"; empty when unset.
+    /// The chord as a shortcut column or a tool result shows it, as the GUI's menus do:
+    /// "Ctrl+Shift+Z", "F5", "Del"; empty when unset.
     inline String FormatShortcut(EditorShortcut chord)
     {
-        String text;
-        if (!chord.IsSet())
-        {
-            return text;
-        }
-        using foundation::ui::KeyModifiers;
-        const auto has = [&](KeyModifiers flag)
-        { return (static_cast<u32>(chord.modifiers) & static_cast<u32>(flag)) != 0; };
-        if (has(KeyModifiers::Ctrl))
-        {
-            text += u8"Ctrl+";
-        }
-        if (has(KeyModifiers::Alt))
-        {
-            text += u8"Alt+";
-        }
-        if (has(KeyModifiers::Shift))
-        {
-            text += u8"Shift+";
-        }
-        text += foundation::ui::KeyCodeName(chord.key);
-        return text;
+        return chord.IsSet() ? foundation::gui::KeystrokeText(chord.stroke) : String{};
     }
 
     enum class EditorActionKind : u8
@@ -112,6 +94,9 @@ export namespace editor
         Function<void(EditorPage*)> execute;
         Function<bool(EditorPage*)> enabled; // unset = always enabled
         Function<bool(EditorPage*)> checked; // Toggle / Window only; unset = never checked
+        /// Why it is disabled over the subject, said where it shows (a tool with nothing to work
+        /// on); unset or empty = nothing to say.
+        Function<String(EditorPage*)> disabledReason;
     };
 
     /// The interface `page` publishes, or null when there is no page or it is not that kind:
@@ -130,10 +115,10 @@ export namespace editor
         EditorActionRegistry(const EditorActionRegistry&) = delete;
         EditorActionRegistry& operator=(const EditorActionRegistry&) = delete;
 
-        /// Registrations and rebinds; the surfaces that cache (the menu bar, the shortcut
-        /// table) rebuild on it. Subscribers outlive the registry's use of them (they are
-        /// the application's surfaces).
-        foundation::ui::Event<void()> OnActionsChanged;
+        /// Records a read of the actions for the GUI's reactive evaluation in progress (an
+        /// Effect): registrations and rebinds run it again, so a surface that caches (the menu
+        /// bar, the keymap's bindings) rebuilds without subscribing by hand.
+        void TrackChanges() const { m_changed.Track(); }
 
         /// The subject the nullary calls run over: the context wires it to its active page.
         /// Unset (a bare registry) = no subject.
@@ -200,6 +185,15 @@ export namespace editor
         [[nodiscard]] static bool IsEnabled(const EditorActionDeclaration& action, EditorPage* subject)
         {
             return !action.enabled || action.enabled(subject);
+        }
+        [[nodiscard]] String DisabledReason(StringView id) const { return DisabledReason(id, Subject()); }
+        /// Why `id` is disabled over `subject`; empty when it is enabled or says nothing.
+        [[nodiscard]] String DisabledReason(StringView id, EditorPage* subject) const
+        {
+            const EditorActionDeclaration* action = Find(id);
+            if (action == nullptr || IsEnabled(*action, subject) || !action->disabledReason)
+                return String{};
+            return action->disabledReason(subject);
         }
         [[nodiscard]] bool IsChecked(StringView id) const { return IsChecked(id, Subject()); }
         [[nodiscard]] bool IsChecked(StringView id, EditorPage* subject) const
@@ -307,18 +301,20 @@ export namespace editor
         }
 
     private:
-        void NotifyChanged() const { OnActionsChanged(); }
+        void NotifyChanged() const { m_changed.Notify(); }
 
+        mutable foundation::gui::Observable m_changed; // registrations and rebinds
         Array<EditorActionDeclaration> m_actions;
         HashMap<u64, usize> m_index;              // id hash -> index (verified on lookup)
         HashMap<u64, EditorShortcut> m_overrides; // id hash -> the user's chord
     };
 
-    /// Items for the actions `ids`, in that order, appended to a context menu over `subject`:
-    /// each labelled from its declaration, enabled as the registry answers now, executing
-    /// through the registry over the subject. An id nobody registered adds nothing (the
-    /// menu's author asked for a name its domain never declared). Returns how many were added.
-    inline usize AppendActionItems(foundation::ui::ContextMenu& menu,
+    /// Items for the actions `ids`, in that order, appended to a menu over `subject`: each
+    /// labelled from its declaration with its effective chord, enabled as the registry answers
+    /// now, executing through the registry over the subject. An id nobody registered adds
+    /// nothing (the menu's author asked for a name its domain never declared). Returns how many
+    /// were added.
+    inline usize AppendActionItems(foundation::gui::Menu& menu,
                                    const EditorActionRegistry& actions, EditorPage* subject,
                                    Span<const StringView> ids)
     {
@@ -332,10 +328,10 @@ export namespace editor
             }
             const EditorActionRegistry* registry = &actions;
             const String actionId = action->id;
-            menu.AddItem(action->label.AsView(),
-                         [registry, actionId, subject]()
-                         { (void)registry->Execute(actionId.AsView(), subject); },
-                         EditorActionRegistry::IsEnabled(*action, subject));
+            foundation::gui::MenuItem* item =
+                menu.AddItem(action->label.AsView(), [registry, actionId, subject]() { (void)registry->Execute(actionId.AsView(), subject); });
+            item->SetShortcut(FormatShortcut(actions.Shortcut(actionId.AsView())).AsView());
+            item->SetEnabled(EditorActionRegistry::IsEnabled(*action, subject));
             ++added;
         }
         return added;

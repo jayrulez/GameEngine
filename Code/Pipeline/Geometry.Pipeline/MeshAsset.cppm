@@ -290,8 +290,6 @@ export namespace pipeline{
     // 5 = geometry ALWAYS in the sidecar (the inline-geometry flag left the envelope); the
     // number moves in lockstep with StaticMeshSource (MeshResource.cppm), whose layout the
     // sidecar carries under this asset's version scope.
-    RTTI_DEFINE_OBJECT_VERSIONED(StaticMeshAsset, "rtti::pipeline::geometry", 5)
-    RTTI_DEFINE_OBJECT_VERSIONED(SkinnedMeshAsset, "rtti::pipeline::geometry", 5)
 
 
     /// A static mesh asset of `mesh` in `target`, named `baseName` made unique, its geometry in

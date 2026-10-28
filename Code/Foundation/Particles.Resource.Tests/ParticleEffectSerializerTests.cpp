@@ -101,6 +101,75 @@ TEST_CASE("particles.serializer: a clean stream round-trips (control)")
     CHECK(dst.Effect().GetSystem(1)->MaxParticles() == 300);
 }
 
+TEST_CASE("particles.serializer: read over an effect, it replaces what the effect had (an editor's undo)")
+{
+    RegisterParticleEffectResource();
+    ParticleEffectResource src;
+    BuildEffect(src.Effect());
+    SubEmitterLink link;
+    link.childSystemIndex = 1;
+    src.Effect().GetSystem(0)->subEmitters.PushBack(link);
+    const Array<u8> bytes = WriteEffect(src.Effect());
+
+    // The same effect read back over itself, as a whole-asset undo does: two systems, one link.
+    CHECK(ReadEffect(bytes, src.Effect()));
+    CHECK(src.Effect().SystemCount() == 2);
+    CHECK(src.Effect().GetSystem(0)->subEmitters.Size() == 1u);
+    CHECK(src.Effect().GetSystem(1)->subEmitters.IsEmpty());
+}
+
+TEST_CASE("particles.serializer: the effect-level links of before are read onto every system but the one each spawns into")
+{
+    RegisterParticleEffectResource();
+    // The old layout by hand: three systems, then the effect's links (one into the third, one
+    // into nothing).
+    MemoryStream buffer(DefaultAllocator());
+    {
+        BinarySerializer writer(buffer, SerializeMode::Write);
+        ParticleEffect fx;
+        BuildEffect(fx);
+        (void)fx.AddSystem(100);
+        // The systems as they were written then: no sub-emitters of their own.
+        foundation::core::Serialize(writer, "name", fx.name);
+        u32 systems = static_cast<u32>(fx.SystemCount());
+        writer.Key("systems");
+        writer.BeginArray(systems);
+        for (u32 i = 0; i < systems; ++i)
+        {
+            writer.BeginObject();
+            SerializeSystem(writer, fx, static_cast<i32>(i), true);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        u32 count = 2;
+        writer.Key("links");
+        writer.BeginArray(count);
+        constexpr i32 kChildren[] = {2, -1};
+        for (const i32 child : kChildren)
+        {
+            writer.BeginObject();
+            SubEmitterLink link;
+            link.childSystemIndex = child;
+            link.spawnCount = 7;
+            Serialize(writer, link);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+    (void)buffer.Seek(0, SeekOrigin::Begin);
+    BinarySerializer reader(buffer, SerializeMode::Read);
+    ParticleEffect read;
+    SerializeEffect(reader, read, true);
+    REQUIRE(reader.IsPayloadOk());
+    REQUIRE(read.SystemCount() == 3);
+    // As it behaved: every other system's events spawned into the third.
+    REQUIRE(read.GetSystem(0)->subEmitters.Size() == 1u);
+    CHECK(read.GetSystem(0)->subEmitters[0].childSystemIndex == 2);
+    CHECK(read.GetSystem(0)->subEmitters[0].spawnCount == 7);
+    CHECK(read.GetSystem(1)->subEmitters.Size() == 1u);
+    CHECK(read.GetSystem(2)->subEmitters.IsEmpty()); // never into itself; the link into nothing dropped
+}
+
 TEST_CASE("particles.serializer: a module type this build cannot construct refuses the payload")
 {
     RegisterParticleEffectResource();

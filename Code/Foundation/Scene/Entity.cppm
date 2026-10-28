@@ -77,4 +77,8 @@ export namespace foundation::scene
         foundation::core::Serialize(ar, ref.id);
     }
 
+    /// EntityRef's reflection: its `id`, so tooling finds what it names by property (an inspector
+    /// takes it as a reference by that id). Idempotent; RegisterAllSceneComponentReflection calls it.
+    void RegisterEntityRefReflection();
+
 } // namespace foundation::scene

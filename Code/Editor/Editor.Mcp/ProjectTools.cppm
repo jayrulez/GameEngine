@@ -30,6 +30,7 @@ export import :log_tools;
 export import :resources;
 export import :script_validate;
 export import :shader_validate;
+export import :gui_validate;
 export import :material_shader;
 export import :script_create;
 export import :project_export;
@@ -677,7 +678,7 @@ export namespace editor::mcp
     // DELIBERATELY; a lost registration then fails the test loudly (the Pipeline::Registration
     // pattern). host_info and the stdio host's project_create / project_open are NOT in it -
     // each host registers its own.
-    inline constexpr usize kEngineToolCount = 32;
+    inline constexpr usize kEngineToolCount = 33;
 
     // Every *.md in `docsDir` as a read-only `docs://<FileName>` resource: the CURATED,
     // distribution-facing docs set (internal design/spec/process docs are never exposed).
@@ -772,6 +773,7 @@ export namespace editor::mcp
         RegisterProjectResources(server, session);
         RegisterScriptValidateTool(server);
         RegisterShaderValidateTool(server, paths.shaderLibrary.AsView());
+        RegisterGuiValidateTool(server);
         RegisterMaterialShaderTool(server, session);
         RegisterScriptCreateTool(server, session);
         RegisterProjectExportTool(server, session, operations);

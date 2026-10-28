@@ -11,20 +11,34 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.input;
+import foundation.gui;
 import foundation.scene;
 import editor.core;
 import editor.scene;
+import editor.viewporttools;
 import editor.camera;
 
 using namespace foundation::core;
 using namespace editor;
 using namespace editor::SceneActionIds;
 namespace scene = foundation::scene;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace
 {
+    // A menu's items, in order (the rows AppendActionItems added).
+    Array<gui::MenuItem*> ItemsOf(gui::Node& node)
+    {
+        Array<gui::MenuItem*> out;
+        if (auto* item = Cast<gui::MenuItem>(&node))
+            out.PushBack(item);
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            for (gui::MenuItem* inner : ItemsOf(*node.GetChildAt(i)))
+                out.PushBack(inner);
+        return out;
+    }
+
     class HeadlessScenePage final : public EditorPage, public ISceneEditorPage
     {
     public:
@@ -51,6 +65,7 @@ namespace
         void PauseSimulation(bool value) override { paused = value; }
         [[nodiscard]] bool IsSimulating() const noexcept override { return simulating; }
         [[nodiscard]] bool IsPaused() const noexcept override { return paused; }
+        [[nodiscard]] ViewportToolManager* ViewportTools() noexcept override { return nullptr; }
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return gizmos; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return cameraOwnsInput; }
         [[nodiscard]] EditorCamera* ViewportCamera() noexcept override { return hasViewport ? &camera : nullptr; }
@@ -76,10 +91,15 @@ namespace
         i32 thumbnailRequests = 0;
         [[nodiscard]] Status RequestViewportCapture(StringView) override { return Status{ErrorCode::NotSupported}; }
         [[nodiscard]] const ViewportCapture& LastViewportCapture() const noexcept override { return capture; }
+        bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource>) override { return false; }
+        void EndScriptedInput() override {}
+        [[nodiscard]] f64 ScriptedInputTime() const noexcept override { return -1.0; }
+        [[nodiscard]] Float2 ViewportPixels() const noexcept override { return Float2{}; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return markers; }
         void SetMarkersShown(bool shown) override { markers = shown; }
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return animation; }
         void SetAnimationPanelShown(bool shown) override { animation = shown; }
+        void EditAnimationClip(const Guid&, const Guid&) override {}
         void CreatePrefabFromEntity(const Guid& entity) override { prefabFrom = entity; }
         void PickAndSpawnPrefab(const Guid& parent) override
         {
@@ -128,10 +148,11 @@ TEST_CASE("scene-actions: registered once, disabled off a scene page; simulate, 
     RegisterSceneEditorActions(context);
     EditorActionRegistry& actions = context.Actions();
     REQUIRE(actions.Find(kSimulateStart) != nullptr);
-    CHECK(actions.Find(kSimulateStart)->menuPath == u8"Scene/Simulate/Play");
+    CHECK(actions.Find(kSimulateStart)->menuPath == u8"Scene/Simulate/Start");
+    CHECK(actions.Find(kSimulateStart)->label == u8"Simulate"); // Play is the Game tab's
     CHECK(actions.Find(kGizmoTranslate)->kind == EditorActionKind::Toggle);
-    CHECK(actions.Shortcut(kGizmoTranslate).key == ui::KeyCode::W);
-    CHECK(actions.Shortcut(kEntityDelete).key == ui::KeyCode::Delete);
+    CHECK(actions.Shortcut(kGizmoTranslate).Keys() == String(u8"w"));
+    CHECK(actions.Shortcut(kEntityDelete).Keys() == String(u8"delete"));
 
     auto* plain = context.AdoptPage(
         UniquePtr<EditorPage>(DefaultAllocator().New<PlainPage>(), DefaultAllocator()));
@@ -293,16 +314,17 @@ TEST_CASE("scene-actions: the entity actions act on the selection's primary, loc
     CHECK(actions.IsEnabled(kEntityCreate, page));
 
     // The hierarchy builds its menu items from the same declarations over the page.
-    auto menu = MakeRef<ui::ContextMenu>(DefaultAllocator());
+    auto menu = MakeRef<gui::Menu>(DefaultAllocator());
     const StringView ids[] = {kEntityCreate, kEntityDelete, u8"nobody.home"};
     CHECK(AppendActionItems(*menu, actions, page, Span<const StringView>(ids, 3)) == 2u);
-    REQUIRE(menu->ItemCount() == 2);
-    CHECK(menu->ItemAt(0)->Label == u8"Create Entity");
-    CHECK(menu->ItemAt(0)->Enabled);
-    CHECK(menu->ItemAt(1)->Label == u8"Delete");
-    CHECK_FALSE(menu->ItemAt(1)->Enabled); // nothing selected after the delete
+    const Array<gui::MenuItem*> items = ItemsOf(*menu);
+    REQUIRE(items.Size() == 2u);
+    CHECK(items[0]->GetText() == u8"Create Entity");
+    CHECK(items[0]->IsEnabled());
+    CHECK(items[1]->GetText() == u8"Delete");
+    CHECK_FALSE(items[1]->IsEnabled()); // nothing selected after the delete
     const usize before = edit.Scene().EntityCount();
-    menu->ItemAt(0)->Action();
+    (void)items[0]->HandleActivate();
     CHECK(edit.Scene().EntityCount() == before + 1);
 
     context.ClosePage(page);
@@ -315,8 +337,7 @@ TEST_CASE("scene-actions: F frames the selection, eased, on a page with a viewpo
     EditorActionRegistry& actions = context.Actions();
     REQUIRE(actions.Find(kFrameSelection) != nullptr);
     CHECK(actions.Find(kFrameSelection)->menuPath == u8"Scene/Frame Selection");
-    CHECK(actions.Shortcut(kFrameSelection).key == ui::KeyCode::F);
-    CHECK(actions.Shortcut(kFrameSelection).modifiers == ui::KeyModifiers::None);
+    CHECK(actions.Shortcut(kFrameSelection).Keys() == String(u8"f")); // no modifier
 
     auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
         DefaultAllocator().New<HeadlessScenePage>(u8"Bistro"), DefaultAllocator())));
@@ -385,8 +406,8 @@ TEST_CASE("scene-actions: Numpad 5 or O switches the viewport between perspectiv
     EditorActionRegistry& actions = context.Actions();
     REQUIRE(actions.Find(kOrthographic) != nullptr);
     CHECK(actions.Find(kOrthographic)->menuPath == u8"Scene/Orthographic");
-    CHECK(actions.Shortcut(kOrthographic).key == ui::KeyCode::Keypad5);
-    CHECK(actions.AlternateShortcut(kOrthographic).key == ui::KeyCode::O);
+    CHECK(actions.Shortcut(kOrthographic).Keys() == String(u8"numpad5"));
+    CHECK(actions.AlternateShortcut(kOrthographic).Keys() == String(u8"o"));
 
     auto* page = static_cast<HeadlessScenePage*>(context.AdoptPage(UniquePtr<EditorPage>(
         DefaultAllocator().New<HeadlessScenePage>(u8"Bistro"), DefaultAllocator())));

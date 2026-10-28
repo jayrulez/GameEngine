@@ -14,3 +14,5 @@ export import :page;
 export import :actions;
 export import :context;
 export import :thumbnail_service;
+export import :editor_resources; // the editor's own files, reloaded as they change (editor-gui X2)
+export import :editor_icons;     // a type's icon and tint, asked of the type (editor-gui X2)

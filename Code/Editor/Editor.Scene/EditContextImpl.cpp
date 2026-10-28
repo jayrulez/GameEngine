@@ -47,6 +47,20 @@ namespace editor
         }
     }
 
+    void SceneEditContext::ResolveComponentResources(const Guid& entity, const TypeInfo* componentType)
+    {
+        scene::ComponentManagerBase* manager = FindManager(componentType);
+        const scene::EntityHandle e = Resolve(entity);
+        if (m_resources != nullptr && manager != nullptr && e.IsAssigned())
+            manager->ResolveEntityResources(e, *m_resources);
+    }
+
+    void SceneEditContext::ResolveSettingsResources(const TypeInfo* settingsType)
+    {
+        if (scene::SceneSystem* system = FindSystemBySettingsType(settingsType); system != nullptr && m_resources != nullptr)
+            system->ResolveResources(*m_resources);
+    }
+
     void SceneEditContext::SetPrefabResolver(scene::PrefabPayloadResolver resolver)
     {
         m_prefabResolver = static_cast<scene::PrefabPayloadResolver&&>(resolver);

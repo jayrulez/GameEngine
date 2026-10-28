@@ -19,7 +19,7 @@
 import foundation.core;
 import foundation.content;
 import foundation.image;
-import foundation.ui;
+import foundation.gui;
 import editor.core;
 import foundation.vfs;
 import foundation.scene;    // the stub scene generator's Stage signature
@@ -29,7 +29,6 @@ using namespace foundation::core;
 using namespace editor;
 namespace content = foundation::content;
 namespace image = foundation::image;
-namespace ui = foundation::ui;
 
 namespace
 {
@@ -159,7 +158,7 @@ TEST_CASE("thumbnails: icon-first, then the drawable + ONE ready signal")
 
     CHECK(!f.service.Get(f.known)); // miss schedules; caller keeps its icon
     PumpLight(f.jobs);
-    RefPtr<ui::Drawable> thumb = f.service.Get(f.known);
+    RefPtr<foundation::gui::Drawable> thumb = f.service.Get(f.known);
     CHECK(thumb);
     CHECK(ready == 1);
     CHECK(f.generates == 1);

@@ -9,6 +9,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
 #include <type_traits>
 
 module foundation.scene;
@@ -1037,5 +1038,20 @@ namespace foundation::scene
                 DestroyEntityImmediate(e);
             }
         }
+    }
+
+    REFLECT_VALUE(EntityRef, "rtti::scene")
+    {
+        builder.Property<&EntityRef::id>("id");
+    }
+
+    void RegisterEntityRefReflection()
+    {
+        static const bool once = []()
+        {
+            RttiRegisterValue_EntityRef();
+            return true;
+        }();
+        (void)once;
     }
 }

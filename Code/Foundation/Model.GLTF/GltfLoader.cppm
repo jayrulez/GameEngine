@@ -202,6 +202,12 @@ export namespace foundation::model::gltf
                     material->setName(Utf8FromC(buf));
                 }
 
+                // KHR_materials_unlit: its colour as it is, no light (the built-in Unlit,
+                // Specs/phong-material.md). The colour and its map come from the
+                // metallic-roughness block as the extension says; the rest is not read.
+                if (mat->unlit)
+                    material->shadingModel = ShadingModel::Unlit;
+
                 // PBR Metallic Roughness.
                 if (mat->has_pbr_metallic_roughness)
                 {

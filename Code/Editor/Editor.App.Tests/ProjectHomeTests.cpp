@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
-// Editor::App tests - the Project page: the project's scenes (the assets of the default-scene
-// setting's type), every reflected setting with its value (an asset by its name), the Game and
-// Project menus' actions, and a rebuild when the settings change.
+// Editor::App tests - the Project page over its markup (Data/Editor/ProjectHome.gml): the project's
+// name, the scenes (the assets of the default-scene setting's type) as links that open them, every
+// reflected setting with its value (an asset by its name), the Game and Project menus' actions as
+// buttons, and a rebuild when the settings change.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
 import foundation.content;
 import foundation.scene.resource;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
@@ -27,6 +29,28 @@ namespace
             }
         }
         return false;
+    }
+
+    RefPtr<foundation::gui::Node> LoadHome()
+    {
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(),
+                                     StringView(app::ProjectHomeView::kPath));
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        foundation::gui::RegisterGuiElements();
+        static const foundation::gui::ElementSet elements = foundation::gui::ElementSet::All();
+        foundation::gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+    template <typename T>
+    T* FindId(foundation::gui::Node& node, StringView id)
+    {
+        if (auto* widget = Cast<foundation::gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+            return Cast<T>(&node);
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            if (T* found = FindId<T>(*node.GetChildAt(i), id))
+                return found;
+        return nullptr;
     }
 
     [[nodiscard]] EditorActionDeclaration Action(StringView id, StringView label, StringView menuPath, i32 order,
@@ -70,7 +94,33 @@ TEST_CASE("project page: the scenes, the settings and the project's actions")
     REQUIRE(context.Actions().Register(
         Action(u8"test.settings", u8"Project Settings...", u8"Project/Project Settings...", 100, others)));
 
-    app::ProjectHomeView home(DefaultAllocator(), context, nullptr);
+    RefPtr<foundation::gui::Node> content = LoadHome();
+    REQUIRE(content.Get() != nullptr);
+    app::ProjectHomeView home(DefaultAllocator(), context, nullptr, content);
+    Array<Guid> opened;
+    home.SetOnOpenAsset([&opened](const Guid& id) { opened.PushBack(id); });
+    CHECK(FindId<foundation::gui::Label>(*content, u8"home-name")->GetText() == StringView(u8"Harbour"));
+    auto* openDefault = FindId<foundation::gui::Button>(*content, u8"home-open-default");
+    REQUIRE(openDefault != nullptr);
+    CHECK(openDefault->GetText() == StringView(u8"Open Docks"));
+    CHECK(openDefault->HandleActivate());
+    REQUIRE(opened.Size() == 1u);
+    CHECK(opened[0] == docks->Id());
+    // Each scene a link that opens it.
+    foundation::gui::Node* scenes = FindId<foundation::gui::Node>(*content, u8"home-scenes");
+    REQUIRE(scenes != nullptr);
+    REQUIRE(scenes->ChildCount() == 2u);
+    auto* first = Cast<foundation::gui::Button>(scenes->GetChildAt(0));
+    REQUIRE(first != nullptr);
+    CHECK(first->GetText() == StringView(u8"Arrival"));
+    CHECK(first->HandleActivate());
+    CHECK(opened.Back() == arrival->Id());
+    // The Game menu's actions as buttons that run them.
+    foundation::gui::Node* game = FindId<foundation::gui::Node>(*content, u8"home-game-actions");
+    REQUIRE(game != nullptr);
+    REQUIRE(game->ChildCount() == 1u);
+    CHECK(Cast<foundation::gui::Button>(game->GetChildAt(0))->HandleActivate());
+    CHECK(plays == 1);
 
     // Every scene, in the asset tree's order (by name).
     REQUIRE(home.Scenes().Size() == 2u);

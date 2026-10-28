@@ -16,7 +16,11 @@ import foundation.scene;
 import foundation.geometry;
 import foundation.physics.resource;
 import physics.pipeline;
+import foundation.gui;
+import foundation.gui.toolkit;
+import foundation.geometry.resource;
 import editor.core;
+import editor.app;
 import editor.physics;
 
 using namespace foundation::core;
@@ -88,4 +92,87 @@ TEST_CASE("collision editor: staging without the render managers fails rather th
         generator->Unstage(stage); // harmless with nothing staged
     }
     std::filesystem::remove_all(dir, ec);
+}
+
+namespace
+{
+    namespace gui = foundation::gui;
+
+    RefPtr<gui::Node> LoadPageMarkup(StringView relative)
+    {
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), relative);
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        gui::RegisterGuiElements();
+        gui::RegisterToolkitElements();
+        static const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    }
+}
+
+TEST_CASE("collision page: its source mesh a slot for what a mesh cooks to, each edit one undo step, no mesh a notice, no collider said in the preview's place")
+{
+    pipeline::RegisterPhysicsAssets();
+    foundation::geometry::RegisterGeometryResourceTypes(); // StaticMeshSource named, as the editor has it
+    const String dir(u8"scratch_collision_page_project");
+    (void)RemoveDirectoryRecursive(dir.AsView());
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());
+    REQUIRE(static_cast<bool>(project));
+    editor::EditorContext context{DefaultAllocator()};
+    context.SetProject(project.Get());
+    foundation::content::Instance* shape = project->SourceDb().RootGroup()->CreateInstance(u8"Hull", pipeline::CollisionShapeAsset::StaticType());
+    REQUIRE(shape != nullptr);
+    pipeline::CollisionShapeAsset asset;
+    REQUIRE(shape->WriteObject(asset).IsOk());
+    {
+        editor::app::AssetPageServices services;
+        services.loadMarkup = [](StringView path) { return LoadPageMarkup(path); };
+        editor::CollisionShapeEditorPage page(context, Move(services), *shape);
+        REQUIRE_FALSE(page.LoadFailed());
+        Array<gui::PropertyInfo> rows;
+        page.Properties().GetProperties(StringView{}, rows);
+        const gui::PropertyInfo* mesh = nullptr;
+        for (const gui::PropertyInfo& row : rows)
+            if (row.Name == StringView(u8"sourceMesh"))
+                mesh = &row;
+        REQUIRE(mesh != nullptr);
+        CHECK(mesh->Kind == gui::PropertyKind::Reference);
+        REQUIRE(mesh->ReferenceType != nullptr);
+        CHECK(StringView(reinterpret_cast<const utf8char*>(mesh->ReferenceType->name)) == StringView(u8"StaticMeshSource"));
+        CHECK_FALSE(page.Notice(u8"mesh").IsEmpty());
+        CHECK(page.Fact(u8"Collider") == StringView(u8"None: no source mesh"));
+        CHECK_FALSE(page.Pane()->Showing());
+
+        const Guid crate{0x77, 0x1};
+        utf8char text[37];
+        crate.ToChars(text);
+        gui::PropertyWrite write;
+        write.Value = gui::Variant(StringView(text, 36));
+        page.Edit(u8"sourceMesh", write);
+        auto* edited = Cast<pipeline::CollisionShapeAsset>(page.Object());
+        REQUIRE(edited != nullptr);
+        CHECK(edited->sourceMesh == crate);
+        CHECK(page.Notice(u8"mesh").IsEmpty());
+        CHECK(page.IsDirty());
+        page.Commands().Undo();
+        CHECK(edited->sourceMesh.IsNil());
+        CHECK_FALSE(page.Notice(u8"mesh").IsEmpty());
+    }
+    context.SetProject(nullptr);
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir.AsView());
+}
+
+TEST_CASE("collision page: a collider cooked before its mesh was cleared is not shown")
+{
+    auto cooked = MakeRef<physics::CollisionShape>(DefaultAllocator());
+    cooked->outline.PushBack(Float3{0, 0, 0});
+    cooked->outline.PushBack(Float3{1, 0, 0});
+    cooked->outline.PushBack(Float3{0, 1, 0});
+    const Guid mesh{0x77, 0x1};
+    CHECK(editor::CollisionShapeEditorPage::ShowsCollider(mesh, cooked.Get()));
+    CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(Guid{}, cooked.Get())); // cleared: the last cook's is not its
+    CHECK_FALSE(editor::CollisionShapeEditorPage::ShowsCollider(mesh, nullptr));    // named, not cooked yet
 }

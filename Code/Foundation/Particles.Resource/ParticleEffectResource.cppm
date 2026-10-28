@@ -115,7 +115,8 @@ export namespace foundation::particles
         ar.EndArray();
     }
 
-    inline void SerializeSystem(ISerializer& ar, ParticleEffect& fx, i32 index)
+    // `effectLinks`: the layout before a system owned its sub-emitters (see SerializeEffect), with none.
+    inline void SerializeSystem(ISerializer& ar, ParticleEffect& fx, i32 index, bool effectLinks = false)
     {
         const bool reading = ar.Mode() == SerializeMode::Read;
         i32 maxParticles = reading ? 0 : fx.GetSystem(index)->MaxParticles();
@@ -163,11 +164,43 @@ export namespace foundation::particles
             return;
         }
         SerializeBehaviors(ar, *sys);
+        if (!ar.IsPayloadOk() || effectLinks)
+        {
+            return;
+        }
+        // Its sub-emitters, each into the system it names.
+        u32 linkCount = reading ? 0u : static_cast<u32>(sys->subEmitters.Size());
+        ar.Key("subEmitters");
+        ar.BeginArray(linkCount);
+        if (reading)
+        {
+            sys->subEmitters.Clear();
+        }
+        for (u32 i = 0; i < linkCount; ++i)
+        {
+            ar.BeginObject();
+            SubEmitterLink link = reading ? SubEmitterLink{} : sys->subEmitters[static_cast<usize>(i)];
+            Serialize(ar, link);
+            ar.EndObject();
+            if (reading)
+            {
+                sys->subEmitters.PushBack(link);
+            }
+        }
+        ar.EndArray();
     }
 
-    inline void SerializeEffect(ISerializer& ar, ParticleEffect& fx)
+    /// An effect either way. `effectLinks`: the layout before a system owned its sub-emitters, the
+    /// effect's own list of links each into a system on every other system's births or deaths
+    /// (the authoring asset's data version 0); read, each becomes a sub-emitter of every system but
+    /// the one it spawns into, as it behaved.
+    inline void SerializeEffect(ISerializer& ar, ParticleEffect& fx, bool effectLinks = false)
     {
         const bool reading = ar.Mode() == SerializeMode::Read;
+        if (reading)
+        {
+            fx.Clear(); // read over an effect (an editor's undo), not added to what it had
+        }
         core::Serialize(ar, "name", fx.name);
 
         u32 systemCount = reading ? 0u : static_cast<u32>(fx.SystemCount());
@@ -176,7 +209,7 @@ export namespace foundation::particles
         for (u32 i = 0; i < systemCount; ++i)
         {
             ar.BeginObject();
-            SerializeSystem(ar, fx, static_cast<i32>(i));
+            SerializeSystem(ar, fx, static_cast<i32>(i), reading && effectLinks);
             if (!ar.IsPayloadOk())
             {
                 return; // refused above: do not read the next system's budget from a shifted stream
@@ -185,19 +218,25 @@ export namespace foundation::particles
         }
         ar.EndArray();
 
-        const Span<const SubEmitterLink> links = fx.SubEmitterLinks();
-        u32 linkCount = reading ? 0u : static_cast<u32>(links.Size());
+        if (!reading || !effectLinks)
+        {
+            return;
+        }
+        u32 linkCount = 0;
         ar.Key("links");
         ar.BeginArray(linkCount);
         for (u32 i = 0; i < linkCount; ++i)
         {
             ar.BeginObject();
-            SubEmitterLink link = reading ? SubEmitterLink{} : links[static_cast<usize>(i)];
+            SubEmitterLink link{};
             Serialize(ar, link);
             ar.EndObject();
-            if (reading)
+            for (i32 s = 0; s < fx.SystemCount(); ++s)
             {
-                fx.AddSubEmitterLink(link);
+                if (link.childSystemIndex >= 0 && link.childSystemIndex < fx.SystemCount() && s != link.childSystemIndex)
+                {
+                    fx.GetSystem(s)->subEmitters.PushBack(link); // into nothing, it did nothing: dropped
+                }
             }
         }
         ar.EndArray();
@@ -369,8 +408,9 @@ export namespace foundation::particles
     }
 
     // v1 (2026-10-21): curves of Core's keys and gradients, size as `size`/`separateAxes`/`sizeY`
-    // (cooked again: the builder's version moved).
-    RTTI_DEFINE_OBJECT_VERSIONED(ParticleEffectResource, "rtti::particles", 1)
+    // (cooked again: the builder's version moved). v2 (2026-10-27): each system its sub-emitters,
+    // no effect-level links (cooked again).
+    RTTI_DEFINE_OBJECT_VERSIONED(ParticleEffectResource, "rtti::particles", 2)
 }
 
 export namespace foundation::particles

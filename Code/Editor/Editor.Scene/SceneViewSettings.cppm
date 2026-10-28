@@ -69,6 +69,11 @@ export namespace editor
         // whether it is drawn as debug lines instead of the shader grid (kept to compare them).
         u8 gridPlane = 0;
         bool gridLines = false;
+        // Where the tool panel was moved to in the viewport (added 2026-10-25, ruling 23): its top
+        // start corner, in pixels from the viewport's; hasToolPanelPlace = false while it sits in
+        // its zone under the chips.
+        bool hasToolPanelPlace = false;
+        Float2 toolPanelPlace{};
 
         // The section's data version gates the keys added after v3 (a keyed reader FAILS the
         // whole section on a missing key, so a v3 file must not be asked for them).
@@ -99,6 +104,8 @@ export namespace editor
                 foundation::core::SerializeAppended(ar, "gridPlane", gridPlane);
                 foundation::core::SerializeAppended(ar, "gridLines", gridLines);
                 foundation::core::SerializeAppended(ar, "cameraOrthographic", cameraOrthographic);
+                foundation::core::SerializeAppended(ar, "hasToolPanelPlace", hasToolPanelPlace);
+                foundation::core::SerializeAppended(ar, "toolPanelPlace", toolPanelPlace);
             }
         }
     };
@@ -141,7 +148,7 @@ export namespace editor
     {
         // v4 (markers / FPS / camera / selection) keeps a v3 legacy reader: a project's saved
         // prefs from before 2026-09-24 load without the new keys and re-save as v4.
-        const_cast<TypeInfo&>(SceneViewSettings::StaticType()).minReadDataVersion = 3;
+        KeepLegacyReader(const_cast<TypeInfo&>(SceneViewSettings::StaticType()), 3);
         GlobalTypeRegistry().Register(SceneViewSettings::StaticType(), TypeDomain(u8"Editor"));
         RegisterSerializable<SceneViewSettings>();
     }

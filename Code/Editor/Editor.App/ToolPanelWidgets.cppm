@@ -3,135 +3,294 @@
 
 // Editor App - :tool_panel_widgets partition
 //
-// The small widget kit every viewport-tool settings panel composes: a vertical panel root, a
-// caption row, a segmented row of exclusive toggle buttons (mode / layer choices), a property-grid
-// float row and the grid mount that fills the panel. Shared by the terrain brushes (sculpt, splat)
-// and the vegetation paint brush, so a new brush panel is a few lines of composition and every
-// panel reads the same.
+// What every viewport tool's panel is made of (Documentation/Specs/editor-gui.md, 5.3, layer 5,
+// part 3), so every panel reads the same (the catalog's 17: three mode-picker styles, two ways to
+// build a check row): a segmented row of exclusive choices (a mode, a layer, by word or by
+// picture), a named slider with its number, a named check and a line of help. The body asks each
+// control's value of the tool again when Sync runs (the host runs it each frame), since a tool's
+// keys change it too (1 to 4 its mode, Shift + wheel its radius).
 
 module;
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
 
 export module editor.app:tool_panel_widgets;
 
 import foundation.core;
-import foundation.ui;
-import foundation.ui.toolkit;
-import editor.core; // EditorRootAllocator
+import foundation.gui;
 
 using namespace foundation::core;
-namespace ui = foundation::ui;
+namespace core = foundation::core;
 
 export namespace editor::app
 {
-    /// A caption row (a label at `fontSize`).
-    [[nodiscard]] inline RefPtr<ui::View> MakeToolPanelRow(StringView title, f32 fontSize)
-    {
-        auto label = MakeRef<ui::Label>(editor::EditorRootAllocator(), title);
-        label->FontSize.SetValue(Optional<f32>{fontSize});
-        return label;
-    }
+    namespace gui = foundation::gui;
 
-    /// The vertical panel root the rows stack into.
-    [[nodiscard]] inline RefPtr<ui::FlexLayout> MakeToolPanelRoot()
+    class ToolPanelBody final : public gui::UIWidget
     {
-        auto root = MakeRef<ui::FlexLayout>(editor::EditorRootAllocator());
-        root->Direction = ui::Orientation::Vertical;
-        root->Spacing = 4.0f;
-        return root;
-    }
-
-    // A segmented row of exclusive toggle buttons - exactly one lit. contentFor(i) supplies each
-    // button's content (icon or label); onSelect(i) applies the choice to the tool; current()
-    // returns the selected index for the lit state. Re-lights via SetSilent + Invalidate (no
-    // OnCheckedChanged recursion). The buttons capture `this` (this row owns them, so it outlives
-    // their closures); the move-only callbacks live as members (never copied into the closures).
-    class SegmentedToggle final : public ui::FlexLayout
-    {
+        RTTI_OBJECT(ToolPanelBody, gui::UIWidget)
     public:
-        SegmentedToggle()
+        /// One choice of a segmented row: its word, or its picture (asked again until it has one,
+        /// as a thumbnail arrives later) with `icon` meanwhile; what it does, its tooltip.
+        struct Choice
         {
-            Direction = ui::Orientation::Horizontal;
-            Spacing = 3.0f;
-        }
+            String label;
+            String tooltip;
+            String icon;                                // a picture's stand-in (an asset type's icon)
+            Function<RefPtr<gui::Drawable>()> picture;  // empty: its word
+        };
 
-        void Build(i32 count, Function<RefPtr<ui::View>(i32)> contentFor,
-                   Function<void(i32)> onSelect, Function<i32()> current,
-                   Function<StringView(i32)> tooltipFor = {})
+        ToolPanelBody() { AddClass(u8"tool-panel-body"); }
+
+        /// A row of exclusive choices under `name` (none: no heading): `get` the chosen one's
+        /// index, `set` choosing.
+        void AddChoices(StringView name, Array<Choice> choices, Function<i32()> get, Function<void(i32)> set)
         {
-            m_onSelect = Move(onSelect);
-            m_current = Move(current);
-            for (i32 i = 0; i < count; ++i)
+            if (!name.IsEmpty())
+                AddHeading(name);
+            auto row = MakeRef<gui::Panel>(MemoryAllocator());
+            row->AddClass(u8"segmented");
+            ChoiceRow group;
+            group.get = core::Move(get);
+            ToolPanelBody* self = this;
+            const usize index = m_choices.Size();
+            for (usize i = 0; i < choices.Size(); ++i)
             {
-                auto button = MakeRef<ui::ToggleButton>(MemoryAllocator());
-                button->SetContent(contentFor(i));
-                if (tooltipFor)
+                Choice& choice = choices[i];
+                auto button = MakeRef<gui::Button>(MemoryAllocator());
+                button->AddClass(u8"segment");
+                button->SetToggle(true);
+                button->SetTooltip(choice.tooltip.AsView());
+                ChoicePicture picture;
+                if (choice.picture)
                 {
-                    button->TooltipText = String(tooltipFor(i));
+                    button->AddClass(u8"picture");
+                    auto image = MakeRef<gui::Image>(MemoryAllocator());
+                    image->AddClass(u8"segment-picture");
+                    image->SetSource(choice.icon);
+                    image->SetHitTestVisible(false);
+                    button->AddChild(image.Get());
+                    picture.image = image.Get();
+                    picture.ask = core::Move(choice.picture);
                 }
-                SegmentedToggle* self = this;
-                button->OnCheckedChanged.Add([self, i](ui::ToggleButton*, bool)
-                                             { self->Choose(i); });
-                AddView(button.Get());
+                else
+                    button->SetText(choice.label.AsView());
+                button->SetOnClick([self, index, i]()
+                                   {
+                                       ChoiceRow& owner = self->m_choices[index];
+                                       if (owner.set)
+                                           owner.set(static_cast<i32>(i));
+                                       self->Sync();
+                                   });
+                group.buttons.PushBack(button.Get());
+                group.pictures.PushBack(core::Move(picture));
+                row->AddChild(button.Get());
             }
-            Refresh();
+            group.set = core::Move(set);
+            m_choices.PushBack(core::Move(group));
+            AddChild(row.Get());
         }
 
-        void Choose(i32 i)
+        /// A picture shown, not chosen, under `name` (a terrain's base layer, which erasing
+        /// reveals): `shown`'s picture once it has one, its icon meanwhile, its tooltip.
+        void AddPicture(StringView name, Choice shown)
         {
-            if (m_onSelect)
-            {
-                m_onSelect(i);
-            }
-            Refresh();
+            if (!name.IsEmpty())
+                AddHeading(name);
+            auto row = MakeRef<gui::Panel>(MemoryAllocator());
+            row->AddClass(u8"segmented");
+            auto frame = MakeRef<gui::Panel>(MemoryAllocator());
+            frame->AddClass(u8"segment");
+            frame->AddClass(u8"picture");
+            frame->AddClass(u8"shown"); // not a button: nothing to choose
+            frame->SetTooltip(shown.tooltip.AsView());
+            auto image = MakeRef<gui::Image>(MemoryAllocator());
+            image->AddClass(u8"segment-picture");
+            image->SetSource(shown.icon);
+            image->SetHitTestVisible(false);
+            frame->AddChild(image.Get());
+            row->AddChild(frame.Get());
+            m_pictures.PushBack(ChoicePicture{image.Get(), core::Move(shown.picture), false});
+            AddChild(row.Get());
         }
 
-        void Refresh()
+        /// A slider named `name` with its number beside it, between `min` and `max` by `step`.
+        void AddSlider(StringView name, f64 min, f64 max, f64 step, Function<f64()> get, Function<void(f64)> set)
         {
-            const i32 selected = m_current ? m_current() : -1;
-            for (usize k = 0; k < ChildCount(); ++k)
+            auto row = MakeRef<gui::Panel>(MemoryAllocator());
+            row->AddClass(u8"hud-row");
+            auto label = MakeRef<gui::Label>(MemoryAllocator());
+            label->AddClass(u8"hud-name");
+            label->SetText(name);
+            row->AddChild(label.Get());
+            auto field = MakeRef<gui::Panel>(MemoryAllocator());
+            field->AddClass(u8"slider-field");
+            auto slider = MakeRef<gui::Slider>(MemoryAllocator());
+            slider->SetMin(min);
+            slider->SetMax(max);
+            slider->SetStep(step);
+            auto number = MakeRef<gui::NumberField>(MemoryAllocator());
+            number->SetMin(min);
+            number->SetMax(max);
+            number->SetStep(step);
+            SliderRow slide;
+            slide.slider = slider.Get();
+            slide.number = number.Get();
+            slide.get = core::Move(get);
+            slide.set = core::Move(set);
+            const usize index = m_slides.Size();
+            ToolPanelBody* self = this;
+            const auto take = [self, index](f64 value)
             {
-                if (auto* toggle = Cast<ui::ToggleButton>(GetChildAt(k)))
+                SliderRow& owner = self->m_slides[index];
+                if (owner.set)
+                    owner.set(value);
+                self->Sync();
+            };
+            slider->SetOnValueChanging(take);
+            slider->SetOnValueChanged(take);
+            number->SetOnValueChanged(take);
+            field->AddChild(slider.Get());
+            field->AddChild(number.Get());
+            row->AddChild(field.Get());
+            m_slides.PushBack(core::Move(slide));
+            AddChild(row.Get());
+        }
+
+        /// A check named `name`.
+        void AddCheck(StringView name, Function<bool()> get, Function<void(bool)> set)
+        {
+            auto check = MakeRef<gui::CheckBox>(MemoryAllocator());
+            check->SetText(name);
+            const usize index = m_checks.Size();
+            ToolPanelBody* self = this;
+            check->SetOnToggled([self, index](bool on)
+                                {
+                                    CheckRow& owner = self->m_checks[index];
+                                    if (owner.set)
+                                        owner.set(on);
+                                    self->Sync();
+                                });
+            m_checks.PushBack(CheckRow{check.Get(), core::Move(get), core::Move(set)});
+            AddChild(check.Get());
+        }
+
+        /// A line of help (how the keys work it), or a note `text` asks again (hidden while it
+        /// says nothing).
+        void AddHelp(StringView text) { AddNote([help = String(text)]() { return help; }); }
+        void AddNote(Function<String()> text)
+        {
+            auto label = MakeRef<gui::Label>(MemoryAllocator());
+            label->AddClass(u8"hud-help");
+            m_notes.PushBack(NoteRow{label.Get(), core::Move(text)});
+            AddChild(label.Get());
+        }
+
+        /// Each control as the tool has it now.
+        void Sync()
+        {
+            for (ChoiceRow& group : m_choices)
+            {
+                const i32 chosen = group.get ? group.get() : -1;
+                for (usize i = 0; i < group.buttons.Size(); ++i)
                 {
-                    toggle->IsChecked.SetSilent(static_cast<i32>(k) == selected);
-                    toggle->Invalidate();
+                    const bool on = static_cast<i32>(i) == chosen;
+                    if (group.buttons[i]->IsChecked() != on)
+                        group.buttons[i]->SetChecked(on);
+                    ChoicePicture& picture = group.pictures[i];
+                    if (picture.ask && !picture.shown)
+                        if (RefPtr<gui::Drawable> drawable = picture.ask())
+                        {
+                            picture.image->SetDrawable(drawable);
+                            picture.shown = true;
+                        }
                 }
             }
+            for (ChoicePicture& picture : m_pictures)
+                if (picture.ask && !picture.shown)
+                    if (RefPtr<gui::Drawable> drawable = picture.ask())
+                    {
+                        picture.image->SetDrawable(drawable);
+                        picture.shown = true;
+                    }
+            for (SliderRow& slide : m_slides)
+            {
+                if (!slide.get)
+                    continue;
+                const f64 value = slide.get();
+                if (slide.slider->GetValue() != value)
+                    slide.slider->SetValue(value);
+                if (!slide.number->IsEditing() && slide.number->GetValue() != value)
+                    slide.number->SetValue(value);
+            }
+            for (CheckRow& check : m_checks)
+                if (check.get && check.box->IsChecked() != check.get())
+                    check.box->SetChecked(check.get());
+            for (NoteRow& note : m_notes)
+            {
+                const String text = note.text ? note.text() : String{};
+                if (note.label->GetText() != text.AsView())
+                    note.label->SetText(text.AsView());
+                note.label->SetDisplayed(!text.IsEmpty());
+            }
         }
+
+        // === For tests ===
+        [[nodiscard]] gui::Button* ChoiceAt(usize group, usize index) const
+        {
+            return group < m_choices.Size() && index < m_choices[group].buttons.Size() ? m_choices[group].buttons[index] : nullptr;
+        }
+        [[nodiscard]] usize ChoiceCount(usize group) const { return group < m_choices.Size() ? m_choices[group].buttons.Size() : 0u; }
+        [[nodiscard]] gui::NumberField* NumberAt(usize index) const { return index < m_slides.Size() ? m_slides[index].number : nullptr; }
+        [[nodiscard]] gui::CheckBox* CheckAt(usize index) const { return index < m_checks.Size() ? m_checks[index].box : nullptr; }
+        /// The `index`th shown picture's image (AddPicture's); null: none.
+        [[nodiscard]] gui::Image* PictureAt(usize index) const { return index < m_pictures.Size() ? m_pictures[index].image : nullptr; }
 
     private:
-        Function<void(i32)> m_onSelect;
-        Function<i32()> m_current;
+        void AddHeading(StringView name)
+        {
+            auto heading = MakeRef<gui::Label>(MemoryAllocator());
+            heading->AddClass(u8"hud-heading");
+            heading->SetText(name);
+            AddChild(heading.Get());
+        }
+        struct ChoicePicture
+        {
+            gui::Image* image = nullptr;
+            Function<RefPtr<gui::Drawable>()> ask;
+            bool shown = false;
+        };
+        struct ChoiceRow
+        {
+            Array<gui::Button*> buttons; // its children's, which it keeps
+            Array<ChoicePicture> pictures;
+            Function<i32()> get;
+            Function<void(i32)> set;
+        };
+        struct SliderRow
+        {
+            gui::Slider* slider = nullptr;
+            gui::NumberField* number = nullptr;
+            Function<f64()> get;
+            Function<void(f64)> set;
+        };
+        struct CheckRow
+        {
+            gui::CheckBox* box = nullptr;
+            Function<bool()> get;
+            Function<void(bool)> set;
+        };
+        struct NoteRow
+        {
+            gui::Label* label = nullptr;
+            Function<String()> text;
+        };
+        Array<ChoiceRow> m_choices;
+        Array<ChoicePicture> m_pictures; // AddPicture's: shown, not chosen
+        Array<SliderRow> m_slides;
+        Array<CheckRow> m_checks;
+        Array<NoteRow> m_notes;
     };
 
-    /// A float row on the panel's property grid; returns the editor so the tool can push values
-    /// back into it (a wheel-resized radius).
-    inline RefPtr<ui::toolkit::FloatEditor> AddToolPanelFloat(ui::toolkit::PropertyGrid& grid,
-                                                              StringView label, f64 value, f64 lo,
-                                                              f64 hi, f64 step, i32 decimals,
-                                                              Function<void(f64)> onChange)
-    {
-        auto editor = MakeRef<ui::toolkit::FloatEditor>(editor::EditorRootAllocator(), label, value,
-                                                        lo, hi, step, decimals, Move(onChange));
-        grid.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(editor.Get()));
-        return editor;
-    }
-
-    /// A bool row on the panel's property grid.
-    inline void AddToolPanelBool(ui::toolkit::PropertyGrid& grid, StringView label, bool value,
-                                 Function<void(bool)> onChange)
-    {
-        auto editor = MakeRef<ui::toolkit::BoolEditor>(editor::EditorRootAllocator(), label, value,
-                                                       Move(onChange));
-        grid.AddProperty(RefPtr<ui::toolkit::PropertyEditor>(editor.Get()));
-    }
-
-    /// Mount the grid so it fills the panel body and resizes with the FloatingPanel.
-    inline void AddToolPanelGrid(ui::FlexLayout& root, RefPtr<ui::toolkit::PropertyGrid> grid)
-    {
-        ui::LayoutStyle style;
-        style.Width = ui::SizeSpec::Match();
-        style.FlexGrow = 1.0f;
-        root.AddView(grid.Get(), style);
-    }
+    RTTI_DEFINE_OBJECT(ToolPanelBody, "rtti::editor::editor::app")
 }

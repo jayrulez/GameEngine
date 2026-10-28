@@ -7,6 +7,11 @@
 // polyline/g/text) from a string into an SVGDocument. Has its own minimal XML
 // tag/attribute scanner (no XML library dependency). Ported from
 // Sedulous.VG.SVG/SVGLoader.bf.
+//
+// The paint attributes (fill, stroke, stroke-width, stroke-linecap, stroke-linejoin) are
+// inherited as SVG's are: from the <svg> element and each <g> down to the shapes in them, a
+// shape's own attribute winning. An icon set written once on its root (fill="none" stroke=...)
+// draws as written.
 
 module;
 #include "Core/Prelude.h"
@@ -36,6 +41,7 @@ export namespace foundation::vg::svg
 
             HashMap<String, String> svgAttrs;
             ParseAttributes(svgContent, pos, svgAttrs);
+            const PaintStyle rootPaint = Cascade(PaintStyle{}, svgAttrs);
 
             if (const String* wStr = svgAttrs.Find(String(u8"width")))
                 if (const Optional<f32> w = ParseFloatValue(wStr->AsView()))
@@ -61,15 +67,80 @@ export namespace foundation::vg::svg
                 }
             }
 
-            if (!ParseChildren(svgContent, pos, doc.elements, doc).IsOk())
+            if (!ParseChildren(svgContent, pos, doc.elements, doc, rootPaint).IsOk())
                 return Err(ErrorCode::InvalidArgument);
 
             return doc;
         }
 
     private:
+        /// The paint a shape inherits from the elements around it (SVG's initial values at the top).
+        struct PaintStyle
+        {
+            Optional<Color> fillColor = Color::Black; ///< empty: fill="none"
+            String fillGradientId;
+            Optional<Color> strokeColor; ///< empty: no stroke
+            f32 strokeWidth = 1.0f;
+            foundation::vg::VGLineCap cap = foundation::vg::VGLineCap::Butt;
+            foundation::vg::VGLineJoin join = foundation::vg::VGLineJoin::Miter;
+        };
+
+        /// `inherited` with the paint attributes `attrs` sets over it.
+        [[nodiscard]] static PaintStyle Cascade(const PaintStyle& inherited, const HashMap<String, String>& attrs)
+        {
+            using detail::EqualsIgnoreCase;
+            PaintStyle style = inherited;
+            if (const String* fillStr = attrs.Find(String(u8"fill")))
+            {
+                if (EqualsIgnoreCase(fillStr->AsView(), u8"none"))
+                {
+                    style.fillColor = {};
+                    style.fillGradientId = String();
+                }
+                else if (const Optional<String> id = ParseUrlReference(fillStr->AsView()))
+                {
+                    style.fillGradientId = id.Value();
+                    style.fillColor = Color::Black; // fallback if the id never resolves
+                }
+                else if (Result<Color> c = SVGColorParser::Parse(fillStr->AsView()); c.HasValue())
+                {
+                    style.fillColor = c.Value();
+                    style.fillGradientId = String();
+                }
+            }
+            if (const String* strokeStr = attrs.Find(String(u8"stroke")))
+            {
+                if (EqualsIgnoreCase(strokeStr->AsView(), u8"none"))
+                    style.strokeColor = {};
+                else if (Result<Color> c = SVGColorParser::Parse(strokeStr->AsView()); c.HasValue())
+                    style.strokeColor = c.Value();
+            }
+            if (const String* swStr = attrs.Find(String(u8"stroke-width")))
+                if (const Optional<f32> v = ParseFloatValue(swStr->AsView()))
+                    style.strokeWidth = v.Value();
+            if (const String* capStr = attrs.Find(String(u8"stroke-linecap")))
+            {
+                if (EqualsIgnoreCase(capStr->AsView(), u8"round"))
+                    style.cap = foundation::vg::VGLineCap::Round;
+                else if (EqualsIgnoreCase(capStr->AsView(), u8"square"))
+                    style.cap = foundation::vg::VGLineCap::Square;
+                else if (EqualsIgnoreCase(capStr->AsView(), u8"butt"))
+                    style.cap = foundation::vg::VGLineCap::Butt;
+            }
+            if (const String* joinStr = attrs.Find(String(u8"stroke-linejoin")))
+            {
+                if (EqualsIgnoreCase(joinStr->AsView(), u8"round"))
+                    style.join = foundation::vg::VGLineJoin::Round;
+                else if (EqualsIgnoreCase(joinStr->AsView(), u8"bevel"))
+                    style.join = foundation::vg::VGLineJoin::Bevel;
+                else if (EqualsIgnoreCase(joinStr->AsView(), u8"miter"))
+                    style.join = foundation::vg::VGLineJoin::Miter;
+            }
+            return style;
+        }
+
         static Status ParseChildren(StringView content, usize& pos, Array<SVGElement>& elements,
-                                    SVGDocument& doc)
+                                    SVGDocument& doc, const PaintStyle& inherited)
         {
             while (pos < content.Size())
             {
@@ -87,7 +158,7 @@ export namespace foundation::vg::svg
                 }
 
                 const usize savedPos = pos;
-                if (!TryParseElement(content, pos, elements, doc).IsOk())
+                if (!TryParseElement(content, pos, elements, doc, inherited).IsOk())
                 {
                     pos = savedPos;
                     SkipTag(content, pos);
@@ -97,7 +168,7 @@ export namespace foundation::vg::svg
         }
 
         static Status TryParseElement(StringView content, usize& pos, Array<SVGElement>& elements,
-                                      SVGDocument& doc)
+                                      SVGDocument& doc, const PaintStyle& inherited)
         {
             if (pos >= content.Size() || content[pos] != u8'<')
                 return ErrorCode::InvalidArgument;
@@ -119,6 +190,7 @@ export namespace foundation::vg::svg
 
             if (pos < content.Size() && content[pos] == u8'>')
                 ++pos;
+            const PaintStyle paint = Cascade(inherited, attrs);
 
             using detail::EqualsIgnoreCase;
             const StringView tag = tagName.AsView();
@@ -219,7 +291,7 @@ export namespace foundation::vg::svg
             {
                 element.type = SVGElementType::Group;
                 if (!isSelfClosing)
-                    ParseChildren(content, pos, element.children, doc);
+                    ParseChildren(content, pos, element.children, doc, paint);
                 SkipClosingTag(content, pos, u8"g");
             }
             else if (EqualsIgnoreCase(tag, u8"defs"))
@@ -230,7 +302,7 @@ export namespace foundation::vg::svg
                 if (!isSelfClosing)
                 {
                     Array<SVGElement> discarded;
-                    ParseChildren(content, pos, discarded, doc);
+                    ParseChildren(content, pos, discarded, doc, PaintStyle{});
                 }
                 SkipClosingTag(content, pos, u8"defs");
             }
@@ -307,34 +379,13 @@ export namespace foundation::vg::svg
             if (!recognized)
                 return ErrorCode::InvalidArgument;
 
-            // Common style attributes.
-            if (const String* fillStr = attrs.Find(String(u8"fill")))
-            {
-                if (EqualsIgnoreCase(fillStr->AsView(), u8"none"))
-                    element.fillColor = {};
-                else if (const Optional<String> id = ParseUrlReference(fillStr->AsView()))
-                {
-                    element.fillGradientId = id.Value();
-                    element.fillColor = Color::Black; // fallback if the id never resolves
-                }
-                else if (Result<Color> c = SVGColorParser::Parse(fillStr->AsView()); c.HasValue())
-                    element.fillColor = c.Value();
-            }
-            else
-            {
-                element.fillColor = Color::Black; // SVG default fill is black.
-            }
-
-            if (const String* strokeStr = attrs.Find(String(u8"stroke")))
-            {
-                if (!EqualsIgnoreCase(strokeStr->AsView(), u8"none"))
-                    if (Result<Color> c = SVGColorParser::Parse(strokeStr->AsView()); c.HasValue())
-                        element.strokeColor = c.Value();
-            }
-
-            if (const String* swStr = attrs.Find(String(u8"stroke-width")))
-                if (const Optional<f32> v = ParseFloatValue(swStr->AsView()))
-                    element.strokeWidth = v.Value();
+            // The paint: inherited, with the element's own attributes over it.
+            element.fillColor = paint.fillColor;
+            element.fillGradientId = paint.fillGradientId;
+            element.strokeColor = paint.strokeColor;
+            element.strokeWidth = paint.strokeWidth;
+            element.strokeCap = paint.cap;
+            element.strokeJoin = paint.join;
 
             if (const String* opStr = attrs.Find(String(u8"opacity")))
                 if (const Optional<f32> v = ParseFloatValue(opStr->AsView()))

@@ -167,6 +167,13 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
     CHECK(pack.Find(u8"forward", ShaderStage::Fragment,
                     ShaderFlags::AlphaTest | ShaderFlags::GBuffer,
                     CookedShaderFormat::SpirV) != nullptr);
+    // The builtin Phong material's (`ALPHA_TEST GBUFFER DITHER`, the forward vertex path).
+    CHECK(pack.Find(u8"phong", ShaderStage::Fragment, ShaderFlags::GBuffer,
+                    CookedShaderFormat::SpirV) != nullptr);
+    CHECK(pack.Find(u8"phong", ShaderStage::Fragment, ShaderFlags::AlphaTest | ShaderFlags::GBuffer,
+                    CookedShaderFormat::SpirV) != nullptr);
+    CHECK(pack.Find(u8"phong", ShaderStage::Vertex, ShaderFlags::Skinned,
+                    CookedShaderFormat::SpirV) != nullptr);
     // Every corpus stage records the corpus's entry point, `main`.
     CHECK(pack.EntryPoint(ShaderNameHash(u8"forward"), ShaderStage::Fragment) == kCorpusEntryPoint);
     // A single-variant shader has only its None variant.

@@ -332,7 +332,6 @@ namespace editor
             EndStroke();
         }
         m_hasHover = false;
-        OnRadiusChanged = {};
     }
 
     void TerrainHoleTool::Draw(render::debug::DebugDraw& drawList)

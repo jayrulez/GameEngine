@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - :settings_dialog partition.
+// Editor App - :settings_dialog partition
 //
-// ProjectSettingsDialog: a modal editor for the project manifest (Project.xml) - the settings
-// ProjectSettings' reflection describes (its name, native module and asset settings, each asset
-// slot filtered to the type the setting names) and the MSAA level, a tab per category the settings
-// name (their `category`; Preferences reads the same way). The engine version stamp is shown
-// read-only under General (every save re-stamps it to the running engine; the
-// launcher/project-manager owns migration).
-//
-// [Save] writes the fields back into EditorProject::Settings() and persists the manifest;
-// [Cancel]/Escape discards. Every asset setting is a ResourceRefEditor row: pick, drop and clear
-// set the instance GUID (rename/move-proof); Save keeps the path alongside as a mirror. An asset
-// list setting (the other UI fonts) is a ContainerListEditor row of slots.
-
+// Project Settings (Documentation/Specs/editor-gui.md, 5.2, layer 6; ruling 20): the project's
+// manifest (Project.xml) on the property grid, a window over its markup
+// (Data/Editor/ProjectSettings.gml). The rows are a bag made from ProjectSettings' reflection, a
+// section per category the settings name, each by its label: text, a number within its range, a
+// check box, an enum's choices by name, and each asset setting an asset reference to the source
+// type it names (a list of them for a list setting), so the slot picks, drops and clears as an
+// inspector's does. MSAA's choices are the render subsystem's levels. The engine version the
+// project was last saved with shows, read only. Save writes the rows back (a list's empty and
+// repeated entries dropped), keeps the path mirrors beside the guids, persists the manifest and
+// tells the editor; Cancel or closing leaves the manifest as it was.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -24,167 +22,287 @@ export module editor.app:settings_dialog;
 
 import foundation.core;
 import foundation.content;
-import foundation.ui;
-import engine.render; // the canonical MSAA level table (kMsaaLevels + index<->samples helpers)
+import foundation.gui;
+import foundation.gui.toolkit;
+import engine.render;  // the MSAA levels
 import engine.project; // ProjectSettings' reflected settings
 import editor.core;
 import :resource_ref_editor;
-import :container_list_editor;
-import :asset_picker_dialog;
-import :category_tabs;
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
-    namespace content = foundation::content;
+    namespace gui = foundation::gui;
 
-    class ProjectSettingsDialog final : public ui::Dialog
+    class ProjectSettingsDialog
     {
-        RTTI_OBJECT(ProjectSettingsDialog, ui::Dialog)
     public:
-        explicit ProjectSettingsDialog(editor::EditorContext& context)
-            : ui::Dialog(u8"Project Settings"), m_context(&context)
+        /// Its markup, under the data root.
+        static constexpr const char8_t* kPath = u8"Editor/ProjectSettings.gml";
+
+        /// Over `context`'s project; `refs` (the asset slots') outlives it.
+        ProjectSettingsDialog(IAllocator& allocator, editor::EditorContext& context, const ResourceRefServices& refs, RefPtr<gui::Node> body)
+            : m_allocator(allocator), m_context(&context), m_body(Move(body))
         {
-            // A fixed size, as Preferences: a tab view measures only the page it shows, so a
-            // free width or height would change as the tabs do. Each page scrolls inside it.
-            MinWidth.SetValue(620.0f);
-            MaxWidth.SetValue(620.0f);
-            MinHeight.SetValue(420.0f);
-            MaxHeight.SetValue(420.0f);
-
-            editor::EditorProject* project = context.Project();
-            m_tabs = MakeUnique<CategoryTabs>(MemoryAllocator(), MemoryAllocator());
-
-            // The settings as the type describes them (ProjectSettings' reflection): a text row
-            // per string setting, per asset setting a slot that picks, takes a dropped asset of
-            // its type and clears (editor-lists-and-asset-slots.md P1), a list of slots per asset
-            // list, and a field, check box or combo per number, flag or choice, seeded from the
-            // manifest, each in its category's tab. MSAA, a choice from the render subsystem's
-            // levels, follows in its own.
-            BuildSettingRows(project);
-
-            // Scene-pass MSAA: Off / 2x / 4x maps to renderMsaaSamples 1 / 2 / 4. The
-            // player and play-in-editor apply it; the render subsystem capability-clamps at runtime
-            // (2x degrades to 1x on WebGPU).
-            {
-                const PropertyInfo* msaa =
-                    FindProperty(engine::project::ProjectSettings::StaticType(), "renderMsaaSamples");
-                ui::FlexLayout* row = AddRow(
-                    m_tabs->Column(msaa != nullptr ? engine::project::SettingCategory(*msaa)
-                                                   : engine::project::kSettingDefaultCategory),
-                    u8"MSAA");
-                m_msaaCombo = MakeRef<ui::ComboBox>(MemoryAllocator());
-                for (u32 i = 0; i < engine::render::MsaaLevelCount(); ++i)
-                {
-                    (void)m_msaaCombo->AddItem(engine::render::kMsaaLevels[i].label);
-                }
-                const u32 samples = (project != nullptr) ? project->Settings().renderMsaaSamples : 1u;
-                m_msaaCombo->SetSelectedIndex(engine::render::MsaaIndexForSamples(samples));
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                row->AddView(m_msaaCombo.Get(), lp);
-            }
-
-            // Engine stamp - informational; re-stamped by every save.
-            {
-                ui::FlexLayout* row =
-                    AddRow(m_tabs->Column(engine::project::kSettingDefaultCategory), u8"Engine version");
-                auto value =
-                    MakeRef<ui::Label>(MemoryAllocator(), editor::kEngineVersionString);
-                ui::LayoutStyle lp;
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(value.Get(), lp);
-            }
-
-            SetContent(&m_tabs->View());
-
-            {
-                ProjectSettingsDialog* self = this;
-                ui::Button* save = AddButton(u8"Save", ui::DialogResult::None);
-                save->OnClick.Add([self](ui::ButtonBase*) { self->Apply(); });
-            }
-            AddButton(u8"Cancel", ui::DialogResult::Cancel);
+            if (!m_body)
+                return;
+            m_grid = Find<gui::PropertyGrid>(u8"settings-grid");
+            if (m_grid != nullptr)
+                ResourceRefEditor::Register(m_grid->GetEditors(), refs);
+            m_window = MakeRef<gui::Window>(m_allocator);
+            m_window->SetTitle(u8"Project Settings");
+            m_window->AddClass(u8"project-settings-window");
+            m_window->SetSize(Float2{kWidth, kHeight});
+            m_window->GetContent()->AddChild(m_body.Get());
+            ProjectSettingsDialog* self = this;
+            if (auto* save = Find<gui::Button>(u8"settings-save"))
+                save->SetOnClick([self]() { (void)self->Save(); });
+            if (auto* cancel = Find<gui::Button>(u8"settings-cancel"))
+                cancel->SetOnClick([self]() { self->Close(); });
+        }
+        ProjectSettingsDialog(const ProjectSettingsDialog&) = delete;
+        ProjectSettingsDialog& operator=(const ProjectSettingsDialog&) = delete;
+        ~ProjectSettingsDialog()
+        {
+            Close();
+            if (m_grid != nullptr)
+                m_grid->SetSource(nullptr);
         }
 
-        /// The category tabs, in the order the settings first name them.
-        [[nodiscard]] ui::TabView& Tabs() const noexcept { return m_tabs->View(); }
-        /// The tab for a category, or -1.
-        [[nodiscard]] i32 TabIndexOf(StringView category) const { return m_tabs->IndexOf(category); }
+        /// Opens it over `root` with the manifest as it is; false with no markup or no project.
+        bool Open(gui::Node& root)
+        {
+            if (!m_window || m_window->IsOpen() || m_context->Project() == nullptr)
+                return false;
+            if (m_grid != nullptr)
+                m_grid->SetSource(nullptr); // the rows are made again, from the manifest as it is
+            Fill(m_context->Project()->Settings());
+            if (m_grid != nullptr)
+                m_grid->SetSource(m_bag.Get());
+            m_window->OpenModal(root);
+            return true;
+        }
+        [[nodiscard]] bool IsOpen() const noexcept { return m_window && m_window->IsOpen(); }
+        void Close()
+        {
+            if (m_window && m_window->IsOpen())
+                m_window->Close();
+        }
+
+        /// Writes the rows into the manifest, persists it and closes; false when it could not be
+        /// written (it stays open, the editor told).
+        bool Save()
+        {
+            editor::EditorProject* project = m_context->Project();
+            if (project == nullptr)
+            {
+                Close();
+                return false;
+            }
+            engine::project::ProjectSettings& settings = project->Settings();
+            WriteBack(settings);
+            settings.RefreshPathMirrors([project](const Guid& id)
+                                        {
+                                            foundation::content::Instance* instance = project->SourceDb().GetInstance(id);
+                                            return instance != nullptr ? instance->Path() : String();
+                                        });
+            if (!project->SaveSettings().IsOk())
+            {
+                m_context->Notify(editor::NoticeKind::Error, u8"Project settings save FAILED (see Console).");
+                return false;
+            }
+            m_context->SetStatus(u8"Project settings saved.");
+            m_context->NotifyProjectSettingsChanged(); // the session's settings-derived state follows
+            Close();
+            return true;
+        }
+
+        /// The rows (the bag the grid shows) and the grid, for a test.
+        [[nodiscard]] gui::PropertyBag* Rows() const noexcept { return m_bag.Get(); }
+        [[nodiscard]] gui::PropertyGrid* Grid() const noexcept { return m_grid; }
+        [[nodiscard]] gui::Window* Window() const noexcept { return m_window.Get(); }
+
+        /// The path of the read-only row showing the engine version the project was saved with.
+        static constexpr StringView kEngineVersionRow = u8"engineVersion";
+        /// The MSAA setting, whose choices are the render subsystem's levels.
+        static constexpr StringView kMsaaSetting = u8"renderMsaaSamples";
 
     private:
-        // A labeled horizontal row (fixed-width label, callers append the field views).
-        ui::FlexLayout* AddRow(ui::FlexLayout& column, StringView label);
+        static constexpr f32 kWidth = 620.0f;
+        static constexpr f32 kHeight = 480.0f;
 
-        ui::EditText* AddTextRow(ui::FlexLayout& column, StringView label, StringView value);
-
-        /// One row per reflected setting a row edits, in its category's tab: strings as text,
-        /// asset settings as slots.
-        void BuildSettingRows(editor::EditorProject* project);
-
-        /// An asset setting's row: a slot bound to `id` (the value Save applies). Edit and
-        /// reveal are left off: this is a modal dialog.
-        void AddAssetRow(ui::FlexLayout& column, StringView label, Guid& id, StringView typeName,
-                         StringView emptyText);
-
-        /// A number, flag or choice setting's row: a numeric field (within the property's `range`),
-        /// a check box, or a combo of the enum's values; recorded in m_values for Save.
-        void AddValueRow(ui::FlexLayout& column, StringView label, const PropertyInfo& property,
-                         const Instance& settings);
-
-        /// An asset list setting's row: a list of slots (add, pick, drop, reorder, remove) over
-        /// `m_assetLists[index]`, rebuilt after every change.
-        void AddAssetListRow(ui::FlexLayout& column, StringView label, usize index);
-        void RebuildAssetList(usize index);
-        /// After the gesture that changed list `index`: its editor is running the callback, so it
-        /// is replaced once the dispatch is over.
-        void AssetListChanged(usize index);
-
-        void Apply();
-
-        /// A string setting's row and the reflected property Save writes it to.
-        struct TextSetting
+        [[nodiscard]] static const TypeInfo& SettingsType() { return engine::project::ProjectSettings::StaticType(); }
+        [[nodiscard]] static StringView NameOf(const PropertyInfo& property) { return StringView(reinterpret_cast<const utf8char*>(property.name)); }
+        [[nodiscard]] static String GuidText(const Guid& id)
         {
-            const PropertyInfo* property = nullptr;
-            ui::EditText* edit = nullptr;
-        };
-        /// An asset setting: the reflected property and the value its slot holds.
-        struct AssetSetting
+            if (id.IsNil())
+                return String{};
+            utf8char chars[37];
+            id.ToChars(chars);
+            return String(StringView(chars, 36));
+        }
+        // The source asset type a setting names, by its name (the settings name it so).
+        [[nodiscard]] static const TypeInfo* SourceTypeNamed(StringView name)
         {
-            const PropertyInfo* property = nullptr;
-            Guid id;
-        };
+            for (const TypeInfo* type : GlobalTypeRegistry().All())
+                if (type != nullptr && type->name != nullptr && StringView(reinterpret_cast<const utf8char*>(type->name)) == name)
+                    return type;
+            return nullptr;
+        }
 
-        /// A number, flag or choice setting: the reflected property and the control holding it.
-        struct ValueSetting
+        // A row per labelled setting, in its category, from the manifest's values.
+        void Fill(const engine::project::ProjectSettings& settings)
         {
-            const PropertyInfo* property = nullptr;
-            ui::NumericField* number = nullptr;
-            ui::CheckBox* flag = nullptr;
-            ui::ComboBox* choice = nullptr;
-        };
-
-        /// An asset list setting: the reflected property, the list as edited (nil entries are
-        /// slots not yet picked; Save drops them), the cell its editor sits in, and the editor.
-        struct AssetListSetting
+            m_bag = MakeUnique<gui::PropertyBag>(m_allocator, m_allocator);
+            const Instance instance(const_cast<engine::project::ProjectSettings*>(&settings), &SettingsType());
+            for (const PropertyInfo& property : Properties(SettingsType()))
+            {
+                const String* label = engine::project::SettingAttribute(property, engine::project::kSettingLabelAttribute);
+                if (label == nullptr || property.address == nullptr)
+                    continue;
+                const void* address = property.address(instance);
+                gui::PropertyInfo* row = AddRow(property, address);
+                if (row == nullptr)
+                    continue;
+                row->DisplayName = *label;
+                row->Category = String(engine::project::SettingCategory(property));
+            }
+            // What last saved it, under the first category.
+            gui::PropertyInfo& version = m_bag->Add(kEngineVersionRow, gui::PropertyKind::String, gui::Variant(settings.engineVersion.AsView()));
+            version.DisplayName = String(u8"Engine version");
+            version.Category = String(engine::project::kSettingDefaultCategory);
+            version.Description = String(u8"The engine this project was last saved with; a save stamps the running one.");
+            version.ReadOnly = true;
+        }
+        // The row a setting is, or null for one no row shows.
+        gui::PropertyInfo* AddRow(const PropertyInfo& property, const void* address)
         {
-            const PropertyInfo* property = nullptr;
-            String assetType;
-            Array<Guid> ids;
-            ui::FlexLayout* host = nullptr;
-            RefPtr<ContainerListEditor> list;
-        };
+            const StringView name = NameOf(property);
+            const TypeInfo& type = *property.type;
+            const String* assetType = engine::project::SettingAttribute(property, engine::project::kSettingAssetTypeAttribute);
+            const String* emptyText = engine::project::SettingAttribute(property, engine::project::kSettingEmptyTextAttribute);
+            if (engine::project::IsAssetSetting(property) && assetType != nullptr)
+            {
+                gui::PropertyInfo& row = m_bag->Add(name, gui::PropertyKind::Reference, gui::Variant(GuidText(*static_cast<const Guid*>(address)).AsView()));
+                row.ReferenceType = SourceTypeNamed(assetType->AsView());
+                if (emptyText != nullptr)
+                    row.Description = Format(u8"None is {}", *emptyText);
+                return &row;
+            }
+            if (engine::project::IsAssetListSetting(property) && assetType != nullptr)
+            {
+                const Array<Guid>& ids = *static_cast<const Array<Guid>*>(address);
+                (void)m_bag->AddList(name, gui::PropertyKind::Reference, gui::Variant(StringView{}), ids.Size());
+                for (usize i = 0; i < ids.Size(); ++i)
+                    m_bag->SetValue(Format(u8"{}.{}", name, i).AsView(), 0, gui::Variant(GuidText(ids[i]).AsView()));
+                if (gui::PropertyInfo* element = m_bag->FindElementInfo(name))
+                    element->ReferenceType = SourceTypeNamed(assetType->AsView());
+                return m_bag->FindInfo(name);
+            }
+            if (name == kMsaaSetting)
+            {
+                gui::PropertyInfo& row = m_bag->Add(name, gui::PropertyKind::Enum, gui::Variant(static_cast<i64>(*static_cast<const u32*>(address))));
+                for (u32 i = 0; i < engine::render::MsaaLevelCount(); ++i)
+                    row.Choices.PushBack(gui::PropertyChoice{String(engine::render::kMsaaLevels[i].label), static_cast<i64>(engine::render::kMsaaLevels[i].samples)});
+                return &row;
+            }
+            if (IsEnum(type))
+            {
+                gui::PropertyInfo& row = m_bag->Add(name, gui::PropertyKind::Enum, gui::Variant(ReadEnumValue(address, type)));
+                for (usize i = 0; i < EnumeratorCount(type); ++i)
+                {
+                    const EnumValue& value = EnumeratorAt(type, i);
+                    row.Choices.PushBack(gui::PropertyChoice{String(StringView(reinterpret_cast<const utf8char*>(value.name))), value.value});
+                }
+                return &row;
+            }
+            if (&type == &TypeOf<String>())
+                return &m_bag->Add(name, gui::PropertyKind::String, gui::Variant(static_cast<const String*>(address)->AsView()));
+            if (&type == &TypeOf<bool>())
+                return &m_bag->Add(name, gui::PropertyKind::Bool, gui::Variant(*static_cast<const bool*>(address)));
+            if (&type == &TypeOf<u32>())
+            {
+                gui::PropertyInfo& row = m_bag->Add(name, gui::PropertyKind::Integer, gui::Variant(static_cast<i64>(*static_cast<const u32*>(address))));
+                if (const Attribute* range = FindAttribute(property, u8"range"))
+                    if (const Float4* bounds = range->value.TryGet<Float4>())
+                    {
+                        row.HasRange = true;
+                        row.Min = bounds->x;
+                        row.Max = bounds->y;
+                        row.Step = bounds->z;
+                    }
+                return &row;
+            }
+            return nullptr;
+        }
+        // The rows into `settings`.
+        void WriteBack(engine::project::ProjectSettings& settings)
+        {
+            if (!m_bag)
+                return;
+            const Instance instance(&settings, &SettingsType());
+            for (const PropertyInfo& property : Properties(SettingsType()))
+            {
+                const StringView name = NameOf(property);
+                if (m_bag->FindInfo(name) == nullptr || property.address == nullptr || m_bag->FindInfo(name)->ReadOnly)
+                    continue;
+                void* address = property.address(instance);
+                const gui::Variant value = m_bag->GetValue(name, 0);
+                const TypeInfo& type = *property.type;
+                if (engine::project::IsAssetSetting(property))
+                {
+                    Guid id;
+                    (void)Guid::TryParse(Trim(value.AsString()), id); // empty: none
+                    *static_cast<Guid*>(address) = id;
+                }
+                else if (engine::project::IsAssetListSetting(property))
+                {
+                    Array<Guid>& ids = *static_cast<Array<Guid>*>(address);
+                    ids.Clear();
+                    for (usize i = 0; i < m_bag->ElementCount(name, 0); ++i)
+                    {
+                        Guid id;
+                        if (!Guid::TryParse(Trim(m_bag->GetValue(Format(u8"{}.{}", name, i).AsView(), 0).AsString()), id) || id.IsNil())
+                            continue; // a slot never picked
+                        bool listed = false;
+                        for (const Guid& other : ids)
+                            listed = listed || other == id;
+                        if (!listed)
+                            ids.PushBack(id);
+                    }
+                }
+                else if (IsEnum(type))
+                    WriteEnumValue(address, type, value.AsInt());
+                else if (&type == &TypeOf<String>())
+                    *static_cast<String*>(address) = String(value.AsString());
+                else if (&type == &TypeOf<bool>())
+                    *static_cast<bool*>(address) = value.AsBool();
+                else if (&type == &TypeOf<u32>())
+                    *static_cast<u32*>(address) = static_cast<u32>(Max<i64>(0, value.AsInt()));
+            }
+        }
 
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const
+        {
+            return m_body ? Cast<T>(FindIn(*m_body, id)) : nullptr;
+        }
+        static gui::Node* FindIn(gui::Node& node, StringView id)
+        {
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
+
+        IAllocator& m_allocator;
         editor::EditorContext* m_context;
-        UniquePtr<CategoryTabs> m_tabs;
-        Array<TextSetting> m_texts;
-        Array<AssetSetting> m_assets; // sized before the rows bind to it: never reallocates after
-        Array<RefPtr<ResourceRefEditor>> m_assetRows; // the rows' editors; their views sit in rows
-        Array<AssetListSetting> m_assetLists; // sized before the rows build: indices stay put
-        Array<ValueSetting> m_values;
-        RefPtr<ui::ComboBox> m_msaaCombo; // scene-pass MSAA: Off/2x/4x -> renderMsaaSamples 1/2/4
+        RefPtr<gui::Node> m_body;
+        RefPtr<gui::Window> m_window;
+        gui::PropertyGrid* m_grid = nullptr;
+        UniquePtr<gui::PropertyBag> m_bag; // made at each open
     };
-
-    RTTI_DEFINE_OBJECT(ProjectSettingsDialog, "rtti::editor::editor::app")
 }

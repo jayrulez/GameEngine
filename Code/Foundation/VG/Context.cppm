@@ -1273,13 +1273,35 @@ export namespace foundation::vg
         void DrawImagePremultiplied(const image::ImageData* texture, Rectangle destRect, Rectangle srcRect,
                                     f32 opacity = 1.0f)
         {
+            DrawImagePremultiplied(texture, destRect, srcRect, Color{1.0f, 1.0f, 1.0f, opacity});
+        }
+        /// The same, its colour scaled by `tint` (its alpha the opacity): a picture baked white (an
+        /// icon in an atlas) takes the tint's colour, one baked in colour stays as drawn under
+        /// white. Pictures drawn one after another from one texture, under one clip and blend,
+        /// are one command (an atlas's icons in a tool bar).
+        void DrawImagePremultiplied(const image::ImageData* texture, Rectangle destRect, Rectangle srcRect, Color tint)
+        {
             if (texture == nullptr || destRect.width <= 0.0f || destRect.height <= 0.0f)
                 return;
+            // A picture drawn at its own size (an icon baked at the size it is shown) lands on the
+            // pixel grid: at a fractional offset the sampler would blend each texel with its
+            // neighbour and soften what was baked crisp.
+            if (m_pixelSnap && TransformIsAxisAligned())
+            {
+                const Float4x4& m = m_currentState.transform;
+                const f32 sx = m(0, 0), sy = m(1, 1);
+                if (Abs(sx) > 1e-4f && Abs(sy) > 1e-4f && Abs(destRect.width * Abs(sx) - srcRect.width) < 1.0f &&
+                    Abs(destRect.height * Abs(sy) - srcRect.height) < 1.0f)
+                {
+                    const Float2 origin = TransformPoint(Float2{destRect.x, destRect.y});
+                    destRect = Rectangle{destRect.x + (Round(origin.x) - origin.x) / sx, destRect.y + (Round(origin.y) - origin.y) / sy,
+                                         srcRect.width / Abs(sx), srcRect.height / Abs(sy)};
+                }
+            }
             FlushCurrentCommand();
             const i32 start = static_cast<i32>(m_batch.indices.Size());
             const usize startVertex = m_batch.vertices.Size();
-            EmitTexturedQuad(destRect, srcRect, texture->Width(), texture->Height(),
-                             ApplyOpacity(Color{1.0f, 1.0f, 1.0f, opacity}));
+            EmitTexturedQuad(destRect, srcRect, texture->Width(), texture->Height(), ApplyOpacity(tint));
             TransformVertices(startVertex);
             VGCommand cmd;
             cmd.startIndex = start;
@@ -1292,8 +1314,21 @@ export namespace foundation::vg
             cmd.blendMode = m_currentBlendMode;
             cmd.drawMode = VGDrawMode::Layer; // compositeLayer -1: the texture, not a layer's target
             cmd.layer = m_currentLayer;
-            m_batch.commands.PushBack(cmd);
             m_commandStartIndex = static_cast<i32>(m_batch.indices.Size());
+            if (!m_batch.commands.IsEmpty())
+            {
+                VGCommand& last = m_batch.commands.Back();
+                if (last.startIndex + last.indexCount == start && last.drawMode == VGDrawMode::Layer && last.compositeLayer < 0 &&
+                    !last.backdrop && last.textureIndex == cmd.textureIndex && last.clipMode == cmd.clipMode &&
+                    last.clipRect.x == cmd.clipRect.x && last.clipRect.y == cmd.clipRect.y &&
+                    last.clipRect.width == cmd.clipRect.width && last.clipRect.height == cmd.clipRect.height && last.scissored == cmd.scissored && last.stencilRef == cmd.stencilRef &&
+                    last.blendMode == cmd.blendMode && last.layer == cmd.layer)
+                {
+                    last.indexCount += cmd.indexCount;
+                    return;
+                }
+            }
+            m_batch.commands.PushBack(cmd);
         }
 
         /// DrawImage clipped to a rounded rectangle: `srcRect` of the texture maps onto

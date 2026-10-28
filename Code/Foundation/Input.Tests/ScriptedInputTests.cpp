@@ -13,6 +13,7 @@
 import foundation.core;
 import foundation.shell;
 import foundation.input;
+import foundation.json;
 
 using namespace foundation::core;
 using namespace foundation::input;
@@ -170,4 +171,34 @@ TEST_CASE("scripted-input: an action map reads the timeline as a player's device
     source.Advance(0.1);
     runtime.Update(source, 1.0f / 60.0f);
     CHECK(runtime.IsDown(ref));
+}
+
+TEST_CASE("scripted input: a timeline read from JSON, as the playtest tools take it, each wrong entry named")
+{
+    using foundation::json::JsonValue;
+    ScriptedInputSource source(DefaultAllocator());
+    const JsonValue timeline = JsonValue::Parse(String(
+        u8R"([{"at": 0.5, "key": "leftshift"}, {"at": 0.1, "mouseMove": [320, 200]}, {"at": 0.2, "wheel": [0, 2]},
+              {"at": 0.3, "mouseButton": "Left", "down": false}, {"at": 0.4, "gamepad": 1, "axis": "LeftX", "value": -0.5}])"));
+    Result<usize, String> added = AddScriptedTimeline(timeline, 1.0, source);
+    REQUIRE(added.HasValue());
+    CHECK(added.Value() == 5u);
+    source.Advance(0.25);
+    CHECK(source.Mouse()->X() == doctest::Approx(320.0f));
+    CHECK(source.Mouse()->ScrollY() == doctest::Approx(2.0f)); // this frame's
+    source.Advance(0.6);
+    CHECK(source.Keyboard()->IsKeyDown(shell::KeyCode::LeftShift)); // the name in any case
+    CHECK(source.GamepadCount() == 2);
+
+    const auto error = [](StringView json, f64 duration)
+    {
+        ScriptedInputSource other(DefaultAllocator());
+        Result<usize, String> result = AddScriptedTimeline(JsonValue::Parse(String(json)), duration, other);
+        return result.HasValue() ? String() : result.Error();
+    };
+    CHECK(error(u8R"([{"at": 0.1, "key": "Nope"}])", 1.0).AsView().StartsWith(u8"input[0]: no key 'Nope'"));
+    CHECK(error(u8R"([{"at": 0.1}, {"at": 2.0, "key": "A"}])", 5.0).AsView().StartsWith(u8"input[0]: name one of"));
+    CHECK(error(u8R"([{"at": 2.0, "key": "A"}])", 1.0).AsView().ContainsIgnoreCase(u8"after the run's end"));
+    CHECK(error(u8R"([{"at": 0.1, "wheel": [1]}])", 1.0) == String(u8"input[0]: `wheel` takes [x, y]"));
+    CHECK(error(u8R"({"at": 0})", 1.0) == String(u8"`input` takes an array of timeline entries"));
 }

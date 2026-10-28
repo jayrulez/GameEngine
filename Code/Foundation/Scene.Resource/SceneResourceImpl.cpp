@@ -2061,9 +2061,16 @@ namespace foundation::scene
         return ar->IsOk() ? Status{} : ar->GetStatus();
     }
 
-    RTTI_DEFINE_OBJECT(SceneDocument, "rtti::scene")
+    // Their display names: the kind the editor names them by, as File > New does.
+    REFLECT_MEMBERS(SceneDocument, "rtti::scene")
+    {
+        builder.Attribute("displayName", String(u8"Scene"));
+    }
 
-    RTTI_DEFINE_OBJECT(PrefabDocument, "rtti::scene")
+    REFLECT_MEMBERS(PrefabDocument, "rtti::scene")
+    {
+        builder.Attribute("displayName", String(u8"Prefab"));
+    }
 
     void ResolveUnresolvedComponents(Scene& scene, ComponentManagerBase& manager)
     {

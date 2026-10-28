@@ -21,7 +21,7 @@ using namespace foundation::core;
 namespace pipeline
 {
     foundation::content::Instance* CreateMaterialInstance(foundation::content::Group* target,
-                                                          StringView baseName, bool unlit)
+                                                          StringView baseName, foundation::materials::BuiltinShading shading)
     {
         if (target == nullptr)
         {
@@ -34,9 +34,7 @@ namespace pipeline
         {
             return nullptr;
         }
-        RefPtr<foundation::materials::Material> built =
-            unlit ? foundation::materials::CreateUnlit(name.AsView())
-                  : foundation::materials::CreatePBR(name.AsView());
+        RefPtr<foundation::materials::Material> built = foundation::materials::CreateBuiltin(shading, name.AsView());
         MaterialAsset asset;
         MaterialImporter::Import(*built, Guid{}, asset);
         return instance->WriteObject(asset).IsOk() ? instance : nullptr;
@@ -44,19 +42,19 @@ namespace pipeline
 
     void RegisterMaterialCreators(AssetCreatorRegistry& registry)
     {
-        // A preset material, PBR or unlit, under Materials/ unless a group was picked.
-        const auto add = [&](StringView label, bool unlit)
+        // A material on each built-in ("PBR Material", "Unlit Material", "Phong Material"), under
+        // Materials/ unless a group was picked.
+        for (const foundation::materials::BuiltinShadingInfo& builtin : foundation::materials::kBuiltinShadings)
         {
             AssetCreator creator;
-            creator.label = String(label);
+            creator.label = Format(u8"{} Material", builtin.label);
             creator.category = String(u8"Materials");
             creator.type = &MaterialAsset::StaticType();
             creator.defaultGroup = String(u8"Materials");
-            creator.run = [unlit](const AssetCreationContext& context)
-            { return CreateMaterialInstance(context.Target(), context.NameOr(u8"Material"), unlit); };
+            const foundation::materials::BuiltinShading shading = builtin.shading;
+            creator.run = [shading](const AssetCreationContext& context)
+            { return CreateMaterialInstance(context.Target(), context.NameOr(u8"Material"), shading); };
             registry.Register(Move(creator));
-        };
-        add(u8"PBR Material", false);
-        add(u8"Unlit Material", true);
+        }
     }
 }

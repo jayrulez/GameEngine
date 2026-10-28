@@ -108,24 +108,27 @@ class Door
     {
         if (show)
         {
-            UILabel@ text = ui::findLabel("hud-prompt");
-            if (text !is null && text.isValid())
+            Node@ panel = gui::root().find("hud-prompt-panel");
+            if (panel is null)
             {
-                text.setText(locked ? (m_picking ? "Picking the lock..." : "Hold Interact: pick the lock")
-                                    : (m_target != 0.0f ? "Interact: close the door" : "Interact: open the door"));
+                return; // the HUD is not up
             }
-            ui::find("hud-prompt-panel").setVisible(true);
-            UIProgressBar@ bar = ui::findProgressBar("hud-pick");
-            if (bar !is null && bar.isValid())
-            {
-                bar.setVisible(m_picking);
-                bar.setValue(m_pick / pickSeconds);
-            }
+            Label::of(gui::root().find("hud-prompt")).text =
+                locked ? (m_picking ? "Picking the lock..." : "Hold Interact: pick the lock")
+                       : (m_target != 0.0f ? "Interact: close the door" : "Interact: open the door");
+            panel.visible = true;
+            Node@ bar = gui::root().find("hud-pick");
+            bar.visible = m_picking;
+            ProgressBar::of(bar).value = m_pick / pickSeconds;
             m_prompting = true;
         }
         else if (m_prompting)
         {
-            ui::find("hud-prompt-panel").setVisible(false);
+            Node@ panel = gui::root().find("hud-prompt-panel");
+            if (panel !is null)
+            {
+                panel.visible = false;
+            }
             m_prompting = false;
         }
     }

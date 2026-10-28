@@ -11,287 +11,126 @@ module editor.heightfield;
 
 import foundation.core;
 import foundation.content;
-import foundation.runtime.client; // IApplicationHost (OnUpdate)
 import foundation.image;
 import foundation.image.io;
 import heightfield.pipeline;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
 namespace image = foundation::image;
-namespace ui = foundation::ui;
 
 namespace editor
 {
-    HeightfieldEditorPage::HeightfieldEditorPage(EditorContext& context,
-                                                 foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_title(instance.Name())
+    namespace
     {
-        SetInstanceId(instance.Id());
-
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset = RefPtr<pipeline::HeightfieldAsset>(Cast<pipeline::HeightfieldAsset>(object.Get()));
-        if (m_asset.Get() == nullptr)
+        // "12.34 m", "-0.50 m": a height to the centimetre (Format has no precision of its own).
+        String Metres(f32 value)
         {
-            LOG_ERROR(u8"Editor", u8"heightfield '{}' failed to read - page opens empty", m_title);
+            const i64 hundredths = static_cast<i64>(Round(Abs(value) * 100.0f));
+            const i64 cents = hundredths % 100;
+            return Format(u8"{}{}.{}{} m", value < 0.0f && hundredths != 0 ? StringView(u8"-") : StringView{}, hundredths / 100, cents / 10, cents % 10);
         }
-        else
+    }
+
+    HeightfieldEditorPage::HeightfieldEditorPage(EditorContext& context, app::AssetPageServices services,
+                                                 foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::HeightfieldAsset::StaticType(), kPath), m_samples(context.Allocator())
+    {
+        if (Content())
         {
-            LoadPreview();
+            m_preview = MakeUnique<app::ImagePreview>(Allocator(), *Content());
+            HeightfieldEditorPage* self = this;
+            m_preview->SetDescribe([self](i32 x, i32 y)
+                                   {
+                                       u16 sample = 0;
+                                       if (!self->SampleAt(x, y, sample))
+                                           return Format(u8"x {}  y {}", x, y);
+                                       return Format(u8"x {}  y {}  ·  {}  ({})", x, y, Metres(self->HeightOf(sample)), static_cast<u32>(sample));
+                                   });
         }
-        m_undoBaseline = Snapshot();
+        LoadPreview();
+        ShowFacts();
+    }
 
-        m_image = MakeRef<ui::ImageView>(Allocator());
-        m_image->ScaleType.SetValue(ui::ScaleType::FitCenter);
-        m_image->SetImage(m_preview.Get());
+    bool HeightfieldEditorPage::SampleAt(i32 x, i32 y, u16& out) const
+    {
+        if (x < 0 || y < 0 || static_cast<u32>(x) >= m_width || static_cast<u32>(y) >= m_height)
+            return false;
+        out = m_samples[static_cast<usize>(y) * m_width + static_cast<usize>(x)];
+        return true;
+    }
 
-        m_info = MakeRef<ui::Label>(Allocator(), StringView(u8""));
-        m_info->FontSize.SetValue(12.0f);
-
-        auto previewColumn = MakeRef<ui::FlexLayout>(Allocator());
-        previewColumn->Direction = ui::Orientation::Vertical;
-        previewColumn->Spacing = 6.0f;
-        previewColumn->Padding = ui::Thickness{8, 6};
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            previewColumn->AddView(m_info.Get(), lp);
-        }
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.FlexGrow = 1.0f;
-            previewColumn->AddView(m_image.Get(), lp);
-        }
-
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        BuildGrid();
-
-        auto gridColumn = MakeRef<ui::FlexLayout>(Allocator());
-        gridColumn->Direction = ui::Orientation::Vertical;
-        gridColumn->Padding = ui::Thickness{8, 6};
-        {
-            ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            gridColumn->AddView(m_grid.Get(), lp);
-        }
-
-        auto split = MakeRef<ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.6f);
-        split->SetPanes(previewColumn.Get(), gridColumn.Get());
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        m_content = app::PageToolbar::Frame(Allocator(), *m_toolbar, *split);
-
-        RefreshInfo();
+    f32 HeightfieldEditorPage::HeightOf(u16 sample) const
+    {
+        const pipeline::HeightfieldAsset* asset = ObjectAs<pipeline::HeightfieldAsset>();
+        if (asset == nullptr)
+            return 0.0f;
+        return asset->minY + (asset->maxY - asset->minY) * (static_cast<f32>(sample) / 65535.0f);
     }
 
     void HeightfieldEditorPage::LoadPreview()
     {
-        m_preview.Reset();
-        m_sourceWidth = 0;
-        m_sourceHeight = 0;
-        m_minSample = 0;
-        m_maxSample = 0;
-        if (m_asset.Get() == nullptr || m_asset->fileName.IsEmpty() ||
-            m_context->Project() == nullptr)
+        const pipeline::HeightfieldAsset* asset = ObjectAs<pipeline::HeightfieldAsset>();
+        if (asset == nullptr)
+            return;
+        if (asset->fileName.IsEmpty() || Context().Project() == nullptr)
         {
-            return; // blank heightfield: no source image to preview
-        }
-        const String path =
-            PathJoin(m_context->Project()->SourcesRoot().AsView(), m_asset->fileName.View());
-        image::Image source;
-        const Status loaded = image::io::LoadImage16(path.AsView(), source);
-        if (!loaded.IsOk() || source.Width() == 0 || source.Height() == 0)
-        {
-            LOG_WARNING(u8"Editor", u8"heightfield source missing or undecodable: {}", path);
+            if (m_preview)
+                m_preview->ShowNone(u8"A blank heightfield: no source image, its heights flat until sculpted.");
             return;
         }
-        m_sourceWidth = source.Width();
-        m_sourceHeight = source.Height();
-        const usize count = static_cast<usize>(m_sourceWidth) * m_sourceHeight;
+        const String path = PathJoin(Context().Project()->SourcesRoot().AsView(), asset->fileName.View());
+        image::Image source;
+        if (!image::io::LoadImage16(path.AsView(), source).IsOk() || source.Width() == 0 || source.Height() == 0)
+        {
+            LOG_WARNING(u8"Editor", u8"heightfield source missing or undecodable: {}", path);
+            if (m_preview)
+                m_preview->ShowNone(Format(u8"{} is missing or did not decode.", asset->fileName.View()).AsView());
+            return;
+        }
+        m_width = source.Width();
+        m_height = source.Height();
+        const usize count = static_cast<usize>(m_width) * m_height;
         const u16* samples = reinterpret_cast<const u16*>(source.PixelData().Data());
-
-        m_minSample = 65535;
-        m_maxSample = 0;
-        Array<u8> rgba;
-        rgba.Resize(count * 4);
+        m_samples.Resize(count);
+        m_low = 65535;
+        m_high = 0;
         for (usize i = 0; i < count; ++i)
         {
-            const u16 s = samples[i];
-            m_minSample = s < m_minSample ? s : m_minSample;
-            m_maxSample = s > m_maxSample ? s : m_maxSample;
-            const u8 g = static_cast<u8>(s >> 8); // 16-bit height -> 8-bit grayscale
+            m_samples[i] = samples[i];
+            m_low = Min(m_low, samples[i]);
+            m_high = Max(m_high, samples[i]);
+        }
+        // Its lowest to its highest as black to white: a low relief over a few hundred samples
+        // shows, where the high byte alone was one flat grey.
+        const f32 span = m_high > m_low ? static_cast<f32>(m_high - m_low) : 1.0f;
+        image::Image grey(m_width, m_height, image::PixelFormat::RGBA8);
+        Span<u8> rgba = grey.PixelDataMut();
+        for (usize i = 0; i < count; ++i)
+        {
+            const u8 g = static_cast<u8>(255.0f * static_cast<f32>(m_samples[i] - m_low) / span + 0.5f);
             rgba[i * 4 + 0] = g;
             rgba[i * 4 + 1] = g;
             rgba[i * 4 + 2] = g;
             rgba[i * 4 + 3] = 255;
         }
-        m_preview = MakeUnique<image::OwnedImageData>(
-            Allocator(), m_sourceWidth, m_sourceHeight, image::PixelFormat::RGBA8,
-            Span<const u8>(rgba.Data(), rgba.Size()), image::ImageColorSpace::Linear);
+        if (m_preview)
+            m_preview->Show(Move(grey));
     }
 
-    void HeightfieldEditorPage::RefreshInfo()
+    void HeightfieldEditorPage::ShowFacts()
     {
-        if (m_asset.Get() == nullptr)
-        {
-            m_info->SetText(u8"Heightfield failed to load.");
+        const pipeline::HeightfieldAsset* asset = ObjectAs<pipeline::HeightfieldAsset>();
+        if (asset == nullptr)
             return;
-        }
-        const Float2 ws = m_asset->worldSize;
-        if (m_preview.Get() == nullptr)
-        {
-            m_info->SetText(Format(u8"Blank heightfield (flat)  |  {} x {} grid  |  extent {} x {} m",
-                                   m_asset->size, m_asset->size, ws.x, ws.y)
-                                .AsView());
+        if (m_width == 0)
             return;
-        }
-        // Map the min/max samples to world Y through the asset's height range.
-        const f32 range = m_asset->maxY - m_asset->minY;
-        const f32 loY = m_asset->minY + range * (static_cast<f32>(m_minSample) / 65535.0f);
-        const f32 hiY = m_asset->minY + range * (static_cast<f32>(m_maxSample) / 65535.0f);
-        m_info->SetText(
-            Format(u8"{}  |  source {} x {}  |  extent {} x {} m  |  height {} .. {} m",
-                   m_asset->fileName.View(), m_sourceWidth, m_sourceHeight, ws.x, ws.y, loY, hiY)
-                .AsView());
-    }
-
-    void HeightfieldEditorPage::BuildGrid()
-    {
-        m_grid->Clear();
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        HeightfieldEditorPage* self = this;
-
-        auto sizeRow = MakeRef<ui::toolkit::IntEditor>(
-            Allocator(), u8"Grid Size (64k+1)", static_cast<i64>(m_asset->size), 65, 100000,
-            Function<void(i64)>{[self](i64 v)
-                                {
-                                    self->m_asset->size = static_cast<i32>(v);
-                                    self->CommitEdit(u8"size");
-                                }},
-            u8"Heightfield");
-        m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(sizeRow.Get()));
-
-        auto worldRow = MakeRef<ui::toolkit::Float2Editor>(
-            Allocator(), u8"World Size (XZ)", m_asset->worldSize, 1.0f, 100000.0f, 1.0f,
-            Function<void(Float2)>{[self](Float2 v)
-                                   {
-                                       self->m_asset->worldSize = v;
-                                       self->CommitEdit(u8"worldSize");
-                                   }},
-            u8"Heightfield");
-        m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(worldRow.Get()));
-
-        auto minRow = MakeRef<ui::toolkit::FloatEditor>(
-            Allocator(), u8"Min Height", static_cast<f64>(m_asset->minY), -100000.0, 100000.0,
-            0.5, 2, Function<void(f64)>{[self](f64 v)
-                                        {
-                                            self->m_asset->minY = static_cast<f32>(v);
-                                            self->CommitEdit(u8"minY");
-                                        }},
-            u8"Heightfield");
-        m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(minRow.Get()));
-
-        auto maxRow = MakeRef<ui::toolkit::FloatEditor>(
-            Allocator(), u8"Max Height", static_cast<f64>(m_asset->maxY), -100000.0, 100000.0,
-            0.5, 2, Function<void(f64)>{[self](f64 v)
-                                        {
-                                            self->m_asset->maxY = static_cast<f32>(v);
-                                            self->CommitEdit(u8"maxY");
-                                        }},
-            u8"Heightfield");
-        m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(maxRow.Get()));
-
-        // Read-only source facts.
-        auto stat = [&](StringView name, String value)
-        {
-            m_grid->AddProperty(RefPtr<ui::toolkit::PropertyEditor>(
-                MakeRef<ui::toolkit::StringEditor>(Allocator(), name, value.AsView(),
-                                                   Function<void(StringView)>{}, u8"Source")
-                    .Get()));
-        };
-        stat(u8"File", m_asset->fileName.IsEmpty() ? String(u8"(blank)")
-                                                   : String(m_asset->fileName.View()));
-        if (m_preview.Get() != nullptr)
-        {
-            stat(u8"Source Size", Format(u8"{} x {}", m_sourceWidth, m_sourceHeight));
-        }
-    }
-
-    void HeightfieldEditorPage::CommitEdit(StringView mergeKey)
-    {
-        Array<byte> after = Snapshot();
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditCommand>(*this, mergeKey, m_undoBaseline, after),
-            Allocator()));
-        m_undoBaseline = Move(after);
-        RefreshInfo();
-        MarkDirty();
-    }
-
-    Array<byte> HeightfieldEditorPage::Snapshot() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        m_asset->Serialize(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void HeightfieldEditorPage::ApplyBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr || blob.IsEmpty())
-        {
-            return;
-        }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        m_asset->Serialize(ar);
-        m_undoBaseline = blob;
-        BuildGrid(); // several editable rows: re-pull them all
-        RefreshInfo();
-        MarkDirty();
-    }
-
-    Status HeightfieldEditorPage::Save()
-    {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false);
-            LOG_INFO(u8"Editor", u8"saved heightfield '{}'", m_title);
-        }
-        return saved;
+        SetFact(u8"Source Size", Format(u8"{} x {}", m_width, m_height).AsView());
+        // The source's own range, in metres by the asset's Y range: what the black and the white are.
+        SetFact(u8"Lowest", Metres(HeightOf(m_low)).AsView());
+        SetFact(u8"Highest", Metres(HeightOf(m_high)).AsView());
     }
 
     const TypeInfo* HeightfieldEditorPageFactory::PrimaryType() const
@@ -299,19 +138,9 @@ namespace editor
         return &pipeline::HeightfieldAsset::StaticType();
     }
 
-    UniquePtr<EditorPage>
-    HeightfieldEditorPageFactory::CreatePage(EditorContext& context,
-                                             foundation::content::Instance& instance)
+    UniquePtr<EditorPage> HeightfieldEditorPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<HeightfieldEditorPage>(context, instance);
+        auto* page = editor::EditorRootAllocator().New<HeightfieldEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
-    }
-
-    void HeightfieldEditorPage::OnUpdate(foundation::runtime::IApplicationHost&, f32)
-    {
-        if (m_toolbar.Get() != nullptr)
-        {
-            m_toolbar->Refresh(); // sync the page's actions to it each frame
-        }
     }
 }

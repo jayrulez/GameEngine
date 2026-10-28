@@ -32,13 +32,14 @@ export namespace editor
         String category;
         String message;
         u64 sequence = 0; // monotonic, 1-based across the run
+        Duration time;    // when it was written, since the buffer was made (the editor's start)
     };
 
     class EditorLogBuffer final : public ILogSink
     {
     public:
         explicit EditorLogBuffer(IAllocator& allocator, usize capacity = 4096)
-            : m_entries(capacity, allocator)
+            : m_entries(capacity, allocator), m_clock(Stopwatch::StartNew())
         {
         }
 
@@ -61,6 +62,7 @@ export namespace editor
             entry.category = String(category);
             entry.message = String(message);
             entry.sequence = m_nextSequence++;
+            entry.time = m_clock.Elapsed();
             (void)m_entries.PushBack(Move(entry));
         }
 
@@ -117,5 +119,6 @@ export namespace editor
         RingBuffer<EditorLogEntry> m_entries;
         u64 m_nextSequence = 1;
         u64 m_dropped = 0;
+        Stopwatch m_clock; // since it was made: each entry's time
     };
 }

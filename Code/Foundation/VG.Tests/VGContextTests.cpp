@@ -1686,3 +1686,64 @@ TEST_CASE("vg.context: a box takes a border colour per side, analytic or tessell
         CHECK(seen[3]);
     }
 }
+
+TEST_CASE("vg.context: premultiplied pictures from one texture, one after another, are one command, each its tint")
+{
+    VGContext ctx;
+    const u8 px[16] = {};
+    image::OwnedImageData atlas(2, 2, image::PixelFormat::RGBA8, Span<const u8>(px, 16));
+    image::OwnedImageData other(2, 2, image::PixelFormat::RGBA8, Span<const u8>(px, 16));
+    const Color red{1.0f, 0.0f, 0.0f, 1.0f};
+    const Color green{0.0f, 1.0f, 0.0f, 0.5f};
+
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{0, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{20, 0, 16, 16}, Rectangle{1, 0, 1, 1}, green);
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.CommandCount() == 1u); // two icons of one atlas: one draw
+    CHECK(batch.GetCommand(0).indexCount == 12);
+    CHECK(batch.vertices[0].color.r == doctest::Approx(1.0f));
+    CHECK(batch.vertices[0].color.g == doctest::Approx(0.0f));
+    CHECK(batch.vertices[4].color.g == doctest::Approx(1.0f));
+    CHECK(batch.vertices[4].color.a == doctest::Approx(0.5f));
+
+    // Another texture, or anything drawn between, starts a command of its own.
+    ctx.DrawImagePremultiplied(&other, Rectangle{40, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    CHECK(batch.CommandCount() == 2u);
+    ctx.FillRect(Rectangle{0, 0, 5, 5}, Color::Blue);
+    ctx.DrawImagePremultiplied(&other, Rectangle{60, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    CHECK(batch.CommandCount() == 4u);
+    // A different clip does too.
+    ctx.PushClipRect(Rectangle{0, 0, 30, 30});
+    ctx.DrawImagePremultiplied(&other, Rectangle{80, 0, 16, 16}, Rectangle{0, 0, 1, 1}, red);
+    ctx.PopClip();
+    CHECK(batch.CommandCount() == 5u);
+}
+
+TEST_CASE("vg.context: a premultiplied picture drawn at its own size lands on the pixel grid")
+{
+    VGContext ctx;
+    const u8 px[32 * 32 * 4] = {};
+    image::OwnedImageData atlas(32, 32, image::PixelFormat::RGBA8, Span<const u8>(px, sizeof(px)));
+    // An icon baked at 16 x 16, centred at a half pixel: moved onto whole pixels, its size kept.
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{5.5f, 3.25f, 16, 16}, Rectangle{0, 0, 16, 16}, Color::White);
+    VGBatch& batch = ctx.GetBatch();
+    REQUIRE(batch.vertices.Size() == 4u);
+    f32 minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+    for (const VGVertex& v : batch.vertices)
+    {
+        minX = Min(minX, v.position.x), minY = Min(minY, v.position.y);
+        maxX = Max(maxX, v.position.x), maxY = Max(maxY, v.position.y);
+    }
+    CHECK(minX == doctest::Approx(Round(5.5f)));
+    CHECK(minY == doctest::Approx(3.0f));
+    CHECK(maxX - minX == doctest::Approx(16.0f));
+    CHECK(maxY - minY == doctest::Approx(16.0f));
+
+    // Drawn larger than it was baked, it is scaled where it was asked for.
+    ctx.Clear();
+    ctx.DrawImagePremultiplied(&atlas, Rectangle{5.5f, 3.25f, 24, 24}, Rectangle{0, 0, 16, 16}, Color::White);
+    bool sawAsked = false;
+    for (const VGVertex& v : ctx.GetBatch().vertices)
+        sawAsked = sawAsked || (v.position.x == doctest::Approx(5.5f) && v.position.y == doctest::Approx(3.25f));
+    CHECK(sawAsked);
+}

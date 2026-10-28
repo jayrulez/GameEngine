@@ -14,7 +14,6 @@ import foundation.fonts;
 import foundation.fonts.truetype;
 import foundation.image;
 import foundation.image.io;
-import foundation.ui;
 
 using namespace foundation::core;
 
@@ -164,18 +163,6 @@ namespace editor::app
         return MakeUnique<EditorSplash>(allocator, &shellRef, window,
                                         hasLogo ? logo.PixelData() : Span<const u8>{}, hasLogo ? logo.Width() : 0u,
                                         hasLogo ? logo.Height() : 0u, Move(font), version);
-    }
-
-    foundation::ui::DrawablePtr LoadEditorLogo(StringView dataRoot, IAllocator& allocator)
-    {
-        Result<Array<byte>> read = ReadFile(PathJoin(dataRoot, u8"Assets/branding/assiduous-logo.svg").AsView());
-        if (!read.HasValue())
-        {
-            return {};
-        }
-        String svg;
-        svg.Append(reinterpret_cast<const utf8char*>(read.Value().Data()), read.Value().Size());
-        return foundation::ui::DrawablePtr(foundation::ui::SVGDrawable::FromString(allocator, svg.AsView()).Get());
     }
 
     bool ApplyEditorWindowIcon(shell::IWindow& window, StringView dataRoot)

@@ -124,3 +124,30 @@ TEST_CASE("gltf: colour factors (linear by the glTF spec) are read as authored s
 
     std::remove(path);
 }
+
+// KHR_materials_unlit: the material comes in on the built-in Unlit (Specs/phong-material.md), its
+// colour read from the metallic-roughness block as the extension says; a material without it is PBR.
+TEST_CASE("gltf: a material with KHR_materials_unlit is unlit; one without is PBR")
+{
+    constexpr const char* kMaterials = R"({
+  "asset": {"version": "2.0"},
+  "extensionsUsed": ["KHR_materials_unlit"],
+  "materials": [
+    {"name": "flat", "pbrMetallicRoughness": {"baseColorFactor": [0.2140, 0.2140, 0.2140, 1.0]},
+     "extensions": {"KHR_materials_unlit": {}}},
+    {"name": "lit", "pbrMetallicRoughness": {"baseColorFactor": [1.0, 1.0, 1.0, 1.0]}}
+  ]
+})";
+    const char* path = "scratch_gltf_unlit.gltf";
+    REQUIRE(WriteFile(StringView(reinterpret_cast<const utf8char*>(path)),
+                      Span<const byte>(reinterpret_cast<const byte*>(kMaterials), std::strlen(kMaterials)))
+                .IsOk());
+    Model model;
+    gltf::GltfLoader loader;
+    REQUIRE(loader.load(StringView(reinterpret_cast<const utf8char*>(path)), model) == ModelLoadResult::Ok);
+    REQUIRE(model.materials().Size() == 2u);
+    CHECK(model.materials()[0]->shadingModel == ShadingModel::Unlit);
+    CHECK(model.materials()[0]->baseColorFactor.x == doctest::Approx(0.5f).epsilon(0.002));
+    CHECK(model.materials()[1]->shadingModel == ShadingModel::Pbr);
+    std::remove(path);
+}

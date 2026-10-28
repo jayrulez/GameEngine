@@ -1,5 +1,6 @@
 # Editor::Scene - `editor.scene`: the scene editor plugin (SceneEditorPage +
 # factory + RegisterSceneEditor). Linked by the editor EXECUTABLE only (never by editor core/app).
+# On the GUI (Documentation/Specs/editor-gui.md, 5.3).
 
 util_add_engine_library(Editor.Scene ALIAS Editor::Scene)
 target_link_libraries(Editor.Scene
@@ -15,16 +16,19 @@ target_link_libraries(Editor.Scene
         Foundation::Physics Foundation::Physics.Resource Engine::Physics Foundation::Heightfield Foundation::Terrain.Resource Foundation::Vegetation.Resource
         Engine::Navigation Foundation::Navigation.Resource Editor::Navigation
         Engine::Spline Foundation::Spline
-        Foundation::UI.Resource Engine::UI Foundation::Audio Foundation::Audio.Resource Engine::Audio
+        Engine::UI Engine::GUI # the game's UI and GUI textures, live in an editing viewport
+        Foundation::Messaging Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Viewport Editor::App # the page on the GUI
+        Foundation::Audio Foundation::Audio.Resource Engine::Audio
         Foundation::Geometry Foundation::Geometry.Resource Pipeline::Geometry
         Foundation::Materials Foundation::Materials.Resource Pipeline::Materials
         Foundation::Shaders Foundation::Shaders.Resource
         Pipeline::Render # the render profile assets (SettingsProfileAsset)
-        Foundation::UI Foundation::UI.Runtime Foundation::UI.Viewport Foundation::VG.Renderer
         Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Engine::Script
         Foundation::Input Foundation::Input.Resource Engine::Input
-        Editor::Core Editor::App Editor::Camera Editor::Preview Editor::ViewportTools Editor::PropertyAnimation Foundation::Policy
-        Foundation::Mcp Foundation::Json) # the scene editor's MCP tools
+        Engine::Composition # the full manager set for the export's scratch scenes
+        Editor::Core Editor::Camera Editor::ViewportTools Editor::PropertyAnimation Foundation::Policy
+        Foundation::Mcp Foundation::Json # the scene editor's MCP tools
+        Foundation::Xml Foundation::Xml.Serialization) # the inspector's text format (its undo)
 
 target_sources(Editor.Scene
     PRIVATE
@@ -33,9 +37,17 @@ target_sources(Editor.Scene
         ToolsImpl.cpp
         ComponentGizmosImpl.cpp
         AssetThumbnailsImpl.cpp
+        ScenePageImpl.cpp
+        SceneTreeImpl.cpp
         HierarchyViewImpl.cpp
         InspectorViewImpl.cpp
-        ScenePageImpl.cpp
+        EntityRefEditorImpl.cpp
+        ScriptBehaviorsSourceImpl.cpp
+        SceneSettingsSourceImpl.cpp
+        SettingsExtraSourcesImpl.cpp
+        SceneHudImpl.cpp
+        SceneCameraPreviewImpl.cpp
+        SceneToolsImpl.cpp
         EntityJsonImpl.cpp
         SceneMcpToolsImpl.cpp
         SceneMcpEditToolsImpl.cpp
@@ -60,10 +72,28 @@ target_sources(Editor.Scene
             Tools.cppm
             ComponentGizmos.cppm
             AssetThumbnails.cppm
+            SceneServices.cppm
+            SceneOverlays.cppm
+            SceneViewState.cppm
+            SceneSimulation.cppm
+            PrefabFlows.cppm
+            SceneTree.cppm
             HierarchyView.cppm
+            EntityPickerWindow.cppm
+            EntityRefEditor.cppm
+            BoneNameEditor.cppm
+            CollisionMatrixEditor.cppm
+            InspectorExtras.cppm
+            ScriptBehaviorsSource.cppm
+            SceneSettingsSource.cppm
+            SettingsExtraSources.cppm
+            BuiltinInspectorExtras.cppm
             InspectorView.cppm
-            EntityPickerDialog.cppm
-            ComponentPickerDialog.cppm
+            SceneBar.cppm
+            SceneHud.cppm
+            SceneCameraPreview.cppm
+            SceneTools.cppm
+            SceneViewport.cppm
             ScenePage.cppm
+            SceneEditorRegistration.cppm
             EditorSceneModule.cppm)
-

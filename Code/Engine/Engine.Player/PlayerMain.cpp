@@ -93,6 +93,9 @@ import foundation.ui.resource;  // UITheme (the manifest's default theme)
 import foundation.ui;           // View / ViewGroup / ProgressBar (the boot-splash controls)
 import engine.ui; // UISubsystem (IME target + default theme + the boot splash overlay)
 import engine.gameinstance; // SceneLoadHandle (the async boot load)
+import engine.gui;                 // the engine GUI (its fonts, sheets and boot splash)
+import foundation.gui;           // the GUI's nodes and data (the splash's progress)
+import foundation.gui.resources; // GuiDocument (the GUI loading screen)
 import foundation.xml.serialization;
 import foundation.settings;
 import engine.project; // manifest + layout (runtime-side, editor-free)

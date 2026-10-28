@@ -3,530 +3,493 @@
 
 // Editor::App - :preferences_dialog partition.
 //
-// EditorPreferencesDialog: a modal editor for PER-USER editor preferences (the foundation.settings
-// store persisted at <user-data>/editor.settings.xml) - distinct from ProjectSettingsDialog, which
-// edits the project manifest. A tab per category: Appearance (the editor FONT paths, blank = the
-// built-in chain, and the UI scale), Export (the templates root, blank = "$ENV_TEMPLATES_DIR, else
-// <user-data>/templates"), Agent access (the MCP host), Game preview (the Game tab's resolutions),
-// Shortcuts, then one per domain-contributed category. [Save] writes every tab's sections back into
-// the store and persists it; font changes apply on the next editor start. [Cancel] discards.
-
+// EditorPreferencesDialog: the user's own editor settings (the foundation.settings store at
+// <user-data>/editor.settings.xml), distinct from Project Settings, which edits the project
+// (Documentation/Specs/editor-gui.md, 5.1, layer 12). A modal window of the editor's markup
+// (Data/Editor/Preferences.gml), a tab per category. Appearance holds the look's inputs: the
+// scheme, the accent (one of the editor's or any #rrggbb), the density, less motion and the UI
+// scale, and whether axis views are orthographic; each change of the look shows at once. Export
+// holds the templates' folder, Agent access the MCP host (on, its port, its token), Game preview
+// the sizes the Game tab offers. Shortcuts lists every action with its chord: a click captures the
+// next keys, Reset goes back to the declaration's. Then a tab per category other parts of the
+// editor contribute, its checks applied as they change. Save writes everything into the store (a
+// chord another action holds refused, a port out of range kept as it was, each said in a warning)
+// and persists it; Cancel, or closing the window, puts the look back as it was and forgets the
+// rest.
 module;
 #include "Core/Prelude.h"
-#include "Core/Reflection/Reflect.h"
 
 export module editor.app:preferences_dialog;
 
 import foundation.core;
-import foundation.ui;
-import editor.core;
+import foundation.gui;
 import foundation.settings;
+import editor.core;
+import :editor_window; // EditorLook, LookFrom, StoreLook, the accents and densities
 import :shortcut_capture;
-import :category_tabs;
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
-    namespace settings = foundation::settings;
+    namespace gui = foundation::gui;
 
-    class EditorPreferencesDialog final : public ui::Dialog
+    class EditorPreferencesDialog
     {
-        RTTI_OBJECT(EditorPreferencesDialog, ui::Dialog)
     public:
-        EditorPreferencesDialog(editor::EditorContext& context, settings::Settings& store)
-            : ui::Dialog(u8"Preferences"), m_context(&context), m_settings(&store)
+        /// Its markup, under the data root.
+        static constexpr const char8_t* kPath = u8"Editor/Preferences.gml";
+
+        /// What it works over.
+        struct Services
         {
-            // A fixed size: a tab view measures only the page it shows, so a free width or height
-            // would change as the tabs do. Each page scrolls inside it.
-            MinWidth.SetValue(680.0f);
-            MaxWidth.SetValue(680.0f);
-            MinHeight.SetValue(480.0f);
-            MaxHeight.SetValue(480.0f);
-
-            m_tabs = MakeUnique<CategoryTabs>(MemoryAllocator(), MemoryAllocator());
-
-            // --- Appearance: the editor's fonts and scale ---
-            {
-                ui::FlexLayout& column = m_tabs->Column(u8"Appearance");
-                StringView fontPath;
-                StringView monoPath;
-                if (const editor::EditorFontSettings* f =
-                        store.Find<editor::EditorFontSettings>())
-                {
-                    fontPath = f->fontPath.AsView();
-                    monoPath = f->monoFontPath.AsView();
-                }
-                m_fontEdit = AddTextRow(column, u8"UI font (.ttf)", fontPath);
-                m_fontEdit->SetPlaceholder(u8"built-in (embedded fallback)");
-                m_monoFontEdit = AddTextRow(column, u8"Mono font (.ttf)", monoPath);
-                m_monoFontEdit->SetPlaceholder(u8"built-in");
-                f32 uiScale = 1.0f;
-                if (const editor::EditorUiSettings* u =
-                        store.Find<editor::EditorUiSettings>())
-                {
-                    uiScale = Clamp(u->uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
-                }
-                ui::FlexLayout* row = AddRow(column, u8"UI scale");
-                auto slider = MakeRef<ui::Slider>(MemoryAllocator());
-                slider->Min.SetValue(editor::kUiScaleMin);
-                slider->Max.SetValue(editor::kUiScaleMax);
-                slider->Step.SetValue(0.05f);
-                slider->Value.SetValue(uiScale);
-                m_uiScaleSlider = slider.Get();
-                {
-                    ui::LayoutStyle lp;
-                    lp.FlexGrow = 1.0f;
-                    lp.AlignSelf = ui::Align::Center;
-                    row->AddView(slider.Get(), lp);
-                }
-                auto valueLabel = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"1.00x"));
-                valueLabel->FontSize.SetValue(11.0f);
-                m_uiScaleLabel = valueLabel.Get();
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(44));
-                    lp.AlignSelf = ui::Align::Center;
-                    row->AddView(valueLabel.Get(), lp);
-                }
-                UpdateScaleLabel(uiScale);
-                EditorPreferencesDialog* self = this;
-                slider->OnValueChanged.Add(
-                    ui::Event<void(ui::Slider*, f32)>::Handler{
-                        [self](ui::Slider*, f32 v) { self->UpdateScaleLabel(v); }});
-                CategoryTabs::AddNote(column, u8"Font changes apply on restart.");
-
-                // The scene view: snapping to an axis view turns it orthographic.
-                const editor::EditorUiSettings* view = store.Find<editor::EditorUiSettings>();
-                auto autoOrtho = MakeRef<ui::CheckBox>(
-                    MemoryAllocator(), StringView(u8"Axis views are orthographic"),
-                    view == nullptr || view->autoOrthographic);
-                autoOrtho->FontSize.SetValue(12.0f);
-                autoOrtho->TooltipText =
-                    String(u8"Snapping a scene view to an axis (its orientation gizmo) turns it "
-                           u8"orthographic, and orbiting away turns it back");
-                m_autoOrthographic = autoOrtho.Get();
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    column.AddView(autoOrtho.Get(), lp);
-                }
-            }
-
-            // --- Export: where the export templates live ---
-            {
-                ui::FlexLayout& column = m_tabs->Column(u8"Export");
-                StringView current;
-                if (const editor::EditorExportSettings* s =
-                        store.Find<editor::EditorExportSettings>())
-                {
-                    current = s->templatesRoot.AsView();
-                }
-                m_rootEdit = AddTextRow(column, u8"Templates root", current);
-                m_rootEdit->SetPlaceholder(editor::DefaultTemplatesRoot().AsView());
-                CategoryTabs::AddNote(column, u8"Blank uses $ENV_TEMPLATES_DIR, else the templates folder "
-                                u8"under the editor's user data.");
-            }
-
-            // --- Agent access: the MCP host over the open project (EditorMcpSettings) ---
-            {
-                ui::FlexLayout& column = m_tabs->Column(u8"Agent access");
-                const editor::EditorMcpSettings* mcp = store.Find<editor::EditorMcpSettings>();
-                auto check = MakeRef<ui::CheckBox>(
-                    MemoryAllocator(), StringView(u8"Serve the open project to agents (MCP)"),
-                    mcp != nullptr && mcp->enabled);
-                check->FontSize.SetValue(12.0f);
-                check->TooltipText =
-                    String(u8"An MCP host on 127.0.0.1 for the project this editor has open; "
-                           u8"the token below is the secret an agent presents");
-                m_mcpEnabled = check.Get();
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    column.AddView(check.Get(), lp);
-                }
-                const u32 port = mcp != nullptr ? mcp->port : editor::kEditorMcpDefaultPort;
-                m_mcpPortEdit = AddTextRow(column, u8"MCP port", Format(u8"{}", port).AsView());
-                m_mcpTokenEdit = AddTextRow(column, u8"MCP token",
-                                            mcp != nullptr ? mcp->token.AsView() : StringView());
-                m_mcpTokenEdit->SetPlaceholder(u8"minted on first enable");
-                CategoryTabs::AddNote(column, u8"Applies to the open project on Save; the token is also "
-                                u8"written to <user-data>/mcp-token for a local agent.");
-            }
-
-            // --- Game preview: the Game tab's resolutions (GamePreviewSettings), sizes to test
-            // at on this machine after the project's own and its export presets'. Staged,
-            // applied on Save. ---
-            {
-                ui::FlexLayout& column = m_tabs->Column(u8"Game preview");
-                CategoryTabs::AddNote(column, u8"Sizes the Game tab offers on this machine, after the "
-                                u8"project's own and its export presets'.");
-                auto previews = MakeRef<ui::FlexLayout>(MemoryAllocator());
-                previews->Direction = ui::Orientation::Vertical;
-                previews->Spacing = 4;
-                ui::LayoutStyle match;
-                match.Width = ui::SizeSpec::Match();
-                column.AddView(previews.Get(), match);
-                m_previewColumn = previews.Get();
-                if (const editor::GamePreviewSettings* seeded = editor::GamePreviewSettings::From(&store))
-                {
-                    for (const editor::GamePreviewResolution& preview : seeded->presets)
-                    {
-                        AddPreviewRow(preview.name.AsView(), preview.width, preview.height);
-                    }
-                }
-                auto add = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Add resolution"));
-                EditorPreferencesDialog* self = this;
-                add->OnClick.Add([self](ui::ButtonBase*) { self->AddPreviewRow(u8"Custom", 1920, 1080); });
-                ui::LayoutStyle left;
-                left.AlignSelf = ui::Align::Start;
-                column.AddView(add.Get(), left);
-            }
-
-            // --- Shortcuts: every action with its effective chord; a click on the chord captures
-            // the next key, Reset forgets the override. Staged in m_shortcutEdits, applied on
-            // Save. ---
-            {
-                ui::FlexLayout& column = m_tabs->Column(u8"Shortcuts");
-                CategoryTabs::AddNote(column, u8"Click a chord and press the new keys (Esc cancels, Del clears). "
-                                u8"A chord another action holds is refused on Save, naming it.");
-                EditorActionRegistry& actions = context.Actions();
-                for (const editor::EditorActionDeclaration& action : actions.Actions())
-                {
-                    AddShortcutRow(column, actions, action);
-                }
-            }
-
-            // Domain-contributed categories (EditorContext::RegisterEditorSettingsContribution),
-            // a tab each (contributions naming one category share it): the app hardcodes
-            // nothing - each domain's fields render generically here and write through their
-            // own closures (usually into the domain's user-store section).
-            for (const editor::EditorContext::EditorSettingsContribution& contribution :
-                 context.EditorSettingsContributions())
-            {
-                ui::FlexLayout& column = m_tabs->Column(contribution.category.AsView());
-                for (const editor::EditorContext::EditorSettingsBoolField& field :
-                     contribution.bools)
-                {
-                    const bool checked = field.get ? field.get() : false;
-                    auto check =
-                        MakeRef<ui::CheckBox>(MemoryAllocator(), field.label.AsView(), checked);
-                    check->FontSize.SetValue(12.0f);
-                    if (!field.description.IsEmpty())
-                    {
-                        check->TooltipText = String(field.description);
-                    }
-                    // Function is move-only: capture the FIELD (context-owned, stable -
-                    // registrations happen at boot, before any dialog opens).
-                    const editor::EditorContext::EditorSettingsBoolField* fieldPtr = &field;
-                    check->OnCheckedChanged.Add(
-                        [fieldPtr](ui::CheckBox*, bool checked)
-                        {
-                            if (fieldPtr->set)
-                            {
-                                fieldPtr->set(checked);
-                            }
-                        });
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    column.AddView(check.Get(), lp);
-                }
-            }
-
-            SetContent(&m_tabs->View());
-
-            {
-                EditorPreferencesDialog* self = this;
-                ui::Button* save = AddButton(u8"Save", ui::DialogResult::None);
-                save->OnClick.Add([self](ui::ButtonBase*) { self->Apply(); });
-            }
-            AddButton(u8"Cancel", ui::DialogResult::Cancel);
-        }
-
-    public:
-        /// Fired on Apply with the new UI scale so the app can apply it LIVE (set the
-        /// host's scale + re-bake icons); the saved setting covers the next launch.
-        Function<void(f32)> OnUiScaleApplied;
-        /// Fired on Apply after the MCP section changed, so the app restarts (or stops) the
-        /// host for the open project without a reopen.
-        Function<void()> OnMcpSettingsApplied;
-
-        /// The category tabs: Appearance, Export, Agent access, Game preview, Shortcuts, then one
-        /// per domain-contributed category.
-        [[nodiscard]] ui::TabView& Tabs() const noexcept { return m_tabs->View(); }
-        /// The tab for a category, or -1.
-        [[nodiscard]] i32 TabIndexOf(StringView category) const { return m_tabs->IndexOf(category); }
-
-        /// The preview resolutions staged in the dialog (rows not removed), in order.
-        [[nodiscard]] usize PreviewRowCount() const noexcept
-        {
-            usize count = 0;
-            for (const PreviewRow& row : m_previewRows)
-            {
-                count += row.removed ? 0u : 1u;
-            }
-            return count;
-        }
-
-    private:
-        /// One staged preview resolution; its views are the rows container's.
-        struct PreviewRow
-        {
-            ui::FlexLayout* row = nullptr;
-            ui::EditText* name = nullptr;
-            ui::NumericField* width = nullptr;
-            ui::NumericField* height = nullptr;
-            bool removed = false;
+            foundation::settings::Settings* user = nullptr; // the user's store
+            editor::EditorActionRegistry* actions = nullptr; // the Shortcuts tab's
+            /// Says a warning to the user (a chord another action holds).
+            Function<void(StringView)> warn;
+            /// The settings other parts of the editor contribute, a tab per category.
+            const Array<editor::EditorContext::EditorSettingsContribution>* contributions = nullptr;
+            /// The MCP section was saved: the host follows it for the open project.
+            Function<void()> mcpChanged;
+            /// Shows a look (the window's SetLook).
+            Function<void(const EditorLook&)> showLook;
+            /// Persists the user's store; false when it could not be written.
+            Function<bool()> persist;
         };
 
-        void AddPreviewRow(StringView name, u32 width, u32 height)
+        EditorPreferencesDialog(IAllocator& allocator, Services services, RefPtr<gui::Node> body)
+            : m_allocator(allocator), m_services(Move(services)), m_body(Move(body))
         {
-            auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 6;
-            auto nameEdit = MakeRef<ui::EditText>(MemoryAllocator());
-            nameEdit->SetText(name);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.AlignSelf = ui::Align::Center;
-            row->AddView(nameEdit.Get(), grow);
-            const auto sizeField = [this, &row](u32 value)
+            if (!m_body)
+                return;
+            m_window = MakeRef<gui::Window>(m_allocator);
+            m_window->SetTitle(u8"Preferences");
+            m_window->AddClass(u8"preferences-window");
+            m_window->SetSize(Float2{kWidth, kHeight});
+            m_window->GetContent()->AddChild(m_body.Get());
+            Bind();
+        }
+        EditorPreferencesDialog(const EditorPreferencesDialog&) = delete;
+        EditorPreferencesDialog& operator=(const EditorPreferencesDialog&) = delete;
+        ~EditorPreferencesDialog() { Close(); }
+
+        /// Opens it over `root`, its controls as the store has them; false with no markup.
+        bool Open(gui::Node& root)
+        {
+            if (!m_window || m_window->IsOpen())
+                return false;
+            m_original = LookFrom(m_services.user != nullptr ? m_services.user->Find<editor::EditorUiSettings>() : nullptr);
+            m_look = m_original;
+            m_saved = false;
+            m_shortcutEdits = editor::ShortcutEdits{};
+            ShowControls();
+            ShowSettings();
+            ShowShortcuts();
+            m_window->OpenModal(root);
+            return true;
+        }
+        [[nodiscard]] bool IsOpen() const noexcept { return m_window && m_window->IsOpen(); }
+
+        /// Keeps the look: into the store, persisted, the window closed.
+        bool Save()
+        {
+            if (m_services.user != nullptr)
             {
-                auto field = MakeRef<ui::NumericField>(MemoryAllocator());
-                field->SetDecimalPlaces(0);
+                StoreLook(m_services.user->Section<editor::EditorUiSettings>(), m_look);
+                m_services.user->MarkChanged<editor::EditorUiSettings>();
+                SaveSettings();
+                if (!m_shortcutEdits.IsEmpty() && m_services.actions != nullptr)
+                {
+                    Array<String> collisions;
+                    (void)m_shortcutEdits.Apply(*m_services.actions, m_services.user->Section<editor::EditorShortcutSettings>(), &collisions);
+                    m_services.user->MarkChanged<editor::EditorShortcutSettings>();
+                    for (const String& collision : collisions)
+                        if (m_services.warn)
+                            m_services.warn(Format(u8"Shortcut kept: {}", collision).AsView());
+                }
+            }
+            const bool persisted = !m_services.persist || m_services.persist();
+            m_saved = true;
+            if (m_window)
+                m_window->Close();
+            return persisted;
+        }
+        /// Puts the look back as it was and closes.
+        void Cancel()
+        {
+            if (m_window && m_window->IsOpen())
+                m_window->Close(); // its close puts the look back
+        }
+
+        /// The look as the controls have it now.
+        [[nodiscard]] const EditorLook& Look() const noexcept { return m_look; }
+        /// The window (its controls by id, for a test).
+        [[nodiscard]] gui::Window* Window() const noexcept { return m_window.Get(); }
+
+    private:
+        static constexpr f32 kWidth = 560.0f;
+        static constexpr f32 kHeight = 440.0f;
+
+        void Close()
+        {
+            if (m_window && m_window->IsOpen())
+                m_window->Close();
+        }
+
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const
+        {
+            return m_body ? Cast<T>(FindIn(*m_body, id)) : nullptr;
+        }
+        static gui::Node* FindIn(gui::Node& node, StringView id)
+        {
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
+
+        // The controls, once: each change of the user's shows the look at once.
+        void Bind()
+        {
+            EditorPreferencesDialog* self = this;
+            const auto onChange = [self](gui::Node* node, Function<void()> apply)
+            {
+                if (node != nullptr)
+                    (void)node->AddEventListener(gui::EventType::Changed, [self, apply = Move(apply)](const gui::Event&)
+                                                 {
+                                                     if (!self->m_showing)
+                                                         apply();
+                                                 });
+            };
+            onChange(Find<gui::Button>(u8"pref-dark"), [self]() { self->Change([](EditorLook& look) { look.dark = true; }); });
+            onChange(Find<gui::Button>(u8"pref-light"), [self]() { self->Change([](EditorLook& look) { look.dark = false; }); });
+            if (gui::Node* accents = Find<gui::Node>(u8"pref-accents"))
+                for (const EditorAccent& accent : kEditorAccents)
+                {
+                    RefPtr<gui::Button> segment = MakeRef<gui::Button>(m_allocator);
+                    segment->AddClass(u8"segment");
+                    segment->SetText(accent.name);
+                    segment->SetToggle(true);
+                    m_accentGroup = m_accentGroup ? m_accentGroup : MakeRef<gui::ButtonGroup>(m_allocator);
+                    segment->SetGroup(m_accentGroup);
+                    const String fill(accent.fill);
+                    onChange(segment.Get(), [self, fill]() { self->Change([&fill](EditorLook& look) { look.accent = fill; }); });
+                    accents->AddChild(segment.Get());
+                    m_accents.PushBack(segment);
+                }
+            if (auto* field = Find<gui::TextField>(u8"pref-accent"))
+                field->SetOnTextChanging([self](StringView text)
+                                         {
+                                             if (!self->m_showing && IsHexColor(text))
+                                                 self->Change([&text](EditorLook& look) { look.accent = String(text); });
+                                         });
+            for (StringView density : kEditorDensities)
+            {
+                const String name(density);
+                onChange(Find<gui::Button>(Format(u8"pref-density-{}", density).AsView()),
+                         [self, name]() { self->Change([&name](EditorLook& look) { look.density = name; }); });
+            }
+            onChange(Find<gui::CheckBox>(u8"pref-motion"), [self]()
+                     {
+                         const auto* motion = self->Find<gui::CheckBox>(u8"pref-motion");
+                         self->Change([motion](EditorLook& look) { look.reduceMotion = motion->IsChecked(); });
+                     });
+            onChange(Find<gui::Slider>(u8"pref-scale"), [self]()
+                     {
+                         const auto* scale = self->Find<gui::Slider>(u8"pref-scale");
+                         self->Change([scale](EditorLook& look) { look.uiScale = static_cast<f32>(scale->GetValue()); });
+                     });
+            if (auto* add = Find<gui::Button>(u8"pref-preview-add"))
+                add->SetOnClick([self]() { self->AddPreview(u8"Custom", 1920, 1080); });
+            AddContributions();
+            if (auto* save = Find<gui::Button>(u8"pref-save"))
+                save->SetOnClick([self]() { (void)self->Save(); });
+            if (auto* cancel = Find<gui::Button>(u8"pref-cancel"))
+                cancel->SetOnClick([self]() { self->Cancel(); });
+            // However it closes (Cancel, its close button, Escape), unsaved, the look goes back.
+            m_window->SetOnClose([self]()
+                                 {
+                                     if (!self->m_saved && self->m_services.showLook)
+                                         self->m_services.showLook(self->m_original);
+                                 });
+        }
+
+        void Change(const Function<void(EditorLook&)>& edit)
+        {
+            edit(m_look);
+            m_look.uiScale = Clamp(m_look.uiScale, editor::kUiScaleMin, editor::kUiScaleMax);
+            ShowControls();
+            if (m_services.showLook)
+                m_services.showLook(m_look);
+        }
+
+        // The tabs beside the look and the keys, as the store has them.
+        void ShowSettings()
+        {
+            foundation::settings::Settings* user = m_services.user;
+            if (user == nullptr)
+                return;
+            const editor::EditorUiSettings* ui = user->Find<editor::EditorUiSettings>();
+            if (auto* ortho = Find<gui::CheckBox>(u8"pref-auto-ortho"))
+                ortho->SetChecked(ui == nullptr || ui->autoOrthographic);
+            if (auto* root = Find<gui::TextField>(u8"pref-templates-root"))
+            {
+                const editor::EditorExportSettings* exportSettings = user->Find<editor::EditorExportSettings>();
+                root->SetText(exportSettings != nullptr ? exportSettings->templatesRoot.AsView() : StringView{});
+                root->SetPlaceholder(editor::DefaultTemplatesRoot().AsView());
+            }
+            const editor::EditorMcpSettings* mcp = user->Find<editor::EditorMcpSettings>();
+            if (auto* enabled = Find<gui::CheckBox>(u8"pref-mcp-enabled"))
+                enabled->SetChecked(mcp != nullptr && mcp->enabled);
+            if (auto* port = Find<gui::TextField>(u8"pref-mcp-port"))
+                port->SetText(Format(u8"{}", mcp != nullptr ? mcp->port : editor::kEditorMcpDefaultPort).AsView());
+            if (auto* token = Find<gui::TextField>(u8"pref-mcp-token"))
+                token->SetText(mcp != nullptr ? mcp->token.AsView() : StringView{});
+            ShowPreviews();
+            for (const Contributed& check : m_contributed)
+                check.box->SetChecked(check.field->get ? check.field->get() : false);
+        }
+        void SaveSettings()
+        {
+            foundation::settings::Settings& user = *m_services.user;
+            if (auto* ortho = Find<gui::CheckBox>(u8"pref-auto-ortho"))
+            {
+                user.Section<editor::EditorUiSettings>().autoOrthographic = ortho->IsChecked();
+                user.MarkChanged<editor::EditorUiSettings>();
+            }
+            if (auto* root = Find<gui::TextField>(u8"pref-templates-root"))
+            {
+                user.Section<editor::EditorExportSettings>().templatesRoot = String(root->GetText());
+                user.MarkChanged<editor::EditorExportSettings>();
+            }
+            auto* enabled = Find<gui::CheckBox>(u8"pref-mcp-enabled");
+            auto* port = Find<gui::TextField>(u8"pref-mcp-port");
+            auto* token = Find<gui::TextField>(u8"pref-mcp-token");
+            if (enabled != nullptr && port != nullptr && token != nullptr)
+            {
+                if (!user.Section<editor::EditorMcpSettings>().ApplyFromPreferences(enabled->IsChecked(), port->GetText(), token->GetText()) &&
+                    m_services.warn)
+                    m_services.warn(u8"The MCP port must be a number from 1024 to 65535; the old one is kept.");
+                user.MarkChanged<editor::EditorMcpSettings>();
+                if (m_services.mcpChanged)
+                    m_services.mcpChanged();
+            }
+            if (editor::GamePreviewSettings* previews = editor::GamePreviewSettings::From(&user))
+            {
+                previews->presets.Clear();
+                for (const PreviewRow& row : m_previews)
+                    if (!row.removed && !row.name->GetText().IsEmpty())
+                        previews->presets.PushBack(editor::GamePreviewResolution{String(row.name->GetText()), static_cast<u32>(row.width->GetValue()),
+                                                                                 static_cast<u32>(row.height->GetValue())});
+                user.MarkChanged<editor::GamePreviewSettings>();
+            }
+        }
+
+        // Game preview: a row per resolution (its name, width and height, Remove), Add after them.
+        void ShowPreviews()
+        {
+            gui::Node* list = Find<gui::Node>(u8"pref-previews");
+            if (list == nullptr)
+                return;
+            while (list->ChildCount() > 0)
+                list->RemoveChild(list->GetChildAt(list->ChildCount() - 1));
+            m_previews.Clear();
+            if (const editor::GamePreviewSettings* previews = editor::GamePreviewSettings::From(m_services.user))
+                for (const editor::GamePreviewResolution& preview : previews->presets)
+                    AddPreview(preview.name.AsView(), preview.width, preview.height);
+        }
+        void AddPreview(StringView name, u32 width, u32 height)
+        {
+            gui::Node* list = Find<gui::Node>(u8"pref-previews");
+            if (list == nullptr)
+                return;
+            RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+            row->AddClass(u8"pref-preview");
+            RefPtr<gui::TextField> nameField = MakeRef<gui::TextField>(m_allocator);
+            nameField->SetText(name);
+            const auto size = [this](u32 value)
+            {
+                RefPtr<gui::NumberField> field = MakeRef<gui::NumberField>(m_allocator);
+                field->SetInteger(true);
                 field->SetMin(1.0);
                 field->SetMax(16384.0);
                 field->SetStep(1.0);
                 field->SetValue(static_cast<f64>(value));
-                ui::LayoutStyle style;
-                style.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(80));
-                style.AlignSelf = ui::Align::Center;
-                row->AddView(field.Get(), style);
-                return field.Get();
+                return field;
             };
-            ui::NumericField* widthField = sizeField(width);
-            ui::LayoutStyle centred;
-            centred.AlignSelf = ui::Align::Center;
-            row->AddView(MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"x")).Get(), centred);
-            ui::NumericField* heightField = sizeField(height);
-            auto remove = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Remove"));
-            const usize index = m_previewRows.Size();
+            RefPtr<gui::NumberField> widthField = size(width);
+            RefPtr<gui::NumberField> heightField = size(height);
+            RefPtr<gui::Label> by = MakeRef<gui::Label>(m_allocator);
+            by->SetText(u8"x");
+            RefPtr<gui::Button> remove = MakeRef<gui::Button>(m_allocator);
+            remove->AddClass(u8"ghost");
+            remove->SetText(u8"Remove");
+            const usize index = m_previews.Size();
             EditorPreferencesDialog* self = this;
-            // Hidden and skipped on Save rather than torn out from under its own click.
-            remove->OnClick.Add(
-                [self, index](ui::ButtonBase*)
+            // Hidden and skipped on Save rather than taken out from under its own click.
+            remove->SetOnClick([self, index]()
+                               {
+                                   self->m_previews[index].removed = true;
+                                   self->m_previews[index].row->SetDisplayed(false);
+                               });
+            row->AddChild(nameField.Get());
+            row->AddChild(widthField.Get());
+            row->AddChild(by.Get());
+            row->AddChild(heightField.Get());
+            row->AddChild(remove.Get());
+            list->AddChild(row.Get());
+            m_previews.PushBack(PreviewRow{row, nameField.Get(), widthField.Get(), heightField.Get(), false});
+        }
+
+        // A tab per category other parts of the editor contribute (contributions naming one
+        // category share it), its checks applied as they change.
+        void AddContributions()
+        {
+            auto* tabs = Find<gui::TabView>(u8"pref-tabs");
+            if (tabs == nullptr || m_services.contributions == nullptr)
+                return;
+            Array<String> categories;
+            Array<gui::Node*> columns;
+            for (const editor::EditorContext::EditorSettingsContribution& contribution : *m_services.contributions)
+            {
+                gui::Node* column = nullptr;
+                for (usize i = 0; i < categories.Size(); ++i)
+                    if (categories[i] == contribution.category)
+                        column = columns[i];
+                if (column == nullptr)
                 {
-                    self->m_previewRows[index].removed = true;
-                    self->m_previewRows[index].row->Visibility = ui::Visibility::Gone;
-                    self->m_previewRows[index].row->Invalidate();
-                });
-            row->AddView(remove.Get(), centred);
-            ui::LayoutStyle match;
-            match.Width = ui::SizeSpec::Match();
-            m_previewColumn->AddView(row.Get(), match);
-            m_previewRows.PushBack(PreviewRow{row.Get(), nameEdit.Get(), widthField, heightField, false});
-        }
-
-        void UpdateScaleLabel(f32 value)
-        {
-            if (m_uiScaleLabel != nullptr)
-            {
-                const i32 percent = static_cast<i32>(value * 100.0f + 0.5f);
-                m_uiScaleLabel->SetText(Format(u8"{}%", percent).AsView());
-            }
-        }
-
-        // A labeled horizontal row (fixed-width label, callers append the field views).
-        ui::FlexLayout* AddRow(ui::FlexLayout& column, StringView label)
-        {
-            auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 8;
-            {
-                auto text = MakeRef<ui::Label>(MemoryAllocator(), label);
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(110));
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(text.Get(), lp);
-            }
-            ui::FlexLayout* raw = row.Get();
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                column.AddView(row.Get(), lp);
-            }
-            return raw;
-        }
-
-        // One action: its label, its menu path, the chord (a capture button) and Reset.
-        void AddShortcutRow(ui::FlexLayout& column, EditorActionRegistry& actions,
-                            const editor::EditorActionDeclaration& action)
-        {
-            auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 8;
-            {
-                auto text = MakeRef<ui::Label>(MemoryAllocator(), action.label.AsView());
-                text->FontSize.SetValue(12.0f);
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(170));
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(text.Get(), lp);
-            }
-            {
-                auto where = MakeRef<ui::Label>(MemoryAllocator(), action.menuPath.AsView());
-                where->FontSize.SetValue(11.0f);
-                where->TextColor.SetValue(Optional<Color>(Color{0.55f, 0.55f, 0.55f, 1.0f}));
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(where.Get(), lp);
-            }
-            const StringView id = action.id.AsView();
-            auto capture = MakeRef<ShortcutCaptureButton>(MemoryAllocator(), actions.Shortcut(id));
-            capture->FontSize.SetValue(Optional<f32>(11.0f));
-            ShortcutCaptureButton* captureRaw = capture.Get();
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(150));
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(capture.Get(), lp);
-            }
-            auto reset = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Reset"));
-            reset->FontSize.SetValue(Optional<f32>(11.0f));
-            reset->IsEnabled = actions.HasOverride(id);
-            ui::Button* resetRaw = reset.Get();
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(60));
-                lp.AlignSelf = ui::Align::Center;
-                row->AddView(reset.Get(), lp);
-            }
-            EditorPreferencesDialog* self = this;
-            const String idText(id);
-            capture->OnChordChosen = [self, idText, resetRaw](EditorShortcut chord)
-            {
-                self->m_shortcutEdits.Set(idText.AsView(), chord);
-                resetRaw->IsEnabled = true;
-            };
-            const editor::EditorActionDeclaration* declaration = &action;
-            reset->OnClick.Add(
-                [self, idText, captureRaw, resetRaw, declaration](ui::ButtonBase*)
-                {
-                    self->m_shortcutEdits.Reset(idText.AsView());
-                    captureRaw->SetChord(declaration->shortcut); // the default, shown at once
-                    resetRaw->IsEnabled = false;
-                });
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                column.AddView(row.Get(), lp);
-            }
-        }
-
-        ui::EditText* AddTextRow(ui::FlexLayout& column, StringView label, StringView value)
-        {
-            ui::FlexLayout* row = AddRow(column, label);
-            auto edit = MakeRef<ui::EditText>(MemoryAllocator());
-            edit->SetText(value);
-            ui::EditText* raw = edit.Get();
-            ui::LayoutStyle lp;
-            lp.FlexGrow = 1.0f;
-            row->AddView(edit.Get(), lp);
-            return raw;
-        }
-
-        void Apply()
-        {
-            m_settings->Section<editor::EditorExportSettings>().templatesRoot =
-                String(m_rootEdit->Text());
-            m_settings->MarkChanged<editor::EditorExportSettings>();
-            editor::EditorFontSettings& fontPrefs =
-                m_settings->Section<editor::EditorFontSettings>();
-            fontPrefs.fontPath = String(m_fontEdit->Text());
-            fontPrefs.monoFontPath = String(m_monoFontEdit->Text());
-            m_settings->MarkChanged<editor::EditorFontSettings>();
-            const f32 uiScale = Clamp(m_uiScaleSlider->Value.Value(), editor::kUiScaleMin, editor::kUiScaleMax);
-            m_settings->Section<editor::EditorUiSettings>().uiScale = uiScale;
-            m_settings->Section<editor::EditorUiSettings>().autoOrthographic =
-                m_autoOrthographic->IsChecked.Value();
-            m_settings->MarkChanged<editor::EditorUiSettings>();
-            if (OnUiScaleApplied)
-            {
-                OnUiScaleApplied(uiScale); // live: host scale + icon re-bake
-            }
-            if (!m_settings->Section<editor::EditorMcpSettings>().ApplyFromPreferences(
-                    m_mcpEnabled->IsChecked.Value(), m_mcpPortEdit->Text(),
-                    m_mcpTokenEdit->Text()))
-            {
-                m_context->Notify(editor::NoticeKind::Warning,
-                                  u8"MCP port must be a number in 1024..65535 - kept the old one.");
-            }
-            m_settings->MarkChanged<editor::EditorMcpSettings>();
-            if (OnMcpSettingsApplied)
-            {
-                OnMcpSettingsApplied(); // live: the host follows the new enabled/port/token
-            }
-            if (editor::GamePreviewSettings* previews = editor::GamePreviewSettings::From(m_settings))
-            {
-                previews->presets.Clear();
-                for (const PreviewRow& row : m_previewRows)
-                {
-                    if (row.removed || row.name->Text().IsEmpty())
-                    {
-                        continue;
-                    }
-                    previews->presets.PushBack(editor::GamePreviewResolution{
-                        String(row.name->Text()), static_cast<u32>(row.width->Value()),
-                        static_cast<u32>(row.height->Value())});
+                    gui::TabPage* page = tabs->AddPage(contribution.category.AsView());
+                    RefPtr<gui::Panel> body = MakeRef<gui::Panel>(m_allocator);
+                    body->AddClass(u8"dialog-body");
+                    body->AddClass(u8"pref-contributed");
+                    page->AddChild(body.Get());
+                    column = body.Get();
+                    categories.PushBack(contribution.category);
+                    columns.PushBack(column);
                 }
-                m_settings->MarkChanged<editor::GamePreviewSettings>();
-            }
-            if (!m_shortcutEdits.IsEmpty())
-            {
-                Array<String> collisions;
-                (void)m_shortcutEdits.Apply(m_context->Actions(),
-                                            m_settings->Section<editor::EditorShortcutSettings>(),
-                                            &collisions);
-                m_settings->MarkChanged<editor::EditorShortcutSettings>();
-                for (const String& collision : collisions)
+                for (const editor::EditorContext::EditorSettingsBoolField& field : contribution.bools)
                 {
-                    m_context->Notify(editor::NoticeKind::Warning,
-                                      Format(u8"Shortcut kept: {}", collision.AsView()).AsView());
+                    RefPtr<gui::CheckBox> box = MakeRef<gui::CheckBox>(m_allocator);
+                    box->SetText(field.label.AsView());
+                    if (!field.description.IsEmpty())
+                        box->SetTooltip(field.description.AsView());
+                    // The field is the context's, kept from boot: registrations come before any
+                    // dialog opens.
+                    const editor::EditorContext::EditorSettingsBoolField* fieldPtr = &field;
+                    gui::CheckBox* raw = box.Get();
+                    (void)box->AddEventListener(gui::EventType::Changed, [fieldPtr, raw](const gui::Event&)
+                                                {
+                                                    if (fieldPtr->set)
+                                                        fieldPtr->set(raw->IsChecked());
+                                                });
+                    column->AddChild(box.Get());
+                    m_contributed.PushBack(Contributed{fieldPtr, raw});
                 }
             }
-            if (editor::SaveEditorSettingsToUserData(*m_settings).IsOk())
-            {
-                m_context->SetStatus(u8"Preferences saved.");
-            }
-            else
-            {
-                m_context->Notify(editor::NoticeKind::Error,
-                                  u8"Preferences save FAILED (see console).");
-            }
-            Close(ui::DialogResult::OK);
         }
 
-        editor::EditorContext* m_context;
-        settings::Settings* m_settings;
-        UniquePtr<CategoryTabs> m_tabs;
-        ui::EditText* m_rootEdit = nullptr;
-        ui::EditText* m_fontEdit = nullptr;
-        ui::EditText* m_monoFontEdit = nullptr;
-        ui::Slider* m_uiScaleSlider = nullptr;
-        ui::Label* m_uiScaleLabel = nullptr;
-        ui::CheckBox* m_mcpEnabled = nullptr;
-        ui::CheckBox* m_autoOrthographic = nullptr;
-        ui::EditText* m_mcpPortEdit = nullptr;
-        ui::EditText* m_mcpTokenEdit = nullptr;
+        // The Shortcuts tab: a row per action, its chord as the registry has it now.
+        void ShowShortcuts()
+        {
+            gui::Node* list = Find<gui::Node>(u8"pref-shortcuts");
+            if (list == nullptr || m_services.actions == nullptr)
+                return;
+            while (list->ChildCount() > 0)
+                list->RemoveChild(list->GetChildAt(list->ChildCount() - 1));
+            editor::EditorActionRegistry& actions = *m_services.actions;
+            EditorPreferencesDialog* self = this;
+            for (const editor::EditorActionDeclaration& action : actions.Actions())
+            {
+                RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+                row->AddClass(u8"pref-shortcut");
+                RefPtr<gui::Label> name = MakeRef<gui::Label>(m_allocator);
+                name->AddClass(u8"row-name");
+                name->SetText(action.label.AsView());
+                RefPtr<gui::Label> where = MakeRef<gui::Label>(m_allocator);
+                where->AddClass(u8"pref-where");
+                where->SetText(action.menuPath.AsView());
+                RefPtr<ShortcutCaptureButton> capture = MakeRef<ShortcutCaptureButton>(m_allocator);
+                capture->SetChord(actions.Shortcut(action.id.AsView()));
+                RefPtr<gui::Button> reset = MakeRef<gui::Button>(m_allocator);
+                reset->AddClass(u8"ghost");
+                reset->SetText(u8"Reset");
+                reset->SetEnabled(actions.HasOverride(action.id.AsView()));
+                const String id = action.id;
+                const EditorShortcut declared = action.shortcut;
+                gui::Button* resetRaw = reset.Get();
+                ShortcutCaptureButton* captureRaw = capture.Get();
+                capture->SetOnChordChosen([self, id, resetRaw](EditorShortcut chord)
+                                          {
+                                              self->m_shortcutEdits.Set(id.AsView(), chord);
+                                              resetRaw->SetEnabled(true);
+                                          });
+                reset->SetOnClick([self, id, captureRaw, resetRaw, declared]()
+                                  {
+                                      self->m_shortcutEdits.Reset(id.AsView());
+                                      captureRaw->SetChord(declared); // the default, shown at once
+                                      resetRaw->SetEnabled(false);
+                                  });
+                row->AddChild(name.Get());
+                row->AddChild(where.Get());
+                row->AddChild(capture.Get());
+                row->AddChild(reset.Get());
+                list->AddChild(row.Get());
+            }
+        }
+
+        // The controls as m_look has it (quietly: no change of theirs comes back).
+        void ShowControls()
+        {
+            m_showing = true;
+            if (auto* dark = Find<gui::Button>(u8"pref-dark"))
+                dark->SetChecked(m_look.dark);
+            if (auto* light = Find<gui::Button>(u8"pref-light"))
+                light->SetChecked(!m_look.dark);
+            for (usize i = 0; i < m_accents.Size(); ++i)
+                m_accents[i]->SetChecked(m_look.accent.AsView() == kEditorAccents[i].fill);
+            if (auto* field = Find<gui::TextField>(u8"pref-accent"); field != nullptr && field->GetText() != m_look.accent.AsView())
+                field->SetText(m_look.accent.AsView());
+            for (StringView density : kEditorDensities)
+                if (auto* segment = Find<gui::Button>(Format(u8"pref-density-{}", density).AsView()))
+                    segment->SetChecked(m_look.density.AsView() == density);
+            if (auto* motion = Find<gui::CheckBox>(u8"pref-motion"))
+                motion->SetChecked(m_look.reduceMotion);
+            if (auto* scale = Find<gui::Slider>(u8"pref-scale"))
+                scale->SetValue(m_look.uiScale);
+            if (auto* value = Find<gui::Label>(u8"pref-scale-value"))
+                value->SetText(Format(u8"{}%", static_cast<i32>(m_look.uiScale * 100.0f + 0.5f)).AsView());
+            m_showing = false;
+        }
+
+        IAllocator& m_allocator;
+        Services m_services;
+        RefPtr<gui::Node> m_body;
+        RefPtr<gui::Window> m_window;
+        RefPtr<gui::ButtonGroup> m_accentGroup;
+        Array<RefPtr<gui::Button>> m_accents;
+        EditorLook m_original; // as it was when it opened
+        EditorLook m_look;     // as the controls have it
+        struct PreviewRow
+        {
+            RefPtr<gui::Panel> row;
+            gui::TextField* name = nullptr;
+            gui::NumberField* width = nullptr;
+            gui::NumberField* height = nullptr;
+            bool removed = false;
+        };
+        struct Contributed
+        {
+            const editor::EditorContext::EditorSettingsBoolField* field = nullptr;
+            gui::CheckBox* box = nullptr;
+        };
+
         editor::ShortcutEdits m_shortcutEdits; // staged; applied and persisted on Save
-        ui::FlexLayout* m_previewColumn = nullptr; // the preview rows sit here
-        Array<PreviewRow> m_previewRows;
+        Array<PreviewRow> m_previews;
+        Array<Contributed> m_contributed;
+        bool m_saved = false;
+        bool m_showing = false; // the controls being set from code
     };
-
-    RTTI_DEFINE_OBJECT(EditorPreferencesDialog, "rtti::editor::editor::app")
 }

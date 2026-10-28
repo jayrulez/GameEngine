@@ -52,6 +52,15 @@ namespace editor
         if (!m_gizmo.IsDragging())
         {
             m_mode = mode;
+            m_handlesShown = true;
+        }
+    }
+
+    void GizmoController::SetHandlesShown(bool shown) noexcept
+    {
+        if (!m_gizmo.IsDragging())
+        {
+            m_handlesShown = shown;
         }
     }
 
@@ -67,17 +76,21 @@ namespace editor
     {
         if (!m_gizmo.IsDragging() && in.pointerValid)
         {
+            if (in.keySelect)
+            {
+                SetHandlesShown(false);
+            }
             if (in.keyTranslate)
             {
-                m_mode = GizmoMode::Translate;
+                SetMode(GizmoMode::Translate);
             }
             if (in.keyRotate)
             {
-                m_mode = GizmoMode::Rotate;
+                SetMode(GizmoMode::Rotate);
             }
             if (in.keyScale)
             {
-                m_mode = GizmoMode::Scale;
+                SetMode(GizmoMode::Scale);
             }
             if (in.keyToggleSpace)
             {
@@ -87,7 +100,7 @@ namespace editor
 
         const Guid* primary = m_edit->EntitySelection().Primary();
         const scene::EntityHandle entity =
-            (primary != nullptr) ? m_edit->Resolve(*primary) : scene::EntityHandle{};
+            (primary != nullptr && m_handlesShown) ? m_edit->Resolve(*primary) : scene::EntityHandle{};
         if (!entity.IsAssigned())
         {
             AbortDrag();
@@ -228,6 +241,10 @@ namespace editor
 
     StringView GizmoController::StatusText() const
     {
+        if (!m_handlesShown)
+        {
+            return StringView(u8"Select  (Q select, W/E/R transform, Ctrl+click toggle, drag to box select)");
+        }
         switch (m_mode)
         {
         case GizmoMode::Translate:
@@ -257,7 +274,7 @@ namespace editor
         {
         case GizmoMode::Translate:
         {
-            const Float3 worldDelta = m_gizmo.UpdateTranslateDrag(in.ray, in.snap);
+            const Float3 worldDelta = m_gizmo.UpdateTranslateDrag(in.ray, in.snap || m_snapMode);
             t.position =
                 m_dragStartLocal.position + TransformDirection(worldDelta, m_parentInverseWorld);
             // Vertex snap: the pivot ON the vertex under the cursor, whichever handle is held;
@@ -271,7 +288,7 @@ namespace editor
         }
         case GizmoMode::Rotate:
         {
-            const TransformGizmo::RotateDelta d = m_gizmo.UpdateRotateDrag(in.ray, in.snap);
+            const TransformGizmo::RotateDelta d = m_gizmo.UpdateRotateDrag(in.ray, in.snap || m_snapMode);
             const Quaternion worldDelta = Quaternion::FromAxisAngle(d.axis, d.angle);
             // Conjugate the world delta into parent space, then compose with the start.
             t.rotation = Normalized(Inverse(m_parentRotation) * worldDelta * m_parentRotation *
@@ -280,7 +297,7 @@ namespace editor
         }
         case GizmoMode::Scale:
         {
-            const Float3 d = m_gizmo.UpdateScaleDrag(in.ray, in.snap);
+            const Float3 d = m_gizmo.UpdateScaleDrag(in.ray, in.snap || m_snapMode);
             t.scale.x = Max(m_dragStartLocal.scale.x + d.x, 0.001f);
             t.scale.y = Max(m_dragStartLocal.scale.y + d.y, 0.001f);
             t.scale.z = Max(m_dragStartLocal.scale.z + d.z, 0.001f);

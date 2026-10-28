@@ -15,7 +15,7 @@ import foundation.geometry;
 import foundation.heightfield;
 import foundation.terrain.resource;
 import foundation.vegetation;
-import foundation.ui;
+import foundation.gui;
 import foundation.render; // ExtractedScene (the props draw as sets)
 import engine.terrain;
 import engine.vegetation;
@@ -182,7 +182,7 @@ TEST_CASE("vegetation scatter: a scripted stroke places a deterministic count in
         bool named = false;
         for (usize i = 0; i + 13 <= tool.StatusText().Size(); ++i)
         {
-            named |= tool.StatusText().SubStr(i, 13) == StringView(u8"ERASE layer 0");
+            named |= tool.StatusText().SubStr(i, 13) == StringView(u8"ERASE layer 1");
         }
         CHECK(named);
         (void)status;
@@ -298,12 +298,17 @@ TEST_CASE("vegetation scatter panel: the provider registers for the brush id and
     editor::ViewportToolHostContext ctx;
     ctx.scene = &fx.scene;
     ctx.commands = &commands;
-    RefPtr<foundation::ui::View> panel = provider->CreatePanel(tool, ctx);
-    CHECK(panel.Get() != nullptr);
-    CHECK(tool.Layer() == 0u);
-    REQUIRE(tool.OnRadiusChanged);
+    RefPtr<foundation::gui::Node> node = provider->CreatePanel(tool, ctx);
+    auto* panel = Cast<editor::app::ToolPanelBody>(node.Get());
+    REQUIRE(panel != nullptr);
+    // The layers by name, the chosen one checked; a wheel resize shows after a Sync.
+    REQUIRE(panel->ChoiceCount(0) >= 1u);
+    CHECK(panel->ChoiceAt(0, 0)->IsChecked());
     tool.SetRadius(9.0f);
-    CHECK(tool.Radius() == 9.0f);
+    panel->Sync();
+    CHECK(panel->NumberAt(0)->GetValue() == doctest::Approx(9.0));
+    panel->ChoiceAt(1, 1)->HandleActivate(); // Erase
+    CHECK(tool.IsEraser());
 }
 
 TEST_CASE("vegetation scatter: a layer whose mesh does not resolve is named in the status (nothing would draw)")

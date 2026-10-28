@@ -1,0 +1,13 @@
+<root>
+	<string name="guid">6bd080d4-e1a9-441d-a6fb-dd7014782f16</string>
+	<string name="typeNamespace">rtti::pipeline::gui</string>
+	<string name="typeName">GuiStyleSheetAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">252222251275244584</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">MasqueradeSheet.css</string>
+		<string name="previewMarkup"/>
+	</object>
+</root>

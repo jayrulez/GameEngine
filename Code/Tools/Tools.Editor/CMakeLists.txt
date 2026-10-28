@@ -15,6 +15,8 @@ add_custom_command(
     COMMENT "Embedding the editor fallback font")
 
 add_executable(Tools.Editor Main.cpp "${_embedded_font_src}")
+# The pages are parked while the editor moves onto the GUI (Documentation/Specs/editor-gui.md, 4.1):
+# each Editor:: page library comes back here with its port.
 target_link_libraries(Tools.Editor PRIVATE
     Foundation::Core
     Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop Foundation::Shell.Desktop
@@ -22,17 +24,22 @@ target_link_libraries(Tools.Editor PRIVATE
     Engine::Scene Engine::Render Engine::Animation Engine::Particles
     Engine::Composition # RegisterAllScriptFacades: the COMPLETE engine facade surface the cook
                           # AND live validation compile against (run/ui/physics/audio/... facades)
-    Editor::Core Editor::App Editor::Scene Editor::Animation Editor::Play Editor::Render Editor::Particles Editor::Geometry Editor::Materials
+    Editor::Core Editor::App Editor::Navigation
+    Editor::Scene # the scene page (its hierarchy and inspector come with their layers)
+    Editor::Play # the Game tabs and the PIE tools
+    Editor::Spline # the scene view's spline tool
+    Editor::Terrain # the scene view's terrain brushes
+    Editor::Vegetation # and the vegetation's
+    Editor::Generic # the fallback asset page
+    Editor::Image Editor::Heightfield Editor::Texture Editor::Fonts Editor::Geometry Editor::Physics Editor::Materials Editor::Render Editor::Audio Editor::Input Editor::Script Editor::Shaders Editor::GUI Editor::Particles Editor::Animation # the asset pages, as they port (X6)
     Pipeline::Core Pipeline::Cook
     Pipeline::Registration # the composition root: every builder/importer/type registration
     Foundation::Resource Foundation::Geometry.Resource Foundation::Materials.Resource Foundation::Texture.Resource
     Pipeline::Texture Pipeline::Fonts Pipeline::Image Pipeline::Geometry
     Pipeline::Animation Pipeline::Materials Pipeline::Shaders
-    Pipeline::Particles Foundation::Input Foundation::Input.Resource Pipeline::Input Editor::Input Editor::PropertyAnimation Engine::Input Foundation::Physics Foundation::Physics.Resource Pipeline::Physics Engine::Physics Pipeline::Navigation Engine::Navigation Foundation::Navigation.Resource Foundation::Audio Foundation::Audio.Resource Pipeline::Audio Engine::Audio
-    # Script backends + cooks (angelscript | luau) come transitively from Pipeline::Registration
-    # above; only the EDITOR-side lexer/UI libs (${SCRIPTLIB_*_EDITOR}, not in the composition root)
-    # are named here, symmetric across both backends.
-    Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Pipeline::Script ${SCRIPTLIB_ANGELSCRIPT_EDITOR} ${SCRIPTLIB_LUAU_EDITOR} Engine::Script Editor::Script Editor::Shaders Foundation::UI.Resource Pipeline::UI Editor::GameUI Editor::Audio Editor::Texture Editor::Image Editor::Heightfield Editor::Terrain Editor::Vegetation Editor::Spline Editor::Fonts Editor::Physics Editor::Generic Pipeline::ModelImporter Foundation::Image.Resource
+    Pipeline::Particles Foundation::Input Foundation::Input.Resource Pipeline::Input Engine::Input Foundation::Physics Foundation::Physics.Resource Pipeline::Physics Engine::Physics Pipeline::Navigation Engine::Navigation Foundation::Navigation.Resource Foundation::Audio Foundation::Audio.Resource Pipeline::Audio Engine::Audio
+    # Script backends + cooks (angelscript | luau) come transitively from Pipeline::Registration.
+    Foundation::Script Foundation::Script.Resource Foundation::Script.Facades Pipeline::Script Engine::Script Foundation::UI.Resource Pipeline::UI Pipeline::ModelImporter Foundation::Image.Resource
     Foundation::Animation.Resource)
 # Stage the editor's runtime deps beside it + emit Tools.Editor.runtime-libs (the editor packaging
 # script reads that list for its sidecars). SDL3 rides in as EXTRA (a no-op when unset, e.g. Linux).

@@ -1,847 +1,381 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Audio - the `:bus_layout_page` partition (implementation).
+// Editor::Audio - the bus layout page's implementation (see BusLayoutPage.cppm).
 
 module;
 #include "Core/Prelude.h"
-#include "Core/Log/Log.h"
 
 module editor.audio;
 
+import :bus_layout_page;
+import :bus_layout_model;
+
 import foundation.core;
 import foundation.content;
-import foundation.runtime.client;
 import foundation.audio;
 import audio.pipeline;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 
 using namespace foundation::core;
-namespace runtime = foundation::runtime;
-namespace ui = foundation::ui;
+namespace gui = foundation::gui;
 
 namespace editor
 {
     namespace
     {
-        using Page = AudioBusLayoutEditorPage*;
+        using Bus = pipeline::AudioBusLayoutAsset::Bus;
 
-        constexpr StringView kFixedNames[4] = {u8"Master", u8"Effects", u8"Music", u8"UI"};
-
-        [[nodiscard]] bool EqualsIgnoreCase(StringView a, StringView b)
+        // A bus's setting as a row: its path, its name, its group in the grid, its range (a float's),
+        // and where it is in a Bus.
+        struct EffectRow
         {
-            if (a.Size() != b.Size())
-            {
-                return false;
-            }
-            for (usize i = 0; i < a.Size(); ++i)
-            {
-                utf8char ca = a.Data()[i];
-                utf8char cb = b.Data()[i];
-                if (ca >= u8'A' && ca <= u8'Z')
-                {
-                    ca = static_cast<utf8char>(ca + (u8'a' - u8'A'));
-                }
-                if (cb >= u8'A' && cb <= u8'Z')
-                {
-                    cb = static_cast<utf8char>(cb + (u8'a' - u8'A'));
-                }
-                if (ca != cb)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        [[nodiscard]] bool IsFixedBusName(StringView name)
+            const char8_t* path;
+            const char8_t* shown;
+            const char8_t* category;
+            const char8_t* description;
+            f64 min;
+            f64 max;
+            f64 step;
+            f32 Bus::*number;
+            bool Bus::*flag;
+        };
+        constexpr EffectRow kEffects[] = {
+            {u8"volume", u8"Volume", u8"Mix", u8"", 0.0, 2.0, 0.01, &Bus::volume, nullptr},
+            {u8"muted", u8"Muted", u8"Mix", u8"", 0.0, 0.0, 0.0, nullptr, &Bus::muted},
+            {u8"lowpassHz", u8"Lowpass (Hz)", u8"Filters", u8"Cuts what is above it; 0 is off", 0.0, 22000.0, 10.0, &Bus::lowpassHz, nullptr},
+            {u8"highpassHz", u8"Highpass (Hz)", u8"Filters", u8"Cuts what is below it; 0 is off", 0.0, 22000.0, 10.0, &Bus::highpassHz, nullptr},
+            {u8"delaySeconds", u8"Delay (s)", u8"Delay", u8"The echo's delay; 0 is off", 0.0, 2.0, 0.01, &Bus::delaySeconds, nullptr},
+            {u8"delayDecay", u8"Decay", u8"Delay", u8"How much of each echo comes back", 0.0, 1.0, 0.01, &Bus::delayDecay, nullptr},
+            {u8"reverbWet", u8"Wet", u8"Reverb", u8"How much reverb is heard; 0 is off", 0.0, 1.0, 0.01, &Bus::reverbWet, nullptr},
+            {u8"reverbRoomSize", u8"Room Size", u8"Reverb", u8"", 0.0, 1.0, 0.01, &Bus::reverbRoomSize, nullptr},
+            {u8"reverbDamping", u8"Damping", u8"Reverb", u8"How fast its high end fades", 0.0, 1.0, 0.01, &Bus::reverbDamping, nullptr},
+        };
+        // The settings' groups, each a section of the grid, in order.
+        constexpr StringView kGroups[] = {u8"Mix", u8"Filters", u8"Delay", u8"Reverb"};
+        [[nodiscard]] usize GroupOf(StringView category)
         {
-            for (const StringView& fixed : kFixedNames)
-            {
-                if (EqualsIgnoreCase(name, fixed))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // The custom-slot index whose name matches, or -1 (fixed names / unknown).
-        [[nodiscard]] i32 FindSlotByName(const pipeline::AudioBusLayoutAsset& asset, StringView name)
-        {
-            if (name.IsEmpty() || IsFixedBusName(name))
-            {
-                return -1;
-            }
-            for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
-            {
-                if (!asset.custom[i].name.IsEmpty() && asset.custom[i].name.AsView() == name)
-                {
-                    return static_cast<i32>(i);
-                }
-            }
-            return -1;
-        }
-
-        void AddRow(ui::toolkit::PropertyGrid& g, RefPtr<ui::toolkit::PropertyEditor> e)
-        {
-            g.AddProperty(Move(e));
-        }
-
-        void RowFloat(ui::toolkit::PropertyGrid& g, StringView name, f32* field, StringView cat,
-                      Page page, f64 mn, f64 mx, f64 step)
-        {
-            String key(cat);
-            key.Append(name);
-            AddRow(g, RefPtr<ui::toolkit::PropertyEditor>(
-                          MakeRef<ui::toolkit::FloatEditor>(
-                              editor::EditorRootAllocator(), name, static_cast<f64>(*field), mn, mx, step, 3,
-                              Function<void(f64)>{[field, page, key](f64 v)
-                                                  {
-                                                      *field = static_cast<f32>(v);
-                                                      page->CommitEdit(key.AsView());
-                                                  }},
-                              cat)
-                              .Get()));
-        }
-        void RowBool(ui::toolkit::PropertyGrid& g, StringView name, bool* field, StringView cat,
-                     Page page)
-        {
-            String key(cat);
-            key.Append(name);
-            AddRow(g, RefPtr<ui::toolkit::PropertyEditor>(
-                          MakeRef<ui::toolkit::BoolEditor>(
-                              editor::EditorRootAllocator(), name, *field,
-                              Function<void(bool)>{[field, page, key](bool v)
-                                                   {
-                                                       *field = v;
-                                                       page->CommitEdit(key.AsView());
-                                                   }},
-                              cat)
-                              .Get()));
-        }
-
-        // Every editable field of one Bus, grouped: Mix, then the effect blocks (0 = off).
-        void BusRows(ui::toolkit::PropertyGrid& g, pipeline::AudioBusLayoutAsset::Bus& bus, Page page)
-        {
-            RowFloat(g, u8"Volume", &bus.volume, u8"Mix", page, 0.0, 2.0, 0.01);
-            RowBool(g, u8"Muted", &bus.muted, u8"Mix", page);
-            RowFloat(g, u8"Lowpass Hz (0 = off)", &bus.lowpassHz, u8"Filter", page, 0.0, 22000.0,
-                     10.0);
-            RowFloat(g, u8"Highpass Hz (0 = off)", &bus.highpassHz, u8"Filter", page, 0.0, 22000.0,
-                     10.0);
-            RowFloat(g, u8"Delay s (0 = off)", &bus.delaySeconds, u8"Delay", page, 0.0, 2.0, 0.01);
-            RowFloat(g, u8"Delay Decay", &bus.delayDecay, u8"Delay", page, 0.0, 1.0, 0.01);
-            RowFloat(g, u8"Reverb Wet (0 = off)", &bus.reverbWet, u8"Reverb", page, 0.0, 1.0, 0.01);
-            RowFloat(g, u8"Reverb Room Size", &bus.reverbRoomSize, u8"Reverb", page, 0.0, 1.0,
-                     0.01);
-            RowFloat(g, u8"Reverb Damping", &bus.reverbDamping, u8"Reverb", page, 0.0, 1.0, 0.01);
-        }
-    } // namespace
-
-    bool AudioBusWouldCycle(const pipeline::AudioBusLayoutAsset& asset, i32 slotIndex,
-                            StringView newParent)
-    {
-        if (slotIndex < 0 || static_cast<usize>(slotIndex) >= pipeline::kAudioCustomBusSlotCount)
-        {
-            return false;
-        }
-        // Walk the proposed parent chain through the custom slots; hitting `slotIndex` = cycle.
-        i32 walk = FindSlotByName(asset, newParent);
-        for (usize guard = 0; walk >= 0 && guard < pipeline::kAudioCustomBusSlotCount + 1; ++guard)
-        {
-            if (walk == slotIndex)
-            {
-                return true;
-            }
-            walk = FindSlotByName(asset, asset.custom[static_cast<usize>(walk)].parent.AsView());
-        }
-        return false;
-    }
-
-    // ============================ Tree adapter ==============================================
-
-    i32 BusLayoutTreeAdapter::RootCount() const
-    {
-        return static_cast<i32>(m_owner->m_roots.Size());
-    }
-    i32 BusLayoutTreeAdapter::GetChildCount(i32 nodeId) const
-    {
-        if (nodeId == -1)
-        {
-            return RootCount();
-        }
-        if (nodeId < 0 || nodeId >= static_cast<i32>(m_owner->m_nodes.Size()))
-        {
+            for (usize g = 0; g < 4; ++g)
+                if (kGroups[g] == category)
+                    return g;
             return 0;
         }
-        return static_cast<i32>(m_owner->m_nodes[static_cast<usize>(nodeId)].children.Size());
     }
-    i32 BusLayoutTreeAdapter::GetChildId(i32 parentId, i32 childIndex) const
+
+    AudioBusLayoutEditorPage::AudioBusLayoutEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance)
+        : app::AssetObjectPage(context, Move(services), instance, pipeline::AudioBusLayoutAsset::StaticType(), kPath)
     {
-        if (parentId == -1)
+        HideAssetRows(); // the layout reflects nothing of its own: its rows are the chosen bus's
+        m_model = MakeUnique<gui::TreeModel>(Allocator());
+        m_tree = Find<gui::TreeView>(u8"bus-tree");
+        m_remove = Find<gui::ButtonBase>(u8"bus-remove");
+        AudioBusLayoutEditorPage* self = this;
+        if (auto* add = Find<gui::ButtonBase>(u8"bus-add"))
+            add->SetOnClick([self]() { (void)self->AddBus(); });
+        if (m_remove != nullptr)
+            m_remove->SetOnClick([self]() { (void)self->RemoveSelected(); });
+        if (m_tree != nullptr)
         {
-            return (childIndex >= 0 && childIndex < RootCount())
-                       ? m_owner->m_roots[static_cast<usize>(childIndex)]
-                       : -1;
+            m_tree->SetModel(m_model.Get());
+            m_tree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                          {
+                                              if (self->m_showing || !index.IsValid())
+                                                  return;
+                                              const usize row = static_cast<usize>(index.InternalId);
+                                              if (row < self->m_rows.Size())
+                                                  self->Select(self->m_rows[row].bus);
+                                          });
+            (void)m_tree->AddEventListener(gui::EventType::ContextMenu, [self](const gui::Event& e)
+                                           {
+                                               const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                               self->ShowMenu(self->m_tree->ItemAt(at), at);
+                                               e.Handled = true;
+                                           });
         }
-        if (parentId < 0 || parentId >= static_cast<i32>(m_owner->m_nodes.Size()))
+        BuildRows();
+        ShowTree();
+        ShowBus();
+    }
+
+    AudioBusLayoutEditorPage::~AudioBusLayoutEditorPage()
+    {
+        if (m_tree != nullptr)
+            m_tree->SetModel(nullptr);
+    }
+
+    String AudioBusLayoutEditorPage::Tree() const
+    {
+        String out;
+        for (const BusRow& row : m_rows)
         {
-            return -1;
+            if (!out.IsEmpty())
+                out += u8"\n";
+            for (i32 d = 0; d < row.depth; ++d)
+                out += u8"  ";
+            out += row.name;
         }
-        const Array<i32>& kids = m_owner->m_nodes[static_cast<usize>(parentId)].children;
-        return (childIndex >= 0 && childIndex < static_cast<i32>(kids.Size()))
-                   ? kids[static_cast<usize>(childIndex)]
-                   : -1;
+        return out;
     }
-    i32 BusLayoutTreeAdapter::GetDepth(i32 nodeId) const
+
+    gui::PropertyBag& AudioBusLayoutEditorPage::EffectRows(StringView group)
     {
-        return (nodeId >= 0 && nodeId < static_cast<i32>(m_owner->m_nodes.Size()))
-                   ? m_owner->m_nodes[static_cast<usize>(nodeId)].depth
-                   : 0;
+        return *m_effectRows[GroupOf(group)];
     }
-    bool BusLayoutTreeAdapter::HasChildren(i32 nodeId) const { return GetChildCount(nodeId) > 0; }
-    RefPtr<ui::View> BusLayoutTreeAdapter::CreateView(i32)
+
+    void AudioBusLayoutEditorPage::BuildRows()
     {
-        auto row = MakeRef<ui::EditableLabel>(editor::EditorRootAllocator());
-        row->FontSize.SetValue(Optional<f32>{12.0f});
-        row->Ellipsis.SetValue(true);
-        row->DoubleClickToEdit.SetValue(false);
-        row->SlowClickToEdit.SetValue(false);
-        return RefPtr<ui::View>(row.Get());
-    }
-    void BusLayoutTreeAdapter::BindView(ui::View* view, i32 nodeId, i32 depth, bool)
-    {
-        if (nodeId < 0 || nodeId >= static_cast<i32>(m_owner->m_nodes.Size()) ||
-            m_owner->m_asset.Get() == nullptr)
+        m_busRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        for (UniquePtr<gui::PropertyBag>& group : m_effectRows)
+            group = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        gui::PropertyInfo& name = m_busRows->Add(u8"name", gui::PropertyKind::String);
+        name.DisplayName = String(u8"Name");
+        name.Description = String(u8"Its own: not a fixed bus's nor another's; its children follow it");
+        gui::PropertyInfo& parent = m_busRows->Add(u8"parent", gui::PropertyKind::Enum);
+        parent.DisplayName = String(u8"Parent");
+        parent.Description = String(u8"The bus it mixes into: a fixed one, or a custom one that is not under it");
+        for (const EffectRow& effect : kEffects)
         {
+            gui::PropertyInfo& info = m_effectRows[GroupOf(effect.category)]->Add(effect.path, effect.flag != nullptr ? gui::PropertyKind::Bool : gui::PropertyKind::Float);
+            info.DisplayName = String(effect.shown);
+            if (effect.description[0] != 0)
+                info.Description = String(effect.description);
+            if (effect.number != nullptr)
+            {
+                info.HasRange = true;
+                info.Min = effect.min;
+                info.Max = effect.max;
+                info.Step = effect.step;
+                info.Hint = String(u8"slider");
+            }
+        }
+        AudioBusLayoutEditorPage* self = this;
+        gui::PropertyBag* const bags[] = {m_busRows.Get(), m_effectRows[0].Get(), m_effectRows[1].Get(), m_effectRows[2].Get(), m_effectRows[3].Get()};
+        for (gui::PropertyBag* raw : bags)
+        {
+            gui::PropertyBag* rows = raw;
+            rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
+                              {
+                                  if (!commit.After.IsEmpty())
+                                      self->Committed(*rows, commit.Path.AsView(), commit.After[0]);
+                              });
+        }
+        AddSection(u8"bus", u8"Bus", *m_busRows);
+        for (usize g = 0; g < 4; ++g)
+            AddSection(kGroups[g], kGroups[g], *m_effectRows[g]);
+    }
+
+    void AudioBusLayoutEditorPage::ShowTree()
+    {
+        const pipeline::AudioBusLayoutAsset* layout = Layout();
+        if (layout == nullptr)
             return;
-        }
-        const AudioBusLayoutEditorPage::BusNode& node =
-            m_owner->m_nodes[static_cast<usize>(nodeId)];
-        auto* row = static_cast<ui::EditableLabel*>(view);
-        if (node.fixed)
+        m_rows = BusTree(*layout);
+        bool found = false;
+        for (const BusRow& row : m_rows)
+            found = found || row.bus == m_selected;
+        if (!found)
+            m_selected = BusRef{0, -1}; // gone (removed, an undo): Master
+        m_showing = true;
+        m_model->Clear();
+        Array<i32> parents; // the last node at each depth
+        i32 chosen = -1;
+        for (const BusRow& row : m_rows)
         {
-            row->SetText(kFixedNames[static_cast<usize>(node.fixedIndex)]);
+            const i32 parent = row.depth > 0 && static_cast<usize>(row.depth - 1) < parents.Size() ? parents[static_cast<usize>(row.depth - 1)] : gui::TreeModel::kRoot;
+            const i32 node = m_model->AddNode(parent, row.name.AsView());
+            m_model->SetIcon(node, u8"Editor/Icons/speaker.svg");
+            while (parents.Size() > static_cast<usize>(row.depth))
+                parents.PopBack();
+            parents.PushBack(node);
+            if (row.bus == m_selected)
+                chosen = node;
         }
-        else
+        if (m_tree != nullptr)
         {
-            row->SetText(
-                m_owner->m_asset->custom[static_cast<usize>(node.slotIndex)].name.AsView());
+            for (usize node = 0; node < m_rows.Size(); ++node)
+                m_tree->SetIdExpanded(static_cast<gui::ItemId>(node), true);
+            if (chosen >= 0)
+            {
+                const gui::ItemId id = static_cast<gui::ItemId>(chosen);
+                m_tree->SetSelectedIds(Span<const gui::ItemId>(&id, 1u));
+            }
         }
-        row->TextOffsetX.SetValue(m_owner->m_tree->ContentInset(depth));
+        m_showing = false;
+        if (m_remove != nullptr)
+            m_remove->SetEnabled(!m_selected.IsFixed());
+        SetNotice(u8"cycle", HasBusCycle(*layout) ? StringView(u8"Some buses are under each other in a loop: the cook refuses the layout until one moves to a fixed bus.")
+                                                  : StringView{});
     }
 
-    // ============================ Construction ==============================================
-
-    AudioBusLayoutEditorPage::AudioBusLayoutEditorPage(EditorContext& context,
-                                                       runtime::IApplicationHost& host,
-                                                       foundation::content::Instance& instance)
-        : app::UIEditorPage(context.Allocator()),
-          m_context(&context), m_title(instance.Name())
+    void AudioBusLayoutEditorPage::ShowBus()
     {
-        (void)host;
-        SetInstanceId(instance.Id());
-        RefPtr<ISerializable> object = instance.ReadObject();
-        m_asset =
-            RefPtr<pipeline::AudioBusLayoutAsset>(Cast<pipeline::AudioBusLayoutAsset>(object.Get()));
-        if (m_asset.Get() == nullptr)
-        {
-            LOG_ERROR(u8"Editor", u8"bus layout '{}' failed to read - page opens empty",
-                               m_title);
-        }
-        m_undoBaseline = SnapshotAsset();
-
-        // Left: the bus tree + Add Bus.
-        m_adapter = MakeUnique<BusLayoutTreeAdapter>(Allocator(), *this);
-        m_tree = MakeRef<ui::toolkit::DraggableTreeView>(Allocator());
-        m_tree->SetItemHeight(22.0f);
-        m_tree->SetDragEnabled(false);
-        m_tree->SetAdapter(m_adapter.Get());
-        {
-            AudioBusLayoutEditorPage* self = this;
-            m_tree->InternalTreeView()->OnItemClick.Add(
-                [self](ui::TreeView::ItemClickInfo info)
-                {
-                    if (info.NodeId >= 0 && info.NodeId < static_cast<i32>(self->m_nodes.Size()))
-                    {
-                        self->m_selectedNode = info.NodeId;
-                        ui::UIContext* ctx = self->Ctx();
-                        if (ctx != nullptr)
-                        {
-                            ctx->MutationQueueRef().QueueAction(
-                                Function<void()>{[self]() { self->RebuildInspector(); }});
-                        }
-                        else
-                        {
-                            self->RebuildInspector();
-                        }
-                    }
-                });
-        }
-        {
-            AudioBusLayoutEditorPage* self = this;
-            m_tree->InternalTreeView()->OnItemRightClick.Add(
-                [self](i32 nodeId, f32 x, f32 y)
-                {
-                    const Float2 at =
-                        self->m_tree->InternalTreeView()->InternalListView()->LocalToScreen(
-                            Float2{x, y});
-                    self->ShowNodeContextMenu(nodeId, at.x, at.y);
-                });
-        }
-        AudioBusLayoutEditorPage* page = this;
-        auto header = MakeRef<app::ListHeader>(Allocator(), StringView(u8"Buses"),
-                                               StringView(u8"Add bus"),
-                                               [page]() { page->AddBus(); });
-        auto leftColumn = MakeRef<ui::FlexLayout>(Allocator());
-        leftColumn->Direction = ui::Orientation::Vertical;
-        leftColumn->Spacing = 4.0f;
-        leftColumn->Padding = ui::Thickness{6, 4};
-        {
-            leftColumn->AddView(header.Get(), app::ListHeader::RowStyle());
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            leftColumn->AddView(m_tree.Get(), grow);
-        }
-
-        // Right: the selected bus's inspector.
-        m_grid = MakeRef<ui::toolkit::PropertyGrid>(Allocator());
-        m_inspectorTitle = MakeRef<ui::Label>(Allocator());
-        m_inspectorTitle->FontSize.SetValue(Optional<f32>{12.0f});
-        auto rightColumn = MakeRef<ui::FlexLayout>(Allocator());
-        rightColumn->Direction = ui::Orientation::Vertical;
-        rightColumn->Spacing = 4.0f;
-        rightColumn->Padding = ui::Thickness{6, 4};
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            rightColumn->AddView(m_inspectorTitle.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            rightColumn->AddView(m_grid.Get(), grow);
-        }
-
-        auto split = MakeRef<ui::toolkit::SplitView>(Allocator());
-        split->SetSplitRatio(0.34f);
-        split->SetPanes(leftColumn.Get(), rightColumn.Get());
-
-        // The page action bar (Save / Undo / Redo / Discard) above the split.
-        m_toolbar = MakeRef<app::PageToolbar>(Allocator(), *this, m_context->Actions());
-        auto column = MakeRef<ui::FlexLayout>(Allocator());
-        column->Direction = ui::Orientation::Vertical;
-        {
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            column->AddView(m_toolbar.Get(), lp);
-            ui::LayoutStyle grow;
-            grow.FlexGrow = 1.0f;
-            grow.Width = ui::SizeSpec::Match();
-            column->AddView(split.Get(), grow);
-        }
-        m_content = column;
-
-        RebuildTree();
-        RebuildInspector();
-    }
-
-    // ============================ Tree / inspector ==========================================
-
-    void AudioBusLayoutEditorPage::RebuildTree()
-    {
-        m_nodes.Clear();
-        m_roots.Clear();
-        if (m_asset.Get() == nullptr)
-        {
-            m_tree->SetAdapter(m_adapter.Get());
+        pipeline::AudioBusLayoutAsset* layout = Layout();
+        if (layout == nullptr)
             return;
-        }
-
-        // Nodes 0..3: the fixed buses (Effects/Music/UI under Master).
-        for (i32 f = 0; f < 4; ++f)
-        {
-            BusNode node;
-            node.fixed = true;
-            node.fixedIndex = f;
-            node.depth = (f == 0) ? 0 : 1;
-            m_nodes.PushBack(Move(node));
-        }
-        m_roots.PushBack(0);
-        m_nodes[0].children.PushBack(1);
-        m_nodes[0].children.PushBack(2);
-        m_nodes[0].children.PushBack(3);
-
-        // Used custom slots. First materialize nodes, then link parents (name references may
-        // point at slots that appear later in the bank).
-        i32 slotNode[pipeline::kAudioCustomBusSlotCount];
-        for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
-        {
-            slotNode[i] = -1;
-            if (m_asset->custom[i].name.IsEmpty())
-            {
-                continue;
-            }
-            BusNode node;
-            node.fixed = false;
-            node.slotIndex = static_cast<i32>(i);
-            slotNode[i] = static_cast<i32>(m_nodes.Size());
-            m_nodes.PushBack(Move(node));
-        }
-        for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
-        {
-            if (slotNode[i] < 0)
-            {
-                continue;
-            }
-            const StringView parent = m_asset->custom[i].parent.AsView();
-            i32 parentNode = 0; // empty/unknown -> Master (the cook's fallback)
-            if (EqualsIgnoreCase(parent, u8"Effects"))
-            {
-                parentNode = 1;
-            }
-            else if (EqualsIgnoreCase(parent, u8"Music"))
-            {
-                parentNode = 2;
-            }
-            else if (EqualsIgnoreCase(parent, u8"UI"))
-            {
-                parentNode = 3;
-            }
-            else
-            {
-                const i32 slot = FindSlotByName(*m_asset, parent);
-                if (slot >= 0 && slotNode[static_cast<usize>(slot)] >= 0 &&
-                    slot != static_cast<i32>(i))
-                {
-                    parentNode = slotNode[static_cast<usize>(slot)];
-                }
-            }
-            m_nodes[static_cast<usize>(parentNode)].children.PushBack(slotNode[i]);
-        }
-        // Depths: BFS from Master (cycles among slots cannot occur - the dropdown refuses them
-        // and the cook rejects them - but cap the walk defensively).
-        Array<i32> pending;
-        pending.PushBack(0);
-        for (usize guard = 0; !pending.IsEmpty() && guard < m_nodes.Size() * 2 + 4; ++guard)
-        {
-            const i32 node = pending.Back();
-            pending.PopBack();
-            for (i32 child : m_nodes[static_cast<usize>(node)].children)
-            {
-                m_nodes[static_cast<usize>(child)].depth =
-                    m_nodes[static_cast<usize>(node)].depth + 1;
-                pending.PushBack(child);
-            }
-        }
-
-        if (m_selectedNode >= static_cast<i32>(m_nodes.Size()))
-        {
-            m_selectedNode = 0;
-        }
-        m_tree->SetAdapter(m_adapter.Get());
-        if (ui::FlattenedTreeAdapter* flat = m_tree->InternalTreeView()->FlatAdapter())
-        {
-            HashSet<i32> expanded;
-            for (i32 i = 0; i < static_cast<i32>(m_nodes.Size()); ++i)
-            {
-                expanded.Insert(i);
-            }
-            flat->SetExpandedNodes(expanded);
-        }
-        m_tree->InternalTreeView()->InternalListView()->NotifyDataChanged();
-    }
-
-    pipeline::AudioBusLayoutAsset::Bus* AudioBusLayoutEditorPage::SelectedBus()
-    {
-        if (m_asset.Get() == nullptr || m_selectedNode < 0 ||
-            m_selectedNode >= static_cast<i32>(m_nodes.Size()))
-        {
-            return nullptr;
-        }
-        BusNode& node = m_nodes[static_cast<usize>(m_selectedNode)];
-        if (node.fixed)
-        {
-            switch (node.fixedIndex)
-            {
-            case 1:
-                return &m_asset->effects;
-            case 2:
-                return &m_asset->music;
-            case 3:
-                return &m_asset->ui;
-            default:
-                return &m_asset->master;
-            }
-        }
-        return &m_asset->custom[static_cast<usize>(node.slotIndex)].bus;
-    }
-
-    void AudioBusLayoutEditorPage::RebuildInspector()
-    {
-        m_grid->Clear();
-        pipeline::AudioBusLayoutAsset::Bus* bus = SelectedBus();
+        const Bus* bus = BusSettings(*layout, m_selected);
         if (bus == nullptr)
-        {
-            m_inspectorTitle->SetText(u8"");
             return;
-        }
-        AudioBusLayoutEditorPage* self = this;
-        Page page = this;
-        const BusNode& node = m_nodes[static_cast<usize>(m_selectedNode)];
-
-        if (node.fixed)
+        // A custom bus's name and parent; a fixed one has neither to change.
+        const bool custom = !m_selected.IsFixed();
+        gui::PropertyInfo* name = m_busRows->FindInfo(u8"name");
+        gui::PropertyInfo* parent = m_busRows->FindInfo(u8"parent");
+        name->Visible = custom;
+        parent->Visible = custom;
+        parent->Choices.Clear();
+        if (custom)
         {
-            m_inspectorTitle->SetText(kFixedNames[static_cast<usize>(node.fixedIndex)]);
+            const Array<String> choices = BusParentChoices(*layout, m_selected.slot);
+            i64 current = 0;
+            for (usize i = 0; i < choices.Size(); ++i)
+            {
+                parent->Choices.PushBack(gui::PropertyChoice{String(choices[i].AsView()), static_cast<i64>(i)});
+                const StringView own = layout->custom[m_selected.slot].parent.AsView();
+                if (BusNamesMatch(choices[i].AsView(), own.IsEmpty() ? kFixedBusNames[0] : own))
+                    current = static_cast<i64>(i);
+            }
+            m_busRows->PropertiesChanged();
+            m_busRows->SetValue(u8"name", 0, gui::Variant(BusName(*layout, m_selected)));
+            m_busRows->SetValue(u8"parent", 0, gui::Variant(current));
         }
         else
+            m_busRows->PropertiesChanged();
+        for (const EffectRow& effect : kEffects)
+            m_effectRows[GroupOf(effect.category)]->SetValue(effect.path, 0, effect.flag != nullptr ? gui::Variant(bus->*effect.flag) : gui::Variant(static_cast<f64>(bus->*effect.number)));
+    }
+
+    void AudioBusLayoutEditorPage::Select(const BusRef& bus)
+    {
+        m_selected = bus;
+        ShowTree();
+        ShowBus();
+    }
+
+    void AudioBusLayoutEditorPage::OnObjectChanged()
+    {
+        ShowTree();
+        ShowBus();
+    }
+
+    bool AudioBusLayoutEditorPage::AddBus()
+    {
+        pipeline::AudioBusLayoutAsset* layout = Layout();
+        if (layout == nullptr)
+            return false;
+        bool room = false;
+        for (const pipeline::AudioBusLayoutAsset::CustomBusSlot& slot : layout->custom)
+            room = room || slot.name.IsEmpty();
+        if (!room)
         {
-            const i32 slotIndex = node.slotIndex;
-            pipeline::AudioBusLayoutAsset::CustomBusSlot& slot =
-                m_asset->custom[static_cast<usize>(slotIndex)];
-            m_inspectorTitle->SetText(slot.name.AsView());
-
-            // Rename (structural: relabels the tree; refuses empty/fixed/duplicate names).
-            AddRow(*m_grid,
-                   RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::StringEditor>(
-                           Allocator(), u8"Name", slot.name.AsView(),
-                           Function<void(StringView)>{
-                               [self, slotIndex](StringView v)
-                               {
-                                   String name(v);
-                                   if (name.IsEmpty() || IsFixedBusName(name.AsView()) ||
-                                       FindSlotByName(*self->m_asset, name.AsView()) >= 0)
-                                   {
-                                       return; // invalid/duplicate: keep the old name
-                                   }
-                                   self->QueueStructural(
-                                       u8"bus-rename",
-                                       Function<void()>{
-                                           [self, slotIndex, name]()
-                                           {
-                                               pipeline::AudioBusLayoutAsset::CustomBusSlot& s =
-                                                   self->m_asset
-                                                       ->custom[static_cast<usize>(slotIndex)];
-                                               // Children referencing the old name follow it.
-                                               const String oldName(s.name.AsView());
-                                               s.name = String(name.AsView());
-                                               for (usize i = 0;
-                                                    i < pipeline::kAudioCustomBusSlotCount; ++i)
-                                               {
-                                                   if (self->m_asset->custom[i].parent.AsView() ==
-                                                       oldName.AsView())
-                                                   {
-                                                       self->m_asset->custom[i].parent =
-                                                           String(name.AsView());
-                                                   }
-                                               }
-                                           }});
-                               }},
-                           u8"Bus")
-                           .Get()));
-
-            // Parent dropdown: fixed buses + other used slots, minus self + cycle-makers.
-            Array<String> owned;
-            for (const StringView& fixed : kFixedNames)
-            {
-                owned.PushBack(String(fixed));
-            }
-            for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
-            {
-                if (static_cast<i32>(i) == slotIndex || m_asset->custom[i].name.IsEmpty())
-                {
-                    continue;
-                }
-                if (AudioBusWouldCycle(*m_asset, slotIndex, m_asset->custom[i].name.AsView()))
-                {
-                    continue;
-                }
-                owned.PushBack(String(m_asset->custom[i].name.AsView()));
-            }
-            Array<StringView> items;
-            for (const String& s : owned)
-            {
-                items.PushBack(s.AsView());
-            }
-            i32 current = 0;
-            for (usize i = 0; i < owned.Size(); ++i)
-            {
-                if (EqualsIgnoreCase(owned[i].AsView(), slot.parent.AsView()))
-                {
-                    current = static_cast<i32>(i);
-                    break;
-                }
-            }
-            Array<String> ownedCopy;
-            for (const String& s : owned)
-            {
-                ownedCopy.PushBack(String(s.AsView()));
-            }
-            AddRow(*m_grid,
-                   RefPtr<ui::toolkit::PropertyEditor>(
-                       MakeRef<ui::toolkit::EnumEditor>(
-                           Allocator(), u8"Parent", current,
-                           Span<const StringView>{items.Data(), items.Size()},
-                           Function<void(i32)>{
-                               [self, slotIndex, ownedCopy = Move(ownedCopy)](i32 v)
-                               {
-                                   if (v < 0 || static_cast<usize>(v) >= ownedCopy.Size())
-                                   {
-                                       return;
-                                   }
-                                   String parent(ownedCopy[static_cast<usize>(v)].AsView());
-                                   self->QueueStructural(
-                                       u8"bus-parent",
-                                       Function<void()>{
-                                           [self, slotIndex, parent]()
-                                           {
-                                               self->m_asset->custom[static_cast<usize>(slotIndex)]
-                                                   .parent = String(parent.AsView());
-                                           }});
-                               }},
-                           u8"Bus")
-                           .Get()));
-
-            auto remove =
-                MakeRef<ui::IconButton>(Allocator(), app::EditorIcons::Get().remove.Get());
-            remove->TooltipText = String(u8"Remove bus");
-            remove->OnClick.Add([self, slotIndex](ui::ButtonBase*) { self->RemoveBus(slotIndex); });
-            m_grid->SetCategoryHeaderActions(u8"Bus", RefPtr<ui::View>(remove.Get()));
+            Context().SetStatus(u8"Every custom bus slot is in use: remove one to add another.");
+            return false;
         }
-
-        BusRows(*m_grid, *bus, page);
+        i32 added = -1;
+        EditWhole(u8"edit_buslayout", [&added](ISerializable& object) { added = editor::AddBus(static_cast<pipeline::AudioBusLayoutAsset&>(object)); });
+        if (added >= 0)
+            Select(BusRef{-1, added});
+        return added >= 0;
     }
 
-    void AudioBusLayoutEditorPage::AddBus()
+    bool AudioBusLayoutEditorPage::RemoveSelected()
     {
-        AudioBusLayoutEditorPage* self = this;
-        QueueStructural(u8"add-bus",
-                        Function<void()>{
-                            [self]()
-                            {
-                                for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
-                                {
-                                    if (self->m_asset->custom[i].name.IsEmpty())
-                                    {
-                                        self->m_asset->custom[i].name = Format(u8"Bus{}", i + 1);
-                                        self->m_asset->custom[i].parent = String(u8"Master");
-                                        self->m_asset->custom[i].bus =
-                                            pipeline::AudioBusLayoutAsset::Bus{};
-                                        return;
-                                    }
-                                }
-                                LOG_WARNING(u8"Editor", u8"bus layout: all {} custom slots in use",
-                                            pipeline::kAudioCustomBusSlotCount);
-                            }});
+        if (Layout() == nullptr || m_selected.IsFixed() || !m_selected.IsValid())
+            return false;
+        const i32 slot = m_selected.slot;
+        m_selected = BusRef{0, -1};
+        EditWhole(u8"edit_buslayout", [slot](ISerializable& object) { RemoveBus(static_cast<pipeline::AudioBusLayoutAsset&>(object), slot); });
+        return true;
     }
 
-    void AudioBusLayoutEditorPage::RemoveBus(i32 slotIndex)
+    void AudioBusLayoutEditorPage::EditRow(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
     {
-        AudioBusLayoutEditorPage* self = this;
-        QueueStructural(
-            u8"bus-remove",
-            Function<void()>{[self, slotIndex]()
-                             {
-                                 pipeline::AudioBusLayoutAsset::CustomBusSlot& s =
-                                     self->m_asset->custom[static_cast<usize>(slotIndex)];
-                                 // Orphans re-parent to Master (the cook fallback, made explicit).
-                                 for (usize i = 0; i < pipeline::kAudioCustomBusSlotCount; ++i)
-                                 {
-                                     if (self->m_asset->custom[i].parent.AsView() == s.name.AsView())
-                                     {
-                                         self->m_asset->custom[i].parent = String(u8"Master");
-                                     }
-                                 }
-                                 s.name = String{};
-                                 s.parent = String{};
-                                 s.bus = pipeline::AudioBusLayoutAsset::Bus{};
-                                 self->m_selectedNode = 0;
-                             }});
+        rows.SetValue(path, 0, value); // as the grid's commit leaves it
+        Committed(rows, path, value);
     }
 
-    void AudioBusLayoutEditorPage::ShowNodeContextMenu(i32 nodeId, f32 screenX, f32 screenY)
+    void AudioBusLayoutEditorPage::Committed(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
     {
-        ui::UIContext* ctx = Ctx();
-        if (ctx == nullptr || m_asset.Get() == nullptr || nodeId < 0 ||
-            nodeId >= static_cast<i32>(m_nodes.Size()))
+        pipeline::AudioBusLayoutAsset* layout = Layout();
+        if (layout == nullptr)
+            return;
+        const BusRef bus = m_selected;
+        if (&rows == m_busRows.Get())
         {
+            if (bus.IsFixed())
+                return;
+            if (path == u8"name")
+            {
+                const String name(Trim(value.AsString()));
+                // Refused (empty, a fixed bus's, another's): the row shows the name it has.
+                if (name.IsEmpty() || IsFixedBusName(name.AsView()) || (FindBusSlot(*layout, name.AsView()) >= 0 && FindBusSlot(*layout, name.AsView()) != bus.slot))
+                {
+                    Context().SetStatus(Format(u8"\"{}\" cannot name this bus: a name is a bus's own, and not a fixed bus's.", name).AsView());
+                    ShowBus();
+                    return;
+                }
+                EditWhole(u8"edit_buslayout", [bus, name](ISerializable& object) { (void)RenameBus(static_cast<pipeline::AudioBusLayoutAsset&>(object), bus.slot, name.AsView()); });
+            }
+            else if (path == u8"parent")
+            {
+                const Array<String> choices = BusParentChoices(*layout, bus.slot);
+                const i64 index = value.AsInt();
+                if (index < 0 || static_cast<usize>(index) >= choices.Size())
+                    return;
+                const String parent(choices[static_cast<usize>(index)].AsView());
+                EditWhole(u8"edit_buslayout", [bus, parent](ISerializable& object) { (void)ReparentBus(static_cast<pipeline::AudioBusLayoutAsset&>(object), bus.slot, parent.AsView()); });
+            }
             return;
         }
-        // A bus's context menu: add a bus, and remove a custom one. The fixed buses stay.
-        const BusNode& node = m_nodes[static_cast<usize>(nodeId)];
-        auto menu = MakeRef<ui::ContextMenu>(Allocator());
-        AudioBusLayoutEditorPage* self = this;
-        menu->AddItem(u8"Add Bus", [self]() { self->AddBus(); });
-        if (!node.fixed)
-        {
-            const i32 slotIndex = node.slotIndex;
-            menu->AddItem(u8"Remove Bus", [self, slotIndex]() { self->RemoveBus(slotIndex); });
-        }
-        menu->Show(ctx, screenX, screenY);
-    }
-
-    void AudioBusLayoutEditorPage::QueueStructural(StringView undoKey, Function<void()> mutate)
-    {
-        AudioBusLayoutEditorPage* self = this;
-        String key(undoKey);
-        auto run = [self, mutate = Move(mutate), key = Move(key)]() mutable
-        {
-            mutate();
-            Array<byte> after = self->SnapshotAsset();
-            (void)self->Commands().Execute(
-                UniquePtr<IEditorCommand>(self->Allocator().New<EditBusLayoutCommand>(
-                                              *self, key.AsView(), self->m_undoBaseline, after),
-                                          self->Allocator()));
-            self->m_undoBaseline = Move(after);
-            self->RebuildTree();
-            self->RebuildInspector();
-            self->MarkDirty();
-        };
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(Function<void()>{Move(run)});
-        }
-        else
-        {
-            run();
-        }
-    }
-
-    // ============================ Undo / save ===============================================
-
-    Array<byte> AudioBusLayoutEditorPage::SnapshotAsset() const
-    {
-        Array<byte> blob;
-        if (m_asset.Get() == nullptr)
-        {
-            return blob;
-        }
-        MemoryStream stream;
-        BinarySerializer ar(stream, SerializeMode::Write);
-        // The snapshot rides a versioned payload exactly like the envelope, so the same reader
-        // accepts it (a scope-less blob would be refused).
-        foundation::core::BeginVersionedPayload(ar, pipeline::AudioBusLayoutAsset::StaticType());
-        m_asset->Serialize(ar);
-        foundation::core::EndVersionedPayload(ar);
-        const Span<const byte> bytes = stream.Bytes();
-        blob.Reserve(bytes.Size());
-        for (byte b : bytes)
-        {
-            blob.PushBack(b);
-        }
-        return blob;
-    }
-
-    void AudioBusLayoutEditorPage::ApplyAssetBlob(const Array<byte>& blob)
-    {
-        if (m_asset.Get() == nullptr)
-        {
-            return;
-        }
-        Array<byte> current = SnapshotAsset();
-        if (current.Size() == blob.Size())
-        {
-            bool same = true;
-            for (usize i = 0; i < blob.Size(); ++i)
+        for (const EffectRow& effect : kEffects)
+            if (path == effect.path)
             {
-                if (current[i] != blob[i])
-                {
-                    same = false;
-                    break;
-                }
-            }
-            if (same)
-            {
+                const bool flag = value.AsBool();
+                const f32 number = static_cast<f32>(value.AsFloat());
+                const EffectRow* row = &effect;
+                EditWhole(u8"edit_buslayout", [bus, row, flag, number](ISerializable& object)
+                          {
+                              Bus* settings = BusSettings(static_cast<pipeline::AudioBusLayoutAsset&>(object), bus);
+                              if (settings == nullptr)
+                                  return;
+                              if (row->flag != nullptr)
+                                  settings->*row->flag = flag;
+                              else
+                                  settings->*row->number = number;
+                          });
                 return;
             }
+    }
+
+    void AudioBusLayoutEditorPage::ShowMenu(i32 item, Float2 at)
+    {
+        if (m_tree == nullptr)
+            return;
+        // A press on a row chooses it first, so Remove acts on it.
+        if (item >= 0)
+        {
+            const gui::ModelIndex index = m_tree->GetItemIndex(item);
+            const usize row = static_cast<usize>(index.InternalId);
+            if (index.IsValid() && row < m_rows.Size())
+                Select(m_rows[row].bus);
         }
-        MemoryStream stream;
-        (void)stream.Write(blob.Data(), blob.Size());
-        (void)stream.Seek(0, SeekOrigin::Begin);
-        BinarySerializer ar(stream, SerializeMode::Read);
-        foundation::core::BeginVersionedPayload(ar, pipeline::AudioBusLayoutAsset::StaticType());
-        m_asset->Serialize(ar);
-        foundation::core::EndVersionedPayload(ar);
-        m_undoBaseline = blob;
         AudioBusLayoutEditorPage* self = this;
-        if (ui::UIContext* ctx = Ctx())
-        {
-            ctx->MutationQueueRef().QueueAction(Function<void()>{[self]()
-                                                                 {
-                                                                     self->RebuildTree();
-                                                                     self->RebuildInspector();
-                                                                 }});
-        }
-        else
-        {
-            RebuildTree();
-            RebuildInspector();
-        }
-        MarkDirty();
+        m_menu = MakeRef<gui::Menu>(Allocator());
+        (void)m_menu->AddItem(u8"Add Bus", [self]() { (void)self->AddBus(); });
+        if (!m_selected.IsFixed())
+            (void)m_menu->AddItem(u8"Remove Bus", [self]() { (void)self->RemoveSelected(); });
+        m_menu->Open(*m_tree, at);
     }
-
-    void AudioBusLayoutEditorPage::CommitEdit(StringView mergeKey)
-    {
-        Array<byte> after = SnapshotAsset();
-        (void)Commands().Execute(UniquePtr<IEditorCommand>(
-            Allocator().New<EditBusLayoutCommand>(*this, mergeKey, m_undoBaseline, after),
-            Allocator()));
-        m_undoBaseline = Move(after);
-        MarkDirty();
-    }
-
-    ui::UIContext* AudioBusLayoutEditorPage::Ctx() const
-    {
-        return (m_tree.Get() != nullptr && m_tree->InternalTreeView() != nullptr)
-                   ? m_tree->InternalTreeView()->Context
-                   : nullptr;
-    }
-
-    Status AudioBusLayoutEditorPage::Save()
-    {
-        if (m_asset.Get() == nullptr || m_context->Project() == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        foundation::content::Instance* instance =
-            m_context->Project()->SourceDb().GetInstance(InstanceId());
-        if (instance == nullptr)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        const Status saved = instance->WriteObject(*m_asset);
-        if (saved.IsOk())
-        {
-            ClearDirty();
-            m_context->RequestCook(false);
-            LOG_INFO(u8"Editor", u8"saved bus layout '{}'", m_title);
-        }
-        return saved;
-    }
-
-    // ============================ Factory ===================================================
 
     const TypeInfo* AudioBusLayoutPageFactory::PrimaryType() const
     {
         return &pipeline::AudioBusLayoutAsset::StaticType();
     }
 
-    UniquePtr<EditorPage>
-    AudioBusLayoutPageFactory::CreatePage(EditorContext& context,
-                                          foundation::content::Instance& instance)
+    UniquePtr<EditorPage> AudioBusLayoutPageFactory::CreatePage(EditorContext& context, foundation::content::Instance& instance)
     {
-        auto* page = editor::EditorRootAllocator().New<AudioBusLayoutEditorPage>(context, *m_host, instance);
+        auto* page = editor::EditorRootAllocator().New<AudioBusLayoutEditorPage>(context, m_services->Make(), instance);
         return UniquePtr<EditorPage>(page, editor::EditorRootAllocator());
-    }
-
-    void RegisterBusLayoutEditor(EditorContext& context, runtime::IApplicationHost& host)
-    {
-        context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<AudioBusLayoutPageFactory>(host), editor::EditorRootAllocator()));
     }
 }

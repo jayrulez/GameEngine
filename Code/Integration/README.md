@@ -28,6 +28,9 @@ Targets by flow-family, mirroring the collection conventions
   round-trips. (Created when its first test migrates or lands.)
 - `Integration.Runtime` - boot flow, scene/script end-to-end scenarios
   (Roll Call-class). (Same.)
+- `Integration.GuiScript` - the GUI (foundation.gui) and its satellites driven
+  from the script backends (the GUI's widgets, the gamekit's screen stack, the
+  engine's GUI).
 
 New families follow the same shape. No big-bang migrations: existing
 cross-collection tests move here opportunistically when next touched.

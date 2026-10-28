@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Terrain tool-panel providers (the first consumers of the editor.app:tool_panel seam): after
-// RegisterTerrainToolPanels, the registry resolves a provider for each brush tool id, and each
-// provider builds a non-null settings panel for its concrete tool. Headless - the panel is just a
-// view tree (no live UI context needed to construct it).
+// Terrain tool-panel providers: after RegisterTerrainToolPanels, the registry resolves a provider
+// for each brush tool id, and each builds its panel of the kit for its concrete tool, which shows
+// what the tool has and sets it. Headless - the panel is just a node tree.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.ui;
+import foundation.gui;
 import foundation.scene;
 import foundation.heightfield;
 import foundation.terrain.resource;
@@ -24,7 +23,7 @@ namespace scene = foundation::scene;
 namespace terrain = foundation::terrain;
 namespace hf = foundation::heightfield;
 
-TEST_CASE("terrain tool panels: providers register + build a panel for each brush tool")
+TEST_CASE("terrain tool panels: a panel of the kit for each brush; it shows the tool and sets it, the keys' changes too")
 {
     editor::RegisterTerrainToolPanels(); // idempotent (first-wins per tool id)
 
@@ -67,45 +66,58 @@ TEST_CASE("terrain tool panels: providers register + build a panel for each brus
     ctx.scene = &sceneObj;
     ctx.commands = &commands;
 
-    RefPtr<foundation::ui::View> sculptPanel = sculptP->CreatePanel(sculpt, ctx);
-    RefPtr<foundation::ui::View> splatPanel = splatP->CreatePanel(splat, ctx);
+    RefPtr<foundation::gui::Node> sculptNode = sculptP->CreatePanel(sculpt, ctx);
+    RefPtr<foundation::gui::Node> splatNode = splatP->CreatePanel(splat, ctx);
     editor::TerrainHoleTool hole(sceneObj, commands, nullptr);
-    RefPtr<foundation::ui::View> holePanel = holeP->CreatePanel(hole, ctx);
-    CHECK(holePanel.Get() != nullptr);
-    CHECK(sculptPanel.Get() != nullptr);
-    CHECK(splatPanel.Get() != nullptr); // built the base swatch + 6 palette slots + eraser
+    RefPtr<foundation::gui::Node> holeNode = holeP->CreatePanel(hole, ctx);
+    auto* sculptPanel = Cast<editor::app::ToolPanelBody>(sculptNode.Get());
+    auto* splatPanel = Cast<editor::app::ToolPanelBody>(splatNode.Get());
+    auto* holePanel = Cast<editor::app::ToolPanelBody>(holeNode.Get());
+    REQUIRE(sculptPanel != nullptr);
+    REQUIRE(splatPanel != nullptr);
+    REQUIRE(holePanel != nullptr);
 
-    // Every layer slot carries a NAME tooltip (a displacement thumbnail is indistinguishable
-    // from its diffuse sibling at swatch size - the name is the disambiguator). Headless with no
-    // editor context the names resolve to placeholders, but they must be present and non-empty.
-    i32 tooltipped = 0;
-    const auto countTooltips = [&](foundation::ui::View& v, const auto& recurse) -> void
-    {
-        if (!v.TooltipText.IsEmpty())
-        {
-            ++tooltipped;
-        }
-        if (auto* group = Cast<foundation::ui::ViewGroup>(&v))
-        {
-            for (usize k = 0; k < group->ChildCount(); ++k)
-            {
-                if (foundation::ui::View* child = group->GetChildAt(k))
-                {
-                    recurse(*child, recurse);
-                }
-            }
-        }
-    };
-    countTooltips(*splatPanel, countTooltips);
-    CHECK(tooltipped >= 7); // 6 palette slots + the eraser (+ the base swatch when thumbs exist)
+    // Sculpt: its four modes by word, the chosen one checked; a key's change shows after a Sync.
+    REQUIRE(sculptPanel->ChoiceCount(0) == 4u);
+    CHECK(sculptPanel->ChoiceAt(0, 0)->GetText() == StringView(u8"Raise"));
+    CHECK(sculptPanel->ChoiceAt(0, 0)->IsChecked());
+    sculpt.SetMode(editor::TerrainSculptTool::Mode::Flatten); // as the 4 key does
+    sculpt.SetRadius(20.0f);                                  // as Shift + wheel does
+    sculptPanel->Sync();
+    CHECK(sculptPanel->ChoiceAt(0, 3)->IsChecked());
+    CHECK_FALSE(sculptPanel->ChoiceAt(0, 0)->IsChecked());
+    CHECK(sculptPanel->NumberAt(0)->GetValue() == doctest::Approx(20.0));
+    sculptPanel->ChoiceAt(0, 1)->HandleActivate(); // Lower, as a click
+    CHECK(sculpt.GetMode() == editor::TerrainSculptTool::Mode::Lower);
 
-    // The eraser and smooth modes the panel's trailing slots drive round-trip on the tool,
-    // mutually exclusive with each other and with the palette selection.
-    splat.SetEraser(true);
+    // Paint Layers: the six layers numbered from 1 (as their keys), each named in its tooltip,
+    // the fifth index checked; its mode a row of words (they were letters on the layer row).
+    REQUIRE(splatPanel->ChoiceCount(0) == 6u);
+    CHECK(splatPanel->ChoiceAt(0, 0)->GetText() == StringView(u8"1"));
+    CHECK(splatPanel->ChoiceAt(0, 5)->IsChecked());
+    for (usize i = 0; i < 6; ++i)
+        CHECK_FALSE(splatPanel->ChoiceAt(0, i)->GetTooltipText().IsEmpty());
+    // The base above them, shown and not chosen (erasing reveals it); its tooltip names it.
+    foundation::gui::Image* base = splatPanel->PictureAt(0);
+    REQUIRE(base != nullptr);
+    REQUIRE(base->GetParent() != nullptr);
+    CHECK(String(base->GetParent()->GetTooltipText()).AsView().StartsWith(u8"The base layer"));
+    CHECK(splatPanel->PictureAt(1) == nullptr);
+    REQUIRE(splatPanel->ChoiceCount(1) == 3u);
+    CHECK(splatPanel->ChoiceAt(1, 0)->IsChecked()); // painting
+    splatPanel->ChoiceAt(1, 1)->HandleActivate();   // Erase
     CHECK(splat.IsEraser());
-    splat.SetSmooth(true);
+    splatPanel->ChoiceAt(1, 2)->HandleActivate();   // Smooth
     CHECK(splat.IsSmooth());
-    CHECK(!splat.IsEraser());
-    splat.SetSmooth(false);
-    CHECK(splat.PaletteIndex() == 5u); // selection survives leaving eraser/smooth mode
+    CHECK_FALSE(splat.IsEraser());
+    splatPanel->ChoiceAt(1, 0)->HandleActivate();   // back to painting, the layer kept
+    CHECK_FALSE(splat.IsSmooth());
+    CHECK(splat.PaletteIndex() == 5u);
+    splatPanel->CheckAt(0)->HandleActivate();       // Airbrush
+    CHECK(splat.IsAirbrush());
+
+    // Cut Holes: Cut or Fill.
+    REQUIRE(holePanel->ChoiceCount(0) == 2u);
+    holePanel->ChoiceAt(0, 1)->HandleActivate();
+    CHECK(hole.GetMode() == editor::TerrainHoleTool::Mode::Fill);
 }

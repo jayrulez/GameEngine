@@ -23,6 +23,7 @@ import editor.project;
 import editor.mcp;
 import engine.render;             // the render profiles (a reference's product)
 import foundation.texture.resource; // texture::Texture (a product made from two cooked forms)
+import foundation.geometry.resource; // geometry::StaticMeshSource (a cooked form a reference names)
 
 using namespace foundation::core;
 using namespace foundation::mcp;
@@ -366,6 +367,11 @@ TEST_CASE("integration.mcp: a reference's product joins to the source asset type
     CHECK(post[0] == u8"PostProcessProfileAsset");
     // A product made from two cooked forms has two asset types.
     CHECK(names(foundation::texture::Texture::StaticType()).Size() == 2u);
+    // A cooked form itself (a collision shape's mesh) takes each asset that cooks to one, or to
+    // one derived from it: a skinned mesh's source is a static mesh's.
+    const Array<String> meshes = names(foundation::geometry::StaticMeshSource::StaticType());
+    REQUIRE(meshes.Size() == 2u);
+    CHECK(((meshes[0] == u8"StaticMeshAsset" && meshes[1] == u8"SkinnedMeshAsset") || (meshes[0] == u8"SkinnedMeshAsset" && meshes[1] == u8"StaticMeshAsset")));
     // Something nothing makes has none.
     CHECK(names(TypeOf<f32>()).IsEmpty());
 }

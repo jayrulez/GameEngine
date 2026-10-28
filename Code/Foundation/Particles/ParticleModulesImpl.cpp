@@ -36,7 +36,7 @@ namespace foundation::particles
     }
     REFLECT_VALUE(RangeColor, "rtti::particles")
     {
-        builder.Property<&RangeColor::min>("min").Property<&RangeColor::max>("max");
+        builder.Property<&RangeColor::min>("min").PropAttribute("color", true).Property<&RangeColor::max>("max").PropAttribute("color", true);
     }
 
     // ---- emission shape (flat struct + its type discriminator) -------------------------------
@@ -53,13 +53,26 @@ namespace foundation::particles
     }
     REFLECT_VALUE(EmissionShape, "rtti::particles")
     {
+        // Each measure where its shape uses it (`visibleWhen` of the type's raw value: 0 a point,
+        // 1 a sphere, 2 a hemisphere, 3 a box, 4 a cone, 5 a ring, 6 a circle, 7 an edge).
         builder.Property<&EmissionShape::type>("type")
             .PropAttribute("displayName", String(u8"Shape"))
             .Property<&EmissionShape::radius>("radius")
+            .PropAttribute("visibleWhen", String(u8"type=1,2,4,5,6,7"))
+            .PropAttribute("description", String(u8"An edge's half its length"))
             .Property<&EmissionShape::extents>("extents")
+            .PropAttribute("displayName", String(u8"Half Extents"))
+            .PropAttribute("visibleWhen", String(u8"type=3"))
             .Property<&EmissionShape::angle>("angle")
+            .PropAttribute("description", String(u8"The cone's half angle, in radians"))
+            .PropAttribute("visibleWhen", String(u8"type=4"))
             .Property<&EmissionShape::arc>("arc")
-            .Property<&EmissionShape::emitFromShell>("emitFromShell");
+            .PropAttribute("description", String(u8"How much of the way round it emits"))
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .PropAttribute("visibleWhen", String(u8"type=1,2,4,5,6"))
+            .Property<&EmissionShape::emitFromShell>("emitFromShell")
+            .PropAttribute("displayName", String(u8"From Its Surface"))
+            .PropAttribute("visibleWhen", String(u8"type=1,2,6"));
     }
 
     // ---- initializers using the emission shape -----------------------------------------------
@@ -76,6 +89,7 @@ namespace foundation::particles
             .Property<&VelocityInitializer::randomness>("randomness")
             .Property<&VelocityInitializer::shapeDirectionSpeed>("shapeDirectionSpeed")
             .Property<&VelocityInitializer::velocityInheritance>("velocityInheritance")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
             .Nested<&VelocityInitializer::shape>("shape");
     }
 
@@ -172,17 +186,20 @@ namespace foundation::particles
     {
         // The fixed-capacity shape lists are count-bound inline vectors, reflected as BoundedArray
         // containers (size = the live count clamped to capacity); the counts stay as scalars too.
+        // (The counts are the lists' sizes, not rows of their own.)
         builder.Attribute("displayName", String(u8"Collision"))
             .BoundedArray<&CollisionBehavior::planes, &CollisionBehavior::planeCount>("planes")
             .BoundedArray<&CollisionBehavior::spheres, &CollisionBehavior::sphereCount>("spheres")
             .BoundedArray<&CollisionBehavior::boxes, &CollisionBehavior::boxCount>("boxes")
-            .Property<&CollisionBehavior::planeCount>("planeCount")
-            .Property<&CollisionBehavior::sphereCount>("sphereCount")
-            .Property<&CollisionBehavior::boxCount>("boxCount")
             .Property<&CollisionBehavior::radius>("radius")
+            .PropAttribute("description", String(u8"A particle's, as it meets them"))
             .Property<&CollisionBehavior::bounce>("bounce")
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
             .Property<&CollisionBehavior::friction>("friction")
-            .Property<&CollisionBehavior::lifetimeLoss>("lifetimeLoss");
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
+            .Property<&CollisionBehavior::lifetimeLoss>("lifetimeLoss")
+            .PropAttribute("description", String(u8"The fraction of its life a hit takes"))
+            .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f});
     }
 
     // ---- curves (count-bound key arrays) + the OverLifetime behaviors ------------------------

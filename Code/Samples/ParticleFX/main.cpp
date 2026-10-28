@@ -728,7 +728,7 @@ namespace
             link.inheritPosition = true;
             link.inheritColor =
                 true; // sparks take the rocket's colour (needs the SpawnAt inherit fix)
-            effect.AddSubEmitterLink(link);
+            effect.GetSystem(0)->subEmitters.PushBack(link); // the rocket's: its sparks burst where it dies
         }
 
         // Tornado: a dust column that swirls up a vertical axis. Local space keeps the vortex + attractor

@@ -94,7 +94,8 @@ namespace editor
             }
 
             [[nodiscard]] StringView Id() const override { return u8"spline.edit"; }
-            [[nodiscard]] StringView DisplayName() const override { return u8"Spline"; }
+            [[nodiscard]] StringView DisplayName() const override { return u8"Edit Spline"; } // as its refusal names it
+            [[nodiscard]] StringView Icon() const override { return u8"Editor/Icons/Types/SplineComponent.svg"; }
             [[nodiscard]] SplineEditToolState State() const noexcept
             {
                 return SplineEditToolState{m_hoverPoint, m_selectedPoint, m_dragging,

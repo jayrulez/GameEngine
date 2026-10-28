@@ -1,133 +1,182 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// BatchImportDialog: the Import gate. The owner assigns DescribeFile after construction and
-// then calls DescribeAll; an inline importer's files are described there and the gate opens.
-// Regression for 2026-09-21: the gate was computed once in the constructor (nothing described
-// yet) and never refreshed for inline importers, so a texture import showed the dialog with
-// Import disabled and "Reading file..." forever - "click Import, nothing happens".
+// The import window over its markup (Data/Editor/Import.gml) and an import of the test's own: what a
+// file would create shown by kind, each kept or not and named; Import open with what it will do,
+// and waiting, saying why, while a file is being read or nothing is kept; the files listed when
+// there are several; Import making what is kept and closing. Keeps the 2026-09-21 regression: Import
+// opens once inline files are described (it once stayed shut, "click Import, nothing happens").
+
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
+#include "Core/Reflection/Reflect.h"
+#include <filesystem>
 
 import foundation.core;
-import foundation.ui;
+import foundation.content;
+import foundation.gui;
+import pipeline.importer;
 import editor.core;
 import editor.app;
-import pipeline.importer;
-import foundation.content;
 
 using namespace foundation::core;
-using namespace editor;
-namespace core = foundation::core;
+using editor::app::AssetImport;
+using editor::app::ImportWindow;
+namespace gui = foundation::gui;
+namespace content = foundation::content;
 
 namespace
 {
-    // An inline importer (no worker prepare): describes to a single-asset plan.
-    class StubImporter final : public pipeline::IFileImporter
+    class WindowThing : public ISerializable
     {
+        RTTI_OBJECT(WindowThing, ISerializable)
     public:
-        explicit StubImporter(bool worker) : m_worker(worker) {}
-        [[nodiscard]] StringView Label() const override { return u8"Stub"; }
-        [[nodiscard]] bool Accepts(StringView extension) const override
-        {
-            return extension == u8"stub";
-        }
-        [[nodiscard]] bool WantsWorkerPrepare() const override { return m_worker; }
-        [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView sourcePath,
-                                                          const pipeline::ImportOptions*,
-                                                          Object*) override
-        {
-            ++describes;
-            return pipeline::SingleAssetPlan(sourcePath);
-        }
-        [[nodiscard]] Result<foundation::content::Instance*>
-        Import(StringView, const pipeline::ImportContext&, foundation::content::Group&,
-               const pipeline::ImportOptions*, Object*,
-               Array<pipeline::DeferredImportWrite>*) override
-        {
-            return Err(ErrorCode::Unknown); // never reached here
-        }
-        u32 describes = 0;
-
-    private:
-        bool m_worker;
+        void Serialize(ISerializer& ar) override { (void)ar; }
     };
 
-    app::BatchImportDialog::FileEntry Entry(StringView path, pipeline::IFileImporter& importer)
+    // Takes ".box": would make a mesh and two textures.
+    class BoxImporter final : public pipeline::IFileImporter
     {
-        app::BatchImportDialog::FileEntry entry;
-        entry.path = String(path);
-        entry.candidates.PushBack(&importer);
-        entry.options = RefPtr<pipeline::ImportOptions>(
-            MakeRef<pipeline::ImportOptions>(DefaultAllocator()).Get());
-        return entry;
-    }
-
-    // The owner's describe policy (AssetsView::ShowBatchImport): inline importers describe
-    // here; worker importers land through OnFilePrepared.
-    void InlineDescribe(app::BatchImportDialog::FileEntry& entry)
-    {
-        pipeline::IFileImporter* importer = entry.candidates[entry.importerIndex];
-        if (!importer->WantsWorkerPrepare())
+    public:
+        [[nodiscard]] StringView Label() const override { return u8"Box"; }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == StringView(u8"box"); }
+        [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView, const pipeline::ImportOptions*, Object*) override
         {
-            entry.plan = importer->DescribeImport(entry.path.AsView(), entry.options.Get(), nullptr);
-            entry.described = true;
+            pipeline::ImportPlan plan;
+            plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Mesh, String(u8"Box"), String(u8"Box"), true});
+            plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Texture, String(u8"Wood"), String(u8"Wood"), true});
+            plan.entries.PushBack(pipeline::ImportPlanEntry{pipeline::ImportResourceKind::Texture, String(u8"Rust"), String(u8"Rust"), true});
+            return plan;
         }
+        [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group& group, const pipeline::ImportOptions* options, Object*,
+                                                        Array<pipeline::DeferredImportWrite>*) override
+        {
+            content::Instance* primary = nullptr;
+            for (const pipeline::ImportPlanEntry& entry : options->selection.entries)
+                if (entry.enabled)
+                {
+                    content::Instance* made = group.CreateInstance(entry.targetName.AsView(), WindowThing::StaticType());
+                    if (primary == nullptr)
+                        primary = made;
+                }
+            return primary;
+        }
+    };
+
+    RefPtr<gui::Node> LoadImport()
+    {
+        const String path = PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(ImportWindow::kPath));
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        gui::RegisterGuiElements();
+        static const gui::ElementSet elements = gui::ElementSet::All();
+        gui::MarkupLoader loader(elements, DefaultAllocator());
+        return loader.LoadFromString(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
     }
+    template <typename T>
+    usize Count(gui::Node& node)
+    {
+        usize count = Cast<T>(&node) != nullptr ? 1u : 0u;
+        for (usize i = 0; i < node.ChildCount(); ++i)
+            count += Count<T>(*node.GetChildAt(i));
+        return count;
+    }
+
+    struct Bed
+    {
+        UniquePtr<editor::EditorProject> project;
+        editor::EditorContext context{DefaultAllocator()};
+        UniquePtr<AssetImport> import;
+        UniquePtr<ImportWindow> window;
+        RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+        content::Group* top = nullptr;
+
+        Bed()
+        {
+            std::error_code ec;
+            std::filesystem::remove_all("import_window_project", ec);
+            REQUIRE(editor::EditorProject::Create(DefaultAllocator(), u8"import_window_project", u8"Window").IsOk());
+            project = editor::EditorProject::Open(DefaultAllocator(), u8"import_window_project");
+            REQUIRE(project);
+            GlobalTypeRegistry().Register(WindowThing::StaticType());
+            context.SetProject(project.Get());
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<BoxImporter>(), DefaultAllocator()));
+            top = project->SourceDb().RootGroup();
+            AssetImport::Services services;
+            services.context = &context;
+            import = MakeUnique<AssetImport>(DefaultAllocator(), Move(services));
+            ImportWindow::Services windows;
+            windows.import = import.Get();
+            window = MakeUnique<ImportWindow>(DefaultAllocator(), DefaultAllocator(), Move(windows), LoadImport());
+            root->SetSize(Float2{1000.0f, 700.0f});
+        }
+        ~Bed()
+        {
+            window.Reset();
+            import.Reset();
+            context.SetProject(nullptr);
+            project.Reset();
+            std::error_code ec;
+            std::filesystem::remove_all("import_window_project", ec);
+        }
+        RefPtr<AssetImport::Session> Open(Span<const String> paths)
+        {
+            RefPtr<AssetImport::Session> session = import->Begin(paths, *top);
+            REQUIRE(session);
+            REQUIRE(window->Open(*root, session));
+            (void)root->UpdateLayout();
+            return session;
+        }
+    };
 }
 
-TEST_CASE("import-dialog: DescribeAll describes inline files and opens the Import gate")
+RTTI_DEFINE_OBJECT(WindowThing, "rtti::tests::importwindow")
+
+TEST_CASE("import window: a file's plan by kind, each kept and named; Import open saying what it does; Import makes what is kept and closes")
 {
-    StubImporter texture(/*worker*/ false);
-    Array<app::BatchImportDialog::FileEntry> files;
-    files.PushBack(Entry(u8"/drop/albedo.stub", texture));
-    files.PushBack(Entry(u8"/drop/normal.stub", texture));
-    auto dialog =
-        MakeRef<app::BatchImportDialog>(DefaultAllocator(), StringView(u8"/Assets"), Move(files));
+    Bed bed;
+    const String box[] = {String(u8"/somewhere/crate.box")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(box, 1u));
+    // Two kinds' boxes, three entries' boxes and names (no option toggles here).
+    gui::Node& detail = *bed.window->Detail();
+    CHECK(Count<gui::CheckBox>(detail) == 5u);
+    CHECK(Count<gui::TextField>(detail) == 3u);
+    CHECK(bed.window->ImportButton()->IsEnabled()); // the regression: open once described
+    CHECK(bed.window->Why() == StringView(u8"Into Content."));
 
-    // Constructed: nothing described yet, so the gate is closed - this is the state the
-    // owner must not leave the dialog in.
-    CHECK_FALSE(dialog->ImportEnabled());
-    CHECK(texture.describes == 0u);
-
-    dialog->DescribeFile = InlineDescribe;
-    dialog->DescribeAll();
-    CHECK(texture.describes == 2u);
-    CHECK(dialog->Files()[0].described);
-    CHECK(dialog->Files()[1].described);
-    CHECK(dialog->ImportEnabled());
-
-    // The Import handler fires with every file described.
-    u32 imported = 0;
-    dialog->OnImport = [&imported]() { ++imported; };
-    (void)imported;
+    session->files[0].plan.entries[2].enabled = false; // Rust left out
+    CHECK(bed.window->Import());
+    CHECK_FALSE(bed.window->IsOpen());
+    CHECK(bed.top->GetInstance(u8"Box") != nullptr);
+    CHECK(bed.top->GetInstance(u8"Wood") != nullptr);
+    CHECK(bed.top->GetInstance(u8"Rust") == nullptr);
+    CHECK(session->closed); // the window let go of it
 }
 
-TEST_CASE("import-dialog: a worker-prepared file keeps the gate closed until it lands")
+TEST_CASE("import window: Import waits while a file is read, saying so, and opens when it is ready; several files are listed, none kept waits")
 {
-    StubImporter texture(/*worker*/ false);
-    StubImporter model(/*worker*/ true);
-    Array<app::BatchImportDialog::FileEntry> files;
-    files.PushBack(Entry(u8"/drop/albedo.stub", texture));
-    files.PushBack(Entry(u8"/drop/hero.stub", model));
-    auto dialog =
-        MakeRef<app::BatchImportDialog>(DefaultAllocator(), StringView(u8"/Assets"), Move(files));
-    dialog->DescribeFile = InlineDescribe;
-    dialog->DescribeAll();
-    CHECK(dialog->Files()[0].described);
-    CHECK_FALSE(dialog->Files()[1].described); // the worker one is still reading
-    CHECK_FALSE(dialog->ImportEnabled());
+    Bed bed;
+    const String two[] = {String(u8"/somewhere/a.box"), String(u8"/somewhere/b.box")};
+    RefPtr<AssetImport::Session> session = bed.Open(Span<const String>(two, 2u));
+    CHECK(bed.window->ImportButton()->IsEnabled());
+    CHECK(bed.window->Why() == StringView(u8"2 of 2 files into Content."));
 
-    // The worker lands: the owner fills the entry and notifies - the gate opens.
-    app::BatchImportDialog::FileEntry& hero = dialog->Files()[1];
-    hero.plan = model.DescribeImport(hero.path.AsView(), hero.options.Get(), nullptr);
-    hero.described = true;
-    dialog->OnFilePrepared(1);
-    CHECK(dialog->ImportEnabled());
+    // As a heavy importer's file while the worker reads it, then told it is ready.
+    session->files[1].state = AssetImport::File::State::Reading;
+    session->onChanged(1);
+    CHECK_FALSE(bed.window->ImportButton()->IsEnabled());
+    CHECK(bed.window->Why() == StringView(u8"Reading b.box..."));
+    CHECK_FALSE(bed.window->Import()); // it stays
+    CHECK(bed.window->IsOpen());
+    session->files[1].state = AssetImport::File::State::Ready;
+    session->onChanged(1);
+    CHECK(bed.window->ImportButton()->IsEnabled());
 
-    // A disabled (unchecked) undescribed file does not gate: only ENABLED files must be ready.
-    hero.described = false;
-    hero.enabled = false;
-    dialog->OnFilePrepared(1);
-    CHECK(dialog->ImportEnabled());
+    session->files[0].kept = false;
+    session->files[1].kept = false;
+    session->onChanged(0);
+    CHECK_FALSE(bed.window->ImportButton()->IsEnabled());
+    CHECK(bed.window->Why() == StringView(u8"No file is kept."));
+    bed.window->Close();
+    CHECK(session->closed);
 }

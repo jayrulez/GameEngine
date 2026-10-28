@@ -21,7 +21,7 @@ import foundation.mcp;
 import pipeline.importer;
 import pipeline.core; // AssetCreatorRegistry (File > New)
 import foundation.content;
-import foundation.ui; // IClipboard (CopyText)
+import foundation.gui; // IClipboard (CopyText)
 import :command;
 import :selection;
 import :page;
@@ -376,9 +376,9 @@ export namespace editor
         /// SetClipboard for a copy the USER asked for: a toast says what was copied.
         void CopyToEditorClipboard(StringView kind, Array<byte> data, StringView what);
         /// Puts text on the OS clipboard and says so: every copy the user asks for announces
-        /// itself, "Copied <what>", so they know it took. A clipboard that refuses, or none (a
-        /// headless view), is a warning instead. `clipboard` is borrowed and may be null.
-        bool CopyText(foundation::ui::IClipboard* clipboard, StringView text, StringView what);
+        /// itself, "Copied <what>", so they know it took. No clipboard (a headless view) is a
+        /// warning instead. `clipboard` is borrowed and may be null.
+        bool CopyText(foundation::gui::IClipboard* clipboard, StringView text, StringView what);
         [[nodiscard]] StringView ClipboardKind() const noexcept { return m_clipboardKind.AsView(); }
         [[nodiscard]] Span<const byte> ClipboardData(StringView kind) const noexcept;
 

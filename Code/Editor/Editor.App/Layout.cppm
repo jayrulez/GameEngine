@@ -8,8 +8,11 @@
 // typed, versioned sections instead of the former bespoke trio (layout.xml + favorites.bin +
 // pages.bin; those are deleted on the first save, no legacy read):
 //
-//   EditorDockLayoutSettings  - the dock tree (DockManager Export/ApplyLayout snapshot);
-//                               panels matched back by PersistenceId, unknown ids skipped
+//   EditorDockLayoutSettings  - the dock's layout (GUI.Docking's DockLayoutDocument), panels
+//                               by their ids; a panel the layout names that is not registered
+//                               keeps its place until it is (version 2; version 1 held the old
+//                               dock's binary tree, read once into the new layout: its splits,
+//                               shares, tab groups and chosen tabs)
 //   EditorFavoritesSettings   - pinned asset guids (EditorContext favorites)
 //   EditorOpenPagesSettings   - open page instance guids + the active one
 //
@@ -21,6 +24,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include "Core/Log/Log.h"
 
 export module editor.app:layout;
 
@@ -29,73 +33,153 @@ import foundation.vfs;
 import foundation.settings;
 import foundation.xml.serialization;
 import editor.core; // EditorContext (favorites)
-import foundation.ui.toolkit;
+import foundation.gui.docking; // DockLayoutDocument, DockController
 
 using namespace foundation::core;
 namespace vfs = foundation::vfs;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
     namespace settings = foundation::settings;
 
     // The one per-project editor-state file (hand-editable XML, like every settings store).
     inline constexpr StringView kProjectEditorSettingsFile = u8"editor.project.settings.xml";
 
-    // Bidirectional field walk of one dock node (children recurse via presence flags).
-    inline void SerializeLayoutNode(ISerializer& ar, ui::toolkit::DockLayoutNode& node)
+    namespace detail
     {
-        ar.BeginObject();
-        foundation::core::Serialize(ar, "type", node.Type);
-        foundation::core::Serialize(ar, "direction", node.Direction);
-        foundation::core::Serialize(ar, "ratio", node.SplitRatio);
-        foundation::core::Serialize(ar, "activeTab", node.ActiveTabIndex);
-        foundation::core::Serialize(ar, "panels", node.PanelIds);
+        // Version 1's dock tree (the old dock's): a node is a split of two children, the first's
+        // share `ratio` (left or top), across (`direction` 0) or down (1), or a tab group of panels.
+        struct LegacyDockNode
+        {
+            u32 direction = 0;
+            f32 ratio = 0.5f;
+            i32 activeTab = 0;
+            Array<String> panels;
+            UniquePtr<LegacyDockNode> first;
+            UniquePtr<LegacyDockNode> second;
+            [[nodiscard]] bool IsSplit() const noexcept { return first && second; }
+        };
 
-        bool hasFirst = static_cast<bool>(node.First);
-        bool hasSecond = static_cast<bool>(node.Second);
-        foundation::core::Serialize(ar, "hasFirst", hasFirst);
-        foundation::core::Serialize(ar, "hasSecond", hasSecond);
-        if (hasFirst)
+        inline void ReadLegacyDockNode(ISerializer& ar, LegacyDockNode& node)
         {
-            if (ar.Mode() == SerializeMode::Read)
+            ar.BeginObject();
+            u32 type = 0; // the node is told by its children, not this
+            foundation::core::Serialize(ar, "type", type);
+            foundation::core::Serialize(ar, "direction", node.direction);
+            foundation::core::Serialize(ar, "ratio", node.ratio);
+            foundation::core::Serialize(ar, "activeTab", node.activeTab);
+            foundation::core::Serialize(ar, "panels", node.panels);
+            bool hasFirst = false;
+            bool hasSecond = false;
+            foundation::core::Serialize(ar, "hasFirst", hasFirst);
+            foundation::core::Serialize(ar, "hasSecond", hasSecond);
+            if (hasFirst)
             {
-                node.First = MakeUnique<ui::toolkit::DockLayoutNode>(editor::EditorRootAllocator());
+                node.first = MakeUnique<LegacyDockNode>(editor::EditorRootAllocator());
+                ar.Key("first");
+                ReadLegacyDockNode(ar, *node.first);
             }
-            ar.Key("first");
-            SerializeLayoutNode(ar, *node.First);
+            if (hasSecond)
+            {
+                node.second = MakeUnique<LegacyDockNode>(editor::EditorRootAllocator());
+                ar.Key("second");
+                ReadLegacyDockNode(ar, *node.second);
+            }
+            ar.EndObject();
         }
-        if (hasSecond)
+
+        // The first panel of a subtree, in order (left or top first); null when it holds none.
+        [[nodiscard]] inline const String* FirstLegacyPanel(const LegacyDockNode& node)
         {
-            if (ar.Mode() == SerializeMode::Read)
+            if (node.IsSplit())
             {
-                node.Second = MakeUnique<ui::toolkit::DockLayoutNode>(editor::EditorRootAllocator());
+                if (const String* found = FirstLegacyPanel(*node.first))
+                    return found;
+                return FirstLegacyPanel(*node.second);
             }
-            ar.Key("second");
-            SerializeLayoutNode(ar, *node.Second);
+            return node.panels.IsEmpty() ? nullptr : &node.panels[0];
         }
-        ar.EndObject();
+
+        // Places `node`'s panels into `stack` and stacks split from it. `stack` holds nothing
+        // yet, or the node's first panel: a split puts its second half's first panel beside it
+        // (taking the second half's share), so each half then splits only its own stack.
+        inline void PlaceLegacyNode(gui::DockLayout& layout, const LegacyDockNode& node, gui::DockNodeId stack)
+        {
+            if (!node.IsSplit())
+            {
+                for (const String& panel : node.panels)
+                    if (layout.StackOf(panel.AsView()) == gui::kNoDock)
+                        (void)layout.InsertTab(panel.AsView(), stack);
+                if (node.activeTab >= 0 && static_cast<usize>(node.activeTab) < node.panels.Size())
+                    (void)layout.Activate(node.panels[static_cast<usize>(node.activeTab)].AsView());
+                return;
+            }
+            const String* firstPanel = FirstLegacyPanel(*node.first);
+            const String* secondPanel = FirstLegacyPanel(*node.second);
+            if (firstPanel == nullptr || secondPanel == nullptr)
+            {
+                PlaceLegacyNode(layout, firstPanel != nullptr ? *node.first : *node.second, stack);
+                return;
+            }
+            if (layout.StackOf(firstPanel->AsView()) == gui::kNoDock)
+                (void)layout.InsertTab(firstPanel->AsView(), stack);
+            const gui::DockSide side = node.direction == 0 ? gui::DockSide::End : gui::DockSide::Bottom;
+            const f32 share = Clamp(1.0f - node.ratio, 0.05f, 0.95f);
+            if (!layout.InsertBeside(secondPanel->AsView(), stack, side, share).Ok())
+            {
+                PlaceLegacyNode(layout, *node.first, stack); // a panel named twice: the first half alone
+                return;
+            }
+            const gui::DockNodeId beside = layout.StackOf(secondPanel->AsView());
+            PlaceLegacyNode(layout, *node.first, stack);
+            PlaceLegacyNode(layout, *node.second, beside);
+        }
     }
 
-    // The dock-tree section: owns a DockLayoutNode snapshot (absent root = never captured).
+    /// The old dock's tree as the GUI dock's layout: its first panel's group in the central stack,
+    /// each split's halves beside one another with the same shares, each group's tabs in order with
+    /// its chosen one. A panel named twice keeps its first place.
+    [[nodiscard]] inline gui::DockLayout LayoutFromLegacy(const detail::LegacyDockNode& root)
+    {
+        gui::DockLayout layout;
+        detail::PlaceLegacyNode(layout, root, layout.CentralStack());
+        return layout;
+    }
+
+    // The dock's layout: its document when one was captured.
     class EditorDockLayoutSettings final : public ISerializable
     {
         RTTI_OBJECT(EditorDockLayoutSettings, ISerializable)
     public:
-        UniquePtr<ui::toolkit::DockLayoutNode> root;
+        bool captured = false;
+        gui::DockLayoutDocument document;
 
         void Serialize(ISerializer& ar) override
         {
-            bool hasRoot = static_cast<bool>(root);
-            foundation::core::Serialize(ar, "hasRoot", hasRoot);
-            if (hasRoot)
+            if (ar.Mode() == SerializeMode::Read && ar.Version() == 1)
             {
-                if (ar.Mode() == SerializeMode::Read)
+                // The old dock's tree, taken into the GUI dock's layout (saved as version 2 after).
+                bool hasRoot = false;
+                foundation::core::Serialize(ar, "hasRoot", hasRoot);
+                captured = false;
+                if (hasRoot)
                 {
-                    root = MakeUnique<ui::toolkit::DockLayoutNode>(editor::EditorRootAllocator());
+                    detail::LegacyDockNode root;
+                    ar.Key("root");
+                    detail::ReadLegacyDockNode(ar, root);
+                    document.Layout = LayoutFromLegacy(root);
+                    captured = detail::FirstLegacyPanel(root) != nullptr;
                 }
-                ar.Key("root");
-                SerializeLayoutNode(ar, *root);
+                return;
+            }
+            foundation::core::Serialize(ar, "captured", captured);
+            if (captured)
+            {
+                ar.Key("layout");
+                ar.BeginObject();
+                document.Serialize(ar);
+                ar.EndObject();
             }
         }
     };
@@ -135,7 +219,7 @@ export namespace editor::app
         RTTI_OBJECT(EditorAssetBrowserSettings, ISerializable)
     public:
         bool gridMode = false;       // false = list, true = grid
-        bool pickerGridMode = false; // the asset picker dialog's own list / grid choice
+        bool pickerGridMode = false; // the asset picker's own list / grid choice (AssetPickerWindow)
 
         void Serialize(ISerializer& ar) override
         {
@@ -150,6 +234,9 @@ export namespace editor::app
         GlobalTypeRegistry().Register(EditorDockLayoutSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorDockLayoutSettings>();
+        // Version 1 (the old dock's tree) still reads, into the new layout: a legacy reader one
+        // version back, removed once projects have saved past it (Process/CONVENTIONS.md).
+        KeepLegacyReader(const_cast<TypeInfo&>(EditorDockLayoutSettings::StaticType()), 1);
         GlobalTypeRegistry().Register(EditorFavoritesSettings::StaticType(),
                                       TypeDomain(u8"Editor"));
         RegisterSerializable<EditorFavoritesSettings>();
@@ -163,32 +250,55 @@ export namespace editor::app
 
     // ---- store <-> live state ------------------------------------------------------------
 
-    // Snapshot `dock`'s current layout into the store. NotFound when the dock tree is empty.
-    [[nodiscard]] inline Status CaptureDockLayout(ui::toolkit::DockManager& dock,
-                                                  settings::Settings& store)
+    // The dock's layout into the store.
+    inline void CaptureDockLayout(const gui::DockController& dock, settings::Settings& store)
     {
-        UniquePtr<ui::toolkit::DockLayoutNode> layout = dock.ExportLayout();
-        if (!layout)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        store.Section<EditorDockLayoutSettings>().root = Move(layout);
+        EditorDockLayoutSettings& section = store.Section<EditorDockLayoutSettings>();
+        section.document.Layout = dock.GetLayout();
+        section.captured = true;
         store.MarkChanged<EditorDockLayoutSettings>();
+    }
+
+    // The store's layout into `dock` (its registered panels placed where it says, the rest at
+    // their defaults). NotFound when none was captured (the caller keeps its default layout);
+    // a refusal (a layout that breaks the dock's rules) said in the log, the dock as it was.
+    [[nodiscard]] inline Status ApplyDockLayout(gui::DockController& dock, settings::Settings& store)
+    {
+        const EditorDockLayoutSettings* section = store.Find<EditorDockLayoutSettings>();
+        if (section == nullptr || !section->captured)
+            return Status{ErrorCode::NotFound};
+        const gui::DockOutcome outcome = dock.Adopt(section->document.Layout);
+        if (!outcome.Ok())
+        {
+            LOG_WARNING(u8"Editor", u8"the saved dock layout was refused ({}); the default stands", outcome.Refused.AsView());
+            return Status{ErrorCode::InvalidArgument};
+        }
         return Status{};
     }
 
-    // Rebuild `dock` from the store's snapshot (panels matched by PersistenceId).
-    // NotFound when no snapshot was ever captured (caller keeps its default layout).
-    [[nodiscard]] inline Status ApplyDockLayout(ui::toolkit::DockManager& dock,
-                                                settings::Settings& store)
+    // The panels a restored layout names that nothing provides once the project's pages have
+    // reopened (a Game tab, which no project reopens; a page whose asset is gone) let go, docked or
+    // closed, so the dock shows no placeholder for them: as the old dock did, which skipped a saved
+    // panel it had none for.
+    inline void ForgetUnprovidedPanels(gui::DockController& dock)
     {
-        const EditorDockLayoutSettings* section = store.Find<EditorDockLayoutSettings>();
-        if (section == nullptr || !section->root)
-        {
-            return Status{ErrorCode::NotFound};
-        }
-        dock.ApplyLayout(section->root.Get());
-        return Status{};
+        gui::DockLayout layout = dock.GetLayout();
+        Array<String> gone;
+        for (const gui::DockNode& node : layout.Nodes())
+            if (node.IsStack())
+                for (const String& panel : node.Panels)
+                    if (dock.Describe(panel.AsView()) == nullptr)
+                        gone.PushBack(panel);
+        for (const String& panel : gone)
+            (void)layout.Close(panel.AsView());
+        for (const gui::DockHidden& hidden : layout.Hidden())
+            if (dock.Describe(hidden.Panel.AsView()) == nullptr)
+                gone.PushBack(hidden.Panel);
+        if (gone.IsEmpty())
+            return;
+        for (const String& panel : gone)
+            (void)layout.Forget(panel.AsView());
+        (void)dock.Adopt(Move(layout));
     }
 
     inline void CaptureFavorites(editor::EditorContext& context,
@@ -283,7 +393,7 @@ export namespace editor::app
         return saved;
     }
 
-    RTTI_DEFINE_OBJECT_VERSIONED(EditorDockLayoutSettings, "rtti::editor::editor::app", 1)
+    RTTI_DEFINE_OBJECT_VERSIONED(EditorDockLayoutSettings, "rtti::editor::editor::app", 2)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorFavoritesSettings, "rtti::editor::editor::app", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorOpenPagesSettings, "rtti::editor::editor::app", 1)
     RTTI_DEFINE_OBJECT_VERSIONED(EditorAssetBrowserSettings, "rtti::editor::editor::app", 1)

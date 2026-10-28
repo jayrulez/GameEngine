@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
+
 // Editor App - :resource_ref_editor partition
 //
-// ResourceRefEditor: a property row over an AssetPickerSlot - the referenced asset's name, its
-// thumbnail, and the pick, edit, clear, reveal and drop verbs. Every page uses it for a field
-// that names an asset (editor-lists-and-asset-slots.md D2).
-//
-// The accepted asset types are a CONSTRUCTOR argument, so a row that names an asset cannot be
-// built without being a drop target for that asset: AssetPickerSlot::AnyAssetType() for a
-// genuinely untyped field, AssetPickerSlot::EntityType() for an entity reference (a hierarchy row
-// drops on it). BindAsset and BindEntity wire every verb to ONE assignment, so a pick, a drop
-// and a clear are the same write - one code path, one undo step.
+// The inspector's asset reference (Documentation/Specs/editor-gui.md, 5.2, layer 4): the property
+// grid's editor for GUI.Toolkit's Reference kind, an asset slot. What may fill it is asked of the
+// builders, never listed here (ruling 19): the source asset types whose builder makes the type the
+// reference points at, or one derived from it. Pick, drop and clear are one write, the grid's, so
+// one undo step; a pick opens the asset picker (AssetPickerWindow). Open and reveal show the asset.
+// What it asks of the editor is a table of its own (ResourceRefServices), so a test gives its own
+// and the application fills it from its context.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -18,115 +17,221 @@ module;
 export module editor.app:resource_ref_editor;
 
 import foundation.core;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.content;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import :asset_picker_slot;
+import :asset_picker_window; // AssetPickRequest
 
 using namespace foundation::core;
-namespace ui = foundation::ui;
 
 export namespace editor::app
 {
-    class ResourceRefEditor final : public ui::toolkit::PropertyEditor
+    namespace gui = foundation::gui;
+
+    /// What a referenced asset shows: its name, its type's glyph and the class that tints it, and
+    /// its thumbnail in the glyph's place once there is one.
+    struct ResourceRefShown
     {
-        RTTI_OBJECT(ResourceRefEditor, ui::toolkit::PropertyEditor)
-    public:
-        struct BindOptions
+        String Name;
+        String Glyph;
+        String GlyphClass;
+        RefPtr<gui::Drawable> Picture;
+    };
+
+    /// What a reference row asks of the editor. Each is optional: one unset leaves its verb out.
+    struct ResourceRefServices
+    {
+        /// The asset types, by name, that may fill a reference to `target`.
+        Function<Array<String>(const TypeInfo& target)> AcceptedTypes;
+        /// What `id` names; false when the project has no such asset (a dangling reference).
+        Function<bool(const Guid& id, ResourceRefShown& out)> Describe;
+        /// Opens a picker over `types` (empty: any), `current` checked; `chosen`
+        /// assigns what it picks (nil: None).
+        Function<void(Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)> Pick;
+        Function<void(const Guid&)> Open;
+        Function<void(const Guid&)> Reveal;
+
+        /// Filled from the editor's context: the builders' types (SourceAssetTypesOf; none, the
+        /// type itself, a reference naming a source asset type), the
+        /// project's names, the type icons and thumbnails, the asset picker over the project's assets (`open`
+        /// shows the asset picker for a request), the context's open and reveal. `context`
+        /// and `icons` outlive what it is given to.
+        [[nodiscard]] static ResourceRefServices From(editor::EditorContext& context, editor::EditorIcons& icons,
+                                                      Function<void(AssetPickRequest request)> open)
         {
-            bool edit = true;   // the edit verb opens the bound asset
-            bool reveal = true; // the reveal verb shows it in the asset browser
-        };
-
-        Function<void()> OnPick;   // opens the picker
-        Function<void()> OnEdit;   // open-for-editing (EditorContext::OpenAsset routing)
-        Function<void()> OnClear;  // clears the reference
-        Function<void()> OnReveal; // reveal in the asset browser (EditorContext::RevealAsset)
-        Function<void(const Guid&)> OnAssignDropped;           // browser drag-drop assign
-        Function<void(StringView, StringView)> OnRejectedDrop; // wrong-type drop -> toast
-
-        /// `acceptedTypes`: the asset types a pick offers and a drop takes (AnyAssetType() for any;
-        /// empty only for a row that names no asset). The first names the slot's type icon.
-        ResourceRefEditor(StringView name, StringView valueText, StringView category,
-                          Span<const StringView> acceptedTypes);
-
-        /// Wires pick, drop, clear, edit and reveal to ONE assignment through `context`:
-        /// - pick opens the asset picker filtered by the accepted types, and assigns its choice;
-        /// - a drop of an accepted type is assigned, the same write; a refused one is reported;
-        /// - clear assigns the nil id;
-        /// - edit and reveal open and show the asset `current` names.
-        /// The row shows `current` from then on (Refresh), and refreshes after every assignment;
-        /// it holds itself across `assign`, so a write that rebuilds the row's grid is safe.
-        /// `options` drops the edit and reveal verbs for a field whose asset is not opened from
-        /// here.
-        void BindAsset(editor::EditorContext& context, Function<Guid()> current,
-                       Function<void(const Guid&)> assign);
-        void BindAsset(editor::EditorContext& context, Function<Guid()> current,
-                       Function<void(const Guid&)> assign, BindOptions options);
-
-        /// Wires an ENTITY reference the same way: `pick` opens the scene's entity picker (the
-        /// caller's, which assigns through AssignValue), a hierarchy row dropped on the slot is
-        /// assigned, clear assigns the nil id, and `nameFor` names the entity. Build the row
-        /// with AssetPickerSlot::EntityType() as its accepted type. The same contract on `assign`
-        /// as BindAsset.
-        void BindEntity(Function<Guid()> current, Function<void(const Guid&)> assign,
-                        Function<String(const Guid&)> nameFor, Function<void()> pick);
-
-        /// Assigns through the bound write, as a pick would: for a caller's own picker.
-        void AssignValue(const Guid& id) { Assign(id); }
-
-        /// Re-reads the bound reference: its name, and an asset's thumbnail when the context has
-        /// one.
-        void Refresh();
-
-        void SetValueText(StringView text);
-        /// What a bound row shows for the nil id: "(none)", or what nil means for the field (a
-        /// preview's default shape). Set before binding.
-        void SetEmptyText(StringView text) { m_emptyText = String(text); }
-        [[nodiscard]] StringView EmptyText() const noexcept { return m_emptyText.AsView(); }
-        [[nodiscard]] StringView ValueText() const noexcept { return m_valueText.AsView(); }
-        [[nodiscard]] Span<const String> AcceptedTypes() const noexcept
-        {
-            return Span<const String>{m_acceptedTypes.Data(), m_acceptedTypes.Size()};
-        }
-        /// The row's slot; null until the grid builds the row.
-        [[nodiscard]] AssetPickerSlot* Slot() const noexcept { return m_slot.Get(); }
-
-        /// The asset TYPE glyph for the slot preview (set from the first accepted type).
-        void SetPreviewIcon(ui::SVGDrawable* icon) { m_previewIcon = icon; }
-        /// The generated thumbnail (wins over the type icon while set; empty falls back).
-        void SetPreviewThumbnail(ui::DrawablePtr thumbnail)
-        {
-            if (m_slot.Get() != nullptr)
+            ResourceRefServices services;
+            editor::EditorContext* ctx = &context;
+            editor::EditorIcons* typeIcons = &icons;
+            if (open)
+                services.Pick = [ctx, open = Move(open)](Span<const String> types, const Guid& current, Function<void(const Guid&)> chosen)
+                {
+                    if (ctx->Project() == nullptr)
+                        return;
+                    AssetPickRequest request;
+                    for (const String& type : types)
+                        request.types.PushBack(type);
+                    request.current = current;
+                    request.chosen = Move(chosen);
+                    open(Move(request));
+                };
+            // What the builders make it from; none: the type itself, a reference naming a source
+            // asset type (Project Settings', ruling 20).
+            services.AcceptedTypes = [ctx](const TypeInfo& target)
             {
-                m_slot->SetPreviewThumbnail(Move(thumbnail));
-            }
+                Array<String> names;
+                if (ctx->SourceAssetTypesOf)
+                    for (const TypeInfo* asset : ctx->SourceAssetTypesOf(target))
+                        names.PushBack(String(StringView(reinterpret_cast<const utf8char*>(asset->name))));
+                if (names.IsEmpty() && target.name != nullptr)
+                    names.PushBack(String(StringView(reinterpret_cast<const utf8char*>(target.name))));
+                return names;
+            };
+            services.Describe = [ctx, typeIcons](const Guid& id, ResourceRefShown& out)
+            {
+                foundation::content::Instance* instance = ctx->Project() != nullptr ? ctx->Project()->SourceDb().GetInstance(id) : nullptr;
+                if (instance == nullptr)
+                    return false;
+                out.Name = String(instance->Name());
+                const TypeInfo* type = GlobalTypeRegistry().FindByName(reinterpret_cast<const char*>(String(instance->TypeNamespace()).CStr()),
+                                                                        reinterpret_cast<const char*>(String(instance->TypeName()).CStr()));
+                if (type != nullptr)
+                {
+                    const editor::TypeIcon icon = typeIcons->For(*type, u8"Asset");
+                    out.Glyph = icon.Source;
+                    out.GlyphClass = icon.Class;
+                }
+                if (ctx->Thumbnails() != nullptr)
+                    out.Picture = ctx->Thumbnails()->Get(id); // null until generated; a bind asks again
+                return true;
+            };
+            services.Open = [ctx](const Guid& id)
+            {
+                if (ctx->OpenAsset)
+                    ctx->OpenAsset(id);
+            };
+            services.Reveal = [ctx](const Guid& id)
+            {
+                if (ctx->RevealAsset)
+                    ctx->RevealAsset(id);
+            };
+            return services;
+        }
+    };
+
+    class ResourceRefEditor final : public gui::SingleControlEditor
+    {
+        RTTI_OBJECT(ResourceRefEditor, gui::SingleControlEditor)
+    public:
+        static constexpr StringView kMissingText = u8"(missing)";
+
+        /// `services` outlives the editor (the registrar's).
+        explicit ResourceRefEditor(const ResourceRefServices& services) : m_services(&services)
+        {
+            AddClass(u8"reference");
+            m_slot = MakeRef<AssetPickerSlot>(MemoryAllocator());
+            Hold(*m_slot);
+        }
+        ResourceRefEditor() : ResourceRefEditor(m_none) {} // what RTTI makes (its own empty services); the registry's has its services
+
+        /// The editor for every Reference property `registry` shows; `services` outlives it.
+        static void Register(gui::PropertyEditorRegistry& registry, const ResourceRefServices& services)
+        {
+            const ResourceRefServices* table = &services;
+            registry.RegisterKind(gui::PropertyKind::Reference, [table](IAllocator& allocator) -> RefPtr<gui::PropertyEditor>
+                                  { return MakeRef<ResourceRefEditor>(allocator, *table); });
         }
 
-        void RefreshView() override { Refresh(); }
+        [[nodiscard]] AssetPickerSlot* Slot() const noexcept { return m_slot.Get(); }
+        /// What it references: nil for none, or when the objects differ.
+        [[nodiscard]] const Guid& Current() const noexcept { return m_current; }
 
     protected:
-        RefPtr<ui::View> CreateEditorView() override;
-
-    private:
-        void Assign(const Guid& id);
-
-        /// A bound row has a value when its id is set (a "(missing)" one can still be cleared);
-        /// an unbound row reads its text.
-        [[nodiscard]] bool HasValue() const
+        void OnBind(const gui::PropertyInfo& info, const gui::PropertyValue& value) override
         {
-            return m_current ? m_boundHasValue : m_valueText.AsView() != StringView(u8"(none)");
+            m_current = Guid{};
+            m_mixed = value.Mixed;
+            if (!m_mixed)
+                (void)Guid::TryParse(Trim(value.Value.AsString()), m_current);
+            m_types = info.ReferenceType != nullptr && m_services->AcceptedTypes ? m_services->AcceptedTypes(*info.ReferenceType) : Array<String>{};
+            m_slot->SetAcceptedTypes(m_types);
+            Wire();
+            Show();
         }
 
-        String m_valueText;
-        String m_emptyText{u8"(none)"};
-        bool m_boundHasValue = false;
-        ui::SVGDrawable* m_previewIcon = nullptr; // borrowed (EditorIcons)
-        Array<String> m_acceptedTypes;
+    private:
+        // Its verbs, as far as the services and the property allow: a read-only one only opens.
+        void Wire()
+        {
+            ResourceRefEditor* self = this;
+            const bool writes = !IsReadOnly();
+            m_slot->SetOnPick(writes && m_services->Pick ? Function<void()>([self]() { self->Pick(); }) : Function<void()>{});
+            m_slot->SetOnClear(writes ? Function<void()>([self]() { self->Assign(Guid{}); }) : Function<void()>{});
+            m_slot->SetOnDropped(writes ? Function<void(const Guid&)>([self](const Guid& id) { self->Assign(id); }) : Function<void(const Guid&)>{});
+            m_slot->SetOnOpen(m_services->Open && !m_mixed ? Function<void()>([self]() { self->m_services->Open(self->m_current); }) : Function<void()>{});
+            m_slot->SetOnReveal(m_services->Reveal && !m_mixed ? Function<void()>([self]() { self->m_services->Reveal(self->m_current); }) : Function<void()>{});
+        }
+        void Show()
+        {
+            m_slot->SetPicture({});
+            if (m_mixed)
+            {
+                m_slot->SetGlyph({});
+                m_slot->SetValue(gui::MixedValueText());
+                return;
+            }
+            if (m_current.IsNil())
+            {
+                m_slot->SetGlyph({});
+                m_slot->SetValue({});
+                return;
+            }
+            ResourceRefShown shown;
+            if (m_services->Describe && m_services->Describe(m_current, shown))
+            {
+                m_slot->SetGlyph(shown.Glyph.AsView(), shown.GlyphClass.AsView());
+                m_slot->SetPicture(foundation::core::Move(shown.Picture));
+                m_slot->SetValue(shown.Name.AsView());
+            }
+            else
+            {
+                m_slot->SetGlyph({});
+                m_slot->SetValue(kMissingText); // still cleared, still replaced
+            }
+        }
+        // The picker answers later, when the row may show another property (rows are pooled):
+        // its choice lands only on the property it was opened for.
+        void Pick()
+        {
+            RefPtr<ResourceRefEditor> self(this);
+            const String path(GetPath());
+            m_services->Pick(m_types.AsSpan(), m_current, [self, path](const Guid& id)
+                             {
+                                 if (self->GetPath() == path.AsView())
+                                     self->Assign(id);
+                             });
+        }
+        // One write through the grid: a pick, a drop and a clear alike.
+        void Assign(const Guid& id)
+        {
+            RefPtr<ResourceRefEditor> keep(this); // the write may rebind the row
+            String text;
+            if (!id.IsNil())
+            {
+                utf8char chars[37];
+                id.ToChars(chars);
+                text = String(StringView(chars, 36));
+            }
+            ApplyEdit(gui::PropertyWrite{gui::Variant(text.AsView())});
+        }
+        ResourceRefServices m_none; // an editor RTTI made has no services: its own, empty (a process-wide one would be state in an interface)
+        const ResourceRefServices* m_services;
         RefPtr<AssetPickerSlot> m_slot;
-        editor::EditorContext* m_context = nullptr; // set by BindAsset: names and thumbnails
-        Function<Guid()> m_current;
-        Function<void(const Guid&)> m_assign;
-        Function<String(const Guid&)> m_nameFor; // set by BindEntity: names what the id refers to
+        Array<String> m_types;
+        Guid m_current;
+        bool m_mixed = false;
     };
+
+    RTTI_DEFINE_OBJECT(ResourceRefEditor, "rtti::editor::editor::app")
 }

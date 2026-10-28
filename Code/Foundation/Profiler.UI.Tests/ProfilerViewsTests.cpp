@@ -21,7 +21,7 @@ using namespace foundation::profiler;
 using namespace foundation::profiler::ui;
 namespace vg = foundation::vg;
 namespace fui = foundation::ui;
-using profiler_ui_tests::KnownSource;
+using profiler_tests::KnownSource;
 
 namespace
 {

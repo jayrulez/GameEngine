@@ -182,7 +182,8 @@ export namespace foundation::resource
             m_direct = nullptr;
         }
 
-        // Attach the runtime proxy for `id` (defined after ResourceManager below).
+        // Attach the runtime proxy for `id`, or let the one it had go when `id` is nil (defined
+        // after ResourceManager below).
         void Bind(ResourceManager& manager);
 
         [[nodiscard]] const Proxy<T>& GetProxy() const noexcept { return m_proxy; }
@@ -1109,6 +1110,11 @@ export namespace foundation::resource
             // Route through BindAsync when the manager is in async-bind mode (scene load); the
             // proxy is null (Pending) until Pump finalizes it - Proxy already tolerates that.
             m_proxy = manager.AsyncBindsEnabled() ? manager.BindAsync<T>(id) : manager.Bind<T>(id);
+        }
+        else
+        {
+            // Cleared: what it named lets go (a direct override, code's own, stays).
+            m_proxy = Proxy<T>{};
         }
     }
 

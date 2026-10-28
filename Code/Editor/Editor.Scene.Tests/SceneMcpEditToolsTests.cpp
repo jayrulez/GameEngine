@@ -7,6 +7,7 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
+import foundation.input;
 import foundation.json;
 import foundation.mcp;
 import foundation.scene;
@@ -15,6 +16,7 @@ import engine.render;
 import engine.script;
 import editor.core;
 import editor.scene;
+import editor.viewporttools;
 import editor.camera;
 
 using namespace foundation::core;
@@ -70,6 +72,7 @@ namespace
         void PauseSimulation(bool) override {}
         [[nodiscard]] bool IsSimulating() const noexcept override { return simulating; }
         [[nodiscard]] bool IsPaused() const noexcept override { return false; }
+        [[nodiscard]] ViewportToolManager* ViewportTools() noexcept override { return nullptr; }
         [[nodiscard]] GizmoController* Gizmos() noexcept override { return nullptr; }
         [[nodiscard]] bool CameraOwnsInput() const noexcept override { return false; }
         [[nodiscard]] bool MarkersShown() const noexcept override { return true; }
@@ -84,9 +87,14 @@ namespace
         {
             return m_capture;
         }
+        bool BeginScriptedInput(UniquePtr<foundation::input::ScriptedInputSource>) override { return false; }
+        void EndScriptedInput() override {}
+        [[nodiscard]] f64 ScriptedInputTime() const noexcept override { return -1.0; }
+        [[nodiscard]] Float2 ViewportPixels() const noexcept override { return Float2{}; }
         void SetMarkersShown(bool) override {}
         [[nodiscard]] bool AnimationPanelShown() const noexcept override { return false; }
         void SetAnimationPanelShown(bool) override {}
+        void EditAnimationClip(const Guid&, const Guid&) override {}
         void CreatePrefabFromEntity(const Guid&) override {}
         void PickAndSpawnPrefab(const Guid&) override {}
         void ApplyInstanceToPrefab(const Guid&) override {}

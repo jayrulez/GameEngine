@@ -10,7 +10,7 @@
 //     | b  d  ty |          y' = b*x + d*y + ty
 //
 // ToMatrix() lays them into a Float4x4 in VG's convention (row vectors, translation in row 3), so
-// a view's transform feeds VGContext::SetTransform losslessly. The GUI lab's Transform2D has the
+// a view's transform feeds VGContext::SetTransform losslessly. The GUI's Transform2D has the
 // same form.
 
 module;

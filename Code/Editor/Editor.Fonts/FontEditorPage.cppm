@@ -3,13 +3,15 @@
 
 // Editor::Fonts - the `editor.fonts` module.
 //
-// FontEditorPage: the bespoke authoring page for FontAsset (the fonts-triad source asset).
-// Left: a live CPU bake preview - the atlas the cook would produce at the preview size
-// (coverage expands to RGBA8; MSDF shows the raw field channels), rebaked on every option
-// commit - plus source facts (file, family, glyph count, atlas occupancy). Right: the
-// authored surface in a PropertyGrid - family, bake mode, the size ramp (comma-separated),
-// MSDF size, codepoint range, atlas dimensions. Edits are whole-asset blob-snapshot undo
-// commands; Save writes the object back and requests a re-cook so bound products hot-swap.
+// FontEditorPage: the bespoke authoring page for FontAsset (the fonts-triad source asset). On the
+// GUI from the image pages' markup (Data/Editor/ImagePage.gml; Documentation/Specs/editor-gui.md,
+// 5.4, layer 2): the atlas the cook would produce at the preview size, baked live (coverage as
+// white over alpha; a distance field decoded at its edge, where its raw channels read as noise),
+// rebaked on every edit and its undo, to zoom, pan and read in; beside the authored surface:
+// family, bake mode, the distance field's size and range, the codepoint range, the atlas size, and
+// the raster ramp's sizes, a row of the page's own ("12, 16, 24") as reflection does not show
+// them. Its facts read only: the glyphs baked and the atlas. Each edit is one undo step;
+// Save writes the asset back and asks for a cook so bound products hot-swap.
 
 module;
 #include "Core/Prelude.h"
@@ -21,12 +23,11 @@ export import :thumbnail_generator;
 
 import foundation.core;
 import foundation.content;
-import foundation.runtime.client; // IApplicationHost (OnUpdate)
 import foundation.image;
 import foundation.fonts;
 import fonts.pipeline;
-import foundation.ui;
-import foundation.ui.toolkit;
+import foundation.gui;
+import foundation.gui.toolkit;
 import editor.core;
 import editor.app;
 
@@ -34,22 +35,27 @@ using namespace foundation::core;
 
 export namespace editor
 {
-    namespace ui = foundation::ui;
-    namespace image = foundation::image;
-    namespace fonts = foundation::fonts;
-
-    // Authoring page for a FontAsset (bake intent + live atlas preview).
-    class FontEditorPage final : public app::UIEditorPage
+    class FontEditorPage final : public app::AssetObjectPage
     {
     public:
-        FontEditorPage(EditorContext& context, foundation::content::Instance& instance);
+        static constexpr StringView kPath = u8"Editor/ImagePage.gml";
 
+        FontEditorPage(EditorContext& context, app::AssetPageServices services, foundation::content::Instance& instance);
         ~FontEditorPage() override;
 
-        [[nodiscard]] StringView Title() const override { return m_title.AsView(); }
-        [[nodiscard]] ui::View* ContentView() override { return m_content.Get(); }
-        [[nodiscard]] Status Save() override;
-        void OnUpdate(foundation::runtime::IApplicationHost& host, f32 dt) override;
+        /// Sets the raster ramp's sizes from text ("10, 12.5 24"), one undo step; false, with the
+        /// row put back and a notice saying why, when it is not a list of sizes from 1 to 512.
+        bool SetSizes(StringView text);
+        /// A font's source relinks to another font file of the project's (Browse on its row).
+        [[nodiscard]] Span<const String> SourceExtensions() const override;
+
+        // === For tests ===
+        [[nodiscard]] app::ImagePreview* Preview() const noexcept { return m_preview.Get(); }
+        [[nodiscard]] foundation::gui::PropertyBag& Ramp() noexcept { return *m_ramp; }
+        [[nodiscard]] usize PreviewGlyphs() const noexcept { return m_previewGlyphs; }
+
+    protected:
+        void OnObjectChanged() override;
 
     private:
         // The preview bake runs OFF the UI thread (msdfgen over the full codepoint range
@@ -74,7 +80,7 @@ export namespace editor
         };
         struct BakeOutcome
         {
-            UniquePtr<image::OwnedImageData> image;
+            foundation::image::Image image; // empty: nothing baked
             usize glyphs = 0;
             f32 size = 0.0f;
             u64 generation = 0;
@@ -93,55 +99,11 @@ export namespace editor
         void ApplyBakeOutcome(BakeOutcome outcome);
         [[nodiscard]] BakeRequest CaptureBakeRequest();
         static void RunBake(const BakeRequest& request, BakeOutcome& outcome);
-        void BuildGrid();
-        // Sections are mode-dependent (raster ramp vs MSDF size): a mode change rebuilds the
-        // grid, DEFERRED through the UI mutation queue (the change fires from a grid editor -
-        // rebuilding mid-dispatch would destroy the dispatching control).
-        void QueueGridRebuild();
-        void CommitEdit(StringView mergeKey);
+        // The ramp's row as the asset has it, shown only for a raster ramp.
+        void ShowRamp();
 
-        [[nodiscard]] Array<byte> Snapshot() const;
-        void ApplyBlob(const Array<byte>& blob);
-        void RefreshRows(); // re-pull row values after undo/redo (never rebuilds the grid)
-
-        class EditFontCommand final : public IEditorCommand
-        {
-        public:
-            EditFontCommand(FontEditorPage& page, StringView mergeKey, Array<byte> before,
-                            Array<byte> after)
-                : m_page(&page), m_mergeKey(mergeKey), m_before(Move(before)), m_after(Move(after))
-            {
-            }
-
-            [[nodiscard]] bool Execute() override
-            {
-                m_page->ApplyBlob(m_after);
-                return true;
-            }
-            void Undo() override { m_page->ApplyBlob(m_before); }
-            [[nodiscard]] StringView TypeId() const override { return u8"edit_font"; }
-            [[nodiscard]] bool MergeInto(IEditorCommand& previous) override
-            {
-                auto& prev = static_cast<EditFontCommand&>(previous);
-                if (prev.m_page != m_page || prev.m_mergeKey.AsView() != m_mergeKey.AsView())
-                {
-                    return false;
-                }
-                prev.m_after = Move(m_after);
-                return true;
-            }
-
-        private:
-            FontEditorPage* m_page;
-            String m_mergeKey;
-            Array<byte> m_before;
-            Array<byte> m_after;
-        };
-
-        EditorContext* m_context = nullptr;
-        String m_title;
-        RefPtr<pipeline::FontAsset> m_asset;
-        UniquePtr<image::OwnedImageData> m_preview; // kept alive for the ImageView (borrowed ptr)
+        UniquePtr<app::ImagePreview> m_preview;
+        UniquePtr<foundation::gui::PropertyBag> m_ramp; // the page's own rows: the sizes
         usize m_previewGlyphs = 0;
         f32 m_previewSize = 0.0f;
 
@@ -151,40 +113,24 @@ export namespace editor
         BakeRequest m_pendingRequest; // newest request stashed while a bake is in flight
         bool m_pendingValid = false;
         BakeSlot* m_activeSlot = nullptr; // borrowed view of the in-flight slot
-
-        RefPtr<ui::View> m_content;
-
-        RefPtr<app::PageToolbar> m_toolbar;
-        RefPtr<ui::ImageView> m_image;
-        RefPtr<ui::Label> m_info;
-        RefPtr<ui::toolkit::PropertyGrid> m_grid;
-        // Borrowed rows (grid owns) - re-pulled after undo/redo.
-        ui::toolkit::StringEditor* m_familyRow = nullptr;
-        ui::toolkit::EnumEditor* m_modeRow = nullptr;
-        ui::toolkit::StringEditor* m_sizesRow = nullptr;
-        ui::toolkit::FloatEditor* m_distanceFieldSizeRow = nullptr;
-        ui::toolkit::FloatEditor* m_distanceFieldRangeRow = nullptr;
-        ui::toolkit::IntEditor* m_firstRow = nullptr;
-        ui::toolkit::IntEditor* m_lastRow = nullptr;
-        ui::toolkit::IntEditor* m_atlasWidthRow = nullptr;
-        ui::toolkit::IntEditor* m_atlasHeightRow = nullptr;
-        ui::toolkit::StringEditor* m_fileRow = nullptr;
-        pipeline::FontBakeMode m_gridMode = pipeline::FontBakeMode::RasterRamp; // mode the grid was built for
-        Array<byte> m_undoBaseline;
     };
 
     class FontEditorPageFactory final : public IEditorPageFactory
     {
     public:
+        explicit FontEditorPageFactory(const app::AssetPageServicesSource& services) : m_services(&services) {}
         [[nodiscard]] const TypeInfo* PrimaryType() const override;
-        [[nodiscard]] UniquePtr<EditorPage>
-        CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+        [[nodiscard]] UniquePtr<EditorPage> CreatePage(EditorContext& context, foundation::content::Instance& instance) override;
+
+    private:
+        const app::AssetPageServicesSource* m_services = nullptr;
     };
 
-    inline void RegisterFontEditor(EditorContext& context)
+    /// The page (asking for its services when it is made) and the font thumbnails.
+    inline void RegisterFontEditor(EditorContext& context, const app::AssetPageServicesSource& services)
     {
         context.Pages().Register(UniquePtr<IEditorPageFactory>(
-            editor::EditorRootAllocator().New<FontEditorPageFactory>(), editor::EditorRootAllocator()));
+            editor::EditorRootAllocator().New<FontEditorPageFactory>(services), editor::EditorRootAllocator()));
         if (context.Thumbnails() != nullptr)
         {
             RegisterFontThumbnailGenerator(*context.Thumbnails());

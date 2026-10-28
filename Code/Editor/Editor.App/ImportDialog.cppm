@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::App - :import_dialog partition.
+// Editor App - :import_dialog partition
 //
-// The pre-import review dialog (Sedulous ImportDialog lineage): dropping a file on the asset
-// browser pops this up when the routed importer has options. Shows the source file, the
-// destination group, the importer's RESOURCE PLAN when it provides one (DescribeImport - a
-// scrollable per-kind list with a checkbox + editable target name per resource, and a
-// check-all per section), and one checkbox per ImportOptions::Toggle, then Import/Cancel.
-// TakePlan() hands the edited plan back to the caller, who stores it as options.selection so
-// the importer's fan-out skips deselected resources and honors renames.
-
+// The import window (Documentation/Specs/editor-gui.md, 5.2, layer 7), over its markup
+// (Data/Editor/Import.gml): one window for one file or many, where the old editor had two. Where
+// they go, a field that opens the group picker; the files, when there are several, each kept or
+// not, with its state (reading, ready, failed), one chosen; the chosen file's importer (a choice
+// when several take it), its options, and what it would create by kind, each kept or not and
+// named, a kind's box keeping or leaving all of it. A file still being read says so and shows when
+// it is ready. The line under it says what Import does, or why it waits, Import waiting with it.
+// It is the view of an AssetImport session, which does the work.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -18,783 +18,381 @@ module;
 export module editor.app:import_dialog;
 
 import foundation.core;
-import foundation.ui;
-import editor.core;
-import pipeline.importer; // the import framework (a consumer imports it itself)
+import foundation.content;
+import foundation.gui;
+import pipeline.importer;
+import :asset_import;
+import :group_picker_dialog;
 
 using namespace foundation::core;
 
 export namespace editor::app
 {
-    namespace ui = foundation::ui;
+    namespace gui = foundation::gui;
+    namespace content = foundation::content;
 
-    /// The per-kind resource list of an import plan: a check-all header per kind, then one
-    /// row per resource (enable checkbox + target-name editor). Edits an EXTERNAL plan in
-    /// place (checkboxes live; call SyncNames before reading the plan - the batch dialog
-    /// switches files without tearing this down at commit time). The plan (and its entries'
-    /// addresses) must outlive the view.
-    class ImportPlanView final : public ui::FlexLayout
+    class ImportWindow
     {
-        RTTI_OBJECT(ImportPlanView, ui::FlexLayout)
     public:
-        explicit ImportPlanView(pipeline::ImportPlan* plan) : m_plan(plan)
+        /// Its markup, under the data root.
+        static constexpr const char8_t* kPath = u8"Editor/Import.gml";
+
+        struct Services
         {
-            Direction = ui::Orientation::Vertical;
-            Spacing = 2.0f;
-            m_nameEditors.Resize(plan->entries.Size());
-            constexpr pipeline::ImportResourceKind kKinds[] = {
-                pipeline::ImportResourceKind::Mesh,     pipeline::ImportResourceKind::Material,
-                pipeline::ImportResourceKind::Texture,  pipeline::ImportResourceKind::Skeleton,
-                pipeline::ImportResourceKind::AnimationClip,
-                pipeline::ImportResourceKind::Collision,
-            };
-            for (const pipeline::ImportResourceKind kind : kKinds)
-            {
-                Array<usize> indices;
-                for (usize i = 0; i < plan->entries.Size(); ++i)
-                {
-                    if (plan->entries[i].kind == kind)
-                    {
-                        indices.PushBack(i);
-                    }
-                }
-                if (indices.IsEmpty())
-                {
-                    continue;
-                }
-
-                Array<RefPtr<ui::CheckBox>> rowChecks;
-                rowChecks.Reserve(indices.Size());
-                auto header = MakeRef<ui::CheckBox>(
-                    MemoryAllocator(), pipeline::ImportResourceKindLabel(kind), true);
-                header->FontSize.SetValue(12.0f);
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(24.0f));
-                    AddView(header.Get(), lp);
-                }
-                for (const usize i : indices)
-                {
-                    pipeline::ImportPlanEntry* entry = &plan->entries[i];
-                    auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-                    row->Direction = ui::Orientation::Horizontal;
-                    row->Spacing = 6.0f;
-                    auto check = MakeRef<ui::CheckBox>(MemoryAllocator(), u8"", entry->enabled);
-                    check->OnCheckedChanged.Add([entry](ui::CheckBox*, bool checked)
-                                                { entry->enabled = checked; });
-                    {
-                        ui::LayoutStyle lp;
-                        lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(38.0f));
-                        lp.Height = ui::SizeSpec::Match();
-                        row->AddView(check.Get(), lp);
-                    }
-                    rowChecks.PushBack(check);
-                    auto name = MakeRef<ui::EditText>(MemoryAllocator());
-                    name->SetText(entry->targetName.AsView());
-                    {
-                        ui::LayoutStyle lp;
-                        lp.FlexGrow = 1.0f;
-                        lp.Height = ui::SizeSpec::Match();
-                        row->AddView(name.Get(), lp);
-                    }
-                    m_nameEditors[i] = name;
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(24.0f));
-                    AddView(row.Get(), lp);
-                }
-                pipeline::ImportPlan* planRef = m_plan;
-                header->OnCheckedChanged.Add(
-                    [planRef, indices = Move(indices), rowChecks = Move(rowChecks)](ui::CheckBox*,
-                                                                                    bool checked)
-                    {
-                        for (const usize i : indices)
-                        {
-                            planRef->entries[i].enabled = checked;
-                        }
-                        for (const RefPtr<ui::CheckBox>& c : rowChecks)
-                        {
-                            c->IsChecked.SetValue(checked);
-                        }
-                    });
-            }
-        }
-
-        /// Write the name editors' current text back into the plan entries.
-        void SyncNames()
-        {
-            for (usize i = 0; i < m_nameEditors.Size() && i < m_plan->entries.Size(); ++i)
-            {
-                if (m_nameEditors[i].Get() != nullptr)
-                {
-                    const StringView text = m_nameEditors[i]->Text();
-                    if (!text.IsEmpty())
-                    {
-                        m_plan->entries[i].targetName = String(text);
-                    }
-                }
-            }
-        }
-
-    private:
-        pipeline::ImportPlan* m_plan; // borrowed; outlives the view
-        Array<RefPtr<ui::EditText>> m_nameEditors; // parallel to plan entries
-    };
-
-    class ImportOptionsDialog final : public ui::Dialog
-    {
-        RTTI_OBJECT(ImportOptionsDialog, ui::Dialog)
-    public:
-        /// Fired when the user confirms; the options object carries their checkbox edits.
-        Function<void()> OnImport;
-        /// Fired when the user clicks "Change..." on the destination row. The caller (which knows the
-        /// project's groups) pops a group chooser, then calls SetDestination with the new group path.
-        Function<void()> OnChangeDestination;
-
-        /// Update the shown destination after the caller's group chooser resolves.
-        void SetDestination(StringView destination)
-        {
-            if (m_destinationText.Get() != nullptr)
-            {
-                m_destinationText->SetText(destination);
-            }
-        }
-
-        ImportOptionsDialog(StringView sourcePath, StringView destination,
-                            RefPtr<pipeline::ImportOptions> options,
-                            pipeline::ImportPlan plan = {})
-            : ui::Dialog(u8"Import"), m_options(Move(options)), m_plan(Move(plan))
-        {
-            const bool hasPlan = !m_plan.IsEmpty();
-            MaxWidth.SetValue(hasPlan ? 620.0f : 480.0f);
-            MaxHeight.SetValue(hasPlan ? 700.0f : 420.0f);
-
-            auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 6.0f;
-
-            AddInfoRow(*column, u8"Source:", pipeline::FileNameOf(sourcePath));
-
-            // Destination row: "Into: <group path> [Change...]" - lets the user retarget the import
-            // (default = the active group). The caller wires OnChangeDestination to a group chooser.
-            {
-                auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-                row->Direction = ui::Orientation::Horizontal;
-                row->Spacing = 6.0f;
-                auto name = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"Into:"));
-                name->FontSize.SetValue(11.0f);
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(52.0f));
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(name.Get(), lp);
-                }
-                m_destinationText = MakeRef<ui::Label>(MemoryAllocator(), destination);
-                m_destinationText->FontSize.SetValue(11.0f);
-                m_destinationText->Ellipsis.SetValue(true);
-                {
-                    ui::LayoutStyle lp;
-                    lp.FlexGrow = 1.0f;
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(m_destinationText.Get(), lp);
-                }
-                auto change = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Change..."));
-                change->FontSize.SetValue(Optional<f32>{11.0f});
-                ImportOptionsDialog* self = this;
-                change->OnClick.Add([self](ui::ButtonBase*)
-                                    { if (self->OnChangeDestination) self->OnChangeDestination(); });
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(72.0f));
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(change.Get(), lp);
-                }
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                column->AddView(row.Get(), lp);
-            }
-
-            if (hasPlan)
-            {
-                BuildResourceList(*column);
-            }
-
-            if (m_options.Get() != nullptr)
-            {
-                for (const pipeline::ImportOptions::Toggle& toggle : m_options->Toggles())
-                {
-                    if (toggle.value == nullptr)
-                    {
-                        continue;
-                    }
-                    auto check =
-                        MakeRef<ui::CheckBox>(MemoryAllocator(), toggle.label, *toggle.value);
-                    check->FontSize.SetValue(12.0f);
-                    if (!toggle.description.IsEmpty())
-                    {
-                        check->TooltipText = String(toggle.description);
-                    }
-                    bool* value = toggle.value;
-                    check->OnCheckedChanged.Add([value](ui::CheckBox*, bool checked)
-                                                { *value = checked; });
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    column->AddView(check.Get(), lp);
-                }
-            }
-
-            SetContent(column.Get());
-
-            ImportOptionsDialog* self = this;
-            ui::Button* import = AddButton(u8"Import", ui::DialogResult::None);
-            import->OnClick.Add(
-                [self](ui::ButtonBase*)
-                {
-                    if (self->OnImport)
-                    {
-                        self->OnImport();
-                    }
-                    self->Close(ui::DialogResult::OK);
-                });
-            AddButton(u8"Cancel", ui::DialogResult::Cancel);
-        }
-
-        [[nodiscard]] pipeline::ImportOptions* Options() const noexcept
-        {
-            return m_options.Get();
-        }
-
-        /// The edited plan (checkboxes applied live; names synced from their editors here).
-        /// Call once, on Import.
-        [[nodiscard]] pipeline::ImportPlan TakePlan()
-        {
-            if (m_planView.Get() != nullptr)
-            {
-                m_planView->SyncNames();
-            }
-            return static_cast<pipeline::ImportPlan&&>(m_plan);
-        }
-
-    private:
-        void BuildResourceList(ui::FlexLayout& column)
-        {
-            m_planView = MakeRef<ImportPlanView>(MemoryAllocator(), &m_plan);
-            auto scroll = MakeRef<ui::ScrollView>(MemoryAllocator());
-            scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-            scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
-            {
-                ui::LayoutStyle contentLp;
-                contentLp.Width = ui::SizeSpec::Match();
-                scroll->AddView(m_planView.Get(), contentLp);
-            }
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.FlexGrow = 1.0f;
-            column.AddView(scroll.Get(), lp);
-        }
-
-        void AddInfoRow(ui::FlexLayout& column, StringView label, StringView value)
-        {
-            auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            row->Direction = ui::Orientation::Horizontal;
-            row->Spacing = 6.0f;
-
-            auto name = MakeRef<ui::Label>(MemoryAllocator(), label);
-            name->FontSize.SetValue(11.0f);
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(52.0f));
-                lp.Height = ui::SizeSpec::Match();
-                row->AddView(name.Get(), lp);
-            }
-            auto text = MakeRef<ui::Label>(MemoryAllocator(), value);
-            text->FontSize.SetValue(11.0f);
-            text->Ellipsis.SetValue(true);
-            {
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.Height = ui::SizeSpec::Match();
-                row->AddView(text.Get(), lp);
-            }
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Match();
-            lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(18.0f));
-            column.AddView(row.Get(), lp);
-        }
-
-        RefPtr<pipeline::ImportOptions> m_options;
-        RefPtr<ui::Label> m_destinationText; // the shown group path; updated by SetDestination
-        pipeline::ImportPlan m_plan;         // edited in place; handed back via TakePlan
-        RefPtr<ImportPlanView> m_planView;
-    };
-
-    /// A selectable source-file row in the batch list: SELECTION is drawn (accent fill), not
-    /// implied - a Button per file could not show which file's detail was active. Hosts the
-    /// enable checkbox / name label / importer dropdown as children; clicks the children do
-    /// not consume (the label, blank space) select the row via the bubble phase.
-    class BatchFileRow final : public ui::FlexLayout
-    {
-        RTTI_OBJECT(BatchFileRow, ui::FlexLayout)
-    public:
-        Function<void()> OnSelect;
-
-        BatchFileRow()
-        {
-            Direction = ui::Orientation::Horizontal;
-            Spacing = 4.0f;
-        }
-
-        void SetSelected(bool selected)
-        {
-            if (m_selected != selected)
-            {
-                m_selected = selected;
-                InvalidateVisual(); // highlight only - geometry unchanged
-            }
-        }
-        [[nodiscard]] bool IsSelected() const noexcept { return m_selected; }
-
-        void OnDraw(ui::UIDrawContext& ctx) override
-        {
-            if (m_selected)
-            {
-                const Color accent = ResolveStyleColor(
-                    ui::StyleProperty::AccentColor,
-                    Color{60.0f / 255.0f, 120.0f / 255.0f, 200.0f / 255.0f, 100.0f / 255.0f});
-                ctx.VG().FillRoundedRect(Rectangle{0, 0, Width(), Height()}, 3.0f,
-                                         Color{accent.r, accent.g, accent.b, 0.35f});
-            }
-            ui::FlexLayout::OnDraw(ctx);
-        }
-
-        void OnMouseDown(ui::MouseEventArgs& e) override
-        {
-            if (e.Button == ui::MouseButton::Left)
-            {
-                if (OnSelect)
-                {
-                    OnSelect();
-                }
-                e.Handled = true;
-            }
-        }
-
-    private:
-        bool m_selected = false;
-    };
-
-    /// One review session for a whole DROP (the import-workflow ruling: one dialog per drop,
-    /// always). Left: the source files - enable checkbox, name, and an importer dropdown
-    /// where more than one importer claims the extension (this ABSORBS the old
-    /// modal-per-file chooser). Right: the selected file's resource plan + option toggles.
-    /// Worker-prepared plans stream in (OnFilePrepared); Import stays disabled until every
-    /// enabled file is described. The caller reads Files() back on OnImport and commits each
-    /// enabled entry.
-    class BatchImportDialog final : public ui::Dialog
-    {
-        RTTI_OBJECT(BatchImportDialog, ui::Dialog)
-    public:
-        struct FileEntry
-        {
-            String path;
-            Array<pipeline::IFileImporter*> candidates; // >= 1, registry order
-            usize importerIndex = 0;
-            bool enabled = true;
-            RefPtr<pipeline::ImportOptions> options; // for the CURRENT importer choice
-            RefPtr<Object> prepared;                 // worker payload (heavy importers)
-            pipeline::ImportPlan plan;
-            bool described = false; // plan/toggles are ready to show + commit
+            AssetImport* import = nullptr;
+            /// Opens the group picker, `current` checked; `picked` hears the choice.
+            Function<void(content::Group& current, Function<void(content::Group&)> picked)> pickGroup;
         };
 
-        Function<void()> OnImport; // read Files() for the final decisions
-        Function<void()> OnChangeDestination;
-        /// (Re)describe one entry - the OWNER owns describe policy (inline for light
-        /// importers; the worker path lands through OnFilePrepared instead).
-        Function<void(FileEntry&)> DescribeFile;
-
-        BatchImportDialog(StringView destination, Array<FileEntry> files)
-            : ui::Dialog(u8"Import Files"), m_files(Move(files))
+        ImportWindow(IAllocator& allocator, Services services, RefPtr<gui::Node> body)
+            : m_allocator(allocator), m_services(Move(services)), m_body(Move(body))
         {
-            MaxWidth.SetValue(860.0f);
-            MaxHeight.SetValue(700.0f);
+            if (!m_body)
+                return;
+            m_window = MakeRef<gui::Window>(m_allocator);
+            m_window->SetTitle(u8"Import");
+            m_window->AddClass(u8"import-window");
+            m_window->SetSize(Float2{kWidth, kHeight});
+            m_window->GetContent()->AddChild(m_body.Get());
+            ImportWindow* self = this;
+            if (auto* group = Find<gui::Button>(u8"import-group"))
+                group->SetOnClick([self]()
+                                  {
+                                      if (!self->m_session || !self->m_services.pickGroup)
+                                          return;
+                                      self->m_services.pickGroup(*self->m_session->group, [self](content::Group& picked)
+                                                                 {
+                                                                     if (!self->m_session)
+                                                                         return;
+                                                                     self->m_services.import->SetGroup(*self->m_session, picked);
+                                                                     self->ShowAll();
+                                                                 });
+                                  });
+            if (auto* run = Find<gui::Button>(u8"import-run"))
+                run->SetOnClick([self]() { (void)self->Import(); });
+            if (auto* cancel = Find<gui::Button>(u8"import-cancel"))
+                cancel->SetOnClick([self]() { self->Close(); });
+            // However it closes, the session lets go of it: a read that arrives after is dropped.
+            m_window->SetOnClose([self]() { self->Release(); });
+        }
+        ImportWindow(const ImportWindow&) = delete;
+        ImportWindow& operator=(const ImportWindow&) = delete;
+        ~ImportWindow() { Close(); }
 
-            auto column = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            column->Direction = ui::Orientation::Vertical;
-            column->Spacing = 6.0f;
-
-            // Destination row (shared by the whole batch).
+        /// Opens it over `root` for `session`, its first file chosen; false with no markup, no
+        /// session or one open.
+        bool Open(gui::Node& root, RefPtr<AssetImport::Session> session)
+        {
+            if (!m_window || !session || m_window->IsOpen())
+                return false;
+            m_session = Move(session);
+            m_selected = 0;
+            ImportWindow* self = this;
+            m_session->onChanged = [self](usize file)
             {
-                auto row = MakeRef<ui::FlexLayout>(MemoryAllocator());
-                row->Direction = ui::Orientation::Horizontal;
-                row->Spacing = 6.0f;
-                auto name = MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"Into:"));
-                name->FontSize.SetValue(11.0f);
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(52.0f));
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(name.Get(), lp);
-                }
-                m_destinationText = MakeRef<ui::Label>(MemoryAllocator(), destination);
-                m_destinationText->FontSize.SetValue(11.0f);
-                m_destinationText->Ellipsis.SetValue(true);
-                {
-                    ui::LayoutStyle lp;
-                    lp.FlexGrow = 1.0f;
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(m_destinationText.Get(), lp);
-                }
-                auto change = MakeRef<ui::Button>(MemoryAllocator(), StringView(u8"Change..."));
-                change->FontSize.SetValue(Optional<f32>{11.0f});
-                BatchImportDialog* self = this;
-                change->OnClick.Add([self](ui::ButtonBase*)
-                                    { if (self->OnChangeDestination) self->OnChangeDestination(); });
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(72.0f));
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(change.Get(), lp);
-                }
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                column->AddView(row.Get(), lp);
-            }
-
-            // The split: file list left, per-file detail right.
-            auto split = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            split->Direction = ui::Orientation::Horizontal;
-            split->Spacing = 8.0f;
-            BuildFileList(*split);
-            m_detail = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            m_detail->Direction = ui::Orientation::Vertical;
-            m_detail->Spacing = 4.0f;
-            {
-                auto scroll = MakeRef<ui::ScrollView>(MemoryAllocator());
-                scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-                scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
-                {
-                    ui::LayoutStyle contentLp;
-                    contentLp.Width = ui::SizeSpec::Match();
-                    scroll->AddView(m_detail.Get(), contentLp);
-                }
-                ui::LayoutStyle lp;
-                lp.FlexGrow = 1.0f;
-                lp.Height = ui::SizeSpec::Match();
-                split->AddView(scroll.Get(), lp);
-            }
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.FlexGrow = 1.0f;
-                column->AddView(split.Get(), lp);
-            }
-            SetContent(column.Get());
-
-            BatchImportDialog* self = this;
-            m_importButton = AddButton(u8"Import", ui::DialogResult::None);
-            m_importButton->OnClick.Add(
-                [self](ui::ButtonBase*)
-                {
-                    self->SyncSelectedNames();
-                    if (self->OnImport)
-                    {
-                        self->OnImport();
-                    }
-                    self->Close(ui::DialogResult::OK);
-                });
-            AddButton(u8"Cancel", ui::DialogResult::Cancel);
-
-            RebuildDetail();
-            SyncImportEnabled();
+                self->ShowFiles();
+                if (file == self->m_selected)
+                    self->ShowDetail();
+                self->ShowWhy();
+            };
+            ShowAll();
+            m_window->OpenModal(root);
+            return true;
+        }
+        [[nodiscard]] bool IsOpen() const noexcept { return m_window && m_window->IsOpen(); }
+        void Close()
+        {
+            if (IsOpen())
+                m_window->Close();
         }
 
-        [[nodiscard]] Array<FileEntry>& Files() noexcept { return m_files; }
-
-        void SetDestination(StringView destination)
+        /// Imports what is kept and closes; false (it stays, saying why) when it cannot yet.
+        bool Import()
         {
-            if (m_destinationText.Get() != nullptr)
-            {
-                m_destinationText->SetText(destination);
-            }
+            if (!m_session || !m_services.import->Commit(*m_session))
+                return false;
+            Close();
+            return true;
+        }
+        /// Shows file `index`'s detail.
+        void Select(usize index)
+        {
+            if (!m_session || index >= m_session->files.Size())
+                return;
+            m_selected = index;
+            ShowFiles();
+            ShowDetail();
         }
 
-        /// A worker prepare landed for `index`: the owner filled prepared/plan/described.
-        /// Refreshes the detail (if that file is selected) and the Import gate.
-        void OnFilePrepared(usize index)
+        // For tests: the session, the window, the chosen file, the line, Import.
+        [[nodiscard]] AssetImport::Session* Session() const noexcept { return m_session.Get(); }
+        [[nodiscard]] gui::Window* Window() const noexcept { return m_window.Get(); }
+        [[nodiscard]] usize Selected() const noexcept { return m_selected; }
+        [[nodiscard]] StringView Why() const
         {
-            if (index == m_selected)
-            {
-                QueueRebuildDetail();
-            }
-            SyncImportEnabled();
+            const auto* why = Find<gui::Label>(u8"import-why");
+            return why != nullptr ? why->GetText() : StringView{};
         }
-
-        /// Describe every file through DescribeFile (the owner assigns it AFTER construction, so
-        /// the constructor's detail + Import gate saw nothing described), then refresh both. The
-        /// owner calls this once before Show; worker-prepared files stay "Reading..." until their
-        /// OnFilePrepared. Without this refresh an inline importer (textures) left the dialog
-        /// gated forever: Import disabled, detail stuck on "Reading file..." (2026-09-21).
-        void DescribeAll()
-        {
-            if (DescribeFile)
-            {
-                for (FileEntry& entry : m_files)
-                {
-                    DescribeFile(entry);
-                }
-            }
-            QueueRebuildDetail();
-            SyncImportEnabled();
-        }
-
-        /// The Import gate as the button shows it (every enabled file described).
-        [[nodiscard]] bool ImportEnabled() const noexcept
-        {
-            return m_importButton != nullptr && m_importButton->IsEnabled;
-        }
+        [[nodiscard]] gui::Button* ImportButton() const { return Find<gui::Button>(u8"import-run"); }
+        [[nodiscard]] gui::Node* Detail() const { return Find<gui::Node>(u8"import-detail"); }
 
     private:
-        void BuildFileList(ui::FlexLayout& split)
+        static constexpr f32 kWidth = 640.0f;
+        static constexpr f32 kHeight = 520.0f;
+
+        void Release()
         {
-            auto list = MakeRef<ui::FlexLayout>(MemoryAllocator());
-            list->Direction = ui::Orientation::Vertical;
-            list->Spacing = 2.0f;
-            BatchImportDialog* self = this;
-            for (usize i = 0; i < m_files.Size(); ++i)
-            {
-                FileEntry* entry = &m_files[i];
-                auto row = MakeRef<BatchFileRow>(MemoryAllocator());
-                row->OnSelect = [self, i]() { self->SelectFile(i); };
-                row->SetSelected(i == m_selected);
-                m_fileRows.PushBack(row);
-                auto check = MakeRef<ui::CheckBox>(MemoryAllocator(), u8"", entry->enabled);
-                check->OnCheckedChanged.Add(
-                    [self, entry](ui::CheckBox*, bool checked)
-                    {
-                        entry->enabled = checked;
-                        self->SyncImportEnabled();
-                    });
-                {
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(30.0f));
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(check.Get(), lp);
-                }
-                auto name = MakeRef<ui::Label>(MemoryAllocator(),
-                                               pipeline::FileNameOf(entry->path.AsView()));
-                name->FontSize.SetValue(12.0f);
-                name->Ellipsis.SetValue(true);
-                {
-                    ui::LayoutStyle lp;
-                    lp.FlexGrow = 1.0f;
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(name.Get(), lp);
-                }
-                if (entry->candidates.Size() > 1)
-                {
-                    // Multiple importers claim the extension: the per-row dropdown replaces
-                    // the old modal-per-file chooser.
-                    auto combo = MakeRef<ui::ComboBox>(MemoryAllocator());
-                    for (pipeline::IFileImporter* importer : entry->candidates)
-                    {
-                        (void)combo->AddItem(importer->Label());
-                    }
-                    combo->SetSelectedIndex(static_cast<i32>(entry->importerIndex));
-                    combo->OnSelectionChanged.Add(
-                        [self, i](ui::ComboBox*, i32 index)
-                        { self->ChangeImporter(i, static_cast<usize>(Max(0, index))); });
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(110.0f));
-                    lp.Height = ui::SizeSpec::Match();
-                    row->AddView(combo.Get(), lp);
-                }
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(26.0f));
-                list->AddView(row.Get(), lp);
-            }
-            auto scroll = MakeRef<ui::ScrollView>(MemoryAllocator());
-            scroll->VScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Auto);
-            scroll->HScrollBarPolicy.SetValue(ui::ScrollBarPolicy::Never);
-            {
-                ui::LayoutStyle contentLp;
-                contentLp.Width = ui::SizeSpec::Match();
-                scroll->AddView(list.Get(), contentLp);
-            }
-            ui::LayoutStyle lp;
-            lp.Width = ui::SizeSpec::Fixed(ui::Unit::Dp(300.0f));
-            lp.Height = ui::SizeSpec::Match();
-            split.AddView(scroll.Get(), lp);
+            if (!m_session)
+                return;
+            m_session->onChanged = {};
+            m_session->closed = true;
+            m_session = {};
+        }
+        void ShowAll()
+        {
+            if (auto* group = Find<gui::Button>(u8"import-group"); group != nullptr && m_session)
+                group->SetText(GroupPicker::ShownName(*m_session->group).AsView());
+            ShowFiles();
+            ShowDetail();
+            ShowWhy();
         }
 
-        void SelectFile(usize index)
+        // The files, when there are several: each kept or not, its state, the chosen one marked.
+        void ShowFiles()
         {
-            if (index == m_selected || index >= m_files.Size())
-            {
+            auto* scroll = Find<gui::UIWidget>(u8"import-files-scroll");
+            auto* list = Find<gui::UIWidget>(u8"import-files");
+            if (scroll == nullptr || list == nullptr || !m_session)
                 return;
-            }
-            SyncSelectedNames(); // keep this file's rename edits before switching away
-            if (m_selected < m_fileRows.Size())
+            const bool several = m_session->files.Size() > 1;
+            scroll->SetDisplayed(several);
+            while (list->ChildCount() > 0)
+                list->RemoveChild(list->GetChildAt(list->ChildCount() - 1));
+            if (!several)
+                return;
+            ImportWindow* self = this;
+            for (usize i = 0; i < m_session->files.Size(); ++i)
             {
-                m_fileRows[m_selected]->SetSelected(false);
+                const AssetImport::File& file = m_session->files[i];
+                RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+                row->AddClass(u8"import-file");
+                if (i == m_selected)
+                    row->AddClass(u8"selected");
+                RefPtr<gui::CheckBox> kept = MakeRef<gui::CheckBox>(m_allocator);
+                kept->SetChecked(file.kept);
+                kept->SetEnabled(file.state != AssetImport::File::State::Failed);
+                kept->SetTooltip(u8"Import this file");
+                kept->SetOnToggled([self, i](bool on)
+                                   {
+                                       if (self->m_session && i < self->m_session->files.Size())
+                                           self->m_session->files[i].kept = on;
+                                       self->ShowWhy();
+                                   });
+                RefPtr<gui::Button> name = MakeRef<gui::Button>(m_allocator);
+                name->AddClass(u8"import-file-name");
+                name->SetText(file.Name());
+                name->SetTooltip(file.path.AsView());
+                name->SetOnClick([self, i]() { self->Later([self, i]() { self->Select(i); }); }); // the rows rebuild: not under the click
+                RefPtr<gui::Label> state = MakeRef<gui::Label>(m_allocator);
+                state->AddClass(u8"badge");
+                state->AddClass(file.state == AssetImport::File::State::Ready    ? StringView(u8"success")
+                                : file.state == AssetImport::File::State::Failed ? StringView(u8"danger")
+                                                                                  : StringView(u8"warning"));
+                state->SetText(file.state == AssetImport::File::State::Ready    ? StringView(u8"Ready")
+                               : file.state == AssetImport::File::State::Failed ? StringView(u8"Failed")
+                                                                                 : StringView(u8"Reading"));
+                row->AddChild(kept.Get());
+                row->AddChild(name.Get());
+                row->AddChild(state.Get());
+                list->AddChild(row.Get());
             }
-            m_selected = index;
-            if (m_selected < m_fileRows.Size())
-            {
-                m_fileRows[m_selected]->SetSelected(true);
-            }
-            QueueRebuildDetail();
         }
 
-        void ChangeImporter(usize fileIndex, usize importerIndex)
+        // The chosen file: its importer, its options, what it would create by kind.
+        void ShowDetail()
         {
-            FileEntry& entry = m_files[fileIndex];
-            if (importerIndex >= entry.candidates.Size() ||
-                importerIndex == entry.importerIndex)
+            auto* detail = Find<gui::UIWidget>(u8"import-detail");
+            if (detail == nullptr || !m_session || m_selected >= m_session->files.Size())
+                return;
+            while (detail->ChildCount() > 0)
+                detail->RemoveChild(detail->GetChildAt(detail->ChildCount() - 1));
+            AssetImport::File& file = m_session->files[m_selected];
+            ImportWindow* self = this;
+            const usize index = m_selected;
+            detail->AddChild(Text(file.Name(), u8"import-title").Get());
+            if (file.importers.Size() > 1)
             {
+                RefPtr<gui::Panel> line = Row(u8"import-importer");
+                line->AddChild(Text(u8"Import as", u8"form-label").Get());
+                RefPtr<gui::ComboBox> choice = MakeRef<gui::ComboBox>(m_allocator);
+                for (const pipeline::IFileImporter* importer : file.importers)
+                    choice->AddItem(importer->Label());
+                choice->SetSelectedIndex(static_cast<i32>(file.importer));
+                choice->SetOnSelectionChanged([self, index](i32 picked)
+                                              {
+                                                  if (!self->m_session || picked < 0)
+                                                      return;
+                                                  self->m_services.import->SetImporter(*self->m_session, index, static_cast<usize>(picked));
+                                                  self->Later([self]() { self->ShowAll(); }); // not under the combo's own event
+                                              });
+                line->AddChild(choice.Get());
+                detail->AddChild(line.Get());
+            }
+            if (file.state == AssetImport::File::State::Reading)
+            {
+                detail->AddChild(Text(Format(u8"Reading {}...", file.Name()).AsView(), u8"form-help").Get());
+                RefPtr<gui::ProgressBar> bar = MakeRef<gui::ProgressBar>(m_allocator);
+                bar->SetIndeterminate(true);
+                detail->AddChild(bar.Get());
                 return;
             }
-            entry.importerIndex = importerIndex;
-            entry.options = entry.candidates[importerIndex]->CreateOptions(MemoryAllocator());
-            if (entry.options.Get() == nullptr)
+            if (file.state == AssetImport::File::State::Failed)
             {
-                // Bare selection carrier (option-less importers still honor renames).
-                entry.options = RefPtr<pipeline::ImportOptions>(
-                    MakeRef<pipeline::ImportOptions>(MemoryAllocator()).Get());
-            }
-            entry.prepared = {}; // payloads are importer-specific
-            entry.plan = {};
-            entry.described = false;
-            if (DescribeFile)
-            {
-                DescribeFile(entry);
-            }
-            if (fileIndex == m_selected)
-            {
-                QueueRebuildDetail();
-            }
-            SyncImportEnabled();
-        }
-
-        // Detail rebuilds DESTROY views - never inline from a click handler (the
-        // mutation-queue rule).
-        void QueueRebuildDetail()
-        {
-            if (Context == nullptr)
-            {
-                RebuildDetail();
+                detail->AddChild(Text(u8"It could not be read; the Console says why.", u8"form-help refused").Get());
                 return;
             }
-            BatchImportDialog* self = this;
-            const RefPtr<BatchImportDialog> keepAlive(this);
-            Context->MutationQueueRef().QueueAction(
-                Function<void()>{[self, keepAlive]() { self->RebuildDetail(); }});
-        }
-
-        void RebuildDetail()
-        {
-            m_detail->RemoveAllViews();
-            m_planView = {};
-            if (m_selected >= m_files.Size())
-            {
-                return;
-            }
-            FileEntry& entry = m_files[m_selected];
-
-            auto title = MakeRef<ui::Label>(MemoryAllocator(),
-                                            pipeline::FileNameOf(entry.path.AsView()));
-            title->FontSize.SetValue(13.0f);
-            {
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                m_detail->AddView(title.Get(), lp);
-            }
-
-            if (!entry.described)
-            {
-                auto reading =
-                    MakeRef<ui::Label>(MemoryAllocator(), StringView(u8"Reading file..."));
-                reading->FontSize.SetValue(12.0f);
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                m_detail->AddView(reading.Get(), lp);
-                return;
-            }
-
-            if (!entry.plan.IsEmpty())
-            {
-                m_planView = MakeRef<ImportPlanView>(MemoryAllocator(), &entry.plan);
-                ui::LayoutStyle lp;
-                lp.Width = ui::SizeSpec::Match();
-                m_detail->AddView(m_planView.Get(), lp);
-            }
-            if (entry.options.Get() != nullptr)
-            {
-                for (const pipeline::ImportOptions::Toggle& toggle : entry.options->Toggles())
+            // Its options.
+            if (file.options)
+                for (const pipeline::ImportOptions::Toggle& toggle : file.options->Toggles())
                 {
-                    if (toggle.value == nullptr)
-                    {
-                        continue;
-                    }
-                    auto check =
-                        MakeRef<ui::CheckBox>(MemoryAllocator(), toggle.label, *toggle.value);
-                    check->FontSize.SetValue(12.0f);
-                    if (!toggle.description.IsEmpty())
-                    {
-                        check->TooltipText = String(toggle.description);
-                    }
+                    RefPtr<gui::CheckBox> box = MakeRef<gui::CheckBox>(m_allocator);
+                    box->SetText(toggle.label);
+                    box->SetTooltip(toggle.description);
+                    box->SetChecked(toggle.value != nullptr && *toggle.value);
                     bool* value = toggle.value;
-                    check->OnCheckedChanged.Add([value](ui::CheckBox*, bool checked)
-                                                { *value = checked; });
-                    ui::LayoutStyle lp;
-                    lp.Width = ui::SizeSpec::Match();
-                    lp.Height = ui::SizeSpec::Fixed(ui::Unit::Dp(22.0f));
-                    m_detail->AddView(check.Get(), lp);
+                    box->SetOnToggled([value](bool on)
+                                      {
+                                          if (value != nullptr)
+                                              *value = on;
+                                      });
+                    detail->AddChild(box.Get());
+                }
+            if (file.plan.IsEmpty())
+            {
+                detail->AddChild(Text(u8"It makes one asset, named after the file.", u8"form-help").Get());
+                return;
+            }
+            // What it would create, by kind: a kind's box keeps or leaves all of it.
+            static constexpr pipeline::ImportResourceKind kKinds[] = {
+                pipeline::ImportResourceKind::Mesh,          pipeline::ImportResourceKind::Material,  pipeline::ImportResourceKind::Texture,
+                pipeline::ImportResourceKind::Skeleton,      pipeline::ImportResourceKind::AnimationClip, pipeline::ImportResourceKind::Collision,
+                pipeline::ImportResourceKind::Asset};
+            for (const pipeline::ImportResourceKind kind : kKinds)
+            {
+                usize count = 0, kept = 0;
+                for (const pipeline::ImportPlanEntry& entry : file.plan.entries)
+                    if (entry.kind == kind)
+                    {
+                        ++count;
+                        kept += entry.enabled ? 1u : 0u;
+                    }
+                if (count == 0)
+                    continue;
+                RefPtr<gui::CheckBox> all = MakeRef<gui::CheckBox>(m_allocator);
+                all->AddClass(u8"import-kind");
+                all->SetText(Format(u8"{} ({})", pipeline::ImportResourceKindLabel(kind), count).AsView());
+                all->SetChecked(kept == count);
+                all->SetIndeterminate(kept > 0 && kept < count);
+                all->SetOnToggled([self, index, kind](bool on)
+                                  {
+                                      if (!self->m_session || index >= self->m_session->files.Size())
+                                          return;
+                                      for (pipeline::ImportPlanEntry& entry : self->m_session->files[index].plan.entries)
+                                          if (entry.kind == kind)
+                                              entry.enabled = on;
+                                      self->Later([self]() { self->ShowDetail(); });
+                                  });
+                detail->AddChild(all.Get());
+                for (usize e = 0; e < file.plan.entries.Size(); ++e)
+                {
+                    const pipeline::ImportPlanEntry& entry = file.plan.entries[e];
+                    if (entry.kind != kind)
+                        continue;
+                    RefPtr<gui::Panel> line = Row(u8"import-entry");
+                    RefPtr<gui::CheckBox> on = MakeRef<gui::CheckBox>(m_allocator);
+                    on->SetChecked(entry.enabled);
+                    on->SetOnToggled([self, index, e](bool checked)
+                                     {
+                                         if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
+                                             self->m_session->files[index].plan.entries[e].enabled = checked;
+                                         self->Later([self]() { self->ShowDetail(); });
+                                     });
+                    RefPtr<gui::TextField> name = MakeRef<gui::TextField>(m_allocator);
+                    name->SetText(entry.targetName.AsView());
+                    name->SetPlaceholder(entry.sourceName.AsView()); // emptied, it keeps the importer's name
+                    name->SetOnTextChanging([self, index, e](StringView text)
+                                            {
+                                                if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
+                                                    self->m_session->files[index].plan.entries[e].targetName = String(text);
+                                            });
+                    line->AddChild(on.Get());
+                    line->AddChild(name.Get());
+                    detail->AddChild(line.Get());
                 }
             }
         }
 
-        void SyncSelectedNames()
+        // What Import does, or why it waits; Import with it.
+        void ShowWhy()
         {
-            if (m_planView.Get() != nullptr)
-            {
-                m_planView->SyncNames();
-            }
-        }
-
-        // Import waits for every ENABLED file to be described (worker prepares stream in).
-        void SyncImportEnabled()
-        {
-            if (m_importButton == nullptr)
-            {
+            if (!m_session)
                 return;
-            }
-            bool ready = true;
-            for (const FileEntry& f : m_files)
+            String why;
+            const bool can = AssetImport::CanImport(*m_session, why);
+            if (auto* line = Find<gui::Label>(u8"import-why"))
             {
-                ready = ready && (!f.enabled || f.described);
+                line->SetText(why.AsView());
+                if (can)
+                    line->RemoveClass(u8"refused");
+                else
+                    line->AddClass(u8"refused");
             }
-            m_importButton->IsEnabled = ready;
-            m_importButton->Invalidate();
+            if (gui::Button* run = ImportButton())
+                run->SetEnabled(can);
         }
 
-        Array<FileEntry> m_files;
-        usize m_selected = 0;
-        RefPtr<ui::Label> m_destinationText;
-        RefPtr<ui::FlexLayout> m_detail;
-        RefPtr<ImportPlanView> m_planView;       // the SELECTED file's plan view
-        Array<RefPtr<BatchFileRow>> m_fileRows;  // parallel to m_files (selection highlight)
-        ui::Button* m_importButton = nullptr;
-    };
+        // After the event that asked (a control's own callback rebuilding the controls).
+        void Later(Function<void()> work)
+        {
+            gui::MutationQueue* queue = m_body ? m_body->GetMutationQueue() : nullptr;
+            if (queue == nullptr)
+                work();
+            else
+                queue->Enqueue(Move(work));
+        }
+        [[nodiscard]] RefPtr<gui::Label> Text(StringView text, StringView classes)
+        {
+            RefPtr<gui::Label> label = MakeRef<gui::Label>(m_allocator);
+            label->AddClasses(classes);
+            label->SetText(text);
+            return label;
+        }
+        [[nodiscard]] RefPtr<gui::Panel> Row(StringView cls)
+        {
+            RefPtr<gui::Panel> row = MakeRef<gui::Panel>(m_allocator);
+            row->AddClass(cls);
+            return row;
+        }
+        template <typename T>
+        [[nodiscard]] T* Find(StringView id) const
+        {
+            return m_body ? Cast<T>(FindIn(*m_body, id)) : nullptr;
+        }
+        static gui::Node* FindIn(gui::Node& node, StringView id)
+        {
+            if (const auto* widget = Cast<gui::UIWidget>(&node); widget != nullptr && widget->GetId() == id)
+                return &node;
+            for (usize i = 0; i < node.ChildCount(); ++i)
+                if (gui::Node* found = FindIn(*node.GetChildAt(i), id))
+                    return found;
+            return nullptr;
+        }
 
-    RTTI_DEFINE_OBJECT(ImportPlanView, "rtti::editor::editor::app")
-    RTTI_DEFINE_OBJECT(BatchFileRow, "rtti::editor::editor::app")
-    RTTI_DEFINE_OBJECT(ImportOptionsDialog, "rtti::editor::editor::app")
-    RTTI_DEFINE_OBJECT(BatchImportDialog, "rtti::editor::editor::app")
+        IAllocator& m_allocator;
+        Services m_services;
+        RefPtr<gui::Node> m_body;
+        RefPtr<gui::Window> m_window;
+        RefPtr<AssetImport::Session> m_session;
+        usize m_selected = 0;
+    };
 }

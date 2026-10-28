@@ -86,7 +86,6 @@ Code/Samples/AnimStressTest/main.cpp
 Code/Samples/AudioPlayground/main.cpp
 Code/Samples/CustomShader/main.cpp
 Code/Samples/Framework/SampleApp.cppm
-Code/Samples/GameUiSandbox/main.cpp
 Code/Samples/GUISandbox/Main.cpp
 Code/Samples/InputActions/main.cpp
 Code/Samples/MultiWindow/main.cpp

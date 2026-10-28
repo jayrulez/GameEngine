@@ -22,7 +22,6 @@ the editor. Games made the usual way, as projects in the editor, are under
 | `InputActions` | Named input actions on keys, pads and touch, an exclusive menu set, smoothing, time scale and rebinding. |
 | `ScriptPlayground` | Script behaviours on entities, in AngelScript or Luau (`--script=<lang>`), from the same scene. |
 | `TerrainPlayground` | Terrain and vegetation from an in-memory heightfield, on the desktop and in the browser. |
-| `GameUiSandbox` | The game UI kit's widgets on a screen of the UI subsystem, driven by keys or a pad. |
 | `NetEcho` | The network stack end to end in a console: a reliable-UDP client and server echoing lines over localhost. |
 
 ## Web

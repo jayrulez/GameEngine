@@ -11,7 +11,7 @@
 //
 // The member functions are defined in FittedInputSourceImpl.cpp: a class whose virtuals are all
 // inline has no key function, so every importer generated its vtables, and clang 21 crashed doing
-// so (CI, GameUiSandbox; a vtable-layout crash in codegen). Out of line, the vtables are this
+// so (on CI, in a sample importing it; a vtable-layout crash in codegen). Out of line, the vtables are this
 // module's alone.
 //
 // Ungated, unlike an editor viewport's surface: it is the whole window's input, so a player who

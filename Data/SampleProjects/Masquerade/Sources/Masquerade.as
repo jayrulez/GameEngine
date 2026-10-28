@@ -60,6 +60,7 @@ class Game
     private bool m_inRound = false;
     private bool m_paused = false;
     private float m_note = 0.0f;         // how long the HUD's word shows yet
+    private bool m_inputHeld = false;    // the "Menu" set pushed (holdInput)
     private float m_controlsShow = 0.0f; // how long the controls panel shows yet
     private int m_map = 0;               // 0 the Palace, 1 the Canal, 2 the Gardens
     private int m_mode = kAlone;
@@ -77,6 +78,7 @@ class Game
         m_inRound = false;
         m_paused = false;
         run::setTimeScale(0.0f); // whatever is behind the title holds still
+        holdInput();
         screens().clear();
         screens().push(kTitleDoc);
         wire("play-btn", EventHandler(this.onPalace));
@@ -169,7 +171,7 @@ class Game
         setText("hud-score", "Points 0");
         find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the sheet's 0
         m_controlsShow = kControlsShown;
-        run::setTimeScale(1.0f);
+        letGo(); // time again, and the player's input: a round may start from any menu
         run::loadScene(m_map == 0 ? kPalace : (m_map == 1 ? kCanal : kGardens));
     }
 
@@ -372,28 +374,43 @@ class Game
         return true;
     }
 
-    // Alone, the scene stops behind a menu. In a networked round it goes on (the host runs the
-    // world for everyone, and a joiner's scene must keep hearing the host: a new round, say), so
-    // the player hears "Menu" instead and stands still under it.
+    // Under any menu the player's actions read released: the input map's "Menu" set (Pause alone)
+    // is pushed as the only one in effect, and a press already held when it opens or closes stays
+    // latched until let go, so the press that works a menu's button is never a Tag. Once, however
+    // many menus ask.
+    private void holdInput()
+    {
+        if (!m_inputHeld)
+        {
+            Input::pushSet("Menu");
+            m_inputHeld = true;
+        }
+    }
+
+    private void releaseInput()
+    {
+        if (m_inputHeld)
+        {
+            Input::popSet();
+            m_inputHeld = false;
+        }
+    }
+
+    // Alone, the scene stops behind a menu too. In a networked round it goes on (the host runs the
+    // world for everyone, and a joiner's scene must keep hearing the host: a new round, say).
     private void holdStill()
     {
+        holdInput();
         if (m_mode == kAlone)
         {
             run::setTimeScale(0.0f);
-        }
-        else
-        {
-            run::currentScene().events.emit("Menu", 1);
         }
     }
 
     private void letGo()
     {
         run::setTimeScale(1.0f);
-        if (m_mode != kAlone)
-        {
-            run::currentScene().events.emit("Menu", 0);
-        }
+        releaseInput();
     }
 
     // The HUD over the scene that is already running.

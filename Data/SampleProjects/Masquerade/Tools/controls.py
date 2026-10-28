@@ -7,7 +7,8 @@ project's default.
 - Tag: F, or the south button (A): tag the guest in front of you.
 - Dance: Space, or the east button (B), held: dance, as the guests do when the orchestra plays.
 - Turn the camera a quarter left or right: Q / E, or the left and right shoulders.
-- Pause: Escape, or Start.
+- Pause: Escape, or Start. It is also the whole of the Menu set, the one in effect while a menu
+  is up (Masquerade.as pushes it), so under a menu no other action reads pressed.
 - On a touch screen: a floating stick on the left half moves; compact buttons on the right, Tag
   largest in the bottom-right corner, Dance beside it, Sprint above Dance, the two turns above
   those; Pause small under the HUD's top-left. The engine draws them (each zone is its button)
@@ -79,11 +80,22 @@ def main():
     for child in list(payload):
         if child.get("name") == "sets":
             payload.remove(child)
-    sets = el(payload, "array", "sets", count="1")
-    el(sets, "string", "name", "Gameplay")
+    # Gameplay, and Menu: Pause alone, the one set in effect while a menu is up (Masquerade.as
+    # pushes it), so the player's actions read released under every menu.
+    menu = [a for a in ACTIONS if a[0] == "Pause"]
+    sets = el(payload, "array", "sets", count="2")
+    write_set(sets, "Gameplay", ACTIONS)
+    write_set(sets, "Menu", menu)
+    mcp("asset_data_write", {"guid": guid, "xml": ET.tostring(root, encoding="unicode")})
+    mcp("project_settings_set", {"defaultInputMapId": guid})
+    print("Controls", guid)
+
+
+def write_set(sets, set_name, set_actions):
+    el(sets, "string", "name", set_name)
     el(sets, "i32", "priority", "0")
-    actions = el(sets, "array", "actions", count=str(len(ACTIONS)))
-    for name, kind, bindings in ACTIONS:
+    actions = el(sets, "array", "actions", count=str(len(set_actions)))
+    for name, kind, bindings in set_actions:
         el(actions, "string", "name", name)
         el(actions, "u8", "kind", str(kind))
         for k, v in (("sensitivity", "0"), ("gravity", "0")):
@@ -96,9 +108,6 @@ def main():
         b = el(actions, "array", "bindings", count=str(len(bindings)))
         for each in bindings:
             binding(b, each)
-    mcp("asset_data_write", {"guid": guid, "xml": ET.tostring(root, encoding="unicode")})
-    mcp("project_settings_set", {"defaultInputMapId": guid})
-    print("Controls", guid)
 
 
 main()

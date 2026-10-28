@@ -40,7 +40,6 @@ class Player
     private int m_sent = -1;          // the input last sent to the host (a client)
     private float m_sendIn = 0.0f;
     private bool m_handedOver = false; // a client's: its agent stopped for the host's transforms
-    private bool m_menu = false;       // a menu covers a networked round (Masquerade.as): no input
 
     Player(Entity@ entity) { @self = entity; }
 
@@ -79,12 +78,6 @@ class Player
         return owner() == (me < 0 ? 0 : me);
     }
 
-    // A menu over a networked round (Masquerade.as): this peer's player stands still under it.
-    void onMenu(int shown)
-    {
-        m_menu = shown != 0;
-    }
-
     // The host: a remote player's stick (x, z), sprint and dance, from Ball.as.
     void onInput(Float4 input)
     {
@@ -101,7 +94,7 @@ class Player
         bool sprint = false;
         bool dance = false;
         bool tag = false;
-        if (mine() && !m_menu)
+        if (mine())
         {
             Float2 stick = Input::value2D("Move");
             float amount = Math::Sqrt(stick.x * stick.x + stick.y * stick.y);

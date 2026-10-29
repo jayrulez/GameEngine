@@ -749,6 +749,11 @@ TEST_CASE("ReflectionProbeSystem accumulates per-scene ranges (multi-scene frame
     pb0.center = Float3{5, 1, 0};
     pb1.key = 3;
     pb1.center = Float3{9, 1, 0};
+    pb1.halfExtents = Float3{2, 3, 4};
+    pb1.blendDistance = 0.5f;
+    pb1.intensity = 0.75f;
+    pb1.priority = 7;
+    pb1.parallax = false;
 
     probes.BeginFrame();
     ReflectionProbe listA[] = {pa};
@@ -765,6 +770,22 @@ TEST_CASE("ReflectionProbeSystem accumulates per-scene ranges (multi-scene frame
     CHECK(probes.RangeFor(&sceneB).count == 2u);
     ExtractedScene sceneC{DefaultAllocator()};
     CHECK(probes.RangeFor(&sceneC).count == 0u); // unknown scene -> no probes
+
+    // Each record holds its probe by name, as lighting.hlsli reads it (the box from the centre and
+    // the half-extents; the cube slice is the probe's slot in the array).
+    REQUIRE(probes.CpuProbes().Size() == 3u);
+    const GpuProbe& record = probes.CpuProbes()[2];
+    CHECK(record.center.x == doctest::Approx(9.0f));
+    CHECK(record.intensity == doctest::Approx(0.75f));
+    CHECK(record.boxMin.x == doctest::Approx(7.0f));
+    CHECK(record.boxMin.z == doctest::Approx(-4.0f));
+    CHECK(record.boxMax.y == doctest::Approx(4.0f));
+    CHECK(record.blendDistance == doctest::Approx(0.5f));
+    CHECK(record.priority == doctest::Approx(7.0f));
+    CHECK(record.parallax == doctest::Approx(0.0f));
+    CHECK(probes.CpuProbes()[1].parallax == doctest::Approx(1.0f)); // the default box-projects
+    CHECK(record.mipCount > 0.0f);
+    CHECK(record.slice != probes.CpuProbes()[1].slice); // each probe its own cube
 
     // Every capture task carries its probe's OWNING scene (captures must render that scene's
     // geometry, never another's).

@@ -203,9 +203,15 @@ namespace
     };
     const FieldRow kGpuProbe[] = {
         FIELD(render::GpuProbe, center, "center"),
+        FIELD(render::GpuProbe, intensity, "intensity"),
         FIELD(render::GpuProbe, boxMin, "boxMin"),
+        FIELD(render::GpuProbe, blendDistance, "blendDistance"),
         FIELD(render::GpuProbe, boxMax, "boxMax"),
-        FIELD(render::GpuProbe, params, "params"),
+        FIELD(render::GpuProbe, slice, "slice"),
+        FIELD(render::GpuProbe, mipCount, "mipCount"),
+        FIELD(render::GpuProbe, priority, "priority"),
+        FIELD(render::GpuProbe, parallax, "parallax"),
+        FIELD(render::GpuProbe, _pad, "_probeRecordPad"),
     };
     const FieldRow kDecalUniforms[] = {
         FIELD(render::DecalUniforms, world, "World"),
@@ -245,9 +251,10 @@ namespace
         FIELD(render::GpuView, localShadowBase, "LocalShadowBase"),
         FIELD(render::GpuView, prevViewProj, "PrevViewProj"),
         FIELD(render::GpuView, jitter, "Jitter"),
-        FIELD(render::GpuView, probeCenter, "ProbeCenter"),
-        FIELD(render::GpuView, probeBoxMin, "ProbeBoxMin"),
-        FIELD(render::GpuView, probeBoxMax, "ProbeBoxMax"),
+        FIELD(render::GpuView, probeBase, "ProbeBase"),
+        FIELD(render::GpuView, probeCount, "ProbeCount"),
+        FIELD(render::GpuView, _probePad0, "_probePad0"),
+        FIELD(render::GpuView, _probePad1, "_probePad1"),
         FIELD(render::GpuView, shadowParams, "ShadowParams"),
         FIELD(render::GpuView, debugParams, "DebugParams"),
         FIELD(render::GpuView, iblDiffuse, "IblDiffuse"),

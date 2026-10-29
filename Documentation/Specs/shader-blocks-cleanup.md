@@ -150,6 +150,13 @@ table in the forward, shadow depth, pick, Phong and Unlit vertex stages.
 - **F12** `GpuLight` lanes 14 and 15 named `pad0`/`pad1` in `cluster_build.cs.hlsl:18`, which carry
   `shadowIndex`/`shadowStrength` (b). Named as in `lighting.hlsli`.
 
+Built 2026-10-29: the view's probe lanes are `ProbeBase` and `ProbeCount` (uints, with honest
+padding; the dead `ProbeBoxMin`/`ProbeBoxMax` are gone, so `GpuView` is 656 bytes), and `GpuProbe`
+names every scalar (`center`, `intensity`, `boxMin`, `blendDistance`, `boxMax`, `slice`,
+`mipCount`, `priority`, `parallax`) in the same 64 bytes and order, so the uploaded bytes do not
+change. F12 was fixed in phase 0. `Render.Tests` checks a probe record's values by name; no GPU
+test draws reflection probes.
+
 ### Phase 5: sky, image lighting, terrain, effects, screen passes
 
 - **F14, F15, F16, F17** the image-lighting precompute push (`ibl_common.hlsli`, no C++ assert):

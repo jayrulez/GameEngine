@@ -108,11 +108,15 @@ namespace foundation::render
             const Float3 boxMax = p.center + p.halfExtents;
 
             GpuProbe g{};
-            g.center = Float4{p.center.x, p.center.y, p.center.z, p.intensity};
-            g.boxMin = Float4{boxMin.x, boxMin.y, boxMin.z, p.blendDistance};
-            g.boxMax = Float4{boxMax.x, boxMax.y, boxMax.z, static_cast<f32>(slot)};
-            g.params = Float4{static_cast<f32>(kPrefilterMips), static_cast<f32>(p.priority),
-                              p.parallax ? 1.0f : 0.0f, 0.0f};
+            g.center = p.center;
+            g.intensity = p.intensity;
+            g.boxMin = boxMin;
+            g.blendDistance = p.blendDistance;
+            g.boxMax = boxMax;
+            g.slice = static_cast<f32>(slot);
+            g.mipCount = static_cast<f32>(kPrefilterMips);
+            g.priority = static_cast<f32>(p.priority);
+            g.parallax = p.parallax ? 1.0f : 0.0f;
             m_cpuProbes[m_active] = g;
 
             // Dirty tracking for static caching: recapture on a new slot or a moved probe.

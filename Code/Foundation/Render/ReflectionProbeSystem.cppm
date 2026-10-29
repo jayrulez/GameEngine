@@ -36,13 +36,19 @@ export namespace foundation::render
 
     // GPU-side probe record (set-0 t9 StructuredBuffer), 64 bytes. Packed so the forward can, per froxel,
     // pick the probe, box-project the reflection ray, and index its cube-array slice.
+    // As lighting.hlsli declares it; Integration.ShaderBlocks checks the two agree.
     struct GpuProbe
     {
-        Float4 center; // xyz = capture center (world),          w = intensity
-        Float4 boxMin; // xyz = box min corner (world),          w = blendDistance
-        Float4
-            boxMax; // xyz = box max corner (world),          w = sliceBase (float; cube index into the array)
-        Float4 params; // x = mipCount, y = priority,            z = parallax (0/1), w = pad
+        Float3 center;          // the capture centre (world)
+        f32 intensity = 1.0f;   // the reflection's strength
+        Float3 boxMin;          // the influence box's near corner (world)
+        f32 blendDistance = 0;  // the fade at the box's faces
+        Float3 boxMax;          // its far corner
+        f32 slice = 0;          // the probe's cube in the array (a float, as the sampler takes it)
+        f32 mipCount = 0;       // the prefiltered mips
+        f32 priority = 0;
+        f32 parallax = 0;       // 1: box-project the reflection ray
+        f32 _pad = 0;
     };
     static_assert(sizeof(GpuProbe) == 64);
 

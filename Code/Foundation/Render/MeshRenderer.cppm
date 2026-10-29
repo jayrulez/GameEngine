@@ -66,7 +66,7 @@ export namespace foundation::render
     // shadow_depth_vs.hlsli, pick_ids_vs.hlsli); Integration.ShaderBlocks checks each against the
     // compiled shaders, member by member.
     struct GpuView
-    {                                // 688 (cbuffer View, view.hlsli)
+    {                                // 656 (cbuffer View, view.hlsli)
         Float4x4 viewProj;           // 64
         Float4x4 view;               // 64  (view-space depth: cluster + cascade select)
         Float4x4 cascadeViewProj[4]; // 256 (CSM: world -> each cascade's light clip)
@@ -88,11 +88,9 @@ export namespace foundation::render
             Float4x4::Identity(); // 64  (motion vectors: last frame's world->clip)
         Float4 jitter =
             Float4{0, 0, 0, 0}; // 16  (xy = this frame's NDC jitter, zw = last frame's)
-        // ProbeCenter: x = this view's scene's base into Probes[], w = its probe count (0 = none);
-        // ProbeBoxMin/Max are written by nothing (shader-blocks-cleanup.md, phase 4 removes them).
-        Float4 probeCenter = Float4{0, 0, 0, 0};
-        Float4 probeBoxMin = Float4{0, 0, 0, 0};
-        Float4 probeBoxMax = Float4{0, 0, 0, 0};
+        u32 probeBase = 0;  // this view's scene's first record in Probes[]
+        u32 probeCount = 0; // its reflection probes (0 = none)
+        u32 _probePad0 = 0, _probePad1 = 0;
         // x = CSM far-fade width (world units), y = the shadow map's uv Y sign; zw unused.
         Float4 shadowParams = Float4{40.0f, 0, 0, 0};
         Float4 debugParams = Float4{0, 0, 0, 0}; // x = semantic debug-view mode, 0 = off
@@ -101,7 +99,7 @@ export namespace foundation::render
         f32 sceneTime = 0.0f;   // the view's scene clock (s): the WIND sway, a surface's Time()
         f32 prevSceneTime = 0.0f; // last frame's (motion vectors)
     };
-    static_assert(sizeof(GpuView) == 688, "cbuffer View layout drift");
+    static_assert(sizeof(GpuView) == 656, "cbuffer View layout drift");
     // A single object's per-draw block (cbuffer Object, object_block.hlsli; set 1 binding 0), one
     // declaration the forward, shadow depth and pick vertex stages all include: each pass writes
     // and reads the fields it uses, by name.
@@ -425,7 +423,7 @@ export namespace foundation::render
         GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
         static constexpr u64 kViewSlot = 256; // dynamic UBO offset alignment (object/shadow-view)
         static constexpr u64 kViewDataSlot =
-            1024;                              // view UBO slot (GpuView is 688 bytes)
+            1024;                              // view UBO slot (GpuView is 656 bytes)
         static constexpr u32 kMaxLights = 256; // per-view light budget (clustered)
         // shadow-view UBO slots per frame: one per (shadow pass × category run). Cascades (up to
         // kMaxShadowViews*kCount) + local-shadow atlas tiles (up to kMaxLocalShadows), each × a few

@@ -78,7 +78,7 @@ namespace foundation::render
             8, rhi::ShaderStage::Fragment, rhi::TextureViewDimension::TextureCubeArray);
         rhi::BindGroupLayoutEntry probeBufEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
             9, rhi::ShaderStage::Fragment, /*readOnly*/ true,
-            /*stride*/ 64); // StructuredBuffer<GpuProbe> (4x float4, see ReflectionProbeSystem)
+            /*stride*/ sizeof(GpuProbe)); // StructuredBuffer<GpuProbe> (ReflectionProbeSystem)
         rhi::BindGroupLayoutEntry set0[] = {
             viewEntry,       lightEntry, shadowTexEntry, atlasTexEntry,  localShadowEntry,
             shadowSampEntry, boneEntry,  iblShEntry,     prefilterEntry, brdfEntry,
@@ -217,7 +217,7 @@ namespace foundation::render
         m_activeProbeCube = has ? cubeArray : m_dummyProbeCubeView;
         m_activeProbeBuffer = has ? probeBuffer : m_dummyProbeBuffer;
         m_activeProbeCount =
-            has ? count : 0; // -> GpuView.probeCenter.w (the forward's loop bound)
+            has ? count : 0; // -> GpuView.probeCount (the forward's loop bound)
     }
 
     void MeshRenderer::UploadLocalShadows(Span<const GpuLocalShadow> shadows, u32 frameIndex)
@@ -1109,10 +1109,10 @@ namespace foundation::render
         vd.iblMaxLod = iblActive ? ctx.ibl.maxLod : -1.0f; // <0 => forward uses flat ambient
         // Probes disabled during probe capture (ctx.probesEnabled=false) -> count 0 so metallics reflect the
         // sky (global IBL), not the not-yet-built probe (which would bake them black - self-reflection).
-        // ProbeCenter.x = this view's SCENE's base into the Probes SRV (scenes' records are concatenated
-        // per frame), .w = its count (the forward's loop bound); box/slice/etc. per probe live in the buffer.
-        vd.probeCenter = Float4{static_cast<f32>(ctx.probeBase), 0, 0,
-                                ctx.probesEnabled ? static_cast<f32>(ctx.probeCount) : 0.0f};
+        // This view's SCENE's base into the Probes SRV (scenes' records are concatenated per frame) and its
+        // count (the forward's loop bound); box, slice and the rest per probe live in the buffer.
+        vd.probeBase = ctx.probeBase;
+        vd.probeCount = ctx.probesEnabled ? ctx.probeCount : 0u;
 
         vd.lightCount = static_cast<f32>(lightCount);
         vd.lightOffset = lightOffset;

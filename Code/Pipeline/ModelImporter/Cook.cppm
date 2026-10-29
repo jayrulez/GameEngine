@@ -342,9 +342,11 @@ export namespace pipeline
             pipeline::SkeletonAsset skelAsset;
             SkeletonSourceFromModel(model, skin, joints.AsSpan(), boneToJoint, skelAsset.source);
             pipeline::SkeletonAssetBuilder skelBuilder;
-            content::Instance* skelInst =
-                root->CreateInstance(Format(u8"{}.skeleton", namePrefix).AsView(),
-                                     animation::SkeletonSource::StaticType());
+            // Every name unique in the group, as the textures' and materials' are: a file can call
+            // its mesh, its texture and its material the same (3ds Max exports often do).
+            content::Instance* skelInst = root->CreateInstance(
+                root->UniqueInstanceName(Format(u8"{}.skeleton", namePrefix).AsView()).AsView(),
+                animation::SkeletonSource::StaticType());
             if (skelInst != nullptr)
             {
                 pipeline::AssetBuildContext ctx{outDb.Allocator()};
@@ -367,8 +369,8 @@ export namespace pipeline
                         .AsView(),
                     clipAsset.source, manifest.skeletonParentNode);
                 content::Instance* clipInst = root->CreateInstance(
-                    Format(u8"{}.{}", namePrefix,
-                           ImportedAssetName(animations[a]->name(), u8"anim", a))
+                    root->UniqueInstanceName(
+                            Format(u8"{}.{}", namePrefix, ImportedAssetName(animations[a]->name(), u8"anim", a)).AsView())
                         .AsView(),
                     animation::AnimationClipSource::StaticType());
                 if (clipInst == nullptr)
@@ -391,8 +393,8 @@ export namespace pipeline
         {
             const model::ModelMesh& m = *meshes[i];
             const bool skinned = IsSkinnedMesh(m) && hasSkin;
-            const String name =
-                Format(u8"{}.{}", namePrefix, ImportedAssetName(m.name(), u8"mesh", i));
+            const String name = root->UniqueInstanceName(
+                Format(u8"{}.{}", namePrefix, ImportedAssetName(m.name(), u8"mesh", i)).AsView());
 
             content::Instance* inst = root->CreateInstance(
                 name.AsView(), skinned ? geometry::SkinnedMeshSource::StaticType()
@@ -448,7 +450,7 @@ export namespace pipeline
             manifest.nodes.PushBack(Move(n));
         }
 
-        const String manifestName = Format(u8"{}.model", namePrefix);
+        const String manifestName = root->UniqueInstanceName(Format(u8"{}.model", namePrefix).AsView());
         content::Instance* manifestInst =
             root->CreateInstance(manifestName.AsView(), ModelManifestSource::StaticType());
         if (manifestInst == nullptr)

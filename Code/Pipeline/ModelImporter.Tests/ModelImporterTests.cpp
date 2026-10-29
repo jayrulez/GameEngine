@@ -2455,3 +2455,39 @@ TEST_CASE("model import: a material is made on the built-in its shading model na
     CHECK(slots(onPbr) == String(u8"AlbedoMap NormalMap OcclusionMap MetallicRoughnessMap"));
     CHECK(bakes == 1); // its separate rough map baked into the packed one by the caller
 }
+
+TEST_CASE("model-cook: a mesh, a texture and a material of one name all cook (3ds Max exports name them alike)")
+{
+    // The direct cook named meshes, clips and the skeleton without making them unique: a mesh
+    // called as its texture was refused its instance and the model came without its body.
+    model::RegisterModelResourceTypes();
+    model::gltf::GltfLoader gltf;
+    model::io::registerLoader(&gltf);
+    model::Model m;
+    const String duck = MiDuck();
+    const model::ModelLoadResult loaded = model::io::loadModel(duck.AsView(), m);
+    model::io::unregisterLoader(&gltf);
+    REQUIRE(loaded == model::ModelLoadResult::Ok);
+    REQUIRE(m.meshes().Size() > 0u);
+    REQUIRE(m.textures().Size() > 0u);
+    const String shared(m.meshes()[0]->name());
+    m.textures()[0]->setName(shared.AsView());
+    REQUIRE(m.materials().Size() > 0u);
+    m.materials()[0]->setName(shared.AsView());
+
+    vfs::NativeFileSystem mount(u8"scratch_modelcook_names_db", DefaultAllocator());
+    (void)RemoveDirectoryRecursive(u8"scratch_modelcook_names_db");
+    content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+    Guid modelGuid;
+    REQUIRE(pipeline::CookModel(m, db, u8"Duck", modelGuid).IsOk());
+    resource::ResourceManager manager(DefaultAllocator(), db);
+    geometry::StaticMeshFactory meshFactory(DefaultAllocator());
+    model::ModelFactory modelFactory;
+    manager.AddFactory(&meshFactory);
+    manager.AddFactory(&modelFactory);
+    resource::Proxy<model::ModelResource> cooked = manager.Bind<model::ModelResource>(modelGuid);
+    REQUIRE(cooked);
+    REQUIRE(cooked->meshes.Size() == m.meshes().Size());
+    for (const RefPtr<geometry::StaticMesh>& mesh : cooked->meshes)
+        CHECK(mesh.Get() != nullptr);
+}

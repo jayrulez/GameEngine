@@ -197,10 +197,21 @@ namespace samples
                 layer.mesh = geometry::Primitives::Cone(AppRoot(), 0.24f, 1.4f); // a tuft
                 core::RefPtr<materials::Material> grass = materials::CreatePBR(
                     u8"grass", core::Float4{0.25f, 0.62f, 0.18f, 1.0f}, 0.0f, 0.85f);
-                // Wind: the tufts sway (their tips; the cone's base sits at local y = -0.7).
-                grass->SetDefaultFloat(u8"WindStrength", 0.18f);
-                grass->SetDefaultFloat(u8"WindSpeed", 2.4f);
-                grass->SetDefaultFloat(u8"WindHeight", 0.7f);
+                // Wind: the tufts sway (their tips; the cone's base sits at local y = -0.7). The
+                // Wind group comes from the effect's table, which the shader system serves (a
+                // material built in code takes it from whoever holds the shader system).
+                auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+                const foundation::shaders::ShaderEffect* wind =
+                    render != nullptr && render->Shaders() != nullptr
+                        ? render->Shaders()->EffectForFlag(foundation::shaders::ShaderFlags::Wind)
+                        : nullptr;
+                if (wind != nullptr)
+                {
+                    grass->AddEffectGroup(*wind);
+                    grass->SetDefaultFloat(u8"Wind.Strength", 0.18f);
+                    grass->SetDefaultFloat(u8"Wind.Speed", 2.4f);
+                    grass->SetDefaultFloat(u8"Wind.Height", 0.7f);
+                }
                 layer.materials.PushBack(foundation::resource::Ref<materials::Material>(grass));
                 layer.placement = foundation::vegetation::VegetationPlacement::Splat;
                 layer.splatLayer = 0;

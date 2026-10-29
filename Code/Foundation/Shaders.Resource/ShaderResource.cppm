@@ -296,6 +296,15 @@ export namespace foundation::shaders
             return (m_depthProgramsAlways || masked) ? m_pickName.AsView() : StringView{};
         }
 
+        // The variant flags the shader's main vertex stage declares (its cooked lattice): what a
+        // material on it may turn on, so which effect groups it carries (an effect's flag here,
+        // `WIND`, gives the material the effect's group; Specs/wind-for-every-shader.md).
+        void SetVertexVariants(ShaderFlags mask) noexcept { m_vertexVariants = mask; }
+        [[nodiscard]] ShaderFlags VertexVariants() const noexcept { return m_vertexVariants; }
+        // The shader system the shader lives in (borrowed; null for a handle never initialised):
+        // where the effects' tables are served.
+        [[nodiscard]] ShaderSystem* System() const noexcept { return m_system; }
+
         [[nodiscard]] StringView Name() const noexcept { return m_name.AsView(); }
         [[nodiscard]] u64 Version()
         {
@@ -313,6 +322,7 @@ export namespace foundation::shaders
         String m_depthName;
         String m_pickName;
         bool m_depthProgramsAlways = false;
+        ShaderFlags m_vertexVariants = ShaderFlags::None;
     };
 
     // Builds a ShaderResource from a ShaderSource: registers the sources with the
@@ -367,6 +377,7 @@ export namespace foundation::shaders
             res->SetDepthPrograms(source->HasProgram(kDepthProgramSuffix),
                                   source->HasProgram(kPickProgramSuffix),
                                   source->depthProgramsAlways);
+            res->SetVertexVariants(static_cast<ShaderFlags>(source->vertexVariantMask));
             return res;
         }
 

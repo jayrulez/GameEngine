@@ -629,3 +629,29 @@ TEST_CASE("shader system: in dev, effects are parsed from the provider's include
     }
     std::filesystem::remove_all(root);
 }
+
+// What a shader's stage declares, asked by the material factory for the effects a material on it
+// carries (Specs/wind-for-every-shader.md): a registered lattice, the pack's, or the source's line.
+TEST_CASE("shader system: a stage's declared variants, registered, packed or read from its source")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    CookedShaderPack pack;
+    pack.AddDeclaredMask(u8"packed", ShaderStage::Vertex, ShaderFlags::Instanced | ShaderFlags::Wind);
+
+    ShaderSystem game(device); // no compiler: the pack answers
+    game.SetCookedPack(&pack);
+    CHECK(game.DeclaredVariants(u8"packed", ShaderStage::Vertex) == (ShaderFlags::Instanced | ShaderFlags::Wind));
+    CHECK(game.DeclaredVariants(u8"packed", ShaderStage::Fragment) == ShaderFlags::None);
+    CHECK(game.DeclaredVariants(u8"unknown", ShaderStage::Vertex) == ShaderFlags::None);
+
+    ShaderSystem editor(device);
+    editor.RegisterSource(u8"lattice", ShaderStage::Vertex, u8"float4 main() : SV_Position { return 0; }\n",
+                          u8"main", ShaderFlags::Skinned | ShaderFlags::Wind);
+    CHECK(editor.DeclaredVariants(u8"lattice", ShaderStage::Vertex) == (ShaderFlags::Skinned | ShaderFlags::Wind));
+    // Registered without a lattice: its own line says what its code reads.
+    editor.RegisterSource(u8"raw", ShaderStage::Vertex,
+                          u8"// variants(vertex): WIND\n// variants(fragment): DITHER\n"
+                          u8"float4 main() : SV_Position { return 0; }\n",
+                          u8"main");
+    CHECK(editor.DeclaredVariants(u8"raw", ShaderStage::Vertex) == ShaderFlags::Wind);
+}

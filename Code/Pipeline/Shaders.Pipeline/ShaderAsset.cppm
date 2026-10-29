@@ -48,7 +48,7 @@ export namespace pipeline{
     // engine's lighting library, every pass contract kept, its parameters in a properties block.
     inline constexpr StringView kShaderStarter = u8R"hlsl(// A low-level shader: the whole pixel stage is yours. This one shades the engine's way, with
 // every light, shadow and reflection probe; change the pixel stage to make it your own.
-// variants(vertex): SKINNED INSTANCED
+// variants(vertex): SKINNED INSTANCED WIND
 // variants(fragment): ALPHA_TEST GBUFFER DITHER
 // preserve-interface (the pixel stage keeps VSOutput's fade input when DITHER is off)
 
@@ -208,8 +208,10 @@ void Surface(SurfaceInput input, inout SurfaceOutput surface)
         }
         // v2: the product names each stage's entry point. v3: one file, compiled at cook time;
         // the product carries the expanded source, the lattices and the property table. v4: the
-        // product carries programs beside the main one (a surface shader's depth and pick).
-        [[nodiscard]] u32 Version() const override { return 4; }
+        // product carries programs beside the main one (a surface shader's depth and pick). v5: a
+        // surface shader's vertex lattices declare WIND (its material's Wind group sways it), and
+        // an effect block expands to a ConstantBuffer read as `Wind.Strength`.
+        [[nodiscard]] u32 Version() const override { return 5; }
 
         [[nodiscard]] Status Build(const pipeline::Asset& asset,
                                    pipeline::AssetBuildContext& ctx) override

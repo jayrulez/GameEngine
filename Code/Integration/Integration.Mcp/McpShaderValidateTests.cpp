@@ -79,7 +79,7 @@ TEST_CASE("integration.mcp: shader_validate - the starter checks clean; a broken
     CHECK(properties.At(0).Get(u8"name").AsString() == StringView(u8"BaseColor"));
     CHECK(properties.At(0).Get(u8"type").AsString() == StringView(u8"Color"));
     CHECK(properties.At(1).Get(u8"range").Count() == 2); // Roughness [0, 1]
-    CHECK(good.Get(u8"vertexVariants").Count() == 2);    // SKINNED INSTANCED
+    CHECK(good.Get(u8"vertexVariants").Count() == 3);    // SKINNED INSTANCED WIND
     CHECK(good.Get(u8"fragmentVariants").Count() == 3);  // ALPHA_TEST GBUFFER DITHER
     CHECK(good.Get(u8"kind").AsString() == StringView(u8"lowLevel"));
 

@@ -30,6 +30,8 @@ import foundation.render;
 import extensions.imgui;
 import foundation.geometry;  // Primitives (the orbiting shadow caster)
 import foundation.materials; // CreatePBR
+import foundation.shaders;        // ShaderEffect, ShaderFlags (the grass's Wind group)
+import foundation.shaders.system; // ShaderSystem::EffectForFlag
 import foundation.heightfield;
 import foundation.terrain.resource;
 import engine.terrain;

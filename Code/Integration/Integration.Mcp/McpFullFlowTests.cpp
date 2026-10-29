@@ -1191,11 +1191,12 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     CHECK(Contains(xml.AsView(), u8"<string>CrackColor</string>"));
     CHECK_FALSE(Contains(xml.AsView(), u8"<string>BaseColor</string>"));
 
-    // Back on the built-in PBR: PBR's sixteen properties again.
+    // Back on the built-in PBR: PBR's thirteen properties again (its wind is the Wind effect's
+    // group, not three of them; Specs/wind-for-every-shader.md).
     const JsonValue onPbr = FfCall(
         server, u8"material_set_shader",
         FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"pbr"));
-    CHECK(onPbr.Get(u8"properties").Count() == 16);
+    CHECK(onPbr.Get(u8"properties").Count() == 13);
     CHECK(onPbr.Get(u8"shaderName").AsString() == StringView(u8"forward"));
 
     // On the built-in Phong: its eleven (six values, four maps, the sampler).

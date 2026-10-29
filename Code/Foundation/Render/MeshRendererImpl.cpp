@@ -1993,10 +1993,10 @@ namespace foundation::render
     {
         const bool masked =
             material != nullptr && material->pipeline.blendMode == materials::BlendMode::Masked;
-        const bool wind = MaterialWantsWind(material);
+        const shaders::ShaderFlags effects = MaterialEffectFlags(material);
         DepthLikeChoice choice;
-        choice.config = pick ? PickConfigFor(ctx, instanced, masked, wind)
-                             : ShadowConfigFor(ctx, instanced, masked, wind);
+        choice.config = pick ? PickConfigFor(ctx, instanced, masked, effects)
+                             : ShadowConfigFor(ctx, instanced, masked, effects);
         // The material's shader has its own program for this pass (it moves its vertices, or cuts
         // out with its own alpha): drawn with it, over the material's set 2 it was generated for.
         const StringView own =
@@ -2011,20 +2011,18 @@ namespace foundation::render
         {
             choice.config.cullMode = material->pipeline.cullMode; // a two-sided material picks both faces
         }
-        choice.materialSet = masked || wind || !own.IsEmpty();
+        // An active effect's block is in the material's set (b1), so its draw binds the set.
+        choice.materialSet = masked || effects != shaders::ShaderFlags::None || !own.IsEmpty();
         return choice;
     }
 
     materials::PipelineConfig MeshRenderer::ShadowConfigFor(const RenderRecordContext& ctx,
                                                             bool instanced, bool masked,
-                                                            bool wind)
+                                                            shaders::ShaderFlags effects)
     {
         materials::PipelineConfig c{};
         c.shaderName = u8"shadow_depth";
-        if (wind)
-        {
-            c.shaderFlags |= shaders::ShaderFlags::Wind; // the caster sways with the card
-        }
+        c.shaderFlags |= effects; // the caster moves as the mesh does (a swaying card's shadow sways)
         c.vertexLayout = materials::VertexLayoutType::Mesh;
         c.instanced = instanced;
         if (instanced)
@@ -2067,14 +2065,12 @@ namespace foundation::render
     }
 
     materials::PipelineConfig MeshRenderer::PickConfigFor(const RenderRecordContext& ctx,
-                                                          bool instanced, bool masked, bool wind)
+                                                          bool instanced, bool masked,
+                                                          shaders::ShaderFlags effects)
     {
         materials::PipelineConfig c{};
         c.shaderName = u8"pick_ids";
-        if (wind)
-        {
-            c.shaderFlags |= shaders::ShaderFlags::Wind; // the pick follows the swayed card
-        }
+        c.shaderFlags |= effects; // the pick follows the mesh as it moves
         c.vertexLayout = materials::VertexLayoutType::Mesh;
         c.instanced = instanced;
         if (instanced)
@@ -2145,10 +2141,7 @@ namespace foundation::render
         {
             config.shaderFlags |= shaders::ShaderFlags::Instanced;
         }
-        if (MaterialWantsWind(material))
-        {
-            config.shaderFlags |= shaders::ShaderFlags::Wind; // the material's Wind* lanes sway it
-        }
+        config.shaderFlags |= MaterialEffectFlags(material); // its active effects (the Wind group sways it)
         if (md.fade > 0.0f)
         {
             config.shaderFlags |= shaders::ShaderFlags::Dither; // the screen-door fade (a cutaway)
@@ -2298,7 +2291,12 @@ namespace foundation::render
         entry->lastUsed = m_frameSerial;
         if (!entry->applied || entry->version != md.overrideVersion)
         {
-            // Back to the material's own values, then this slot's overrides over them.
+            // Back to the material's own values, then this slot's overrides over them. A name
+            // `Effect.Property` (`Wind.Strength`) reaches the material's effect group: the instance's
+            // setters route it there. This instance is the forward pass's alone: the shadow and pick
+            // passes draw with the shared material's (RenderData.cppm, MeshRenderData::overrides), and
+            // the variant follows the shared material's gate (MaterialEffectFlags), so an override
+            // changes how an active effect moves the visible mesh, not whether it is on.
             materials::MaterialInstance& inst = *entry->instance;
             for (const materials::MaterialPropertyDef& d : material->Properties())
             {
@@ -2307,6 +2305,7 @@ namespace foundation::render
                     inst.ResetProperty(d.name);
                 }
             }
+            inst.ResetEffects();
             for (u32 i = 0; i < md.overrideCount; ++i)
             {
                 const MaterialPropertyOverride& o = md.overrides[i];
@@ -2333,6 +2332,17 @@ namespace foundation::render
     {
         RetireBindGroup(m_materials->DetachBindGroup(&instance));
         RetireBuffer(m_materials->DetachUniformBuffer(&instance));
+        RetireEffectBuffers(instance);
+    }
+
+    void MeshRenderer::RetireEffectBuffers(materials::MaterialInstance& instance)
+    {
+        Array<rhi::Buffer*> buffers(*m_allocator);
+        m_materials->DetachEffectBuffers(&instance, buffers);
+        for (rhi::Buffer* buffer : buffers)
+        {
+            RetireBuffer(buffer);
+        }
     }
 
     void MeshRenderer::PruneOverrideInstances()
@@ -2356,25 +2366,21 @@ namespace foundation::render
         }
     }
 
-    bool MeshRenderer::MaterialWantsWind(const materials::Material* material) noexcept
+    shaders::ShaderFlags MeshRenderer::MaterialEffectFlags(const materials::Material* material) noexcept
     {
+        shaders::ShaderFlags flags = shaders::ShaderFlags::None;
         if (material == nullptr)
         {
-            return false;
+            return flags;
         }
-        const materials::MaterialPropertyDef* strength = material->FindProperty(u8"WindStrength");
-        if (strength == nullptr || strength->type != materials::MaterialPropertyType::Float)
+        for (const materials::MaterialEffectGroup& group : material->EffectGroups())
         {
-            return false;
+            if (group.IsActive())
+            {
+                flags |= group.flag;
+            }
         }
-        const Span<const u8> defaults = material->DefaultUniformData();
-        if (static_cast<usize>(strength->offset) + sizeof(f32) > defaults.Size())
-        {
-            return false;
-        }
-        f32 value = 0.0f;
-        MemCopy(&value, defaults.Data() + strength->offset, sizeof(f32));
-        return value > 0.0f;
+        return flags;
     }
 
     rhi::BindGroup* MeshRenderer::MaterialBindGroup(materials::Material* material)
@@ -2420,6 +2426,7 @@ namespace foundation::render
             {
                 RetireBindGroup(m_materials->DetachBindGroup(inst));
                 RetireBuffer(m_materials->DetachUniformBuffer(inst));
+                RetireEffectBuffers(*inst);
                 m_instances.Remove(material->uid);
                 continue; // UniquePtr slot dropped -> instance destroyed (bg already detached)
             }

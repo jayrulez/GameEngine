@@ -1,6 +1,7 @@
 # Wind for every shader - the sway read from the draw, not from PBR's material layout
 
-> Status: APPROVED 2026-10-29; 2b-1 (the effect block) BUILT 2026-10-29 on clang; 2b-2 next (user: "Let's look into this properly.
+> Status: APPROVED 2026-10-29; 2b-1 (the effect block, 6460a54b1) and 2b-2 (materials, renderer, data)
+> BUILT 2026-10-29 on clang; 2b-3 (the material page, MCP output, docs) next (user: "Let's look into this properly.
 > Explain how it is built into PBR, and why it can't be used in custom shader"; "Wind write up").
 > Phase 2 of `shader-blocks-cleanup.md`, which removes every borrowed lane, the clock's included.
 > Read CONVENTIONS.md first.
@@ -157,12 +158,29 @@ over both the disk route the cook uses and the resolver the editor uses).
 
 Built 2026-10-29 (2b-1): `effect <Name> : <FLAG>` blocks parse with the properties parser (one
 grammar for both: uniforms only in an effect, one float `(gate)`, one declaration per line), expand
-to `cbuffer <Name> : register(b1, space2)` with a `#line` after, and a malformed one to `#error`
+to `ConstantBuffer<<Name>Effect> <Name> : register(b1, space2)` (the effect's members read as
+`Wind.Strength`; first a plain `cbuffer`, whose members were global names that collided with
+custom shaders' own properties, `Speed` among them, once every surface shader declared `WIND`)
+with a `#line` after, and a malformed one to `#error`
 lines at its lines; every compile installs one include handler that expands them in what it
 serves, from the resolver or from disk through DXC's own handler (the search order unchanged),
 and in the top-level source; the engine cook records each `.hlsli` effect in the pack (format 4),
 and `ShaderSystem::FindEffect` / `EffectForFlag` serve them, from the pack or, in dev, parsed from
 the provider's includes.
+
+Built 2026-10-29 (2b-2): `wind.hlsli` declares `effect Wind : WIND`; PBR's buffer keeps its
+three old lanes as padding (`_materialPad0..2`). A material carries effect groups
+(`MaterialEffectGroup`; serialized as `MaterialSource::effects`, MaterialSource version 4), bound
+at binding 1 + i in its set and uploaded per instance; the factory gives a material the groups its
+shader's vertex stage declares (`ShaderResource::VertexVariants`, `ShaderSystem::DeclaredVariants`)
+from the shader system's tables, and `BuiltinShadingInfo::vertexVariants` lets the pipeline keep or
+drop a group without one. A stored material migrates on read: its three wind properties go and a
+Wind group comes with the values they held (every stored material had wind off); the migration
+describes the old lanes' layout itself, as the one thing it needs from before the effect existed,
+and the factory re-lays the group onto the live table. The renderer's rule:
+`MeshRenderer::MaterialEffectFlags`, the flags of every group whose gate is above zero. Overrides
+reach `Effect.Property`; shadow and pick follow the shared material's gate. Surface shaders and
+the low-level starter declare `WIND`.
 
 The order: (2b-1) the effect block in the shaders module: the syntax, the include handler that
 expands it, the tables in the pack and served by the shader system; (2b-2) materials, the

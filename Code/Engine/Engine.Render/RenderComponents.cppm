@@ -1289,8 +1289,9 @@ export namespace engine::render
         }
 
         // Set one of the entity's material properties for it alone: the material in `slot` draws with
-        // `value` for the property `name` (as the material editor shows it: Roughness, EmissiveColor),
-        // every other mesh using that material unchanged. A Float4 for a colour or a vector: a colour
+        // `value` for the property `name` (as the material editor shows it: Roughness, EmissiveColor,
+        // or an effect's value as `Effect.Property`: Wind.Strength), every other mesh using that
+        // material unchanged. A Float4 for a colour or a vector: a colour
         // as authored, sRGB rgba, and an HDR colour (EmissiveColor) sRGB rgb with its intensity in w.
         // A name the material does not have, or a value wider than the property, changes nothing.
         // Runtime only: not saved with the scene. False for an entity without a mesh or a negative slot.

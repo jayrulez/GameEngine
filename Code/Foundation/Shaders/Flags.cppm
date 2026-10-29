@@ -30,7 +30,7 @@ export namespace foundation::shaders
         VertexColors = 1u << 5,   // -> #define VERTEX_COLORS
         ReceiveShadows = 1u << 6, // -> #define RECEIVE_SHADOWS
         GBuffer = 1u << 7, // -> #define GBUFFER (forward MRT: also output view-normal + motion)
-        Wind = 1u << 8,    // -> #define WIND (vertex sway from the material's Wind* properties)
+        Wind = 1u << 8,    // -> #define WIND (vertex sway from the material's Wind effect group)
         Holes = 1u << 9,   // -> #define HOLES (terrain: discard by the bilinear hole mask - a holed chunk's rim)
         Dither = 1u << 10, // -> #define DITHER (a faded mesh: discard by a screen-door pattern; a cutaway)
     };

@@ -5,7 +5,8 @@
 ///
 /// MaterialSystem: owns material instances' GPU resources and - the key idea -
 /// INFERS the bind-group layout from a material's declared property list (uniforms
-/// -> one uniform buffer at binding 0; each texture/sampler -> its own entry). A new
+/// -> one uniform buffer at binding 0; each effect group -> its own uniform buffer from
+/// binding 1; each texture/sampler -> its own entry). A new
 /// material or custom shader therefore needs no renderer changes. Layouts are cached
 /// by content hash; instance uniform buffers + bind groups are (re)built lazily, and
 /// instances notify the system on dirty so PrepareDirtyInstances is O(dirty).
@@ -101,9 +102,24 @@ export namespace foundation::materials
             }
             if (hasUniforms && material.UniformDataSize() > 0)
             {
-                // Vertex too: the WIND vertex variant reads the material's Wind* lanes.
+                // Vertex too: a surface shader's Vertex() reads its material's properties.
                 entries.PushBack(rhi::BindGroupLayoutEntry::UniformBuffer(
                     0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment));
+            }
+            // Each effect group's buffer, right after the material's (the bind group pushes them at
+            // the same positions: WebGPU matches entries by position). An effect block binds at
+            // b1 of the material's set (kShaderEffectRegister); the engine declares one effect per
+            // flag and its shaders one (Wind), so a second group would take b2, which no shader
+            // declares until effects get registers of their own. Vertex: the effects are vertex
+            // effects (the sway).
+            u32 effectBinding = kFirstEffectBinding;
+            for (const MaterialEffectGroup& group : material.EffectGroups())
+            {
+                if (group.uniformSize > 0)
+                {
+                    entries.PushBack(rhi::BindGroupLayoutEntry::UniformBuffer(
+                        effectBinding++, rhi::ShaderStage::Vertex));
+                }
             }
 
             u32 texBinding = 0, sampBinding = 0;
@@ -166,7 +182,7 @@ export namespace foundation::materials
                 return nullptr;
             }
 
-            if (instance.IsUniformDirty() && material->UniformDataSize() > 0)
+            if (instance.IsUniformDirty() && HasUniformBuffers(*material))
             {
                 if (!UpdateUniformBuffer(instance))
                 {
@@ -266,6 +282,28 @@ export namespace foundation::materials
             return nullptr;
         }
 
+        // Hand the instance's effect buffers to the caller (removed from the system) WITHOUT
+        // destroying them, appended to `out`: the DetachUniformBuffer twin for the effect groups'
+        // buffers, retired the same way.
+        void DetachEffectBuffers(MaterialInstance* instance, Array<rhi::Buffer*>& out)
+        {
+            if (instance == nullptr)
+            {
+                return;
+            }
+            if (EffectBuffers* buffers = m_effectBuffers.Find(instance))
+            {
+                for (rhi::Buffer* b : buffers->buffers)
+                {
+                    if (b != nullptr)
+                    {
+                        out.PushBack(b);
+                    }
+                }
+                m_effectBuffers.Remove(instance);
+            }
+        }
+
         // Hand the instance's bind group to the caller (removed from the system) WITHOUT
         // destroying it - for deferred retirement while in-flight frames may still bind it.
         [[nodiscard]] rhi::BindGroup* DetachBindGroup(MaterialInstance* instance)
@@ -305,6 +343,17 @@ export namespace foundation::materials
                 rhi::Buffer* b = *buf;
                 m_device->DestroyBuffer(b);
                 m_uniformBuffers.Remove(instance);
+            }
+            if (EffectBuffers* buffers = m_effectBuffers.Find(instance))
+            {
+                for (rhi::Buffer* b : buffers->buffers)
+                {
+                    if (b != nullptr)
+                    {
+                        m_device->DestroyBuffer(b);
+                    }
+                }
+                m_effectBuffers.Remove(instance);
             }
         }
 
@@ -402,9 +451,82 @@ export namespace foundation::materials
             return m_device->CreateTextureView(outTex, vd, outView).IsOk();
         }
 
+        // Whether the material has a uniform buffer of any kind: its own or an effect group's.
+        [[nodiscard]] static bool HasUniformBuffers(const Material& material) noexcept
+        {
+            if (material.UniformDataSize() > 0)
+            {
+                return true;
+            }
+            for (const MaterialEffectGroup& group : material.EffectGroups())
+            {
+                if (group.uniformSize > 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // The instance's effect group buffers, created on first use and written from its values.
+        bool UpdateEffectBuffers(MaterialInstance& instance)
+        {
+            Material* material = instance.GetMaterial();
+            if (material->EffectGroupCount() == 0)
+            {
+                return true;
+            }
+            EffectBuffers* buffers = m_effectBuffers.Find(&instance);
+            if (buffers == nullptr)
+            {
+                buffers = &m_effectBuffers.InsertOrAssign(&instance, EffectBuffers{});
+            }
+            while (buffers->buffers.Size() < material->EffectGroupCount())
+            {
+                buffers->buffers.PushBack(nullptr);
+            }
+            for (usize g = 0; g < material->EffectGroupCount(); ++g)
+            {
+                const MaterialEffectGroup& group = material->GetEffectGroup(g);
+                if (group.uniformSize == 0)
+                {
+                    continue;
+                }
+                rhi::Buffer*& buffer = buffers->buffers[g];
+                if (buffer == nullptr)
+                {
+                    rhi::BufferDesc bd{};
+                    bd.size = group.uniformSize; // a whole row already (Material::SetEffectGroup)
+                    bd.usage = rhi::BufferUsage::Uniform;
+                    bd.memory = rhi::MemoryLocation::CpuToGpu;
+                    if (!m_device->CreateBuffer(bd, buffer).IsOk())
+                    {
+                        buffer = nullptr;
+                        return false;
+                    }
+                }
+                const Span<const u8> data = instance.EffectData(g);
+                if (data.Size() > 0 && data.Size() <= group.uniformSize)
+                {
+                    if (void* ptr = buffer->Map())
+                    {
+                        EncodeUniformsForGpu(Span<const MaterialPropertyDef>{group.properties.Data(),
+                                                                             group.properties.Size()},
+                                             data, static_cast<u8*>(ptr));
+                        buffer->Unmap();
+                    }
+                }
+            }
+            return true;
+        }
+
         bool UpdateUniformBuffer(MaterialInstance& instance)
         {
             Material* material = instance.GetMaterial();
+            if (!UpdateEffectBuffers(instance))
+            {
+                return false;
+            }
             if (material->UniformDataSize() == 0)
             {
                 return true;
@@ -452,6 +574,24 @@ export namespace foundation::materials
             {
                 entries.PushBack(
                     rhi::BindGroupEntry::BufferEntry(*buf, 0, material->UniformDataSize()));
+            }
+            // The effect groups' buffers, in the layout's order (GetOrCreateLayout).
+            if (material->EffectGroupCount() > 0)
+            {
+                const EffectBuffers* buffers = m_effectBuffers.Find(&instance);
+                for (usize g = 0; g < material->EffectGroupCount(); ++g)
+                {
+                    const MaterialEffectGroup& group = material->GetEffectGroup(g);
+                    if (group.uniformSize == 0)
+                    {
+                        continue;
+                    }
+                    if (buffers == nullptr || g >= buffers->buffers.Size() || buffers->buffers[g] == nullptr)
+                    {
+                        return false; // never written: the layout's entry would go unfilled
+                    }
+                    entries.PushBack(rhi::BindGroupEntry::BufferEntry(buffers->buffers[g], 0, group.uniformSize));
+                }
             }
 
             usize propIndex = 0;
@@ -526,6 +666,13 @@ export namespace foundation::materials
                 h = h * 31u + static_cast<u64>(p.type);
                 h = h * 31u + p.binding;
             }
+            // Each effect group adds a binding: a material with one is another layout.
+            u64 effectBindings = 0;
+            for (const MaterialEffectGroup& group : material.EffectGroups())
+            {
+                effectBindings += group.uniformSize > 0 ? 1u : 0u;
+            }
+            h = h * 31u + 0x9E37u + effectBindings;
             return h;
         }
 
@@ -587,6 +734,17 @@ export namespace foundation::materials
             {
                 m_device->DestroyBuffer(e.value);
             }
+            for (auto& e : m_effectBuffers)
+            {
+                for (rhi::Buffer* b : e.value.buffers)
+                {
+                    if (b != nullptr)
+                    {
+                        m_device->DestroyBuffer(b);
+                    }
+                }
+            }
+            m_effectBuffers.Clear();
             for (auto& e : m_layoutCache)
             {
                 m_device->DestroyBindGroupLayout(e.value);
@@ -631,6 +789,10 @@ export namespace foundation::materials
             m_device = nullptr;
         }
 
+        // The binding the first effect group's buffer takes in the material's set (b1:
+        // foundation.shaders' kShaderEffectRegister).
+        static constexpr u32 kFirstEffectBinding = 1;
+
         rhi::Device* m_device = nullptr;
         rhi::Queue* m_queue = nullptr;
         rhi::Sampler* m_defaultSampler = nullptr;
@@ -652,6 +814,12 @@ export namespace foundation::materials
         HashMap<u64, rhi::BindGroupLayout*> m_layoutCache;
         HashMap<u64, rhi::Sampler*> m_samplerCache;
         HashMap<MaterialInstance*, rhi::Buffer*> m_uniformBuffers;
+        // Each instance's effect group buffers, by group index (null for a group without uniforms).
+        struct EffectBuffers
+        {
+            Array<rhi::Buffer*> buffers;
+        };
+        HashMap<MaterialInstance*, EffectBuffers> m_effectBuffers;
         HashMap<MaterialInstance*, rhi::BindGroup*> m_bindGroups;
         Array<MaterialInstance*> m_dirty;
     };

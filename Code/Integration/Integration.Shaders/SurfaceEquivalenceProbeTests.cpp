@@ -51,6 +51,7 @@ namespace
     {
         bool ok = false;
         Array<pipeline::ShaderCheckProgram> programs;
+        Array<shaders::ShaderProperty> properties; // its properties block's table: its materials' layout
     };
 
     // `timedAlpha`: the cut-out also reads Time() (the depth and pick views' clock), through a
@@ -98,29 +99,78 @@ namespace
         }
         REQUIRE(check.IsOk());
         REQUIRE(check.hasVertex); // forward's wind
+        // The engine's vertex stages sway every surface shader by its material's Wind group, so its
+        // programs declare WIND (Specs/wind-for-every-shader.md, rule 4).
+        REQUIRE_FALSE(check.programs.IsEmpty());
+        CHECK(shaders::HasFlag(check.programs[0].vertexMask, shaders::ShaderFlags::Wind));
+        out.properties = check.block.properties;
         out.programs = Move(check.programs);
         out.ok = true;
         return out;
     }
 
-    // The forward PBR material the scene uses, and the same values on the surface PBR (its
-    // properties are forward's, in forward's layout, so the material is the same but its shader).
+    // The forward PBR material the scene uses, swaying by its Wind group, and the same values on
+    // the surface PBR, laid out by its properties block (forward's, in forward's layout, with its
+    // own wind properties in the lanes forward's buffer leaves as padding), swaying by its own
+    // Vertex(). The surface material carries the Wind group too (its programs declare WIND), off:
+    // so it sways once, by its Vertex(), and its own WindStrength does not collide with the
+    // effect's Strength.
     RefPtr<materials::Material> PbrMaterial(StringView name, Float4 color, f32 metallic,
-                                            f32 roughness, bool surface)
+                                            f32 roughness, bool surface, const SurfacePrograms& cooked,
+                                            const shaders::ShaderEffect& wind, f32 windStrength)
     {
-        RefPtr<materials::Material> m = materials::CreatePBR(name, color, metallic, roughness);
-        m->SetDefaultFloat(u8"WindStrength", 0.15f);
+        RefPtr<materials::Material> m;
+        if (!surface)
+        {
+            m = materials::CreatePBR(name, color, metallic, roughness);
+            m->AddEffectGroup(wind);
+            m->SetDefaultFloat(u8"Wind.Strength", windStrength);
+            m->SetDefaultFloat(u8"Wind.Speed", 1.0f);
+            m->SetDefaultFloat(u8"Wind.Height", 0.5f);
+            return m;
+        }
+        materials::MaterialBuilder builder(name);
+        builder.Shader(kSurfaceName).VertexLayout(materials::VertexLayoutType::Mesh);
+        for (const shaders::ShaderProperty& p : cooked.properties)
+        {
+            switch (p.type)
+            {
+            case shaders::ShaderPropertyType::Float:
+                builder.Float(p.name.AsView(), p.value.x);
+                break;
+            case shaders::ShaderPropertyType::Color:
+                builder.Color(p.name.AsView(), p.value);
+                break;
+            case shaders::ShaderPropertyType::ColorHdr:
+                builder.ColorHdr(p.name.AsView(), p.value);
+                break;
+            case shaders::ShaderPropertyType::Texture:
+                builder.Texture(p.name.AsView());
+                break;
+            case shaders::ShaderPropertyType::Sampler:
+                builder.Sampler(p.name.AsView());
+                break;
+            default:
+                FAIL("surface_pbr declares a property kind this test does not lay out");
+                break;
+            }
+        }
+        builder.Effect(wind);
+        m = builder.Build();
+        m->SetDefaultColor(u8"BaseColor", color);
+        m->SetDefaultFloat(u8"Metallic", metallic);
+        m->SetDefaultFloat(u8"Roughness", roughness);
+        m->SetDefaultFloat(u8"WindStrength", windStrength);
         m->SetDefaultFloat(u8"WindSpeed", 1.0f);
         m->SetDefaultFloat(u8"WindHeight", 0.5f);
-        if (surface)
-        {
-            m->shaderName = String(kSurfaceName);
-            m->pipeline.shaderName = m->shaderName.AsView();
-            m->depthShaderName = String(kSurfaceName);
-            m->depthShaderName += shaders::kDepthProgramSuffix;
-            m->pickShaderName = String(kSurfaceName);
-            m->pickShaderName += shaders::kPickProgramSuffix;
-        }
+        // Laid out as forward's: the values mean the same on both.
+        REQUIRE(m->FindProperty(u8"EmissiveColor") != nullptr);
+        CHECK(m->FindProperty(u8"EmissiveColor")->offset == 32u);
+        CHECK(m->FindProperty(u8"AlphaCutoff")->offset == 56u);
+        m->depthShaderName = String(kSurfaceName);
+        m->depthShaderName += shaders::kDepthProgramSuffix;
+        m->pickShaderName = String(kSurfaceName);
+        m->pickShaderName += shaders::kPickProgramSuffix;
         return m;
     }
 
@@ -178,11 +228,12 @@ namespace
 
             RefPtr<geometry::StaticMesh> sphere = geometry::Primitives::Sphere(DefaultAllocator(), 1.0f, 48, 24);
             RefPtr<geometry::StaticMesh> ground = geometry::Primitives::Plane(DefaultAllocator(), 8.0f, 8.0f);
-            RefPtr<materials::Material> ball =
-                PbrMaterial(u8"ball", Float4{0.8f, 0.3f, 0.2f, 1.0f}, 0.2f, 0.4f, surface);
-            RefPtr<materials::Material> floor =
-                PbrMaterial(u8"floor", Float4{0.7f, 0.7f, 0.7f, 1.0f}, 0.0f, 0.8f, surface);
-            floor->SetDefaultFloat(u8"WindStrength", 0.0f); // the ground stays put
+            const shaders::ShaderEffect* wind = shaderSystem.EffectForFlag(shaders::ShaderFlags::Wind);
+            REQUIRE(wind != nullptr);
+            RefPtr<materials::Material> ball = PbrMaterial(u8"ball", Float4{0.8f, 0.3f, 0.2f, 1.0f}, 0.2f,
+                                                           0.4f, surface, cooked, *wind, 0.15f);
+            RefPtr<materials::Material> floor = PbrMaterial(u8"floor", Float4{0.7f, 0.7f, 0.7f, 1.0f}, 0.0f,
+                                                            0.8f, surface, cooked, *wind, 0.0f); // stays put
             ball->SetDefaultFloat4(u8"EmissiveColor", Float4{0.05f, 0.02f, 0.0f, 1.0f});
             if (cutOut)
             {

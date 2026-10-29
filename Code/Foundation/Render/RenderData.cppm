@@ -244,9 +244,11 @@ export namespace foundation::render
         const RefPtr<materials::Material>* submeshMaterials = nullptr;
         u32 submeshMaterialCount = 0;
         // Material properties set for this mesh alone (borrowed from its owner for the frame), and
-        // their version, bumped whenever they change. A mesh with any draws alone (it never batches)
-        // with an instance of its own for each overridden slot; depth and shadow passes use the
-        // shared material.
+        // their version, bumped whenever they change. A name is a shader property's, or an effect
+        // group's value as `Effect.Property` (`Wind.Strength`). A mesh with any draws alone (it never
+        // batches) with an instance of its own for each overridden slot; the depth, shadow and pick
+        // passes use the shared material (so an overridden wind sways the visible mesh only, and an
+        // effect switches on by the shared material's gate alone).
         const MaterialPropertyOverride* overrides = nullptr;
         u32 overrideCount = 0;
         u32 overrideVersion = 0;

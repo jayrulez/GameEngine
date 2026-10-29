@@ -1320,6 +1320,20 @@ export namespace foundation::resource
             }};
     }
 
+    /// A description for a factory that USES a host `Service` when there is one but works without
+    /// (`Factory(IAllocator&, Service*)`, the pointer null in a host without it): created in every
+    /// host, so not gated (`service` null).
+    template <typename Product, typename Cooked, typename Factory, typename Service>
+    [[nodiscard]] constexpr ResourceFactoryDesc FactoryWithOptionalService() noexcept
+    {
+        return ResourceFactoryDesc{
+            []() -> const TypeInfo* { return &Product::StaticType(); },
+            []() -> const TypeInfo* { return &Cooked::StaticType(); },
+            nullptr,
+            [](IAllocator& allocator, const IResourceServices& services) -> UniquePtr<IResourceFactory>
+            { return MakeUnique<Factory>(allocator, allocator, services.Get<Service>()); }};
+    }
+
     /// One resource library's declaration: an id, its type registration (idempotent; null when
     /// the library has none of its own) and its factory descriptions. Declared `inline constexpr`
     /// in the library's interface: a constant table, duplicated per image without harm.

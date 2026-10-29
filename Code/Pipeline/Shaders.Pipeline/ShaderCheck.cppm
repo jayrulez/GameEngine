@@ -192,12 +192,15 @@ export namespace pipeline
         return found;
     }
 
-    // A surface shader's lattices: the template's, the same for every surface shader.
-    inline constexpr ShaderFlags kSurfaceForwardVertexMask = ShaderFlags::Skinned | ShaderFlags::Instanced;
+    // A surface shader's lattices: the template's, the same for every surface shader. WIND in each
+    // vertex lattice: the engine's vertex stages sway by the material's Wind group, so every surface
+    // shader can sway, its shadow and pick with it (Specs/wind-for-every-shader.md, rule 4).
+    inline constexpr ShaderFlags kSurfaceForwardVertexMask =
+        ShaderFlags::Skinned | ShaderFlags::Instanced | ShaderFlags::Wind;
     inline constexpr ShaderFlags kSurfaceForwardFragmentMask =
         ShaderFlags::AlphaTest | ShaderFlags::GBuffer | ShaderFlags::Dither;
     inline constexpr ShaderFlags kSurfaceDepthVertexMask =
-        ShaderFlags::Skinned | ShaderFlags::Instanced | ShaderFlags::AlphaTest;
+        ShaderFlags::Skinned | ShaderFlags::Instanced | ShaderFlags::AlphaTest | ShaderFlags::Wind;
     inline constexpr ShaderFlags kSurfaceDepthFragmentMask = ShaderFlags::AlphaTest;
 
     namespace detail

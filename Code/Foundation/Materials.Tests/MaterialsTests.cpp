@@ -143,8 +143,10 @@ TEST_CASE("material templates: the Phong builtin lays its cbuffer out as phong.p
         CHECK(phong->FindProperty(map)->type == MaterialPropertyType::Texture2D);
     }
     CHECK(phong->FindProperty(u8"MainSampler")->type == MaterialPropertyType::Sampler);
-    // No wind: a Phong material never asks for the swaying vertex variant.
+    // No wind property: the wind is an effect group, which a Phong material carries when its
+    // shader's table is at hand (MaterialBuilder::Effect, the factory), never a property.
     CHECK(phong->FindProperty(u8"WindStrength") == nullptr);
+    CHECK(phong->EffectGroupCount() == 0u);
 }
 
 TEST_CASE("material builtins: each known by its shader, its short name and its label")
@@ -305,3 +307,212 @@ TEST_CASE("material builder: lays uniforms out as a properties block (HLSL packi
     CHECK(mat->FindProperty(u8"Wobble")->offset == 32u);   // at 28 it would straddle a row
     CHECK(mat->UniformDataSize() == block.uniformSize);
 }
+
+// --- Effect groups (Specs/wind-for-every-shader.md) ----------------------------------------
+
+namespace
+{
+    // An effect's table, as the shader system serves it from an effect block.
+    shaders::ShaderEffect WindTable()
+    {
+        const shaders::ShaderEffectBlock block = shaders::ParseShaderEffect(
+            u8"effect Wind : WIND\n"
+            u8"{\n"
+            u8"    float Strength = 0 [0, 2] (gate);\n"
+            u8"    float Speed = 1 [0, 20];\n"
+            u8"    float Height = 1 [0.01, 100];\n"
+            u8"}\n");
+        REQUIRE(block.IsOk());
+        return block.effect;
+    }
+
+    f32 FloatAt(Span<const u8> bytes, u32 offset)
+    {
+        f32 v = -1.0f;
+        if (static_cast<usize>(offset) + sizeof(f32) <= bytes.Size())
+        {
+            MemCopy(&v, bytes.Data() + offset, sizeof(v));
+        }
+        return v;
+    }
+
+    // The Null device, remembering the last layout and bind group it was asked for (the Null
+    // objects keep nothing).
+    class RecordingDevice final : public rhi::null::NullDevice
+    {
+    public:
+        using rhi::null::NullDevice::NullDevice;
+        Array<rhi::BindGroupLayoutEntry> layoutEntries;
+        Array<rhi::BindGroupEntry> groupEntries;
+
+        Status CreateBindGroupLayout(const rhi::BindGroupLayoutDesc& desc, rhi::BindGroupLayout*& out) override
+        {
+            layoutEntries.Clear();
+            for (const rhi::BindGroupLayoutEntry& e : desc.entries)
+            {
+                layoutEntries.PushBack(e);
+            }
+            return rhi::null::NullDevice::CreateBindGroupLayout(desc, out);
+        }
+        Status CreateBindGroup(const rhi::BindGroupDesc& desc, rhi::BindGroup*& out) override
+        {
+            groupEntries.Clear();
+            for (const rhi::BindGroupEntry& e : desc.entries)
+            {
+                groupEntries.PushBack(e);
+            }
+            return rhi::null::NullDevice::CreateBindGroup(desc, out);
+        }
+    };
+}
+
+TEST_CASE("material effects: a group from the effect's table, addressed as Effect.Property")
+{
+    RefPtr<Material> mat = MaterialBuilder(u8"card")
+                               .Shader(u8"forward")
+                               .Color(u8"BaseColor", Float4{1, 1, 1, 1})
+                               .Effect(WindTable())
+                               .Build();
+    REQUIRE(mat);
+    CHECK(mat->PropertyCount() == 1u);    // the group is not a property
+    CHECK(mat->UniformDataSize() == 16u); // nor in the shader's buffer
+    REQUIRE(mat->EffectGroupCount() == 1u);
+    const MaterialEffectGroup& wind = mat->GetEffectGroup(0);
+    CHECK(wind.name == u8"Wind");
+    CHECK(wind.flag == shaders::ShaderFlags::Wind);
+    CHECK(wind.uniformSize == 16u);
+    const Span<const u8> defaults{wind.defaults.Data(), wind.defaults.Size()};
+    CHECK(FloatAt(defaults, 0) == doctest::Approx(0.0f)); // the table's defaults
+    CHECK(FloatAt(defaults, 4) == doctest::Approx(1.0f));
+    CHECK(FloatAt(defaults, 8) == doctest::Approx(1.0f));
+    CHECK_FALSE(wind.IsActive());
+
+    mat->SetDefaultFloat(u8"Wind.Strength", 0.25f);
+    CHECK(wind.IsActive());
+    usize group = 99;
+    const MaterialPropertyDef* height = mat->FindEffectProperty(u8"Wind.Height", &group);
+    REQUIRE(height != nullptr);
+    CHECK(group == 0u);
+    CHECK(height->offset == 8u);
+    CHECK(mat->FindEffectProperty(u8"Wind.Gust") == nullptr);
+    CHECK(mat->FindEffectProperty(u8"Fog.Strength") == nullptr);
+    CHECK(mat->FindEffectProperty(u8"BaseColor") == nullptr); // a property's name has no dot
+
+    // Adopting the effects a shader declares: kept (values and all) while it declares the flag,
+    // dropped when it does not.
+    const shaders::ShaderEffect table = WindTable();
+    mat->AdoptDeclaredEffects(Span<const shaders::ShaderEffect>(&table, 1),
+                              shaders::ShaderFlags::Skinned | shaders::ShaderFlags::Wind);
+    REQUIRE(mat->EffectGroupCount() == 1u);
+    CHECK(FloatAt(Span<const u8>{mat->GetEffectGroup(0).defaults.Data(), 16}, 0) == doctest::Approx(0.25f));
+    mat->AdoptDeclaredEffects(Span<const shaders::ShaderEffect>(&table, 1), shaders::ShaderFlags::Skinned);
+    CHECK(mat->EffectGroupCount() == 0u);
+    // And a shader that declares it gives a material without the group one, at the defaults.
+    mat->AdoptDeclaredEffects(Span<const shaders::ShaderEffect>(&table, 1), shaders::ShaderFlags::Wind);
+    REQUIRE(mat->EffectGroupCount() == 1u);
+    CHECK_FALSE(mat->GetEffectGroup(0).IsActive());
+}
+
+TEST_CASE("material effects: an instance overrides a group's values apart from the material's")
+{
+    RefPtr<Material> mat = MaterialBuilder(u8"card")
+                               .Shader(u8"forward")
+                               .Float(u8"Roughness", 0.5f)
+                               .Effect(WindTable())
+                               .Build();
+    REQUIRE(mat);
+    MaterialInstance inst(mat.Get());
+    CHECK(FloatAt(inst.EffectData(0), 4) == doctest::Approx(1.0f));
+
+    inst.ClearUniformDirty();
+    inst.SetFloat(u8"Wind.Speed", 6.0f);
+    CHECK(inst.IsUniformDirty());
+    CHECK(FloatAt(inst.EffectData(0), 4) == doctest::Approx(6.0f));
+    const MaterialEffectGroup& wind = mat->GetEffectGroup(0);
+    CHECK(FloatAt(Span<const u8>{wind.defaults.Data(), wind.defaults.Size()}, 4) ==
+          doctest::Approx(1.0f)); // the material untouched
+    CHECK(FloatAt(inst.UniformData(), 0) == doctest::Approx(0.5f)); // nor the shader's buffer
+
+    inst.SetFloat4(u8"Wind.Speed", Float4{9, 9, 9, 9}); // wider than the parameter: refused
+    CHECK(FloatAt(inst.EffectData(0), 4) == doctest::Approx(6.0f));
+    inst.SetFloat(u8"WindSpeed", 3.0f); // the old name reaches nothing
+    CHECK(FloatAt(inst.EffectData(0), 4) == doctest::Approx(6.0f));
+
+    inst.ResetProperty(u8"Wind.Speed");
+    CHECK(FloatAt(inst.EffectData(0), 4) == doctest::Approx(1.0f));
+    inst.SetFloat(u8"Wind.Strength", 0.4f);
+    inst.SetFloat(u8"Wind.Height", 2.0f);
+    inst.ResetEffects();
+    CHECK(FloatAt(inst.EffectData(0), 0) == doctest::Approx(0.0f));
+    CHECK(FloatAt(inst.EffectData(0), 8) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("material system: an effect group takes binding 1 of the material's set, in the vertex stage")
+{
+    RecordingDevice device{DefaultAllocator()};
+    MaterialSystem system;
+    REQUIRE(system.Initialize(device).IsOk());
+
+    RefPtr<Material> plain = MaterialBuilder(u8"plain")
+                                 .Shader(u8"forward")
+                                 .Color(u8"BaseColor", Float4{1, 1, 1, 1})
+                                 .Texture(u8"AlbedoMap")
+                                 .Sampler(u8"MainSampler")
+                                 .Build();
+    RefPtr<Material> card = MaterialBuilder(u8"card")
+                                .Shader(u8"forward")
+                                .Color(u8"BaseColor", Float4{1, 1, 1, 1})
+                                .Texture(u8"AlbedoMap")
+                                .Sampler(u8"MainSampler")
+                                .Effect(WindTable())
+                                .Build();
+    REQUIRE(plain);
+    REQUIRE(card);
+
+    rhi::BindGroupLayout* plainLayout = system.GetOrCreateLayout(*plain);
+    REQUIRE(plainLayout != nullptr);
+    CHECK(device.layoutEntries.Size() == 3u); // b0, t0, s0
+    rhi::BindGroupLayout* cardLayout = system.GetOrCreateLayout(*card);
+    REQUIRE(cardLayout != nullptr);
+    CHECK(cardLayout != plainLayout); // the group makes it another layout
+    REQUIRE(device.layoutEntries.Size() == 4u);
+    CHECK(device.layoutEntries[0].binding == 0u);
+    CHECK(device.layoutEntries[0].type == rhi::BindingType::UniformBuffer);
+    // Right after the material's buffer: the bind group pushes the effect's buffer at the same
+    // position (WebGPU matches entries by position).
+    CHECK(device.layoutEntries[1].binding == 1u);
+    CHECK(device.layoutEntries[1].type == rhi::BindingType::UniformBuffer);
+    CHECK(device.layoutEntries[1].visibility == rhi::ShaderStage::Vertex);
+
+    card->SetDefaultFloat(u8"Wind.Strength", 0.3f);
+    MaterialInstance inst(card.Get());
+    inst.SetFloat(u8"Wind.Speed", 4.0f);
+    REQUIRE(system.PrepareInstance(inst) != nullptr);
+    REQUIRE(device.groupEntries.Size() == 4u);
+    CHECK(device.groupEntries[0].buffer != nullptr);
+    rhi::Buffer* windBuffer = device.groupEntries[1].buffer;
+    REQUIRE(windBuffer != nullptr);
+    CHECK(device.groupEntries[1].bufferSize == 16u);
+    CHECK(windBuffer != device.groupEntries[0].buffer);
+    // The buffer holds the instance's values, by the effect's offsets.
+    const Span<const u8> written{static_cast<const u8*>(windBuffer->Map()), 16};
+    CHECK(FloatAt(written, 0) == doctest::Approx(0.3f));
+    CHECK(FloatAt(written, 4) == doctest::Approx(4.0f));
+    CHECK(FloatAt(written, 8) == doctest::Approx(1.0f));
+
+    // A later override rewrites it.
+    inst.SetFloat(u8"Wind.Height", 0.5f);
+    system.PrepareDirtyInstances();
+    CHECK(FloatAt(Span<const u8>{static_cast<const u8*>(windBuffer->Map()), 16}, 8) == doctest::Approx(0.5f));
+
+    // Handed over for retirement with the uniform buffer, then gone from the system.
+    Array<rhi::Buffer*> detached;
+    system.DetachEffectBuffers(&inst, detached);
+    REQUIRE(detached.Size() == 1u);
+    CHECK(detached[0] == windBuffer);
+    Array<rhi::Buffer*> again;
+    system.DetachEffectBuffers(&inst, again);
+    CHECK(again.IsEmpty());
+    device.DestroyBuffer(windBuffer);
+}
+

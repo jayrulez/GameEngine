@@ -3,8 +3,8 @@
 
 /// Foundation::Materials - the `:instance` partition.
 ///
-/// MaterialInstance: a per-use copy of a Material's properties with overridable
-/// values and dirty tracking. Setters write into an override uniform buffer / texture
+/// MaterialInstance: a per-use copy of a Material's properties (and its effect groups'
+/// values) with overridable values and dirty tracking. Setters write into an override uniform buffer / texture
 /// maps and flip dirty flags; on a false->true transition the instance NOTIFIES its
 /// sink (the MaterialSystem) so re-prep is O(dirty), not O(all instances). The sink
 /// is an interface declared here so :system can depend on :instance (not vice-versa),
@@ -87,6 +87,15 @@ export namespace foundation::materials
                     m_uniformData[i] = defaults[i];
                 }
             }
+            if (material != nullptr)
+            {
+                // Each effect group's values, which this instance may override apart from the
+                // shader's buffer (`Wind.Strength`).
+                for (const MaterialEffectGroup& group : material->EffectGroups())
+                {
+                    m_effectData.PushBack(group.defaults);
+                }
+            }
         }
 
         ~MaterialInstance()
@@ -164,8 +173,56 @@ export namespace foundation::materials
                        : m_material->DefaultUniformData();
         }
 
+        // The values of the material's effect group `groupIndex` this instance draws with (its
+        // overrides over the material's).
+        [[nodiscard]] Span<const u8> EffectData(usize groupIndex) const noexcept
+        {
+            if (groupIndex < m_effectData.Size())
+            {
+                return Span<const u8>{m_effectData[groupIndex].Data(), m_effectData[groupIndex].Size()};
+            }
+            if (groupIndex < m_material->EffectGroupCount())
+            {
+                const Array<u8>& defaults = m_material->GetEffectGroup(groupIndex).defaults;
+                return Span<const u8>{defaults.Data(), defaults.Size()};
+            }
+            return {};
+        }
+
+        // Every effect group back to the material's values.
+        void ResetEffects()
+        {
+            bool changed = false;
+            for (usize g = 0; g < m_effectData.Size() && g < m_material->EffectGroupCount(); ++g)
+            {
+                const Array<u8>& defaults = m_material->GetEffectGroup(g).defaults;
+                if (m_effectData[g].Size() == defaults.Size() && defaults.Size() > 0)
+                {
+                    MemCopy(m_effectData[g].Data(), defaults.Data(), defaults.Size());
+                    changed = true;
+                }
+            }
+            if (changed)
+            {
+                SetUniformDirty();
+            }
+        }
+
         void ResetProperty(StringView n)
         {
+            usize group = 0;
+            if (const MaterialPropertyDef* e = m_material->FindEffectProperty(n, &group))
+            {
+                const Array<u8>& defaults = m_material->GetEffectGroup(group).defaults;
+                if (group < m_effectData.Size() &&
+                    static_cast<usize>(e->offset) + e->size <= m_effectData[group].Size() &&
+                    static_cast<usize>(e->offset) + e->size <= defaults.Size())
+                {
+                    MemCopy(m_effectData[group].Data() + e->offset, defaults.Data() + e->offset, e->size);
+                    SetUniformDirty();
+                }
+                return;
+            }
             const isize idx = m_material->GetPropertyIndex(n);
             if (idx < 0)
             {
@@ -216,6 +273,18 @@ export namespace foundation::materials
     private:
         void WriteUniform(StringView n, const void* src, usize bytes)
         {
+            // `Effect.Property`: a value of an effect group, in its own buffer.
+            usize group = 0;
+            if (const MaterialPropertyDef* e = m_material->FindEffectProperty(n, &group))
+            {
+                if (group < m_effectData.Size() && bytes <= e->size &&
+                    static_cast<usize>(e->offset) + bytes <= m_effectData[group].Size())
+                {
+                    MemCopy(m_effectData[group].Data() + e->offset, src, bytes);
+                    SetUniformDirty();
+                }
+                return;
+            }
             const isize idx = m_material->GetPropertyIndex(n);
             if (idx < 0)
             {
@@ -260,6 +329,7 @@ export namespace foundation::materials
         RefPtr<Material> m_material; // owned (keeps a reloaded-away material alive while cached)
         IMaterialInstanceSink* m_sink = nullptr;      // borrowed (the MaterialSystem)
         Array<u8> m_uniformData;                      // override uniform buffer
+        Array<Array<u8>> m_effectData;                // override values per effect group
         HashMap<usize, rhi::TextureView*> m_textures; // override textures by property index
         HashMap<usize, rhi::Sampler*> m_samplers;     // override samplers by property index
         PropertyOverrideMask m_overrides;

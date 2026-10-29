@@ -421,3 +421,256 @@ TEST_CASE("material resource: a material takes its shader's depth and pick progr
     CHECK(always[0] == u8"lit.depth"); // it moves its vertices: its own depth, opaque too
     compiler->Destroy();
 }
+
+// --- Effect groups (Specs/wind-for-every-shader.md) ----------------------------------------
+
+namespace
+{
+    f32 FloatAt(const Array<u8>& bytes, u32 offset)
+    {
+        f32 v = -1.0f;
+        if (static_cast<usize>(offset) + sizeof(f32) <= bytes.Size())
+        {
+            MemCopy(&v, bytes.Data() + offset, sizeof(v));
+        }
+        return v;
+    }
+
+    isize IndexOfName(const Array<String>& names, StringView name)
+    {
+        for (usize i = 0; i < names.Size(); ++i)
+        {
+            if (names[i].AsView() == name)
+            {
+                return static_cast<isize>(i);
+            }
+        }
+        return -1;
+    }
+
+    // A PBR material as data version 3 stored it: the wind in the buffer's spare lanes.
+    void LegacyPbrSource(MaterialSource& out, f32 strength, f32 speed, f32 height)
+    {
+        RefPtr<Material> old = MaterialBuilder(u8"grass")
+                                   .Shader(u8"forward")
+                                   .VertexLayout(VertexLayoutType::Mesh)
+                                   .Color(u8"BaseColor", Float4{0.2f, 0.6f, 0.2f, 1.0f})
+                                   .Float(u8"Metallic", 0.0f)
+                                   .Float(u8"Roughness", 0.8f)
+                                   .Float(u8"WindStrength", strength)
+                                   .Float(u8"WindSpeed", speed)
+                                   .ColorHdr(u8"EmissiveColor", Float4{0, 0, 0, 1})
+                                   .Float(u8"OcclusionStrength", 1.0f)
+                                   .Float(u8"NormalScale", 1.0f)
+                                   .Float(u8"AlphaCutoff", 0.5f)
+                                   .Float(u8"WindHeight", height)
+                                   .Texture(u8"AlbedoMap")
+                                   .Texture(u8"NormalMap")
+                                   .Texture(u8"MetallicRoughnessMap")
+                                   .Texture(u8"OcclusionMap")
+                                   .Texture(u8"EmissiveMap")
+                                   .Sampler(u8"MainSampler")
+                                   .Build();
+        MaterialSource::FromMaterial(*old, Guid{}, out);
+        out.shaderName = String(u8"forward");
+    }
+
+    shaders::ShaderEffect WindTable()
+    {
+        const shaders::ShaderEffectBlock block = shaders::ParseShaderEffect(
+            u8"effect Wind : WIND\n"
+            u8"{\n"
+            u8"    float Strength = 0 [0, 2] (gate);\n"
+            u8"    float Speed = 1 [0, 20];\n"
+            u8"    float Height = 1 [0.01, 100];\n"
+            u8"}\n");
+        REQUIRE(block.IsOk());
+        return block.effect;
+    }
+}
+
+TEST_CASE("material source: a version-3 PBR material's wind lanes migrate into a Wind group")
+{
+    MaterialSource src;
+    LegacyPbrSource(src, 0.3f, 2.0f, 0.7f);
+    REQUIRE(IndexOfName(src.propertyNames, u8"WindStrength") == 3);
+    const usize before = src.propertyNames.Size();
+    const Array<u8> bytes = src.uniformDefaults;
+
+    src.MigrateWindLanes();
+    CHECK(IndexOfName(src.propertyNames, u8"WindStrength") < 0);
+    CHECK(IndexOfName(src.propertyNames, u8"WindSpeed") < 0);
+    CHECK(IndexOfName(src.propertyNames, u8"WindHeight") < 0);
+    CHECK(src.propertyNames.Size() == before - 3u);
+    CHECK(src.propertyTypes.Size() == src.propertyNames.Size());
+    CHECK(src.propertyOffsets.Size() == src.propertyNames.Size());
+    CHECK(src.propertySizes.Size() == src.propertyNames.Size());
+    CHECK(src.propertyBindings.Size() == src.propertyNames.Size());
+    // The rest unmoved, the buffer's bytes as they were (the lanes are padding now).
+    const isize emissive = IndexOfName(src.propertyNames, u8"EmissiveColor");
+    REQUIRE(emissive >= 0);
+    CHECK(src.propertyOffsets[static_cast<usize>(emissive)] == 32u);
+    CHECK(src.uniformDefaults.Size() == bytes.Size());
+    // Laid out as today's CreatePBR is: the same table, so it is complete and draws as one.
+    RefPtr<Material> pbr = CreatePBR(u8"today");
+    MaterialSource today;
+    MaterialSource::FromMaterial(*pbr, Guid{}, today);
+    REQUIRE(today.propertyNames.Size() == src.propertyNames.Size());
+    for (usize i = 0; i < today.propertyNames.Size(); ++i)
+    {
+        CHECK(src.propertyNames[i] == today.propertyNames[i]);
+        CHECK(src.propertyOffsets[i] == today.propertyOffsets[i]);
+        CHECK(src.propertyBindings[i] == today.propertyBindings[i]);
+    }
+    CHECK(ForwardMaterialSourceIsComplete(src));
+
+    // The Wind group, holding the lanes' values.
+    REQUIRE(src.effects.Size() == 1u);
+    const MaterialEffectGroupSource& wind = src.effects[0];
+    CHECK(wind.name == u8"Wind");
+    CHECK(wind.flag == static_cast<u32>(shaders::ShaderFlags::Wind));
+    CHECK(wind.gateIndex == 0u);
+    CHECK(wind.uniformSize == 16u);
+    REQUIRE(wind.propertyNames.Size() == 3u);
+    CHECK(wind.propertyNames[0] == u8"Strength");
+    CHECK(wind.propertyNames[1] == u8"Speed");
+    CHECK(wind.propertyNames[2] == u8"Height");
+    CHECK(FloatAt(wind.values, 0) == doctest::Approx(0.3f));
+    CHECK(FloatAt(wind.values, 4) == doctest::Approx(2.0f));
+    CHECK(FloatAt(wind.values, 8) == doctest::Approx(0.7f));
+
+    // Idempotent: nothing left to migrate, the group kept once.
+    src.MigrateWindLanes();
+    CHECK(src.effects.Size() == 1u);
+    CHECK(src.propertyNames.Size() == before - 3u);
+
+    // A custom shader's material keeps properties of those names: they are its own.
+    MaterialSource custom;
+    LegacyPbrSource(custom, 0.3f, 2.0f, 0.7f);
+    custom.shaderId = Guid{1u, 2u}; // any custom shader
+    custom.MigrateWindLanes();
+    CHECK(IndexOfName(custom.propertyNames, u8"WindStrength") == 3);
+    CHECK(custom.effects.IsEmpty());
+}
+
+TEST_CASE("material source: reading migrates a stored PBR material; the group round-trips")
+{
+    MaterialSource legacy;
+    LegacyPbrSource(legacy, 0.0f, 0.0f, 1.0f); // what every stored material holds: wind off
+    MemoryStream buffer;
+    {
+        BinarySerializer writer(buffer, SerializeMode::Write);
+        legacy.Serialize(writer);
+    }
+    MaterialSource read;
+    {
+        (void)buffer.Seek(0, SeekOrigin::Begin);
+        BinarySerializer reader(buffer, SerializeMode::Read);
+        read.Serialize(reader);
+    }
+    CHECK(IndexOfName(read.propertyNames, u8"WindStrength") < 0);
+    REQUIRE(read.effects.Size() == 1u);
+    CHECK(FloatAt(read.effects[0].values, 0) == doctest::Approx(0.0f));
+    CHECK(FloatAt(read.effects[0].values, 8) == doctest::Approx(1.0f));
+
+    // And the runtime material carries it, off.
+    RefPtr<Material> material = MaterialFromSource(DefaultAllocator(), read, u8"forward");
+    REQUIRE(material->EffectGroupCount() == 1u);
+    CHECK(material->GetEffectGroup(0).name == u8"Wind");
+    CHECK(material->GetEffectGroup(0).flag == shaders::ShaderFlags::Wind);
+    CHECK_FALSE(material->GetEffectGroup(0).IsActive());
+
+    // A material's groups round-trip through FromMaterial and the stream.
+    material->SetDefaultFloat(u8"Wind.Strength", 0.5f);
+    MaterialSource again;
+    MaterialSource::FromMaterial(*material, Guid{}, again);
+    MemoryStream second;
+    {
+        BinarySerializer writer(second, SerializeMode::Write);
+        again.Serialize(writer);
+    }
+    MaterialSource back;
+    {
+        (void)second.Seek(0, SeekOrigin::Begin);
+        BinarySerializer reader(second, SerializeMode::Read);
+        back.Serialize(reader);
+    }
+    REQUIRE(back.effects.Size() == 1u);
+    CHECK(FloatAt(back.effects[0].values, 0) == doctest::Approx(0.5f));
+    CHECK(back.effects[0].propertyOffsets.Size() == 3u);
+}
+
+TEST_CASE("material resource: with the shader system, the factory gives a material the effects its shader declares")
+{
+    GlobalTypeRegistry().Register(MaterialSource::StaticType());
+    RegisterSerializable<MaterialSource>();
+    GlobalTypeRegistry().Register(Material::StaticType());
+
+    NativeFileSystem mount(u8"scratch_mat_effect_db", DefaultAllocator());
+    Guid swaysId, stillId;
+    {
+        foundation::content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+        // A PBR material saved without a group (made where no table was at hand).
+        RefPtr<Material> pbr = CreatePBR(u8"sways");
+        MaterialSource sways;
+        MaterialSource::FromMaterial(*pbr, Guid{}, sways);
+        sways.shaderName = String(u8"forward");
+        auto* a = db.RootGroup()->CreateInstance(u8"sways", MaterialSource::StaticType());
+        swaysId = a->Id();
+        REQUIRE(a->WriteObject(sways).IsOk());
+        // A material carrying a group on a shader that does not declare WIND.
+        RefPtr<Material> still = CreateUnlit(u8"still", Float4{1, 1, 1, 1}, u8"still_shader");
+        still->AddEffectGroup(WindTable());
+        MaterialSource stillSource;
+        MaterialSource::FromMaterial(*still, Guid{}, stillSource);
+        auto* b = db.RootGroup()->CreateInstance(u8"still", MaterialSource::StaticType());
+        stillId = b->Id();
+        REQUIRE(b->WriteObject(stillSource).IsOk());
+    }
+
+    // A game's shader system: the pack's lattices and effect tables, no compiler.
+    shaders::CookedShaderPack pack;
+    String error;
+    REQUIRE(pack.AddEffect(WindTable(), error));
+    pack.AddDeclaredMask(u8"forward", shaders::ShaderStage::Vertex,
+                         shaders::ShaderFlags::Skinned | shaders::ShaderFlags::Wind);
+    pack.AddDeclaredMask(u8"still_shader", shaders::ShaderStage::Vertex, shaders::ShaderFlags::Skinned);
+    rhi::null::NullDevice device{DefaultAllocator()};
+    shaders::ShaderSystem system(device);
+    system.SetCookedPack(&pack);
+    CHECK(system.DeclaredVariants(u8"forward", shaders::ShaderStage::Vertex) ==
+          (shaders::ShaderFlags::Skinned | shaders::ShaderFlags::Wind));
+
+    {
+        foundation::content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+        MaterialFactory factory(DefaultAllocator(), &system);
+        ResourceManager manager(DefaultAllocator(), db);
+        manager.AddFactory(&factory);
+        Proxy<Material> sways = manager.Bind<Material>(swaysId);
+        REQUIRE(sways);
+        REQUIRE(sways->EffectGroupCount() == 1u);
+        CHECK(sways->GetEffectGroup(0).name == u8"Wind");
+        CHECK_FALSE(sways->GetEffectGroup(0).IsActive()); // the effect's defaults: off
+        Proxy<Material> still = manager.Bind<Material>(stillId);
+        REQUIRE(still);
+        CHECK(still->EffectGroupCount() == 0u); // its shader cannot sway
+    }
+    {
+        // Without the shader system a material keeps what its source carries.
+        foundation::content::ContentDatabase db(DefaultAllocator(), mount, BinarySerializerFactory(), u8".rasset");
+        MaterialFactory factory;
+        ResourceManager manager(DefaultAllocator(), db);
+        manager.AddFactory(&factory);
+        Proxy<Material> still = manager.Bind<Material>(stillId);
+        REQUIRE(still);
+        CHECK(still->EffectGroupCount() == 1u);
+        Proxy<Material> sways = manager.Bind<Material>(swaysId);
+        REQUIRE(sways);
+        CHECK(sways->EffectGroupCount() == 0u);
+    }
+
+    FileDelete(u8"scratch_mat_effect_db/sways.rasset");
+    FileDelete(u8"scratch_mat_effect_db/still.rasset");
+    RemoveDirectory(u8"scratch_mat_effect_db");
+}
+

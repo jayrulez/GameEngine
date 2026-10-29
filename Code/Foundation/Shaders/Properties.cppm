@@ -32,8 +32,9 @@
 //
 // The header names the effect and the variant flag its code is compiled in (one of the engine's
 // flags). The body takes uniforms only, and exactly one float marked (gate): the effect is on
-// while it is above zero. The block becomes `cbuffer Wind : register(b1, space2)`, its members
-// named as declared; the compiler's include handler expands it wherever the include is served.
+// while it is above zero. The block becomes `struct WindEffect { ... };` and
+// `ConstantBuffer<WindEffect> Wind : register(b1, space2);`, so its code reads `Wind.Strength`;
+// the compiler's include handler expands it wherever the include is served.
 
 module;
 #include "Core/Prelude.h"
@@ -743,6 +744,25 @@ export namespace foundation::shaders
             }
         }
 
+        // A block's uniforms as members, in declaration order, one per line with its offset.
+        inline void AppendUniformMembers(String& out, const Array<ShaderProperty>& properties)
+        {
+            for (const ShaderProperty& p : properties)
+            {
+                if (p.size == 0u)
+                {
+                    continue;
+                }
+                out += u8"    ";
+                out += RowOf(p.type).hlsl;
+                out += u8" ";
+                out += p.name;
+                out += u8"; // offset ";
+                out += Format(u8"{}", p.offset);
+                out += u8"\n";
+            }
+        }
+
         // A cbuffer of a block's uniforms in declaration order, which HLSL packs exactly as
         // PackCbufferMember did. Nothing when the block has none.
         inline void AppendCbuffer(String& out, StringView name, StringView registerText,
@@ -762,20 +782,7 @@ export namespace foundation::shaders
             out += u8" : ";
             out += registerText;
             out += u8" {\n";
-            for (const ShaderProperty& p : properties)
-            {
-                if (p.size == 0u)
-                {
-                    continue;
-                }
-                out += u8"    ";
-                out += RowOf(p.type).hlsl;
-                out += u8" ";
-                out += p.name;
-                out += u8"; // offset ";
-                out += Format(u8"{}", p.offset);
-                out += u8"\n";
-            }
+            AppendUniformMembers(out, properties);
             out += u8"};\n";
         }
 
@@ -937,13 +944,44 @@ export namespace foundation::shaders
         return blocks;
     }
 
-    // The declaration an effect stands for: its cbuffer at the effect binding, its members named
-    // as declared, so the effect's code reads `Strength`.
+    // The declaration an effect stands for: a struct of its parameters (`<Name>Effect`) and a
+    // ConstantBuffer of it named for the effect, at the effect binding, so the effect's code reads
+    // `Wind.Strength`, as a material and a script address the value. Not a plain cbuffer: its
+    // members would be global names, and a shader that declares the effect's variant would then
+    // refuse a property of its own named `Speed` or `Height` (ruled in 2b-2: every custom shader
+    // may opt in, rule 4). A ConstantBuffer<T> packs its struct by the cbuffer rules, so the
+    // offsets are PackCbufferMember's.
+    [[nodiscard]] inline String EffectStructName(StringView effectName)
+    {
+        String out(effectName);
+        out += u8"Effect";
+        return out;
+    }
     [[nodiscard]] inline String GenerateEffectDeclaration(const ShaderEffect& effect)
     {
         String out;
-        detail::AppendCbuffer(out, effect.name.AsView(), kShaderEffectRegister,
-                              effect.properties);
+        bool any = false;
+        for (const ShaderProperty& p : effect.properties)
+        {
+            any = any || p.size != 0u;
+        }
+        if (!any)
+        {
+            return out;
+        }
+        const String structName = EffectStructName(effect.name.AsView());
+        out += u8"struct ";
+        out += structName;
+        out += u8" {\n";
+        detail::AppendUniformMembers(out, effect.properties);
+        out += u8"};\n";
+        out += u8"ConstantBuffer<";
+        out += structName;
+        out += u8"> ";
+        out += effect.name;
+        out += u8" : ";
+        out += kShaderEffectRegister;
+        out += u8";\n";
         return out;
     }
 

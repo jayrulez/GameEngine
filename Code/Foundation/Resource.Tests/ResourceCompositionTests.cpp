@@ -70,6 +70,23 @@ namespace
         FakeDevice* m_device;
     };
 
+    // A factory that uses the device when the host has one and works without it.
+    class OptionalFactory final : public IResourceFactory
+    {
+    public:
+        OptionalFactory(IAllocator&, FakeDevice* device) noexcept : m_device(device) {}
+        [[nodiscard]] const TypeInfo* ProductType() const override { return &PlainProduct::StaticType(); }
+        [[nodiscard]] const TypeInfo* CookedType() const override { return &PlainSource::StaticType(); }
+        [[nodiscard]] RefPtr<Object> Create(ResourceManager&, foundation::content::Instance&) override
+        {
+            return RefPtr<Object>{};
+        }
+        [[nodiscard]] FakeDevice* Device() const noexcept { return m_device; }
+
+    private:
+        FakeDevice* m_device;
+    };
+
     int g_registered = 0;
     void RegisterFakeTypes() { ++g_registered; }
 
@@ -178,3 +195,23 @@ TEST_CASE("resource composition: Register hands every created factory to a manag
     CHECK(manager.HasFactory(PlainProduct::StaticType().id));
     CHECK(manager.HasFactory(GatedProduct::StaticType().id));
 }
+
+TEST_CASE("resource composition: a factory with an optional service is made in every host, given it where there is one")
+{
+    constexpr ResourceFactoryDesc optional =
+        FactoryWithOptionalService<PlainProduct, PlainSource, OptionalFactory, FakeDevice>();
+    CHECK(optional.service == nullptr); // not gated: never skipped
+    CHECK(optional.product() == &PlainProduct::StaticType());
+
+    NoResourceServices none;
+    UniquePtr<IResourceFactory> headless = optional.create(DefaultAllocator(), none);
+    REQUIRE(headless.Get() != nullptr);
+    CHECK(static_cast<OptionalFactory*>(headless.Get())->Device() == nullptr);
+
+    FakeDevice device;
+    DeviceServices services(device);
+    UniquePtr<IResourceFactory> hosted = optional.create(DefaultAllocator(), services);
+    REQUIRE(hosted.Get() != nullptr);
+    CHECK(static_cast<OptionalFactory*>(hosted.Get())->Device() == &device);
+}
+

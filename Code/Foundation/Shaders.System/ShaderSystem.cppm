@@ -230,6 +230,47 @@ export namespace foundation::shaders
             return Effects().ForFlag(flag);
         }
 
+        // The variant flags `name`'s `stage` declares (its `// variants` line, or the lattice a
+        // cooked shader was registered or packed with): what a material on the shader may turn on,
+        // so what effect groups it carries (Specs/wind-for-every-shader.md). Served the way
+        // GetVariant would serve the stage: a registered source's mask, else the pack's, else the
+        // provider's source, fetched and remembered as a compile would. None when unknown.
+        [[nodiscard]] ShaderFlags DeclaredVariants(core::StringView name, ShaderStage stage)
+        {
+            const core::u64 srcKey = SourceKey(name, stage);
+            const Source* registered = m_sources.Find(srcKey);
+            const bool compiles = m_compiler != nullptr && registered != nullptr && !registered->hlsl.IsEmpty();
+            if (m_pack != nullptr && !compiles)
+            {
+                return m_pack->DeclaredMask(ShaderNameHash(name), stage);
+            }
+            if (const ShaderFlags* mask = m_declaredMasks.Find(srcKey))
+            {
+                return *mask;
+            }
+            if (registered != nullptr)
+            {
+                // Registered without a lattice: the raw flags compile, so its directive says what
+                // its code reads.
+                const VariantDirective directive = ParseStageVariantDirective(registered->hlsl.AsView(), stage);
+                return directive.present ? directive.mask : ShaderFlags::None;
+            }
+            if (m_provider != nullptr)
+            {
+                Source fetched;
+                if (m_provider->FetchSource(name, stage, fetched.hlsl, fetched.entryPoint))
+                {
+                    // The corpus's rule, as GetCompiledVariant applies it.
+                    const VariantDirective directive = ParseVariantDirective(fetched.hlsl.AsView());
+                    const ShaderFlags mask = directive.present ? directive.mask : ShaderFlags::None;
+                    m_sources.InsertOrAssign(srcKey, core::Move(fetched));
+                    m_declaredMasks.InsertOrAssign(srcKey, mask);
+                    return mask;
+                }
+            }
+            return ShaderFlags::None;
+        }
+
         // Get (compile-on-demand + cache) the GPU module for a variant. Returns null if the
         // source is unknown or compilation fails. A failed variant is remembered until its source
         // changes (RegisterSource, InvalidateShader, a reload), so a broken shader is compiled

@@ -63,8 +63,9 @@ TEST_CASE("shader creator: the starter compiles, every variant, against the engi
     }
     CHECK(check.IsOk());
     CHECK(check.block.properties.Size() == 6u);
-    CHECK(check.vertexMask ==
-          (foundation::shaders::ShaderFlags::Skinned | foundation::shaders::ShaderFlags::Instanced));
+    // WIND: the starter sways by its material's Wind group (Specs/wind-for-every-shader.md, rule 4).
+    CHECK(check.vertexMask == (foundation::shaders::ShaderFlags::Skinned | foundation::shaders::ShaderFlags::Instanced |
+                               foundation::shaders::ShaderFlags::Wind));
 }
 
 TEST_CASE("shader creator: a new shader links its starter file and takes its instance's name")

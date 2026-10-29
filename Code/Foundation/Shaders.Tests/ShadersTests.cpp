@@ -176,6 +176,18 @@ TEST_CASE("cook: the engine corpus cooks to a SPIR-V pack (lint clean, variants 
                     CookedShaderFormat::SpirV) != nullptr);
     // Every corpus stage records the corpus's entry point, `main`.
     CHECK(pack.EntryPoint(ShaderNameHash(u8"forward"), ShaderStage::Fragment) == kCorpusEntryPoint);
+    // The corpus's one effect, wind.hlsli's: its table in the pack, its variant cooked, so a game
+    // reads it with no sources (Specs/wind-for-every-shader.md).
+    const ShaderEffect* wind = pack.Effects().Find(u8"Wind");
+    REQUIRE(wind != nullptr);
+    CHECK(wind->flag == ShaderFlags::Wind);
+    CHECK(pack.Effects().ForFlag(ShaderFlags::Wind) == wind);
+    REQUIRE(wind->Gate() != nullptr);
+    CHECK(wind->Gate()->name.AsView() == StringView(u8"Strength"));
+    CHECK(wind->properties.Size() == 3u);
+    CHECK(wind->uniformSize == 16u);
+    CHECK(pack.Find(u8"forward", ShaderStage::Vertex, ShaderFlags::Wind, CookedShaderFormat::SpirV) != nullptr);
+    CHECK(pack.Find(u8"phong", ShaderStage::Vertex, ShaderFlags::Wind, CookedShaderFormat::SpirV) != nullptr);
     // A single-variant shader has only its None variant.
     const Array<byte>* tonemapBlob =
         pack.Find(u8"tonemap", ShaderStage::Fragment, ShaderFlags::None, CookedShaderFormat::SpirV);
@@ -983,7 +995,7 @@ namespace
                                         "    float Speed = 1 [0, 20];\n"        // 5
                                         "    float Height = 1 [0.01, 100];\n"   // 6
                                         "}\n"                                   // 7
-                                        "float WindAmount() { return Strength * Speed; }\n";
+                                        "float WindAmount() { return Wind.Strength * Wind.Speed; }\n";
 
     // An effect whose third line declares a texture, which an effect may not.
     constexpr const char* kBadEffect = "effect Wind : WIND\n"
@@ -992,10 +1004,10 @@ namespace
                                        "    float Strength (gate);\n"
                                        "}\n";
 
-    // Reads the effect's members by their declared names.
+    // Reads the effect's members by their declared names, through the effect's buffer.
     constexpr const char* kReadsWind = "#include \"fx_wind.hlsli\"\n"
                                        "float4 main() : SV_Target {\n"
-                                       "    return float4(Strength, Speed, Height, WindAmount());\n"
+                                       "    return float4(Wind.Strength, Wind.Speed, Wind.Height, WindAmount());\n"
                                        "}\n";
 
     void WriteScratch(StringView path, const char* text)
@@ -1058,7 +1070,7 @@ TEST_CASE("effects: an include's effect block compiles from disk, beside its inc
     WriteScratch(u8".test-scratch/fxdisk/sub/fx_sibling.hlsli",
                  "effect Fade : DITHER\n{\n    float Amount = 1 (gate);\n}\n");
     WriteScratch(u8".test-scratch/fxdisk/sub/fx_nested.hlsli",
-                 "#include \"fx_sibling.hlsli\"\nfloat FadeAmount() { return Amount; }\n");
+                 "#include \"fx_sibling.hlsli\"\nfloat FadeAmount() { return Fade.Amount; }\n");
 
     const StringView includePaths[] = {u8".test-scratch/fxdisk"};
     CompileOptions options;
@@ -1100,6 +1112,20 @@ TEST_CASE("effects: an include's effect block compiles through a resolver")
     String messages;
     CHECK(CompileFragment(*compiler, kReadsWind, options, messages));
     INFO(doctest::String(reinterpret_cast<const char*>(messages.CStr())));
+
+    // The effect's members are not global names: a shader whose own material has a `Speed` and a
+    // `Height` (a surface shader declares WIND whatever its properties are called) compiles.
+    constexpr const char* kOwnSpeed = "cbuffer Material : register(b0, space2) {\n"
+                                      "    float Speed;\n"
+                                      "    float Height;\n"
+                                      "};\n"
+                                      "#include \"fx_wind.hlsli\"\n"
+                                      "float4 main() : SV_Target {\n"
+                                      "    return float4(Speed, Height, Wind.Speed, Wind.Height);\n"
+                                      "}\n";
+    String ownMessages;
+    CHECK(CompileFragment(*compiler, kOwnSpeed, options, ownMessages));
+    INFO(doctest::String(reinterpret_cast<const char*>(ownMessages.CStr())));
     compiler->Destroy();
 }
 
@@ -1116,7 +1142,7 @@ TEST_CASE("effects: an effect block in the source itself is expanded too")
                                  "    float Strength = 0 (gate);\n"      // 3
                                  "}\n"                                   // 4
                                  "float4 main() : SV_Target {\n"         // 5
-                                 "    return Strength * Sped;\n"         // 6: the mistake
+                                 "    return Wind.Strength * Sped;\n"    // 6: the mistake
                                  "}\n";
     CompileOptions options;
     options.sourceName = u8"Top.hlsl";
@@ -1138,7 +1164,7 @@ TEST_CASE("effects: a malformed effect in an include fails the compile naming it
         return;
     }
     constexpr const char* kReadsBad = "#include \"fx_bad.hlsli\"\n"
-                                      "float4 main() : SV_Target { return Strength; }\n";
+                                      "float4 main() : SV_Target { return Wind.Strength; }\n";
     // Disk.
     (void)CreateDirectory(u8".test-scratch");
     (void)CreateDirectory(u8".test-scratch/fxdisk");
@@ -1184,7 +1210,7 @@ TEST_CASE("cook: the corpus's effect blocks are stored in the pack, and a stage 
                  "#include \"fx_wind.hlsli\"\n"
                  "float4 main(uint id : SV_VertexID) : SV_Position {\n"
                  "#ifdef WIND\n"
-                 "    return float4(Strength, Speed, Height, 1);\n"
+                 "    return float4(Wind.Strength, Wind.Speed, Wind.Height, 1);\n"
                  "#else\n"
                  "    return float4(0, 0, 0, 1);\n"
                  "#endif\n"

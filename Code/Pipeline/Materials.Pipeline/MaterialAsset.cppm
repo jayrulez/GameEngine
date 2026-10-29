@@ -54,21 +54,7 @@ export namespace pipeline{
         [[nodiscard]] inline MaterialPropertyType MaterialTypeOf(
             foundation::shaders::ShaderPropertyType type) noexcept
         {
-            using T = foundation::shaders::ShaderPropertyType;
-            switch (type)
-            {
-            case T::Float: return MaterialPropertyType::Float;
-            case T::Float2: return MaterialPropertyType::Float2;
-            case T::Float3: return MaterialPropertyType::Float3;
-            case T::Float4: return MaterialPropertyType::Float4;
-            case T::Int: return MaterialPropertyType::Int;
-            case T::Color: return MaterialPropertyType::Color;
-            case T::ColorHdr: return MaterialPropertyType::ColorHdr;
-            case T::Texture: return MaterialPropertyType::Texture2D;
-            case T::TextureCube: return MaterialPropertyType::TextureCube;
-            case T::Sampler: return MaterialPropertyType::Sampler;
-            }
-            return MaterialPropertyType::Float;
+            return foundation::materials::MaterialPropertyTypeOf(type);
         }
 
         [[nodiscard]] inline isize IndexOf(const Array<String>& names, StringView name) noexcept
@@ -167,6 +153,33 @@ export namespace pipeline{
         }
     }
 
+    // Keeps the effect groups of `from` whose effect `declared` (the new shader's vertex variants)
+    // still declares, values and all, as `to`'s; drops the rest with a warning. A material moved
+    // between two shaders that both declare WIND keeps its wind; one moved to a shader that does
+    // not, loses it (Specs/wind-for-every-shader.md). A shader that declares an effect the
+    // material has no group for gets none here: the factory adds it at the effect's defaults when
+    // it has the shader system.
+    inline void KeepDeclaredEffects(const MaterialSource& from, MaterialSource& to,
+                                    foundation::shaders::ShaderFlags declared)
+    {
+        to.effects.Clear();
+        for (const MaterialEffectGroupSource& group : from.effects)
+        {
+            const auto flag = static_cast<foundation::shaders::ShaderFlags>(group.flag);
+            if (foundation::shaders::HasFlag(declared, flag))
+            {
+                to.effects.PushBack(group);
+            }
+            else
+            {
+                LOG_WARNING(u8"Materials",
+                            u8"material '{}': shader '{}' does not declare the {} effect - its "
+                            u8"group is dropped",
+                            from.name, to.shaderName, group.name);
+            }
+        }
+    }
+
     // A material on a custom shader, laid out by the shader's property table: each property in
     // the shader's order and at its offset, at the shader's default, then the authored material's
     // values carried over (CarryMaterialValues). The cook lays a material out so, and the editor
@@ -213,6 +226,7 @@ export namespace pipeline{
             }
         }
         CarryMaterialValues(authored, out);
+        KeepDeclaredEffects(authored, out, static_cast<foundation::shaders::ShaderFlags>(shader.vertexVariantMask));
     }
 
     // Cooks a MaterialAsset -> MaterialSource in the output DB (the authored source is
@@ -223,7 +237,8 @@ export namespace pipeline{
         // Cook version 2 (2026-09-08): MaterialSource 3 - the property arrays use full names; a product cooked under the older record
         // version is refused by the reader, so the recipe hash must change to re-cook it.
         // Version 3: a material on a custom shader is laid out by the shader's property table.
-        [[nodiscard]] u32 Version() const override { return 3; }
+        // Version 4: MaterialSource 4 - the effect groups, and PBR's wind lanes migrated into one.
+        [[nodiscard]] u32 Version() const override { return 4; }
 
         [[nodiscard]] const TypeInfo* AssetType() const override
         {
@@ -342,6 +357,7 @@ export namespace pipeline{
         to.samplerU = source.samplerU;
         to.samplerV = source.samplerV;
         CarryMaterialValues(source, to);
+        KeepDeclaredEffects(source, to, foundation::materials::BuiltinShadingOf(shading).vertexVariants);
         AssignMaterialSource(source, to);
     }
 

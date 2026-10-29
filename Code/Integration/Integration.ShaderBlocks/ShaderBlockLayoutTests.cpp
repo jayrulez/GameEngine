@@ -800,12 +800,9 @@ TEST_CASE("shader blocks: the built-in materials' buffers match their MaterialBu
         shaders::ShaderFlags flags;
         RefPtr<materials::Material> material;
     };
-    // forward.vs's WIND variant declares PBR's buffer through wind.hlsli. Phong's and Unlit's WIND
-    // vertex variants declare that same PBR layout over their own buffers (the cleanup's phase 2
-    // gives the wind a block of its own), so they are not rows here.
+    // The vertex stages declare no material buffer: the wind reads its own block (the next test).
     const MaterialRow rows[] = {
         {u8"forward", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None, materials::CreatePBR(u8"pbr")},
-        {u8"forward", shaders::ShaderStage::Vertex, shaders::ShaderFlags::Wind, materials::CreatePBR(u8"pbr")},
         {u8"phong", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None, materials::CreatePhong(u8"phong")},
         {u8"unlit", shaders::ShaderStage::Fragment, shaders::ShaderFlags::None, materials::CreateUnlit(u8"unlit")},
     };
@@ -829,9 +826,23 @@ TEST_CASE("shader blocks: the built-in materials' buffers match their MaterialBu
                 ++uniformCount;
             }
         }
-        CHECK(members->Size() == uniformCount); // no uniform on one side only
+        // Padding is padding (shader-blocks-cleanup.md, rule 2): a member named `_...` holds a
+        // place (PBR's former wind lanes) and is no property.
+        usize memberCount = 0;
         for (const SpirvMember& member : *members)
         {
+            if (!member.name.AsView().StartsWith(u8"_"))
+            {
+                ++memberCount;
+            }
+        }
+        CHECK(memberCount == uniformCount); // no uniform on one side only
+        for (const SpirvMember& member : *members)
+        {
+            if (member.name.AsView().StartsWith(u8"_"))
+            {
+                continue;
+            }
             CAPTURE(reinterpret_cast<const char*>(member.name.CStr()));
             const materials::MaterialPropertyDef* property = row.material->FindProperty(member.name.AsView());
             REQUIRE(property != nullptr);
@@ -839,6 +850,60 @@ TEST_CASE("shader blocks: the built-in materials' buffers match their MaterialBu
             REQUIRE(member.hasOffset);
             CHECK(property->offset == member.offset);
         }
+    }
+}
+
+TEST_CASE("shader blocks: every WIND vertex stage's Wind block matches the effect's table")
+{
+    // The effect block in wind.hlsli is the one declaration of the wind's parameters: the cook
+    // records its table in the pack, and the material system fills the buffer by that table's
+    // offsets. Every stage that sways must read the same layout.
+    CookedCorpus corpus;
+    if (corpus.compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping the effect block layouts");
+        return;
+    }
+    REQUIRE(corpus.ok);
+    const shaders::ShaderEffect* wind = corpus.pack.Effects().ForFlag(shaders::ShaderFlags::Wind);
+    REQUIRE(wind != nullptr);
+    CHECK(wind->name.AsView() == StringView(u8"Wind"));
+    REQUIRE(wind->Gate() != nullptr);
+    CHECK(wind->Gate()->name.AsView() == StringView(u8"Strength"));
+
+    String spirvName(u8"type.ConstantBuffer.");
+    spirvName += shaders::EffectStructName(wind->name.AsView());
+    const char8_t* const stages[] = {u8"forward", u8"phong", u8"unlit", u8"shadow_depth", u8"pick_ids"};
+    for (const char8_t* shader : stages)
+    {
+        CAPTURE(reinterpret_cast<const char*>(shader));
+        const Array<byte>* blob = corpus.pack.Find(StringView(shader), shaders::ShaderStage::Vertex,
+                                                   shaders::ShaderFlags::Wind,
+                                                   shaders::CookedShaderFormat::SpirV);
+        REQUIRE(blob != nullptr);
+        const SpirvBlocks module(*blob);
+        const Array<SpirvMember>* members = module.Find(spirvName.AsView());
+        REQUIRE(members != nullptr);
+        CHECK(members->Size() == wind->properties.Size());
+        for (usize i = 0; i < members->Size() && i < wind->properties.Size(); ++i)
+        {
+            const SpirvMember& member = (*members)[i];
+            CHECK(member.name.AsView() == wind->properties[i].name.AsView());
+            REQUIRE(member.hasOffset);
+            CHECK(member.offset == wind->properties[i].offset);
+        }
+        // Not the material's buffer: no vertex stage declares one for the wind any more.
+        CHECK(module.Find(u8"type.Material") == nullptr);
+    }
+
+    // What each built-in's vertex stage declares, as the C++ table states it (the effects a
+    // material on it may carry where no shader system is at hand): its `// variants` line, as the
+    // cook read it.
+    for (const materials::BuiltinShadingInfo& builtin : materials::kBuiltinShadings)
+    {
+        CAPTURE(reinterpret_cast<const char*>(builtin.shaderName.Data()));
+        CHECK(corpus.pack.DeclaredMask(shaders::ShaderNameHash(builtin.shaderName), shaders::ShaderStage::Vertex) ==
+              builtin.vertexVariants);
     }
 }
 

@@ -368,3 +368,76 @@ TEST_CASE("material editor: a PBR material put on the built-in Phong keeps its c
     CHECK(pbr.source.textureSlots[1] == u8"NormalMap");
     CHECK(pbr.source.textureIds[1] == normal);
 }
+
+// The effect groups follow the shader's vertex variants (Specs/wind-for-every-shader.md): a
+// material moved between two shaders that declare WIND keeps its Wind group, values and all; one
+// moved to a shader that does not, loses it.
+namespace
+{
+    foundation::shaders::ShaderEffect WindTable()
+    {
+        const foundation::shaders::ShaderEffectBlock block = foundation::shaders::ParseShaderEffect(
+            u8"effect Wind : WIND\n"
+            u8"{\n"
+            u8"    float Strength = 0 [0, 2] (gate);\n"
+            u8"    float Speed = 1 [0, 20];\n"
+            u8"    float Height = 1 [0.01, 100];\n"
+            u8"}\n");
+        REQUIRE(block.IsOk());
+        return block.effect;
+    }
+
+    f32 WindStrengthOf(const MaterialSource& source)
+    {
+        f32 v = -1.0f;
+        if (!source.effects.IsEmpty() && source.effects[0].values.Size() >= sizeof(f32))
+        {
+            MemCopy(&v, source.effects[0].values.Data(), sizeof(v));
+        }
+        return v;
+    }
+}
+
+TEST_CASE("material editor: a material keeps its Wind group on a shader that declares WIND, and loses it on one that does not")
+{
+    RefPtr<Material> card = CreatePBR(u8"card");
+    card->AddEffectGroup(WindTable());
+    card->SetDefaultFloat(u8"Wind.Strength", 0.4f);
+    MaterialAsset asset;
+    MaterialImporter::Import(*card, Guid{}, asset);
+    REQUIRE(asset.source.effects.Size() == 1u);
+
+    // Built-in to built-in: Phong's vertex stage declares WIND as PBR's does.
+    SetMaterialBuiltInShader(asset.source, BuiltinShading::Phong);
+    REQUIRE(asset.source.effects.Size() == 1u);
+    CHECK(asset.source.effects[0].name == u8"Wind");
+    CHECK(WindStrengthOf(asset.source) == doctest::Approx(0.4f));
+
+    // To a custom shader whose vertex stage declares WIND (a surface shader's, a low-level one
+    // that lists it): kept.
+    const foundation::shaders::ShaderPropertiesBlock block = foundation::shaders::ParseShaderProperties(
+        u8"properties {\n  Color BaseColor = (1, 1, 1, 1);\n}\n");
+    REQUIRE(block.IsOk());
+    foundation::shaders::ShaderSource sways;
+    sways.name = String(u8"sways");
+    sways.SetProperties(block);
+    sways.vertexVariantMask = static_cast<u32>(foundation::shaders::ShaderFlags::Skinned |
+                                               foundation::shaders::ShaderFlags::Wind);
+    SetMaterialShader(asset.source, Guid{0x1ull, 0x2ull}, sways);
+    REQUIRE(asset.source.effects.Size() == 1u);
+    CHECK(WindStrengthOf(asset.source) == doctest::Approx(0.4f));
+
+    // To one that does not: dropped.
+    foundation::shaders::ShaderSource still;
+    still.name = String(u8"still");
+    still.SetProperties(block);
+    still.vertexVariantMask = static_cast<u32>(foundation::shaders::ShaderFlags::Skinned);
+    SetMaterialShader(asset.source, Guid{0x3ull, 0x4ull}, still);
+    CHECK(asset.source.effects.IsEmpty());
+
+    // Back on a built-in: no group to carry, so none (the factory gives it the effect's
+    // defaults where it has the shader system).
+    SetMaterialBuiltInShader(asset.source, BuiltinShading::Pbr);
+    CHECK(asset.source.effects.IsEmpty());
+}
+

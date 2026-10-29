@@ -24,6 +24,7 @@ import foundation.resource;
 import foundation.content;
 import foundation.shaders;
 import foundation.shaders.resource;
+import foundation.shaders.system; // ShaderSystem: the effects' tables, a builtin shader's variants
 import foundation.texture;
 import foundation.texture.resource;
 import foundation.materials;
@@ -36,6 +37,39 @@ namespace texture = foundation::texture;
 
 export namespace foundation::materials
 {
+
+    // One effect group of a material as stored (Specs/wind-for-every-shader.md): the effect's name
+    // and variant flag, its gate's index, its buffer's size, its parameters' names, types, offsets
+    // and sizes, and the material's values. Everything the group needs is here, so a material from
+    // an asset draws its effect with nothing at runtime but its source.
+    struct MaterialEffectGroupSource
+    {
+        String name;
+        u32 flag = 0; // ShaderFlags: the effect's variant
+        u32 gateIndex = kNoMaterialEffectGate;
+        u32 uniformSize = 0;
+        Array<String> propertyNames;
+        Array<u8> propertyTypes; // MaterialPropertyType
+        Array<u32> propertyOffsets;
+        Array<u32> propertySizes;
+        Array<u8> values;
+    };
+
+    // Found by argument-dependent lookup from foundation.core's Array<T> serialization.
+    inline void Serialize(ISerializer& ar, MaterialEffectGroupSource& group)
+    {
+        ar.BeginObject();
+        foundation::core::Serialize(ar, "name", group.name);
+        foundation::core::Serialize(ar, "flag", group.flag);
+        foundation::core::Serialize(ar, "gateIndex", group.gateIndex);
+        foundation::core::Serialize(ar, "uniformSize", group.uniformSize);
+        foundation::core::Serialize(ar, "propertyNames", group.propertyNames);
+        foundation::core::Serialize(ar, "propertyTypes", group.propertyTypes);
+        foundation::core::Serialize(ar, "propertyOffsets", group.propertyOffsets);
+        foundation::core::Serialize(ar, "propertySizes", group.propertySizes);
+        foundation::core::Serialize(ar, "values", group.values);
+        ar.EndObject();
+    }
 
     // Authored material: a shader reference (by resource id) + declared properties (as
     // parallel arrays so it serializes with the primitive Array<T> path) + render-state
@@ -73,6 +107,10 @@ export namespace foundation::materials
         Array<String> textureSlots;
         Array<Guid> textureIds;
 
+        // The effect groups (data version 4): one per effect the material's shader declares the
+        // variant of, apart from the shader's properties (Specs/wind-for-every-shader.md).
+        Array<MaterialEffectGroupSource> effects;
+
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "name", name);
@@ -93,10 +131,136 @@ export namespace foundation::materials
             foundation::core::Serialize(ar, "textureIds", textureIds);
             foundation::core::Serialize(ar, "samplerU", samplerU);
             foundation::core::Serialize(ar, "samplerV", samplerV);
+            // The effect groups came with data version 4. A version-3 payload (a product cooked
+            // before them, read through ReadsDataVersionsFrom) has none. A MaterialSource nested in
+            // a MaterialAsset (a text .xasset) is read inside the asset's version scope, which does
+            // not name MaterialSource (Version() of it is 0 there): an asset saved before the
+            // groups has no key, which SerializeAppended reads as none.
+            const u32 stored = ar.Mode() == SerializeMode::Read ? ar.Version(MaterialSource::StaticType().id)
+                                                                : 0u;
+            if (stored == 0u || stored >= 4u)
+            {
+                SerializeAppended(ar, "effects", effects);
+            }
             if (ar.Mode() == SerializeMode::Read)
             {
                 AdoptTemplateColorTypes();
+                MigrateWindLanes();
             }
+        }
+
+        // Before effect groups (data version 3), a PBR material carried the wind in its buffer's
+        // spare lanes as the properties WindStrength, WindSpeed and WindHeight (offsets 24, 28,
+        // 60). The wind is an effect now: the three properties go (their bytes stay, as the
+        // padding the buffer declares there) and the material gets a Wind group holding their
+        // values. The group's layout below is the effect's on the day of that change, frozen with
+        // the data it reads; the live table is wind.hlsli's effect block, onto which the factory
+        // re-lays the group, keeping these values, whenever it has the shader system. Only for a
+        // builtin shader's material whose template no longer declares the lanes: a custom shader
+        // may name properties of its own so. Idempotent: a migrated source has no lanes left.
+        void MigrateWindLanes()
+        {
+            if (!shaderId.IsNil())
+            {
+                return;
+            }
+            static constexpr StringView kLanes[] = {u8"WindStrength", u8"WindSpeed", u8"WindHeight"};
+            static constexpr StringView kParameters[] = {u8"Strength", u8"Speed", u8"Height"};
+            static constexpr f32 kFallback[] = {0.0f, 1.0f, 1.0f}; // a lane the source lacks
+            bool any = false;
+            for (const String& n : propertyNames)
+            {
+                for (StringView lane : kLanes)
+                {
+                    any = any || n.AsView() == lane;
+                }
+            }
+            if (!any)
+            {
+                return;
+            }
+            RefPtr<Material> templ = BuiltinMaterialTemplate(shaderName.AsView());
+            if (!templ || templ->FindProperty(kLanes[0]) != nullptr)
+            {
+                return;
+            }
+
+            f32 values[3] = {kFallback[0], kFallback[1], kFallback[2]};
+            usize w = 0;
+            const usize count = propertyNames.Size();
+            for (usize i = 0; i < count; ++i)
+            {
+                isize lane = -1;
+                for (usize k = 0; k < 3; ++k)
+                {
+                    if (propertyNames[i].AsView() == kLanes[k])
+                    {
+                        lane = static_cast<isize>(k);
+                    }
+                }
+                if (lane >= 0)
+                {
+                    const u32 offset = i < propertyOffsets.Size() ? propertyOffsets[i] : ~0u;
+                    if (offset != ~0u && static_cast<usize>(offset) + sizeof(f32) <= uniformDefaults.Size())
+                    {
+                        MemCopy(&values[lane], uniformDefaults.Data() + offset, sizeof(f32));
+                    }
+                    continue;
+                }
+                if (w != i)
+                {
+                    propertyNames[w] = Move(propertyNames[i]);
+                    if (i < propertyTypes.Size())
+                    {
+                        propertyTypes[w] = propertyTypes[i];
+                    }
+                    if (i < propertyOffsets.Size())
+                    {
+                        propertyOffsets[w] = propertyOffsets[i];
+                    }
+                    if (i < propertySizes.Size())
+                    {
+                        propertySizes[w] = propertySizes[i];
+                    }
+                }
+                if (w < propertyBindings.Size())
+                {
+                    propertyBindings[w] = static_cast<u32>(w); // a builtin's ordinals are its order
+                }
+                ++w;
+            }
+            propertyNames.Resize(w);
+            propertyTypes.Resize(Min(w, propertyTypes.Size()));
+            propertyOffsets.Resize(Min(w, propertyOffsets.Size()));
+            propertySizes.Resize(Min(w, propertySizes.Size()));
+            propertyBindings.Resize(Min(w, propertyBindings.Size()));
+
+            for (const MaterialEffectGroupSource& group : effects)
+            {
+                if (group.name.AsView() == u8"Wind")
+                {
+                    return; // already carried
+                }
+            }
+            MaterialEffectGroupSource wind;
+            wind.name = String(u8"Wind");
+            wind.flag = static_cast<u32>(shaders::ShaderFlags::Wind);
+            wind.gateIndex = 0;
+            wind.uniformSize = 16;
+            wind.values.Resize(16);
+            for (u8& b : wind.values)
+            {
+                b = 0;
+            }
+            for (usize k = 0; k < 3; ++k)
+            {
+                wind.propertyNames.PushBack(String(kParameters[k]));
+                wind.propertyTypes.PushBack(static_cast<u8>(MaterialPropertyType::Float));
+                wind.propertyOffsets.PushBack(static_cast<u32>(k * sizeof(f32)));
+                wind.propertySizes.PushBack(static_cast<u32>(sizeof(f32)));
+                MemCopy(wind.values.Data() + k * sizeof(f32), &values[k], sizeof(f32));
+            }
+            effects.PushBack(Move(wind));
         }
 
         // A material stored before materials had colour properties declared its colours as
@@ -162,6 +326,30 @@ export namespace foundation::materials
             {
                 out.uniformDefaults.PushBack(defaults[i]);
             }
+            out.effects.Clear();
+            for (const MaterialEffectGroup& group : material.EffectGroups())
+            {
+                out.effects.PushBack(EffectGroupSourceOf(group));
+            }
+        }
+
+        // A material's effect group as stored.
+        [[nodiscard]] static MaterialEffectGroupSource EffectGroupSourceOf(const MaterialEffectGroup& group)
+        {
+            MaterialEffectGroupSource g;
+            g.name = String(group.name);
+            g.flag = static_cast<u32>(group.flag);
+            g.gateIndex = group.gateIndex;
+            g.uniformSize = group.uniformSize;
+            for (const MaterialPropertyDef& d : group.properties)
+            {
+                g.propertyNames.PushBack(String(d.name));
+                g.propertyTypes.PushBack(static_cast<u8>(d.type));
+                g.propertyOffsets.PushBack(d.offset);
+                g.propertySizes.PushBack(d.size);
+            }
+            g.values = group.defaults;
+            return g;
         }
     };
 
@@ -231,6 +419,27 @@ export namespace foundation::materials
         material->AllocateDefaultUniformData();
         material->SetRawDefaultUniformData(
             Span<const u8>{src.uniformDefaults.Data(), src.uniformDefaults.Size()});
+        // The effect groups, each as stored (the material needs nothing else to draw them).
+        for (const MaterialEffectGroupSource& group : src.effects)
+        {
+            Array<MaterialPropertyDef> defs;
+            const usize n = group.propertyNames.Size();
+            for (usize i = 0; i < n; ++i)
+            {
+                MaterialPropertyDef d{};
+                d.name = group.propertyNames[i].AsView();
+                d.type = i < group.propertyTypes.Size() ? static_cast<MaterialPropertyType>(group.propertyTypes[i])
+                                                        : MaterialPropertyType::Float;
+                d.binding = static_cast<u32>(i);
+                d.offset = i < group.propertyOffsets.Size() ? group.propertyOffsets[i] : 0u;
+                d.size = i < group.propertySizes.Size() ? group.propertySizes[i] : 0u;
+                defs.PushBack(d);
+            }
+            material->SetEffectGroup(group.name.AsView(), static_cast<shaders::ShaderFlags>(group.flag),
+                                     group.gateIndex, group.uniformSize,
+                                     Span<const MaterialPropertyDef>{defs.Data(), defs.Size()},
+                                     Span<const u8>{group.values.Data(), group.values.Size()});
+        }
 
         material->pipeline = PipelineConfig{};
         material->pipeline.shaderName = material->shaderName.AsView();
@@ -247,6 +456,17 @@ export namespace foundation::materials
     class MaterialFactory final : public IResourceFactory
     {
     public:
+        MaterialFactory() noexcept : m_allocator(&DefaultAllocator()) {}
+        // The allocator backs every material it creates. With the shader system (borrowed; may be
+        // null): the factory re-lays each material's effect groups on the effects' live tables, by
+        // what its shader's vertex stage declares (a material saved before an effect existed
+        // gains its group; one whose shader no longer declares the effect loses it). Without one,
+        // a material keeps the groups its source carries, which is all it needs to draw them.
+        MaterialFactory(IAllocator& allocator, shaders::ShaderSystem* system) noexcept
+            : m_allocator(&allocator), m_system(system)
+        {
+        }
+
         [[nodiscard]] const TypeInfo* ProductType() const override
         {
             return &Material::StaticType();
@@ -280,6 +500,10 @@ export namespace foundation::materials
             String shaderName;
             String depthName;
             String pickName;
+            // Where the material's effects are declared: the shader's vertex variants, and the
+            // shader system serving the effects' tables (a custom shader's own, else the host's).
+            shaders::ShaderSystem* effectSystem = nullptr;
+            shaders::ShaderFlags vertexVariants = shaders::ShaderFlags::None;
             if (!src->shaderId.IsNil())
             {
                 Proxy<shaders::ShaderResource> shader =
@@ -291,17 +515,28 @@ export namespace foundation::materials
                     const bool masked = src->blendMode == BlendMode::Masked;
                     depthName = String(shader->DepthProgram(masked));
                     pickName = String(shader->PickProgram(masked));
+                    effectSystem = shader->System();
+                    vertexVariants = shader->VertexVariants();
                 }
             }
             if (shaderName.IsEmpty())
             {
                 shaderName = String(src->shaderName.AsView());
+                if (m_system != nullptr && !shaderName.IsEmpty())
+                {
+                    effectSystem = m_system;
+                    vertexVariants = m_system->DeclaredVariants(shaderName.AsView(), shaders::ShaderStage::Vertex);
+                }
             }
 
-            RefPtr<Material> material =
-                MaterialFromSource(DefaultAllocator(), *src, shaderName.AsView());
+            RefPtr<Material> material = MaterialFromSource(*m_allocator, *src, shaderName.AsView());
             material->depthShaderName = Move(depthName);
             material->pickShaderName = Move(pickName);
+            // An empty library says nothing (a shader system with no corpus): the stored groups stand.
+            if (effectSystem != nullptr && !effectSystem->Effects().IsEmpty())
+            {
+                material->AdoptDeclaredEffects(effectSystem->Effects().All(), vertexVariants);
+            }
 
             // Default texture bindings: resolve each through the manager (the Bind records the
             // material->texture edge, so a texture reload rebuilds this material) and install as
@@ -356,9 +591,13 @@ export namespace foundation::materials
             }
             return material;
         }
+
+    private:
+        IAllocator* m_allocator;
+        shaders::ShaderSystem* m_system = nullptr; // borrowed; null in a host without one
     };
 
-    // MaterialSource::StaticType() is defined WITH its reflected properties + data version (2)
+    // MaterialSource::StaticType() is defined WITH its reflected properties + data version (4)
     // in MaterialResourceImpl.cpp (GCC module hygiene: REFLECT_MEMBERS bodies out of interfaces).
 
 } // namespace foundation::materials
@@ -375,8 +614,11 @@ export namespace foundation::materials
 
     /// The materials resource module (engine-composition.md D1): the module the engine
     /// composition composes this library's factories from.
+    /// The material factory is created in every host and given the host's shader system when it
+    /// has one (the effects' tables; MaterialFactory), not gated on it.
     inline constexpr foundation::resource::ResourceFactoryDesc kMaterialsResourceFactories[] = {
-        foundation::resource::FactoryByDefault<Material, MaterialSource, MaterialFactory>(),
+        foundation::resource::FactoryWithOptionalService<Material, MaterialSource, MaterialFactory,
+                                                         shaders::ShaderSystem>(),
     };
     inline constexpr foundation::resource::ResourceModule kMaterialsResourceModule{
         u8"materials", &RegisterMaterialResourceTypes, kMaterialsResourceFactories,

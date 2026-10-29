@@ -168,6 +168,17 @@ export namespace foundation::materials
             return *this;
         }
 
+        // --- effect groups (Specs/wind-for-every-shader.md) ---
+        // The group of an effect the material's shader declares (its variant flag in the shader's
+        // vertex variants), at the effect's defaults, from the effect's table: the shader system's
+        // (ShaderSystem::FindEffect / EffectForFlag). No C++ copy of a table: a builder without
+        // one makes a material without the group.
+        MaterialBuilder& Effect(const shaders::ShaderEffect& effect)
+        {
+            m_material->AddEffectGroup(effect);
+            return *this;
+        }
+
         // Finishes and yields the material. The builder is empty afterwards.
         [[nodiscard]] RefPtr<Material> Build()
         {
@@ -205,18 +216,14 @@ export namespace foundation::materials
             .Color(u8"BaseColor", baseColor)
             .Float(u8"Metallic", metallic)
             .Float(u8"Roughness", roughness)
-            // Wind (offsets 24 / 28 / 60 - the cbuffer's spare lanes, so the block stays 64 bytes
-            // and a material without them reads zeros = no sway): metres of sway at full height,
-            // radians per second, and the local height where the sway is full. A strength above 0
-            // selects the WIND vertex variant (MeshRenderer::MaterialWantsWind).
-            .Float(u8"WindStrength", 0.0f)
-            .Float(u8"WindSpeed", 0.0f)
+            // Offsets 24 and 60 are padding (forward.ps.hlsl's `_materialPad*`): the cbuffer packs
+            // EmissiveColor at 32 and stays 64 bytes. The wind, which once lived there, is an
+            // effect with a buffer of its own (the material's Wind group, MaterialBuilder::Effect).
             // Black = none; rgb x EmissiveMap, times the intensity in w (glow above white).
             .ColorHdr(u8"EmissiveColor", Float4{0, 0, 0, 1})
             .Float(u8"OcclusionStrength", 1.0f)
             .Float(u8"NormalScale", 1.0f)
             .Float(u8"AlphaCutoff", 0.5f)
-            .Float(u8"WindHeight", 1.0f)
             .Texture(u8"AlbedoMap")
             .Texture(u8"NormalMap")
             .Texture(u8"MetallicRoughnessMap")
@@ -288,11 +295,18 @@ export namespace foundation::materials
         StringView shaderName; // the material source's shaderName
         StringView shortName;  // "pbr", "unlit", "phong"
         StringView label;      // "PBR", "Unlit", "Phong"
+        // What the builtin's vertex stage declares (its `// variants` line, pinned by
+        // Materials.Tests against the shader file): the effects a material on it may carry where
+        // no shader system is at hand to ask (a material moved between shaders in the editor
+        // keeps its Wind group when both declare WIND).
+        shaders::ShaderFlags vertexVariants;
     };
+    inline constexpr shaders::ShaderFlags kBuiltinVertexVariants =
+        shaders::ShaderFlags::Skinned | shaders::ShaderFlags::Instanced | shaders::ShaderFlags::Wind;
     inline constexpr BuiltinShadingInfo kBuiltinShadings[] = {
-        {BuiltinShading::Pbr, u8"forward", u8"pbr", u8"PBR"},
-        {BuiltinShading::Unlit, u8"unlit", u8"unlit", u8"Unlit"},
-        {BuiltinShading::Phong, u8"phong", u8"phong", u8"Phong"},
+        {BuiltinShading::Pbr, u8"forward", u8"pbr", u8"PBR", kBuiltinVertexVariants},
+        {BuiltinShading::Unlit, u8"unlit", u8"unlit", u8"Unlit", kBuiltinVertexVariants},
+        {BuiltinShading::Phong, u8"phong", u8"phong", u8"Phong", kBuiltinVertexVariants},
     };
     inline constexpr usize kBuiltinShadingCount = sizeof(kBuiltinShadings) / sizeof(kBuiltinShadings[0]);
     [[nodiscard]] inline const BuiltinShadingInfo& BuiltinShadingOf(BuiltinShading shading)

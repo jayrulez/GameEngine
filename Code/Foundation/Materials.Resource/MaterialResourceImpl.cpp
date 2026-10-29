@@ -25,7 +25,11 @@ namespace foundation::materials
 {
     REFLECT_MEMBERS(MaterialSource, "rtti::materials")
     {
-        builder.DataVersion(3) // 3: the property arrays use full names (propertyNames...)
+        // 3: the property arrays use full names (propertyNames...). 4: the effect groups
+        // (`effects`; Specs/wind-for-every-shader.md); a version-3 payload still reads, without
+        // them, and its PBR wind lanes migrate into a Wind group (MaterialSource::MigrateWindLanes).
+        builder.DataVersion(4)
+            .ReadsDataVersionsFrom(3)
             .Property<&MaterialSource::name>("name")
             .PropAttribute("displayName", String(u8"Name"))
             .Property<&MaterialSource::shaderId>("shaderId")

@@ -275,14 +275,20 @@ export namespace foundation::render
         // buffer for the rest of the run.
         static constexpr u32 kMultiMeshEvictFrames = kMeshRendererMultiMeshEvictFrames;
 
-        // Whether a material opts into the WIND vertex variant: it declares a "WindStrength"
-        // float whose default is above zero. Every other material keeps the variant it had, so
-        // a scene without wind materials renders byte-identical to before the flag existed.
-        [[nodiscard]] static bool MaterialWantsWind(const materials::Material* material) noexcept;
+        // The variant flags a material's active effects turn on (Specs/wind-for-every-shader.md):
+        // an effect group is active while its gate is above zero in the material's values, and an
+        // active effect adds its flag (`WIND` for the Wind group). The renderer knows that rule,
+        // not what any effect does. A material with no active effect keeps the variants it had, so
+        // a scene without one renders byte-identical to before effects existed. Read from the
+        // shared material: a per-entity override of a gate does not switch the variant (the
+        // pipeline is chosen per material), it only changes the values an already active effect
+        // draws with.
+        [[nodiscard]] static shaders::ShaderFlags MaterialEffectFlags(const materials::Material* material) noexcept;
 
         // The depth-like pipeline (depth prepass and shadows, or `pick`) for a draw of `material`:
         // the built-in program, or the material's own when its shader has one; `materialSet` when
-        // the draw binds the material's set 2 (a masked cut-out, wind, or the material's program).
+        // the draw binds the material's set 2 (a masked cut-out, an active effect, whose block is in
+        // the material's set, or the material's program).
         struct DepthLikeChoice
         {
             materials::PipelineConfig config;
@@ -459,13 +465,13 @@ export namespace foundation::render
         // shadow acne off lit surfaces (tuned on GPU; 5.2 refines with normal-offset bias in the shader).
         [[nodiscard]] static materials::PipelineConfig
         ShadowConfigFor(const RenderRecordContext& ctx, bool instanced, bool masked = false,
-                        bool wind = false);
+                        shaders::ShaderFlags effects = shaders::ShaderFlags::None);
 
         // Pick-id PSO config: the depth-only layouts with the `pick_ids` fragment writing the
         // RG32Uint id target (ctx.colorFormat), single-sample, no bias, masked = alpha-tested.
         [[nodiscard]] static materials::PipelineConfig
         PickConfigFor(const RenderRecordContext& ctx, bool instanced, bool masked,
-                      bool wind = false);
+                      shaders::ShaderFlags effects = shaders::ShaderFlags::None);
 
         [[nodiscard]] static materials::PipelineConfig
         ConfigFor(const MeshRenderData& md, const RenderRecordContext& ctx, bool instanced);
@@ -516,8 +522,10 @@ export namespace foundation::render
         // shared instance when none of its overrides is for `slot`.
         [[nodiscard]] materials::MaterialInstance* InstanceFor(const MeshRenderData& md, u32 slot,
                                                                materials::Material* material);
-        // Retire an instance's bind group and uniform buffer (in-flight frames may still bind them).
+        // Retire an instance's bind group and uniform buffers (in-flight frames may still bind them).
         void ReleaseInstance(materials::MaterialInstance& instance);
+        // Retire an instance's effect group buffers (materials::MaterialSystem::DetachEffectBuffers).
+        void RetireEffectBuffers(materials::MaterialInstance& instance);
         // Drop the override instances no draw has used for a while (overrides cleared, entity gone).
         void PruneOverrideInstances();
 

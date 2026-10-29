@@ -337,7 +337,7 @@ TEST_CASE("effects: a properties block knows no gate, and keeps its errors as th
     REQUIRE(block.properties.Size() == 1u);
 }
 
-TEST_CASE("effects: the generated cbuffer binds at b1 of the material's set, members as declared")
+TEST_CASE("effects: the generated ConstantBuffer binds at b1 of the material's set, read as Effect.Member")
 {
     const ShaderEffectBlock block = ParseShaderEffect(View("effect Wind : WIND\n"
                                                            "{\n"
@@ -347,11 +347,12 @@ TEST_CASE("effects: the generated cbuffer binds at b1 of the material's set, mem
                                                            "}\n"));
     REQUIRE(block.IsOk());
     const String declaration = GenerateEffectDeclaration(block.effect);
-    CHECK(declaration.AsView() == View("cbuffer Wind : register(b1, space2) {\n"
+    CHECK(declaration.AsView() == View("struct WindEffect {\n"
                                        "    float Strength; // offset 0\n"
                                        "    float Speed; // offset 4\n"
                                        "    float Height; // offset 8\n"
-                                       "};\n"));
+                                       "};\n"
+                                       "ConstantBuffer<WindEffect> Wind : register(b1, space2);\n"));
 
     // The expansion replaces the block and keeps the later lines' numbers.
     String expanded;
@@ -361,15 +362,16 @@ TEST_CASE("effects: the generated cbuffer binds at b1 of the material's set, mem
              "{\n"
              "    float Strength = 0 (gate);\n"
              "}\n"
-             "float Sway() { return Strength; }\n"),
+             "float Sway() { return Wind.Strength; }\n"),
         u8"wind.hlsli", expanded);
     REQUIRE(blocks.Size() == 1u);
     CHECK(expanded.AsView() == View("// head\n"
-                                    "cbuffer Wind : register(b1, space2) {\n"
+                                    "struct WindEffect {\n"
                                     "    float Strength; // offset 0\n"
                                     "};\n"
+                                    "ConstantBuffer<WindEffect> Wind : register(b1, space2);\n"
                                     "#line 6 \"wind.hlsli\"\n"
-                                    "float Sway() { return Strength; }\n"));
+                                    "float Sway() { return Wind.Strength; }\n"));
 
     // A block with errors becomes an #error at each error's line, so a compile reaching it
     // fails naming the file and line.

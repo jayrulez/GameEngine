@@ -86,7 +86,10 @@ against the code on 2026-10-28; what is still open:
   `@icon` is not read; a background with no `background-size` fills its box rather than its
   natural size; `@import` resolves from the data root, not the importing sheet; the token list is
   not generated into a document, nor shown beside a part in the inspector.
-- **Motion.** A sheet property's tween shows only after a StyleManager pass; groups do not
+- **Motion.** A `transform: scale()` in a keyframe animation showed no change on a label in the
+  engine's GUI (Masquerade's clock, 2026-10-28), where an opacity animation on the same label ran:
+  not yet reduced to a test (whether the scale is not animated or not drawn); a sheet property's
+  tween shows only after a StyleManager pass; groups do not
   ping-pong; a spring retargeted across shadows, transforms or gradients keeps its speed in
   progress, not the value's units; a node's own scale is not reflected.
 - **Overlays.** Modality is per dispatcher, not per root (GuiHost has none); a tooltip's content is

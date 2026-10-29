@@ -212,8 +212,11 @@ From a survey of the code (2026-10-14):
   its colour; `Tools/sounds.py` generates the three pieces and the sounds, the Crowd plays the
   murmur, `Orchestra.as` the cue's piece and `Masquerade.as` the rest. The HUD names the mark's
   costume in its colour rather than a swatch: a script can colour a label's text, not a panel.
-- **P5b The screens, redesigned** (APPROVED 2026-10-28; the user chose the portraits as pictures and
-  the engine's ready step): the user, back on
+- **P5b The screens, redesigned** (BUILT 2026-10-28, layers 0 to 5: b2df032eb, c2a18bd4b, 92e435372,
+  2cefffa92, a54148ed9, 46efdbff5 and the ring and warning after them; the engine's parts cf0f84a7f,
+  c7d8d28e3, e6eccf775, bd34c4134, 2d4aedd5b. The user chose the portraits as pictures and the
+  engine's ready step; the look is the user's to judge. Left: the title's backdrop camera, framed
+  so the floor fills the window): the user, back on
   the sample after its GUI port: "masquerade UI did not look good". Seen in the editor's Game tab
   on 2026-10-28: the title is one tall panel doing five jobs (the three maps as buttons whose choice
   is a lit border, a line repeating the choice, Play alone, Host, an unstyled address field, Join,

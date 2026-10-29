@@ -165,6 +165,17 @@
   counting. Not looked into yet: whether the clock's script reads time that a paused scene still
   advances, or the HUD's canvas runs apart from the scene it shows. A paused run should hold every
   clock a game reads.
+- **The player opens on a black window** (user 2026-10-29, running the exported Linux players): the
+  window stays black through startup (the graphics device, the shader and content packs, the GUI's
+  fonts and sheets, the game script), then the title appears. The player's only drawn screen is the
+  GUI loading overlay (PlayerApplication.h, the boot splash), shown just while the first scene
+  loads async, so it shows only where that load is long (Masquerade, the Shader Gallery). The
+  editor has what the player lacks: a splash drawn on the CPU into a software window opened before
+  the device (EditorSplash.cppm). Wanted: measure a release player's startup phases first (where
+  the black time goes; GPU pipeline creation on the first frames is a guess, unmeasured), draw a
+  splash at once as the editor does and hold it to the first real frame (the web player its
+  equivalent in the page), and cut the time where the measurements show how (a pipeline cache kept
+  on disk, if the player keeps none).
 - **A blue cast on PaperKid's road and cars, seen once** (user 2026-10-29, playing Block 1 in the
   editor): for two or three frames about every third of a second, then held while paused, the
   road, the pavement and the cars brightened toward blue (road 82,93,123 to 98,147,214) while the

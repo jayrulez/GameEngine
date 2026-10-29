@@ -6,8 +6,10 @@ Guid kCoinSparkle = Guid("245b459c-4b93-4876-9496-6e4eb3daa145");
 // Audio/powerUp7 (Kenney Digital Audio, CC0): the chime of a coin taken.
 Guid kCoinSound = Guid("6d963695-67f8-4b7f-9cf4-d234f8034116");
 
-// The hero looks at the nearest coin within its reach (an AimIkComponent on the Player). Coins
-// share these, one script module: the first coin to update in a frame starts it over.
+// The hero looks at the nearest coin within its reach (an AimIkComponent on the Player) that it can
+// turn its head to: one in front of it, not too steep above or below. A coin behind it would twist
+// the head over backwards, so it does not count. Coins share these, one script module: the first
+// coin to update in a frame starts it over.
 double g_lookFrame = -1.0;
 float g_lookNearest = 0.0f;
 
@@ -20,6 +22,8 @@ class Coin
     [0.2, "Bob height (m)"] float bobHeight;
     [1, "Points"] int value;
     [7.0, "The hero looks at the nearest coin within this (m)"] float lookRadius;
+    [55.0, "... and within this turn from where the hero faces (degrees)"] float lookTurn;
+    [35.0, "... and within this angle above or below its eyes (degrees)"] float lookPitch;
 
     private Entity@ m_player;
     private Float3 m_home = Float3(0.0f, 0.0f, 0.0f);
@@ -74,11 +78,37 @@ class Coin
             g_lookNearest = lookRadius;
             aim.active = false;
         }
-        if (distance < g_lookNearest)
+        if (distance < g_lookNearest && inView())
         {
             g_lookNearest = distance;
             SceneAnimation::of(self.scene).setIkTarget(m_player, self.worldPosition());
             aim.active = true;
         }
+    }
+
+    // Whether the hero can turn its head to this coin: the turn from its facing, and the angle
+    // above or below, each within its limit. The hero's centre stands in for its eyes (the head
+    // is about 0.1 m below it).
+    private bool inView()
+    {
+        Float3 to = self.worldPosition() - m_player.worldPosition();
+        float flat = Math::Sqrt(to.x * to.x + to.z * to.z);
+        if (flat < 0.01f)
+        {
+            return false; // straight above or below
+        }
+        float degrees = 3.14159265f / 180.0f;
+        if (Math::Abs(Math::Atan2(to.y, flat)) > lookPitch * degrees)
+        {
+            return false;
+        }
+        Float3 facing = Quaternion::RotateVector(m_player.worldRotation(), Float3(0.0f, 0.0f, 1.0f));
+        float facingFlat = Math::Sqrt(facing.x * facing.x + facing.z * facing.z);
+        if (facingFlat < 0.01f)
+        {
+            return false;
+        }
+        float along = (facing.x * to.x + facing.z * to.z) / (facingFlat * flat);
+        return along >= Math::Cos(lookTurn * degrees);
     }
 }

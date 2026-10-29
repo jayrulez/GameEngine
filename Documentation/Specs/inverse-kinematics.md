@@ -14,6 +14,8 @@
 > scene runs. Two notes: world matrices are cached only after PostUpdate, so the managers compose
 > the targets' and the mesh's worlds fresh; the aim's `up` is an entity the up axis leans toward.
 > The editor's gizmo for a selected IK component moves to P4 with the bone pickers.
+> 2026-10-29: the aim's one cone became a turn and a tilt limit, and a target past them is held at
+> its side or released (Sky Hopper's hero threw its head back at coins behind it).
 > P3 BUILT 2026-10-05: SolveFootIk (Foundation, given grounds) and FootIkComponent, probing
 > through a new scene seam, ISceneRayQuery (SceneSystem::AsRayQuery; PhysicsSceneSystem answers,
 > triggers skipped), so animation needs no physics link. Folded in from Sedulous's review: one
@@ -119,10 +121,14 @@ of model-space transforms; no physics, no scene.
   mid LOCAL rotations (a correction quaternion in model space, converted through the parent's
   model inverse) and, with an orientation, the end's. Result: reached, and the residual distance.
 - **Aim** (head, spine, a weapon): a list of bones with per-bone weights (a spine shares the turn:
-  0.3, 0.5, 1.0), an aim axis and an up axis in the last bone's space, a model-space target, a
-  maximum angle from the animated direction (60 degrees default) and weight. Each bone takes its
-  share of the remaining swing, then the last bone rolls about its aim so the up axis leans
-  toward an up direction (model space), or back to the animated up without one (no roll drift).
+  0.3, 0.5, 1.0), an aim axis and an up axis in the last bone's space, a model-space target, two
+  limits from the animated direction, as a neck has (a turn to either side about the animated up,
+  60 degrees by default, and a tilt up or down, 45), and weight. Each bone takes its share of the
+  remaining swing, then the last bone rolls about its aim so the up axis leans toward an up
+  direction (model space), or back to the animated up without one (no roll drift). A target past
+  the limits is held at them, turned toward its side: one behind turns the aim as far as it goes
+  to that side, never up and over the top (as the single cone of P1 did). The result says when a
+  target lies beyond them, at any weight.
 - **Rebuild**: after a solve, model space is rebuilt from the chain's start downward only (a
   correction lower in the hierarchy never moves a bone above it).
 - **Order and weight are the caller's**: solvers do not fade; the engine owns time.
@@ -149,6 +155,10 @@ of model-space transforms; no physics, no scene.
   `EntityRef` (its world position, and rotation if `matchRotation`) or, empty, the component's own
   entity; pole an `EntityRef` (optional); `weight` and `fadeSeconds` (the weight eases toward
   `active ? weight : 0`); `order` (lower first; ez's ordering, so a look-at runs after the legs).
+  The aim's `maxTurn` and `maxTilt` are in degrees, and `beyondLimits` says what a target past them
+  does: Hold (aim as far as they go) or Release (ease out over fadeSeconds, still solving at weight
+  0 so it eases back in when the target returns). Data version 1; a version 0 record's one
+  `maxAngle` becomes both limits, held.
 - **`FootIkComponent`** (as built): the animation's ground is the plane through the model origin
   across up, offset by `groundHeight` (0 for every imported sample rig: P0a measured their origins
   at the floor). A planted foot moves by the ground's height under it; the pelvis lowers by the
@@ -219,7 +229,8 @@ of model-space transforms; no physics, no scene.
   target at the chain's start or in a degenerate line.
 - No pole, straight animated chain: the hinge fallback bends it, the same way two frames running.
 - Weight 0 leaves the pose untouched byte for byte; weight 0.5 is between.
-- Aim reaches the target direction within the max angle and clamps beyond it; the up axis holds.
+- Aim reaches the target direction within its turn and tilt and holds at them beyond; a target
+  behind turns it to that side, never over the top; the up axis holds.
 - A rebuild leaves bones above the chain unchanged.
 - No allocation after the first call (an allocator that counts).
 

@@ -17,6 +17,8 @@ import foundation.core;
 import foundation.animation;
 import foundation.scene;
 import foundation.script.facades;
+import foundation.xml;
+import foundation.xml.serialization;
 import engine.animation;
 import engine.render;
 
@@ -290,6 +292,140 @@ TEST_CASE("ik component: the script calls set a point and read the result; remov
     CHECK(s.Player().Modifiers().IsEmpty());
     s.Tick(); // and the player runs on with nothing dangling
     CHECK_FALSE(animation.ikReached(headEntity));
+}
+
+namespace
+{
+    // The head's aim (its +z) and position in the skeleton's model space, from the final pose.
+    Float3 HeadAimModel(Stage& s)
+    {
+        animation::AnimationPlayer& p = s.Player();
+        (void)p.GetSkinningMatrices();
+        animation::ModelPoseCache cache;
+        cache.Build(*s.skeleton, p.GetFinalPoses());
+        const Float4x4& m = cache.At(5);
+        return Normalized(Float3{m.m[2][0], m.m[2][1], m.m[2][2]});
+    }
+
+    // A point at `offset` from the head (0, 13, 0) in model space, as a world position.
+    Float3 FromHead(Stage& s, Float3 offset)
+    {
+        return TransformPoint(Float3{0, 13, 0} + offset, s.level.GetWorldMatrix(s.body));
+    }
+
+    engine::animation::AimIkComponent& HeadAim(Stage& s, scene::EntityHandle target)
+    {
+        const scene::EntityHandle e = s.level.CreateEntity(u8"HeadIk");
+        s.level.SetParent(e, s.rider);
+        auto& c = s.level.GetSystem<engine::animation::AimIkComponentManager>()->Add(e);
+        c.bones.PushBack(engine::animation::AimIkBone{String(u8"Head"), 1.0f});
+        c.target = s.level.GetEntityId(target);
+        c.maxTurn = 60.0f;
+        c.maxTilt = 30.0f;
+        c.fadeSeconds = 0.0f;
+        return c;
+    }
+
+    void MoveTo(Stage& s, scene::EntityHandle e, Float3 at)
+    {
+        Transform t;
+        t.position = at;
+        s.level.SetLocalTransform(e, t);
+    }
+}
+
+TEST_CASE("ik aim component: a target behind is held at the turn limit on its side, never over the top")
+{
+    Stage s;
+    const scene::EntityHandle target = s.Target(u8"Coin", Float3{0, 0, 0});
+    MoveTo(s, target, FromHead(s, Float3{1, 9, -10})); // behind, to +x, high above
+    (void)HeadAim(s, target);
+    s.Tick();
+    s.Tick();
+    const Float3 aim = HeadAimModel(s);
+    CHECK(aim.z > 0.0f);
+    CHECK(aim.y == doctest::Approx(std::sin(30.0f * kDegToRad)).epsilon(1e-3));
+    CHECK(std::atan2(aim.x, aim.z) == doctest::Approx(60.0f * kDegToRad).epsilon(1e-3));
+}
+
+TEST_CASE("ik aim component: Release eases off past the limits and comes back when the target does")
+{
+    Stage s;
+    const scene::EntityHandle target = s.Target(u8"Coin", Float3{0, 0, 0});
+    MoveTo(s, target, FromHead(s, Float3{1, 0, 4})); // ahead
+    engine::animation::AimIkComponent& added = HeadAim(s, target);
+    added.beyondLimits = engine::animation::AimBeyondLimits::Release;
+    added.fadeSeconds = 0.1f;
+    const scene::EntityHandle owner = s.level.FindEntityByName(u8"HeadIk");
+    auto* aims = s.level.GetSystem<engine::animation::AimIkComponentManager>();
+    for (i32 i = 0; i < 12; ++i)
+    {
+        s.Tick();
+    }
+    CHECK(aims->Get(owner)->runtime.weight == doctest::Approx(1.0f));
+    CHECK(Dot(HeadAimModel(s), Normalized(Float3{1, 0, 4})) > 1.0f - 1.0e-4f);
+
+    MoveTo(s, target, FromHead(s, Float3{1, 0, -4})); // behind: past the turn
+    // The frame's ease runs before the frame's solve, so the solve that finds the target beyond
+    // starts the ease a frame later.
+    s.Tick();
+    s.Tick();
+    CHECK(aims->Get(owner)->runtime.weight < 1.0f); // easing off, not snapping
+    CHECK(aims->Get(owner)->runtime.weight > 0.0f);
+    for (i32 i = 0; i < 12; ++i)
+    {
+        s.Tick();
+    }
+    CHECK(aims->Get(owner)->runtime.weight == 0.0f);
+    CHECK(Dot(HeadAimModel(s), Float3{0, 0, 1}) > 1.0f - 1.0e-5f); // the animated aim
+    CHECK(s.Player().Modifiers().Count() == 1u); // still watching at weight 0
+
+    MoveTo(s, target, FromHead(s, Float3{-1, 0, 4})); // ahead again
+    for (i32 i = 0; i < 12; ++i)
+    {
+        s.Tick();
+    }
+    CHECK(aims->Get(owner)->runtime.weight == doctest::Approx(1.0f));
+    CHECK(Dot(HeadAimModel(s), Normalized(Float3{-1, 0, 4})) > 1.0f - 1.0e-4f);
+
+    // Off: it leaves the player, released or not.
+    aims->Get(owner)->active = false;
+    for (i32 i = 0; i < 12; ++i)
+    {
+        s.Tick();
+    }
+    CHECK(s.Player().Modifiers().IsEmpty());
+}
+
+TEST_CASE("ik aim component: a v0 record's one maxAngle becomes both limits, held")
+{
+    engine::animation::RegisterAnimationComponentReflection();
+    const TypeInfo& type = TypeOf<engine::animation::AimIkComponent>();
+    CHECK(type.dataVersion == 1u);
+    CHECK(type.minReadDataVersion == 0u);
+    CHECK(type.readsLegacyData);
+    foundation::xml::XmlDocument doc(DefaultAllocator());
+    REQUIRE(doc.Parse(u8"<root><array name=\"bones\" count=\"0\"/>"
+                      u8"<string name=\"target\">00000000-0000-0000-0000-000000000000</string>"
+                      u8"<string name=\"up\">00000000-0000-0000-0000-000000000000</string>"
+                      u8"<object name=\"aimAxis\"><f32 name=\"x\">0</f32><f32 name=\"y\">0</f32><f32 name=\"z\">1</f32></object>"
+                      u8"<object name=\"upAxis\"><f32 name=\"x\">0</f32><f32 name=\"y\">1</f32><f32 name=\"z\">0</f32></object>"
+                      u8"<f32 name=\"maxAngle\">70</f32><f32 name=\"weight\">1</f32>"
+                      u8"<f32 name=\"fadeSeconds\">0.35</f32><bool name=\"active\">false</bool>"
+                      u8"<i32 name=\"order\">0</i32><bool name=\"debugDraw\">false</bool></root>") ==
+            foundation::xml::XmlResult::Ok);
+    foundation::xml::XmlSerializer reader(doc);
+    const SerializedDataVersion chain[] = {{type.id, 0}};
+    reader.PushVersionScope(chain, 1);
+    engine::animation::AimIkComponent c;
+    Serialize(reader, c);
+    reader.PopVersionScope();
+    CHECK(reader.IsOk());
+    CHECK(c.maxTurn == doctest::Approx(70.0f));
+    CHECK(c.maxTilt == doctest::Approx(70.0f));
+    CHECK(c.beyondLimits == engine::animation::AimBeyondLimits::Hold);
+    CHECK(c.fadeSeconds == doctest::Approx(0.35f));
+    CHECK_FALSE(c.active);
 }
 
 namespace

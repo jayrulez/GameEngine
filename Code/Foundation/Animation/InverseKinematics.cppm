@@ -29,11 +29,14 @@ export namespace foundation::animation
     /// What a solve did: whether the chain's end reached its target, and how far it missed (a
     /// distance for a two-bone chain, an angle in radians for an aim). `valid` is false when the
     /// bones do not form the chain (a bad index, or a bone not below the one before it); nothing
-    /// changed then.
+    /// changed then. `beyondLimits` is an aim's: the target lies past its turn or its tilt from the
+    /// animated direction (reported at any weight, 0 included, so a caller that fades an aim out
+    /// beyond its limits can tell when the target comes back).
     struct IkResult
     {
         bool valid = false;
         bool reached = false;
+        bool beyondLimits = false;
         f32 error = 0.0f;
     };
 
@@ -70,7 +73,10 @@ export namespace foundation::animation
     };
 
     /// An aim (a head, a spine sharing a turn, a weapon): the last bone's aim axis points at the
-    /// target, each bone taking its share of the swing still to go.
+    /// target, each bone taking its share of the swing still to go. Its reach is two limits from
+    /// the animated aim, as a neck has: a turn to either side (about the animated up axis) and a
+    /// tilt up or down. A target past them is held at them, turned toward its side: a target
+    /// behind turns the aim as far as it goes to that side, never up and over the top.
     struct AimIkSettings
     {
         Float3 target = Float3::Zero; // model space
@@ -80,7 +86,8 @@ export namespace foundation::animation
         // is kept (no roll drifts in from the swing).
         bool hasUp = false;
         Float3 up = Float3::Zero; // model space
-        f32 maxAngle = 60.0f * kDegToRad; // from the animated aim direction
+        f32 maxTurn = 60.0f * kDegToRad; // to either side of the animated aim
+        f32 maxTilt = 45.0f * kDegToRad; // above or below the animated aim
         f32 weight = 1.0f;
     };
 
@@ -412,8 +419,9 @@ export namespace foundation::animation
     /// Points the last bone's aim axis at `settings.target`, the swing shared along `bones` (root
     /// first): bone i takes `shares[i]` of what is still to go (a spine: 0.3, 0.5, 1.0; the last
     /// share 1 lands it exactly). Empty `shares` gives the last bone all of it. The direction is
-    /// held within maxAngle of the animated one, and the up axis is then turned toward `up` (or
-    /// back to the animated up) about the aim axis. The error is the angle left to the target.
+    /// held within maxTurn and maxTilt of the animated one, and the up axis is then turned toward
+    /// `up` (or back to the animated up) about the aim axis. The error is the angle left to the
+    /// target.
     inline IkResult SolveAim(const Skeleton& skeleton, Span<BoneTransform> local, ModelPoseCache& model,
                              Span<const i32> bones, Span<const f32> shares, const AimIkSettings& settings)
     {
@@ -439,8 +447,16 @@ export namespace foundation::animation
         const Quaternion animated = ik::RotationOf(model.At(last));
         const Float3 aimFrom = Normalized(RotateVector(animated, aimAxis));
         const Float3 upFrom = RotateVector(animated, settings.upAxis);
-        // The direction to aim from `origin`: the target's, held within maxAngle of the animated.
-        auto wanted = [&](Float3 origin) -> Float3
+        // The animated aim's frame: forward, its up (the up axis made perpendicular to it), and its
+        // side. The limits are a turn about that up and a tilt toward it.
+        Float3 frameUp = ik::Perpendicular(upFrom, aimFrom);
+        frameUp = LengthSquared(frameUp) > 1.0e-10f ? Normalized(frameUp) : ik::AnyPerpendicular(aimFrom);
+        const Float3 frameSide = Cross(frameUp, aimFrom);
+        const f32 maxTurn = Clamp(settings.maxTurn, 0.0f, kPi);
+        const f32 maxTilt = Clamp(settings.maxTilt, 0.0f, kPi * 0.5f);
+        // The direction to aim from `origin`: the target's, its turn and tilt each held within its
+        // limit; `beyond` says whether either was.
+        auto wanted = [&](Float3 origin, bool* beyond) -> Float3
         {
             const Float3 toTarget = settings.target - origin;
             if (Length(toTarget) <= kEpsilon)
@@ -448,14 +464,24 @@ export namespace foundation::animation
                 return aimFrom;
             }
             const Float3 direction = Normalized(toTarget);
-            const f32 angle = Acos(Clamp(Dot(aimFrom, direction), -1.0f, 1.0f));
-            if (angle <= settings.maxAngle)
+            const f32 forward = Dot(direction, aimFrom);
+            const f32 side = Dot(direction, frameSide);
+            const f32 rise = Dot(direction, frameUp);
+            const f32 turn = Atan2(side, forward); // +-pi straight behind
+            const f32 tilt = Atan2(rise, Sqrt(forward * forward + side * side));
+            const bool within = Abs(turn) <= maxTurn && Abs(tilt) <= maxTilt;
+            if (beyond != nullptr)
+            {
+                *beyond = !within;
+            }
+            if (within)
             {
                 return direction;
             }
-            Float3 axis = Cross(aimFrom, direction);
-            axis = LengthSquared(axis) > 1.0e-12f ? Normalized(axis) : ik::AnyPerpendicular(aimFrom);
-            return RotateVector(Quaternion::FromAxisAngle(axis, settings.maxAngle), aimFrom);
+            const f32 heldTurn = Clamp(turn, -maxTurn, maxTurn);
+            const f32 heldTilt = Clamp(tilt, -maxTilt, maxTilt);
+            const Float3 level = aimFrom * Cos(heldTurn) + frameSide * Sin(heldTurn);
+            return level * Cos(heldTilt) + frameUp * Sin(heldTilt);
         };
         auto aimNow = [&]() { return Normalized(RotateVector(ik::RotationOf(model.At(last)), aimAxis)); };
 
@@ -465,6 +491,7 @@ export namespace foundation::animation
             return Length(toTarget) > kEpsilon ? Acos(Clamp(Dot(aimNow(), Normalized(toTarget)), -1.0f, 1.0f))
                                                : 0.0f;
         };
+        (void)wanted(ik::Position(model.At(last)), &result.beyondLimits);
         if (settings.weight <= 0.0f)
         {
             result.error = missed();
@@ -485,7 +512,7 @@ export namespace foundation::animation
                 continue;
             }
             // The target direction from where the last bone is NOW (a turn above it moved it).
-            const Float3 direction = wanted(ik::Position(model.At(last)));
+            const Float3 direction = wanted(ik::Position(model.At(last)), nullptr);
             const Quaternion turn = Slerp(Quaternion::Identity, ik::FromTo(aimNow(), direction), share);
             ik::TurnInModel(skeleton, local, model, bones[i], turn);
             ik::Rebuild(skeleton, local, model, bones[i]);

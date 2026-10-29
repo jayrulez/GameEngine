@@ -8,8 +8,8 @@ gets two components, which drive the model's animator below it:
   PlayerController turns it off in the air.
 - AimIkComponent: the head (Neck 0.4, Head 1.0) looks at the nearest coin within reach; Coin.as
   picks the coin and sets the target, and turns it off when none is near. A coin counts only in
-  front of the hero (within 55 degrees of its facing, 35 above or below), so maxAngle is a guard:
-  past it the solver swings the head the short way round, over the top for a coin behind.
+  front of the hero (within 55 degrees of its facing, 35 above or below); the head's own limits
+  sit just past those, and a target beyond them releases the look.
 
 `ik.py` writes every level; `ik.py Level2` one. A rerun rewrites the same values.
 """
@@ -30,7 +30,9 @@ FEET = {
 }
 LOOK = {
     "bones": [{"bone": "Neck", "share": 0.4}, {"bone": "Head", "share": 1.0}],
-    "maxAngle": 60.0,
+    "maxTurn": 60.0,
+    "maxTilt": 40.0,
+    "beyondLimits": "Release",
     "fadeSeconds": 0.35,
     "active": False,  # until a coin is near
 }

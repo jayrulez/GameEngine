@@ -267,6 +267,13 @@ export namespace engine::animation
         foundation::core::Serialize(ar, "share", b.share);
     }
 
+    /// What an aim does with a target past its turn or tilt limits.
+    enum class AimBeyondLimits : u8
+    {
+        Hold,    // aim as far as the limits go, turned toward the target's side
+        Release, // ease off (over fadeSeconds) until the target comes back within them
+    };
+
     /// Bones that turn so the last one points at a target: a head that follows, a spine sharing the
     /// turn (0.3, 0.5, 1.0), a weapon.
     struct AimIkComponent
@@ -276,7 +283,9 @@ export namespace engine::animation
         scene::EntityRef up;     // optional: the up axis leans toward it (else the animated up)
         Float3 aimAxis{0.0f, 0.0f, 1.0f}; // in the last bone's space
         Float3 upAxis{0.0f, 1.0f, 0.0f};
-        f32 maxAngle = 60.0f; // degrees from the animated direction
+        f32 maxTurn = 60.0f; // v1: degrees to either side of the animated direction
+        f32 maxTilt = 45.0f; // v1: degrees above or below it
+        AimBeyondLimits beyondLimits = AimBeyondLimits::Hold; // v1
         f32 weight = 1.0f;
         f32 fadeSeconds = 0.2f;
         bool active = true;
@@ -292,7 +301,21 @@ export namespace engine::animation
         foundation::core::Serialize(ar, "up", c.up);
         foundation::core::Serialize(ar, "aimAxis", c.aimAxis);
         foundation::core::Serialize(ar, "upAxis", c.upAxis);
-        foundation::core::Serialize(ar, "maxAngle", c.maxAngle);
+        if (ar.Mode() == SerializeMode::Write || ar.Version() >= 1)
+        {
+            foundation::core::Serialize(ar, "maxTurn", c.maxTurn);
+            foundation::core::Serialize(ar, "maxTilt", c.maxTilt);
+            foundation::core::Serialize(ar, "beyondLimits", c.beyondLimits);
+        }
+        else
+        {
+            // v0's one cone: both limits take its angle, and a target past it is held.
+            f32 maxAngle = 60.0f;
+            foundation::core::Serialize(ar, "maxAngle", maxAngle);
+            c.maxTurn = maxAngle;
+            c.maxTilt = Min(maxAngle, 90.0f);
+            c.beyondLimits = AimBeyondLimits::Hold;
+        }
         foundation::core::Serialize(ar, "weight", c.weight);
         foundation::core::Serialize(ar, "fadeSeconds", c.fadeSeconds);
         foundation::core::Serialize(ar, "active", c.active);
@@ -619,6 +642,8 @@ export namespace engine::animation
         explicit IkComponentManagerBase(StringView typeId) : scene::SerializableComponentManager<T>(typeId) {}
 
         void OnSceneCreate(scene::Scene& scene) override { m_scene = &scene; }
+        // Whether a component that is on is held off for now (Derived hides this; none by default).
+        [[nodiscard]] bool HeldOff(const T&) const noexcept { return false; }
         [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
         // Before the animation graph (-1) and single-clip (0) managers, whose players run the solve.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -2; }
@@ -723,11 +748,14 @@ export namespace engine::animation
             rt.status = IkStatus::Solving;
             rt.logged = IkStatus::Solving;
 
-            // The weight eases toward its goal at full scale per fadeSeconds.
-            const f32 goal = c.active ? Clamp(c.weight, 0.0f, 1.0f) : 0.0f;
+            // The weight eases toward its goal at full scale per fadeSeconds. A component held off
+            // (an aim released past its limits) eases out but keeps solving at weight 0, so its
+            // solve still says when the target comes back.
+            const bool heldOff = c.active && static_cast<Derived*>(this)->HeldOff(c);
+            const f32 goal = c.active && !heldOff ? Clamp(c.weight, 0.0f, 1.0f) : 0.0f;
             const f32 step = c.fadeSeconds > 0.0f ? deltaTime / c.fadeSeconds : 1.0f;
             rt.weight = rt.weight < goal ? Min(goal, rt.weight + step) : Max(goal, rt.weight - step);
-            if (rt.weight <= 0.0f)
+            if (rt.weight <= 0.0f && !heldOff)
             {
                 DetachIk(*m_scene, rt);
                 return;
@@ -857,6 +885,14 @@ export namespace engine::animation
     public:
         AimIkComponentManager() : IkComponentManagerBase(u8"aim_ik") {}
 
+        /// Released past its limits: its last solve found the target beyond them.
+        [[nodiscard]] bool HeldOff(const AimIkComponent& c) const noexcept
+        {
+            const IkModifier* m = c.runtime.modifier.Get();
+            return c.beyondLimits == AimBeyondLimits::Release && m != nullptr && m->solved &&
+                   m->result.valid && m->result.beyondLimits;
+        }
+
         [[nodiscard]] IkStatus Resolve(AimIkComponent& c, const animation::Skeleton& skeleton, String& failed)
         {
             if (c.bones.IsEmpty() || c.bones.Size() > animation::kMaxAimBones)
@@ -908,7 +944,8 @@ export namespace engine::animation
             s.target = TransformPoint(rt.targetWorld, worldToModel);
             s.aimAxis = c.aimAxis;
             s.upAxis = c.upAxis;
-            s.maxAngle = c.maxAngle * kDegToRad;
+            s.maxTurn = c.maxTurn * kDegToRad;
+            s.maxTilt = c.maxTilt * kDegToRad;
             s.weight = rt.weight;
             s.hasUp = false;
             m.aimUpIsPoint = false;

@@ -351,7 +351,7 @@ TEST_CASE("ik: a solve rebuilds from the chain down, bones above and beside neve
     CHECK(Length(At(cache, kToe) - At(cache, kFoot)) == doctest::Approx(1.0f)); // carried along
 }
 
-TEST_CASE("ik aim: reaches within its limit, clamps beyond it, shares the swing, holds its up axis")
+TEST_CASE("ik aim: reaches within its limits, holds beyond them, shares the swing, holds its up axis")
 {
     Skeleton skel{kBoneCount};
     BuildBody(skel);
@@ -381,7 +381,7 @@ TEST_CASE("ik aim: reaches within its limit, clamps beyond it, shares the swing,
         const Float3 upWanted = Normalized(Float3{0, 1, 0} - aim * Dot(Float3{0, 1, 0}, aim));
         CHECK(Dot(up, upWanted) > 1.0f - 1.0e-5f);
     }
-    SUBCASE("beyond the limit: stopped at maxAngle from the animated direction")
+    SUBCASE("beyond the turn limit: stopped at maxTurn from the animated direction")
     {
         Array<BoneTransform> pose = BindPose(skel);
         ModelPoseCache cache;
@@ -394,6 +394,70 @@ TEST_CASE("ik aim: reaches within its limit, clamps beyond it, shares the swing,
         CHECK(std::acos(Clamp(Dot(Axis(cache, kHead, 2), Float3{0, 0, 1}), -1.0f, 1.0f)) ==
               doctest::Approx(60.0f * kDegToRad).epsilon(1e-3));
         CHECK(Finite(All(pose)));
+    }
+    SUBCASE("turn and tilt are separate limits: a wide turn within, a steep tilt held")
+    {
+        Array<BoneTransform> pose = BindPose(skel);
+        ModelPoseCache cache;
+        cache.Build(skel, All(pose));
+        AimIkSettings settings;
+        settings.maxTurn = 60.0f * kDegToRad;
+        settings.maxTilt = 30.0f * kDegToRad;
+        const Span<const i32> head1{spine + 2, 1};
+        settings.target = head + Float3{5, 0, 5}; // 45 degrees to the side: within the turn
+        IkResult result = SolveAim(skel, All(pose), cache, head1, {}, settings);
+        CHECK(result.reached);
+        CHECK_FALSE(result.beyondLimits);
+
+        pose = BindPose(skel);
+        cache.Build(skel, All(pose));
+        settings.target = head + Float3{0, 5, 5}; // 45 degrees up: past the tilt
+        result = SolveAim(skel, All(pose), cache, head1, {}, settings);
+        CHECK_FALSE(result.reached);
+        CHECK(result.beyondLimits);
+        const Float3 aim = Axis(cache, kHead, 2);
+        CHECK(aim.y == doctest::Approx(std::sin(30.0f * kDegToRad)).epsilon(1e-3));
+        CHECK(std::abs(aim.x) < 1.0e-4f);
+    }
+    SUBCASE("a target behind: turned to its side as far as the turn goes, never up and over")
+    {
+        AimIkSettings settings;
+        settings.maxTurn = 60.0f * kDegToRad;
+        settings.maxTilt = 30.0f * kDegToRad;
+        // Behind and a little to +x, level, then also high above: the old cone swung these over
+        // the top of the head; the limits hold them at the side.
+        const Float3 behind[] = {Float3{1, 0, -10}, Float3{1, 9, -10}};
+        const f32 rise[] = {0.0f, std::sin(30.0f * kDegToRad)};
+        for (usize i = 0; i < 2; ++i)
+        {
+            Array<BoneTransform> pose = BindPose(skel);
+            ModelPoseCache cache;
+            cache.Build(skel, All(pose));
+            settings.target = head + behind[i];
+            const IkResult result = SolveAim(skel, All(pose), cache, spine, shares, settings);
+            CHECK(result.valid);
+            CHECK(result.beyondLimits);
+            const Float3 aim = Axis(cache, kHead, 2);
+            CHECK(aim.z > 0.0f); // still facing forward of the animated aim
+            CHECK(aim.y == doctest::Approx(rise[i]).epsilon(1e-3));
+            const Float3 level = Normalized(Float3{aim.x, 0, aim.z});
+            CHECK(std::atan2(level.x, level.z) == doctest::Approx(60.0f * kDegToRad).epsilon(1e-3));
+            CHECK(Finite(All(pose)));
+        }
+    }
+    SUBCASE("weight 0 still reports a target beyond the limits, the pose untouched")
+    {
+        Array<BoneTransform> pose = BindPose(skel);
+        const Array<BoneTransform> original = BindPose(skel);
+        ModelPoseCache cache;
+        cache.Build(skel, All(pose));
+        AimIkSettings settings;
+        settings.target = head + Float3{0, 0, -5};
+        settings.weight = 0.0f;
+        CHECK(SolveAim(skel, All(pose), cache, spine, shares, settings).beyondLimits);
+        CHECK(std::memcmp(pose.Data(), original.Data(), sizeof(BoneTransform) * pose.Size()) == 0);
+        settings.target = head + Float3{0, 0, 5};
+        CHECK_FALSE(SolveAim(skel, All(pose), cache, spine, shares, settings).beyondLimits);
     }
     SUBCASE("an up direction: the head rolls toward it")
     {

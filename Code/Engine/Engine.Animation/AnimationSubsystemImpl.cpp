@@ -172,6 +172,8 @@ namespace engine::animation
             .Attribute("description",
                        String(u8"Turns a chain of bones so the last one points at a target, "
                               u8"such as a head that follows."))
+            .DataVersion(1) // v1: maxTurn, maxTilt and beyondLimits for v0's one maxAngle
+            .ReadsDataVersionsFrom(0) // a v0 record's maxAngle becomes both limits, held
             .Method<&foundation::script::ComponentOf<AimIkComponent>, AimIkComponent>("of")
             .Property<&AimIkComponent::bones>("bones")
             .PropAttribute("description", String(u8"Root first; the last bone aims (a spine: 0.3, 0.5, 1)."))
@@ -183,9 +185,16 @@ namespace engine::animation
                            String(u8"Optional: the up axis leans toward this entity (else the animated up)."))
             .Property<&AimIkComponent::aimAxis>("aimAxis")
             .Property<&AimIkComponent::upAxis>("upAxis")
-            .Property<&AimIkComponent::maxAngle>("maxAngle")
+            .Property<&AimIkComponent::maxTurn>("maxTurn")
             .PropAttribute("range", Float4{0.0f, 180.0f, 1.0f, 0.0f})
-            .PropAttribute("description", String(u8"Degrees from the animated direction."))
+            .PropAttribute("description", String(u8"Degrees to either side of the animated direction."))
+            .Property<&AimIkComponent::maxTilt>("maxTilt")
+            .PropAttribute("range", Float4{0.0f, 90.0f, 1.0f, 0.0f})
+            .PropAttribute("description", String(u8"Degrees above or below the animated direction."))
+            .Property<&AimIkComponent::beyondLimits>("beyondLimits")
+            .PropAttribute("description",
+                           String(u8"A target past the limits: Hold aims as far as they go, toward its side; "
+                                  u8"Release eases off until it comes back."))
             .Property<&AimIkComponent::weight>("weight")
             .PropAttribute("range", Float4{0.0f, 1.0f, 0.01f, 0.0f})
             .Property<&AimIkComponent::fadeSeconds>("fadeSeconds")
@@ -274,6 +283,12 @@ namespace engine::animation
             .PropAttribute("description", String(u8"The instanced meshes it animates (none: its own)"));
     }
 
+    REFLECT_ENUM(AimBeyondLimits, "rtti::engine::animation")
+    {
+        builder.Value("Hold", AimBeyondLimits::Hold);
+        builder.Value("Release", AimBeyondLimits::Release);
+    }
+
     REFLECT_ENUM(RootMotionMode, "rtti::engine::animation")
     {
         builder.Value("Ignore", RootMotionMode::Ignore);
@@ -327,6 +342,7 @@ namespace engine::animation
             // spawn's EntityRef remap walker both introspect through ContainerInfo).
             core::RegisterArrayType<foundation::scene::EntityRef>();
             RttiRegisterEnum_RootMotionMode();
+            RttiRegisterEnum_AimBeyondLimits();
             RttiRegisterValue_SkeletalAnimationComponent();
             RttiRegisterValue_AnimationGraphComponent();
             RttiRegisterValue_InstancedSkinningComponent();

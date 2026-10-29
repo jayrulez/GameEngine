@@ -7,8 +7,9 @@
 // leaf guids) becomes a spawnable PrefabDocument named "Prefab" inside the model's group. The
 // wiring mirrors the runtime model spawn (Sandbox): one entity per node, MeshComponents with
 // mesh/material refs by guid (per-submesh refs for multi-material models), and - when the model
-// brought a skeleton + clips - ONE SkeletalAnimationComponent on the root whose meshEntities
-// (EntityRefs, prefab-remapped per spawn) feed every skinned mesh node.
+// brought a skeleton - ONE SkeletalAnimationComponent on the root whose meshEntities (EntityRefs,
+// prefab-remapped per spawn) feed every skinned mesh node: its resting clip when the model has
+// clips, else none, the rig's rest pose (a skinned mesh fed nothing draws its raw vertices).
 //
 // RE-IMPORT REGENERATES: the "Prefab" instance is found by name and reused (same guid), so
 // placed instances rebuild through the standard prefab machinery. This lives in the scene
@@ -133,7 +134,7 @@ export namespace pipeline
             scene.SetLocalTransform(e, node.localTransform);
             entities.PushBack(e);
         }
-        const bool animated = !manifest.skeletonGuid.IsNil() && !manifest.animationGuids.IsEmpty();
+        const bool rigged = !manifest.skeletonGuid.IsNil();
         Array<scene::EntityHandle> skinnedEntities;
         Array<Guid> materialIds;
         for (usize i = 0; i < manifest.nodes.Size(); ++i)
@@ -187,7 +188,7 @@ export namespace pipeline
 
             const bool skinned =
                 (meshIndex < manifest.meshSkinned.Size()) && manifest.meshSkinned[meshIndex] != 0;
-            if (skinned && animated)
+            if (skinned && rigged)
             {
                 skinnedEntities.PushBack(entities[i]);
                 PlaceInSkeletonSpace(scene, manifest, entities, root, i);
@@ -201,7 +202,10 @@ export namespace pipeline
         {
             engine::animation::SkeletalAnimationComponent& ac = anims->Add(root);
             ac.skeleton.SetId(manifest.skeletonGuid);
-            ac.clip.SetId(manifest.animationGuids[RestingClip(manifestInstance, manifest)]);
+            if (!manifest.animationGuids.IsEmpty())
+            {
+                ac.clip.SetId(manifest.animationGuids[RestingClip(manifestInstance, manifest)]);
+            }
             for (scene::EntityHandle e : skinnedEntities)
             {
                 ac.meshEntities.PushBack(scene.GetEntityId(e));

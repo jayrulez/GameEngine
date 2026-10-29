@@ -263,13 +263,15 @@ export namespace engine::animation
         }
 
     public:
-        // SIMULATION-GATED (user ruling 2026-08-18): animation is gameplay-side state and must
-        // not advance in a non-simulating scene - watching things animate in the editor's edit
+        // Time is SIMULATION-GATED (user ruling 2026-08-18): animation is gameplay-side state and
+        // must not advance in a non-simulating scene - watching things animate in the editor's edit
         // mode was distracting and wrong. Consumers that want live animation in a paused-looking
         // context (the bespoke preview pages) enable simulation on their PRIVATE preview scene
         // (PreviewViewport::SetSimulationEnabled) - scenes default to simulating, so players and
-        // headless tests are unaffected.
-        [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
+        // headless tests are unaffected. The pose is not: in a non-simulating scene the manager
+        // still feeds its meshes the player's standing pose (the rig's rest pose before any clip),
+        // since a skinned mesh fed nothing draws its raw vertices, which an FBX file keeps lying in
+        // its authoring tool's axes.
 
         void OnUpdate(scene::ScenePhase phase, f32 deltaTime) override
         {
@@ -309,9 +311,14 @@ export namespace engine::animation
                     }
                     // React to the CLIP changing independently of the skeleton (editor picks land one at
                     // a time; a hot reload swaps the product behind the ref mid-play). autoPlay starts the
-                    // new clip; manual users drive a.player->Play themselves.
+                    // new clip; manual users drive a.player->Play themselves. Not while the scene stands
+                    // still: the clip starts when the simulation does.
                     animation::AnimationClip* clip = a.clip.Get();
-                    if (clip != a.playerClip)
+                    if (!m_scene->SimulationEnabled())
+                    {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
+                    }
+                    else if (clip != a.playerClip)
                     {
                         a.playerClip = clip;
                         if (a.autoPlay && clip != nullptr)
@@ -324,10 +331,13 @@ export namespace engine::animation
                         }
                     }
                     a.player->speed = a.speed;
-                    a.player->Update(deltaTime);
-                    root_motion_apply::Apply(
-                        *m_scene, owner, Span<const scene::EntityRef>{a.meshEntities.Data(), a.meshEntities.Size()},
-                        a.rootMotionTarget, a.rootMotion, a.rootMotionState, a.player->ConsumeRootMotion(), deltaTime);
+                    if (m_scene->SimulationEnabled())
+                    {
+                        a.player->Update(deltaTime);
+                        root_motion_apply::Apply(
+                            *m_scene, owner, Span<const scene::EntityRef>{a.meshEntities.Data(), a.meshEntities.Size()},
+                            a.rootMotionTarget, a.rootMotion, a.rootMotionState, a.player->ConsumeRootMotion(), deltaTime);
+                    }
                     const Span<const Float4x4> mats = a.player->GetSkinningMatrices();
                     const Span<const Float4x4> prev = a.player->GetPrevSkinningMatrices();
                     const auto feed = [&](scene::EntityHandle e)
@@ -422,8 +432,7 @@ export namespace engine::animation
         }
 
     public:
-        // Simulation-gated like the clip manager (see its comment).
-        [[nodiscard]] bool IsSimulationOnly() const noexcept override { return true; }
+        // Time is simulation-gated and the pose is not, as in the clip manager (see its comment).
 
         // Run before the simple-clip manager (UpdateOrder 0) so the graph drives graph-backed entities.
         [[nodiscard]] i32 UpdateOrder() const noexcept override { return -1; }
@@ -470,10 +479,17 @@ export namespace engine::animation
                         root_motion_apply::Release(*m_scene, a.rootMotionState);
                         return;
                     }
-                    a.player->Update(deltaTime);
-                    root_motion_apply::Apply(
-                        *m_scene, owner, Span<const scene::EntityRef>{a.meshEntities.Data(), a.meshEntities.Size()},
-                        a.rootMotionTarget, a.rootMotion, a.rootMotionState, a.player->ConsumeRootMotion(), deltaTime);
+                    if (m_scene->SimulationEnabled())
+                    {
+                        a.player->Update(deltaTime);
+                        root_motion_apply::Apply(
+                            *m_scene, owner, Span<const scene::EntityRef>{a.meshEntities.Data(), a.meshEntities.Size()},
+                            a.rootMotionTarget, a.rootMotion, a.rootMotionState, a.player->ConsumeRootMotion(), deltaTime);
+                    }
+                    else
+                    {
+                        root_motion_apply::Release(*m_scene, a.rootMotionState);
+                    }
                     const Span<const Float4x4> mats = a.player->GetSkinningMatrices();
                     const Span<const Float4x4> prev = a.player->GetPrevSkinningMatrices();
                     const auto feed = [&](scene::EntityHandle e)

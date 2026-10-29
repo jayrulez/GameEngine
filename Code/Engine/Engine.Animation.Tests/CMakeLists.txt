@@ -7,6 +7,7 @@ add_executable(Engine.Animation.Tests
     InstancedSkinningTests.cpp
     PropertyAnimatorTests.cpp
     GraphParameterTests.cpp
+    RestPoseTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(Engine.Animation.Tests PRIVATE

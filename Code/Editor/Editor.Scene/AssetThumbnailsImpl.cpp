@@ -17,6 +17,7 @@ import foundation.geometry;
 import foundation.materials;
 import engine.render;
 import engine.particles;
+import engine.animation;
 import foundation.animation;
 import modelimporter;
 import editor.core;
@@ -298,6 +299,56 @@ namespace editor
             return bounds;
         }
 
+        // Has the ref loaded or failed? Mirrors MeshRefsSettled for one animator ref.
+        template <typename TRef>
+        [[nodiscard]] bool RefSettled(TRef& ref)
+        {
+            if (ref.id.IsNil() || ref.Get() != nullptr)
+            {
+                return true;
+            }
+            resource::ResourceHandle* handle = ref.GetProxy().Handle();
+            return handle == nullptr || handle->State() == resource::ResourceState::Failed;
+        }
+
+        // A skinned mesh draws in its rig's rest pose only once an animator feeds it a palette,
+        // and the stage never ticks the scene: once the animators' skeletons have loaded, one tick
+        // with the simulation off feeds it (time stands still, so no clip plays). False while a
+        // skeleton is still loading.
+        [[nodiscard]] bool PoseSkinnedMeshes(scene::Scene& stage)
+        {
+            bool any = false;
+            bool settled = true;
+            if (auto* clips = stage.GetSystem<engine::animation::SkeletalAnimationComponentManager>())
+            {
+                clips->ForEach(
+                    [&](engine::animation::SkeletalAnimationComponent& c, scene::EntityHandle)
+                    {
+                        any = true;
+                        settled = settled && RefSettled(c.skeleton);
+                    });
+            }
+            if (auto* graphs = stage.GetSystem<engine::animation::AnimationGraphComponentManager>())
+            {
+                graphs->ForEach(
+                    [&](engine::animation::AnimationGraphComponent& c, scene::EntityHandle)
+                    {
+                        any = true;
+                        settled = settled && RefSettled(c.skeleton) && RefSettled(c.graph);
+                    });
+            }
+            if (!settled)
+            {
+                return false;
+            }
+            if (any)
+            {
+                stage.SetSimulationEnabled(false);
+                stage.Update(0.0f);
+            }
+            return true;
+        }
+
         void FrameFromBounds(const AABB& bounds, ThumbnailFraming& outFraming)
         {
             if (bounds.IsValid())
@@ -362,7 +413,7 @@ namespace editor
                     AddSun(stage);
                     m_spawned = true;
                 }
-                if (!MeshRefsSettled(stage))
+                if (!MeshRefsSettled(stage) || !PoseSkinnedMeshes(stage))
                 {
                     return ThumbnailStageStep::Pending;
                 }
@@ -410,7 +461,7 @@ namespace editor
                     scene::ResolveSceneResources(stage, resources);
                     m_loaded = true;
                 }
-                if (!MeshRefsSettled(stage))
+                if (!MeshRefsSettled(stage) || !PoseSkinnedMeshes(stage))
                 {
                     return ThumbnailStageStep::Pending;
                 }
@@ -596,8 +647,8 @@ namespace editor
         };
 
         // Model manifests: the imported node hierarchy rebuilt in the job's private scene
-        // (meshes + materials only - a thumbnail needs no physics or animation), framed by
-        // the combined world mesh bounds. Mirrors BuildModelScene's mesh loop but through
+        // (meshes + materials, and a rigged model's animator with no clip so its skinned meshes
+        // draw in the rig's rest pose), framed by the combined world mesh bounds. Mirrors BuildModelScene's mesh loop but through
         // GetSystem - the private scene already carries the app's full manager set, and
         // AddSystem is not idempotent.
         class ModelManifestThumbnailGenerator final : public ISceneThumbnailGenerator
@@ -636,6 +687,7 @@ namespace editor
                     }
                     const foundation::model::ModelManifestSource& manifest = asset->manifest;
                     const scene::EntityHandle root = stage.CreateEntity(instance->Name());
+                    Array<scene::EntityHandle> skinnedEntities;
                     Array<scene::EntityHandle> entities;
                     entities.Reserve(manifest.nodes.Size());
                     for (const foundation::model::ModelNode& node : manifest.nodes)
@@ -675,6 +727,7 @@ namespace editor
                                 stage.SetParent(entities[i], parent >= 0 ? entities[static_cast<usize>(parent)] : root, false);
                                 stage.SetLocalTransform(entities[i], Transform{});
                             }
+                            skinnedEntities.PushBack(entities[i]);
                         }
                         // The mesh's own material list, as the prefab binds it: its submeshes
                         // index their slots, not the model's whole list.
@@ -689,11 +742,21 @@ namespace editor
                             component.materials.PushBack(ref);
                         }
                     }
+                    auto* animators = stage.GetSystem<engine::animation::SkeletalAnimationComponentManager>();
+                    if (animators != nullptr && !manifest.skeletonGuid.IsNil() && !skinnedEntities.IsEmpty())
+                    {
+                        engine::animation::SkeletalAnimationComponent& animator = animators->Add(root);
+                        animator.skeleton.SetId(manifest.skeletonGuid);
+                        for (const scene::EntityHandle e : skinnedEntities)
+                        {
+                            animator.meshEntities.PushBack(stage.GetEntityId(e));
+                        }
+                    }
                     scene::ResolveSceneResources(stage, resources);
                     AddSun(stage);
                     m_spawned = true;
                 }
-                if (!MeshRefsSettled(stage))
+                if (!MeshRefsSettled(stage) || !PoseSkinnedMeshes(stage))
                 {
                     return ThumbnailStageStep::Pending;
                 }

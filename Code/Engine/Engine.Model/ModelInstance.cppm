@@ -5,8 +5,9 @@
 // entities, outside any project's prefabs: what a host that cooks a model file at run time does
 // with it (the Sandbox sample, the model viewer). One entity per model node under a root, a mesh
 // component per node with a mesh (its own material list, from the manifest's slots), and, when the
-// model is skinned and has clips, a skeletal animation component on the root playing the first
-// clip into its skinned meshes. A skinned mesh sits in its skeleton's space, as the project's model
+// model is skinned, a skeletal animation component on the root feeding its skinned meshes: the
+// first clip playing, or none (the rig's rest pose; a skinned mesh fed nothing draws its raw
+// vertices). A skinned mesh sits in its skeleton's space, as the project's model
 // prefab puts it (foundation::model::SkinnedMeshParent). The model's resources stay alive while the caller keeps its proxy.
 
 module;
@@ -42,8 +43,9 @@ export namespace engine::model
     {
         /// The root's own transform (its scale fits the model to a size, as the caller wants).
         Transform rootTransform;
-        /// Put a skeletal animation component on the root playing the first clip (a skinned model
-        /// with clips). Off when the caller drives the skeleton otherwise (an animation graph).
+        /// The root's skeletal animation component plays the first clip (a skinned model with clips);
+        /// off, it holds the rest pose. Either way a skinned model gets the component, which the
+        /// caller may drive itself.
         bool animate = true;
     };
 
@@ -119,20 +121,23 @@ export namespace engine::model
             }
         }
 
-        // A skinned model with clips: the root plays the first into its skinned meshes.
-        if (options.animate && model.skeleton && !model.animations.IsEmpty() && model.animations[0] &&
-            !instance.skinned.IsEmpty())
+        // A skinned model: the root feeds its skinned meshes, playing the first clip when asked and
+        // there is one, else holding the rest pose.
+        if (model.skeleton && !instance.skinned.IsEmpty())
         {
             if (auto* animators = scene.GetSystem<engine::animation::SkeletalAnimationComponentManager>())
             {
                 engine::animation::SkeletalAnimationComponent& animator = animators->Add(instance.root);
                 animator.skeleton = model.skeleton.Get();
-                animator.clip = model.animations[0].Get();
+                if (options.animate && !model.animations.IsEmpty() && model.animations[0])
+                {
+                    animator.clip = model.animations[0].Get();
+                    instance.animated = true;
+                }
                 for (const scene::EntityHandle e : instance.skinned)
                 {
                     animator.meshEntities.PushBack(scene.GetEntityId(e));
                 }
-                instance.animated = true;
             }
         }
         return instance;

@@ -937,6 +937,9 @@ export namespace foundation::animation
             m_prevSkinningMatrices.Resize(boneCount);
             for (usize i = 0; i < boneCount; ++i)
             {
+                // Before the first Update the pose is the rig's rest pose, as a clip player's is.
+                const Bone* bone = skeleton.GetBone(static_cast<i32>(i));
+                m_finalPoses[i] = bone != nullptr ? bone->localBindPose : BoneTransform{};
                 m_skinningMatrices[i] = Float4x4::Identity();
                 m_prevSkinningMatrices[i] = Float4x4::Identity();
             }

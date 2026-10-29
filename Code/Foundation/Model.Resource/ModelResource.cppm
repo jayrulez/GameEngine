@@ -126,6 +126,30 @@ export namespace foundation::model
         Float3 boundsMin{};         // model-space AABB (for spawn-time auto-fit/placement)
         Float3 boundsMax{};
 
+        /// The material list an entity drawing mesh `meshIndex` binds, indexed by its submeshes'
+        /// materialIndex (slot 0 covers single-material meshes and out-of-range indexes). A v2
+        /// manifest records the slots each mesh uses and its submeshes index THAT list (Bistro: 254
+        /// materials per node before, one or two after); an unresolvable slot stays nil. A v1
+        /// manifest (no slots) cooked its submeshes with model-wide indices: the whole list.
+        void MeshMaterialGuids(usize meshIndex, Array<Guid>& out) const
+        {
+            out.Clear();
+            if (meshIndex < meshMaterialSlots.Size() && !meshMaterialSlots[meshIndex].slots.IsEmpty())
+            {
+                for (const i32 slot : meshMaterialSlots[meshIndex].slots)
+                {
+                    out.PushBack(slot >= 0 && static_cast<usize>(slot) < materialGuids.Size()
+                                     ? materialGuids[static_cast<usize>(slot)]
+                                     : Guid{});
+                }
+                return;
+            }
+            for (const Guid& g : materialGuids)
+            {
+                out.PushBack(g);
+            }
+        }
+
         void Serialize(ISerializer& ar) override
         {
             foundation::core::Serialize(ar, "meshGuids", meshGuids);

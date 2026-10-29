@@ -644,6 +644,7 @@ namespace editor
                         stage.SetLocalTransform(entity, node.localTransform);
                         entities.PushBack(entity);
                     }
+                    Array<Guid> materialIds;
                     for (usize i = 0; i < manifest.nodes.Size(); ++i)
                     {
                         const foundation::model::ModelNode& node = manifest.nodes[i];
@@ -663,10 +664,28 @@ namespace editor
                         engine::render::MeshComponent& component = meshes->Add(entities[i]);
                         component.mesh.SetId(
                             manifest.meshGuids[static_cast<usize>(node.meshIndex)]);
-                        for (const Guid& materialId : manifest.materialGuids)
+                        // A skinned mesh in its skeleton's space, as the model's prefab puts it.
+                        const usize mesh = static_cast<usize>(node.meshIndex);
+                        if (mesh < manifest.meshSkinned.Size() && manifest.meshSkinned[mesh] != 0)
+                        {
+                            const i32 parent = foundation::model::SkinnedMeshParent(manifest.nodes.AsSpan(),
+                                                                                   manifest.skeletonParentNode, i);
+                            if (parent != foundation::model::kSkinnedMeshKeepsPlace)
+                            {
+                                stage.SetParent(entities[i], parent >= 0 ? entities[static_cast<usize>(parent)] : root, false);
+                                stage.SetLocalTransform(entities[i], Transform{});
+                            }
+                        }
+                        // The mesh's own material list, as the prefab binds it: its submeshes
+                        // index their slots, not the model's whole list.
+                        manifest.MeshMaterialGuids(mesh, materialIds);
+                        for (const Guid& materialId : materialIds)
                         {
                             resource::Ref<materials::Material> ref;
-                            ref.SetId(materialId);
+                            if (!materialId.IsNil())
+                            {
+                                ref.SetId(materialId);
+                            }
                             component.materials.PushBack(ref);
                         }
                     }

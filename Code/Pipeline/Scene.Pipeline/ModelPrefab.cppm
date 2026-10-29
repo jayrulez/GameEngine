@@ -135,6 +135,7 @@ export namespace pipeline
         }
         const bool animated = !manifest.skeletonGuid.IsNil() && !manifest.animationGuids.IsEmpty();
         Array<scene::EntityHandle> skinnedEntities;
+        Array<Guid> materialIds;
         for (usize i = 0; i < manifest.nodes.Size(); ++i)
         {
             const foundation::model::ModelNode& node = manifest.nodes[i];
@@ -161,34 +162,17 @@ export namespace pipeline
             engine::render::MeshComponent& mc = meshes->Add(entities[i]);
             mc.mesh.SetId(manifest.meshGuids[meshIndex]);
 
-            // The material list, indexed by SubMesh::materialIndex (slot 0 covers
-            // single-material meshes and out-of-range indexes). A v2 manifest records the
-            // slots each mesh uses and its submeshes index THAT list, so the entity binds
-            // only its own materials (Bistro: 254 per node before, one or two after). A v1
-            // manifest (no slots) cooked its submeshes with model-wide indices: the whole
-            // list stays their table.
-            const bool hasSlots = meshIndex < manifest.meshMaterialSlots.Size() &&
-                                  !manifest.meshMaterialSlots[meshIndex].slots.IsEmpty();
-            if (hasSlots)
+            // The mesh's own material list (ModelManifestSource::MeshMaterialGuids); an
+            // unresolvable slot stays an empty ref.
+            manifest.MeshMaterialGuids(meshIndex, materialIds);
+            for (const Guid& g : materialIds)
             {
-                for (const i32 slot : manifest.meshMaterialSlots[meshIndex].slots)
+                foundation::resource::Ref<foundation::materials::Material> r;
+                if (!g.IsNil())
                 {
-                    foundation::resource::Ref<foundation::materials::Material> r;
-                    if (slot >= 0 && static_cast<usize>(slot) < manifest.materialGuids.Size())
-                    {
-                        r.SetId(manifest.materialGuids[static_cast<usize>(slot)]);
-                    }
-                    mc.materials.PushBack(r); // an unresolvable slot stays an empty ref
-                }
-            }
-            else
-            {
-                for (const Guid& g : manifest.materialGuids)
-                {
-                    foundation::resource::Ref<foundation::materials::Material> r;
                     r.SetId(g);
-                    mc.materials.PushBack(r);
                 }
+                mc.materials.PushBack(r);
             }
 
             // Generated collision: each mesh node gets a cooked-shape collider that folds

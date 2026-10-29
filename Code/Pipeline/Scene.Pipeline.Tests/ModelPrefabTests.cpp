@@ -510,3 +510,33 @@ TEST_CASE("model-prefab: a skinned mesh sits at identity under the skeleton's pa
     }
     RemoveTreeMP(dir);
 }
+
+TEST_CASE("model-prefab: a mesh binds its own material slots, the whole list only without them")
+{
+    // The rule the prefab and the editor's model thumbnail share (MeshMaterialGuids).
+    foundation::model::ModelManifestSource manifest;
+    const Guid a(1, 1), b(2, 2), c(3, 3);
+    manifest.materialGuids.PushBack(a);
+    manifest.materialGuids.PushBack(b);
+    manifest.materialGuids.PushBack(c);
+    foundation::model::ModelMeshMaterialSlots slots;
+    slots.slots.PushBack(2);
+    slots.slots.PushBack(0);
+    slots.slots.PushBack(7); // out of range: nil, never another mesh's material
+    manifest.meshMaterialSlots.PushBack(Move(slots));
+    manifest.meshMaterialSlots.PushBack(foundation::model::ModelMeshMaterialSlots{});
+
+    Array<Guid> ids;
+    manifest.MeshMaterialGuids(0, ids);
+    REQUIRE(ids.Size() == 3u);
+    CHECK(ids[0] == c); // submesh 0 draws slot 0, the model's third material
+    CHECK(ids[1] == a);
+    CHECK(ids[2].IsNil());
+
+    // No slots (a v1 manifest, or a mesh past the list): the model-wide list, in order.
+    manifest.MeshMaterialGuids(1, ids);
+    REQUIRE(ids.Size() == 3u);
+    CHECK(ids[0] == a);
+    manifest.MeshMaterialGuids(5, ids);
+    CHECK(ids.Size() == 3u);
+}

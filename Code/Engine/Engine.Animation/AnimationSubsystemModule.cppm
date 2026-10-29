@@ -13,4 +13,5 @@ export module engine.animation;
 export import :components;
 export import :propertyanimator;
 export import :ik;
+export import :attachment;
 export import :subsystem;

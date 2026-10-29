@@ -16,6 +16,7 @@ target_sources(Engine.Animation
             AnimationComponents.cppm
             PropertyAnimatorComponent.cppm
             IkComponents.cppm
+            BoneAttachment.cppm
             AnimationSubsystem.cppm
             AnimationSubsystemModule.cppm)
 

@@ -156,6 +156,20 @@ namespace engine::animation
             .PropAttribute("description", String(u8"Draw the chain and its target while the scene runs."));
     }
 
+    // A bone attachment (BoneAttachment.cppm): its bone picked from the animator's, as an IK chain's.
+    REFLECT_VALUE(BoneAttachmentComponent, "rtti::engine::animation")
+    {
+        builder.Attribute("displayName", String(u8"Bone Attachment"))
+            .Attribute("category", String(u8"Animation"))
+            .Attribute("description",
+                       String(u8"Follows one bone of the animator above it while the scene runs, such as a "
+                              u8"weapon in a hand or a hat on a head; its children ride along."))
+            .Method<&foundation::script::ComponentOf<BoneAttachmentComponent>, BoneAttachmentComponent>("of")
+            .Property<&BoneAttachmentComponent::bone>("bone")
+            .PropAttribute("boneName", true)
+            .PropAttribute("description", String(u8"The bone this entity follows."));
+    }
+
     REFLECT_VALUE(AimIkBone, "rtti::engine::animation")
     {
         builder.Property<&AimIkBone::bone>("bone")
@@ -353,6 +367,7 @@ namespace engine::animation
             RttiRegisterValue_FootIkLegBones();
             core::RegisterArrayType<FootIkLegBones>();
             RttiRegisterValue_FootIkComponent();
+            RttiRegisterValue_BoneAttachmentComponent();
             RttiRegisterEnum_PropertyLoopMode();
             RttiRegisterValue_PropertyAnimatorComponent();
             return true;
@@ -377,7 +392,8 @@ namespace engine::animation
             {&core::TypeOf<PropertyAnimatorComponent>(), u8"PropertyAnimatorComponent"},
             {&core::TypeOf<TwoBoneIkComponent>(), u8"TwoBoneIkComponent"},
             {&core::TypeOf<AimIkComponent>(), u8"AimIkComponent"},
-            {&core::TypeOf<FootIkComponent>(), u8"FootIkComponent"}};
+            {&core::TypeOf<FootIkComponent>(), u8"FootIkComponent"},
+            {&core::TypeOf<BoneAttachmentComponent>(), u8"BoneAttachmentComponent"}};
         for (const Entry& component : components)
         {
             GlobalTypeRegistry().Register(*component.type);

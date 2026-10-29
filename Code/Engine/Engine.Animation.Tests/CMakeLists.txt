@@ -8,6 +8,7 @@ add_executable(Engine.Animation.Tests
     PropertyAnimatorTests.cpp
     GraphParameterTests.cpp
     RestPoseTests.cpp
+    BoneAttachmentTests.cpp
     TestsMain.cpp)
 
 target_link_libraries(Engine.Animation.Tests PRIVATE

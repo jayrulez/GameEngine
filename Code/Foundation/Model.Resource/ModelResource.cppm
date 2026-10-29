@@ -75,6 +75,26 @@ export namespace foundation::model
         return skeletonParentNode;
     }
 
+    /// The node an unskinned mesh node rides with in a rigged model: the nearest node at or above
+    /// it that is one of the skeleton's bones (`isBone(name)`), which a bone attachment moves with
+    /// the animation (a weapon hung under a hand). The bones animate only as a skinning palette, so
+    /// without it the mesh stands where the file put it while the skin moves. -1 when no bone is
+    /// above it. The walk up is bounded by the node count (a malformed cycle).
+    template <typename IsBone>
+    [[nodiscard]] i32 RigidMeshBone(Span<const ModelNode> nodes, usize meshNode, IsBone&& isBone)
+    {
+        i32 node = static_cast<i32>(meshNode);
+        for (usize steps = 0; node >= 0 && static_cast<usize>(node) < nodes.Size() && steps <= nodes.Size(); ++steps)
+        {
+            if (isBone(nodes[static_cast<usize>(node)].name.AsView()))
+            {
+                return node;
+            }
+            node = nodes[static_cast<usize>(node)].parentIndex;
+        }
+        return -1;
+    }
+
     // Free Serialize for ModelNode (ADL-found by the generic Array<T> serializer).
     inline void Serialize(ISerializer& ar, ModelNode& n)
     {

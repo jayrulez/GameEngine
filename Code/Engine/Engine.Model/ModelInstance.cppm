@@ -7,7 +7,8 @@
 // component per node with a mesh (its own material list, from the manifest's slots), and, when the
 // model is skinned, a skeletal animation component on the root feeding its skinned meshes: the
 // first clip playing, or none (the rig's rest pose; a skinned mesh fed nothing draws its raw
-// vertices). A skinned mesh sits in its skeleton's space, as the project's model
+// vertices), and a bone attachment on the nearest bone node above each unskinned mesh, which moves
+// it with the animation (foundation::model::RigidMeshBone). A skinned mesh sits in its skeleton's space, as the project's model
 // prefab puts it (foundation::model::SkinnedMeshParent). The model's resources stay alive while the caller keeps its proxy.
 
 module;
@@ -118,6 +119,29 @@ export namespace engine::model
                     scene.SetLocalTransform(entities[i], Transform{});
                 }
                 instance.skinned.PushBack(entities[i]);
+            }
+        }
+
+        // An unskinned mesh under a bone (a weapon in a hand) follows that bone: one attachment on the
+        // nearest bone node above it, its children riding along.
+        auto* attachments = scene.GetSystem<engine::animation::BoneAttachmentComponentManager>();
+        if (model.skeleton && attachments != nullptr)
+        {
+            const foundation::animation::Skeleton& skeleton = *model.skeleton.Get();
+            for (usize i = 0; i < model.nodes.Size(); ++i)
+            {
+                const i32 meshIndex = model.nodes[i].meshIndex;
+                if (meshIndex < 0 || static_cast<usize>(meshIndex) >= model.meshes.Size() || !model.meshes[static_cast<usize>(meshIndex)] ||
+                    model.meshes[static_cast<usize>(meshIndex)]->IsSkinned())
+                {
+                    continue;
+                }
+                const i32 bone = foundation::model::RigidMeshBone(model.nodes.AsSpan(), i, [&](StringView name)
+                                                                  { return skeleton.FindBone(name) >= 0; });
+                if (bone >= 0 && attachments->Get(entities[static_cast<usize>(bone)]) == nullptr)
+                {
+                    attachments->Add(entities[static_cast<usize>(bone)]).bone = model.nodes[static_cast<usize>(bone)].name;
+                }
             }
         }
 

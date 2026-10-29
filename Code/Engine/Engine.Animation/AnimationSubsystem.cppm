@@ -22,6 +22,7 @@ import foundation.scene; // Scene
 import engine.scene; // SceneSubsystem (to register as scene-aware)
 import :components;
 import :propertyanimator;
+import :attachment;
 import :ik;
 
 using namespace foundation::core;
@@ -38,6 +39,7 @@ export namespace engine::animation
         scene.AddSystem<InstancedSkinningComponentManager>(); // crowd skinning (shared pose pool)
         scene.AddSystem<PropertyAnimatorComponentManager>();  // reflected property-curve animation
         AddIkSceneManagers(scene); // inverse kinematics: pose modifiers on the players above
+        scene.AddSystem<BoneAttachmentComponentManager>(); // entities that follow a bone
     }
 
     // Registers the reflection, and draws the IK components that ask for it (debugDraw) into each

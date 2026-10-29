@@ -9,7 +9,9 @@
 // mesh/material refs by guid (per-submesh refs for multi-material models), and - when the model
 // brought a skeleton - ONE SkeletalAnimationComponent on the root whose meshEntities (EntityRefs,
 // prefab-remapped per spawn) feed every skinned mesh node: its resting clip when the model has
-// clips, else none, the rig's rest pose (a skinned mesh fed nothing draws its raw vertices).
+// clips, else none, the rig's rest pose (a skinned mesh fed nothing draws its raw vertices). An
+// unskinned mesh under a bone (a weapon in a hand) gets a bone attachment on the nearest bone node
+// above it (foundation::model::RigidMeshBone), so it moves with the animation.
 //
 // RE-IMPORT REGENERATES: the "Prefab" instance is found by name and reused (same guid), so
 // placed instances rebuild through the standard prefab machinery. This lives in the scene
@@ -39,6 +41,7 @@ import engine.animation;
 import foundation.physics;
 import engine.physics;
 import modelimporter;
+import animation.pipeline;
 import pipeline.importer;
 
 using namespace foundation::core;
@@ -82,6 +85,35 @@ export namespace pipeline
             }
         }
         return containing < manifest.animationGuids.Size() ? containing : 0;
+    }
+
+    /// The skeleton's bone names, read from the skeleton asset beside the manifest (empty when the
+    /// model has none or it does not read back).
+    [[nodiscard]] inline Array<String> SkeletonBoneNames(foundation::content::Instance& manifestInstance,
+                                                         const foundation::model::ModelManifestSource& manifest)
+    {
+        Array<String> names;
+        if (manifest.skeletonGuid.IsNil())
+        {
+            return names;
+        }
+        for (foundation::content::Instance* sibling : manifestInstance.OwningGroup().Instances())
+        {
+            if (sibling->Id() != manifest.skeletonGuid)
+            {
+                continue;
+            }
+            RefPtr<ISerializable> object = sibling->ReadObject();
+            if (const auto* skeleton = Cast<pipeline::SkeletonAsset>(object.Get()))
+            {
+                for (const String& name : skeleton->source.boneNames)
+                {
+                    names.PushBack(name);
+                }
+            }
+            break;
+        }
+        return names;
     }
 
     /// The skinned mesh entity under the skeleton's parent node at identity, or left where the file
@@ -192,6 +224,39 @@ export namespace pipeline
             {
                 skinnedEntities.PushBack(entities[i]);
                 PlaceInSkeletonSpace(scene, manifest, entities, root, i);
+            }
+        }
+
+        // An unskinned mesh under a bone follows it: one attachment on the nearest bone node above.
+        if (rigged)
+        {
+            const Array<String> bones = SkeletonBoneNames(manifestInstance, manifest);
+            auto* attachments = scene.AddSystem<engine::animation::BoneAttachmentComponentManager>();
+            for (usize i = 0; i < manifest.nodes.Size(); ++i)
+            {
+                const i32 meshIndex = manifest.nodes[i].meshIndex;
+                if (meshIndex < 0 || static_cast<usize>(meshIndex) >= manifest.meshGuids.Size() ||
+                    manifest.meshGuids[static_cast<usize>(meshIndex)].IsNil() ||
+                    (static_cast<usize>(meshIndex) < manifest.meshSkinned.Size() && manifest.meshSkinned[static_cast<usize>(meshIndex)] != 0))
+                {
+                    continue;
+                }
+                const i32 bone = foundation::model::RigidMeshBone(manifest.nodes.AsSpan(), i,
+                                                                  [&](StringView name)
+                                                                  {
+                                                                      for (const String& b : bones)
+                                                                      {
+                                                                          if (b.AsView() == name)
+                                                                          {
+                                                                              return true;
+                                                                          }
+                                                                      }
+                                                                      return false;
+                                                                  });
+                if (bone >= 0 && attachments->Get(entities[static_cast<usize>(bone)]) == nullptr)
+                {
+                    attachments->Add(entities[static_cast<usize>(bone)]).bone = manifest.nodes[static_cast<usize>(bone)].name;
+                }
             }
         }
 

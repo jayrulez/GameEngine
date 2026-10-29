@@ -22,6 +22,7 @@ import engine.animation;
 import modelimporter;
 import pipeline.importer;
 import scene.pipeline;
+import animation.pipeline;
 
 using namespace foundation::core;
 namespace scene = foundation::scene;
@@ -544,4 +545,87 @@ TEST_CASE("model-prefab: a mesh binds its own material slots, the whole list onl
     manifest.MeshMaterialGuids(1, ids);
     REQUIRE(ids.Size() == 3u);
     CHECK(ids[0] == a);
+}
+
+TEST_CASE("model-prefab: an unskinned mesh under a bone gets an attachment on that bone's node")
+{
+    // A weapon hung under a hand bone stands where the file put it unless something moves it: the
+    // prefab puts one bone attachment on the nearest bone node above each unskinned mesh. Nodes:
+    // Root; Armature; Hips and Hand (bones); Grip (a plain node under the hand); Sword (a static
+    // mesh under the grip); Body (the skinned mesh); Prop (a static mesh under no bone).
+    pipeline::RegisterModelManifestAsset();
+    pipeline::RegisterAnimationAssets();
+    engine::render::RegisterRenderComponentReflection();
+    engine::animation::RegisterAnimationComponentReflection();
+    GlobalTypeRegistry().Register(scene::PrefabDocument::StaticType());
+    RegisterSerializable<scene::PrefabDocument>();
+
+    const StringView dir = u8"scratch_model_prefab_bone_attachment";
+    RemoveTreeMP(dir);
+    (void)CreateDirectory(dir);
+    foundation::vfs::NativeFileSystem mount(dir, foundation::core::DefaultAllocator());
+    foundation::content::ContentDatabase db(foundation::core::DefaultAllocator(), mount,
+                                            BinarySerializerFactory(), u8".rasset");
+    foundation::content::Group* group = db.RootGroup()->CreateGroup(u8"Knight");
+    REQUIRE(group != nullptr);
+
+    pipeline::SkeletonAsset skeleton;
+    skeleton.source.boneNames.PushBack(String(u8"Hips"));
+    skeleton.source.boneNames.PushBack(String(u8"Hand"));
+    foundation::content::Instance* skeletonInst = group->CreateInstance(u8"skeleton", pipeline::SkeletonAsset::StaticType());
+    REQUIRE(skeletonInst != nullptr);
+    REQUIRE(skeletonInst->WriteObject(skeleton).IsOk());
+
+    pipeline::ModelManifestAsset asset;
+    asset.manifest.meshGuids.PushBack(Guid{0x81, 0x1}); // the sword
+    asset.manifest.meshGuids.PushBack(Guid{0x81, 0x2}); // the body
+    asset.manifest.meshGuids.PushBack(Guid{0x81, 0x3}); // the prop
+    asset.manifest.meshSkinned.PushBack(0);
+    asset.manifest.meshSkinned.PushBack(1);
+    asset.manifest.meshSkinned.PushBack(0);
+    for (usize i = 0; i < 3; ++i)
+    {
+        asset.manifest.meshMaterial.PushBack(-1);
+        asset.manifest.meshMaterialSlots.PushBack(foundation::model::ModelMeshMaterialSlots{});
+    }
+    asset.manifest.skeletonGuid = skeletonInst->Id();
+    asset.manifest.skeletonParentNode = 1;
+    auto node = [&](StringView name, i32 parent, i32 mesh)
+    {
+        foundation::model::ModelNode n;
+        n.name = String(name);
+        n.parentIndex = parent;
+        n.meshIndex = mesh;
+        asset.manifest.nodes.PushBack(Move(n));
+    };
+    node(u8"Root", -1, -1);
+    node(u8"Armature", 0, -1);
+    node(u8"Hips", 1, -1);
+    node(u8"Hand", 2, -1);
+    node(u8"Grip", 3, -1);
+    node(u8"Sword", 4, 0);
+    node(u8"Body", 0, 1);
+    node(u8"Prop", 0, 2);
+    foundation::content::Instance* manifestInst = group->CreateInstance(u8"Knight", pipeline::ModelManifestAsset::StaticType());
+    REQUIRE(manifestInst != nullptr);
+    REQUIRE(manifestInst->WriteObject(asset).IsOk());
+
+    pipeline::ModelPrefabResult generated = pipeline::GenerateModelPrefab(DefaultAllocator(), *manifestInst);
+    REQUIRE(generated.instance != nullptr);
+    UniquePtr<IStream> payload = generated.instance->ReadData(u8"scene");
+    REQUIRE(payload.Get() != nullptr);
+    scene::Scene level(DefaultAllocator(), u8"level");
+    level.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(level);
+    REQUIRE(scene::SpawnPrefab(level, *payload, generated.instance->Id()).IsAssigned());
+
+    auto* attachments = level.GetSystem<engine::animation::BoneAttachmentComponentManager>();
+    REQUIRE(attachments != nullptr);
+    const engine::animation::BoneAttachmentComponent* hand = attachments->Get(level.FindEntityByName(u8"Hand"));
+    REQUIRE(hand != nullptr); // the nearest bone above the sword (the grip is no bone)
+    CHECK(hand->bone == u8"Hand");
+    CHECK(attachments->Get(level.FindEntityByName(u8"Grip")) == nullptr);
+    CHECK(attachments->Get(level.FindEntityByName(u8"Hips")) == nullptr);
+    CHECK(attachments->Get(level.FindEntityByName(u8"Prop")) == nullptr); // under no bone: stays put
+    CHECK(attachments->Get(level.FindEntityByName(u8"Body")) == nullptr); // skinned: the palette moves it
 }

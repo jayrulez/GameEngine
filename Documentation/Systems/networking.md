@@ -85,7 +85,8 @@ determinism caveat (lockstep needs bit-exact simulation - not promised by state 
 
 The `Net` facade (registered by `RegisterNetScriptFacade`, resolved per script context through
 the instance's `NetworkManager`): `Net.isServer()` / `isClient()` / `peerCount()` /
-`startServer(...)` / `connect(...)`, plus SEND-side RPC (`Net.rpc(...)` / `rpcNumber(...)` /
+`startServer(...)` / `connect(...)`, `Net.canHost()` (false in a browser, which cannot listen, so a
+title offers Host only where it works; `NetworkManager::CanHost`), plus SEND-side RPC (`Net.rpc(...)` / `rpcNumber(...)` /
 `rpcText(...)`), and the RECEIVE side, `Net.on(name, fn)` (P3 slice 1, built 2026-10-14): the
 handler is called with the sender's peer id, then the number or the text, if any. The sends write
 a one-byte kind (`ScriptRpcKind`) after the RPC id so the receiver knows what follows. Handlers

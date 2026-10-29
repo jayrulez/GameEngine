@@ -446,6 +446,10 @@ export namespace foundation::net
             return m != nullptr ? m->Session().NetworkTimeMs() : 0.0;
         }
 
+        /// Whether this build can host at all (a browser cannot listen): a title offers Host only
+        /// when it can, rather than failing once it is chosen.
+        [[nodiscard]] static bool canHost() { return NetworkManager::CanHost(); }
+
         // Runtime role control - a game's menu calls these. Port is a natural i32 (0..65535). Return
         // false when offline-support is absent or the socket fails to open (the game shows an error).
         static bool startServer(i32 port)

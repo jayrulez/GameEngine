@@ -549,10 +549,12 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
     const Status status = ctx->Load(u8"bool IsServer;\n"
                                     u8"bool IsClient;\n"
                                     u8"int Peers;\n"
+                                    u8"bool CanHost;\n"
                                     u8"void main() {\n"
                                     u8"  IsServer = Net::isServer();\n"
                                     u8"  IsClient = Net::isClient();\n"
                                     u8"  Peers = Net::peerCount();\n"
+                                    u8"  CanHost = Net::canHost();\n"
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
@@ -561,6 +563,7 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
     CHECK(ctx->GetGlobal(u8"IsClient").Get<bool>() == false);
     CHECK(ctx->GetGlobal(u8"Peers").Get<f64>() ==
           0.0); // the AS backend unifies integer globals to f64
+    CHECK(ctx->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost()); // the build's, not the session's
 }
 #endif // OPTION_HAS_ANGELSCRIPT
 
@@ -580,12 +583,14 @@ TEST_CASE("net-facade: Luau reads the live session through the Net facade")
     // Luau: statics via `.`; the chunk runs at top level, so the globals it assigns are readable.
     const Status status = ctx->Load(u8"IsServer = Net.isServer()\n"
                                     u8"IsClient = Net.isClient()\n"
-                                    u8"Peers = Net.peerCount()\n",
+                                    u8"Peers = Net.peerCount()\n"
+                                    u8"CanHost = Net.canHost()\n",
                                     u8"main");
     REQUIRE(status.IsOk());
 
     CHECK(ctx->GetGlobal(u8"IsServer").Get<bool>() == true);
     CHECK(ctx->GetGlobal(u8"IsClient").Get<bool>() == false);
     CHECK(ctx->GetGlobal(u8"Peers").Get<f64>() == 0.0);
+    CHECK(ctx->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost());
 }
 #endif // OPTION_HAS_LUAU

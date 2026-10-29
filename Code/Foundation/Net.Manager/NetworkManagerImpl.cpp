@@ -28,6 +28,7 @@ namespace foundation::net
         builder.Method<&Net::peerCount>("peerCount");
         builder.Method<&Net::networkTick>("networkTick");
         builder.Method<&Net::networkTimeMs>("networkTimeMs");
+        builder.Method<&Net::canHost>("canHost"); // false in a browser: offer no Host there
         builder.Method<&Net::startServer>("startServer");
         builder.Method<&Net::startDedicatedServer>("startDedicatedServer");
         builder.Method<&Net::connect>("connect");

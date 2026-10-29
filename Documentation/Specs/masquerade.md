@@ -283,7 +283,9 @@ From a survey of the code (2026-10-14):
   address pages; (3) the Controls page with prompts, the HUD's hints; (4) pause and results; (5) the
   marker and the hunter's warning. Each built through the MCP tools, as the sample is, and played in
   two Game tabs where it touches the network.
-- **P6 Ship**: web, Steam Deck, README pictures, the website's card, a docs page.
+- **P6 Ship**: web, Steam Deck, README pictures, the website's card, a docs page. The README and its
+  pictures done 2026-10-29 (the project's own and the root's); the docs page's section was written
+  with P5b; web, the Deck and the website's card wait for publishing.
 - **P7 `wss://`** (gap 8): the client's choice of `wss://`, and a docs page on putting a TLS
   reverse proxy (Caddy, nginx) in front of a dedicated host, so the site's demo can join a hosted
   game.

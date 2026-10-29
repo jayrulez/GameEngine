@@ -173,6 +173,20 @@ scenes, generated sounds.
 |:---:|:---:|:---:|
 | ![Gardens](Documentation/Images/Lamplight-Gardens.png) | ![Ground Floor](Documentation/Images/Lamplight-GroundFloor.png) | ![Results](Documentation/Images/Lamplight-Results.png) |
 
+**Masquerade** is social stealth at a masked ball, alone against bots or with up to four players
+over the network, chosen to show the network stack and crowds: an authoritative host that plays
+and players joining it natively, replicated script state, and some 150 guests on navigation drawn
+as instances of six costumes. Each hunter is given a mark, a guest in one of those costumes, and is
+someone else's mark; guests stroll, gather and dance to the orchestra's cues, and a hunter who
+sprints or stands still through a dance stands out. Three maps: the Palace, the Canal with its
+gondolas, and the Gardens. Masks and silk on custom shaders, music the crowd follows, and the
+models, the music and the sounds all made by its scripts. More in
+[its README](Data/SampleProjects/Masquerade/README.md); it is not on the website or the Deck yet.
+
+| The title | On the Canal | The music stops |
+|:---:|:---:|:---:|
+| ![The title](Documentation/Images/Masquerade-Title.png) | ![On the Canal](Documentation/Images/Masquerade-Canal.png) | ![Results](Documentation/Images/Masquerade-Results.png) |
+
 **Shader Gallery** (`ShaderGallery`) is the custom shaders sample: a hall of lesson shaders to
 fly through, each on its own plinth, each `.hlsl` a short commented lesson that builds on the one
 before. Surface shaders first (unlit colour, textures, lava, a hologram, triplanar rock, dissolve,

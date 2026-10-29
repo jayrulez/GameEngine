@@ -886,7 +886,10 @@ export namespace foundation::gui
         // left to right (the layout then runs as it always has, the pieces untouched). With no
         // resolver installed, a right-to-left paragraph keeps its pieces in order (only its start
         // moves to the right) and each is shaped as its script reads.
-        [[nodiscard]] inline bool ResolveBidi(Array<TextPiece>& pieces, fonts::TextDirection direction, bool autoRightToLeft,
+        // Not inline, nor OrderLine: an importer that inlined them (a test, under clang's optimiser)
+        // referenced an Array<u32> member the module never emitted for it, and failed to link. Their
+        // one definition lives in the library.
+        [[nodiscard]] bool ResolveBidi(Array<TextPiece>& pieces, fonts::TextDirection direction, bool autoRightToLeft,
                                               f32 letterSpacing)
         {
             const bool automatic = direction == fonts::TextDirection::Auto;
@@ -1006,7 +1009,7 @@ export namespace foundation::gui
         // the paragraph's level; L2: the runs at each level reversed), each from where the one to
         // its left ends. The line's last piece in logical order loses its trailing spaces' width,
         // which hang past its end (to its left when it reads right to left).
-        inline void OrderLine(Array<TextPiece>& pieces, usize from, usize to, u8 baseLevel, LaidOutLine& line)
+        void OrderLine(Array<TextPiece>& pieces, usize from, usize to, u8 baseLevel, LaidOutLine& line)
         {
             Array<usize> items;
             for (usize p = from; p < to; ++p)

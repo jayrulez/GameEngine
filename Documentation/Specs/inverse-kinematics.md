@@ -179,7 +179,7 @@ of model-space transforms; no physics, no scene.
 - **Debug draw**: each component draws its target (green reached, orange not), its pole and the
   chain, when the editor's gizmos are on or a run asks (`debugDraw`).
 - **Bone attachments are out of scope** (bone entities are not written from the pose); noted as
-  the natural next seed.
+  the natural next seed, and built 2026-10-29 as BoneAttachmentComponent (1eac3373b).
 
 ### Scripts
 

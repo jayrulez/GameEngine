@@ -364,8 +364,8 @@ PaperKid, Sky Hopper and Snowline). What the seeds or the specs left open:
 - **Vertical root motion for a character**: Character mode walks, it does not climb (the
   delta's vertical is ignored), so a jump, climb or vault clip cannot carry a physics
   character up. Entity mode keeps vertical when the clip extracts it.
-- Bone attachments, the natural next piece after IK, are already seeded under the planned list
-  below ("Bone attachments", item 6).
+- Bone attachments, the natural next piece after IK: the component is DONE 2026-10-29
+  (1eac3373b; planned list item 6 below, the record in week-2026-10-24).
 
 ## Seeded: ragdoll (user 2026-08-26)
 
@@ -1093,11 +1093,13 @@ this is the list, with the section to read for each.
 5. **Renderer debug views remainder**: pixel inspector, wipe/compare, semantic
    coverage for terrain/sprite/unlit shaders when needed (layers 1 + 2 LANDED
    2026-09-03). Read: "renderer debug views in the editor viewport".
-6. **Bone attachments** (design, triggered by the first game need):
-   BoneAttachmentComponent (copy one joint's model-space pose onto an entity
-   after the animation tick) + the drop-pure-joint-nodes import option, which
-   RIDES the import-UX planning pass (merge-meshes). Read: "bone attachments
-   + joint-node import noise".
+6. **Bone attachments**: BoneAttachmentComponent is DONE 2026-10-29 (1eac3373b,
+   with 0829bdb28: the node an unskinned mesh hangs under joins the skeleton;
+   record in week-2026-10-24). It names a bone of the animator at or above it
+   (no animator EntityRef), and the import puts one on the nearest bone above
+   each unskinned mesh. STILL OPEN: the drop-pure-joint-nodes import option,
+   which RIDES the import-UX planning pass (merge-meshes); an attached bone
+   node must survive it. Read: "bone attachments + joint-node import noise".
 7. **PaperKid editor-use feedback** (still open; the new-component menu is now a searchable
    picker, 2026-10-10): drag an instance into a group; seed input map / bus layout / UI theme
    for new projects (font, sky, primitives already seeded); WASD default input

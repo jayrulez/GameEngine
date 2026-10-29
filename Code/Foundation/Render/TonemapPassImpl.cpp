@@ -156,15 +156,17 @@ namespace foundation::render
                      lutView, lutUid](rhi::RenderPassEncoder& rp)
                     {
                         rhi::TextureView* hdrView = graph.GetTextureView(hdr);
-                        rhi::BindGroup* bg = EnsureBindGroup(
-                            slot, hdrView, graph.GetTextureView(bloom),
-                            graph.GetTextureView(ao),
-                            autoView != nullptr ? autoView : hdrView,
-                            lutView != nullptr ? lutView : hdrView,
-                            graph.GetTextureGeneration(hdr) ^
-                                (graph.GetTextureGeneration(bloom) * 1099511628211ull) ^
-                                (graph.GetTextureGeneration(ao) * 14695981039346656037ull) ^
-                                (autoGen * 31ull) ^ (lutUid * 131071ull));
+                        const u64 hdrGen = graph.GetTextureGeneration(hdr);
+                        BindInputs inputs;
+                        inputs.Set(0, hdrView, hdrGen);
+                        inputs.Set(1, graph.GetTextureView(bloom), graph.GetTextureGeneration(bloom));
+                        inputs.Set(2, graph.GetTextureView(ao), graph.GetTextureGeneration(ao));
+                        // Unused bindings take the HDR view, as the layout needs a texture there.
+                        inputs.Set(3, autoView != nullptr ? autoView : hdrView,
+                                   autoView != nullptr ? autoGen : hdrGen);
+                        inputs.Set(4, lutView != nullptr ? lutView : hdrView,
+                                   lutView != nullptr ? lutUid : hdrGen);
+                        rhi::BindGroup* bg = EnsureBindGroup(slot, inputs);
                         if (bg == nullptr)
                         {
                             return;
@@ -250,19 +252,13 @@ namespace foundation::render
         return entry->pipeline;
     }
 
-    rhi::BindGroup* TonemapPass::EnsureBindGroup(u32 slot, rhi::TextureView* hdrView,
-                                                 rhi::TextureView* bloomView,
-                                                 rhi::TextureView* aoView,
-                                                 rhi::TextureView* autoLumView,
-                                                 rhi::TextureView* lutView, u64 generation)
+    rhi::BindGroup* TonemapPass::EnsureBindGroup(u32 slot, const BindInputs& inputs)
     {
-        if (slot >= kMaxSlots || hdrView == nullptr || bloomView == nullptr ||
-            aoView == nullptr || autoLumView == nullptr || lutView == nullptr)
+        if (slot >= kMaxSlots || !inputs.Complete())
         {
             return nullptr;
         }
-        if (m_bindGroups[slot] != nullptr && m_bgViews[slot] == hdrView &&
-            m_bgBloom[slot] == bloomView && m_bgAo[slot] == aoView && m_bgGen[slot] == generation)
+        if (m_bindGroups[slot] != nullptr && m_bgInputs[slot] == inputs)
         {
             return m_bindGroups[slot];
         }
@@ -272,11 +268,11 @@ namespace foundation::render
             m_bindGroups[slot] = nullptr;
         }
         rhi::BindGroupEntry entries[] = {
-            rhi::BindGroupEntry::TextureEntry(hdrView),
-            rhi::BindGroupEntry::TextureEntry(bloomView),
-            rhi::BindGroupEntry::TextureEntry(aoView),
-            rhi::BindGroupEntry::TextureEntry(autoLumView),
-            rhi::BindGroupEntry::TextureEntry(lutView),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[0]),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[1]),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[2]),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[3]),
+            rhi::BindGroupEntry::TextureEntry(inputs.views[4]),
             rhi::BindGroupEntry::SamplerEntry(m_sampler),
         };
         rhi::BindGroupDesc bgd{};
@@ -287,10 +283,7 @@ namespace foundation::render
             m_bindGroups[slot] = nullptr;
             return nullptr;
         }
-        m_bgViews[slot] = hdrView;
-        m_bgBloom[slot] = bloomView;
-        m_bgAo[slot] = aoView;
-        m_bgGen[slot] = generation;
+        m_bgInputs[slot] = inputs;
         return m_bindGroups[slot];
     }
 

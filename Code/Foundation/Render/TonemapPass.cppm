@@ -18,6 +18,7 @@ import foundation.rhi;
 import foundation.rendergraph;
 import foundation.shaders;
 import foundation.shaders.system;
+import :bind_group_cache;
 
 using namespace foundation::core;
 namespace rendergraph = foundation::rendergraph;
@@ -123,14 +124,14 @@ export namespace foundation::render
         // Build the fullscreen pipeline for `fmt` (rebuilt if the LDR target format changes - usually one).
         rhi::RenderPipeline* EnsurePipeline(rhi::TextureFormat fmt);
 
-        // One bind group per (view, frame) slot over its HDR transient view. Rebuilt when the transient's
-        // GENERATION changes (the graph stamps a fresh id whenever a different physical texture backs the
-        // transient - e.g. on resize). Pointer identity alone is unsafe: a freed view address can be reused
-        // by the new allocation, leaving the cached bind group pointing at a destroyed texture.
-        rhi::BindGroup* EnsureBindGroup(u32 slot, rhi::TextureView* hdrView,
-                                        rhi::TextureView* bloomView, rhi::TextureView* aoView,
-                                        rhi::TextureView* autoLumView, rhi::TextureView* lutView,
-                                        u64 generation);
+        // One bind group per (view, frame) slot, kept while EVERY input is the same view of the
+        // same texture (BindGroupInputs: the HDR, bloom and AO transients, the adapted exposure,
+        // the grading LUT, each with its generation). A combined generation alone collided: the
+        // exposure's two ping-pong textures folded into one number with the transients' could
+        // land on last frame's value, and the group kept the other exposure texture, so every
+        // other frame showed a stale exposure (PaperKid's Block 1 flickered, 2026-10-29).
+        using BindInputs = BindGroupInputs<5>;
+        rhi::BindGroup* EnsureBindGroup(u32 slot, const BindInputs& inputs);
 
         void Shutdown();
 
@@ -156,10 +157,7 @@ export namespace foundation::render
 
         rhi::Sampler* m_sampler = nullptr; // linear-clamp, for the bloom composite
         rhi::BindGroup* m_bindGroups[kMaxSlots] = {};
-        rhi::TextureView* m_bgViews[kMaxSlots] = {};
-        rhi::TextureView* m_bgBloom[kMaxSlots] = {};
-        rhi::TextureView* m_bgAo[kMaxSlots] = {};
-        u64 m_bgGen[kMaxSlots] = {}; // transient generation the cached BG was built for
+        BindInputs m_bgInputs[kMaxSlots] = {}; // what each slot's group was built from
     };
 
 } // namespace foundation::render

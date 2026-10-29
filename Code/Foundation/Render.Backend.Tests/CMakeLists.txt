@@ -16,7 +16,7 @@ add_executable(Render.Backend.Tests
     EmissiveProbeTests.cpp SubmeshShaderProbeTests.cpp ViewFormatProbeTests.cpp
     ScaledViewProbeTests.cpp ColorProbeTests.cpp DebugGridProbeTests.cpp ShadowControlProbeTests.cpp
     ScreenSpaceProbeTests.cpp TaaProbeTests.cpp OrthographicProbeTests.cpp SsgiTemporalProbeTests.cpp
-    GpuProfileProbeTests.cpp)
+    GpuProfileProbeTests.cpp TonemapProbeTests.cpp)
 
 target_link_libraries(Render.Backend.Tests PRIVATE
     Foundation::Render Foundation::Materials.PipelineCache Foundation::RHI.TestSupport

@@ -103,3 +103,4 @@ Code/Tools/Tools.Cook/Main.cpp
 Code/Tools/Tools.Editor/Main.cpp
 Code/Tools/Tools.Export/Main.cpp
 Code/Tools/Tools.Mcp/Main.cpp
+Code/Tools/Tools.ModelViewer/Main.cpp

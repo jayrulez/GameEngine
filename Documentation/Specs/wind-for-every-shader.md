@@ -128,6 +128,16 @@ What exists to build on (read 2026-10-29):
   a layer's instanced set draws with one material, so one Wind block per material serves the set.
   No sample's material turns wind on today.
 
+**Where the block binds: the material's set** (ruled 2026-10-29, user: "Approved"). Wind's values
+are the material's, while set 1 is the draw's (the object ring, a set's instances), so a material's
+block there would need a bind group per draw per material and set-1 layouts per variant in three
+passes. The Wind block is `cbuffer Wind : register(b1, space2)`, in the material's set: binding 1
+is free there (the material's buffer is b0; its textures and samplers sit at the +100 and +300
+shifts), the shadow and pick passes already bind a windy draw's material set, and a material whose
+shader declares `WIND` gets the binding in its set-2 layout, one layout per material. The include
+handler that serves `wind.hlsli` expands its `effect` block (the compiler installs one handler
+over both the disk route the cook uses and the resolver the editor uses).
+
 What follows from it:
 
 - **`wind.hlsli` stops declaring the material buffer**; its effect block becomes `cbuffer Wind`, and
@@ -155,8 +165,6 @@ Checked against the alternatives:
 
 ## To verify before building
 
-- How the three passes' binding layouts take a binding present only in their `WIND` variants (the
-  pipeline layout per variant), on Vulkan and WebGPU.
 - Where a material's Wind block lives: one uniform per windy material, built from its group and
   rebuilt when it changes; how an entity's material instance overrides it.
 - WGSL alignment of the Wind block (scalars or a float4, not a float3).

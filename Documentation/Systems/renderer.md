@@ -516,14 +516,16 @@ MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-ve
   chunk's nearest distance), so neighbouring chunks met at a straight seam and a chunk's last
   instances vanished as a block. The prefix stays the coarse bound; the dissolve itself is per
   instance in the vertex shaders (`instance_fade.hlsli`, forward / shadow-depth / pick under
-  INSTANCED): the renderer writes each instance's RANK ((i + 0.5) / uploadCount, its place in
-  the set's random order) into its `Tint.a` at upload when the item carries a window, and the
-  shader collapses an instance to its origin (zero area) when its rank is above the density at
-  ITS OWN camera distance, shrinking over the last eighth of the window first. The window rides
-  the pass's view block through a PRIVATE slot per faded set (`ShadowParams.zw` on the forward
-  view; `ShadowWind.yz` + `ShadowCamera` on the 96-byte shadow view; `FadeStart` + `PickCamera`
-  on the 96-byte pick view), budgeted by `kMaxFadedSetSlots` (a set past it draws unfaded, never
-  dropped). Non-faded sets and every other draw are untouched (window 0). Probed at the texel
+  INSTANCED): each instance's RANK is (index + 0.5) / count, its place in the set's random
+  order, and the shader collapses an instance to its origin (zero area) when its rank is above
+  the density at ITS OWN camera distance, shrinking over the last eighth of the window first. The
+  window, the count (the whole list's) and a MultiMesh set's pick id are the draw's
+  `InstanceSet` block (`render::GpuInstanceSet`, set 1 beside the instances, the same in the three
+  passes; a set owns one per frame-in-flight region, a per-frame batch binds a constant one), and
+  the shadow view's `ShadowFadeFromCamera` says whether its pass has a camera to fade from
+  (shader-blocks-cleanup phase 1, 2026-10-29; before, the window rode a private copy of each
+  pass's view block per set and the rank the tint's alpha). Non-faded sets and every other draw
+  are untouched (window 0). Probed at the texel
   on Vulkan + WebGPU (`InstanceFadeProbeTests`). Sets are built on demand under a per-extraction budget (4 chunks, `SetBuildBudget`),
   invalidated by the heightfield and splat uid + version, the entity world matrix (recompose,
   no rescatter) and the layer's scatter hash; `InvalidateRegion` (the editor brushes, P1)
@@ -574,9 +576,10 @@ MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-ve
   or slows with it, the frozen editing scene's stands still, and Simulate sways it; the environment extraction stamps it on the snapshot
   (`ExtractedScene::SetTime`), and every record context reads its view's (or its casters')
   scene clock, falling back to `RenderFrame::SetTime` (the app's run clock via
-  `RenderSubsystem::SetTime`) only for a snapshot no scene stamped (the probes). It rides
-  `IblParams.zw` (this and last frame's seconds), `ShadowView.ShadowWind.x` (the ShadowView
-  cbuffer grew to 80 bytes) and `PickView.WindTime`.
+  `RenderSubsystem::SetTime`) only for a snapshot no scene stamped (the probes). It is each pass
+  view's named `SceneTime` (and the forward view's `PrevSceneTime`, last frame's seconds, for motion
+  vectors), which surface shaders' `Time()` reads too (shader-blocks-cleanup phase 2a,
+  2026-10-29; before, it rode `IblParams.zw`, `ShadowWind.x` and `PickView.WindTime`).
   `Render.Backend.Tests` WindProbe: a segmented card's tips shift between two frame times while
   its root rows stay, and a still material renders byte-identical; Vulkan + WebGPU.
 - **Props (P2, 2026-09-22).** A layer with Scattered placement draws its authored

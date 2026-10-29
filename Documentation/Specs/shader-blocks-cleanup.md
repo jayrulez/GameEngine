@@ -1,7 +1,7 @@
 # Shader blocks cleanup - every value in a field named for it
 
-> Status: APPROVED 2026-10-29; phase 0 BUILT and committed (f1e5416e1); phase 1 BUILT 2026-10-29 on
-> clang, uncommitted; gcc and the other lanes owed (user: "just slotting unrelated things in
+> Status: APPROVED 2026-10-29; phases 0 (f1e5416e1), 1 (9cf6a7739) and 2a (the clock) BUILT on clang;
+> 2b (wind as an effect) next; gcc and the other lanes owed (user: "just slotting unrelated things in
 > unused blocks"; "I'd like if we could clean up all those shader things slopped in").
 > The wind's own design is `wind-for-every-shader.md`, phase 2 here.
 > Mirror: Sedulous ports each phase after it lands.
@@ -104,8 +104,11 @@ fields; `Render.Backend.Tests/InstanceFadeProbeTests.cpp` (GPU) passes unchanged
 - **F8, part** `ShadowView.ShadowWind.x` = the clock (c).
 - **F9, part** `PickView.WindTime` = the clock, in the row after `SetPickId`.
 
-The clock becomes named `Time` and `PrevTime` fields of each pass's view block, which the wind
-and surface shaders' `Time()` both read. The PBR wind lanes stay in its
+The clock becomes named `SceneTime` and `PrevSceneTime` fields of each pass's view block, which
+the wind and surface shaders' `Time()` both read. Built 2026-10-29 (2a): the forward view's
+`IblParams` is four named scalars (`IblDiffuse`, `IblSpecular`, `SceneTime`, `PrevSceneTime`), the
+shadow view's `ShadowWind` a named `SceneTime`, the pick view's `WindTime` `SceneTime` (not `Time`:
+that is the surface API's `Time()`, which a field of the same name hid). The PBR wind lanes stay in its
 material for now, read by the renderer by name; removing them is a data version bump, phase 6.
 
 ### Phase 3: the per-draw block and the instance stream

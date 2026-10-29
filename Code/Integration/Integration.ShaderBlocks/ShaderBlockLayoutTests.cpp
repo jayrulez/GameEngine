@@ -250,7 +250,10 @@ namespace
         FIELD(render::GpuView, probeBoxMax, "ProbeBoxMax"),
         FIELD(render::GpuView, shadowParams, "ShadowParams"),
         FIELD(render::GpuView, debugParams, "DebugParams"),
-        FIELD(render::GpuView, iblParams, "IblParams"),
+        FIELD(render::GpuView, iblDiffuse, "IblDiffuse"),
+        FIELD(render::GpuView, iblSpecular, "IblSpecular"),
+        FIELD(render::GpuView, sceneTime, "SceneTime"),
+        FIELD(render::GpuView, prevSceneTime, "PrevSceneTime"),
     };
     // The per-draw block: one C++ struct for three passes, each declaring its own part of it
     // (phase 3 gives each pass its fields by name; until then each row records what it declares).
@@ -290,13 +293,16 @@ namespace
     };
     const FieldRow kShadowView[] = {
         FIELD(render::GpuShadowView, lightViewProj, "LightViewProj"),
-        FIELD(render::GpuShadowView, wind, "ShadowWind"),
         FIELD(render::GpuShadowView, camera, "ShadowCamera"),
         FIELD(render::GpuShadowView, fadeFromCamera, "ShadowFadeFromCamera"),
+        FIELD(render::GpuShadowView, sceneTime, "SceneTime"),
+        FIELD(render::GpuShadowView, _pad0, "_shadowPad0"),
+        FIELD(render::GpuShadowView, _pad1, "_shadowPad1"),
+        FIELD(render::GpuShadowView, _pad2, "_shadowPad2"),
     };
     const FieldRow kPickView[] = {
         FIELD(render::GpuPickView, viewProj, "ViewProj"),
-        FIELD(render::GpuPickView, windTime, "WindTime"),
+        FIELD(render::GpuPickView, sceneTime, "SceneTime"),
         FIELD(render::GpuPickView, _pad0, "_pickPad0"),
         FIELD(render::GpuPickView, _pad1, "_pickPad1"),
         FIELD(render::GpuPickView, _pad2, "_pickPad2"),

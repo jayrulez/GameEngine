@@ -95,9 +95,10 @@ export namespace foundation::render
         // x = CSM far-fade width (world units), y = the shadow map's uv Y sign; zw unused.
         Float4 shadowParams = Float4{40.0f, 0, 0, 0};
         Float4 debugParams = Float4{0, 0, 0, 0}; // x = semantic debug-view mode, 0 = off
-        // x = IBL diffuse intensity, y = IBL specular; zw = the WIND clock, this frame's and the
-        // last (phase 2 moves it to named fields).
-        Float4 iblParams = Float4{1, 1, 0, 0};
+        f32 iblDiffuse = 1.0f;  // the sky-lighting dimmer
+        f32 iblSpecular = 1.0f; // the sky-reflection dimmer
+        f32 sceneTime = 0.0f;   // the view's scene clock (s): the WIND sway, a surface's Time()
+        f32 prevSceneTime = 0.0f; // last frame's (motion vectors)
     };
     static_assert(sizeof(GpuView) == 688, "cbuffer View layout drift");
     struct GpuObject
@@ -139,9 +140,10 @@ export namespace foundation::render
     struct GpuShadowView
     {
         Float4x4 lightViewProj;
-        Float4 wind = Float4{0, 0, 0, 0};    // x = time (s) for the WIND sway; yzw unused
-        Float3 camera = Float3{0, 0, 0};     // the camera's position (the instance fade's distance)
-        u32 fadeFromCamera = 0;              // 1: the pass couples to a camera, so instances fade
+        Float3 camera = Float3{0, 0, 0}; // the camera's position (the instance fade's distance)
+        u32 fadeFromCamera = 0;          // 1: the pass couples to a camera, so instances fade
+        f32 sceneTime = 0.0f;            // the scene clock (s): the WIND sway, a surface's Time()
+        f32 _pad0 = 0.0f, _pad1 = 0.0f, _pad2 = 0.0f;
     }; // 96  (cbuffer ShadowView)
     // GPU-layout contract: these mirror HLSL cbuffer/StructuredBuffer elements and use the PACKED
     // Float4x4 (64B, tight). A stray SIMD Matrix4 (also 64B but 16-byte aligned) would still trip the
@@ -154,7 +156,7 @@ export namespace foundation::render
     struct GpuPickView
     {
         Float4x4 viewProj;
-        f32 windTime = 0.0f; // time (s) for the WIND sway (the pick follows the swayed card)
+        f32 sceneTime = 0.0f; // the scene clock (s): the WIND sway, a surface's Time()
         f32 _pad0 = 0.0f, _pad1 = 0.0f, _pad2 = 0.0f;
         Float3 camera = Float3{0, 0, 0}; // the camera's position (the instance fade's distance)
         f32 _pad3 = 0.0f;

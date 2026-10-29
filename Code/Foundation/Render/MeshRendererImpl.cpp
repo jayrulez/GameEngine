@@ -162,7 +162,7 @@ namespace foundation::render
         // (set 0 = light view UBO, set 1 = the SAME object/instance layouts as forward, so the
         // object/instance bind groups are reused). No material/cluster sets. The view is the
         // pixel stage's too: a masked surface's depth and pick pixel stages run its Surface()
-        // at the view's camera position and time (ShadowCamera/ShadowWind, PickCamera/WindTime).
+        // at the view's camera position and time (ShadowCamera and SceneTime, PickCamera and SceneTime).
         rhi::BindGroupLayoutEntry shadowViewEntry = rhi::BindGroupLayoutEntry::UniformBuffer(
             0, rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment);
         shadowViewEntry.hasDynamicOffset = true;
@@ -1099,8 +1099,10 @@ namespace foundation::render
         // would collapse every local lookup onto one atlas row.
         vd.shadowParams.y = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
         vd.debugParams.x = static_cast<f32>(ctx.debugSemantic);
-        vd.iblParams = Float4{ctx.iblDiffuseIntensity, ctx.iblSpecularIntensity, ctx.timeSeconds,
-                              ctx.prevTimeSeconds}; // zw = the WIND sway clock
+        vd.iblDiffuse = ctx.iblDiffuseIntensity;
+        vd.iblSpecular = ctx.iblSpecularIntensity;
+        vd.sceneTime = ctx.timeSeconds;
+        vd.prevSceneTime = ctx.prevTimeSeconds; // the previous position sways at last frame's time
         // Ring base + THIS view's scene's entry base (scenes' entries are concatenated per frame;
         // lights carry scene-relative shadowIndex values).
         vd.localShadowBase = m_localShadowBase + ctx.localShadowEntryBase;
@@ -1210,7 +1212,7 @@ namespace foundation::render
             // Pass-level view: the cropped VP, no group id (draws carry their own).
             GpuPickView pv{};
             pv.viewProj = ctx.viewProj;
-            pv.windTime = ctx.timeSeconds;
+            pv.sceneTime = ctx.timeSeconds;
             pv.camera = ctx.cameraPos;
             *static_cast<GpuPickView*>(sv.ptr) = pv;
         }
@@ -1218,7 +1220,7 @@ namespace foundation::render
         {
             GpuShadowView svd{};
             svd.lightViewProj = ctx.viewProj;
-            svd.wind.x = ctx.timeSeconds;
+            svd.sceneTime = ctx.timeSeconds;
             svd.camera = ctx.cameraPos;
             // A faded set's shadow fades from the camera the pass couples to; a pass with none
             // (no view) draws every instance.

@@ -1,6 +1,6 @@
 /* Masquerade's look on the engine GUI, the project's GUI sheet (guiStyleSheetIds): night blue cards
    edged in gold, gold buttons, the costumes' colours for the HUD's mark. Its screens are
-   Title, Maps, Join, Hud, Pause and Results (Masquerade.as pushes them). */
+   Title, Maps, Join, Controls, Hud, Pause and Results (Masquerade.as pushes them). */
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 screen.fades:entering { animation: fade-in 0.3s ease-out; }
@@ -20,13 +20,27 @@ button.gold:disabled { background-color: #0A0F1E; border: 2px solid #3A2A20; col
 .sand { color: #E0D0B0; }
 .dust { color: #B8A080; }
 
-/* The controls: a row per action, its key and its pad button. */
-.controls { flex-direction: column; align-items: center; gap: 2px; }
-.controls-row { flex-direction: row; align-items: center; width: 560px; }
-.controls-action { width: 300px; font-size: 15px; color: #E0D0B0; }
-.controls-key { width: 120px; font-size: 16px; color: #FFFFFF; }
-.controls-pad { width: 140px; font-size: 16px; color: #F4D080; }
-.controls-head { font-size: 13px; color: #B09878; }
+/* The prompts: the control an action takes, read from the input map for the device in use. A key is
+   a keycap of its name; a pad button its glyph (Tools/glyphs.py), its text hidden under it. */
+prompt.key { height: 34px; min-width: 34px; padding: 0px 10px; font-size: 16px; color: #F4E6C8;
+             background-color: #0C1428; border: 2px solid #7A5A28; border-radius: 8px; text-align: center; }
+prompt.key[kind="pad"] { width: 38px; min-width: 38px; height: 38px; padding: 0px; color: rgba(0, 0, 0, 0);
+                         background-color: rgba(0, 0, 0, 0); border: 0px solid rgba(0, 0, 0, 0); background-size: 38px 38px; }
+prompt.key[binding="pad-south"] { background-image: url("{{{Texture:PadSouth}}}"); }
+prompt.key[binding="pad-east"] { background-image: url("{{{Texture:PadEast}}}"); }
+prompt.key[binding="pad-west"] { background-image: url("{{{Texture:PadWest}}}"); }
+prompt.key[binding="pad-north"] { background-image: url("{{{Texture:PadNorth}}}"); }
+prompt.key[binding="pad-lb"] { background-image: url("{{{Texture:PadLB}}}"); }
+prompt.key[binding="pad-rb"] { background-image: url("{{{Texture:PadRB}}}"); }
+prompt.key[binding="pad-ls"] { background-image: url("{{{Texture:PadLS}}}"); }
+prompt.key[binding="pad-start"] { background-image: url("{{{Texture:PadStart}}}"); }
+prompt.key[binding="left-stick"] { background-image: url("{{{Texture:LeftStick}}}"); }
+
+/* The controls page: a row per action, its prompts and what it does. */
+.controls-card { padding: 28px 44px; align-items: center; gap: 12px; width: 560px; }
+.control-rows { flex-direction: column; align-items: stretch; gap: 10px; width: 440px; }
+.control-row { flex-direction: row; align-items: center; gap: 10px; }
+.control-what { font-size: 18px; color: #E0D0B0; margin-left: 6px; }
 
 /* The title and its pages (Maps, Join): one card in the middle, the ball behind it. */
 .title-card { padding: 36px 56px 40px; align-items: center; gap: 4px; width: 560px; }
@@ -64,12 +78,16 @@ textfield.address:focus-visible { border: 3px solid #F4D080; }
 .hud-mark-row { flex-direction: row; align-items: center; gap: 6px; }
 .hud-mark { font-size: 20px; }
 .hud-score { font-size: 18px; color: #E0D0B0; }
+.hud-middle { flex-direction: column; align-items: center; gap: 8px; }
 .hud-note { font-size: 28px; color: #F4D080; opacity: 0; }
+.hud-tag { padding: 6px 12px; background-color: rgba(10, 16, 32, 0.75); border-radius: 10px; opacity: 0; }
 .hud-time { font-size: 22px; color: #F4E6C8; }
 .hud-rank { font-size: 16px; color: #E0D0B0; }
 .hud-right { align-items: end; }
 .hud-foot { flex-direction: row; justify-content: center; }
-.hud-controls { padding: 14px; background-color: rgba(10, 16, 32, 0.78); border-radius: 12px; opacity: 0; }
+.hud-controls { flex-direction: row; gap: 22px; padding: 12px 18px; background-color: rgba(10, 16, 32, 0.78); border-radius: 12px; opacity: 0; }
+.hint { flex-direction: row; align-items: center; gap: 8px; }
+.hint-what { font-size: 17px; color: #E0D0B0; }
 
 /* The mark's costume, in its colour, lightened to read on the night blue (the black coat silver). */
 .costume-0 { color: rgb(242, 115, 140); }
@@ -83,7 +101,6 @@ textfield.address:focus-visible { border: 3px solid #F4D080; }
 .pause-card { padding: 24px; gap: 10px; width: 628px; }
 .pause-title { font-size: 36px; color: #F4D080; }
 button.wide { height: 44px; font-size: 22px; }
-.pause-controls { margin-top: 6px; }
 .results-card { padding: 26px; align-items: center; gap: 8px; width: 572px; }
 .results-title { font-size: 40px; color: #F4D080; }
 .results-you { font-size: 22px; color: #F4E6C8; margin-bottom: 4px; }

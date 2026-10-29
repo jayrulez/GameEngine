@@ -99,6 +99,7 @@ class Ball
     private array<float> m_orderIn; // until a bot's approach order is refreshed
     private float m_sample = 0.0f;
     private float m_hud = 0.0f;
+    private bool m_reachTold = false; // the "InReach" last sent
     private int m_cue = 0;
     private Entity@ m_best;         // a tag's search: the nearest in reach so far
     private float m_bestDistance = 0.0f;
@@ -312,6 +313,17 @@ class Ball
         {
             return;
         }
+        Entity@ found = inReach(seat);
+        if (found !is null)
+        {
+            resolve(seat, found);
+        }
+    }
+
+    // Whom a tag by `seat` would reach: the nearest person within tagReach in front of its hunter
+    // (or right beside it), else null. A tag's search, and the HUD's Tag prompt while it finds one.
+    private Entity@ inReach(int seat)
+    {
         Entity@ tagger = m_hunters[seat];
         Float3 p = tagger.worldPosition();
         Float3 ahead = Quaternion::RotateVector(tagger.worldRotation(), Float3(0.0f, 0.0f, 1.0f));
@@ -331,10 +343,7 @@ class Ball
                 consider(m_hunters[h], p, ahead);
             }
         }
-        if (m_best !is null)
-        {
-            resolve(seat, m_best);
-        }
+        return m_best;
     }
 
     // Someone in reach and in front (or right beside), nearer than the best so far (m_best).
@@ -495,6 +504,13 @@ class Ball
     private void tell(float d)
     {
         int seat = seatOfPlayer(localPlayer());
+        // Someone to tag in front of this peer's hunter: the game shows Tag's prompt while there is.
+        bool reach = !over && seat >= 0 && inReach(seat) !is null;
+        if (reach != m_reachTold)
+        {
+            m_reachTold = reach;
+            self.scene.events.emit("InReach", reach ? 1 : 0);
+        }
         m_hud -= d;
         if (m_hud <= 0.0f && seat >= 0)
         {

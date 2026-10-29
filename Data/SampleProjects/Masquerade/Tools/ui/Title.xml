@@ -1,5 +1,6 @@
 <!-- The title (Masquerade.as): the game's name over the ball, and what to do: play alone or host
-     (each then choosing the map, Maps.xml), join a host (Join.xml), or quit. Styled by
+     (each then choosing the map, Maps.xml), join a host (Join.xml), see the controls (Controls.xml),
+     or quit. Styled by
      MasqueradeSheet.css. Back (Escape, East) does nothing here: the title is the bottom of the stack. -->
 <Screen class="fades" nav-default="solo-btn" back="none">
   <Panel class="centre">
@@ -10,6 +11,7 @@
         <Button id="solo-btn" class="gold menu" text="Play alone"/>
         <Button id="host-btn" class="gold menu" text="Host a ball"/>
         <Button id="join-btn" class="gold menu" text="Join a ball"/>
+        <Button id="controls-btn" class="gold menu" text="Controls"/>
         <Button id="quit-btn" class="gold menu" text="Quit"/>
       </Panel>
     </Panel>

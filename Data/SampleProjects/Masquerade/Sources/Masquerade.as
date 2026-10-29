@@ -4,7 +4,8 @@
 // The title offers play alone, host, join or quit; the first two choose a map (Maps), then play it alone or host it (the server on `kPort`, waiting for each
 // joiner's ready, then the map); or joins a host: the connection first, from the title, then the
 // host's map (named in its welcome) loads, and the joiner says it is ready, so the map's networked
-// entities are in place for the host's first snapshot. The round itself is the scene's (Ball.as): this hears it. "Hud" (four times a second: your
+// entities are in place for the host's first snapshot. The round itself is the scene's (Ball.as): this hears it. "InReach" (someone to tag
+// in front of you, or no longer), "Hud" (four times a second: your
 // points, the seconds left, your target's costume, your place), "Note" (something happened to
 // you, or a mask flared), "RoundOver" (everyone's points) and "RoundStart" (the host began another
 // round). Pause (Escape or Start) shows the pause menu, holding the round still when playing alone
@@ -16,6 +17,7 @@ const float kControlsShown = 7.0f; // how long the controls show as a round star
 const string kTitleDoc = "{2c8d8d4f-d770-496d-a766-d14cfbfcd328}";
 const string kMapsDoc = "{bef19424-1fc4-4f06-b262-b49abeacf1a6}";
 const string kJoinDoc = "{36b90866-3b41-4a1c-8b87-c0305859bb5d}";
+const string kControlsDoc = "{9e97d8b6-d7f7-42c0-8554-07fb7c631b59}";
 const string kHudDoc = "{e183e431-f835-4289-a1eb-88d33b67db46}";
 const string kPauseDoc = "{76517a0e-2810-4018-ad32-036418a2bc1c}";
 const string kResultsDoc = "{d6ee5f73-8622-4f72-8f7b-1d7e43f609b8}";
@@ -85,6 +87,7 @@ class Game
     {
         m_inRound = false;
         m_paused = false;
+        m_controlsOpen = false; // the stack is cleared below
         run::setTimeScale(0.0f); // whatever is behind the title holds still
         holdInput();
         screens().clear();
@@ -92,7 +95,39 @@ class Game
         wire("solo-btn", EventHandler(this.onSolo));
         wire("host-btn", EventHandler(this.onHost));
         wire("join-btn", EventHandler(this.onJoin));
+        wire("controls-btn", EventHandler(this.onControls));
         wire("quit-btn", EventHandler(this.onQuit));
+    }
+
+    // ---- the controls page, over the title or the pause menu ----
+    private bool m_controlsOpen = false;
+
+    private bool onControls(GuiEvent e)
+    {
+        sound(kClick);
+        screens().push(kControlsDoc);
+        wire("controls-back", EventHandler(this.onControlsBack));
+        m_controlsOpen = true;
+        return true;
+    }
+
+    private bool onControlsBack(GuiEvent e)
+    {
+        closeControls();
+        return true;
+    }
+
+    // Its Back, or the game's Pause (Escape, Start): the screen stack's own back would also reach
+    // the pause menu under it, as Escape is the game's Pause too.
+    private void closeControls()
+    {
+        if (!m_controlsOpen)
+        {
+            return;
+        }
+        sound(kClick);
+        m_controlsOpen = false;
+        screens().pop();
     }
 
     // ---- the map, to play alone or to host: a card each, the chosen one lit, then Start ----
@@ -271,6 +306,11 @@ class Game
 
     void update(float dt)
     {
+        if (m_controlsOpen && Input::wasPressed("Pause"))
+        {
+            closeControls();
+            return;
+        }
         // A joiner on the title, waiting for the host's welcome.
         if (m_joinWait >= 0.0f)
         {
@@ -347,6 +387,15 @@ class Game
         setText("hud-score", "Points " + int(hud.x));
         setText("hud-time", clock(hud.y));
         setText("hud-rank", place(int(hud.w)) + " of 4");
+    }
+
+    // Someone to tag in front of you (Ball.as): Tag's prompt shows by your hunter's line of sight.
+    void onInReach(int yes)
+    {
+        if (m_inRound)
+        {
+            find("hud-tag").tween("opacity", yes != 0 ? "1" : "0", 0.15f, "ease");
+        }
     }
 
     void onNote(int what)
@@ -439,6 +488,7 @@ class Game
         wire("restart-btn", EventHandler(this.onAgain));
         find("restart-btn").visible = m_mode != kJoining; // the host's to start over
         wire("title-btn", EventHandler(this.onTitle));
+        wire("pause-controls-btn", EventHandler(this.onControls));
     }
 
     private bool onResume(GuiEvent e)

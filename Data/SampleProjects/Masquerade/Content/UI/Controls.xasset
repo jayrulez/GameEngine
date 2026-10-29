@@ -1,0 +1,12 @@
+<root>
+	<string name="guid">9e97d8b6-d7f7-42c0-8554-07fb7c631b59</string>
+	<string name="typeNamespace">rtti::pipeline::gui</string>
+	<string name="typeName">GuiDocumentAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">4454064819806775415</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Controls.xml</string>
+	</object>
+</root>

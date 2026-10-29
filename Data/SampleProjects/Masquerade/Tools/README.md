@@ -27,9 +27,10 @@ it makes, what it needs first and how to call it. Generated files land in `gener
    night environment and the post profile every map shares, written when a map is) and
    `sounds.py` (the orchestra's three pieces and the round's sounds, generated and imported into
    `Audio/`; before the scripts, which name them, and the maps, whose crowd plays the murmur).
-3. **Scripts**: `importscripts.py` checks the screens with `gui_validate` and imports them
+3. **Scripts**: `glyphs.py` first (the pad's button glyphs the prompts show, drawn and imported into
+   `UI/Glyphs`); then `importscripts.py` checks the screens with `gui_validate` and imports them
    (`ui/*.xml` on the engine GUI, over `ui/MasqueradeSheet.css`, made the project's GUI sheet), then
-   `scripts/*.as`, filling each script's `{{GUI:Hud}}`-style asset ids, and makes `Masquerade.as` (the game: the title, the
+   `scripts/*.as`, filling each script's, document's and the sheet's `{{GUI:Hud}}`-style asset ids, and makes `Masquerade.as` (the game: the title, the
    HUD, pause, the results, the best round in the save) the startup script. The rest: a guest
    (`Guest`: wandering, talking and dancing to the cues; a bot is one too), the player (`Player`),
    the round (`Ball`: four hunters in a ring of targets, tagging, the mask's flare, the bots'

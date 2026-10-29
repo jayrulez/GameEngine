@@ -1,6 +1,9 @@
 // CameraRig - the camera above and behind the player, turned a quarter at a time (TurnLeft and
 // TurnRight), swinging round to the new quarter rather than cutting to it, and following the player
 // with a little lag so a step does not jolt the view. (Lamplight's, which follows its thief.)
+// Behind the title it sweeps slowly to and fro before the ball's dais instead (each map's dais
+// stands against a wall, so a full circle would leave the hall), on the time the game script hands
+// it: the scene holds still at time scale 0 there.
 const float kPi = 3.14159265f;
 
 class CameraRig
@@ -13,10 +16,17 @@ class CameraRig
     [0.8, "Aim this far above the player's feet (m)"] float lookHeight;
     [6.0, "How quickly it catches up with the player"] float follow;
     [7.0, "How quickly it swings to a new quarter"] float swing;
+    [12.0, "Behind the title: distance from the dais (m)"] float titleDistance;
+    [7.5, "Behind the title: height above the floor (m)"] float titleHeight;
+    [4.0, "Behind the title: aim this far above the dais, so it sits below the menu (m)"] float titleLook;
+    [0.7, "Behind the title: how far it sweeps each side of the dais's front (radians)"] float titleSweep;
+    [0.12, "Behind the title: how fast it sweeps (radians of its cycle a second)"] float titleTurn;
 
     private int m_quarter = 0;    // 0 = looking north (-Z), then quarters clockwise
     private float m_yaw = 0.0f;   // the swing's current angle (radians)
     private Float3 m_focus = Float3(0.0f, 0.0f, 0.0f);
+    private bool m_title = false;   // circling the dais behind the title
+    private float m_phase = 0.0f;   // where in its sweep it is (radians of the cycle)
 
     CameraRig(Entity@ entity) { @self = entity; }
 
@@ -39,8 +49,40 @@ class CameraRig
         place();
     }
 
+    // The title's frame (Masquerade.as): its real time while the title is up, below zero once a
+    // round begins, when the rig is back behind the player at once.
+    void onTitleView(float dt)
+    {
+        if (dt < 0.0f)
+        {
+            m_title = false;
+            if (target !is null && target.isValid())
+            {
+                m_focus = target.worldPosition();
+            }
+            m_yaw = float(m_quarter) * kPi * 0.5f;
+            place();
+            return;
+        }
+        Entity@ dais = self.scene.find("Dais");
+        if (dais is null)
+        {
+            return;
+        }
+        m_title = true;
+        m_phase += titleTurn * dt;
+        float angle = titleSweep * Math::Sin(m_phase); // 0 is straight out from the wall (+Z)
+        Float3 at = dais.worldPosition();
+        look(Float3(at.x - Math::Sin(angle) * titleDistance, titleHeight, at.z + Math::Cos(angle) * titleDistance),
+             Float3(at.x, at.y + titleLook, at.z));
+    }
+
     void onUpdate(double dt)
     {
+        if (m_title)
+        {
+            return;
+        }
         float d = float(dt);
         if (Input::wasPressed("TurnLeft"))
         {
@@ -70,8 +112,14 @@ class CameraRig
     {
         Float3 seat = Float3(m_focus.x - Math::Sin(m_yaw) * distance, m_focus.y + height,
                              m_focus.z + Math::Cos(m_yaw) * distance);
+        look(seat, Float3(m_focus.x, m_focus.y + lookHeight, m_focus.z));
+    }
+
+    // Sit at `seat` looking at `at`.
+    private void look(Float3 seat, Float3 at)
+    {
         self.setPosition(seat);
-        Float3 dir = Float3(m_focus.x - seat.x, m_focus.y + lookHeight - seat.y, m_focus.z - seat.z);
+        Float3 dir = Float3(at.x - seat.x, at.y - seat.y, at.z - seat.z);
         float len = Math::Sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
         if (len < 0.0001f)
         {

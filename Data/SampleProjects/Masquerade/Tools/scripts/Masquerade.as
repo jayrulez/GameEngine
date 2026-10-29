@@ -78,6 +78,7 @@ class Game
     private float m_roundSeconds = 0.0f; // the round's length, as its first report gave the time
     private bool m_inputHeld = false;    // the "Menu" set pushed (holdInput)
     private float m_controlsShow = 0.0f; // how long the controls panel shows yet
+    private bool m_onTitle = false;      // the title (or a page over it) is up: the camera sweeps before the dais
     private int m_map = 0;               // 0 the Palace, 1 the Canal, 2 the Gardens
     private int m_mode = kAlone;
     private string m_address = "127.0.0.1";
@@ -97,6 +98,7 @@ class Game
     private void showTitle()
     {
         m_inRound = false;
+        m_onTitle = true;
         m_paused = false;
         m_controlsOpen = false; // the stack is cleared below
         run::setTimeScale(0.0f); // whatever is behind the title holds still
@@ -302,6 +304,7 @@ class Game
     // ---- a round ----
     private void startRound()
     {
+        leaveTitle();
         m_paused = false;
         m_inRound = true;
         m_note = 0.0f;
@@ -317,6 +320,16 @@ class Game
         m_controlsShow = kControlsShown;
         letGo(); // time again, and the player's input: a round may start from any menu
         run::loadScene(m_map == 0 ? kPalace : (m_map == 1 ? kCanal : kGardens));
+    }
+
+    // The camera back behind the player (CameraRig) as the title gives way to a round.
+    private void leaveTitle()
+    {
+        if (m_onTitle)
+        {
+            m_onTitle = false;
+            run::currentScene().events.emit("TitleView", -1.0f);
+        }
     }
 
     void update(float dt)
@@ -339,6 +352,10 @@ class Game
         }
         if (!m_inRound)
         {
+            if (m_onTitle)
+            {
+                run::currentScene().events.emit("TitleView", dt); // CameraRig sweeps before the dais
+            }
             return;
         }
         if (m_readyIn >= 0.0f && run::sceneReady())
@@ -660,6 +677,7 @@ class Game
     // The HUD over the scene that is already running.
     private void enterRound()
     {
+        leaveTitle();
         screens().clear();
         screens().push(kHudDoc);
         m_inRound = true;

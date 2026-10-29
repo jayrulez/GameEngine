@@ -107,6 +107,10 @@ class Game
         screens().push(kTitleDoc);
         wire("solo-btn", EventHandler(this.onSolo));
         wire("host-btn", EventHandler(this.onHost));
+        if (!Net::canHost())
+        {
+            UIWidget::of(find("host-btn")).addClass("gone"); // a browser cannot host; it joins a host's ball
+        }
         wire("join-btn", EventHandler(this.onJoin));
         wire("controls-btn", EventHandler(this.onControls));
         wire("quit-btn", EventHandler(this.onQuit));

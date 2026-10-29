@@ -38,6 +38,7 @@ class Player
     private Float4 m_remote = Float4(0.0f, 0.0f, 0.0f, 0.0f); // a remote player's input (the host)
     private float m_remoteAge = 99.0f;
     private int m_sent = -1;          // the input last sent to the host (a client)
+    private bool m_ringShown = false;  // the ring under this hunter shown (it is this peer's)
     private float m_sendIn = 0.0f;
     private bool m_handedOver = false; // a client's: its agent stopped for the host's transforms
 
@@ -88,6 +89,22 @@ class Player
     void onUpdate(double dt)
     {
         float d = float(dt);
+        // The ring on the floor under your own guest (maps.py: hidden on every hunter), once whose
+        // this hunter is is known (a joiner's hunter becomes its own as the host's state arrives).
+        bool own = mine();
+        if (own != m_ringShown)
+        {
+            Entity@ ring = self.findChildByName("Ring");
+            if (ring !is null && ring.isValid())
+            {
+                DecalComponent@ decal = DecalComponent::of(ring);
+                if (decal !is null)
+                {
+                    decal.visible = own;
+                    m_ringShown = own;
+                }
+            }
+        }
         // What the player asks for: the stick as a direction on the floor, sprint, dance, a tag.
         float dx = 0.0f;
         float dz = 0.0f;

@@ -90,14 +90,18 @@ textfield.address:focus-visible { border: 3px solid #F4D080; }
 .hud-portrait { width: 72px; height: 72px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.06); }
 .hud-mark-words { flex-direction: column; gap: 2px; }
 .hud-mark { font-size: 24px; }
+.hud-left { flex-direction: column; align-items: start; gap: 8px; }
+/* The hunter whose mark you are, near (Ball.as): a quiet line under your mark, not an alarm. */
+.hud-near { font-size: 16px; color: #F0B0A0; padding: 5px 12px; background-color: rgba(60, 14, 18, 0.72); border-radius: 8px; opacity: 0; }
 
-/* The clock: the time large over a bar of the round left, warm in its last half minute. */
+/* The clock: the time large over a bar of the round left, warm and pulsing in its last half minute. */
 .hud-middle { flex-direction: column; align-items: center; gap: 10px; }
 .hud-clock { align-items: center; width: 150px; }
 .hud-time { font-size: 30px; color: #F4E6C8; }
 .hud-timebar { width: 120px; height: 5px; }
 .hud-clock.late { border: 1px solid #F4A050; }
-.hud-clock.late .hud-time { color: #F4A050; }
+.hud-clock.late .hud-time { color: #F4A050; animation: clock-pulse 0.5s ease-in-out infinite alternate; }
+@keyframes clock-pulse { from { opacity: 1; color: #FFC070; } to { opacity: 0.45; color: #E07830; } }
 
 /* The word a moment in the middle (a tag, a miss, a flare), on a card of its own over the floor. */
 .hud-note { font-size: 26px; color: #F4D080; padding: 6px 16px; background-color: rgba(10, 16, 32, 0.82); border-radius: 10px; opacity: 0; }

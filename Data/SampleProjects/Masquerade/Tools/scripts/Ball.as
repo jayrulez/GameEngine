@@ -23,6 +23,7 @@
 // input and tags come by RPC ("input", "tag"); notes go to one player ("note"). Entity active flags
 // do not replicate, so every peer shows each hunter's look from the replicated costumes itself.
 
+const float kNearMetres = 6.0f;  // the hunter whose mark you are, nearer than this: you hear of it
 const int kHunters = 4;
 const int kCostumes = 6;
 const int kDanceClip = 3;
@@ -100,6 +101,7 @@ class Ball
     private float m_sample = 0.0f;
     private float m_hud = 0.0f;
     private bool m_reachTold = false; // the "InReach" last sent
+    private bool m_nearTold = false;  // the "HunterNear" last sent
     private int m_cue = 0;
     private Entity@ m_best;         // a tag's search: the nearest in reach so far
     private float m_bestDistance = 0.0f;
@@ -320,6 +322,27 @@ class Ball
         }
     }
 
+    // Whether the hunter whose target `seat` is stands within kNearMetres of it.
+    private bool hunterNear(int seat)
+    {
+        Float3 p = m_hunters[seat].worldPosition();
+        for (int h = 0; h < kHunters; ++h)
+        {
+            if (h == seat || targetOf(h) != seat)
+            {
+                continue;
+            }
+            Float3 q = m_hunters[h].worldPosition();
+            float dx = q.x - p.x;
+            float dz = q.z - p.z;
+            if (dx * dx + dz * dz < kNearMetres * kNearMetres)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     // Whom a tag by `seat` would reach: the nearest person within tagReach in front of its hunter
     // (or right beside it), else null. A tag's search, and the HUD's Tag prompt while it finds one.
     private Entity@ inReach(int seat)
@@ -510,6 +533,13 @@ class Ball
         {
             m_reachTold = reach;
             self.scene.events.emit("InReach", reach ? 1 : 0);
+        }
+        // The hunter whose mark you are, near: the game says so, quietly.
+        bool near = !over && seat >= 0 && hunterNear(seat);
+        if (near != m_nearTold)
+        {
+            m_nearTold = near;
+            self.scene.events.emit("HunterNear", near ? 1 : 0);
         }
         m_hud -= d;
         if (m_hud <= 0.0f && seat >= 0)

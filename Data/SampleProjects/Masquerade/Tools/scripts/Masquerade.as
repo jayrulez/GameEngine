@@ -5,7 +5,7 @@
 // joiner's ready, then the map); or joins a host: the connection first, from the title, then the
 // host's map (named in its welcome) loads, and the joiner says it is ready, so the map's networked
 // entities are in place for the host's first snapshot. The round itself is the scene's (Ball.as): this hears it. "InReach" (someone to tag
-// in front of you, or no longer), "Hud" (four times a second: your
+// in front of you, or no longer), "HunterNear" (the hunter whose mark you are, near, or no longer), "Hud" (four times a second: your
 // points, the seconds left, your target's costume, your place), "Note" (something happened to
 // you, or a mask flared), "RoundOver" (everyone's points) and "RoundStart" (the host began another
 // round). Pause (Escape or Start) shows the pause menu, holding the round still when playing alone
@@ -74,6 +74,7 @@ class Game
     private float m_delta = 0.0f;        // how long the points' change shows yet
     private int m_shownScore = 0;        // the points the HUD shows
     private int m_shownCostume = -1;     // the mark whose portrait the HUD shows
+    private bool m_late = false;         // the clock in the round's last half minute
     private float m_roundSeconds = 0.0f; // the round's length, as its first report gave the time
     private bool m_inputHeld = false;    // the "Menu" set pushed (holdInput)
     private float m_controlsShow = 0.0f; // how long the controls panel shows yet
@@ -311,6 +312,7 @@ class Game
         m_shownScore = 0;
         m_shownCostume = -1;
         m_roundSeconds = 0.0f;
+        m_late = false;
         find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the sheet's 0
         m_controlsShow = kControlsShown;
         letGo(); // time again, and the player's input: a round may start from any menu
@@ -429,16 +431,31 @@ class Game
         m_roundSeconds = Math::Max(m_roundSeconds, hud.y);
         setText("hud-time", clock(hud.y));
         ProgressBar::of(find("hud-timebar")).value = m_roundSeconds > 0.0f ? hud.y / m_roundSeconds : 0.0f;
-        UIWidget@ clockCard = UIWidget::of(find("hud-clock"));
-        if (hud.y <= kLateSeconds && hud.y > 0.0f)
+        // Only as it changes: the class set again each report would start its pulse over.
+        bool late = hud.y <= kLateSeconds && hud.y > 0.0f;
+        if (late != m_late)
         {
-            clockCard.addClass("late");
-        }
-        else
-        {
-            clockCard.removeClass("late");
+            m_late = late;
+            UIWidget@ clockCard = UIWidget::of(find("hud-clock"));
+            if (late)
+            {
+                clockCard.addClass("late");
+            }
+            else
+            {
+                clockCard.removeClass("late");
+            }
         }
         setText("hud-rank", place(int(hud.w)) + " of 4");
+    }
+
+    // The hunter whose mark you are, near (Ball.as): a quiet line under your mark while it is.
+    void onHunterNear(int yes)
+    {
+        if (m_inRound)
+        {
+            find("hud-near").tween("opacity", yes != 0 ? "1" : "0", yes != 0 ? 0.3f : 0.8f, "ease");
+        }
     }
 
     // Someone to tag in front of you (Ball.as): Tag's prompt shows by your hunter's line of sight.

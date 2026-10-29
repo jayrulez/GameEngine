@@ -7,12 +7,15 @@
 <Screen blocks="false" back="none">
   <Panel class="hud">
     <Panel class="hud-top">
-      <Panel class="hud-card hud-mark-card">
-        <Image id="hud-portrait" class="hud-portrait"/>
-        <Panel class="hud-mark-words">
-          <Label class="hud-caption" text="Your mark"/>
-          <Label id="hud-target" class="hud-mark" text=""/>
+      <Panel class="hud-left">
+        <Panel class="hud-card hud-mark-card">
+          <Image id="hud-portrait" class="hud-portrait"/>
+          <Panel class="hud-mark-words">
+            <Label class="hud-caption" text="Your mark"/>
+            <Label id="hud-target" class="hud-mark" text=""/>
+          </Panel>
         </Panel>
+        <Label id="hud-near" class="hud-near" text="Your hunter is near"/>
       </Panel>
       <Panel class="hud-middle">
         <Panel id="hud-clock" class="hud-card hud-clock">

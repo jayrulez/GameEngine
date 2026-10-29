@@ -3,7 +3,8 @@
 in Roboto (Data/Engine/Fonts, Apache 2.0) and imported through the editor's MCP as textures in
 UI/Glyphs, one per button the controls bind. MasqueradeSheet.css draws a prompt's glyph by its
 binding (`prompt[binding="pad-south"]`, the token foundation.input names the button by), filled by
-importscripts.py from `{{Texture:PadSouth}}`; a key stays a keycap of its own name in text.
+importscripts.py from `{{Texture:PadSouth}}`; a key stays a keycap of its own name in text. Also
+the ring a decal draws on the floor under your own guest (YouRing, maps.py).
 
   Tools/glyphs.py          draws them into Tools/generated/glyphs and imports them
 """
@@ -60,8 +61,24 @@ def draw(shape, fill, label):
     return im.resize((SIZE, SIZE), Image.LANCZOS)
 
 
+def ring():
+    """The floor's ring under your own guest (a decal, maps.py, tinted gold there): white, its
+    edges soft, on a clear ground."""
+    s = 256 * SCALE
+    im = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for k, (outer, inner, alpha) in enumerate(((0.48, 0.36, 70), (0.46, 0.38, 160), (0.44, 0.40, 255))):
+        d.ellipse([s * (0.5 - outer), s * (0.5 - outer), s * (0.5 + outer), s * (0.5 + outer)], fill=(255, 255, 255, alpha))
+        d.ellipse([s * (0.5 - inner), s * (0.5 - inner), s * (0.5 + inner), s * (0.5 + inner)], fill=(0, 0, 0, 0))
+    return im.resize((256, 256), Image.LANCZOS)
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    path = os.path.join(OUT, "YouRing.png")
+    ring().save(path)
+    r = mcp("asset_import", {"source": path, "group": "UI/Glyphs", "importer": "Texture"})
+    print("UI/Glyphs/YouRing", r["guid"])
     for name, (shape, fill, label) in GLYPHS.items():
         path = os.path.join(OUT, name + ".png")
         draw(shape, fill, label).save(path)

@@ -7,10 +7,12 @@
 		<object>
 			<string name="name">Linux64 Desktop</string>
 			<string name="platform">Linux64</string>
-			<string name="templateId"/>
-			<string name="playerName"/>
+			<string name="templateId">gameengine-steamdeck-release-0.1.0</string>
+			<string name="playerName">ShaderGallery</string>
 			<string name="outputSubdir">Linux64</string>
-			<array name="additionalFiles" count="0"/>
+			<array name="additionalFiles" count="1">
+				<string>CREDITS.md</string>
+			</array>
 			<string name="config"/>
 			<bool name="stageSymbols">false</bool>
 			<bool name="pruneToReachable">false</bool>
@@ -18,7 +20,7 @@
 			<u32 name="renderWidth">0</u32>
 			<u32 name="renderHeight">0</u32>
 			<i32 name="renderFit">1</i32>
-			<bool name="overridesWindow">false</bool>
+			<bool name="overridesWindow">true</bool>
 			<u32 name="windowWidth">1280</u32>
 			<u32 name="windowHeight">720</u32>
 			<u8 name="windowMode">0</u8>

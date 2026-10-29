@@ -1,6 +1,6 @@
 /* Masquerade's look on the engine GUI, the project's GUI sheet (guiStyleSheetIds): night blue cards
    edged in gold, gold buttons, the costumes' colours for the HUD's mark. Its screens are
-   Title, Hud, Pause and Results (Masquerade.as pushes them). */
+   Title, Maps, Join, Hud, Pause and Results (Masquerade.as pushes them). */
 
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 screen.fades:entering { animation: fade-in 0.3s ease-out; }
@@ -28,20 +28,33 @@ button.gold:disabled { background-color: #0A0F1E; border: 2px solid #3A2A20; col
 .controls-pad { width: 140px; font-size: 16px; color: #F4D080; }
 .controls-head { font-size: 13px; color: #B09878; }
 
-/* The title. */
-/* Tight enough to fit a 720-pixel-high view whole. */
-.title-card { padding: 18px 28px; align-items: center; gap: 2px; width: 656px; }
-.title-name { font-size: 62px; color: #F4D080; }
-.title-lead { font-size: 19px; color: #C8B090; margin-bottom: 6px; }
-button.map { width: 420px; height: 42px; font-size: 22px; }
-.map-about { font-size: 15px; color: #B8A080; }
-.map-best { font-size: 14px; color: #A89070; margin-bottom: 4px; }
-.map-choice { font-size: 17px; color: #F4D080; margin-top: 2px; margin-bottom: 4px; }
-.title-row { flex-direction: row; justify-content: center; gap: 10px; margin-bottom: 4px; }
-button.mode { width: 200px; height: 40px; font-size: 20px; }
-textfield.address { width: 200px; height: 40px; }
-.net-status { font-size: 14px; color: #C8A070; }
-.title-quit { margin-top: 4px; margin-bottom: 6px; }
+/* The title and its pages (Maps, Join): one card in the middle, the ball behind it. */
+.title-card { padding: 36px 56px 40px; align-items: center; gap: 4px; width: 560px; }
+.title-name { font-size: 72px; color: #F4D080; }
+.title-lead { font-size: 18px; color: #C8B090; margin-bottom: 22px; }
+.title-menu { flex-direction: column; align-items: stretch; gap: 10px; width: 300px; }
+button.menu { height: 46px; font-size: 22px; }
+
+.page-title { font-size: 40px; color: #F4D080; }
+.page-lead { font-size: 17px; color: #C8B090; margin-bottom: 10px; }
+.page-buttons { flex-direction: row; justify-content: center; gap: 14px; margin-top: 14px; }
+button.page { width: 180px; height: 44px; font-size: 21px; }
+button.primary { background-color: #2A1E0C; border: 2px solid #C8963C; }
+button.primary:hover { background-color: #3A2A12; border: 3px solid #F4D080; }
+
+/* The map cards: the name, its line and its best round; the chosen one lit in gold. */
+.maps-card { padding: 28px 32px; align-items: center; gap: 12px; }
+.map-cards { flex-direction: row; gap: 14px; margin-top: 6px; }
+button.map-card { flex-direction: column; align-items: start; gap: 6px; width: 250px; padding: 16px 18px; }
+button.map-card.chosen { background-color: #2A1E0C; border: 3px solid #F4D080; }
+.map-name { font-size: 24px; color: #F4E6C8; }
+.map-about { font-size: 15px; color: #C8B090; white-space: normal; width: 214px; text-align: left; }
+.map-best { font-size: 14px; color: #A89070; margin-top: 4px; }
+
+.join-card { padding: 32px 44px; align-items: center; gap: 8px; width: 520px; }
+textfield.address { width: 320px; height: 44px; font-size: 20px; color: #F4E6C8; background-color: #0C1428; border: 2px solid #7A5A28; border-radius: 10px; padding: 0px 12px; }
+textfield.address:focus-visible { border: 3px solid #F4D080; }
+.net-status { font-size: 15px; color: #C8A070; min-height: 20px; }
 
 /* The HUD: the mark and the points top left, a word in the middle, the time and the place top
    right, the controls below for a moment. It takes no pointer: the round is played beneath it. */

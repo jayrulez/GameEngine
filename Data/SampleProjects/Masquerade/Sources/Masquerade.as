@@ -1,7 +1,7 @@
 // Masquerade - the game's orchestrator (the reserved class Game): the title, a round at the ball
 // under its HUD, the pause menu, and the results.
 //
-// The title picks a map, then plays it alone or hosts it (the server on `kPort`, waiting for each
+// The title offers play alone, host, join or quit; the first two choose a map (Maps), then play it alone or host it (the server on `kPort`, waiting for each
 // joiner's ready, then the map); or joins a host: the connection first, from the title, then the
 // host's map (named in its welcome) loads, and the joiner says it is ready, so the map's networked
 // entities are in place for the host's first snapshot. The round itself is the scene's (Ball.as): this hears it. "Hud" (four times a second: your
@@ -14,6 +14,8 @@
 const float kControlsShown = 7.0f; // how long the controls show as a round starts (s)
 // The screens, on the engine GUI's screen stack (pushed by their documents' ids).
 const string kTitleDoc = "{2c8d8d4f-d770-496d-a766-d14cfbfcd328}";
+const string kMapsDoc = "{bef19424-1fc4-4f06-b262-b49abeacf1a6}";
+const string kJoinDoc = "{36b90866-3b41-4a1c-8b87-c0305859bb5d}";
 const string kHudDoc = "{e183e431-f835-4289-a1eb-88d33b67db46}";
 const string kPauseDoc = "{76517a0e-2810-4018-ad32-036418a2bc1c}";
 const string kResultsDoc = "{d6ee5f73-8622-4f72-8f7b-1d7e43f609b8}";
@@ -87,31 +89,67 @@ class Game
         holdInput();
         screens().clear();
         screens().push(kTitleDoc);
-        wire("play-btn", EventHandler(this.onPalace));
-        wire("canal-btn", EventHandler(this.onCanal));
         wire("solo-btn", EventHandler(this.onSolo));
         wire("host-btn", EventHandler(this.onHost));
         wire("join-btn", EventHandler(this.onJoin));
-        setText("map-choice", "The map: " + mapTitle(m_map));
-        setText("net-status", "");
-        find("canal-btn").enabled = !kCanal.IsNil();
-        wire("gardens-btn", EventHandler(this.onGardens));
-        find("gardens-btn").enabled = !kGardens.IsNil();
         wire("quit-btn", EventHandler(this.onQuit));
-        setText("palace-best", bestLine(0));
-        setText("canal-best", bestLine(1));
-        setText("gardens-best", bestLine(2));
     }
 
-    private bool onPalace(GuiEvent e) { choose(0); return true; }
-    private bool onCanal(GuiEvent e) { choose(1); return true; }
-    private bool onGardens(GuiEvent e) { choose(2); return true; }
+    // ---- the map, to play alone or to host: a card each, the chosen one lit, then Start ----
+    private bool m_hostChosen = false; // the map page's Start hosts (else it plays alone)
 
-    private void choose(int map)
+    private void showMaps(bool host)
+    {
+        m_hostChosen = host;
+        screens().push(kMapsDoc);
+        setText("maps-heading", host ? "Host a ball" : "Play alone");
+        Button::of(find("maps-start")).text = host ? "Host" : "Play";
+        wire("map-0", EventHandler(this.onMap0));
+        wire("map-1", EventHandler(this.onMap1));
+        wire("map-2", EventHandler(this.onMap2));
+        find("map-1").enabled = !kCanal.IsNil();
+        find("map-2").enabled = !kGardens.IsNil();
+        for (int map = 0; map < 3; ++map)
+        {
+            setText("map-best-" + map, bestLine(map));
+        }
+        wire("maps-start", EventHandler(this.onStart));
+        wire("maps-back", EventHandler(this.onBack));
+        setText("net-status", "");
+        choose(m_map, false);
+    }
+
+    private bool onMap0(GuiEvent e) { choose(0, true); return true; }
+    private bool onMap1(GuiEvent e) { choose(1, true); return true; }
+    private bool onMap2(GuiEvent e) { choose(2, true); return true; }
+
+    // The chosen card lit; a click on it chooses, Start then plays or hosts it.
+    private void choose(int map, bool click)
+    {
+        if (click)
+        {
+            sound(kClick);
+        }
+        m_map = map;
+        for (int i = 0; i < 3; ++i)
+        {
+            UIWidget@ card = UIWidget::of(find("map-" + i));
+            if (i == map)
+            {
+                card.addClass("chosen");
+            }
+            else
+            {
+                card.removeClass("chosen");
+            }
+        }
+    }
+
+    private bool onBack(GuiEvent e)
     {
         sound(kClick);
-        m_map = map;
-        setText("map-choice", "The map: " + mapTitle(map));
+        screens().pop();
+        return true;
     }
 
     private string mapTitle(int map)
@@ -122,14 +160,27 @@ class Game
     private bool onSolo(GuiEvent e)
     {
         sound(kClick);
-        m_mode = kAlone;
-        startRound();
+        showMaps(false);
         return true;
     }
 
     private bool onHost(GuiEvent e)
     {
         sound(kClick);
+        showMaps(true);
+        return true;
+    }
+
+    // The map page's Start: play the chosen map alone, or host it.
+    private bool onStart(GuiEvent e)
+    {
+        sound(kClick);
+        if (!m_hostChosen)
+        {
+            m_mode = kAlone;
+            startRound();
+            return true;
+        }
         if (!Net::startServer(kPort))
         {
             setText("net-status", "Could not host on port " + kPort);
@@ -141,9 +192,25 @@ class Game
         return true;
     }
 
+    // ---- joining: the address, then Join; the map is the host's ----
     private bool onJoin(GuiEvent e)
     {
         sound(kClick);
+        screens().push(kJoinDoc);
+        TextField::of(find("address")).text = m_address;
+        wire("join-go", EventHandler(this.onJoinGo));
+        wire("join-back", EventHandler(this.onBack));
+        setText("net-status", "");
+        return true;
+    }
+
+    private bool onJoinGo(GuiEvent e)
+    {
+        sound(kClick);
+        if (m_joinWait >= 0.0f)
+        {
+            return true; // already waiting for the host
+        }
         string typed = TextField::of(find("address")).text;
         m_address = typed.length() > 0 ? typed : "127.0.0.1";
         // Connect from the title; the host's welcome names its map, which then loads (onHostMap).

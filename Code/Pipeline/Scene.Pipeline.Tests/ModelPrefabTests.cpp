@@ -94,7 +94,8 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
     asset.manifest.materialGuids.PushBack(matB);
     {
         // v2 slots: the static mesh draws material B only (its submeshes index slot 0 = B);
-        // the skinned mesh has NO slots entry (a v1-shaped mesh) and keeps the whole list.
+        // the skinned mesh's entry is empty (its parts name no material): it binds none and
+        // draws in the default material, not the model's first.
         foundation::model::ModelMeshMaterialSlots staticSlots;
         staticSlots.slots.PushBack(1);
         asset.manifest.meshMaterialSlots.PushBack(Move(staticSlots));
@@ -166,9 +167,7 @@ TEST_CASE("model-prefab: manifest -> spawnable prefab; regeneration reuses the i
             if (c.mesh.id == meshSkinned)
             {
                 sawSkinned = true;
-                REQUIRE(c.materials.Size() == 2u); // no slots recorded: the whole list
-                CHECK(c.materials[0].id == matA);
-                CHECK(c.materials[1].id == matB);
+                CHECK(c.materials.IsEmpty()); // no material named: none bound
             }
         });
     CHECK(meshCount == 2u);
@@ -511,7 +510,7 @@ TEST_CASE("model-prefab: a skinned mesh sits at identity under the skeleton's pa
     RemoveTreeMP(dir);
 }
 
-TEST_CASE("model-prefab: a mesh binds its own material slots, the whole list only without them")
+TEST_CASE("model-prefab: a mesh binds its own material slots, the whole list only in a v1 manifest")
 {
     // The rule the prefab and the editor's model thumbnail share (MeshMaterialGuids).
     foundation::model::ModelManifestSource manifest;
@@ -533,10 +532,16 @@ TEST_CASE("model-prefab: a mesh binds its own material slots, the whole list onl
     CHECK(ids[1] == a);
     CHECK(ids[2].IsNil());
 
-    // No slots (a v1 manifest, or a mesh past the list): the model-wide list, in order.
+    // A mesh whose parts name no material (an FBX shadow plane) binds none: the default
+    // material draws it, not the model's first (the plane drew the character's texture).
+    manifest.MeshMaterialGuids(1, ids);
+    CHECK(ids.IsEmpty());
+    manifest.MeshMaterialGuids(5, ids);
+    CHECK(ids.IsEmpty());
+
+    // A v1 manifest (no slot lists at all) cooked model-wide submesh indices: the whole list.
+    manifest.meshMaterialSlots.Clear();
     manifest.MeshMaterialGuids(1, ids);
     REQUIRE(ids.Size() == 3u);
     CHECK(ids[0] == a);
-    manifest.MeshMaterialGuids(5, ids);
-    CHECK(ids.Size() == 3u);
 }

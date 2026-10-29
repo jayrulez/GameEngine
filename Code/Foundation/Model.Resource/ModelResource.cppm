@@ -129,13 +129,19 @@ export namespace foundation::model
         /// The material list an entity drawing mesh `meshIndex` binds, indexed by its submeshes'
         /// materialIndex (slot 0 covers single-material meshes and out-of-range indexes). A v2
         /// manifest records the slots each mesh uses and its submeshes index THAT list (Bistro: 254
-        /// materials per node before, one or two after); an unresolvable slot stays nil. A v1
-        /// manifest (no slots) cooked its submeshes with model-wide indices: the whole list.
+        /// materials per node before, one or two after); an unresolvable slot stays nil, and a mesh
+        /// whose parts name no material has none (it draws in the default material, not the
+        /// model's first). A v1 manifest (no slot lists at all) cooked its submeshes with
+        /// model-wide indices: the whole list.
         void MeshMaterialGuids(usize meshIndex, Array<Guid>& out) const
         {
             out.Clear();
-            if (meshIndex < meshMaterialSlots.Size() && !meshMaterialSlots[meshIndex].slots.IsEmpty())
+            if (!meshMaterialSlots.IsEmpty())
             {
+                if (meshIndex >= meshMaterialSlots.Size())
+                {
+                    return;
+                }
                 for (const i32 slot : meshMaterialSlots[meshIndex].slots)
                 {
                     out.PushBack(slot >= 0 && static_cast<usize>(slot) < materialGuids.Size()
@@ -203,13 +209,18 @@ export namespace foundation::model
         Float3 boundsMax{};
 
         // The model-wide material indices (into `materials`) a mesh's submeshes index, in slot
-        // order: what an entity drawing the mesh binds as its material list. A v1 manifest's mesh
-        // (no slots) indexes every material, in order.
+        // order: what an entity drawing the mesh binds as its material list. Empty for a mesh whose
+        // parts name no material (the default material draws it). A v1 manifest's mesh (no slot
+        // lists at all) indexes every material, in order.
         void MeshMaterialIndices(usize meshIndex, Array<i32>& out) const
         {
             out.Clear();
-            if (meshIndex < meshMaterialSlots.Size() && !meshMaterialSlots[meshIndex].slots.IsEmpty())
+            if (!meshMaterialSlots.IsEmpty())
             {
+                if (meshIndex >= meshMaterialSlots.Size())
+                {
+                    return;
+                }
                 for (const i32 slot : meshMaterialSlots[meshIndex].slots)
                 {
                     out.PushBack(slot);

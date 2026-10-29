@@ -54,7 +54,8 @@ export namespace engine::terrain
         f32 _pad0 = 0;
         Float3 cameraPos; // world camera
         f32 _pad1 = 0;
-        Float4 jitter; // xy = this frame's TAA jitter, zw = last frame's
+        Float2 jitter;     // this frame's TAA jitter (NDC)
+        Float2 prevJitter; // last frame's (unjitters the motion vectors)
         Float4 cascadeSplitFar;
         Float4 cascadeTexelSize;
         f32 cascadeCount = 0;     // 0: no directional caster this frame (the PS is fully lit)
@@ -78,6 +79,7 @@ export namespace engine::terrain
     static_assert(offsetof(GpuTerrainView, lightDir) == 512);
     static_assert(offsetof(GpuTerrainView, cameraPos) == 528);
     static_assert(offsetof(GpuTerrainView, jitter) == 544);
+    static_assert(offsetof(GpuTerrainView, prevJitter) == 552);
     static_assert(offsetof(GpuTerrainView, cascadeCount) == 592);
     static_assert(offsetof(GpuTerrainView, shadowFarFade) == 608);
     static_assert(offsetof(GpuTerrainView, heightMapsBound) == 620);
@@ -108,9 +110,11 @@ export namespace engine::terrain
         Float2 texelSpan;   // texels spanned across the chunk
         Float2 heightRange; // minY, maxY (world)
         Float2 gridSize;    // the heightfield's side, in x and y
-        Float2 skirt;       // x = skirt depth (world), y = pad
+        f32 skirtDepth = 0; // how far the skirt ring drops below the surface (world)
+        f32 _pad0 = 0;
     };
     static_assert(sizeof(GpuTerrainChunk) == 56, "cbuffer TerrainChunk layout drift");
+    static_assert(offsetof(GpuTerrainChunk, skirtDepth) == 48);
 
     class TerrainRenderer final : public render::Renderer
     {
@@ -641,7 +645,8 @@ export namespace engine::terrain
                 ubo.prevViewProj = ctx.prevViewProj;
                 ubo.lightDir = Float3{sun.x, sun.y, sun.z};
                 ubo.cameraPos = Float3{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z};
-                ubo.jitter = Float4{ctx.jitter.x, ctx.jitter.y, ctx.prevJitter.x, ctx.prevJitter.y};
+                ubo.jitter = ctx.jitter;
+                ubo.prevJitter = ctx.prevJitter;
                 const f32 uvYSign = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
                 ubo.shadowUvYSign = uvYSign;
                 // CSM receive: copy this view's cascade matrices/splits (world-space - the VS emits
@@ -987,7 +992,7 @@ export namespace engine::terrain
         // GpuTerrainView (672 bytes; the pick pass's GpuTerrainPickView, 144, shares the slot), padded
         // to the dynamic-offset alignment.
         static constexpr u64 kViewSlotSize = 768;
-        // GpuTerrainChunk (7 float2 = 56 bytes), padded to the dynamic-offset alignment.
+        // GpuTerrainChunk (six float2 and two scalars = 56 bytes), padded to the dynamic-offset alignment.
         static constexpr u64 kChunkSlotSize = 256;
 
         struct LodMesh
@@ -1063,7 +1068,8 @@ export namespace engine::terrain
                 Float2{static_cast<f32>(tmodel::kChunkQuads), static_cast<f32>(tmodel::kChunkQuads)},
                 Float2{data.minY, data.maxY},
                 Float2{static_cast<f32>(data.gridSize), static_cast<f32>(data.gridSize)},
-                Float2{skirtDepth, 0.0f}};
+                skirtDepth,
+                0.0f};
         }
 
         // The forward/resolve pass view bind group: t1 = the LIVE CSM cascade array (or the dummy

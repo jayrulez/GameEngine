@@ -105,7 +105,8 @@ export namespace foundation::render
         i32 outputAccum = 0; // 1: write the accumulated bounce, not the composite (the denoise's input)
         f32 intensity = 1.0f;
         // HLSL starts a float4 on a 16-byte boundary; Float4 here is only 4-byte aligned, so
-        // the pad keeps the C++ offsets the shader's (a shifted read scrambled the sky term).
+        // the pad keeps the C++ offsets the shader's (a shifted read scrambled the sky term). The
+        // shader declares the same two pads (_pad0, _pad1), so both sides list each member.
         f32 pad0 = 0.0f;
         f32 pad1 = 0.0f;
         Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view -> world normal)

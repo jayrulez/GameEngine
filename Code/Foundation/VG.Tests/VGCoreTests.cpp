@@ -22,6 +22,30 @@ TEST_CASE("vg.vertex: layout and solid helpers")
     CHECK(v.coverage == doctest::Approx(1.0f));
 }
 
+TEST_CASE("vg.vertex: the per-pipeline constructors write their values where the shaders read them")
+{
+    // The box shadow: the SDF operand rides texCoord and the signed corner radius coverage.
+    const VGVertex shadow = VGVertex::BoxShadow(Float2{1.0f, 2.0f}, Float2{-0.5f, 0.25f}, Color::Red, -1.5f);
+    CHECK(shadow.position == Float2{1.0f, 2.0f});
+    CHECK(shadow.texCoord == Float2{-0.5f, 0.25f});
+    CHECK(shadow.color == Color::Red);
+    CHECK(shadow.coverage == -1.5f);
+    CHECK(shadow.effect == Float2{0.0f, 0.0f});
+
+    // A glyph: full coverage, the edge shift and ramp in effect.
+    const VGVertex glyph = VGVertex::Glyph(Float2{3.0f, 4.0f}, Float2{0.1f, 0.2f}, Color::White, Float2{0.125f, 0.25f});
+    CHECK(glyph.texCoord == Float2{0.1f, 0.2f});
+    CHECK(glyph.coverage == 1.0f);
+    CHECK(glyph.effect == Float2{0.125f, 0.25f});
+
+    // A layer composite: the filter as offsets from none, so a plain composite carries zeros.
+    const VGVertex plain = VGVertex::LayerComposite(Float2{0.0f, 0.0f}, Float2{1.0f, 1.0f}, Color::White, 1.0f, 1.0f);
+    CHECK(plain.effect == Float2{0.0f, 0.0f});
+    CHECK(plain.coverage == 1.0f);
+    const VGVertex filtered = VGVertex::LayerComposite(Float2{0.0f, 0.0f}, Float2{1.0f, 1.0f}, Color::White, 0.25f, 1.5f);
+    CHECK(filtered.effect == Float2{0.75f, 0.5f});
+}
+
 TEST_CASE("vg.fills: gradient stop interpolation")
 {
     GradientStop stops[] = {GradientStop(0.0f, Color::Black), GradientStop(1.0f, Color::White)};

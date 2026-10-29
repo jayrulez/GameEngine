@@ -41,8 +41,10 @@ export namespace foundation::render
         f32 sunAngularSizeDegrees = 0;
         Float3 sunColor;
         f32 sunIntensity = 0;
-        Float4 jitter;          // xy = this frame's NDC jitter, zw = last frame's
-        Float4 skyFlags; // x = sky-ray Y sign (-1 flips the sampled ray on Y-flip targets); yzw unused
+        Float2 jitter;          // this frame's NDC jitter
+        Float2 prevJitter;      // last frame's NDC jitter (unjitters the reprojection)
+        f32 sceneYSign = 1;     // the scene NDC's Y sign: -1 on Y-flip targets, +1 on Vulkan
+        f32 _pad0 = 0, _pad1 = 0, _pad2 = 0;
     };
     static_assert(sizeof(GpuSky) == 208, "cbuffer Sky layout drift");
     static_assert(offsetof(GpuSky, cameraPos) == 128);
@@ -51,6 +53,9 @@ export namespace foundation::render
     static_assert(offsetof(GpuSky, sunAngularSizeDegrees) == 156);
     static_assert(offsetof(GpuSky, sunColor) == 160);
     static_assert(offsetof(GpuSky, sunIntensity) == 172);
+    static_assert(offsetof(GpuSky, jitter) == 176);
+    static_assert(offsetof(GpuSky, prevJitter) == 184);
+    static_assert(offsetof(GpuSky, sceneYSign) == 192);
 
     class SkyPass
     {

@@ -54,7 +54,7 @@ export namespace foundation::render
         f32 roughCutoff = 0.6f;
         i32 maxSteps = 96;
         // Scene-NDC Y sign for the shader's uv<->ndc conversions: -1 on Vulkan (negative
-        // viewport), +1 on Y-flip targets (NeedsClipSpaceYFlip). Mirrors ShadowParams.y.
+        // viewport), +1 on Y-flip targets (NeedsClipSpaceYFlip). Mirrors the forward view's ShadowUvYSign.
         // (Occupies the old frameMod slot - the dither is static by design, frameMod was 0.)
         f32 ySign = -1.0f;
         i32 debug = 0;

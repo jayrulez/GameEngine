@@ -1398,10 +1398,10 @@ export namespace foundation::vg::renderer
         {
             const rhi::VertexAttribute attributes[5] = {
                 {rhi::VertexFormat::Float32x2, 0, 0},  // position
-                {rhi::VertexFormat::Float32x2, 8, 1},  // texCoord
+                {rhi::VertexFormat::Float32x2, 8, 1},  // texCoord (a box shadow's SDF operand)
                 {rhi::VertexFormat::Float32x4, 16, 2}, // color
-                {rhi::VertexFormat::Float32, 32, 3},   // coverage
-                {rhi::VertexFormat::Float32x2, 36, 4}, // effect (distance-field text effects)
+                {rhi::VertexFormat::Float32, 32, 3},   // coverage (a box shadow's signed corner radius)
+                {rhi::VertexFormat::Float32x2, 36, 4}, // effect (a glyph's edge shift and ramp; a layer's colour filter)
             };
             // An analytic box's vertex (foundation::vg::VGBoxVertex).
             const rhi::VertexAttribute boxAttributes[10] = {

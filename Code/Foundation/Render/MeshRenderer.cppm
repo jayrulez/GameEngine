@@ -86,20 +86,24 @@ export namespace foundation::render
         u32 localShadowBase = 0; // 16
         Float4x4 prevViewProj =
             Float4x4::Identity(); // 64  (motion vectors: last frame's world->clip)
-        Float4 jitter =
-            Float4{0, 0, 0, 0}; // 16  (xy = this frame's NDC jitter, zw = last frame's)
+        Float2 jitter = Float2{0, 0};     // this frame's NDC jitter (TAA)
+        Float2 prevJitter = Float2{0, 0}; // 16  (last frame's: unjitters the motion vectors)
         u32 probeBase = 0;  // this view's scene's first record in Probes[]
         u32 probeCount = 0; // its reflection probes (0 = none)
         u32 _probePad0 = 0, _probePad1 = 0;
-        // x = CSM far-fade width (world units), y = the shadow map's uv Y sign; zw unused.
-        Float4 shadowParams = Float4{40.0f, 0, 0, 0};
-        Float4 debugParams = Float4{0, 0, 0, 0}; // x = semantic debug-view mode, 0 = off
+        f32 shadowFarFade = 40.0f;   // the CSM's far fade width (world units)
+        f32 shadowUvYSign = 0.0f;    // the shadow map's uv Y sign (backend-driven)
+        f32 _shadowPad0 = 0.0f, _shadowPad1 = 0.0f;
+        u32 debugMode = 0;           // the semantic debug view (0 = off)
+        u32 _debugPad0 = 0, _debugPad1 = 0, _debugPad2 = 0;
         f32 iblDiffuse = 1.0f;  // the sky-lighting dimmer
         f32 iblSpecular = 1.0f; // the sky-reflection dimmer
         f32 sceneTime = 0.0f;   // the view's scene clock (s): the WIND sway, a surface's Time()
         f32 prevSceneTime = 0.0f; // last frame's (motion vectors)
     };
     static_assert(sizeof(GpuView) == 656, "cbuffer View layout drift");
+    static_assert(offsetof(GpuView, jitter) == 576);
+    static_assert(offsetof(GpuView, prevJitter) == 584);
     // A single object's per-draw block (cbuffer Object, object_block.hlsli; set 1 binding 0), one
     // declaration the forward, shadow depth and pick vertex stages all include: each pass writes
     // and reads the fields it uses, by name.

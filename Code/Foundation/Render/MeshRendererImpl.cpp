@@ -1100,7 +1100,8 @@ namespace foundation::render
         GpuView vd{};
         vd.viewProj = ctx.viewProj;
         vd.prevViewProj = ctx.prevViewProj; // motion vectors (camera)
-        vd.jitter = Float4{ctx.jitter.x, ctx.jitter.y, ctx.prevJitter.x, ctx.prevJitter.y};
+        vd.jitter = ctx.jitter;
+        vd.prevJitter = ctx.prevJitter;
         vd.view = ctx.viewMatrix;
         vd.cameraPos = ctx.cameraPos;
         vd.ambient = ctx.ambient;
@@ -1136,16 +1137,16 @@ namespace foundation::render
             // the receiver's compare bias. Defaults: ShadowBiasDefaults.
             vd.shadowNormalBias = ctx.cascades.normalBias;
             vd.shadowDepthBias = ctx.cascades.depthBias;
-            vd.shadowParams.x = ctx.cascades.farFade; // the scene's fade width at the reach
+            vd.shadowFarFade = ctx.cascades.farFade; // the scene's fade width at the reach
         }
         // y = shadow-map sample uv.y sign. The shadow map rasterizes the same as the main color
         // target, so on Y-flip targets (WebGPU, positive viewport) uv.y = +ndc.y*0.5+0.5; on
-        // Vulkan (negative-height viewport) it stays -ndc.y*0.5+0.5. Mirrors SkyPass's SkyFlags.
+        // Vulkan (negative-height viewport) it stays -ndc.y*0.5+0.5. Mirrors SkyPass's SceneYSign.
         // OUTSIDE the cascades.valid block: SampleLocalShadow (spot/point tiles) uses this sign
         // too, and local shadows exist without a valid directional CSM - the struct default (0)
         // would collapse every local lookup onto one atlas row.
-        vd.shadowParams.y = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
-        vd.debugParams.x = static_cast<f32>(ctx.debugSemantic);
+        vd.shadowUvYSign = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
+        vd.debugMode = static_cast<u32>(ctx.debugSemantic);
         vd.iblDiffuse = ctx.iblDiffuseIntensity;
         vd.iblSpecular = ctx.iblSpecularIntensity;
         vd.sceneTime = ctx.timeSeconds;

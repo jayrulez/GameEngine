@@ -12,6 +12,7 @@
 // end to end removes that banding (see [[vg-quality-track]]).
 
 module;
+#include <cstddef> // offsetof
 #include "Core/Prelude.h"
 
 export module foundation.vg:vertex;
@@ -23,17 +24,30 @@ using namespace foundation::core;
 export namespace foundation::vg
 {
     /// Vertex structure for vector graphics with analytical AA support.
+    ///
+    /// One layout serves every pipeline but the analytic box (VGBoxVertex), and two pipelines
+    /// read some fields for another value; each has a named constructor so the write site says
+    /// which (and the shader names its input the same way):
+    /// - the box shadow (BoxShadow, vg_shadow.ps): `texCoord` is the rounded-box SDF operand q
+    ///   and `coverage` the corner radius in blur-sigma units, negative for an inset shadow;
+    /// - a distance-field glyph's effect pass (Glyph, vg_df.ps): `effect` is the edge shift and
+    ///   the ramp width;
+    /// - a layer composite (LayerComposite, vg_layer.ps): `effect` is the colour filter as
+    ///   offsets from no filter, (1 - saturation, brightness - 1).
     // ENGINE_EXPORT_DATA for SizeInBytes: a static data member read from another
     // library needs the annotation (shared-libraries.md P5/W1).
     struct ENGINE_EXPORT_DATA VGVertex
     {
         Float2 position;     ///< Position in screen/world coordinates.
-        Float2 texCoord;     ///< Texture coordinates (UV).
+        Float2 texCoord;     ///< Texture coordinates (UV); the SDF operand for a box shadow.
         Color color;         ///< Vertex color in full float RGBA (no 8-bit quantization).
-        f32 coverage = 1.0f; ///< Analytical-AA coverage (0 = transparent fringe, 1 = opaque).
-        /// A distance-field glyph's effect pass (TextEffects), in the field's units (0.5 is the
-        /// edge): x moves the edge outward, y widens it into a soft ramp. Either nonzero reads
-        /// the field's true distance (alpha) instead of the multi-channel median. Zero elsewhere.
+        /// Analytical-AA coverage (0 = transparent fringe, 1 = opaque); the signed corner radius
+        /// for a box shadow.
+        f32 coverage = 1.0f;
+        /// Zero but for two pipelines. A distance-field glyph's effect pass (TextEffects), in the
+        /// field's units (0.5 is the edge): x moves the edge outward, y widens it into a soft
+        /// ramp; either nonzero reads the field's true distance (alpha) instead of the
+        /// multi-channel median. A layer composite: (1 - saturation, brightness - 1).
         Float2 effect{};
 
         /// Size in bytes of this vertex structure.
@@ -70,6 +84,37 @@ export namespace foundation::vg
         {
             return VGVertex(x, y, SolidUV, SolidUV, color, coverage);
         }
+
+        /// A box shadow's vertex (VGDrawMode::BoxShadow): `shadowOperand` is the rounded-box SDF
+        /// operand q = |p - c| - (halfSize - r) in blur-sigma units, carried in `texCoord`;
+        /// `signedCornerRadius` is the corner radius r in sigma units, negative for an inset
+        /// shadow, carried in `coverage`.
+        [[nodiscard]] static constexpr VGVertex BoxShadow(Float2 position, Float2 shadowOperand, Color color,
+                                                          f32 signedCornerRadius) noexcept
+        {
+            return VGVertex(position, shadowOperand, color, signedCornerRadius);
+        }
+
+        /// A distance-field glyph's vertex: `edgeShiftRamp`, carried in `effect`, is x the edge's
+        /// move outward and y its ramp width, in field units (zeros for the plain glyph pass).
+        [[nodiscard]] static constexpr VGVertex Glyph(Float2 position, Float2 uv, Color color,
+                                                      Float2 edgeShiftRamp) noexcept
+        {
+            VGVertex vertex(position, uv, color, 1.0f);
+            vertex.effect = edgeShiftRamp;
+            return vertex;
+        }
+
+        /// A layer composite's vertex (VGDrawMode::Layer): the colour filter rides `effect` as
+        /// offsets from no filter, (1 - saturation, brightness - 1), so a plain composite carries
+        /// zeros.
+        [[nodiscard]] static constexpr VGVertex LayerComposite(Float2 position, Float2 uv, Color tint,
+                                                               f32 saturation, f32 brightness) noexcept
+        {
+            VGVertex vertex(position, uv, tint);
+            vertex.effect = Float2{1.0f - saturation, brightness - 1.0f};
+            return vertex;
+        }
     };
 
     /// One corner of an analytic box (VGContext::DrawBox, VGDrawMode::Box): every vertex carries
@@ -98,4 +143,9 @@ export namespace foundation::vg
 
     static_assert(sizeof(VGVertex) == VGVertex::SizeInBytes,
                   "VGVertex must match the renderer layout (VGRenderVertex)");
+    static_assert(offsetof(VGVertex, position) == 0);
+    static_assert(offsetof(VGVertex, texCoord) == 8);
+    static_assert(offsetof(VGVertex, color) == 16);
+    static_assert(offsetof(VGVertex, coverage) == 32);
+    static_assert(offsetof(VGVertex, effect) == 36);
 }

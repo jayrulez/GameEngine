@@ -1,7 +1,8 @@
 # Shader blocks cleanup - every value in a field named for it
 
-> Status: APPROVED 2026-10-29; phases 0 (f1e5416e1), 1 (9cf6a7739) and 2a (the clock) BUILT on clang;
-> 2b (wind as an effect) next; gcc and the other lanes owed (user: "just slotting unrelated things in
+> Status: APPROVED 2026-10-29; every phase BUILT 2026-10-29 on clang (0 f1e5416e1, 1 9cf6a7739,
+> 2a 93ecb9a96, wind 2b in wind-for-every-shader.md, 3 e7501f703, 4 0894b95e2, 5 b45cdc22b, 6);
+> gcc, clang-shared, wasm and ASAN owed (user: "just slotting unrelated things in
 > unused blocks"; "I'd like if we could clean up all those shader things slopped in").
 > The wind's own design is `wind-for-every-shader.md`, phase 2 here.
 > Mirror: Sedulous ports each phase after it lands.
@@ -214,6 +215,39 @@ sides. `Integration.ShaderBlocks` checks every block above under its new names.
   and saturation and brightness in another. Named per pipeline.
 - Out of scope, kept and documented: the TAA history target's alpha holding the previous depth (a
   texture channel, not a constant block).
+
+Built 2026-10-29: the three views that carried both jitters in one float4 (`Jitter`: xy this
+frame's, zw last frame's) split it into `float2 Jitter` and `float2 PrevJitter` in the same bytes:
+the forward view (`view.hlsli`, `render::GpuView`, read by `forward_ps.hlsli` and `unlit.ps.hlsl`),
+the sky (`sky_common.hlsli`, `render::GpuSky`, read by `sky.ps.hlsl`) and the terrain view
+(`terrain.ps.hlsl`, `terrain::GpuTerrainView`); the SSAO, SSR and SSGI pushes already held one
+jitter, named, and the TAA push none. The sky's `SkyFlags` (only x read) is `SceneYSign` and
+`_skyPad0..2`. The terrain chunk's `Skirt` (y was padding) is `SkirtDepth` and `_terrainChunkPad0`
+in all three chunk declarations (`terrain.vs`, `terrain_depth.vs`, `terrain_pick.vs`). The SSGI
+resolve shader declares the `_pad0`, `_pad1` its C++ mirror already had at 56 and 60, so both sides
+list the same members and the test rows include them. Nothing uploaded moved: every block keeps its
+size and every value its offset.
+The VG vertex keeps its one struct and its one layout (`VGVertex`, `VGRenderVertex`: Float32x2 at
+0, Float32x2 at 8, Float32x4 at 16, Float32 at 32, Float32x2 at 36, stride 44, locations 0 to 4,
+now with offset asserts on both structs); the pipelines that read a field for another value write
+it through a named constructor, `VGVertex::BoxShadow(position, shadowOperand, color,
+signedCornerRadius)`, `VGVertex::Glyph(position, uv, color, edgeShiftRamp)` and
+`VGVertex::LayerComposite(position, uv, tint, saturation, brightness)` (which encodes the filter as
+`(1 - saturation, brightness - 1)` in one place), and each fragment shader names its inputs for its
+own meaning under the same semantics: `vg_shadow.ps` `ShadowOperand` (TEXCOORD0) and
+`SignedCornerRadius` (COVERAGE: the corner radius in blur-sigma units, negative for inset),
+`vg_df.ps` `EdgeShiftRamp`, `vg_layer.ps` `SaturationBrightnessOffset` (both EFFECT); the shared
+`vg.vs` keeps the common names and says which pipelines read them otherwise.
+PBR's three wind lanes need no further migration: wind 2b-2 (40e7b2924, `wind-for-every-shader.md`)
+made them padding (`_materialPad0..2`) at their old offsets, so nothing else moved, and migrated
+stored materials' wind properties into the Wind group (MaterialSource version 4). The TAA history's
+alpha stays the previous frame's linear depth, now stated where the target is created
+(`TaaPass::EnsureHistory`) and where it is read and written (`taa.ps.hlsl`'s `HistoryColor` and
+`PSOut`). `Integration.ShaderBlocks` checks the changed blocks under their new names.
+
+Also named in this phase: the forward view's `ShadowParams` (the far fade width and the shadow
+map's uv Y sign, `zw` unused) became `ShadowFarFade` and `ShadowUvYSign`, and its `DebugParams`
+(the debug mode in `x`, `yzw` spare) a `uint DebugMode`, each with honest padding.
 
 ### Stale comments and missing mirrors (fixed in phase 0, built 2026-10-29)
 

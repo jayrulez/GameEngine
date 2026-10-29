@@ -10,6 +10,7 @@
 // decode). Ported from Sedulous.VG.Renderer/VGRenderVertex.bf.
 
 module;
+#include <cstddef> // offsetof
 #include "Core/Prelude.h"
 
 export module foundation.vg.renderer:vertex;
@@ -21,13 +22,16 @@ using namespace foundation::core;
 
 export namespace foundation::vg::renderer
 {
+    // The fields keep VGVertex's names; two pipelines read texCoord, coverage and effect for
+    // other values (VGVertex's comment and named constructors list them, and each fragment
+    // shader names its inputs for its own meaning).
     struct VGRenderVertex
     {
         f32 position[2];
-        f32 texCoord[2];
+        f32 texCoord[2]; // the SDF operand for a box shadow
         f32 color[4];
-        f32 coverage;
-        f32 effect[2];
+        f32 coverage;    // the signed corner radius for a box shadow
+        f32 effect[2];   // a glyph's edge shift and ramp; a layer's colour filter
 
         VGRenderVertex() = default;
 
@@ -49,4 +53,10 @@ export namespace foundation::vg::renderer
 
     static_assert(sizeof(VGRenderVertex) == 44,
                   "VGRenderVertex must be 44 bytes (8+8+16+4+8) for the shader layout");
+    // The offsets the renderer's vertex layout names (Renderer.cppm, CreatePipelineVariant).
+    static_assert(offsetof(VGRenderVertex, position) == 0);
+    static_assert(offsetof(VGRenderVertex, texCoord) == 8);
+    static_assert(offsetof(VGRenderVertex, color) == 16);
+    static_assert(offsetof(VGRenderVertex, coverage) == 32);
+    static_assert(offsetof(VGRenderVertex, effect) == 36);
 }

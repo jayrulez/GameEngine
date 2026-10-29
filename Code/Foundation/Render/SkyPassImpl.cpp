@@ -113,10 +113,11 @@ namespace foundation::render
         u.sunAngularSizeDegrees = sunSize;
         u.sunColor = sunColor;
         u.sunIntensity = sunIntensity;
-        u.jitter = Float4{jitter.x, jitter.y, prevJitter.x, prevJitter.y};
+        u.jitter = jitter;
+        u.prevJitter = prevJitter;
         // Y-flip targets (WebGPU today; see DxDevice::NeedsClipSpaceYFlip) present the reconstructed sky ray mirrored
         // vertically vs. Vulkan's negative-height viewport; mirror the sampled ray back on those.
-        u.skyFlags = Float4{m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f, 0.0f, 0.0f, 0.0f};
+        u.sceneYSign = m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f;
 
         graph.AddRenderPass(
             u8"sky",

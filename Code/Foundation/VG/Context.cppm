@@ -585,9 +585,6 @@ export namespace foundation::vg
             const VGLayer& layer = m_batch.layers[static_cast<usize>(index)];
             const Rectangle bounds = layer.bounds;
             const Color tint{1.0f, 1.0f, 1.0f, alpha};
-            // The colour filters ride the vertices' effect pair, which no blend space touches:
-            // (1 - saturation, brightness - 1), so a plain composite carries zeros.
-            const Float2 filters{1.0f - layer.saturation, layer.brightness - 1.0f};
             const i32 start = static_cast<i32>(m_batch.indices.Size());
             const u32 base = static_cast<u32>(m_batch.vertices.Size());
             const f32 x0 = bounds.x, y0 = bounds.y, x1 = bounds.x + bounds.width, y1 = bounds.y + bounds.height;
@@ -595,9 +592,9 @@ export namespace foundation::vg
             const Float2 uvs[4] = {Float2{0.0f, 0.0f}, Float2{1.0f, 0.0f}, Float2{1.0f, 1.0f}, Float2{0.0f, 1.0f}};
             for (usize i = 0; i < 4; ++i)
             {
-                VGVertex v(corners[i], uvs[i], tint);
-                v.effect = filters;
-                m_batch.vertices.PushBack(v);
+                // The colour filters ride the vertices' effect pair, which no blend space touches.
+                m_batch.vertices.PushBack(
+                    VGVertex::LayerComposite(corners[i], uvs[i], tint, layer.saturation, layer.brightness));
             }
             const u32 quad[6] = {0, 1, 2, 0, 2, 3};
             for (const u32 i : quad)
@@ -904,8 +901,9 @@ export namespace foundation::vg
         /// rounded-box SDF operand `|p - c| - (halfSize - r)` is LINEAR in position, so it
         /// interpolates exactly from the vertices (in sigma units, in texcoord) and the shader
         /// only has to finish `length(max(q,0)) + min(max(q.x,q.y),0) - r`. Non-uniform radii
-        /// come for free: each quadrant carries its own corner radius (coverage = r / sigma,
-        /// negated for inset). Batches with every other shadow in the same command.
+        /// come for free: each quadrant carries its own corner radius (r / sigma, negated for
+        /// inset; VGVertex::BoxShadow names where each rides). Batches with every other shadow in
+        /// the same command.
         void FillBoxShadow(Rectangle rect, CornerRadii radii, f32 blur, Color color,
                            bool inset = false)
         {
@@ -940,7 +938,7 @@ export namespace foundation::vg
                 const f32 sx = signs[qd][0];
                 const f32 sy = signs[qd][1];
                 const f32 r = Min(corner[qd], Min(half.x, half.y));
-                const f32 coverage = (inset ? -r : r) / sigma;
+                const f32 signedCornerRadius = (inset ? -r : r) / sigma;
                 const f32 reachX = half.x + extent;
                 const f32 reachY = half.y + extent;
                 // q at a local offset (ax, ay) = |offset| - (half - r), in sigma units.
@@ -951,10 +949,10 @@ export namespace foundation::vg
                 const Float2 p2{center.x + sx * reachX, center.y + sy * reachY};
                 const Float2 p3{center.x, center.y + sy * reachY};
                 const u32 base = static_cast<u32>(m_batch.vertices.Size());
-                m_batch.vertices.PushBack(VGVertex(TransformPoint(p0), q(0.0f, 0.0f), opColor, coverage));
-                m_batch.vertices.PushBack(VGVertex(TransformPoint(p1), q(reachX, 0.0f), opColor, coverage));
-                m_batch.vertices.PushBack(VGVertex(TransformPoint(p2), q(reachX, reachY), opColor, coverage));
-                m_batch.vertices.PushBack(VGVertex(TransformPoint(p3), q(0.0f, reachY), opColor, coverage));
+                m_batch.vertices.PushBack(VGVertex::BoxShadow(TransformPoint(p0), q(0.0f, 0.0f), opColor, signedCornerRadius));
+                m_batch.vertices.PushBack(VGVertex::BoxShadow(TransformPoint(p1), q(reachX, 0.0f), opColor, signedCornerRadius));
+                m_batch.vertices.PushBack(VGVertex::BoxShadow(TransformPoint(p2), q(reachX, reachY), opColor, signedCornerRadius));
+                m_batch.vertices.PushBack(VGVertex::BoxShadow(TransformPoint(p3), q(0.0f, reachY), opColor, signedCornerRadius));
                 m_batch.indices.PushBack(base + 0);
                 m_batch.indices.PushBack(base + 1);
                 m_batch.indices.PushBack(base + 2);
@@ -1866,12 +1864,11 @@ export namespace foundation::vg
                 pass(Float2{}, color, 0.0f, 0.0f);
         }
 
-        void EmitGlyphQuad(const fonts::GlyphQuad& quad, Color color, Float2 effect = Float2{})
+        void EmitGlyphQuad(const fonts::GlyphQuad& quad, Color color, Float2 edgeShiftRamp = Float2{})
         {
             const u32 baseIndex = static_cast<u32>(m_batch.vertices.Size());
 
-            VGVertex vertex(Float2{quad.x0, quad.y0}, Float2{quad.u0, quad.v0}, color, 1.0f);
-            vertex.effect = effect;
+            VGVertex vertex = VGVertex::Glyph(Float2{quad.x0, quad.y0}, Float2{quad.u0, quad.v0}, color, edgeShiftRamp);
             m_batch.vertices.PushBack(vertex);
             vertex.position = Float2{quad.x1, quad.y0};
             vertex.texCoord = Float2{quad.u1, quad.v0};

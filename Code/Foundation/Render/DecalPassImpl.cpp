@@ -181,7 +181,7 @@ namespace foundation::render
             u.invTargetSize = invSize;
             u.fadeStartCos = Cos(d.fadeStart);
             u.fadeEndCos = Cos(d.fadeEnd);
-            // Interpolant Y correction (the SkyFlags.x convention): Vulkan's negative viewport
+            // Interpolant Y correction (the sky's SceneYSign convention): Vulkan's negative viewport
             // makes the emitted NDC land on the right pixel already (+1 = verbatim, bit-identical
             // to the pre-flip shader); Y-flip targets mirror the interpolant, so -1 un-mirrors.
             u.yFlip = m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f;

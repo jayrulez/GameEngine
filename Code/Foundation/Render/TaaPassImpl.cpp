@@ -201,6 +201,9 @@ namespace foundation::render
         DestroyHistory(hist);
         for (u32 i = 0; i < 2; ++i)
         {
+            // rgb is the accumulated colour; alpha is NOT colour: it holds the previous frame's
+            // linear view depth, which taa.ps reads back for the disocclusion test (a texture
+            // channel rather than a second depth ping-pong; nothing downstream reads it).
             rhi::TextureDesc td{};
             td.format = kHistoryFormat;
             td.width = w;

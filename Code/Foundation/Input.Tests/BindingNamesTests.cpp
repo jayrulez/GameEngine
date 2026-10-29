@@ -32,6 +32,20 @@ TEST_CASE("binding names: PadButtonName maps the face + dpad + shoulder buttons"
           StringView(u8"Pad LB"));
 }
 
+// Every button its own name (a prompt's sheet draws a glyph per name): the stick presses read
+// "Pad Button" once, so Sprint on the left stick could not be told from any other.
+TEST_CASE("binding names: every pad button has a name of its own")
+{
+    CHECK(PadButtonName(static_cast<u32>(shell::GamepadButton::LeftStick)) == StringView(u8"Pad LS"));
+    for (u32 a = 0; a < static_cast<u32>(shell::GamepadButton::Count); ++a)
+    {
+        CAPTURE(a);
+        CHECK(PadButtonName(a) != StringView(u8"Pad Button"));
+        for (u32 b = a + 1; b < static_cast<u32>(shell::GamepadButton::Count); ++b)
+            CHECK(PadButtonName(a) != PadButtonName(b));
+    }
+}
+
 TEST_CASE("binding names: DescribeBinding dispatches on the binding's source")
 {
     Binding key;
@@ -55,7 +69,7 @@ TEST_CASE("binding names: DescribeBinding dispatches on the binding's source")
     wasd.posX = static_cast<u32>(shell::KeyCode::D);
     wasd.negY = static_cast<u32>(shell::KeyCode::S);
     wasd.posY = static_cast<u32>(shell::KeyCode::W);
-    CHECK(DescribeBinding(wasd) == StringView(u8"Keys A/D/S/W"));
+    CHECK(DescribeBinding(wasd) == StringView(u8"W A S D")); // up, left, down, right, as a player reads them
 }
 
 TEST_CASE("binding names: SourceName / KindName / InteractionName")

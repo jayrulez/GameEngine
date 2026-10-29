@@ -90,7 +90,8 @@ export namespace foundation::input
         return out;
     }
 
-    /// A gamepad button code (shell::GamepadButton) -> a label ("Pad South", "Pad LB", "DPad Up").
+    /// A gamepad button code (shell::GamepadButton) -> a label ("Pad South", "Pad LB", "DPad Up"), one
+    /// of its own for every button, so a prompt's sheet can tell any two apart.
     [[nodiscard]] inline StringView PadButtonName(u32 code)
     {
         switch (static_cast<foundation::shell::GamepadButton>(code))
@@ -119,6 +120,24 @@ export namespace foundation::input
             return u8"Pad Start";
         case foundation::shell::GamepadButton::Back:
             return u8"Pad Back";
+        case foundation::shell::GamepadButton::LeftStick:
+            return u8"Pad LS"; // the left stick pressed
+        case foundation::shell::GamepadButton::RightStick:
+            return u8"Pad RS";
+        case foundation::shell::GamepadButton::Guide:
+            return u8"Pad Guide";
+        case foundation::shell::GamepadButton::LeftPaddle1:
+            return u8"Pad Left Paddle 1";
+        case foundation::shell::GamepadButton::LeftPaddle2:
+            return u8"Pad Left Paddle 2";
+        case foundation::shell::GamepadButton::RightPaddle1:
+            return u8"Pad Right Paddle 1";
+        case foundation::shell::GamepadButton::RightPaddle2:
+            return u8"Pad Right Paddle 2";
+        case foundation::shell::GamepadButton::Touchpad:
+            return u8"Pad Touchpad";
+        case foundation::shell::GamepadButton::Misc1:
+            return u8"Pad Misc";
         default:
             return u8"Pad Button";
         }
@@ -185,14 +204,14 @@ export namespace foundation::input
             return String(u8"Touch Stick");
         case BindingSource::Composite2D:
         {
-            String s(u8"Keys ");
+            // Up, left, down, right, as a player reads them ("W A S D"; the arrows "Up Left Down Right").
+            String s(KeyName(b.posY));
+            s += u8" ";
             s += KeyName(b.negX);
-            s += u8"/";
-            s += KeyName(b.posX);
-            s += u8"/";
+            s += u8" ";
             s += KeyName(b.negY);
-            s += u8"/";
-            s += KeyName(b.posY);
+            s += u8" ";
+            s += KeyName(b.posX);
             return s;
         }
         }

@@ -35,6 +35,22 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The TAA resolve's push block (TaaPush, taa.ps.hlsl); Integration.ShaderBlocks checks it
+    // against the compiled shader, member by member.
+    struct GpuTaaPush
+    {
+        Float2 texelSize{};
+        f32 blendFactor = 0.97f;
+        f32 historyValid = 0.0f;
+        f32 varianceGamma = 1.25f;
+        f32 motionScale = 1.0f / 32.0f; // per pixel a frame (taa.ps.hlsl)
+        f32 nearPlane = 0.1f;
+        f32 farPlane = 1000.0f;
+        i32 orthographic = 0; // 1: linear depth (taa.ps.hlsl's disocclusion test)
+        i32 pad0 = 0, pad1 = 0, pad2 = 0;
+    };
+    static_assert(sizeof(GpuTaaPush) == 48, "push TaaPush layout drift");
+
     // Owns the TAA resolve pipeline + per-view color-history ping-pong. One per renderer.
     class TaaPass
     {
@@ -75,19 +91,6 @@ export namespace foundation::render
         }
 
     private:
-        struct TaaPush
-        {
-            Float2 texelSize{};
-            f32 blendFactor = 0.97f;
-            f32 historyValid = 0.0f;
-            f32 varianceGamma = 1.25f;
-            f32 motionScale = 1.0f / 32.0f; // per pixel a frame (taa.ps.hlsl)
-            f32 nearPlane = 0.1f;
-            f32 farPlane = 1000.0f;
-            i32 orthographic = 0; // 1: linear depth (taa.ps.hlsl's disocclusion test)
-            i32 pad0 = 0, pad1 = 0, pad2 = 0;
-        };
-
         struct ViewHistory
         {
             rhi::Texture* tex[2] = {};

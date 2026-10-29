@@ -853,6 +853,8 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Integration/Integration.TextureCompression Pipeline::Texture.Compression)
     # A surface shader x render: the built-in PBR as a surface shader draws as forward does, on real GPUs.
     util_test_suite(Code/Integration/Integration.Shaders            Pipeline::Shaders)
+    # Every engine shader block x its C++ mirror, member by member, from the SPIR-V DXC compiles.
+    util_test_suite(Code/Integration/Integration.ShaderBlocks       Foundation::Render)
 endif()
 
 # Web-only samples, then stop - the rest of Code/Samples is desktop-only. Honor

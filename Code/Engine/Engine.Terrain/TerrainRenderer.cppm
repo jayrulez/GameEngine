@@ -35,6 +35,57 @@ export namespace engine::terrain
     namespace render = foundation::render;
     namespace tmodel = foundation::terrain;
 
+    /// The terrain shaders' cascade count (TERRAIN_CASCADE_COUNT in terrain.vs/.ps.hlsl); matches
+    /// render::kShadowCascadesCount.
+    inline constexpr u32 kTerrainCascadeCount = 4;
+
+    // The terrain passes' blocks; Integration.ShaderBlocks checks each against the compiled shaders,
+    // member by member. The colour pass's view (cbuffer TerrainView, terrain.ps.hlsl; terrain.vs.hlsl
+    // declares the same fields up to ShadowParams, terrain_depth.vs.hlsl the first two).
+    struct GpuTerrainView
+    {
+        Float4x4 chunkToWorld; // heightfield-local -> world
+        Float4x4 viewProj;     // world -> clip (camera), or the cascade's light clip (shadow cast)
+        Float4x4 view;         // world -> view (GBuffer normal + shadow view depth)
+        Float4x4 prevViewProj; // last frame's world -> clip (motion vectors)
+        Float4x4 cascadeViewProj[kTerrainCascadeCount];
+        Float4 lightDir;  // xyz = direction TO the light (normalized); w unused
+        Float4 cameraPos; // xyz = world camera; w unused
+        Float4 jitter;    // xy = this frame's TAA jitter, zw = last frame's
+        Float4 cascadeSplitFar;
+        Float4 cascadeTexelSize;
+        Float4 shadowMeta;   // x = cascade count, y = layer base, z = normal bias, w = depth bias
+        Float4 shadowParams; // x = far-fade width, y = uv.y sign, z = heightBlendContrast, w = height maps bound
+        Float4 splatParams; // x = palette count, y = weights bound, z = base tile, w = base bound
+        Float4 splatParams2; // x = mask maps bound, yzw spare
+        Float4 shadowLight;  // x = the caster light's shadow strength (1 = full), yzw spare
+    };
+    static_assert(sizeof(GpuTerrainView) == 672, "cbuffer TerrainView layout drift");
+
+    // The pick pass's view, written into the same TerrainView slot (cbuffer TerrainView as
+    // terrain_pick.vs.hlsl declares it: the colour pass's first two matrices, then the id).
+    struct GpuTerrainPickView
+    {
+        Float4x4 chunkToWorld;
+        Float4x4 viewProj;
+        u32 pickIndex = 0, pickGeneration = 0, p0 = 0, p1 = 0; // the shader's PickId, then _pvPad
+    };
+    static_assert(sizeof(GpuTerrainPickView) == 144, "cbuffer TerrainView (pick) layout drift");
+
+    // The per-chunk block (cbuffer TerrainChunk, terrain.vs, terrain_depth.vs and terrain_pick.vs
+    // .hlsl). Shared by the colour, depth and pick passes.
+    struct GpuTerrainChunk
+    {
+        Float2 originXZ;    // world XZ of the chunk's grid origin
+        Float2 sizeXZ;      // world XZ span of the chunk
+        Float2 texelBase;   // height-texture texel of the chunk origin
+        Float2 texelSpan;   // texels spanned across the chunk
+        Float2 heightRange; // minY, maxY (world)
+        Float2 gridSize;    // the heightfield's side, in x and y
+        Float2 skirt;       // x = skirt depth (world), y = pad
+    };
+    static_assert(sizeof(GpuTerrainChunk) == 56, "cbuffer TerrainChunk layout drift");
+
     class TerrainRenderer final : public render::Renderer
     {
     public:
@@ -557,7 +608,7 @@ export namespace engine::terrain
                 {
                     continue;
                 }
-                ViewUBO ubo{};
+                GpuTerrainView ubo{};
                 ubo.chunkToWorld = data->chunkToWorld;
                 ubo.viewProj = ctx.viewProj;
                 ubo.view = ctx.viewMatrix;
@@ -669,7 +720,7 @@ export namespace engine::terrain
                     }
                     ++m_frameChunks;
                     ++m_frameChunkAllocs;
-                    ChunkUBO cb = MakeChunkUBO(*data, c);
+                    GpuTerrainChunk cb = MakeChunkUBO(*data, c);
                     MemCopy(cr.ptr, &cb, sizeof(cb));
 
                     const bool holed = c.hasHoles && holePso != nullptr && holeBg != nullptr;
@@ -758,7 +809,7 @@ export namespace engine::terrain
                 if (pick)
                 {
                     // The pick VS reads the PickView prefix: ChunkToWorld, the cropped VP, the id.
-                    PickViewUBO pu{};
+                    GpuTerrainPickView pu{};
                     pu.chunkToWorld = data->chunkToWorld;
                     pu.viewProj = ctx.viewProj;
                     pu.pickIndex = render::EntityTag::Index(data->entityId) + 1u;
@@ -768,7 +819,7 @@ export namespace engine::terrain
                 else
                 {
                     // The depth VS reads only ChunkToWorld + ViewProj; the rest of the slot is unused.
-                    ViewUBO ubo{};
+                    GpuTerrainView ubo{};
                     ubo.chunkToWorld = data->chunkToWorld;
                     ubo.viewProj = ctx.viewProj; // camera VP (prepass) or cascade light VP (shadow)
                     MemCopy(vr.ptr, &ubo, sizeof(ubo));
@@ -833,7 +884,7 @@ export namespace engine::terrain
                         continue;
                     }
                     ++m_frameChunkAllocs;
-                    ChunkUBO cb = MakeChunkUBO(*data, c);
+                    GpuTerrainChunk cb = MakeChunkUBO(*data, c);
                     MemCopy(cr.ptr, &cb, sizeof(cb));
 
                     const bool holed = c.hasHoles && holePso != nullptr && holeBg != nullptr;
@@ -906,29 +957,11 @@ export namespace engine::terrain
 
     private:
         static constexpr u32 kMaxTerrains = 8;
-        static constexpr u32 kCascadeCount = 4; // matches render::kShadowCascadesCount
-        static constexpr u64 kViewSlotSize = 768;  // 8 mat4 + 6 float4, padded to dynamic alignment
-        static constexpr u64 kChunkSlotSize = 256; // 6 float2, padded to dynamic alignment
-
-        // Mirrors the HLSL TerrainView cbuffer (b0, space0) - keep field order/offsets in lockstep.
-        struct ViewUBO
-        {
-            Float4x4 chunkToWorld;
-            Float4x4 viewProj;
-            Float4x4 view;
-            Float4x4 prevViewProj;
-            Float4x4 cascadeViewProj[kCascadeCount];
-            Float4 lightDir;
-            Float4 cameraPos;
-            Float4 jitter;
-            Float4 cascadeSplitFar;
-            Float4 cascadeTexelSize;
-            Float4 shadowMeta;   // x = cascade count, y = layer base, z = normal bias, w = depth bias
-            Float4 shadowParams; // x = far-fade width, y = uv.y sign, z = heightBlendContrast, w = height maps bound
-            Float4 splatParams; // x = palette count, y = weights bound, z = base tile, w = base bound
-            Float4 splatParams2; // x = mask maps bound, yzw spare
-            Float4 shadowLight;  // x = the caster light's shadow strength (1 = full), yzw spare
-        };
+        static constexpr u32 kCascadeCount = kTerrainCascadeCount;
+        // GpuTerrainView (8 mat4 + 10 float4 = 672 bytes), padded to the dynamic-offset alignment.
+        static constexpr u64 kViewSlotSize = 768;
+        // GpuTerrainChunk (7 float2 = 56 bytes), padded to the dynamic-offset alignment.
+        static constexpr u64 kChunkSlotSize = 256;
 
         struct LodMesh
         {
@@ -981,16 +1014,6 @@ export namespace engine::terrain
             u64 shaderVersion = 0;
         };
 
-        // The pick pass's view layout, written into the same TerrainView slot (the pick VS declares
-        // exactly this prefix; terrain_pick.vs.hlsl). Keep in lockstep.
-        struct PickViewUBO
-        {
-            Float4x4 chunkToWorld;
-            Float4x4 viewProj;
-            u32 pickIndex = 0, pickGeneration = 0, p0 = 0, p1 = 0;
-        };
-        static_assert(sizeof(PickViewUBO) == 144, "cbuffer TerrainView (pick prefix) layout drift");
-
         struct PickPso
         {
             rhi::RenderPipeline* pso = nullptr;
@@ -999,26 +1022,14 @@ export namespace engine::terrain
             u64 shaderVersion = 0;
         };
 
-        // Mirrors the HLSL TerrainChunk cbuffer (b0, space1). Shared by the color + depth passes.
-        struct ChunkUBO
-        {
-            Float2 originXZ;
-            Float2 sizeXZ;
-            Float2 texelBase;
-            Float2 texelSpan;
-            Float2 heightRange;
-            Float2 gridSize;
-            Float2 skirt; // x = skirt depth (world), y = pad
-        };
-
-        [[nodiscard]] static ChunkUBO MakeChunkUBO(const TerrainRenderData& data,
+        [[nodiscard]] static GpuTerrainChunk MakeChunkUBO(const TerrainRenderData& data,
                                                    const tmodel::TerrainChunk& c)
         {
             // Skirt depth: how far the skirt ring drops below the surface to plug an LOD seam. Bounded
             // by the chunk's own relief (a seam can't mismatch by more), with a floor for near-flat
             // terrain. Only visible AT a crack, so being generous is free (unused in the depth pass).
             const f32 skirtDepth = Max(1.0f, 0.5f * (c.bounds.max.y - c.bounds.min.y));
-            return ChunkUBO{
+            return GpuTerrainChunk{
                 Float2{c.bounds.min.x, c.bounds.min.z},
                 Float2{c.bounds.max.x - c.bounds.min.x, c.bounds.max.z - c.bounds.min.z},
                 Float2{static_cast<f32>(c.gridX0), static_cast<f32>(c.gridZ0)},

@@ -60,7 +60,7 @@ namespace foundation::render
         rhi::PushConstantRange pc{};
         pc.stages = rhi::ShaderStage::Fragment;
         pc.offset = 0;
-        pc.size = sizeof(TaaPush);
+        pc.size = sizeof(GpuTaaPush);
         rhi::PipelineLayoutDesc pld{};
         pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};
         pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pc, 1};
@@ -141,7 +141,7 @@ namespace foundation::render
                                rhi::ResourceState::RenderTarget, hist.state[cur]);
         hist.state[cur] = rhi::ResourceState::RenderTarget;
 
-        TaaPush push{};
+        GpuTaaPush push{};
         push.texelSize = Float2{1.0f / static_cast<f32>(w), 1.0f / static_cast<f32>(h)};
         push.blendFactor = blendFactor;
         push.historyValid = hist.valid ? 1.0f : 0.0f;
@@ -182,7 +182,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_pipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(TaaPush), &push);
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuTaaPush), &push);
                         rp.Draw(3, 1, 0, 0);
                     });
             });

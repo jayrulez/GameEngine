@@ -37,6 +37,51 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The SSR passes' push blocks (ssr and ssr_resolve .ps.hlsl); Integration.ShaderBlocks checks
+    // each against the compiled shader, member by member.
+    // Byte-identical to the HLSL SsrPush (128 bytes, the portable push-constant limit).
+    struct GpuSsrPush
+    {
+        Float4x4 invProj{};
+        Float2 vpMin{0.0f, 0.0f};
+        Float2 vpSize{1.0f, 1.0f};
+        Float2 jitter{};
+        f32 projXX = 1.0f;
+        f32 projYY = 1.0f;
+        f32 thickness = 0.5f;
+        f32 intensity = 1.0f;
+        f32 edgeFade = 0.1f;
+        f32 roughCutoff = 0.6f;
+        i32 maxSteps = 96;
+        // Scene-NDC Y sign for the shader's uv<->ndc conversions: -1 on Vulkan (negative
+        // viewport), +1 on Y-flip targets (NeedsClipSpaceYFlip). Mirrors ShadowParams.y.
+        // (Occupies the old frameMod slot - the dither is static by design, frameMod was 0.)
+        f32 ySign = -1.0f;
+        i32 debug = 0;
+        f32 glossy = 1.0f;
+    };
+    static_assert(sizeof(GpuSsrPush) <= 128,
+                  "SSR push exceeds the portable 128-byte push-constant limit");
+    static_assert(sizeof(GpuSsrPush) == 128, "push SsrPush layout drift");
+
+    // Byte-identical to the HLSL SsrResolvePush.
+    struct GpuSsrResolvePush
+    {
+        Float2 vpMin{0.0f, 0.0f};
+        Float2 vpSize{1.0f, 1.0f};
+        Float2 texelSize{};
+        f32 blendFactor = 0.88f;
+        f32 historyValid = 0.0f;
+        f32 varianceGamma = 1.0f;
+        f32 motionScale = 24.0f;
+        i32 temporalOn = 1;
+        i32 debug = 0;
+        f32 ghostReject = 6.0f;
+    };
+    static_assert(sizeof(GpuSsrResolvePush) <= 128,
+                  "SSR resolve push exceeds the portable 128-byte limit");
+    static_assert(sizeof(GpuSsrResolvePush) == 52, "push SsrResolvePush layout drift");
+
     // Owns the SSR pipeline. Produces a fresh HDR transient (scene with reflections composited in).
     class SsrPass
     {
@@ -95,47 +140,6 @@ export namespace foundation::render
     private:
         static constexpr rhi::TextureFormat kHdrFormat =
             rhi::TextureFormat::RGBA16Float; // matches the scene HDR
-        // Byte-identical to the HLSL SsrPush (124 bytes, under the portable 128-byte push limit).
-        struct SsrPushC
-        {
-            Float4x4 invProj{};
-            Float2 vpMin{0.0f, 0.0f};
-            Float2 vpSize{1.0f, 1.0f};
-            Float2 jitter{};
-            f32 projXX = 1.0f;
-            f32 projYY = 1.0f;
-            f32 thickness = 0.5f;
-            f32 intensity = 1.0f;
-            f32 edgeFade = 0.1f;
-            f32 roughCutoff = 0.6f;
-            i32 maxSteps = 96;
-            // Scene-NDC Y sign for the shader's uv<->ndc conversions: -1 on Vulkan (negative
-            // viewport), +1 on Y-flip targets (NeedsClipSpaceYFlip). Mirrors ShadowParams.y.
-            // (Occupies the old frameMod slot - the dither is static by design, frameMod was 0.)
-            f32 ySign = -1.0f;
-            i32 debug = 0;
-            f32 glossy = 1.0f;
-        };
-        static_assert(sizeof(SsrPushC) <= 128,
-                      "SSR push exceeds the portable 128-byte push-constant limit");
-
-        // Byte-identical to the HLSL SsrResolvePush.
-        struct SsrResolvePushC
-        {
-            Float2 vpMin{0.0f, 0.0f};
-            Float2 vpSize{1.0f, 1.0f};
-            Float2 texelSize{};
-            f32 blendFactor = 0.88f;
-            f32 historyValid = 0.0f;
-            f32 varianceGamma = 1.0f;
-            f32 motionScale = 24.0f;
-            i32 temporalOn = 1;
-            i32 debug = 0;
-            f32 ghostReject = 6.0f;
-        };
-        static_assert(sizeof(SsrResolvePushC) <= 128,
-                      "SSR resolve push exceeds the portable 128-byte limit");
-
         static constexpr u32 kMaxViews = 8;
         struct ViewHistory
         {

@@ -29,6 +29,20 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The FXAA pass's push block (FxaaPush, fxaa.ps.hlsl); Integration.ShaderBlocks checks it
+    // against the compiled shader, member by member.
+    struct GpuFxaaPush
+    {
+        Float2 texelSize{};         // 1 / the full target size
+        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv -> the view's sub-rect
+        Float2 uvOffset{0.0f, 0.0f};
+        f32 subpixelQuality = 0.75f;
+        f32 edgeThreshold = 0.166f;
+        f32 edgeThresholdMin = 0.0312f; // skip dark, flat areas
+        f32 linearInput = 0.0f; // 1 = the source holds linear values (an sRGB or float target)
+    };
+    static_assert(sizeof(GpuFxaaPush) == 40, "push FxaaPush layout drift");
+
     // Anti-aliases a tonemapped LDR transient into the final LDR target. Owns the fullscreen pipeline +
     // per-(view,frame) bind groups over the (transient) source view. Declared after tonemap, when TAA is off.
     class FxaaPass
@@ -62,7 +76,7 @@ export namespace foundation::render
             rhi::PushConstantRange pc{};
             pc.stages = rhi::ShaderStage::Fragment;
             pc.offset = 0;
-            pc.size = sizeof(f32) * 10;
+            pc.size = sizeof(GpuFxaaPush);
             rhi::PipelineLayoutDesc pld{};
             pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};
             pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pc, 1};
@@ -103,9 +117,14 @@ export namespace foundation::render
             // decodes to linear on sampling and a float one holds linear values (the tonemap
             // encodes once, where the target is shown), so FXAA's luma is told which it reads.
             const bool linearInput = rhi::IsSrgb(ldrFormat) || rhi::IsFloat(ldrFormat);
-            const f32 push[10] = {texelSize.x, texelSize.y,     uvScale.x, uvScale.y, uvOffset.x,
-                                  uvOffset.y,  subpixelQuality, 0.166f,    0.0312f,
-                                  linearInput ? 1.0f : 0.0f};
+            GpuFxaaPush push{};
+            push.texelSize = texelSize;
+            push.uvScale = uvScale;
+            push.uvOffset = uvOffset;
+            push.subpixelQuality = subpixelQuality;
+            push.edgeThreshold = 0.166f;
+            push.edgeThresholdMin = 0.0312f;
+            push.linearInput = linearInput ? 1.0f : 0.0f;
 
             const rhi::LoadOp load = clearColor ? rhi::LoadOp::Clear : rhi::LoadOp::Load;
             graph.AddRenderPass(
@@ -128,7 +147,7 @@ export namespace foundation::render
                             }
                             rp.SetPipeline(pipeline);
                             rp.SetBindGroup(0, bg, Span<const u32>{});
-                            rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(push), push);
+                            rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(push), &push);
                             rp.Draw(3, 1, 0, 0);
                         });
                 });

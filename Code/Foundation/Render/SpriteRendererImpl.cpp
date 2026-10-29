@@ -133,11 +133,7 @@ namespace foundation::render
         {
             return;
         }
-        struct ViewUBO
-        {
-            Float4x4 viewProj;
-            Float4x4 view;
-        } ubo{ctx.viewProj, ctx.viewMatrix};
+        const GpuSpriteView ubo{ctx.viewProj, ctx.viewMatrix};
         MemCopy(vr.ptr, &ubo, sizeof(ubo));
 
         // Fuse consecutive sprites sharing (texture, blend) into one instanced draw.

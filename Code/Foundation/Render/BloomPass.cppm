@@ -28,6 +28,18 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The bloom down/up passes' push block (BloomPush, bloom_common.hlsli); Integration.ShaderBlocks
+    // checks it against the compiled shader, member by member.
+    struct GpuBloomPush
+    {
+        Float2 srcTexel{};
+        f32 threshold = 1.0f;
+        f32 knee = 0.5f;
+        i32 firstPass = 0;
+        f32 pad0 = 0, pad1 = 0, pad2 = 0;
+    };
+    static_assert(sizeof(GpuBloomPush) == 32, "push BloomPush layout drift");
+
     // Builds the bloom pyramid from an HDR input; returns the mip-0 (half-res) accumulated bloom handle,
     // which the tonemap composites. Owns the down/up pipelines + sampler; the pyramid is graph transients.
     class BloomPass
@@ -55,15 +67,6 @@ export namespace foundation::render
                                                          u32 vpH, f32 threshold, f32 knee);
 
     private:
-        struct BloomPush
-        {
-            Float2 srcTexel{};
-            f32 threshold = 1.0f;
-            f32 knee = 0.5f;
-            i32 firstPass = 0;
-            f32 pad0 = 0, pad1 = 0, pad2 = 0;
-        };
-
         rhi::RenderPipeline* MakePipeline(StringView name, bool additive);
 
         // Bind group over a (transient) source view, cached by view pointer + generation. Transients are

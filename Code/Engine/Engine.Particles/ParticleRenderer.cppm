@@ -36,6 +36,19 @@ export namespace engine::particles
     // Foundation aliases (sibling engine::* namespaces would otherwise shadow these).
     namespace render = foundation::render;
 
+    // The particle passes' view (cbuffer ParticleView, particle.vs/.ps and particletrail.vs .hlsl);
+    // Integration.ShaderBlocks checks it against the compiled shaders, member by member.
+    struct GpuParticleView
+    {
+        Float4x4 viewProj;
+        Float4x4 view;
+        // x = Proj[2][2], y = Proj[3][2], z = Proj[2][3] (view depth from a sampled NDC depth; z = 0
+        // for an orthographic projection). w is written 0 and read by nothing: the soft-particle
+        // distance rides each instance (SizeRotMode.w).
+        Float4 depthParams;
+    };
+    static_assert(sizeof(GpuParticleView) == 144, "cbuffer ParticleView layout drift");
+
     class ParticleRenderer final : public render::Renderer
     {
     public:
@@ -278,14 +291,9 @@ export namespace engine::particles
             // shader linearizes as such) + the soft-particle fade distance.
             const Float4x4 proj =
                 (ctx.view != nullptr) ? ctx.view->Camera().projection : Float4x4::Identity();
-            struct ViewUBO
-            {
-                Float4x4 viewProj;
-                Float4x4 view;
-                Float4 depthParams;
-            } ubo{ctx.viewProj, ctx.viewMatrix,
-                  Float4{proj(2, 2), proj(3, 2), proj(2, 3),
-                         0.0f}}; // .w unused (soft distance is per-instance)
+            const GpuParticleView ubo{ctx.viewProj, ctx.viewMatrix,
+                                      Float4{proj(2, 2), proj(3, 2), proj(2, 3),
+                                             0.0f}}; // .w unused (soft distance is per-instance)
             MemCopy(vr.ptr, &ubo, sizeof(ubo));
 
             // Scene-depth bind group (set 2) for soft particles. The transparent pass hands us the opaque
@@ -400,7 +408,7 @@ export namespace engine::particles
     private:
         static constexpr u32 kMaxViews = 8;
         static constexpr u64 kViewSlotSize =
-            256; // 2x mat4 + a float4, padded to the dynamic-uniform alignment
+            256; // GpuParticleView (2x mat4 + a float4), padded to the dynamic-uniform alignment
         static constexpr u32 kTrailMaxIndices =
             262144u; // identity index buffer cap (largest single trail batch)
 

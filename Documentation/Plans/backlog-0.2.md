@@ -140,6 +140,17 @@ then nothing hosts a GUI an agent would ask about); then a standalone phase: the
 place in `McpGuide.md` and the engine's tool count, and a session that finds a node, explains its
 styles and edits it.
 
+## Shader blocks: no meaning in a spare or borrowed lane (user 2026-10-29)
+
+"Just slotting unrelated things in unused blocks". Specced 2026-10-29 as
+`Specs/shader-blocks-cleanup.md` (the full audit, 26 findings, in phases). Audit the engine's shader constant blocks and
+give each meaning a named place, the block growing where it must. Seen 2026-10-29: the wind in PBR's
+material buffer's spare lanes (offsets 24, 28, 60; `Specs/wind-for-every-shader.md` moves the wind
+out); the forward clock in `IblParams.zw`; `Tint.a` as a faded instance set's rank; `ShadowWind`
+carrying the wind clock in `.x` and the instance fade window in `.yz`; the pick view's fade end in
+`PickCamera.w`. Each with its C++ side (the structs the renderer fills) and a test that the layouts
+on both sides agree.
+
 ## The shader page: the cooked code, and project include files (2026-10-12; after 0.1)
 
 What custom shaders left after 0.1 (`Specs/custom-shaders.md`, phase 8): a toggle on the shader

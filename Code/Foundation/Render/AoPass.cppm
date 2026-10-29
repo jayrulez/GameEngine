@@ -30,6 +30,53 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The AO passes' push blocks (ao_gtao, ao_ssao, ao_blur and ao_apply .ps.hlsl: GtaoPush,
+    // SsaoPush, BlurPush, ApplyPush); Integration.ShaderBlocks checks each against the compiled
+    // shader, member by member.
+    struct GpuGtaoPush
+    {
+        Float4x4 invProj{};
+        Float2 texelSize{};
+        f32 radius = 0.5f;
+        f32 intensity = 1.0f;
+        f32 projScaleY = 1.0f;
+        i32 frameMod = 0;
+        i32 debugMode = 0;
+        i32 orthographic = 0; // 1: view rays are parallel, no divide by depth
+    };
+    static_assert(sizeof(GpuGtaoPush) == 96, "push GtaoPush layout drift");
+    struct GpuSsaoPush
+    {
+        Float4x4 invProj{};
+        Float2 texelSize{};
+        Float2 jitter{};
+        f32 projXX = 1.0f;
+        f32 projYY = 1.0f;
+        f32 radius = 0.5f;
+        f32 intensity = 1.0f;
+        f32 bias = 0.05f;
+        i32 sampleCount = 16;
+        i32 debugMode = 0;
+        i32 orthographic = 0; // 1: view rays are parallel, no divide by depth
+        i32 pad = 0;
+    };
+    static_assert(sizeof(GpuSsaoPush) == 116, "push SsaoPush layout drift");
+    struct GpuAoBlurPush
+    {
+        Float2 dir{};
+        Float2 texelSize{};
+        f32 depthSigma = 120.0f;
+        f32 p0 = 0, p1 = 0, p2 = 0;
+    };
+    static_assert(sizeof(GpuAoBlurPush) == 32, "push BlurPush layout drift");
+    struct GpuAoApplyPush
+    {
+        f32 strength = 1.0f;
+        f32 flipAoY = 0; // 1 = sample AO with flipped uv.y (Y-flip targets: WebGPU today)
+        f32 p1 = 0, p2 = 0;
+    };
+    static_assert(sizeof(GpuAoApplyPush) == 16, "push ApplyPush layout drift");
+
     // Which AO generator to run (mutually exclusive - both write the same AO buffer).
     enum class AoMode : u32
     {
@@ -76,46 +123,6 @@ export namespace foundation::render
     private:
         static constexpr rhi::TextureFormat kHdrFormat =
             rhi::TextureFormat::RGBA16Float; // matches the scene HDR
-        struct GtaoPushC
-        {
-            Float4x4 invProj{};
-            Float2 texelSize{};
-            f32 radius = 0.5f;
-            f32 intensity = 1.0f;
-            f32 projScaleY = 1.0f;
-            i32 frameMod = 0;
-            i32 debugMode = 0;
-            i32 orthographic = 0; // 1: view rays are parallel, no divide by depth
-        };
-        struct SsaoPushC
-        {
-            Float4x4 invProj{};
-            Float2 texelSize{};
-            Float2 jitter{};
-            f32 projXX = 1.0f;
-            f32 projYY = 1.0f;
-            f32 radius = 0.5f;
-            f32 intensity = 1.0f;
-            f32 bias = 0.05f;
-            i32 sampleCount = 16;
-            i32 debugMode = 0;
-            i32 orthographic = 0; // 1: view rays are parallel, no divide by depth
-            i32 pad = 0;
-        };
-        struct BlurPushC
-        {
-            Float2 dir{};
-            Float2 texelSize{};
-            f32 depthSigma = 120.0f;
-            f32 p0 = 0, p1 = 0, p2 = 0;
-        };
-        struct ApplyPushC
-        {
-            f32 strength = 1.0f;
-            f32 flipAoY = 0; // 1 = sample AO with flipped uv.y (Y-flip targets: WebGPU today)
-            f32 p1 = 0, p2 = 0;
-        };
-
         // A fixed byte buffer so a generate push (GTAO or SSAO) can be captured by value into the pass lambda.
         struct PushBuf
         {

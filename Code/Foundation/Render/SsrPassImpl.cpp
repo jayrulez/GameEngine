@@ -65,7 +65,7 @@ namespace foundation::render
         rhi::PushConstantRange pcr{};
         pcr.stages = rhi::ShaderStage::Fragment;
         pcr.offset = 0;
-        pcr.size = sizeof(SsrPushC);
+        pcr.size = sizeof(GpuSsrPush);
         rhi::PipelineLayoutDesc pld{};
         pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{gl, 1};
         pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pcr, 1};
@@ -124,7 +124,7 @@ namespace foundation::render
         rhi::PushConstantRange rpc{};
         rpc.stages = rhi::ShaderStage::Fragment;
         rpc.offset = 0;
-        rpc.size = sizeof(SsrResolvePushC);
+        rpc.size = sizeof(GpuSsrResolvePush);
         rhi::PipelineLayoutDesc rpld{};
         rpld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{rgl, 1};
         rpld.pushConstantRanges = Span<const rhi::PushConstantRange>{&rpc, 1};
@@ -253,7 +253,7 @@ namespace foundation::render
         // --- Trace: reflection buffer (rgb reflected radiance, a = confidence) ---
         const rendergraph::RGHandle refl =
             graph.CreateTransient(u8"ssr.refl", rendergraph::RGTextureDesc(kHdrFormat, w, h));
-        SsrPushC pc{};
+        GpuSsrPush pc{};
         pc.invProj = invProj;
         pc.vpMin = vpMin;
         pc.vpSize = vpSize;
@@ -296,7 +296,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_pipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(SsrPushC), &pc);
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuSsrPush), &pc);
                         rp.Draw(3, 1, 0, 0);
                     });
             });
@@ -319,7 +319,7 @@ namespace foundation::render
                                rhi::ResourceState::RenderTarget, hist.state[cur]);
         hist.state[cur] = rhi::ResourceState::RenderTarget;
 
-        SsrResolvePushC rpc2{};
+        GpuSsrResolvePush rpc2{};
         rpc2.vpMin = vpMin;
         rpc2.vpSize = vpSize;
         rpc2.texelSize = Float2{1.0f / fw, 1.0f / fh};
@@ -361,7 +361,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_resolvePipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(SsrResolvePushC),
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuSsrResolvePush),
                                             &rpc2);
                         rp.Draw(3, 1, 0, 0);
                     });

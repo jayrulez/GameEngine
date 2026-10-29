@@ -52,10 +52,10 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        m_gtaoLayout = MakePipelineLayout(sizeof(GtaoPushC));
-        m_ssaoLayout = MakePipelineLayout(sizeof(SsaoPushC));
-        m_blurLayout = MakePipelineLayout(sizeof(BlurPushC));
-        m_applyLayout = MakePipelineLayout(sizeof(ApplyPushC));
+        m_gtaoLayout = MakePipelineLayout(sizeof(GpuGtaoPush));
+        m_ssaoLayout = MakePipelineLayout(sizeof(GpuSsaoPush));
+        m_blurLayout = MakePipelineLayout(sizeof(GpuAoBlurPush));
+        m_applyLayout = MakePipelineLayout(sizeof(GpuAoApplyPush));
         if (m_gtaoLayout == nullptr || m_ssaoLayout == nullptr || m_blurLayout == nullptr ||
             m_applyLayout == nullptr)
         {
@@ -139,7 +139,7 @@ namespace foundation::render
         rhi::RenderPipeline* pipeline = nullptr;
         if (mode == AoMode::GTAO)
         {
-            GtaoPushC gp{};
+            GpuGtaoPush gp{};
             gp.invProj = invProj;
             gp.texelSize = texel;
             gp.radius = radius;
@@ -153,7 +153,7 @@ namespace foundation::render
         }
         else
         {
-            SsaoPushC sp{};
+            GpuSsaoPush sp{};
             sp.invProj = invProj;
             sp.texelSize = texel;
             sp.projXX = proj(0, 0);
@@ -217,7 +217,7 @@ namespace foundation::render
         }
         const rendergraph::RGHandle out =
             graph.CreateTransient(u8"ao.applied", rendergraph::RGTextureDesc(kHdrFormat, w, h));
-        ApplyPushC ap{};
+        GpuAoApplyPush ap{};
         ap.strength = strength;
         // The SSAO/GTAO fullscreen passes store the AO buffer vertically flipped vs the HDR scene on
         // Y-flip targets (WebGPU today, positive viewport); realign by sampling AO with flipped uv.y there.
@@ -245,7 +245,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_applyPipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(ApplyPushC), &ap);
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuAoApplyPush), &ap);
                         rp.Draw(3, 1, 0, 0);
                     });
             });
@@ -274,7 +274,7 @@ namespace foundation::render
                              rendergraph::RGHandle depth, rendergraph::RGHandle out, u32 w, u32 h,
                              Float2 texel, Float2 dir)
     {
-        BlurPushC bp{};
+        GpuAoBlurPush bp{};
         bp.dir = dir;
         bp.texelSize = texel;
         graph.AddRenderPass(
@@ -300,7 +300,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_blurPipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(BlurPushC), &bp);
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuAoBlurPush), &bp);
                         rp.Draw(3, 1, 0, 0);
                     });
             });

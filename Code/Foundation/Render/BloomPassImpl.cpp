@@ -46,7 +46,7 @@ namespace foundation::render
         rhi::PushConstantRange pc{};
         pc.stages = rhi::ShaderStage::Fragment;
         pc.offset = 0;
-        pc.size = sizeof(BloomPush);
+        pc.size = sizeof(GpuBloomPush);
         rhi::PipelineLayoutDesc pld{};
         pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};
         pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pc, 1};
@@ -132,7 +132,7 @@ namespace foundation::render
             const rendergraph::RGHandle src = (i == 0) ? hdr : chain[i - 1];
             const u32 srcW = (i == 0) ? vpW : lw[i - 1];
             const u32 srcH = (i == 0) ? vpH : lh[i - 1];
-            BloomPush push{};
+            GpuBloomPush push{};
             push.srcTexel = Float2{1.0f / static_cast<f32>(srcW), 1.0f / static_cast<f32>(srcH)};
             push.threshold = threshold;
             push.knee = knee;
@@ -160,7 +160,7 @@ namespace foundation::render
                                             rp.SetPipeline(m_downPipeline);
                                             rp.SetBindGroup(0, bg, Span<const u32>{});
                                             rp.SetPushConstants(rhi::ShaderStage::Fragment, 0,
-                                                                sizeof(BloomPush), &push);
+                                                                sizeof(GpuBloomPush), &push);
                                             rp.Draw(3, 1, 0, 0);
                                         });
                                 });
@@ -171,7 +171,7 @@ namespace foundation::render
         {
             const rendergraph::RGHandle src = chain[i + 1];
             const rendergraph::RGHandle dst = chain[i];
-            BloomPush push{};
+            GpuBloomPush push{};
             push.srcTexel =
                 Float2{1.0f / static_cast<f32>(lw[i + 1]), 1.0f / static_cast<f32>(lh[i + 1])};
             const u32 dw = lw[i], dh = lh[i];
@@ -196,7 +196,7 @@ namespace foundation::render
                                             rp.SetPipeline(m_upPipeline);
                                             rp.SetBindGroup(0, bg, Span<const u32>{});
                                             rp.SetPushConstants(rhi::ShaderStage::Fragment, 0,
-                                                                sizeof(BloomPush), &push);
+                                                                sizeof(GpuBloomPush), &push);
                                             rp.Draw(3, 1, 0, 0);
                                         });
                                 });

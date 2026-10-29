@@ -186,8 +186,8 @@ namespace foundation::render
         {
             return binding;
         }
-        BuildParams* bp = static_cast<BuildParams*>(pr.ptr);
-        *bp = BuildParams{};
+        GpuClusterBuildParams* bp = static_cast<GpuClusterBuildParams*>(pr.ptr);
+        *bp = GpuClusterBuildParams{};
         bp->gridX = gridX;
         bp->gridY = gridY;
         bp->sliceCount = kSliceCount;
@@ -357,7 +357,7 @@ namespace foundation::render
             return false;
         }
         rhi::BindGroupEntry entries[] = {
-            rhi::BindGroupEntry::BufferEntry(params, 0, sizeof(BuildParams)),
+            rhi::BindGroupEntry::BufferEntry(params, 0, sizeof(GpuClusterBuildParams)),
             rhi::BindGroupEntry::BufferEntry(lights, 0, m_lightRing.ByteCapacity()),
             rhi::BindGroupEntry::BufferEntry(offsets, 0, m_offsetsBytes[bufferSlot]),
             rhi::BindGroupEntry::BufferEntry(indices, 0, m_indicesBytes[bufferSlot]),

@@ -61,6 +61,92 @@ export namespace foundation::render
     /// static constexpr member from a shared library).
     inline constexpr u32 kMeshRendererMultiMeshEvictFrames = 120;
 
+    // The renderers' GPU blocks as the shaders declare them (forward_vs.hlsli, view.hlsli,
+    // shadow_depth_vs.hlsli, pick_ids_vs.hlsli); Integration.ShaderBlocks checks each against the
+    // compiled shaders, member by member.
+    struct GpuView
+    {                                // 688 (cbuffer View, view.hlsli)
+        Float4x4 viewProj;           // 64
+        Float4x4 view;               // 64  (view-space depth: cluster + cascade select)
+        Float4x4 cascadeViewProj[4]; // 256 (CSM: world -> each cascade's light clip)
+        Float3 cameraPos;
+        f32 lightCount; // 16  (light count as float, mirrors HLSL)
+        u32 lightOffset;
+        i32 clusterViewportX, clusterViewportY;
+        f32 iblMaxLod = -1.0f; // 16 (iblMaxLod<0 => no IBL)
+        u32 clusterGridX = 0, clusterGridY = 0, clusterSliceCount = 0,
+            clusterTileSize = 0;                                                      // 16
+        f32 clusterNear = 0, clusterFar = 0, clusterLogScale = 0, clusterLogBias = 0; // 16
+        Float3 ambient = Float3{0, 0, 0};
+        f32 shadowCascadeCount = 0.0f;                // 16
+        Float4 cascadeSplitFar = Float4{0, 0, 0, 0};  // 16
+        Float4 cascadeTexelSize = Float4{0, 0, 0, 0}; // 16
+        f32 shadowNormalBias = 0, shadowDepthBias = 0, cascadeLayerBase = 0;
+        u32 localShadowBase = 0; // 16
+        Float4x4 prevViewProj =
+            Float4x4::Identity(); // 64  (motion vectors: last frame's world->clip)
+        Float4 jitter =
+            Float4{0, 0, 0, 0}; // 16  (xy = this frame's NDC jitter, zw = last frame's)
+        // ProbeCenter: x = this view's scene's base into Probes[], w = its probe count (0 = none);
+        // ProbeBoxMin/Max are written by nothing (shader-blocks-cleanup.md, phase 4 removes them).
+        Float4 probeCenter = Float4{0, 0, 0, 0};
+        Float4 probeBoxMin = Float4{0, 0, 0, 0};
+        Float4 probeBoxMax = Float4{0, 0, 0, 0};
+        // x = CSM far-fade width (world units), y = the shadow map's uv Y sign; zw = a faded
+        // instanced set's window, in its private copy of this block (phase 1 moves it out).
+        Float4 shadowParams = Float4{40.0f, 0, 0, 0};
+        Float4 debugParams = Float4{0, 0, 0, 0}; // x = semantic debug-view mode, 0 = off
+        // x = IBL diffuse intensity, y = IBL specular; zw = the WIND clock, this frame's and the
+        // last (phase 2 moves it to named fields).
+        Float4 iblParams = Float4{1, 1, 0, 0};
+    };
+    static_assert(sizeof(GpuView) == 688, "cbuffer View layout drift");
+    struct GpuObject
+    {
+        Float4x4 world;
+        Float4x4 prevWorld;
+        Color tint;
+        u32 boneBase = 0, prevBoneBase = 0;
+        u32 pickIndex = 0, pickGeneration = 0; // pick pass only (EntityTag index + 1, generation)
+        f32 fade = 0.0f; // the screen-door fade, 0 = solid (forward pass, the DITHER variant)
+        u32 _fadePad[3] = {};
+    }; // 176 (cbuffer Object)
+    struct GpuInstance
+    {
+        Float4x4 world;
+        Float4x4 prevWorld;
+        Color tint;
+    }; // 144 (StructuredBuffer element)
+    struct GpuDataOffsets
+    {
+        u32 x, y, z, w;
+    }; // 16  (instance-stepped vertex attr; forward: .w = the fade's bits)
+    struct GpuShadowView
+    {
+        Float4x4 lightViewProj;
+        Float4 wind = Float4{0, 0, 0, 0};   // x = time (s) for the WIND sway, y/z = a faded set's window
+        Float4 camera = Float4{0, 0, 0, 0}; // xyz = the camera's position (the instance fade's distance)
+    }; // 96  (cbuffer ShadowView)
+    // GPU-layout contract: these mirror HLSL cbuffer/StructuredBuffer elements and use the PACKED
+    // Float4x4 (64B, tight). A stray SIMD Matrix4 (also 64B but 16-byte aligned) would still trip the
+    // size math via padding shifts - the guards pin the exact byte layout the shaders expect.
+    static_assert(sizeof(GpuObject) == 176, "cbuffer Object layout drift");
+    static_assert(sizeof(GpuInstance) == 144,
+                  "StructuredBuffer<GpuInstance> element layout drift");
+    // The pick pass's set-0 view (cbuffer PickView in pick_ids.vs): the cropped VP plus a
+    // per-DRAW-GROUP id override (a MultiMesh set is one entity for all its instances, and its
+    // instance data is persistent - the id rides the view slot instead; 0 = per-object id).
+    struct GpuPickView
+    {
+        Float4x4 viewProj;
+        u32 pickIndex = 0, pickGeneration = 0;
+        f32 windTime = 0.0f;  // time (s) for the WIND sway (the pick follows the swayed card)
+        f32 fadeStart = 0.0f; // a faded set's window start (camera.w = its end; 0 = none)
+        Float4 camera = Float4{0, 0, 0, 0}; // xyz = the camera's position, w = fade end
+    }; // 96  (cbuffer PickView; shares the shadow-view ring's 256B slots)
+    static_assert(sizeof(GpuShadowView) == 96, "cbuffer ShadowView layout drift");
+    static_assert(sizeof(GpuPickView) == 96, "cbuffer PickView layout drift");
+
     class MeshRenderer final : public Renderer
     {
     public:
@@ -78,10 +164,10 @@ export namespace foundation::render
                                u8"mesh.shadowView"),
               m_objectRing(device, framesInFlight, kViewSlot,
                            rhi::BufferUsage::Uniform | rhi::BufferUsage::CopyDst, u8"mesh.object"),
-              m_instanceRing(device, framesInFlight, sizeof(InstanceData),
+              m_instanceRing(device, framesInFlight, sizeof(GpuInstance),
                              rhi::BufferUsage::StorageRead | rhi::BufferUsage::CopyDst,
                              u8"mesh.instances"),
-              m_offsetsRing(device, framesInFlight, sizeof(DataOffsets),
+              m_offsetsRing(device, framesInFlight, sizeof(GpuDataOffsets),
                             rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst, u8"mesh.offsets"),
               m_lightRing(device, framesInFlight, sizeof(GpuLight),
                           rhi::BufferUsage::StorageRead | rhi::BufferUsage::CopyDst, u8"mesh.lights"),
@@ -136,7 +222,7 @@ export namespace foundation::render
         // set 0. null views -> the neutral 1x1 dummies (zero SH + black cube => flat fallback ambient).
         // Upload this frame's local-shadow entries into the local-shadow ring (bound whole at set 0;
         // the shader reads LocalShadows[LocalShadowBase + shadowIndex]). Called once per frame (after
-        // PrepareFrame, which begins the ring). The base is stamped into each view's ViewData in Resolve.
+        // PrepareFrame, which begins the ring). The base is stamped into each view's GpuView in Resolve.
         void UploadLocalShadows(Span<const GpuLocalShadow> shadows, u32 frameIndex) override;
 
         // ---- Renderer ----
@@ -277,85 +363,6 @@ export namespace foundation::render
         // Sweep sets whose lastFrame is older than kMultiMeshEvictFrames.
         void EvictStaleMultiMeshSets();
         GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
-        struct ViewData
-        {                                // 560 (matches the View cbuffer)
-            Float4x4 viewProj;           // 64
-            Float4x4 view;               // 64  (view-space depth: cluster + cascade select)
-            Float4x4 cascadeViewProj[4]; // 256 (CSM: world -> each cascade's light clip)
-            Float3 cameraPos;
-            f32 lightCount; // 16  (light count as float, mirrors HLSL)
-            u32 lightOffset;
-            i32 clusterViewportX, clusterViewportY;
-            f32 iblMaxLod = -1.0f; // 16 (iblMaxLod<0 => no IBL)
-            u32 clusterGridX = 0, clusterGridY = 0, clusterSliceCount = 0,
-                clusterTileSize = 0;                                                      // 16
-            f32 clusterNear = 0, clusterFar = 0, clusterLogScale = 0, clusterLogBias = 0; // 16
-            Float3 ambient = Float3{0, 0, 0};
-            f32 shadowCascadeCount = 0.0f;                // 16
-            Float4 cascadeSplitFar = Float4{0, 0, 0, 0};  // 16
-            Float4 cascadeTexelSize = Float4{0, 0, 0, 0}; // 16
-            f32 shadowNormalBias = 0, shadowDepthBias = 0, cascadeLayerBase = 0;
-            u32 localShadowBase = 0; // 16
-            Float4x4 prevViewProj =
-                Float4x4::Identity(); // 64  (motion vectors: last frame's world->clip)
-            Float4 jitter =
-                Float4{0, 0, 0, 0}; // 16  (xy = this frame's NDC jitter, zw = last frame's)
-            Float4 probeCenter =
-                Float4{0, 0, 0, 0}; // 16  (xyz = probe center, w = probe count [0 = none])
-            Float4 probeBoxMin = Float4{0, 0, 0, 0}; // 16  (xyz = box min, w = probe cube slice)
-            Float4 probeBoxMax = Float4{0, 0, 0, 0}; // 16  (xyz = box max, w = probe intensity)
-            Float4 shadowParams =
-                Float4{40.0f, 0, 0, 0}; // 16  (x = CSM far-fade width in world units; yzw spare)
-            Float4 debugParams =
-                Float4{0, 0, 0, 0}; // 16  (x = semantic debug-view mode, 0 = off; yzw spare)
-            Float4 iblParams =
-                Float4{1, 1, 0, 0}; // 16  (x = IBL diffuse intensity, y = IBL specular; zw spare)
-        };
-        struct ObjectData
-        {
-            Float4x4 world;
-            Float4x4 prevWorld;
-            Color tint;
-            u32 boneBase = 0, prevBoneBase = 0;
-            u32 pickIndex = 0, pickGeneration = 0; // pick pass only (EntityTag index + 1, generation)
-            f32 fade = 0.0f; // the screen-door fade, 0 = solid (forward pass, the DITHER variant)
-            u32 _fadePad[3] = {};
-        }; // 176 (cbuffer Object)
-        struct InstanceData
-        {
-            Float4x4 world;
-            Float4x4 prevWorld;
-            Color tint;
-        }; // 144 (StructuredBuffer element)
-        struct DataOffsets
-        {
-            u32 x, y, z, w;
-        }; // 16  (instance-stepped vertex attr; forward: .w = the fade's bits)
-        struct ShadowViewData
-        {
-            Float4x4 lightViewProj;
-            Float4 wind = Float4{0, 0, 0, 0};   // x = time (s) for the WIND sway, y/z = a faded set's window
-            Float4 camera = Float4{0, 0, 0, 0}; // xyz = the camera's position (the instance fade's distance)
-        }; // 96  (cbuffer ShadowView)
-        // GPU-layout contract: these mirror HLSL cbuffer/StructuredBuffer elements and use the PACKED
-        // Float4x4 (64B, tight). A stray SIMD Matrix4 (also 64B but 16-byte aligned) would still trip the
-        // size math via padding shifts - the guards pin the exact byte layout the shaders expect.
-        static_assert(sizeof(ObjectData) == 176, "cbuffer Object layout drift");
-        static_assert(sizeof(InstanceData) == 144,
-                      "StructuredBuffer<InstanceData> element layout drift");
-        // The pick pass's set-0 view (cbuffer PickView in pick_ids.vs): the cropped VP plus a
-        // per-DRAW-GROUP id override (a MultiMesh set is one entity for all its instances, and its
-        // instance data is persistent - the id rides the view slot instead; 0 = per-object id).
-        struct PickViewData
-        {
-            Float4x4 viewProj;
-            u32 pickIndex = 0, pickGeneration = 0;
-            f32 windTime = 0.0f;  // time (s) for the WIND sway (the pick follows the swayed card)
-            f32 fadeStart = 0.0f; // a faded set's window start (camera.w = its end; 0 = none)
-            Float4 camera = Float4{0, 0, 0, 0}; // xyz = the camera's position, w = fade end
-        }; // 96  (cbuffer PickView; shares the shadow-view ring's 256B slots)
-        static_assert(sizeof(ShadowViewData) == 96, "cbuffer ShadowView layout drift");
-        static_assert(sizeof(PickViewData) == 96, "cbuffer PickView layout drift");
         // MultiMesh sets a pick pass can id per frame (each takes a shadow-view ring slot).
         static constexpr u32 kMaxPickMultiMeshSets = 64;
         // Faded instanced sets per frame that get a PRIVATE view slot carrying their window (the
@@ -365,7 +372,7 @@ export namespace foundation::render
 
         static constexpr u64 kViewSlot = 256; // dynamic UBO offset alignment (object/shadow-view)
         static constexpr u64 kViewDataSlot =
-            1024;                              // view UBO slot (ViewData is 528B with CSM cascades)
+            1024;                              // view UBO slot (GpuView is 688 bytes)
         static constexpr u32 kMaxLights = 256; // per-view light budget (clustered)
         // shadow-view UBO slots per frame: one per (shadow pass × category run). Cascades (up to
         // kMaxShadowViews*kCount) + local-shadow atlas tiles (up to kMaxLocalShadows), each × a few
@@ -533,7 +540,7 @@ export namespace foundation::render
                              rhi::BindGroup*& bg, u32& bgGen, bool whole);
 
         // The set-0 bind group spans two rings: the per-view UBO (dynamic-offset window of one
-        // ViewData) + the light list (whole light buffer, read as Lights[lightOffset + i]). PER-VIEW
+        // GpuView) + the light list (whole light buffer, read as Lights[lightOffset + i]). PER-VIEW
         // SLOTS: views of different scenes bind different IBL products in one frame (per-scene sky),
         // so each view index caches its own group - keyed by the ring generations, the shadow/atlas
         // generations, and the IBL context generation (unique across contexts, [[bind-group-cache-
@@ -545,7 +552,7 @@ export namespace foundation::render
         Status CreateShadowResources();
 
         // The set-0 bind group for the shadow depth pass: just the light-view UBO (dynamic-offset
-        // window of one ShadowViewData). Rebuilt when the shadow-view ring (re)allocated.
+        // window of one GpuShadowView). Rebuilt when the shadow-view ring (re)allocated.
         bool EnsureShadowViewBindGroup();
 
         // Tiny placeholder cluster buffers + a set-3 bind group over them, bound when clustering is
@@ -605,7 +612,7 @@ export namespace foundation::render
 
         DynamicUniformRing m_viewRing;
         DynamicUniformRing m_shadowViewRing;
-        ViewData m_passView{}; // the pass's view block, copied per faded instanced set with its window
+        GpuView m_passView{}; // the pass's view block, copied per faded instanced set with its window
         DynamicUniformRing m_objectRing;
         DynamicUniformRing m_instanceRing;
         DynamicUniformRing m_offsetsRing;

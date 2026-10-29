@@ -50,6 +50,33 @@ export namespace foundation::render
         f32 intensity = 1.0f;
     };
 
+    // The tonemap's push block (TonemapPush, tonemap.ps.hlsl): twenty scalars, each a float in the
+    // shader (the flags as 0/1, the operator as 0 clamp, 1 AgX, 2 the present copy). The pads are
+    // scalars, never a float3: a WGSL uniform wants a vec3 on a 16-byte boundary.
+    // Integration.ShaderBlocks checks it against the compiled shader, member by member.
+    struct GpuTonemapPush
+    {
+        f32 exposure = 1.0f;
+        f32 bloomIntensity = 0.0f;
+        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv -> the view's sub-rect
+        Float2 uvOffset{0.0f, 0.0f};
+        f32 aoStrength = 0.0f;
+        f32 debugShowAo = 0.0f;
+        f32 toneOperator = 0.0f; // the shader's Operator
+        f32 flipSceneY = 0.0f;
+        f32 autoExposure = 0.0f;
+        f32 autoKey = 0.18f;
+        f32 autoMin = 0.0f;
+        f32 autoMax = 0.0f;
+        f32 gradeIntensity = 0.0f;
+        f32 lutSize = 0.0f;
+        f32 encodeOutput = 0.0f; // 1 = the target stores the display encoding as written (plain UNORM)
+        f32 rotation = 0.0f;     // the ContentRotation, as a float
+        f32 pad1 = 0.0f;
+        f32 pad2 = 0.0f;
+    };
+    static_assert(sizeof(GpuTonemapPush) == 80, "push TonemapPush layout drift");
+
     // Tonemaps an HDR transient into an LDR target. Owns the fullscreen pipeline + per-(view,frame)
     // bind groups over the (transient) HDR view. Declared once per view, after that view's forward pass.
     class TonemapPass

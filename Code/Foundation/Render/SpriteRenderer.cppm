@@ -34,7 +34,16 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
-    // One instance record uploaded to the instance stream (64 bytes = 4x float4, matches the VS inputs).
+    // The sprite pass's view (cbuffer SpriteView, sprite.vs.hlsl); Integration.ShaderBlocks checks it
+    // against the compiled shader, member by member.
+    struct GpuSpriteView
+    {
+        Float4x4 viewProj;
+        Float4x4 view;
+    };
+    static_assert(sizeof(GpuSpriteView) == 128, "cbuffer SpriteView layout drift");
+
+    // One instance record uploaded to the instance stream (96 bytes = 6x float4, matches the VS inputs).
     struct SpriteInstance
     {
         Float4 positionSize;    // xyz world center, w width
@@ -84,7 +93,7 @@ export namespace foundation::render
 
     private:
         static constexpr u32 kMaxViews = 8;
-        static constexpr u64 kViewSlotSize = 256; // 2x mat4 padded to the dynamic-uniform alignment
+        static constexpr u64 kViewSlotSize = 256; // GpuSpriteView padded to the dynamic-uniform alignment
 
         // One bind group over the whole view ring (per-draw dynamic offset selects the slot). Rebuilt ONLY
         // when the ring reallocates (generation bump) - which drains the GPU first (Reserve's WaitIdle) - so

@@ -40,6 +40,20 @@ namespace rhi = foundation::rhi;
 
 export namespace foundation::render
 {
+    // The image-lighting precompute push (struct IblPush, ibl_common.hlsli), shared by the env, mip
+    // and prefilter passes; Integration.ShaderBlocks checks it against the compiled shader.
+    struct GpuIblPush
+    {
+        i32 faceIndex = 0;
+        i32 mode = 0;
+        f32 roughness = 0.0f;
+        f32 skyIntensity = 1.0f;
+        Float4 sun{};     // xyz = direction, w = sun angular size (deg)
+        Float4 horizon{}; // rgb, a = sun intensity
+        Float4 zenith{};  // rgb, a = sky rotation (radians)
+        Float4 ground{};  // rgb, a = turbidity
+    };
+    static_assert(sizeof(GpuIblPush) == 80, "push IblPush layout drift");
 
     // Owns the per-scene IBL contexts + the passes that build their products. One per renderer.
     class IBLSystem
@@ -180,20 +194,8 @@ export namespace foundation::render
         // (so the forward can read this frame's handles); the write passes only run when dirty.
         void ProcessContext(Context& ctx, rendergraph::RenderGraph& graph);
 
-        struct IblPush
-        {
-            i32 faceIndex = 0;
-            i32 mode = 0;
-            f32 roughness = 0.0f;
-            f32 skyIntensity = 1.0f;
-            Float4 sun{};     // xyz = direction, w = sun angular size (deg)
-            Float4 horizon{}; // rgb, a = sun intensity
-            Float4 zenith{};  // rgb, a = rotation (radians)
-            Float4 ground{};  // rgb
-        };
-
         // Build the procedural-env push for one cube face from the context's sky + sun direction.
-        [[nodiscard]] static IblPush MakeSkyPush(const Context& ctx, i32 face);
+        [[nodiscard]] static GpuIblPush MakeSkyPush(const Context& ctx, i32 face);
 
         void DestroyExternalBindGroups(Context& ctx);
 

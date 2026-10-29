@@ -51,7 +51,7 @@ namespace foundation::render
         rhi::PushConstantRange pcr{};
         pcr.stages = rhi::ShaderStage::Fragment;
         pcr.offset = 0;
-        pcr.size = sizeof(SsgiPushC);
+        pcr.size = sizeof(GpuSsgiPush);
         rhi::PipelineLayoutDesc pld{};
         pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{gl, 1};
         pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pcr, 1};
@@ -105,7 +105,7 @@ namespace foundation::render
         rhi::PushConstantRange dpc{};
         dpc.stages = rhi::ShaderStage::Fragment;
         dpc.offset = 0;
-        dpc.size = sizeof(SsgiDownPushC);
+        dpc.size = sizeof(GpuSsgiDownPush);
         rhi::PipelineLayoutDesc dpld{};
         dpld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{dgl, 1};
         dpld.pushConstantRanges = Span<const rhi::PushConstantRange>{&dpc, 1};
@@ -136,7 +136,7 @@ namespace foundation::render
         rhi::PushConstantRange bpc{};
         bpc.stages = rhi::ShaderStage::Fragment;
         bpc.offset = 0;
-        bpc.size = sizeof(SsgiBlurPushC);
+        bpc.size = sizeof(GpuSsgiBlurPush);
         rhi::PipelineLayoutDesc bpld{};
         bpld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{bgl, 1};
         bpld.pushConstantRanges = Span<const rhi::PushConstantRange>{&bpc, 1};
@@ -173,7 +173,7 @@ namespace foundation::render
         rhi::PushConstantRange rpc{};
         rpc.stages = rhi::ShaderStage::Fragment;
         rpc.offset = 0;
-        rpc.size = sizeof(SsgiResolvePushC);
+        rpc.size = sizeof(GpuSsgiResolvePush);
         rhi::PipelineLayoutDesc rpld{};
         rpld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{rgl, 1};
         rpld.pushConstantRanges = Span<const rhi::PushConstantRange>{&rpc, 1};
@@ -394,7 +394,7 @@ namespace foundation::render
         const u32 qh = (h / 4u > 0u) ? h / 4u : 1u;
         const rendergraph::RGHandle sceneQuarter = graph.CreateTransient(
             u8"ssgi.scene.quarter", rendergraph::RGTextureDesc(kHdrFormat, qw, qh));
-        SsgiDownPushC dpc2{};
+        GpuSsgiDownPush dpc2{};
         dpc2.srcTexelSize = Float2{1.0f / fw, 1.0f / fh};
         graph.AddRenderPass(
             u8"ssgi.down",
@@ -415,7 +415,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_downPipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(SsgiDownPushC),
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuSsgiDownPush),
                                             &dpc2);
                         rp.Draw(3, 1, 0, 0);
                     });
@@ -424,7 +424,7 @@ namespace foundation::render
         // --- Trace: GI buffer (rgb one-bounce radiance, a = hit fraction) ---
         const rendergraph::RGHandle gi =
             graph.CreateTransient(u8"ssgi.raw", rendergraph::RGTextureDesc(kHdrFormat, w, h));
-        SsgiPushC pc{};
+        GpuSsgiPush pc{};
         pc.invProj = invProj;
         pc.vpMin = vpMin;
         pc.vpSize = vpSize;
@@ -461,7 +461,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(m_pipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(SsgiPushC), &pc);
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuSsgiPush), &pc);
                         rp.Draw(3, 1, 0, 0);
                     });
             });
@@ -469,7 +469,7 @@ namespace foundation::render
         // --- Spatial denoise: neighbors share their hits before the temporal accumulate
         //     (depth-aware; at 1-4 rays the raw estimate alone cannot converge), and again after
         //     it at a widening step (the a-trous passes below) ---
-        SsgiBlurPushC bpc2{};
+        GpuSsgiBlurPush bpc2{};
         bpc2.texelSize = Float2{1.0f / fw, 1.0f / fh};
         bpc2.depthSigma = (p.depthSigma > 1e-3f) ? p.depthSigma : 1e-3f;
         bpc2.invProj = invProj;
@@ -479,7 +479,7 @@ namespace foundation::render
         const auto declareBlur = [this, &graph, depth, bpc2](StringView name, rendergraph::RGHandle src,
                                                               rendergraph::RGHandle dst, f32 step)
         {
-            SsgiBlurPushC pushed = bpc2;
+            GpuSsgiBlurPush pushed = bpc2;
             pushed.step = step;
             graph.AddRenderPass(
                 name,
@@ -504,7 +504,7 @@ namespace foundation::render
                             rp.SetPipeline(m_blurPipeline);
                             rp.SetBindGroup(0, bg, Span<const u32>{});
                             rp.SetPushConstants(rhi::ShaderStage::Fragment, 0,
-                                                sizeof(SsgiBlurPushC), &pushed);
+                                                sizeof(GpuSsgiBlurPush), &pushed);
                             rp.Draw(3, 1, 0, 0);
                         });
                 });
@@ -531,7 +531,7 @@ namespace foundation::render
                                rhi::ResourceState::RenderTarget, hist.state[cur]);
         hist.state[cur] = rhi::ResourceState::RenderTarget;
 
-        SsgiResolvePushC rpc2{};
+        GpuSsgiResolvePush rpc2{};
         rpc2.vpMin = vpMin;
         rpc2.vpSize = vpSize;
         rpc2.texelSize = Float2{1.0f / fw, 1.0f / fh};
@@ -604,7 +604,7 @@ namespace foundation::render
                         rp.SetPipeline(m_resolvePipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
                         rp.SetPushConstants(rhi::ShaderStage::Fragment,
-                                            0, sizeof(SsgiResolvePushC), &rpc2);
+                                            0, sizeof(GpuSsgiResolvePush), &rpc2);
                         rp.Draw(3, 1, 0, 0);
                     });
             });
@@ -624,7 +624,7 @@ namespace foundation::render
             // The composite: the resolve with its accumulate off reads the smoothed bounce as its
             // current frame. Its history input is bound (this frame's, keyed apart from the
             // accumulate's bind group) and unread; its history output is a scratch target.
-            SsgiResolvePushC cpc = rpc2;
+            GpuSsgiResolvePush cpc = rpc2;
             cpc.temporalOn = 0;
             cpc.outputAccum = 0;
             const rendergraph::RGHandle scratch =
@@ -670,7 +670,7 @@ namespace foundation::render
                             rp.SetPipeline(m_resolvePipeline);
                             rp.SetBindGroup(0, bg, Span<const u32>{});
                             rp.SetPushConstants(rhi::ShaderStage::Fragment, 0,
-                                                sizeof(SsgiResolvePushC), &cpc);
+                                                sizeof(GpuSsgiResolvePush), &cpc);
                             rp.Draw(3, 1, 0, 0);
                         });
                 });

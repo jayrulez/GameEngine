@@ -31,6 +31,30 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The debug draw's push blocks (debug_geom.vs.hlsl GeomPush, debug_grid.hlsli GridPush,
+    // debug_screen.vs.hlsl ScreenPush); Integration.ShaderBlocks checks each against the compiled
+    // shader, member by member.
+    struct GpuDebugGeomPush
+    {
+        Float4x4 viewProj;
+    };
+    static_assert(sizeof(GpuDebugGeomPush) == 64, "push GeomPush layout drift");
+    struct GpuDebugGridPush
+    {
+        Float4x4 viewProj;
+        Float4 originExtent; // xyz: the quad's centre on the plane; w: metres each way
+        Float4 axisUSpacing; // xyz: the plane's first axis; w: the finest line spacing, metres
+        Float4 axisVBlend;   // xyz: the plane's second axis; w: 0..1 toward the next decade
+        Float4 cameraFade;   // xyz: the camera; w: the distance the grid has faded out by
+    };
+    static_assert(sizeof(GpuDebugGridPush) == 128, "push GridPush layout drift");
+    struct GpuDebugScreenPush
+    {
+        Float2 invSize{}; // 1 / the view's size in pixels
+        Float2 pad{};
+    };
+    static_assert(sizeof(GpuDebugScreenPush) == 16, "push ScreenPush layout drift");
+
     class DebugDrawPass
     {
     public:

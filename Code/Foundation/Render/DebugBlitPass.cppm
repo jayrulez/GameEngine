@@ -31,6 +31,20 @@ namespace rhi = foundation::rhi;
 
 export namespace foundation::render
 {
+    // The debug blit's push block (DebugBlitPush, debug_blit.ps.hlsl); Integration.ShaderBlocks
+    // checks it against the compiled shader, member by member.
+    struct GpuDebugBlitPush
+    {
+        f32 uvScaleX, uvScaleY;   // the shader's UvScale: fullscreen uv -> the view's sub-rect
+        f32 uvOffsetX, uvOffsetY; // UvOffset
+        f32 sourceW, sourceH;     // SourceSize, in texels
+        f32 rangeMin, rangeMax;
+        f32 nearZ, farZ;
+        u32 mode; // bits 0-2 the channel, bit 4 linearize depth
+        u32 pad;
+    };
+    static_assert(sizeof(GpuDebugBlitPush) == 48, "push DebugBlitPush layout drift");
+
     // Blits a named graph texture into the view's final LDR target for inspection.
     class DebugBlitPass
     {
@@ -63,7 +77,7 @@ export namespace foundation::render
             rhi::PushConstantRange pc{};
             pc.stages = rhi::ShaderStage::Fragment;
             pc.offset = 0;
-            pc.size = sizeof(Push);
+            pc.size = sizeof(GpuDebugBlitPush);
             rhi::PipelineLayoutDesc pld{};
             pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};
             pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pc, 1};
@@ -91,7 +105,7 @@ export namespace foundation::render
             const u32 slot =
                 (viewIndex % kMaxViews) * m_framesInFlight + (frameIndex % m_framesInFlight);
 
-            Push push{};
+            GpuDebugBlitPush push{};
             push.uvScaleX = 1.0f;
             push.uvScaleY = 1.0f;
             push.uvOffsetX = 0.0f;
@@ -143,17 +157,6 @@ export namespace foundation::render
         }
 
     private:
-        struct Push
-        {
-            f32 uvScaleX, uvScaleY;
-            f32 uvOffsetX, uvOffsetY;
-            f32 sourceW, sourceH;
-            f32 rangeMin, rangeMax;
-            f32 nearZ, farZ;
-            u32 mode;
-            u32 pad;
-        };
-
         static constexpr u32 kMaxViews = 8;
         static constexpr u32 kMaxFramesInFlight = 8;
         static constexpr u32 kMaxSlots = kMaxViews * kMaxFramesInFlight;

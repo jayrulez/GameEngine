@@ -28,6 +28,19 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The exposure measure's push block (ExposurePush, exposure_measure.ps.hlsl);
+    // Integration.ShaderBlocks checks it against the compiled shader, member by member.
+    struct GpuExposurePush
+    {
+        Float2 uvScale{1.0f, 1.0f}; // fullscreen uv -> the view's sub-rect
+        Float2 uvOffset{0.0f, 0.0f};
+        f32 dtSpeed = 0.0f;      // this frame's adaptation step: seconds x adapt speed
+        f32 historyValid = 0.0f; // 0 = no previous level (snap instead of easing)
+        f32 pad0 = 0.0f;
+        f32 pad1 = 0.0f;
+    };
+    static_assert(sizeof(GpuExposurePush) == 32, "push ExposurePush layout drift");
+
     // Measures + adapts scene luminance into a persistent per-view 1x1 the tonemap samples.
     class ExposurePass
     {
@@ -64,7 +77,7 @@ export namespace foundation::render
             rhi::PushConstantRange pc{};
             pc.stages = rhi::ShaderStage::Fragment;
             pc.offset = 0;
-            pc.size = sizeof(f32) * 8;
+            pc.size = sizeof(GpuExposurePush);
             rhi::PipelineLayoutDesc pld{};
             pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};
             pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pc, 1};
@@ -133,14 +146,13 @@ export namespace foundation::render
                                    rhi::ResourceState::ShaderRead, state.state[cur]);
             state.state[cur] = rhi::ResourceState::ShaderRead;
 
-            const f32 push[8] = {uvScale.x,
-                                 uvScale.y,
-                                 uvOffset.x,
-                                 uvOffset.y,
-                                 Max(deltaSeconds, 0.0f) * Max(adaptSpeed, 0.0f),
-                                 state.valid ? 1.0f : 0.0f,
-                                 0.0f,
-                                 0.0f};
+            GpuExposurePush push{};
+            push.uvScale = uvScale;
+            push.uvOffset = uvOffset;
+            push.dtSpeed = Max(deltaSeconds, 0.0f) * Max(adaptSpeed, 0.0f);
+            push.historyValid = state.valid ? 1.0f : 0.0f;
+            push.pad0 = 0.0f;
+            push.pad1 = 0.0f;
             rhi::TextureView* prevView = state.view[prev];
             // Per-(view, frame) slots (the FxaaPass scheme): prevView PING-PONGS every
             // frame, so a per-view-only slot mismatches every frame and EnsureBindGroup
@@ -175,7 +187,7 @@ export namespace foundation::render
                             rp.SetPipeline(pipeline);
                             rp.SetBindGroup(0, bg, Span<const u32>{});
                             rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(push),
-                                                push);
+                                                &push);
                             rp.Draw(3, 1, 0, 0);
                         });
                 });

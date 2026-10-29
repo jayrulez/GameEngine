@@ -39,6 +39,84 @@ namespace rhi = foundation::rhi;
 
 export namespace foundation::render
 {
+
+    // The SSGI passes' push blocks (ssgi, ssgi_down, ssgi_blur and ssgi_resolve .ps.hlsl);
+    // Integration.ShaderBlocks checks each against the compiled shader, member by member.
+    // Byte-identical to the HLSL SsgiPush.
+    struct GpuSsgiPush
+    {
+        Float4x4 invProj{};
+        Float2 vpMin{0.0f, 0.0f};
+        Float2 vpSize{1.0f, 1.0f};
+        Float2 jitter{};
+        f32 projXX = 1.0f;
+        f32 projYY = 1.0f;
+        f32 thickness = 0.6f;
+        f32 radius = 3.0f;
+        i32 maxSteps = 24;
+        i32 rayCount = 2;
+        f32 ySign = -1.0f;
+        u32 frameIndex = 0;
+        f32 maxRadiance = 4.0f;
+        f32 pad0 = 0.0f;
+    };
+    static_assert(sizeof(GpuSsgiPush) <= 128,
+                  "SSGI push exceeds the portable 128-byte push-constant limit");
+    static_assert(sizeof(GpuSsgiPush) == 128, "push SsgiPush layout drift");
+
+    // Byte-identical to the HLSL SsgiDownPush.
+    struct GpuSsgiDownPush
+    {
+        Float2 srcTexelSize{};
+        Float2 pad0{};
+    };
+    static_assert(sizeof(GpuSsgiDownPush) <= 128,
+                  "SSGI downsample push exceeds the portable 128-byte limit");
+    static_assert(sizeof(GpuSsgiDownPush) == 16, "push SsgiDownPush layout drift");
+
+    // Byte-identical to the HLSL SsgiBlurPush.
+    struct GpuSsgiBlurPush
+    {
+        Float2 texelSize{};
+        f32 depthSigma = 0.05f;
+        f32 step = 1.0f; // tap spacing in pixels: 1 before the accumulate, 1/2/4/8 after it
+        Float4x4 invProj{};
+        Float2 vpMin{0.0f, 0.0f};
+        Float2 vpSize{1.0f, 1.0f};
+        f32 ySign = -1.0f;
+        f32 pad1 = 0.0f;
+    };
+    static_assert(sizeof(GpuSsgiBlurPush) <= 128,
+                  "SSGI blur push exceeds the portable 128-byte limit");
+    static_assert(sizeof(GpuSsgiBlurPush) == 104, "push SsgiBlurPush layout drift");
+
+    // Byte-identical to the HLSL SsgiResolvePush.
+    struct GpuSsgiResolvePush
+    {
+        Float2 vpMin{0.0f, 0.0f};
+        Float2 vpSize{1.0f, 1.0f};
+        Float2 texelSize{};
+        f32 blendFactor = 0.92f;
+        f32 historyValid = 0.0f;
+        f32 varianceGamma = 1.5f;
+        f32 motionScale = 24.0f;
+        i32 temporalOn = 1;
+        i32 debug = 0;
+        i32 outputAccum = 0; // 1: write the accumulated bounce, not the composite (the denoise's input)
+        f32 intensity = 1.0f;
+        // HLSL starts a float4 on a 16-byte boundary; Float4 here is only 4-byte aligned, so
+        // the pad keeps the C++ offsets the shader's (a shifted read scrambled the sky term).
+        f32 pad0 = 0.0f;
+        f32 pad1 = 0.0f;
+        Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view -> world normal)
+        Float4 skyAmbient{};           // rgb = flat fill, w = SH sky dimmer (0 = no SH sky)
+    };
+    static_assert(offsetof(GpuSsgiResolvePush, viewToWorld) == 64,
+                  "SSGI resolve push: the float4 block must start where HLSL puts it");
+    static_assert(sizeof(GpuSsgiResolvePush) <= 128,
+                  "SSGI resolve push exceeds the portable 128-byte limit");
+    static_assert(sizeof(GpuSsgiResolvePush) == 128, "push SsgiResolvePush layout drift");
+
     // Owns the SSGI pipelines. Produces a fresh HDR transient (scene + one screen-space bounce).
     class SsgiPass
     {
@@ -120,77 +198,6 @@ export namespace foundation::render
     private:
         static constexpr rhi::TextureFormat kHdrFormat =
             rhi::TextureFormat::RGBA16Float; // matches the scene HDR
-
-        // Byte-identical to the HLSL SsgiPush.
-        struct SsgiPushC
-        {
-            Float4x4 invProj{};
-            Float2 vpMin{0.0f, 0.0f};
-            Float2 vpSize{1.0f, 1.0f};
-            Float2 jitter{};
-            f32 projXX = 1.0f;
-            f32 projYY = 1.0f;
-            f32 thickness = 0.6f;
-            f32 radius = 3.0f;
-            i32 maxSteps = 24;
-            i32 rayCount = 2;
-            f32 ySign = -1.0f;
-            u32 frameIndex = 0;
-            f32 maxRadiance = 4.0f;
-            f32 pad0 = 0.0f;
-        };
-        static_assert(sizeof(SsgiPushC) <= 128,
-                      "SSGI push exceeds the portable 128-byte push-constant limit");
-
-        // Byte-identical to the HLSL SsgiDownPush.
-        struct SsgiDownPushC
-        {
-            Float2 srcTexelSize{};
-            Float2 pad0{};
-        };
-        static_assert(sizeof(SsgiDownPushC) <= 128,
-                      "SSGI downsample push exceeds the portable 128-byte limit");
-
-        // Byte-identical to the HLSL SsgiBlurPush.
-        struct SsgiBlurPushC
-        {
-            Float2 texelSize{};
-            f32 depthSigma = 0.05f;
-            f32 step = 1.0f; // tap spacing in pixels: 1 before the accumulate, 1/2/4/8 after it
-            Float4x4 invProj{};
-            Float2 vpMin{0.0f, 0.0f};
-            Float2 vpSize{1.0f, 1.0f};
-            f32 ySign = -1.0f;
-            f32 pad1 = 0.0f;
-        };
-        static_assert(sizeof(SsgiBlurPushC) <= 128,
-                      "SSGI blur push exceeds the portable 128-byte limit");
-
-        // Byte-identical to the HLSL SsgiResolvePush.
-        struct SsgiResolvePushC
-        {
-            Float2 vpMin{0.0f, 0.0f};
-            Float2 vpSize{1.0f, 1.0f};
-            Float2 texelSize{};
-            f32 blendFactor = 0.92f;
-            f32 historyValid = 0.0f;
-            f32 varianceGamma = 1.5f;
-            f32 motionScale = 24.0f;
-            i32 temporalOn = 1;
-            i32 debug = 0;
-            i32 outputAccum = 0; // 1: write the accumulated bounce, not the composite (the denoise's input)
-            f32 intensity = 1.0f;
-            // HLSL starts a float4 on a 16-byte boundary; Float4 here is only 4-byte aligned, so
-            // the pad keeps the C++ offsets the shader's (a shifted read scrambled the sky term).
-            f32 pad0 = 0.0f;
-            f32 pad1 = 0.0f;
-            Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view -> world normal)
-            Float4 skyAmbient{};           // rgb = flat fill, w = SH sky dimmer (0 = no SH sky)
-        };
-        static_assert(offsetof(SsgiResolvePushC, viewToWorld) == 64,
-                      "SSGI resolve push: the float4 block must start where HLSL puts it");
-        static_assert(sizeof(SsgiResolvePushC) <= 128,
-                      "SSGI resolve push exceeds the portable 128-byte limit");
 
         static constexpr u32 kMaxViews = 8;
         struct ViewHistory

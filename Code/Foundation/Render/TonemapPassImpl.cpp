@@ -55,9 +55,7 @@ namespace foundation::render
         rhi::PushConstantRange pc{};
         pc.stages = rhi::ShaderStage::Fragment;
         pc.offset = 0;
-        pc.size = sizeof(f32) * 20; // exposure + bloom + uvScale.xy + uvOffset.xy + aoStrength +
-                                    // debugShowAo + operator + flipSceneY + autoExposure/key/min/max
-                                    // + gradeIntensity + lutSize + encodeOutput + 3 scalar pads
+        pc.size = sizeof(GpuTonemapPush);
         rhi::PipelineLayoutDesc pld{};
         pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};
         pld.pushConstantRanges = Span<const rhi::PushConstantRange>{&pc, 1};
@@ -112,14 +110,25 @@ namespace foundation::render
         // (encoded wherever it is shown), so only a plain UNORM target takes the display
         // encoding as the shader writes it. Writing it to an sRGB swapchain encoded it twice.
         const bool encodeOutput = !rhi::IsSrgb(ldrFormat) && !rhi::IsFloat(ldrFormat);
-        const f32 push[20] = {
-            exposure,          bloomIntensity, uvScale.x,  uvScale.y,
-            uvOffset.x,        uvOffset.y,     aoStrength, debugShowAo ? 1.0f : 0.0f,
-            copyOnly ? 2.0f : (agx ? 1.0f : 0.0f), flipSceneY ? 1.0f : 0.0f,
-            autoOn ? 1.0f : 0.0f, autoExposure.key, autoExposure.minExposure,
-            autoExposure.maxExposure,
-            gradeOn ? grading.intensity : 0.0f, gradeOn ? grading.lutSize : 0.0f,
-            encodeOutput ? 1.0f : 0.0f, static_cast<f32>(static_cast<u32>(turn)), 0.0f, 0.0f};
+        GpuTonemapPush push{};
+        push.exposure = exposure;
+        push.bloomIntensity = bloomIntensity;
+        push.uvScale = uvScale;
+        push.uvOffset = uvOffset;
+        push.aoStrength = aoStrength;
+        push.debugShowAo = debugShowAo ? 1.0f : 0.0f;
+        push.toneOperator = copyOnly ? 2.0f : (agx ? 1.0f : 0.0f);
+        push.flipSceneY = flipSceneY ? 1.0f : 0.0f;
+        push.autoExposure = autoOn ? 1.0f : 0.0f;
+        push.autoKey = autoExposure.key;
+        push.autoMin = autoExposure.minExposure;
+        push.autoMax = autoExposure.maxExposure;
+        push.gradeIntensity = gradeOn ? grading.intensity : 0.0f;
+        push.lutSize = gradeOn ? grading.lutSize : 0.0f;
+        push.encodeOutput = encodeOutput ? 1.0f : 0.0f;
+        push.rotation = static_cast<f32>(static_cast<u32>(turn));
+        push.pad1 = 0.0f;
+        push.pad2 = 0.0f;
 
         const rhi::LoadOp load = clearColor ? rhi::LoadOp::Clear : rhi::LoadOp::Load;
         rhi::TextureView* autoView = autoOn ? autoExposure.view : nullptr;
@@ -162,7 +171,7 @@ namespace foundation::render
                         }
                         rp.SetPipeline(pipeline);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
-                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(push), push);
+                        rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(push), &push);
                         rp.Draw(3, 1, 0, 0);
                     });
             });

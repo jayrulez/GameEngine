@@ -37,7 +37,7 @@ namespace foundation::render
         rhi::PushConstantRange gpc{};
         gpc.stages = rhi::ShaderStage::Vertex;
         gpc.offset = 0;
-        gpc.size = sizeof(Float4x4);
+        gpc.size = sizeof(GpuDebugGeomPush);
         // No bind groups -> the push block lives at space0 (debug_geom.vs.hlsl), so the
         // browser push-constant emulation must synthesize its uniform at group 0 too. The
         // range default (1) matches every OTHER shader's space1 convention; here it must be 0.
@@ -54,7 +54,7 @@ namespace foundation::render
         rhi::PushConstantRange grc{};
         grc.stages = rhi::ShaderStage::Vertex | rhi::ShaderStage::Fragment;
         grc.offset = 0;
-        grc.size = sizeof(Float4x4) + 4 * sizeof(Float4);
+        grc.size = sizeof(GpuDebugGridPush);
         grc.bindGroupIndex = 0;
         rhi::PipelineLayoutDesc grld{};
         grld.pushConstantRanges = Span<const rhi::PushConstantRange>{&grc, 1};
@@ -78,7 +78,7 @@ namespace foundation::render
         rhi::PushConstantRange spc{};
         spc.stages = rhi::ShaderStage::Vertex;
         spc.offset = 0;
-        spc.size = sizeof(f32) * 4;
+        spc.size = sizeof(GpuDebugScreenPush);
         rhi::PipelineLayoutDesc spld{};
         spld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{sbl, 1};
         spld.pushConstantRanges = Span<const rhi::PushConstantRange>{&spc, 1};
@@ -156,34 +156,24 @@ namespace foundation::render
         {
             return;
         }
-        // The grid's push block (debug_grid.vs.hlsl GridPush): ViewProj, then four float4s.
-        struct GridPush
-        {
-            Float4x4 viewProj;
-            Float4 originExtent;
-            Float4 axisUSpacing;
-            Float4 axisVBlend;
-            Float4 cameraFade;
-        };
-        static_assert(sizeof(GridPush) == sizeof(Float4x4) + 4 * sizeof(Float4), "GridPush layout drift");
         const bool drawGrid = gridDesc != nullptr && p->grid != nullptr;
-        GridPush gridPush{};
+        GpuDebugGridPush gridPush{};
         if (drawGrid)
         {
             const debug::GridPlaneDesc& g = *gridDesc;
-            gridPush = GridPush{viewProj,
-                                Float4{g.origin.x, g.origin.y, g.origin.z, g.extent},
-                                Float4{g.axisU.x, g.axisU.y, g.axisU.z, g.spacing},
-                                Float4{g.axisV.x, g.axisV.y, g.axisV.z, g.blend},
-                                Float4{g.cameraPosition.x, g.cameraPosition.y, g.cameraPosition.z,
-                                       g.fadeDistance}};
+            gridPush = GpuDebugGridPush{viewProj,
+                                        Float4{g.origin.x, g.origin.y, g.origin.z, g.extent},
+                                        Float4{g.axisU.x, g.axisU.y, g.axisU.z, g.spacing},
+                                        Float4{g.axisV.x, g.axisV.y, g.axisV.z, g.blend},
+                                        Float4{g.cameraPosition.x, g.cameraPosition.y,
+                                               g.cameraPosition.z, g.fadeDistance}};
         }
 
         const u32 dlN = ol0 - dl0, olN = dt0 - ol0, dtN = ot0 - dt0, otN = total - ot0;
-        const Float4x4 vpMat = viewProj;
+        const GpuDebugGeomPush geomPush{viewProj};
         graph.AddRenderPass(
             u8"debug.geom",
-            [color, depth, vb, p, vpX, vpY, vpW, vpH, vpMat, dlN, ol0, olN, dt0, dtN, ot0, otN,
+            [color, depth, vb, p, vpX, vpY, vpW, vpH, geomPush, dlN, ol0, olN, dt0, dtN, ot0, otN,
              drawGrid, gridPush](rendergraph::PassBuilder& b)
             {
                 b.SetColorTarget(0, color, rhi::LoadOp::Load, rhi::StoreOp::Store,
@@ -193,7 +183,7 @@ namespace foundation::render
                 b.SetViewport(vpX, vpY, vpW, vpH);
                 b.NeverCull();
                 b.SetExecute(
-                    [vb, p, vpMat, dlN, ol0, olN, dt0, dtN, ot0, otN, drawGrid,
+                    [vb, p, geomPush, dlN, ol0, olN, dt0, dtN, ot0, otN, drawGrid,
                      gridPush](rhi::RenderPassEncoder& rp)
                     {
                         // The grid first, so lines and gizmos draw over it: six vertices, the
@@ -215,8 +205,8 @@ namespace foundation::render
                         const auto draw = [&](rhi::RenderPipeline* pipe, u32 count, u32 first)
                         {
                             rp.SetPipeline(pipe);
-                            rp.SetPushConstants(rhi::ShaderStage::Vertex, 0, sizeof(Float4x4),
-                                                &vpMat);
+                            rp.SetPushConstants(rhi::ShaderStage::Vertex, 0, sizeof(geomPush),
+                                                &geomPush);
                             rp.Draw(count, 1, first, 0);
                         };
                         if (dlN > 0)
@@ -268,8 +258,9 @@ namespace foundation::render
             return;
         }
         const u32 count = static_cast<u32>(verts.Size());
-        const f32 push[4] = {1.0f / static_cast<f32>(vpW), 1.0f / static_cast<f32>(vpH), 0.0f,
-                             0.0f};
+        GpuDebugScreenPush push{};
+        push.invSize = Float2{1.0f / static_cast<f32>(vpW), 1.0f / static_cast<f32>(vpH)};
+        push.pad = Float2{0.0f, 0.0f};
         rhi::BindGroup* bg = m_fontBg;
         graph.AddRenderPass(
             u8"debug.screen",
@@ -285,7 +276,7 @@ namespace foundation::render
                         rp.SetPipeline(pipe);
                         rp.SetBindGroup(0, bg, Span<const u32>{});
                         rp.SetVertexBuffer(0, vb, 0);
-                        rp.SetPushConstants(rhi::ShaderStage::Vertex, 0, sizeof(push), push);
+                        rp.SetPushConstants(rhi::ShaderStage::Vertex, 0, sizeof(push), &push);
                         rp.Draw(count, 1, 0, 0);
                     });
             });

@@ -28,6 +28,19 @@ namespace rhi = foundation::rhi;
 
 export namespace foundation::render
 {
+    // The sky's uniform (cbuffer Sky, sky_common.hlsli); Integration.ShaderBlocks checks it against
+    // the compiled shader, member by member.
+    struct GpuSky
+    {
+        Float4x4 invViewProj;  // inverse of the UNJITTERED view-proj (a stable sky ray under TAA)
+        Float4x4 prevViewProj; // last frame's view-proj (motion vectors)
+        Float4 camPosIntensity; // xyz = camera world position, w = the sky background's display multiplier
+        Float4 sunDir;          // xyz = light direction, w = the sun's angular size (degrees)
+        Float4 sunColor;        // rgb = sun colour, w = sun intensity
+        Float4 jitter;          // xy = this frame's NDC jitter, zw = last frame's
+        Float4 skyFlags; // x = sky-ray Y sign (-1 flips the sampled ray on Y-flip targets); yzw unused
+    };
+    static_assert(sizeof(GpuSky) == 208, "cbuffer Sky layout drift");
 
     class SkyPass
     {
@@ -60,24 +73,13 @@ export namespace foundation::render
         static constexpr u32 kMaxFIF = 4;
         static constexpr u32 kMaxViews = 16; // mains 0..9, probe-capture faces 10..15
         static constexpr u32 kMaxSlots = kMaxViews * kMaxFIF;
-        struct SkyUniform
-        {
-            Float4x4 invViewProj;
-            Float4x4 prevViewProj;
-            Float4 camPosIntensity;
-            Float4 sunDir;
-            Float4 sunColor;
-            Float4 jitter;
-            Float4 skyFlags; // x = sky-ray Y sign (-1 flips the sampled ray on Y-flip targets)
-        };
-
         rhi::RenderPipeline* EnsurePipeline(rhi::TextureFormat colorFmt,
                                             rhi::TextureFormat depthFmt, u32 samples);
 
         // Env identity = (view pointer, context uid): the uid catches pointer REUSE after an IBL
         // context eviction, per the versioned-cache rule.
         rhi::BindGroup* EnsureBindGroup(u32 slot, rhi::TextureView* envView, u64 envUid,
-                                        const SkyUniform& u);
+                                        const GpuSky& u);
 
         void Shutdown();
 

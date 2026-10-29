@@ -95,6 +95,9 @@ export namespace foundation::vg::renderer
         f32 distanceFieldAtlasHeight = 512.0f;
         f32 blendSpace = 0.0f; // 1: VGBlendSpace::Encoded (the shaders keep colours encoded)
     };
+    // cbuffer VGUniforms, as every vg*.hlsl stage declares it; Integration.ShaderBlocks checks it
+    // against the compiled shaders, member by member.
+    static_assert(sizeof(VGUniforms) == 80, "cbuffer VGUniforms layout drift");
 
     /// One blur pass's uniform (vg_blur.ps's VGBlur), in a VGUniforms-sized slot.
     struct VGBlurUniforms
@@ -105,6 +108,7 @@ export namespace foundation::vg::renderer
         f32 radius = 0.0f; // taps each side
         f32 unused[2] = {0.0f, 0.0f};
     };
+    static_assert(sizeof(VGBlurUniforms) == 32, "cbuffer VGBlur layout drift");
 
     /// A handle to one batch's data inside the shared frame buffers. Returned by
     /// Prepare, consumed by Render. Invalid slices are no-ops.
@@ -1070,7 +1074,7 @@ export namespace foundation::vg::renderer
         static constexpr i32 MaxVertexCapacity = 131072 * 16; // ~2.1M verts (~64 MB/frame at 32 B/vert)
         static constexpr i32 MaxUniformSlots = 256; // a slice's slot, then one per layer
         static constexpr i32 UniformSlotSize =
-            256; // dynamic-offset alignment (>= sizeof(VGUniforms)=64)
+            256; // dynamic-offset alignment (>= sizeof(VGUniforms) = 80)
 
         static void WriteBuffer(rhi::Buffer* buf, u64 offset, const void* data, usize size)
         {

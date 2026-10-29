@@ -34,6 +34,21 @@ namespace rhi = foundation::rhi;
 export namespace foundation::render
 {
 
+    // The cluster build's parameters (cbuffer ClusterBuildParams, cluster_build.cs.hlsl): 16-byte
+    // rows of scalars, then two row-major matrices. Integration.ShaderBlocks checks it against the
+    // compiled shader, member by member.
+    struct GpuClusterBuildParams
+    {
+        u32 gridX = 0, gridY = 0, sliceCount = 0, tileSize = 0;
+        f32 nearZ = 0.0f, farZ = 0.0f, logScale = 0.0f, logBias = 0.0f;
+        u32 lightCount = 0, lightOffset = 0;
+        u32 orthographic = 0; // the kernel unprojects tile corners without the depth scale
+        f32 pad0 = 0.0f;
+        Float4x4 viewMatrix;
+        Float4x4 invProjection;
+    };
+    static_assert(sizeof(GpuClusterBuildParams) == 176, "cbuffer ClusterBuildParams layout drift");
+
     // What a built cluster grid exposes to the forward pass (the buffers + the grid params the
     // fragment shader needs to map a pixel+depth to its cluster). Filled by DeclareBuild.
     struct ClusterBinding
@@ -99,25 +114,13 @@ export namespace foundation::render
 
     private:
         GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
-        // Matches the ClusterBuildParams cbuffer (std140; 16-aligned scalars + two row-major mats).
-        struct BuildParams
-        {
-            u32 gridX = 0, gridY = 0, sliceCount = 0, tileSize = 0;
-            f32 nearZ = 0.0f, farZ = 0.0f, logScale = 0.0f, logBias = 0.0f;
-            u32 lightCount = 0, lightOffset = 0;
-            u32 orthographic = 0; // the kernel unprojects tile corners without the depth scale
-            f32 pad0 = 0.0f;
-            Float4x4 viewMatrix;
-            Float4x4 invProjection;
-        };
-
         static constexpr u32 kTileSize = 16;
         static constexpr u32 kSliceCount = 24;
         static constexpr u32 kMaxPerCluster =
             64; // per-cluster light cap (matches MAX_PER_CLUSTER in the kernel)
         static constexpr u32 kMaxLights = 256; // per-view light budget (matches the forward's)
         static constexpr u64 kParamsSlot =
-            256; // dynamic UBO offset alignment (>= sizeof(BuildParams))
+            256; // dynamic UBO offset alignment (>= sizeof(GpuClusterBuildParams))
         static constexpr u32 kMaxViewsPerFrame = 8;
 
         // (Re)create one (view,frame) slot's cluster buffers when its cluster count grows. Lazy: only

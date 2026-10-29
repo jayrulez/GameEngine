@@ -103,7 +103,7 @@ namespace foundation::render
         // set 1 (instanced): per-instance StructuredBuffer (read-only storage).
         rhi::BindGroupLayoutEntry instEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
             0, rhi::ShaderStage::Vertex, /*readOnly*/ true,
-            /*stride*/ sizeof(InstanceData)); // StructuredBuffer<InstanceData>
+            /*stride*/ sizeof(GpuInstance)); // StructuredBuffer<InstanceData>
         if (!MakeLayout(instEntry, m_instanceLayout))
         {
             return Status{ErrorCode::Unknown};
@@ -194,7 +194,7 @@ namespace foundation::render
         m_activeProbeCube = has ? cubeArray : m_dummyProbeCubeView;
         m_activeProbeBuffer = has ? probeBuffer : m_dummyProbeBuffer;
         m_activeProbeCount =
-            has ? count : 0; // -> ViewData.probeCenter.w (the forward's loop bound)
+            has ? count : 0; // -> GpuView.probeCenter.w (the forward's loop bound)
     }
 
     void MeshRenderer::UploadLocalShadows(Span<const GpuLocalShadow> shadows, u32 frameIndex)
@@ -283,7 +283,7 @@ namespace foundation::render
             return;
         } // device-local mirror of the bone staging ring (VS reads VRAM)
         if (!EnsureShadowViewBindGroup() ||
-            !EnsureBindGroup(m_objectRing, m_objectLayout, sizeof(ObjectData), m_objectBG,
+            !EnsureBindGroup(m_objectRing, m_objectLayout, sizeof(GpuObject), m_objectBG,
                              m_objectBGGen, /*whole*/ false) ||
             !EnsureBindGroup(m_instanceRing, m_instanceLayout, 0, m_instanceBG, m_instanceBGGen,
                              /*whole*/ true))
@@ -646,7 +646,7 @@ namespace foundation::render
             RetireOrDrainBuffer(m_rampBuffer);
         }
         rhi::BufferDesc bd{};
-        bd.size = static_cast<u64>(count) * sizeof(DataOffsets);
+        bd.size = static_cast<u64>(count) * sizeof(GpuDataOffsets);
         bd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
         bd.memory = rhi::MemoryLocation::CpuToGpu;
         bd.label = u8"mesh.multimesh.ramp";
@@ -656,11 +656,11 @@ namespace foundation::render
             m_rampCapacity = 0;
             return false;
         }
-        if (auto* p = static_cast<DataOffsets*>(m_rampBuffer->Map()))
+        if (auto* p = static_cast<GpuDataOffsets*>(m_rampBuffer->Map()))
         {
             for (u32 i = 0; i < count; ++i)
             {
-                p[i] = DataOffsets{i, 0, 0, 0};
+                p[i] = GpuDataOffsets{i, 0, 0, 0};
             }
             m_rampBuffer->Unmap();
         }
@@ -722,7 +722,7 @@ namespace foundation::render
             // The region capacity is rounded (MultiMeshRegionCapacity) so region r's byte offset
             // meets every backend's storage-buffer offset alignment.
             const u32 capacity = MultiMeshRegionCapacity(uploadCount);
-            const u64 regionBytes = static_cast<u64>(capacity) * sizeof(InstanceData);
+            const u64 regionBytes = static_cast<u64>(capacity) * sizeof(GpuInstance);
             bd.size = static_cast<u64>(fif) * regionBytes; // one region per frame-in-flight
             bd.usage = rhi::BufferUsage::StorageRead | rhi::BufferUsage::CopyDst;
             bd.memory = rhi::MemoryLocation::CpuToGpu;
@@ -783,9 +783,9 @@ namespace foundation::render
                             set->regionCount[region] < uploadCount;
         if (behind && set->instanceBuf != nullptr && mm.transforms != nullptr)
         {
-            if (auto* dst = static_cast<InstanceData*>(set->instanceBuf->Map()))
+            if (auto* dst = static_cast<GpuInstance*>(set->instanceBuf->Map()))
             {
-                InstanceData* r = dst + static_cast<usize>(region) * set->capacity;
+                GpuInstance* r = dst + static_cast<usize>(region) * set->capacity;
                 const bool ranked = mm.fadeEnd > 0.0f; // a faded set: the rank rides the tint alpha
                 for (u32 i = 0; i < uploadCount; ++i)
                 {
@@ -794,7 +794,7 @@ namespace foundation::render
                     {
                         tint.a = (static_cast<f32>(i) + 0.5f) / static_cast<f32>(uploadCount);
                     }
-                    r[i] = InstanceData{mm.transforms[i], mm.transforms[i], tint};
+                    r[i] = GpuInstance{mm.transforms[i], mm.transforms[i], tint};
                 }
                 set->instanceBuf->Unmap();
                 set->regionVersion[region] = mm.version;
@@ -815,7 +815,7 @@ namespace foundation::render
             // framesInFlight regions: the offsets are rewritten EVERY frame (dynamic bone bases), so each
             // frame writes its own region while the GPU reads the previous frame's - never the same bytes.
             od.size = static_cast<u64>(m_framesInFlight) * static_cast<u64>(mm.instanceCount) *
-                      sizeof(DataOffsets);
+                      sizeof(GpuDataOffsets);
             od.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
             od.memory = rhi::MemoryLocation::CpuToGpu;
             od.label = u8"mesh.multimesh.offsets";
@@ -837,7 +837,7 @@ namespace foundation::render
         {
             return false;
         }
-        auto* data = static_cast<const InstanceData*>(set->instanceBuf->Map());
+        auto* data = static_cast<const GpuInstance*>(set->instanceBuf->Map());
         if (data == nullptr)
         {
             return false;
@@ -855,7 +855,7 @@ namespace foundation::render
         {
             return false;
         }
-        auto* data = static_cast<const InstanceData*>(set->instanceBuf->Map());
+        auto* data = static_cast<const GpuInstance*>(set->instanceBuf->Map());
         if (data == nullptr)
         {
             return false;
@@ -897,7 +897,7 @@ namespace foundation::render
             const u32 base =
                 region *
                 set->offsetsCapacity; // write ONLY this frame's region (GPU reads the prev one)
-            auto* od = static_cast<DataOffsets*>(set->offsetsBuf->Map());
+            auto* od = static_cast<GpuDataOffsets*>(set->offsetsBuf->Map());
             if (od == nullptr)
             {
                 continue;
@@ -914,11 +914,11 @@ namespace foundation::render
                 const u32 bucket = pose * mm->boneCount;     // matrix-unit offset within a palette
                 const u32 curBase = pool->base + bucket;     // current pose
                 const u32 prvBase = pool->prevBase + bucket; // last frame's pose (motion vectors)
-                od[base + i] = DataOffsets{
+                od[base + i] = GpuDataOffsets{
                     i, curBase, prvBase, 0}; // .x = Instances[] idx, .y = cur bone base, .z = prev
             }
             set->offsetsBuf->Unmap();
-            set->offsetsByteOffset = base * static_cast<u32>(sizeof(DataOffsets));
+            set->offsetsByteOffset = base * static_cast<u32>(sizeof(GpuDataOffsets));
         }
     }
 
@@ -978,7 +978,7 @@ namespace foundation::render
         {
             return;
         }
-        ViewData vd{};
+        GpuView vd{};
         vd.viewProj = ctx.viewProj;
         vd.prevViewProj = ctx.prevViewProj; // motion vectors (camera)
         vd.jitter = Float4{ctx.jitter.x, ctx.jitter.y, ctx.prevJitter.x, ctx.prevJitter.y};
@@ -1046,7 +1046,7 @@ namespace foundation::render
             vd.clusterLogBias = ctx.cluster.logBias;
         }
         m_passView = vd; // a faded instanced set copies this with its window (ResolveMultiMesh)
-        *static_cast<ViewData*>(view.ptr) = vd;
+        *static_cast<GpuView*>(view.ptr) = vd;
         const u32 viewOffset = view.byteOffset;
 
         const bool allowInstancing = (items[0].data->category != RenderCategories::Transparent);
@@ -1136,19 +1136,19 @@ namespace foundation::render
         if (pick)
         {
             // Pass-level view: the cropped VP, no group id (draws carry their own).
-            PickViewData pv{};
+            GpuPickView pv{};
             pv.viewProj = ctx.viewProj;
             pv.windTime = ctx.timeSeconds;
             pv.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
-            *static_cast<PickViewData*>(sv.ptr) = pv;
+            *static_cast<GpuPickView*>(sv.ptr) = pv;
         }
         else
         {
-            ShadowViewData svd{};
+            GpuShadowView svd{};
             svd.lightViewProj = ctx.viewProj;
             svd.wind.x = ctx.timeSeconds;
             svd.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
-            *static_cast<ShadowViewData*>(sv.ptr) = svd;
+            *static_cast<GpuShadowView*>(sv.ptr) = svd;
         }
         const u32 shadowViewOffset = sv.byteOffset;
 
@@ -1261,14 +1261,14 @@ namespace foundation::render
         {
             return;
         }
-        ObjectData od{};
+        GpuObject od{};
         od.world = md.world;
         od.prevWorld = ctx.needsMotion ? PrevWorldFor(md.entityId, md.world) : md.world;
         od.tint = md.color;
         od.boneBase = boneBase;
         od.prevBoneBase = prevBoneBase;
         od.fade = md.fade;
-        *static_cast<ObjectData*>(obj.ptr) = od;
+        *static_cast<GpuObject*>(obj.ptr) = od;
 
         // Shared per-submesh draw state (view/object/cluster sets + vertex/index buffers + skinning).
         ResolvedDraw base{};
@@ -1386,12 +1386,12 @@ namespace foundation::render
                 WarnInstanceRingFull("forward", count, m_instanceRing.FrameAllocatedSlots());
                 return;
             }
-            InstanceData* id = static_cast<InstanceData*>(inst.ptr);
-            DataOffsets* od = static_cast<DataOffsets*>(offs.ptr);
+            GpuInstance* id = static_cast<GpuInstance*>(inst.ptr);
+            GpuDataOffsets* od = static_cast<GpuDataOffsets*>(offs.ptr);
             for (u32 k = 0; k < count; ++k)
             {
                 const auto* md = static_cast<const MeshRenderData*>(items[first + k].data);
-                id[k] = InstanceData{
+                id[k] = GpuInstance{
                     md->world, ctx.needsMotion ? PrevWorldFor(md->entityId, md->world) : md->world,
                     md->color};
                 u32 boneBase = 0, prevBase = 0;
@@ -1404,7 +1404,7 @@ namespace foundation::render
                     }
                 }
                 // .x = Instances[] index, .y/.z = bone bases, .w = the fade's bits (0 = solid).
-                od[k] = DataOffsets{inst.slotIndex + k, boneBase, prevBase, std::bit_cast<u32>(md->fade)};
+                od[k] = GpuDataOffsets{inst.slotIndex + k, boneBase, prevBase, std::bit_cast<u32>(md->fade)};
             }
             offsByteOffset = offs.byteOffset;
         }
@@ -1541,14 +1541,14 @@ namespace foundation::render
         {
             return;
         }
-        ObjectData od{};
+        GpuObject od{};
         od.world = md.world;
         od.prevWorld = md.world; // depth pass ignores prevWorld
         od.tint = md.color;
         od.boneBase = boneBase;
         od.pickIndex = EntityTag::Index(md.entityId) + 1u; // pick pass: 0 = nothing
         od.pickGeneration = EntityTag::Generation(md.entityId);
-        *static_cast<ObjectData*>(obj.ptr) = od;
+        *static_cast<GpuObject*>(obj.ptr) = od;
 
         ResolvedDraw d{};
         d.pso = pso;
@@ -1633,8 +1633,8 @@ namespace foundation::render
             return;
         }
 
-        InstanceData* id = static_cast<InstanceData*>(inst.ptr);
-        DataOffsets* od = static_cast<DataOffsets*>(offs.ptr);
+        GpuInstance* id = static_cast<GpuInstance*>(inst.ptr);
+        GpuDataOffsets* od = static_cast<GpuDataOffsets*>(offs.ptr);
         // When this prepass feeds the forward (camera depth prepass, fillInstanceCache), build the FULL
         // InstanceData incl. REAL prevWorld so the forward can reuse it for motion vectors. Shadow casters
         // leave prevWorld = world (the depth/shadow shaders ignore it - no extra prev-world lookup).
@@ -1645,7 +1645,7 @@ namespace foundation::render
             const Float4x4 prev = (feedsForward && ctx.needsMotion)
                                       ? PrevWorldFor(md->entityId, md->world)
                                       : md->world;
-            id[k] = InstanceData{md->world, prev, md->color};
+            id[k] = GpuInstance{md->world, prev, md->color};
             u32 boneBase = 0, prevBase = 0;
             if (skinned)
             {
@@ -1657,10 +1657,10 @@ namespace foundation::render
             }
             // Pick pass: .z/.w carry the entity id (the fill is pick-private - never shared with
             // the forward, which reads prevBase from .z).
-            od[k] = pick ? DataOffsets{inst.slotIndex + k, boneBase,
+            od[k] = pick ? GpuDataOffsets{inst.slotIndex + k, boneBase,
                                        EntityTag::Generation(md->entityId),
                                        EntityTag::Index(md->entityId) + 1u}
-                         : DataOffsets{inst.slotIndex + k, boneBase, prevBase, 0};
+                         : GpuDataOffsets{inst.slotIndex + k, boneBase, prevBase, 0};
         }
         if (feedsForward)
         { // record this group's DataOffsets range for the forward to reuse
@@ -1745,10 +1745,10 @@ namespace foundation::render
             const DynamicUniformRing::Range slot = m_viewRing.Allocate();
             if (slot.ok) // past the budget: the pass's slot, drawn unfaded rather than dropped
             {
-                ViewData faded = m_passView;
+                GpuView faded = m_passView;
                 faded.shadowParams.z = mm.fadeStart;
                 faded.shadowParams.w = mm.fadeEnd;
-                *static_cast<ViewData*>(slot.ptr) = faded;
+                *static_cast<GpuView*>(slot.ptr) = faded;
                 viewOffset = slot.byteOffset;
             }
         }
@@ -1858,14 +1858,14 @@ namespace foundation::render
             {
                 return;
             }
-            PickViewData pv{};
+            GpuPickView pv{};
             pv.viewProj = ctx.viewProj;
             pv.windTime = ctx.timeSeconds;
             pv.pickIndex = EntityTag::Index(mm.entityId) + 1u;
             pv.pickGeneration = EntityTag::Generation(mm.entityId);
             pv.fadeStart = mm.fadeStart;
             pv.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, mm.fadeEnd};
-            *static_cast<PickViewData*>(sv.ptr) = pv;
+            *static_cast<GpuPickView*>(sv.ptr) = pv;
             shadowViewOffset = sv.byteOffset;
         }
         else if (mm.fadeEnd > 0.0f && ctx.view != nullptr)
@@ -1875,11 +1875,11 @@ namespace foundation::render
             const DynamicUniformRing::Range sv = m_shadowViewRing.Allocate();
             if (sv.ok) // past the budget: the pass's slot, unfaded rather than dropped
             {
-                ShadowViewData svd{};
+                GpuShadowView svd{};
                 svd.lightViewProj = ctx.viewProj;
                 svd.wind = Float4{ctx.timeSeconds, mm.fadeStart, mm.fadeEnd, 0.0f};
                 svd.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
-                *static_cast<ShadowViewData*>(sv.ptr) = svd;
+                *static_cast<GpuShadowView*>(sv.ptr) = svd;
                 shadowViewOffset = sv.byteOffset;
             }
         }
@@ -2535,7 +2535,7 @@ namespace foundation::render
         // local-shadow entries (t3), comparison sampler (s0), bone-matrix pool (t4), IBL SH9 (t5),
         // prefilter cube (t6), BRDF LUT (t7), env sampler (s1). Buffers bound whole.
         rhi::BindGroupEntry entries[] = {
-            rhi::BindGroupEntry::BufferEntry(viewBuf, 0, sizeof(ViewData)),
+            rhi::BindGroupEntry::BufferEntry(viewBuf, 0, sizeof(GpuView)),
             rhi::BindGroupEntry::BufferEntry(lightBuf, 0, m_lightRing.ByteCapacity()),
             rhi::BindGroupEntry::TextureEntry(m_activeShadowView),
             rhi::BindGroupEntry::TextureEntry(m_activeAtlasView),
@@ -2756,7 +2756,7 @@ namespace foundation::render
             // Range = the larger of the two layouts that read this slot: ShadowView (80) and the
             // pick pass's PickView (80). WebGPU validates the bound size against the shader's
             // declared cbuffer, so the range must cover both; the slot (256) has room.
-            rhi::BindGroupEntry::BufferEntry(buf, 0, Max(sizeof(PickViewData), sizeof(ShadowViewData))),
+            rhi::BindGroupEntry::BufferEntry(buf, 0, Max(sizeof(GpuPickView), sizeof(GpuShadowView))),
             rhi::BindGroupEntry::BufferEntry(boneBuf, 0,
                                              m_boneDeviceBytes), // t4: skinning pool
         };

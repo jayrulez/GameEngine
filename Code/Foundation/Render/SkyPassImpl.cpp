@@ -103,7 +103,7 @@ namespace foundation::render
         }
         const u32 slot = (viewIndex % kMaxViews) * m_fif + (frameIndex % m_fif);
         const u64 uid = envUid;
-        SkyUniform u{};
+        GpuSky u{};
         u.invViewProj = invViewProj;
         u.prevViewProj = prevViewProj;
         // w = the display-only sky-background multiplier (skyIntensity itself is baked into the cube).
@@ -209,7 +209,7 @@ namespace foundation::render
     }
 
     rhi::BindGroup* SkyPass::EnsureBindGroup(u32 slot, rhi::TextureView* envView, u64 envUid,
-                                             const SkyUniform& u)
+                                             const GpuSky& u)
     {
         if (slot >= kMaxSlots)
         {
@@ -219,7 +219,7 @@ namespace foundation::render
         if (s.ubo == nullptr)
         {
             rhi::BufferDesc bd{};
-            bd.size = sizeof(SkyUniform);
+            bd.size = sizeof(GpuSky);
             bd.usage = rhi::BufferUsage::Uniform;
             bd.memory = rhi::MemoryLocation::CpuToGpu;
             bd.label = u8"sky.ubo";
@@ -231,7 +231,7 @@ namespace foundation::render
         }
         if (void* p = s.ubo->Map())
         {
-            MemCopy(p, &u, sizeof(SkyUniform));
+            MemCopy(p, &u, sizeof(GpuSky));
             s.ubo->Unmap();
         }
         if (s.bindGroup == nullptr || s.env != envView || s.envUid != envUid)
@@ -242,7 +242,7 @@ namespace foundation::render
                 s.bindGroup = nullptr;
             }
             rhi::BindGroupEntry be[] = {
-                rhi::BindGroupEntry::BufferEntry(s.ubo, 0, sizeof(SkyUniform)),
+                rhi::BindGroupEntry::BufferEntry(s.ubo, 0, sizeof(GpuSky)),
                 rhi::BindGroupEntry::TextureEntry(envView),
                 rhi::BindGroupEntry::SamplerEntry(m_sampler),
             };

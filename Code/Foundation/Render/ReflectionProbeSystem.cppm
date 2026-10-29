@@ -42,17 +42,19 @@ export namespace foundation::render
         Float4 boxMin; // xyz = box min corner (world),          w = blendDistance
         Float4
             boxMax; // xyz = box max corner (world),          w = sliceBase (float; cube index into the array)
-        Float4 params; // x = mipCount, y = priority,            zw = pad
+        Float4 params; // x = mipCount, y = priority,            z = parallax (0/1), w = pad
     };
     static_assert(sizeof(GpuProbe) == 64);
 
+    // The probe prefilter's push block (struct Push, probe_prefilter_ps.ps.hlsl; pad0 and pad1 are its
+    // float2 Pad); Integration.ShaderBlocks checks it against the compiled shader, member by member.
     struct PrefilterPush
     {
         i32 faceIndex = 0;
         f32 roughness = 0.0f;
         f32 pad0 = 0.0f, pad1 = 0.0f;
     };
-    static_assert(sizeof(PrefilterPush) == 16);
+    static_assert(sizeof(PrefilterPush) == 16, "push Push (probe prefilter) layout drift");
 
     class ReflectionProbeSystem
     {

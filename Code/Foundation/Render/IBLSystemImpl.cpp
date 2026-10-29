@@ -429,7 +429,7 @@ namespace foundation::render
             useEquirect ? equirectBG : useCubemap ? cubemapBG : m_dummyEnvBindGroup;
         for (u32 face = 0; face < 6; ++face)
         {
-            IblPush push = MakeSkyPush(ctx, static_cast<i32>(face));
+            GpuIblPush push = MakeSkyPush(ctx, static_cast<i32>(face));
             graph.AddRenderPass(u8"ibl.env.face",
                                 [envH, face, push, envPipe, envBG](rendergraph::PassBuilder& b)
                                 {
@@ -448,7 +448,7 @@ namespace foundation::render
                                                 rp.SetBindGroup(0, envBG, Span<const u32>{});
                                             }
                                             rp.SetPushConstants(rhi::ShaderStage::Fragment, 0,
-                                                                sizeof(IblPush), &push);
+                                                                sizeof(GpuIblPush), &push);
                                             rp.Draw(3, 1, 0, 0);
                                         });
                                 });
@@ -464,9 +464,9 @@ namespace foundation::render
         DeclarePrefilter(ctx, graph, envH, ctx.m_prefilterH);
     }
 
-    IBLSystem::IblPush IBLSystem::MakeSkyPush(const Context& ctx, i32 face)
+    GpuIblPush IBLSystem::MakeSkyPush(const Context& ctx, i32 face)
     {
-        IblPush p{};
+        GpuIblPush p{};
         p.faceIndex = face;
         p.mode = static_cast<i32>(ctx.m_sky.mode);
         p.skyIntensity = ctx.m_sky.intensity;
@@ -536,7 +536,7 @@ namespace foundation::render
             rhi::BindGroup* srcBG = ctx.m_envMipBG[mip - 1];
             for (u32 face = 0; face < 6; ++face)
             {
-                IblPush push{};
+                GpuIblPush push{};
                 push.faceIndex = static_cast<i32>(face);
                 graph.AddRenderPass(
                     u8"ibl.env.mip",
@@ -553,7 +553,7 @@ namespace foundation::render
                             {
                                 rp.SetPipeline(m_downsamplePipeline);
                                 rp.SetBindGroup(0, srcBG, Span<const u32>{});
-                                rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(IblPush),
+                                rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuIblPush),
                                                     &push);
                                 rp.Draw(3, 1, 0, 0);
                             });
@@ -574,7 +574,7 @@ namespace foundation::render
                                       : 0.0f;
             for (u32 face = 0; face < 6; ++face)
             {
-                IblPush push{};
+                GpuIblPush push{};
                 push.faceIndex = static_cast<i32>(face);
                 push.roughness = roughness;
                 graph.AddRenderPass(
@@ -592,7 +592,7 @@ namespace foundation::render
                             {
                                 rp.SetPipeline(m_prefilterPipeline);
                                 rp.SetBindGroup(0, envBG, Span<const u32>{});
-                                rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(IblPush),
+                                rp.SetPushConstants(rhi::ShaderStage::Fragment, 0, sizeof(GpuIblPush),
                                                     &push);
                                 rp.Draw(3, 1, 0, 0);
                             });
@@ -887,7 +887,7 @@ namespace foundation::render
         rhi::PushConstantRange pcRange{};
         pcRange.stages = rhi::ShaderStage::Fragment;
         pcRange.offset = 0;
-        pcRange.size = sizeof(IblPush);
+        pcRange.size = sizeof(GpuIblPush);
         // procedural env: push constants + the env bind group (unused but included so
         // push constants land at space1, matching the prefilter/downsample/equirect layouts).
         rhi::BindGroupLayout* envLayouts[] = {m_envLayout};
@@ -1082,7 +1082,7 @@ namespace foundation::render
             rhi::PushConstantRange pc{};
             pc.stages = rhi::ShaderStage::Fragment;
             pc.offset = 0;
-            pc.size = sizeof(IblPush);
+            pc.size = sizeof(GpuIblPush);
             rhi::BindGroupLayout* layouts[] = {m_equirectLayout};
             rhi::PipelineLayoutDesc pld{};
             pld.bindGroupLayouts = Span<rhi::BindGroupLayout* const>{layouts, 1};

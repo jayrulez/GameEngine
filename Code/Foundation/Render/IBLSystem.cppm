@@ -23,6 +23,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module foundation.render:ibl;
 
@@ -48,12 +49,24 @@ export namespace foundation::render
         i32 mode = 0;
         f32 roughness = 0.0f;
         f32 skyIntensity = 1.0f;
-        Float4 sun{};     // xyz = direction, w = sun angular size (deg)
-        Float4 horizon{}; // rgb, a = sun intensity
-        Float4 zenith{};  // rgb, a = sky rotation (radians)
-        Float4 ground{};  // rgb, a = turbidity
+        Float3 sunDirection{};
+        f32 sunAngularSize = 0.0f; // degrees
+        Float3 horizon{};
+        f32 sunIntensity = 0.0f;
+        Float3 zenith{};
+        f32 skyRotation = 0.0f; // radians, a yaw about +Y
+        Float3 ground{};
+        f32 turbidity = 0.0f; // the analytic sky's haze
     };
     static_assert(sizeof(GpuIblPush) == 80, "push IblPush layout drift");
+    static_assert(offsetof(GpuIblPush, sunDirection) == 16);
+    static_assert(offsetof(GpuIblPush, sunAngularSize) == 28);
+    static_assert(offsetof(GpuIblPush, horizon) == 32);
+    static_assert(offsetof(GpuIblPush, sunIntensity) == 44);
+    static_assert(offsetof(GpuIblPush, zenith) == 48);
+    static_assert(offsetof(GpuIblPush, skyRotation) == 60);
+    static_assert(offsetof(GpuIblPush, ground) == 64);
+    static_assert(offsetof(GpuIblPush, turbidity) == 76);
 
     // Owns the per-scene IBL contexts + the passes that build their products. One per renderer.
     class IBLSystem

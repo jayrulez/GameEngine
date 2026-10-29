@@ -11,6 +11,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module engine.particles:renderer;
 
@@ -42,12 +43,18 @@ export namespace engine::particles
     {
         Float4x4 viewProj;
         Float4x4 view;
-        // x = Proj[2][2], y = Proj[3][2], z = Proj[2][3] (view depth from a sampled NDC depth; z = 0
-        // for an orthographic projection). w is written 0 and read by nothing: the soft-particle
-        // distance rides each instance (SizeRotMode.w).
-        Float4 depthParams;
+        // The projection terms that turn a sampled NDC depth back into view depth (soft particles):
+        // Proj[2][2], Proj[3][2] and Proj[2][3] (0 for an orthographic projection). The soft
+        // distance itself rides each instance (ParticleBillboardInstance::softDistance).
+        f32 projZScale = 0;
+        f32 projZOffset = 0;
+        f32 projWScale = 0;
+        f32 _pad0 = 0;
     };
     static_assert(sizeof(GpuParticleView) == 144, "cbuffer ParticleView layout drift");
+    static_assert(offsetof(GpuParticleView, projZScale) == 128);
+    static_assert(offsetof(GpuParticleView, projZOffset) == 132);
+    static_assert(offsetof(GpuParticleView, projWScale) == 136);
 
     class ParticleRenderer final : public render::Renderer
     {
@@ -286,14 +293,17 @@ export namespace engine::particles
             {
                 return;
             }
-            // DepthParams = the projection coeffs that reconstruct view-space depth from a sampled NDC
-            // depth (Proj[2][2], Proj[3][2], Proj[2][3]: 0 for an orthographic projection, which the
-            // shader linearizes as such) + the soft-particle fade distance.
+            // The projection terms that reconstruct view-space depth from a sampled NDC depth
+            // (Proj[2][2], Proj[3][2], Proj[2][3]: 0 for an orthographic projection, which the
+            // shader linearizes as such).
             const Float4x4 proj =
                 (ctx.view != nullptr) ? ctx.view->Camera().projection : Float4x4::Identity();
-            const GpuParticleView ubo{ctx.viewProj, ctx.viewMatrix,
-                                      Float4{proj(2, 2), proj(3, 2), proj(2, 3),
-                                             0.0f}}; // .w unused (soft distance is per-instance)
+            GpuParticleView ubo{};
+            ubo.viewProj = ctx.viewProj;
+            ubo.view = ctx.viewMatrix;
+            ubo.projZScale = proj(2, 2);
+            ubo.projZOffset = proj(3, 2);
+            ubo.projWScale = proj(2, 3);
             MemCopy(vr.ptr, &ubo, sizeof(ubo));
 
             // Scene-depth bind group (set 2) for soft particles. The transparent pass hands us the opaque
@@ -562,6 +572,8 @@ export namespace engine::particles
                 return nullptr;
             }
 
+            // Five float4s, each carrying four of ParticleBillboardInstance's named fields (its offset
+            // asserts); particle.vs.hlsl unpacks them by name.
             const rhi::VertexAttribute attrs[] = {
                 {rhi::VertexFormat::Float32x4, 0, 0},  {rhi::VertexFormat::Float32x4, 16, 1},
                 {rhi::VertexFormat::Float32x4, 32, 2}, {rhi::VertexFormat::Float32x4, 48, 3},

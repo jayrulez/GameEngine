@@ -160,14 +160,18 @@ namespace foundation::render
                 {
                     const auto* s = static_cast<const SpriteRenderData*>(items[k].data);
                     SpriteInstance& si = inst[k - i];
-                    si.positionSize =
-                        Float4{s->worldCenter.x, s->worldCenter.y, s->worldCenter.z, s->size.x};
-                    si.sizeOrientation =
-                        Float4{s->size.y, static_cast<f32>(s->orientation), 0.0f, 0.0f};
+                    si.position = s->worldCenter;
+                    si.width = s->size.x;
+                    si.height = s->size.y;
+                    si.orientation = static_cast<f32>(s->orientation);
+                    si._pad0 = 0.0f;
+                    si._pad1 = 0.0f;
                     si.tint = Float4{s->tint.r, s->tint.g, s->tint.b, s->tint.a};
                     si.uvRect = s->uvRect;
-                    si.axisRight = Float4{s->axisRight.x, s->axisRight.y, s->axisRight.z, 0.0f};
-                    si.axisUp = Float4{s->axisUp.x, s->axisUp.y, s->axisUp.z, 0.0f};
+                    si.axisRight = s->axisRight;
+                    si._pad2 = 0.0f;
+                    si.axisUp = s->axisUp;
+                    si._pad3 = 0.0f;
                 }
                 rhi::RenderPipeline* pso = EnsurePipeline(ctx.colorFormat, head->additive);
                 rhi::BindGroup* texBg = EnsureTextureBindGroup(head->texture);
@@ -304,6 +308,7 @@ namespace foundation::render
             return nullptr;
         }
 
+        // Six float4s, each carrying SpriteInstance's named fields at its offset asserts.
         const rhi::VertexAttribute attrs[] = {
             {rhi::VertexFormat::Float32x4, 0, 0},  {rhi::VertexFormat::Float32x4, 16, 1},
             {rhi::VertexFormat::Float32x4, 32, 2}, {rhi::VertexFormat::Float32x4, 48, 3},

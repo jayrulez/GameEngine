@@ -470,13 +470,14 @@ namespace foundation::render
         p.faceIndex = face;
         p.mode = static_cast<i32>(ctx.m_sky.mode);
         p.skyIntensity = ctx.m_sky.intensity;
-        p.sun = Float4{ctx.m_sunDir.x, ctx.m_sunDir.y, ctx.m_sunDir.z, ctx.m_sky.sunAngularSize};
-        p.horizon = Float4{ctx.m_sky.horizon.x, ctx.m_sky.horizon.y, ctx.m_sky.horizon.z,
-                           ctx.m_sky.sunIntensity};
-        p.zenith =
-            Float4{ctx.m_sky.zenith.x, ctx.m_sky.zenith.y, ctx.m_sky.zenith.z, ctx.m_sky.rotation};
-        p.ground =
-            Float4{ctx.m_sky.ground.x, ctx.m_sky.ground.y, ctx.m_sky.ground.z, ctx.m_sky.turbidity};
+        p.sunDirection = ctx.m_sunDir;
+        p.sunAngularSize = ctx.m_sky.sunAngularSize;
+        p.horizon = ctx.m_sky.horizon;
+        p.sunIntensity = ctx.m_sky.sunIntensity;
+        p.zenith = ctx.m_sky.zenith;
+        p.skyRotation = ctx.m_sky.rotation;
+        p.ground = ctx.m_sky.ground;
+        p.turbidity = ctx.m_sky.turbidity;
         return p;
     }
 

@@ -13,6 +13,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 #include <initializer_list>
 
 export module engine.terrain:renderer;
@@ -35,13 +36,13 @@ export namespace engine::terrain
     namespace render = foundation::render;
     namespace tmodel = foundation::terrain;
 
-    /// The terrain shaders' cascade count (TERRAIN_CASCADE_COUNT in terrain.vs/.ps.hlsl); matches
+    /// The terrain shaders' cascade count (TERRAIN_CASCADE_COUNT in terrain.ps.hlsl); matches
     /// render::kShadowCascadesCount.
     inline constexpr u32 kTerrainCascadeCount = 4;
 
     // The terrain passes' blocks; Integration.ShaderBlocks checks each against the compiled shaders,
     // member by member. The colour pass's view (cbuffer TerrainView, terrain.ps.hlsl; terrain.vs.hlsl
-    // declares the same fields up to ShadowParams, terrain_depth.vs.hlsl the first two).
+    // declares its first four members by the same names, terrain_depth.vs.hlsl its first two).
     struct GpuTerrainView
     {
         Float4x4 chunkToWorld; // heightfield-local -> world
@@ -49,28 +50,53 @@ export namespace engine::terrain
         Float4x4 view;         // world -> view (GBuffer normal + shadow view depth)
         Float4x4 prevViewProj; // last frame's world -> clip (motion vectors)
         Float4x4 cascadeViewProj[kTerrainCascadeCount];
-        Float4 lightDir;  // xyz = direction TO the light (normalized); w unused
-        Float4 cameraPos; // xyz = world camera; w unused
-        Float4 jitter;    // xy = this frame's TAA jitter, zw = last frame's
+        Float3 lightDir; // direction TO the light (normalized)
+        f32 _pad0 = 0;
+        Float3 cameraPos; // world camera
+        f32 _pad1 = 0;
+        Float4 jitter; // xy = this frame's TAA jitter, zw = last frame's
         Float4 cascadeSplitFar;
         Float4 cascadeTexelSize;
-        Float4 shadowMeta;   // x = cascade count, y = layer base, z = normal bias, w = depth bias
-        Float4 shadowParams; // x = far-fade width, y = uv.y sign, z = heightBlendContrast, w = height maps bound
-        Float4 splatParams; // x = palette count, y = weights bound, z = base tile, w = base bound
-        Float4 splatParams2; // x = mask maps bound, yzw spare
-        Float4 shadowLight;  // x = the caster light's shadow strength (1 = full), yzw spare
+        f32 cascadeCount = 0;     // 0: no directional caster this frame (the PS is fully lit)
+        f32 cascadeLayerBase = 0; // the first cascade's layer in the shadow array
+        f32 shadowNormalBias = 0;
+        f32 shadowDepthBias = 0;
+        f32 shadowFarFade = 0; // the far edge's fade width (view depth)
+        f32 shadowUvYSign = 0;
+        f32 heightBlendContrast = 0; // the height blend's soft-skirt width
+        u32 heightMapsBound = 0;     // 1: a base or palette height map is bound (height blend on)
+        f32 paletteCount = 0;
+        u32 weightsBound = 0;   // 1: the splat weights, indices and palette are bound
+        f32 baseTileScale = 0;  // the base maps' tile size (terrain-local units)
+        u32 baseBound = 0;      // 1: a base albedo is bound
+        u32 maskMapsBound = 0;  // 1: a palette coverage mask array is bound
+        f32 _pad2 = 0, _pad3 = 0, _pad4 = 0;
+        f32 shadowStrength = 0; // the caster light's shadow strength (1 = full)
+        f32 _pad5 = 0, _pad6 = 0, _pad7 = 0;
     };
     static_assert(sizeof(GpuTerrainView) == 672, "cbuffer TerrainView layout drift");
+    static_assert(offsetof(GpuTerrainView, lightDir) == 512);
+    static_assert(offsetof(GpuTerrainView, cameraPos) == 528);
+    static_assert(offsetof(GpuTerrainView, jitter) == 544);
+    static_assert(offsetof(GpuTerrainView, cascadeCount) == 592);
+    static_assert(offsetof(GpuTerrainView, shadowFarFade) == 608);
+    static_assert(offsetof(GpuTerrainView, heightMapsBound) == 620);
+    static_assert(offsetof(GpuTerrainView, paletteCount) == 624);
+    static_assert(offsetof(GpuTerrainView, baseBound) == 636);
+    static_assert(offsetof(GpuTerrainView, maskMapsBound) == 640);
+    static_assert(offsetof(GpuTerrainView, shadowStrength) == 656);
 
-    // The pick pass's view, written into the same TerrainView slot (cbuffer TerrainView as
-    // terrain_pick.vs.hlsl declares it: the colour pass's first two matrices, then the id).
+    // The pick pass's own view (cbuffer TerrainPickView, terrain_pick.vs.hlsl), written into the
+    // slot the colour pass's TerrainView uses: the same two matrices first, then the id.
     struct GpuTerrainPickView
     {
         Float4x4 chunkToWorld;
         Float4x4 viewProj;
-        u32 pickIndex = 0, pickGeneration = 0, p0 = 0, p1 = 0; // the shader's PickId, then _pvPad
+        u32 pickIndex = 0; // entity index + 1 (0 is no entity)
+        u32 pickGeneration = 0;
+        u32 _pad0 = 0, _pad1 = 0;
     };
-    static_assert(sizeof(GpuTerrainPickView) == 144, "cbuffer TerrainView (pick) layout drift");
+    static_assert(sizeof(GpuTerrainPickView) == 144, "cbuffer TerrainPickView layout drift");
 
     // The per-chunk block (cbuffer TerrainChunk, terrain.vs, terrain_depth.vs and terrain_pick.vs
     // .hlsl). Shared by the colour, depth and pick passes.
@@ -602,7 +628,7 @@ export namespace engine::terrain
                 // Per-terrain view UBO. The VS works in WORLD space (ChunkToWorld applied there, NOT
                 // folded into ViewProj) so the PS can shadow-sample worldPos against the world-space
                 // cascade matrices. Cascade fields are filled from ctx.cascades (Stage B) - here they
-                // stay zero => shadowMeta.x (cascade count) 0 => SampleCSM returns fully lit.
+                // stay zero => cascadeCount 0 => SampleCSM returns fully lit.
                 const render::DynamicUniformRing::Range vr = m_viewRing.Allocate();
                 if (!vr.ok)
                 {
@@ -613,12 +639,11 @@ export namespace engine::terrain
                 ubo.viewProj = ctx.viewProj;
                 ubo.view = ctx.viewMatrix;
                 ubo.prevViewProj = ctx.prevViewProj;
-                ubo.lightDir = Float4{sun.x, sun.y, sun.z, 0.0f};
-                ubo.cameraPos = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
+                ubo.lightDir = Float3{sun.x, sun.y, sun.z};
+                ubo.cameraPos = Float3{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z};
                 ubo.jitter = Float4{ctx.jitter.x, ctx.jitter.y, ctx.prevJitter.x, ctx.prevJitter.y};
                 const f32 uvYSign = m_device->NeedsClipSpaceYFlip() ? 1.0f : -1.0f;
-                // z = heightBlendContrast, w = height maps bound: filled with the splat params below.
-                ubo.shadowParams = Float4{0.0f, uvYSign, 0.0f, 0.0f};
+                ubo.shadowUvYSign = uvYSign;
                 // CSM receive: copy this view's cascade matrices/splits (world-space - the VS emits
                 // worldPos). Count 0 (no directional caster) leaves the PS fully lit. Mirrors
                 // MeshRenderer's view-UBO shadow fill.
@@ -634,28 +659,29 @@ export namespace engine::terrain
                     ubo.cascadeTexelSize =
                         Float4{ctx.cascades.texelWorldSize[0], ctx.cascades.texelWorldSize[1],
                                ctx.cascades.texelWorldSize[2], ctx.cascades.texelWorldSize[3]};
-                    ubo.shadowMeta = Float4{static_cast<f32>(kCascadeCount),
-                                            static_cast<f32>(ctx.cascadeLayerBase),
-                                            ctx.cascades.normalBias, ctx.cascades.depthBias};
-                    ubo.shadowLight.x = ctx.cascades.strength;
-                    ubo.shadowParams.x = ctx.cascades.farFade;
+                    ubo.cascadeCount = static_cast<f32>(kCascadeCount);
+                    ubo.cascadeLayerBase = static_cast<f32>(ctx.cascadeLayerBase);
+                    ubo.shadowNormalBias = ctx.cascades.normalBias;
+                    ubo.shadowDepthBias = ctx.cascades.depthBias;
+                    ubo.shadowStrength = ctx.cascades.strength;
+                    ubo.shadowFarFade = ctx.cascades.farFade;
                 }
                 const bool hasWeights = data->weightView != nullptr && data->indexView != nullptr &&
                                         data->paletteArrayView != nullptr && data->paletteCount > 0;
-                ubo.splatParams =
-                    Float4{static_cast<f32>(data->paletteCount), hasWeights ? 1.0f : 0.0f,
-                           data->baseTileScale, data->baseAlbedoView != nullptr ? 1.0f : 0.0f};
-                // Height-blend: ShadowParams.z = the soft-skirt contrast,
-                // .w = height maps bound (any base OR palette height map present). Off (w = 0) => the
-                // PS keeps the linear weighting, byte-identical.
+                ubo.paletteCount = static_cast<f32>(data->paletteCount);
+                ubo.weightsBound = hasWeights ? 1u : 0u;
+                ubo.baseTileScale = data->baseTileScale;
+                ubo.baseBound = data->baseAlbedoView != nullptr ? 1u : 0u;
+                // Height-blend: on when any base OR palette height map is present, with the
+                // soft-skirt contrast. Off => the PS keeps the linear weighting, byte-identical.
                 const bool heightBound =
                     data->baseHeightView != nullptr || data->heightArrayView != nullptr;
-                ubo.shadowParams.z = data->heightBlendContrast;
-                ubo.shadowParams.w = heightBound ? 1.0f : 0.0f;
-                // Coverage mask: SplatParams2.x = mask maps bound (a palette
-                // mask array is present). Off (0) => the PS skips the coverage multiply, byte-identical.
+                ubo.heightBlendContrast = data->heightBlendContrast;
+                ubo.heightMapsBound = heightBound ? 1u : 0u;
+                // Coverage mask: on when a palette mask array is present. Off => the PS skips the
+                // coverage multiply, byte-identical.
                 const bool maskBound = data->maskArrayView != nullptr;
-                ubo.splatParams2 = Float4{maskBound ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+                ubo.maskMapsBound = maskBound ? 1u : 0u;
                 MemCopy(vr.ptr, &ubo, sizeof(ubo));
 
                 // Local-space frustum (chunkToWorld folded in) matches the chunks' local bounds.
@@ -808,7 +834,7 @@ export namespace engine::terrain
                 }
                 if (pick)
                 {
-                    // The pick VS reads the PickView prefix: ChunkToWorld, the cropped VP, the id.
+                    // The pick VS's own block: ChunkToWorld, the cropped VP, the id.
                     GpuTerrainPickView pu{};
                     pu.chunkToWorld = data->chunkToWorld;
                     pu.viewProj = ctx.viewProj;
@@ -958,7 +984,8 @@ export namespace engine::terrain
     private:
         static constexpr u32 kMaxTerrains = 8;
         static constexpr u32 kCascadeCount = kTerrainCascadeCount;
-        // GpuTerrainView (8 mat4 + 10 float4 = 672 bytes), padded to the dynamic-offset alignment.
+        // GpuTerrainView (672 bytes; the pick pass's GpuTerrainPickView, 144, shares the slot), padded
+        // to the dynamic-offset alignment.
         static constexpr u64 kViewSlotSize = 768;
         // GpuTerrainChunk (7 float2 = 56 bytes), padded to the dynamic-offset alignment.
         static constexpr u64 kChunkSlotSize = 256;

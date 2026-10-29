@@ -218,8 +218,13 @@ namespace
         FIELD(render::DecalUniforms, invWorld, "InvWorld"),
         FIELD(render::DecalUniforms, invViewProj, "InvViewProj"),
         FIELD(render::DecalUniforms, color, "Color"),
-        FIELD(render::DecalUniforms, params, "Params"),
-        FIELD(render::DecalUniforms, flip, "Flip"),
+        FIELD(render::DecalUniforms, invTargetSize, "InvTargetSize"),
+        FIELD(render::DecalUniforms, fadeStartCos, "FadeStartCos"),
+        FIELD(render::DecalUniforms, fadeEndCos, "FadeEndCos"),
+        FIELD(render::DecalUniforms, yFlip, "YFlip"),
+        FIELD(render::DecalUniforms, _pad0, "_decalPad0"),
+        FIELD(render::DecalUniforms, _pad1, "_decalPad1"),
+        FIELD(render::DecalUniforms, _pad2, "_decalPad2"),
     };
 
     // The forward view (view.hlsli), as every forward stage declares it.
@@ -317,9 +322,12 @@ namespace
     const FieldRow kSky[] = {
         FIELD(render::GpuSky, invViewProj, "InvViewProj"),
         FIELD(render::GpuSky, prevViewProj, "PrevViewProj"),
-        FIELD(render::GpuSky, camPosIntensity, "CamPosIntensity"),
-        FIELD(render::GpuSky, sunDir, "SunDir"),
+        FIELD(render::GpuSky, cameraPos, "CameraPos"),
+        FIELD(render::GpuSky, backgroundIntensity, "BackgroundIntensity"),
+        FIELD(render::GpuSky, sunDirection, "SunDirection"),
+        FIELD(render::GpuSky, sunAngularSizeDegrees, "SunAngularSizeDegrees"),
         FIELD(render::GpuSky, sunColor, "SunColor"),
+        FIELD(render::GpuSky, sunIntensity, "SunIntensity"),
         FIELD(render::GpuSky, jitter, "Jitter"),
         FIELD(render::GpuSky, skyFlags, "SkyFlags"),
     };
@@ -328,10 +336,14 @@ namespace
         FIELD(render::GpuIblPush, mode, "Mode"),
         FIELD(render::GpuIblPush, roughness, "Roughness"),
         FIELD(render::GpuIblPush, skyIntensity, "SkyIntensity"),
-        FIELD(render::GpuIblPush, sun, "Sun"),
+        FIELD(render::GpuIblPush, sunDirection, "SunDirection"),
+        FIELD(render::GpuIblPush, sunAngularSize, "SunAngularSize"),
         FIELD(render::GpuIblPush, horizon, "Horizon"),
+        FIELD(render::GpuIblPush, sunIntensity, "SunIntensity"),
         FIELD(render::GpuIblPush, zenith, "Zenith"),
+        FIELD(render::GpuIblPush, skyRotation, "SkyRotation"),
         FIELD(render::GpuIblPush, ground, "Ground"),
+        FIELD(render::GpuIblPush, turbidity, "Turbidity"),
     };
     // probe_prefilter_ps.ps.hlsl's struct Push; its float2 Pad is the mirror's pad0 and pad1.
     const FieldRow kPrefilterPush[] = {
@@ -469,6 +481,7 @@ namespace
         FieldRow{u8"ViewToWorld1", offsetof(render::GpuSsgiResolvePush, viewToWorld) + 16u},
         FieldRow{u8"ViewToWorld2", offsetof(render::GpuSsgiResolvePush, viewToWorld) + 32u},
         FIELD(render::GpuSsgiResolvePush, skyAmbient, "SkyAmbient"),
+        FIELD(render::GpuSsgiResolvePush, shSkyDimmer, "ShSkyDimmer"),
     };
     const FieldRow kSsrPush[] = {
         FIELD(render::GpuSsrPush, invProj, "InvProj"),
@@ -518,8 +531,8 @@ namespace
         FIELD(render::GpuTonemapPush, lutSize, "LutSize"),
         FIELD(render::GpuTonemapPush, encodeOutput, "EncodeOutput"),
         FIELD(render::GpuTonemapPush, rotation, "Rotation"),
-        FIELD(render::GpuTonemapPush, pad1, "Pad1"),
-        FIELD(render::GpuTonemapPush, pad2, "Pad2"),
+        FIELD(render::GpuTonemapPush, _pad0, "_tonemapPad0"),
+        FIELD(render::GpuTonemapPush, _pad1, "_tonemapPad1"),
     };
     const FieldRow kFxaaPush[] = {
         FIELD(render::GpuFxaaPush, texelSize, "TexelSize"),
@@ -574,9 +587,12 @@ namespace
     const FieldRow kParticleView[] = {
         FIELD(particles::GpuParticleView, viewProj, "ViewProj"),
         FIELD(particles::GpuParticleView, view, "View"),
-        FIELD(particles::GpuParticleView, depthParams, "DepthParams"),
+        FIELD(particles::GpuParticleView, projZScale, "ProjZScale"),
+        FIELD(particles::GpuParticleView, projZOffset, "ProjZOffset"),
+        FIELD(particles::GpuParticleView, projWScale, "ProjWScale"),
+        FIELD(particles::GpuParticleView, _pad0, "_particleViewPad0"),
     };
-    // TerrainView as terrain.ps.hlsl declares it; terrain.vs.hlsl declares its first twelve
+    // TerrainView as terrain.ps.hlsl declares it; terrain.vs.hlsl declares its first four
     // members and terrain_depth.vs.hlsl its first two (the same rows, a prefix of this table).
     const FieldRow kTerrainView[] = {
         FIELD(terrain::GpuTerrainView, chunkToWorld, "ChunkToWorld"),
@@ -585,23 +601,42 @@ namespace
         FIELD(terrain::GpuTerrainView, prevViewProj, "PrevViewProj"),
         FIELD(terrain::GpuTerrainView, cascadeViewProj, "CascadeViewProj"),
         FIELD(terrain::GpuTerrainView, lightDir, "LightDir"),
+        FIELD(terrain::GpuTerrainView, _pad0, "_terrainViewPad0"),
         FIELD(terrain::GpuTerrainView, cameraPos, "CameraPos"),
+        FIELD(terrain::GpuTerrainView, _pad1, "_terrainViewPad1"),
         FIELD(terrain::GpuTerrainView, jitter, "Jitter"),
         FIELD(terrain::GpuTerrainView, cascadeSplitFar, "CascadeSplitFar"),
         FIELD(terrain::GpuTerrainView, cascadeTexelSize, "CascadeTexelSize"),
-        FIELD(terrain::GpuTerrainView, shadowMeta, "ShadowMeta"),
-        FIELD(terrain::GpuTerrainView, shadowParams, "ShadowParams"),
-        FIELD(terrain::GpuTerrainView, splatParams, "SplatParams"),
-        FIELD(terrain::GpuTerrainView, splatParams2, "SplatParams2"),
-        FIELD(terrain::GpuTerrainView, shadowLight, "ShadowLight"),
+        FIELD(terrain::GpuTerrainView, cascadeCount, "CascadeCount"),
+        FIELD(terrain::GpuTerrainView, cascadeLayerBase, "CascadeLayerBase"),
+        FIELD(terrain::GpuTerrainView, shadowNormalBias, "ShadowNormalBias"),
+        FIELD(terrain::GpuTerrainView, shadowDepthBias, "ShadowDepthBias"),
+        FIELD(terrain::GpuTerrainView, shadowFarFade, "ShadowFarFade"),
+        FIELD(terrain::GpuTerrainView, shadowUvYSign, "ShadowUvYSign"),
+        FIELD(terrain::GpuTerrainView, heightBlendContrast, "HeightBlendContrast"),
+        FIELD(terrain::GpuTerrainView, heightMapsBound, "HeightMapsBound"),
+        FIELD(terrain::GpuTerrainView, paletteCount, "PaletteCount"),
+        FIELD(terrain::GpuTerrainView, weightsBound, "WeightsBound"),
+        FIELD(terrain::GpuTerrainView, baseTileScale, "BaseTileScale"),
+        FIELD(terrain::GpuTerrainView, baseBound, "BaseBound"),
+        FIELD(terrain::GpuTerrainView, maskMapsBound, "MaskMapsBound"),
+        FIELD(terrain::GpuTerrainView, _pad2, "_terrainViewPad2"),
+        FIELD(terrain::GpuTerrainView, _pad3, "_terrainViewPad3"),
+        FIELD(terrain::GpuTerrainView, _pad4, "_terrainViewPad4"),
+        FIELD(terrain::GpuTerrainView, shadowStrength, "ShadowStrength"),
+        FIELD(terrain::GpuTerrainView, _pad5, "_terrainViewPad5"),
+        FIELD(terrain::GpuTerrainView, _pad6, "_terrainViewPad6"),
+        FIELD(terrain::GpuTerrainView, _pad7, "_terrainViewPad7"),
     };
-    constexpr usize kTerrainVertexViewMembers = 12; // through ShadowParams (terrain.vs.hlsl)
+    constexpr usize kTerrainVertexViewMembers = 4;  // through PrevViewProj (terrain.vs.hlsl)
     constexpr usize kTerrainDepthViewMembers = 2;   // ChunkToWorld, ViewProj (terrain_depth.vs.hlsl)
     const FieldRow kTerrainPickView[] = {
         FIELD(terrain::GpuTerrainPickView, chunkToWorld, "ChunkToWorld"),
         FIELD(terrain::GpuTerrainPickView, viewProj, "ViewProj"),
-        FIELD(terrain::GpuTerrainPickView, pickIndex, "PickId"),
-        FIELD(terrain::GpuTerrainPickView, p0, "_pvPad"),
+        FIELD(terrain::GpuTerrainPickView, pickIndex, "PickIndex"),
+        FIELD(terrain::GpuTerrainPickView, pickGeneration, "PickGeneration"),
+        FIELD(terrain::GpuTerrainPickView, _pad0, "_pickViewPad0"),
+        FIELD(terrain::GpuTerrainPickView, _pad1, "_pickViewPad1"),
     };
     const FieldRow kTerrainChunk[] = {
         FIELD(terrain::GpuTerrainChunk, originXZ, "OriginXZ"),
@@ -692,7 +727,7 @@ namespace
         {u8"terrain", ShaderStage::Fragment, ShaderFlags::None, u8"type.TerrainView", Span<const FieldRow>(kTerrainView)},
         {u8"terrain", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainView", Span<const FieldRow>(kTerrainView, kTerrainVertexViewMembers)},
         {u8"terrain_depth", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainView", Span<const FieldRow>(kTerrainView, kTerrainDepthViewMembers)},
-        {u8"terrain_pick", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainView", Span<const FieldRow>(kTerrainPickView)},
+        {u8"terrain_pick", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainPickView", Span<const FieldRow>(kTerrainPickView)},
         {u8"terrain", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainChunk", Span<const FieldRow>(kTerrainChunk)},
         {u8"terrain_depth", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainChunk", Span<const FieldRow>(kTerrainChunk)},
         {u8"terrain_pick", ShaderStage::Vertex, ShaderFlags::None, u8"type.TerrainChunk", Span<const FieldRow>(kTerrainChunk)},

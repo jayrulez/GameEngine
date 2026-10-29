@@ -19,6 +19,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module foundation.render:decal_pass;
 
@@ -41,7 +42,7 @@ export namespace foundation::render
     // The scene HDR format decals blend into (matches TonemapPass::HdrFormat / AoPass).
     inline constexpr rhi::TextureFormat kDecalHdrFormat = rhi::TextureFormat::RGBA16Float;
 
-    // One decal, uploaded to the per-decal UBO (set 1, dynamic offset). 224 bytes.
+    // One decal, uploaded to the per-decal UBO (set 1, dynamic offset). 240 bytes.
     struct DecalUniforms
     {
         Float4x4 world;    // decal box world transform (scale = box size); projects along local +Z
@@ -49,10 +50,17 @@ export namespace foundation::render
         Float4x4
             invViewProj; // (ndc, depth) -> world, for depth reconstruction (this view, jittered)
         Float4 color;    // rgba tint
-        Float4 params;   // x,y = 1/full-target-size ; z,w = cos(angleFadeStart), cos(angleFadeEnd)
-        Float4 flip;     // x = interpolant Y correction (+1 Vulkan, -1 Y-flip targets); yzw spare
+        Float2 invTargetSize; // 1 / the full target's size
+        f32 fadeStartCos = 1; // cos(the angle fade's start)
+        f32 fadeEndCos = 1;   // cos(its end)
+        f32 yFlip = 1;        // interpolant Y correction (+1 Vulkan, -1 Y-flip targets)
+        f32 _pad0 = 0, _pad1 = 0, _pad2 = 0;
     };
     static_assert(sizeof(DecalUniforms) == 240);
+    static_assert(offsetof(DecalUniforms, invTargetSize) == 208);
+    static_assert(offsetof(DecalUniforms, fadeStartCos) == 216);
+    static_assert(offsetof(DecalUniforms, fadeEndCos) == 220);
+    static_assert(offsetof(DecalUniforms, yFlip) == 224);
 
     class DecalPass
     {

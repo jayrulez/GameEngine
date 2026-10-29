@@ -11,6 +11,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module foundation.render:sky;
 
@@ -34,13 +35,22 @@ export namespace foundation::render
     {
         Float4x4 invViewProj;  // inverse of the UNJITTERED view-proj (a stable sky ray under TAA)
         Float4x4 prevViewProj; // last frame's view-proj (motion vectors)
-        Float4 camPosIntensity; // xyz = camera world position, w = the sky background's display multiplier
-        Float4 sunDir;          // xyz = light direction, w = the sun's angular size (degrees)
-        Float4 sunColor;        // rgb = sun colour, w = sun intensity
+        Float3 cameraPos;            // camera world position
+        f32 backgroundIntensity = 1; // the sky background's display multiplier (not IBL)
+        Float3 sunDirection;         // the light's direction
+        f32 sunAngularSizeDegrees = 0;
+        Float3 sunColor;
+        f32 sunIntensity = 0;
         Float4 jitter;          // xy = this frame's NDC jitter, zw = last frame's
         Float4 skyFlags; // x = sky-ray Y sign (-1 flips the sampled ray on Y-flip targets); yzw unused
     };
     static_assert(sizeof(GpuSky) == 208, "cbuffer Sky layout drift");
+    static_assert(offsetof(GpuSky, cameraPos) == 128);
+    static_assert(offsetof(GpuSky, backgroundIntensity) == 140);
+    static_assert(offsetof(GpuSky, sunDirection) == 144);
+    static_assert(offsetof(GpuSky, sunAngularSizeDegrees) == 156);
+    static_assert(offsetof(GpuSky, sunColor) == 160);
+    static_assert(offsetof(GpuSky, sunIntensity) == 172);
 
     class SkyPass
     {

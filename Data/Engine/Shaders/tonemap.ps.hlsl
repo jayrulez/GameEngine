@@ -14,9 +14,10 @@ SamplerState      BloomSamp : register(s0, space0);
 struct TonemapPush { float Exposure; float BloomIntensity; float2 UvScale; float2 UvOffset; float AoStrength; float DebugShowAo; float Operator; float FlipSceneY;
                      float AutoExposure; float AutoKey; float AutoMin; float AutoMax; float GradeIntensity; float LutSize;
                      // 1 = the target stores the display encoding as written (a plain UNORM target);
-                     // 0 = it encodes on write (sRGB) or holds linear values (float). Three SCALAR
-                     // pads, never a float3: a WGSL uniform wants a vec3 on a 16-byte boundary.
-                     float EncodeOutput; float Rotation; float Pad1; float Pad2; };
+                     // 0 = it encodes on write (sRGB) or holds linear values (float). Rotation is the
+                     // ContentRotation; then two SCALAR pads, never a vector: a WGSL uniform wants a
+                     // vec3 on a 16-byte boundary.
+                     float EncodeOutput; float Rotation; float _tonemapPad0; float _tonemapPad1; };
 PUSH_CONSTANT(TonemapPush, pc, space1);
 
 // Linear -> sRGB display encode (the OETF the CM1a "clamp" operator needs before writing the

@@ -16,6 +16,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module foundation.render:sprite_renderer;
 
@@ -43,17 +44,32 @@ export namespace foundation::render
     };
     static_assert(sizeof(GpuSpriteView) == 128, "cbuffer SpriteView layout drift");
 
-    // One instance record uploaded to the instance stream (96 bytes = 6x float4, matches the VS inputs).
+    // One instance record uploaded to the instance stream (96 bytes). The vertex layout reads it as
+    // six float4s at locations 0 to 5; sprite.vs.hlsl names each attribute for the fields it
+    // carries, so the offsets below are the shader's contract.
     struct SpriteInstance
     {
-        Float4 positionSize;    // xyz world center, w width
-        Float4 sizeOrientation; // x height, y orientation mode
+        Float3 position; // world centre
+        f32 width;
+        f32 height;
+        f32 orientation; // the orientation mode's ordinal, as a float (the shader rounds it)
+        f32 _pad0, _pad1;
         Float4 tint;
         Float4 uvRect;    // xy uv min, zw uv size
-        Float4 axisRight; // xyz entity right (EntityOriented)
-        Float4 axisUp;    // xyz entity up (EntityOriented)
+        Float3 axisRight; // the entity's right (EntityOriented)
+        f32 _pad2;
+        Float3 axisUp; // the entity's up (EntityOriented)
+        f32 _pad3;
     };
     static_assert(sizeof(SpriteInstance) == 96);
+    static_assert(offsetof(SpriteInstance, position) == 0);
+    static_assert(offsetof(SpriteInstance, width) == 12);
+    static_assert(offsetof(SpriteInstance, height) == 16);
+    static_assert(offsetof(SpriteInstance, orientation) == 20);
+    static_assert(offsetof(SpriteInstance, tint) == 32);
+    static_assert(offsetof(SpriteInstance, uvRect) == 48);
+    static_assert(offsetof(SpriteInstance, axisRight) == 64);
+    static_assert(offsetof(SpriteInstance, axisUp) == 80);
 
     class SpriteRenderer final : public Renderer
     {

@@ -2,7 +2,14 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 #pragma pack_matrix(row_major)
-cbuffer ParticleView : register(b0, space0) { float4x4 ViewProj; float4x4 View; float4 DepthParams; };
+cbuffer ParticleView : register(b0, space0) {
+    float4x4 ViewProj;
+    float4x4 View;
+    float    ProjZScale;    // Proj[2][2] (soft particles, the billboard pixel stage)
+    float    ProjZOffset;   // Proj[3][2]
+    float    ProjWScale;    // Proj[2][3]
+    float    _particleViewPad0;
+};
 // Vertex inputs are TEXCOORD<location>: the DX12 input layout names every element TEXCOORD with
 // the shader location as its index (DxRenderPipeline), so POSITION/COLOR semantics fail layout
 // creation there and the trail draw silently dropped. Locations 0/1/2 are unchanged.

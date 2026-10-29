@@ -106,10 +106,13 @@ namespace foundation::render
         GpuSky u{};
         u.invViewProj = invViewProj;
         u.prevViewProj = prevViewProj;
-        // w = the display-only sky-background multiplier (skyIntensity itself is baked into the cube).
-        u.camPosIntensity = Float4{camPos.x, camPos.y, camPos.z, backgroundIntensity};
-        u.sunDir = Float4{sunDir.x, sunDir.y, sunDir.z, sunSize};
-        u.sunColor = Float4{sunColor.x, sunColor.y, sunColor.z, sunIntensity};
+        // The background multiplier is display-only (skyIntensity itself is baked into the cube).
+        u.cameraPos = camPos;
+        u.backgroundIntensity = backgroundIntensity;
+        u.sunDirection = sunDir;
+        u.sunAngularSizeDegrees = sunSize;
+        u.sunColor = sunColor;
+        u.sunIntensity = sunIntensity;
         u.jitter = Float4{jitter.x, jitter.y, prevJitter.x, prevJitter.y};
         // Y-flip targets (WebGPU today; see DxDevice::NeedsClipSpaceYFlip) present the reconstructed sky ray mirrored
         // vertically vs. Vulkan's negative-height viewport; mirror the sampled ray back on those.

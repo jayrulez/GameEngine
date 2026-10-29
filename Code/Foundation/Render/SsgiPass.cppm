@@ -109,8 +109,13 @@ export namespace foundation::render
         f32 pad0 = 0.0f;
         f32 pad1 = 0.0f;
         Float4 viewToWorld[3]{};       // rows of the camera's world rotation (view -> world normal)
-        Float4 skyAmbient{};           // rgb = flat fill, w = SH sky dimmer (0 = no SH sky)
+        Float3 skyAmbient{};           // the flat ambient fill
+        // The SH sky's multiplier (the view's IBL diffuse). 0 is the rule for "no SH sky bound":
+        // the shader then adds the flat fill alone, as the forward does.
+        f32 shSkyDimmer = 0.0f;
     };
+    static_assert(offsetof(GpuSsgiResolvePush, skyAmbient) == 112);
+    static_assert(offsetof(GpuSsgiResolvePush, shSkyDimmer) == 124);
     static_assert(offsetof(GpuSsgiResolvePush, viewToWorld) == 64,
                   "SSGI resolve push: the float4 block must start where HLSL puts it");
     static_assert(sizeof(GpuSsgiResolvePush) <= 128,

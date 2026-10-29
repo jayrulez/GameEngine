@@ -336,9 +336,12 @@ export namespace engine::particles
                 }
                 const Float2 sz = (sizes != nullptr) ? (*sizes)[i] : Float2{0.1f, 0.1f};
                 ParticleBillboardInstance& o = out[k];
-                o.positionSize = Float4{p.x, p.y, p.z, sz.x};
-                o.sizeRotMode =
-                    Float4{sz.y, (rots != nullptr) ? (*rots)[i] : 0.0f, modeF, softDist};
+                o.position = p;
+                o.width = sz.x;
+                o.height = sz.y;
+                o.rotation = (rots != nullptr) ? (*rots)[i] : 0.0f;
+                o.mode = modeF;
+                o.softDistance = softDist;
                 o.color = (cols != nullptr) ? ParticleColorToLinear((*cols)[i])
                                             : Float4{1.0f, 1.0f, 1.0f, 1.0f};
                 const f32 lifeRatio = (ages != nullptr && lifes != nullptr && (*lifes)[i] > 0.0f)
@@ -351,7 +354,8 @@ export namespace engine::particles
                 {
                     v = TransformDirection(v, xform);
                 }
-                o.velocity = Float4{v.x, v.y, v.z, stretch ? 0.1f : 0.0f};
+                o.velocity = v;
+                o.stretch = stretch ? 0.1f : 0.0f;
                 bmin = Float3{Min(bmin.x, p.x), Min(bmin.y, p.y), Min(bmin.z, p.z)};
                 bmax = Float3{Max(bmax.x, p.x), Max(bmax.y, p.y), Max(bmax.z, p.z)};
             }

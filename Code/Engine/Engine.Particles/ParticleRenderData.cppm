@@ -10,6 +10,7 @@
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 #include <type_traits>
 
 export module engine.particles:renderdata;
@@ -34,16 +35,33 @@ export namespace engine::particles
         return Float4{l.r, l.g, l.b, l.a};
     }
 
-    // One packed billboard instance (80 bytes = 5x float4, matches the ParticleRenderer VS inputs).
+    // One packed billboard instance (80 bytes). The vertex layout reads it as five float4s at
+    // locations 0 to 4 (ParticleRenderer's billboard pipeline); particle.vs.hlsl unpacks each into
+    // the fields named here, so the offsets below are the shader's contract.
     struct ParticleBillboardInstance
     {
-        Float4 positionSize; // xyz world center, w width
-        Float4 sizeRotMode;  // x height, y rotation (radians), z orientation mode, w unused
-        Float4 color;        // rgba, linear (decoded from the simulated sRGB colour)
-        Float4 uvRect;       // xy uv min, zw uv size (flipbook)
-        Float4 velocity;     // xyz world velocity, w stretch scale (0 = plain billboard)
+        Float3 position;  // world centre
+        f32 width;
+        f32 height;
+        f32 rotation;     // radians, the camera-facing roll
+        f32 mode;         // the orientation mode's ordinal, as a float (the shader rounds it)
+        f32 softDistance; // the soft-particle fade band (0 = off)
+        Float4 color;     // rgba, linear (decoded from the simulated sRGB colour)
+        Float4 uvRect;    // xy uv min, zw uv size (flipbook)
+        Float3 velocity;  // world velocity
+        f32 stretch;      // the stretch scale (0 = plain billboard)
     };
     static_assert(sizeof(ParticleBillboardInstance) == 80);
+    static_assert(offsetof(ParticleBillboardInstance, position) == 0);
+    static_assert(offsetof(ParticleBillboardInstance, width) == 12);
+    static_assert(offsetof(ParticleBillboardInstance, height) == 16);
+    static_assert(offsetof(ParticleBillboardInstance, rotation) == 20);
+    static_assert(offsetof(ParticleBillboardInstance, mode) == 24);
+    static_assert(offsetof(ParticleBillboardInstance, softDistance) == 28);
+    static_assert(offsetof(ParticleBillboardInstance, color) == 32);
+    static_assert(offsetof(ParticleBillboardInstance, uvRect) == 48);
+    static_assert(offsetof(ParticleBillboardInstance, velocity) == 64);
+    static_assert(offsetof(ParticleBillboardInstance, stretch) == 76);
 
     // Both particle render-data kinds ride the one particle rendererId; this tells them apart in Resolve.
     struct ParticleRenderDataBase : foundation::render::RenderData

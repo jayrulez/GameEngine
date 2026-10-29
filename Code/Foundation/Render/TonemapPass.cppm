@@ -72,8 +72,8 @@ export namespace foundation::render
         f32 lutSize = 0.0f;
         f32 encodeOutput = 0.0f; // 1 = the target stores the display encoding as written (plain UNORM)
         f32 rotation = 0.0f;     // the ContentRotation, as a float
-        f32 pad1 = 0.0f;
-        f32 pad2 = 0.0f;
+        f32 _pad0 = 0.0f;
+        f32 _pad1 = 0.0f;
     };
     static_assert(sizeof(GpuTonemapPush) == 80, "push TonemapPush layout drift");
 

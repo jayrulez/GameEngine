@@ -177,6 +177,34 @@ test draws reflection probes.
   calling it padding (b). A struct.
 - **F26** SSGI resolve `SkyAmbient.w` = the SH sky dimmer, 0 meaning no SH sky (c, mild).
 
+Built 2026-10-29: every value in these blocks has a field named for it, in the same bytes except
+where noted. The image-lighting push `IblPush` is `SunDirection`/`SunAngularSize`,
+`Horizon`/`SunIntensity`, `Zenith`/`SkyRotation`, `Ground`/`Turbidity` (float3 plus a scalar each).
+The sky block splits `CameraPos`/`BackgroundIntensity`, `SunDirection`/`SunAngularSizeDegrees` and
+`SunColor`/`SunIntensity`. The terrain view names every scalar: `CascadeCount`,
+`CascadeLayerBase`, `ShadowNormalBias`, `ShadowDepthBias` (the former `ShadowMeta`, not in the
+findings but the same packing), `ShadowFarFade`, `ShadowUvYSign`, `HeightBlendContrast`,
+`HeightMapsBound`, `PaletteCount`, `WeightsBound`, `BaseTileScale`, `BaseBound`, `MaskMapsBound`,
+`ShadowStrength`, with `LightDir` and `CameraPos` as float3s and their dead w lanes, like the spare
+lanes, honest `_terrainViewPad0..7`; the four flags are uints written 1 or 0 (they were floats
+1.0 or 0.0: the one change of bytes), the two counts stay floats. `terrain.vs.hlsl` declares the
+block's first four members (the matrices it reads) and `terrain_depth.vs.hlsl` its first two, by
+the same names; the pick pass's block is its own `cbuffer TerrainPickView` (`PickIndex`,
+`PickGeneration`, `_pickViewPad0..1`), so one name no longer means two layouts. The decal block is
+`InvTargetSize`, `FadeStartCos`, `FadeEndCos`, `YFlip` and `_decalPad0..2`. The particle view's
+`DepthParams` is `ProjZScale`, `ProjZOffset`, `ProjWScale` and `_particleViewPad0` (its dead w
+gone). The particle and sprite instance streams name every field in C++
+(`ParticleBillboardInstance`: `position`, `width`, `height`, `rotation`, `mode`, `softDistance`,
+`color`, `uvRect`, `velocity`, `stretch`; `SpriteInstance`: `position`, `width`, `height`,
+`orientation`, `tint`, `uvRect`, `axisRight`, `axisUp`, with `_pad0..3`) with offset asserts; their
+vertex layouts are unchanged (five and six Float32x4 attributes at the same offsets and
+locations), so each shader input is a float4 named for the fields it carries
+(`PositionWidth`, `HeightRotationModeSoftDistance`, `VelocityStretch`; `PositionWidth`,
+`HeightOrientation`), and particle.vs.hlsl unpacks its instance into a named `ParticleInstance`
+before reading it. Tonemap's pads are `_tonemapPad0..1` (it was a struct since phase 0). The SSGI
+resolve push splits `SkyAmbient`/`ShSkyDimmer`, 0 for "no SH sky" stated as the rule on both
+sides. `Integration.ShaderBlocks` checks every block above under its new names.
+
 ### Phase 6: what the phases leave
 
 - PBR's three wind lanes removed from its material (a data version bump and migration), once

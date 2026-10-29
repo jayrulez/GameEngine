@@ -178,11 +178,13 @@ namespace foundation::render
             u.invWorld = Inverse(d.world);
             u.invViewProj = invViewProj;
             u.color = Float4{d.color.r, d.color.g, d.color.b, d.color.a};
-            u.params = Float4{invSize.x, invSize.y, Cos(d.fadeStart), Cos(d.fadeEnd)};
+            u.invTargetSize = invSize;
+            u.fadeStartCos = Cos(d.fadeStart);
+            u.fadeEndCos = Cos(d.fadeEnd);
             // Interpolant Y correction (the SkyFlags.x convention): Vulkan's negative viewport
             // makes the emitted NDC land on the right pixel already (+1 = verbatim, bit-identical
             // to the pre-flip shader); Y-flip targets mirror the interpolant, so -1 un-mirrors.
-            u.flip = Float4{m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f, 0.0f, 0.0f, 0.0f};
+            u.yFlip = m_device->NeedsClipSpaceYFlip() ? -1.0f : 1.0f;
             MemCopy(r.ptr, &u, sizeof(u));
             viewDraws.PushBack(Draw{r.byteOffset, d.texture});
         }

@@ -127,8 +127,8 @@ namespace foundation::render
         push.lutSize = gradeOn ? grading.lutSize : 0.0f;
         push.encodeOutput = encodeOutput ? 1.0f : 0.0f;
         push.rotation = static_cast<f32>(static_cast<u32>(turn));
-        push.pad1 = 0.0f;
-        push.pad2 = 0.0f;
+        push._pad0 = 0.0f;
+        push._pad1 = 0.0f;
 
         const rhi::LoadOp load = clearColor ? rhi::LoadOp::Clear : rhi::LoadOp::Load;
         rhi::TextureView* autoView = autoOn ? autoExposure.view : nullptr;

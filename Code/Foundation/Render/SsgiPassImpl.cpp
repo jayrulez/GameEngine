@@ -549,7 +549,8 @@ namespace foundation::render
             rpc2.viewToWorld[r] = Float4{sky.viewToWorld(r, 0), sky.viewToWorld(r, 1), sky.viewToWorld(r, 2), 0.0f};
         }
         const bool shSky = sky.shBuffer != nullptr;
-        rpc2.skyAmbient = Float4{sky.ambient.x, sky.ambient.y, sky.ambient.z, shSky ? sky.iblDiffuse : 0.0f};
+        rpc2.skyAmbient = sky.ambient;
+        rpc2.shSkyDimmer = shSky ? sky.iblDiffuse : 0.0f; // 0 = no SH sky (the shader's rule)
         rhi::Buffer* const shBuffer = shSky ? sky.shBuffer : m_dummyShBuffer;
         const u64 shGeneration = shSky ? sky.generation : 0;
         const rendergraph::RGHandle shHandle = shSky ? sky.shHandle : rendergraph::RGHandle{};

@@ -2178,6 +2178,62 @@ TEST_CASE("model-import: the skeleton's parent node is the skin's root joint's p
     CHECK(pipeline::SkeletonParentNode(m, pipeline::SkeletonJoints(m, empty).AsSpan()) == -2);
 }
 
+TEST_CASE("model-import: the node an unskinned mesh hangs under joins the skeleton, its animation played")
+{
+    // 3ds Max's Biped animates a weapon's prop node with the hand; the file does not make it a
+    // bone and no vertex is bound to it. Left outside the skeleton, its channels were dropped and
+    // the weapon rode the pelvis.
+    model::Model m;
+    auto bone = [&](StringView name, i32 parent, bool isBone, i32 mesh = -1)
+    {
+        auto* b = new model::ModelBone();
+        b->setName(name);
+        b->parentIndex = parent;
+        b->isSkeletonBone = isBone;
+        b->meshIndex = mesh;
+        return m.addBone(b);
+    };
+    for (usize i = 0; i < 4; ++i)
+        m.addMesh(new model::ModelMesh()); // no joints or weights: unskinned
+    const i32 root = bone(u8"100001", -1, false);
+    const i32 bip = bone(u8"Bip001", root, true);
+    const i32 hand = bone(u8"Bip001 R Hand", bip, true);
+    const i32 prop = bone(u8"Bip001 Prop1", bip, false); // not a file bone
+    const i32 grip = bone(u8"Grip", prop, false);        // the node the weapon hangs under
+    bone(u8"Weapon", grip, false, 1);
+    const i32 apart = bone(u8"Stand", root, false); // a node the skeleton does not reach
+    bone(u8"Banner", apart, false, 2);
+    bone(u8"Hilt", hand, false, 3); // under a joint already: nothing to add
+    model::ModelSkin skin;
+    skin.addJoint(bip, Float4x4::Identity());
+    skin.addJoint(hand, Float4x4::Identity());
+
+    model::ModelAnimation swing;
+    swing.duration = 1.0f;
+    auto* lift = new model::AnimationChannel();
+    lift->targetBone = prop;
+    lift->path = model::AnimationPath::Translation;
+    lift->addKeyframe(0.0f, Float4{0.0f, 0.0f, 0.0f, 0.0f});
+    lift->addKeyframe(1.0f, Float4{0.0f, 1.0f, 0.0f, 0.0f});
+    swing.addChannel(lift);
+
+    const Array<i32> joints = pipeline::SkeletonJoints(m, skin);
+    REQUIRE(joints.Size() == 4u); // the skin's two, then the prop and the grip; not the stand
+    CHECK(joints[0] == bip);
+    CHECK(joints[1] == hand);
+    CHECK(joints[2] == prop);
+    CHECK(joints[3] == grip);
+    const HashMap<i32, i32> boneToJoint = pipeline::BuildBoneToJoint(joints.AsSpan());
+    foundation::animation::SkeletonSource skeleton;
+    pipeline::SkeletonSourceFromModel(m, skin, joints.AsSpan(), boneToJoint, skeleton);
+    CHECK(skeleton.boneNames[2] == String(u8"Bip001 Prop1"));
+    CHECK(skeleton.parentIndices[2] == 0); // under the pelvis's joint
+    foundation::animation::AnimationClipSource clip;
+    pipeline::AnimationClipSourceFromModel(swing, boneToJoint, u8"swing", clip, pipeline::SkeletonParentNode(m, joints.AsSpan()));
+    REQUIRE(clip.trackBone.Size() == 1u);
+    CHECK(clip.trackBone[0] == 2); // the prop's swing is a track of the pose
+}
+
 TEST_CASE("model-import: a bone the skin's joints hang from joins the skeleton, its animation played; an empty one does not")
 {
     // 3ds Max hangs a skeleton from a Dummy helper bone with no vertices of its own and animates it

@@ -26,6 +26,18 @@ namespace animation = foundation::animation;
 
 export namespace pipeline
 {
+    // True if the model mesh carries skinning (Joints/Weights vertex elements).
+    [[nodiscard]] inline bool IsSkinnedMesh(const model::ModelMesh& mesh) noexcept
+    {
+        for (const model::VertexElement& e : mesh.vertexElements())
+        {
+            if (e.semantic == model::VertexSemantic::Joints)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 
     // The model node the joints `joints` hang from: the parent of their first root (a joint whose
     // parent is not among them), -1 when that root has no parent, -2 with no joints. Several roots
@@ -59,7 +71,11 @@ export namespace pipeline
     // vertices of its own, and animates it with the pose (a creature's bob): it is a joint, its
     // channels played. An empty node above (Blender's armature object, whose animation is the
     // character's travel) stays outside: the node the skeleton hangs from, its channels the clip's
-    // model tracks. Appended after the skin's joints, so no vertex's joint index moves.
+    // model tracks. Then the node each unskinned mesh hangs under, with the nodes between it and
+    // the skeleton, when its chain reaches the skeleton: 3ds Max's Biped animates a weapon's prop
+    // node with the hand (the file does not make it a bone), and no vertex is bound to it, so
+    // without it the clip's prop channels were dropped and the weapon's bone attachment rode the
+    // pelvis. Each is appended after the skin's joints, so no vertex's joint index moves.
     [[nodiscard]] inline Array<i32> SkeletonJoints(const model::Model& model, const model::ModelSkin& skin)
     {
         Array<i32> joints;
@@ -72,6 +88,38 @@ export namespace pipeline
             if (hang < 0 || static_cast<usize>(hang) >= bones.Size() || !bones[static_cast<usize>(hang)]->isSkeletonBone)
                 break;
             joints.PushBack(hang);
+        }
+
+        const auto among = [&](i32 bone)
+        {
+            for (const i32 joint : joints)
+                if (joint == bone)
+                    return true;
+            return false;
+        };
+        const auto valid = [&](i32 bone) { return bone >= 0 && static_cast<usize>(bone) < bones.Size(); };
+        for (const model::ModelBone* node : bones)
+        {
+            const Span<model::ModelMesh* const> meshes = model.meshes();
+            if (node->meshIndex < 0 || static_cast<usize>(node->meshIndex) >= meshes.Size() ||
+                IsSkinnedMesh(*meshes[static_cast<usize>(node->meshIndex)]))
+                continue; // no mesh, or a skinned one (the palette moves it; a skin with no weights does not)
+            // The node it hangs under.
+            const i32 carrier = node->parentIndex;
+            if (!valid(carrier) || among(carrier))
+                continue;
+            // The nodes from it up to the skeleton, joined parents first; none when it hangs apart.
+            Array<i32> chain;
+            i32 up = carrier;
+            for (usize guard = 0; valid(up) && !among(up) && guard <= bones.Size(); ++guard)
+            {
+                chain.PushBack(up);
+                up = bones[static_cast<usize>(up)]->parentIndex;
+            }
+            if (!valid(up))
+                continue;
+            for (usize i = chain.Size(); i-- > 0;)
+                joints.PushBack(chain[i]);
         }
         return joints;
     }

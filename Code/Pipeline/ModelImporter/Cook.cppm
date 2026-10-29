@@ -56,18 +56,6 @@ export namespace pipeline
     using foundation::model::ModelNode;
     using foundation::model::ModelResource;
 
-    // True if the model mesh carries skinning (Joints/Weights vertex elements).
-    [[nodiscard]] inline bool IsSkinnedMesh(const model::ModelMesh& mesh) noexcept
-    {
-        for (const model::VertexElement& e : mesh.vertexElements())
-        {
-            if (e.semantic == model::VertexSemantic::Joints)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 
     // Cook the model's textures into outDb. The model loaders DECODE every texture into raw
     // RGBA8 pixels (storeImageData) for external files, data-URIs, AND embedded GLB buffer-views

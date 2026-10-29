@@ -48,7 +48,7 @@ import physics.pipeline;
 import :mesh_convert;
 import :anim_convert;
 import foundation.model.resource;
-import :cook; // IsSkinnedMesh + the conversion helpers' home
+import :cook; // the conversion helpers' home
 
 using namespace foundation::core;
 

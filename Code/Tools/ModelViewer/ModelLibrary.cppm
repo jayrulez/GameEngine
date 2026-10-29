@@ -72,7 +72,7 @@ export namespace modelviewer
 
     /// What the cache's cooked files were made by: raised when the import changes what it makes, so
     /// a model opened again cooks afresh.
-    inline constexpr u32 kCacheVersion = 3;
+    inline constexpr u32 kCacheVersion = 4;
 
     /// The folder `path`'s cooked files live in under `cacheRoot`: named by the path, its size, its
     /// modification time and the cache version. Empty when the file is not there.

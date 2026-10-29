@@ -165,6 +165,16 @@
   counting. Not looked into yet: whether the clock's script reads time that a paused scene still
   advances, or the HUD's canvas runs apart from the scene it shows. A paused run should hold every
   clock a game reads.
+- **A blue cast on PaperKid's road and cars, seen once** (user 2026-10-29, playing Block 1 in the
+  editor): for two or three frames about every third of a second, then held while paused, the
+  road, the pavement and the cars brightened toward blue (road 82,93,123 to 98,147,214) while the
+  lawn, the house walls and the sky stayed exactly as they were. Ruled out: the toon shader (it
+  held with the materials on PBR), geometry and culling (the scene page drew the road from the
+  same camera), TAA and the sky's specular (neither switch changed it); PaperKid has no reflection
+  probes and SSR is off. It came in a long editor session with many MCP captures, running the
+  build of 76d1ee64a (the tone map fix); the same build played through every level with validation
+  on showed nothing, nor did the build before it. That session's log was overwritten. If it comes
+  back: keep the log (validation is on in Debug), pause, and capture the editor and the Game tab.
 
 ### The GUI's filters: drop-shadow and colour (UI survey 2026-10-14; reframed 2026-10-28)
 

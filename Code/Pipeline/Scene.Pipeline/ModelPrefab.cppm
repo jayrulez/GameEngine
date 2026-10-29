@@ -83,33 +83,17 @@ export namespace pipeline
         return containing < manifest.animationGuids.Size() ? containing : 0;
     }
 
-    /// A skin draws in its skeleton's parent's space (the joints' palette is relative to it), and
-    /// glTF ignores a skinned mesh node's own transform: so the skinned mesh entity goes under
-    /// the skeleton's parent node (the prefab root when the skeleton has none) at identity, and
-    /// its world IS the skeleton's model space wherever the file put the mesh node
-    /// (inverse-kinematics.md P0a). Left where the file put it when the manifest does not know
-    /// the parent (before data version 3) or that parent is the mesh node or below it.
+    /// The skinned mesh entity under the skeleton's parent node at identity, or left where the file
+    /// put it (foundation::model::SkinnedMeshParent says which).
     inline void PlaceInSkeletonSpace(scene::Scene& scene,
                                      const foundation::model::ModelManifestSource& manifest,
                                      const Array<scene::EntityHandle>& entities,
                                      scene::EntityHandle root, usize meshNode)
     {
-        const i32 parent = manifest.skeletonParentNode;
-        if (parent < -1 || parent >= static_cast<i32>(entities.Size()))
+        const i32 parent = foundation::model::SkinnedMeshParent(manifest.nodes.AsSpan(), manifest.skeletonParentNode, meshNode);
+        if (parent == foundation::model::kSkinnedMeshKeepsPlace)
         {
             return;
-        }
-        // The walk up is bounded by the node count, so a malformed cycle cannot hang it.
-        i32 node = parent;
-        for (usize steps = 0; node >= 0 && static_cast<usize>(node) < manifest.nodes.Size() &&
-                              steps <= manifest.nodes.Size();
-             ++steps)
-        {
-            if (static_cast<usize>(node) == meshNode)
-            {
-                return;
-            }
-            node = manifest.nodes[static_cast<usize>(node)].parentIndex;
         }
         scene.SetParent(entities[meshNode], parent >= 0 ? entities[static_cast<usize>(parent)] : root);
         scene.SetLocalTransform(entities[meshNode], Transform{});

@@ -47,6 +47,34 @@ export namespace foundation::model
         i32 meshIndex = -1;
     };
 
+    /// What SkinnedMeshParent answers when the mesh stays where the file put it.
+    inline constexpr i32 kSkinnedMeshKeepsPlace = -2;
+
+    /// Where a skinned mesh's node goes when the model is put into a scene. A skin draws in its
+    /// skeleton's parent's space (the joints' palette is relative to it), and glTF ignores a
+    /// skinned mesh node's own transform: so the mesh's node goes under the skeleton's parent node
+    /// at identity (-1: the model's root, when the skeleton has no parent), and its world IS the
+    /// skeleton's model space wherever the file put the mesh node (inverse-kinematics.md P0a).
+    /// kSkinnedMeshKeepsPlace when it stays: the parent is not known (data before version 3) or is
+    /// the mesh node or below it. The walk up is bounded by the node count (a malformed cycle).
+    [[nodiscard]] inline i32 SkinnedMeshParent(Span<const ModelNode> nodes, i32 skeletonParentNode, usize meshNode)
+    {
+        if (skeletonParentNode < -1 || skeletonParentNode >= static_cast<i32>(nodes.Size()))
+        {
+            return kSkinnedMeshKeepsPlace;
+        }
+        i32 node = skeletonParentNode;
+        for (usize steps = 0; node >= 0 && static_cast<usize>(node) < nodes.Size() && steps <= nodes.Size(); ++steps)
+        {
+            if (static_cast<usize>(node) == meshNode)
+            {
+                return kSkinnedMeshKeepsPlace;
+            }
+            node = nodes[static_cast<usize>(node)].parentIndex;
+        }
+        return skeletonParentNode;
+    }
+
     // Free Serialize for ModelNode (ADL-found by the generic Array<T> serializer).
     inline void Serialize(ISerializer& ar, ModelNode& n)
     {
@@ -145,6 +173,7 @@ export namespace foundation::model
         Array<Proxy<materials::Material>>
             materials;                       // resolved materials (albedo wired as default texture)
         Proxy<animation::Skeleton> skeleton; // resolved skeleton (null if not skinned)
+        i32 skeletonParentNode = -2;          // the manifest's (SkinnedMeshParent)
         Array<Proxy<animation::AnimationClip>> animations; // resolved animation clips
         Float3 boundsMin{};
         Float3 boundsMax{};
@@ -211,6 +240,7 @@ export namespace foundation::model
             {
                 model->meshMaterialSlots.PushBack(slots);
             }
+            model->skeletonParentNode = src->skeletonParentNode;
 
             // Resolve meshes (skinned ones bind as SkinnedMesh, stored as the StaticMesh base; the renderer
             // checks IsSkinned() + uploads the skin stream). Bind records the model->mesh dependency edge.

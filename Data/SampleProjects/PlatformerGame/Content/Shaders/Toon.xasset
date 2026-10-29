@@ -1,0 +1,15 @@
+<root>
+	<string name="guid">31a5ec9f-23cd-456b-9759-5e98f5304332</string>
+	<string name="typeNamespace">rtti::pipeline::shaders</string>
+	<string name="typeName">ShaderAsset</string>
+	<array name="dataVersions" count="1">
+		<u64 name="type">1478437592279357899</u64>
+		<u32 name="version">0</u32>
+	</array>
+	<object name="payload">
+		<string name="fileName">Toon.hlsl</string>
+		<string name="name">Toon</string>
+		<string name="vertexEntryPoint">VSMain</string>
+		<string name="fragmentEntryPoint">PSMain</string>
+	</object>
+</root>

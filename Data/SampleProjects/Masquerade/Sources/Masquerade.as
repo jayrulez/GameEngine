@@ -18,6 +18,12 @@ const string kTitleDoc = "{2c8d8d4f-d770-496d-a766-d14cfbfcd328}";
 const string kMapsDoc = "{bef19424-1fc4-4f06-b262-b49abeacf1a6}";
 const string kJoinDoc = "{36b90866-3b41-4a1c-8b87-c0305859bb5d}";
 const string kControlsDoc = "{9e97d8b6-d7f7-42c0-8554-07fb7c631b59}";
+// Each costume's portrait (Tools/portraits.py), in the costumes' order (rose, teal and gold gowns,
+// black, plum and ivory coats), as the HUD's Image takes a texture: "{id}".
+array<string> kPortraits = {"{cc8a11f4-8f17-44d7-8de3-4eb3cb85ecba}", "{41b5c641-67bf-42bf-ba9c-f9c806f3ed14}",
+                            "{7676ab80-0ce8-4fd6-9930-6ac5efaee6c3}", "{9ec8ca2c-9a53-4c3b-9bdf-bb4bf1ace540}",
+                            "{96fe7fa5-05f5-4509-b87c-e2ad11df97a8}", "{72a109fb-d9b4-468e-a9c7-b4978d6ad72b}"};
+const float kLateSeconds = 30.0f; // the clock warms for the round's last half minute
 const string kHudDoc = "{e183e431-f835-4289-a1eb-88d33b67db46}";
 const string kPauseDoc = "{76517a0e-2810-4018-ad32-036418a2bc1c}";
 const string kResultsDoc = "{d6ee5f73-8622-4f72-8f7b-1d7e43f609b8}";
@@ -65,6 +71,10 @@ class Game
     private bool m_inRound = false;
     private bool m_paused = false;
     private float m_note = 0.0f;         // how long the HUD's word shows yet
+    private float m_delta = 0.0f;        // how long the points' change shows yet
+    private int m_shownScore = 0;        // the points the HUD shows
+    private int m_shownCostume = -1;     // the mark whose portrait the HUD shows
+    private float m_roundSeconds = 0.0f; // the round's length, as its first report gave the time
     private bool m_inputHeld = false;    // the "Menu" set pushed (holdInput)
     private float m_controlsShow = 0.0f; // how long the controls panel shows yet
     private int m_map = 0;               // 0 the Palace, 1 the Canal, 2 the Gardens
@@ -297,7 +307,10 @@ class Game
         screens().clear();
         screens().push(kHudDoc);
         setText("hud-target", "");
-        setText("hud-score", "Points 0");
+        setText("hud-score", "0");
+        m_shownScore = 0;
+        m_shownCostume = -1;
+        m_roundSeconds = 0.0f;
         find("hud-controls").tween("opacity", "1", 0.3f, "ease"); // from the sheet's 0
         m_controlsShow = kControlsShown;
         letGo(); // time again, and the player's input: a round may start from any menu
@@ -366,6 +379,14 @@ class Game
                 find("hud-note").tween("opacity", "0", 0.5f, "ease");
             }
         }
+        if (m_delta > 0.0f)
+        {
+            m_delta -= dt;
+            if (m_delta <= 0.0f)
+            {
+                find("hud-delta").tween("opacity", "0", 0.6f, "ease");
+            }
+        }
     }
 
     // ---- what the round reports ----
@@ -384,8 +405,39 @@ class Game
             mark.removeClass("costume-" + c);
         }
         mark.addClass("costume-" + costume);
-        setText("hud-score", "Points " + int(hud.x));
+        // Only as the mark changes: setting the picture again would load it again, blank meanwhile.
+        if (costume != m_shownCostume && costume >= 0 && costume < int(kPortraits.length()))
+        {
+            m_shownCostume = costume;
+            Image::of(find("hud-portrait")).src = kPortraits[costume];
+        }
+        // The points, and each change floating beside them a moment, gold up, red down.
+        int score = int(hud.x);
+        if (score != m_shownScore)
+        {
+            int change = score - m_shownScore;
+            m_shownScore = score;
+            setText("hud-score", "" + score);
+            setText("hud-delta", (change > 0 ? "+" : "") + change);
+            UIWidget@ delta = UIWidget::of(find("hud-delta"));
+            delta.removeClass(change > 0 ? "loss" : "gain");
+            delta.addClass(change > 0 ? "gain" : "loss");
+            find("hud-delta").tween("opacity", "1", 0.15f, "ease");
+            m_delta = 1.4f;
+        }
+        // The time over a bar of the round left (the round's length: the first time it reports).
+        m_roundSeconds = Math::Max(m_roundSeconds, hud.y);
         setText("hud-time", clock(hud.y));
+        ProgressBar::of(find("hud-timebar")).value = m_roundSeconds > 0.0f ? hud.y / m_roundSeconds : 0.0f;
+        UIWidget@ clockCard = UIWidget::of(find("hud-clock"));
+        if (hud.y <= kLateSeconds && hud.y > 0.0f)
+        {
+            clockCard.addClass("late");
+        }
+        else
+        {
+            clockCard.removeClass("late");
+        }
         setText("hud-rank", place(int(hud.w)) + " of 4");
     }
 

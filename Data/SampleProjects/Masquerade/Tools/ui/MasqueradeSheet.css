@@ -82,16 +82,35 @@ textfield.address:focus-visible { border: 3px solid #F4D080; }
    right, the controls below for a moment. It takes no pointer: the round is played beneath it. */
 .hud { flex-grow: 1; flex-direction: column; justify-content: space-between; padding: 18px; gap: 10px; pointer-events: none; }
 .hud-top { flex-direction: row; justify-content: space-between; align-items: start; }
-.hud-card { flex-direction: column; padding: 10px; gap: 2px; background-color: rgba(10, 16, 32, 0.75); border-radius: 10px; }
-.hud-mark-row { flex-direction: row; align-items: center; gap: 6px; }
-.hud-mark { font-size: 20px; }
-.hud-score { font-size: 18px; color: #E0D0B0; }
-.hud-middle { flex-direction: column; align-items: center; gap: 8px; }
-.hud-note { font-size: 28px; color: #F4D080; opacity: 0; }
+.hud-card { flex-direction: column; padding: 10px 14px; gap: 2px; background-color: rgba(10, 16, 32, 0.78); border-radius: 12px; border: 1px solid rgba(200, 150, 60, 0.35); }
+.hud-caption { font-size: 13px; color: #B8A080; }
+
+/* Your mark: the costume's portrait, and its name in its colour. */
+.hud-mark-card { flex-direction: row; align-items: center; gap: 12px; padding: 8px 16px 8px 8px; }
+.hud-portrait { width: 72px; height: 72px; border-radius: 10px; background-color: rgba(255, 255, 255, 0.06); }
+.hud-mark-words { flex-direction: column; gap: 2px; }
+.hud-mark { font-size: 24px; }
+
+/* The clock: the time large over a bar of the round left, warm in its last half minute. */
+.hud-middle { flex-direction: column; align-items: center; gap: 10px; }
+.hud-clock { align-items: center; width: 150px; }
+.hud-time { font-size: 30px; color: #F4E6C8; }
+.hud-timebar { width: 120px; height: 5px; }
+.hud-clock.late { border: 1px solid #F4A050; }
+.hud-clock.late .hud-time { color: #F4A050; }
+
+/* The word a moment in the middle (a tag, a miss, a flare), on a card of its own over the floor. */
+.hud-note { font-size: 26px; color: #F4D080; padding: 6px 16px; background-color: rgba(10, 16, 32, 0.82); border-radius: 10px; opacity: 0; }
 .hud-tag { padding: 6px 12px; background-color: rgba(10, 16, 32, 0.75); border-radius: 10px; opacity: 0; }
-.hud-time { font-size: 22px; color: #F4E6C8; }
-.hud-rank { font-size: 16px; color: #E0D0B0; }
-.hud-right { align-items: end; }
+
+/* Your points, large, each change floating up beside them a moment, then your place. */
+.hud-points-card { align-items: end; }
+.hud-points-row { flex-direction: row; align-items: center; gap: 10px; }
+.hud-score { font-size: 34px; color: #F4E6C8; }
+.hud-delta { font-size: 20px; opacity: 0; }
+.hud-delta.gain { color: #F4D080; }
+.hud-delta.loss { color: #D87070; }
+.hud-rank { font-size: 16px; color: #E0D0B0; margin-top: 2px; }
 .hud-foot { flex-direction: row; justify-content: center; }
 .hud-controls { flex-direction: row; gap: 22px; padding: 12px 18px; background-color: rgba(10, 16, 32, 0.78); border-radius: 12px; opacity: 0; }
 .hint { flex-direction: row; align-items: center; gap: 8px; }

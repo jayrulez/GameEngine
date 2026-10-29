@@ -405,6 +405,7 @@ add_subdirectory(Code/Foundation/Render.Api) # light scene-rendering interface (
 add_subdirectory(Code/Foundation/Render)    # renderer: scene->render extraction + (later) the GPU forward path
 add_subdirectory(Code/Engine/Engine.Render)
 add_subdirectory(Code/Engine/Engine.Animation) # skeletal-animation scene integration (links RenderSubsystem; after Render)
+add_subdirectory(Code/Engine/Engine.Model) # a cooked model put into a scene as entities (Sandbox, the model viewer)
 add_subdirectory(Code/Engine/Engine.Particles) # particle scene/render integration (renderer + provider seam; after Render)
 add_subdirectory(Code/Engine/Engine.Physics) # physics scene integration (components + per-scene Jolt world + interpolation; after Render)
 add_subdirectory(Code/Engine/Engine.Terrain) # terrain scene integration (TerrainComponent)
@@ -628,6 +629,8 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Tools/Tools.Mcp)          # headless MCP stdio server (agent access)
     add_subdirectory(Code/Tools/Tools.Export)        # Export dist packager
     add_subdirectory(Code/Tools/Tools.ShaderPack) # ShaderPack: cook shaders.dpak (WGSL for web)
+    add_subdirectory(Code/Tools/ModelViewer)       # the model viewer's headless half (open, cache, numbers)
+    add_subdirectory(Code/Tools/Tools.ModelViewer) # the standalone model viewer (Documentation/Specs/model-viewer.md)
 endif()
 
 # --- Tests: every module's flat-sibling doctest suite (guarded by its module target so the
@@ -690,6 +693,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Pipeline/Fonts.Pipeline.Tests                  Pipeline::Fonts)
     util_test_suite(Code/Pipeline/VG.Pipeline.Tests                     Pipeline::VG)
     util_test_suite(Code/Engine/Engine.Animation.Tests              Engine::Animation)
+    util_test_suite(Code/Tools/ModelViewer.Tests                    Tools::ModelViewer)
     util_test_suite(Code/Engine/Engine.Audio.Tests                  Engine::Audio)
     # Monolithic: its one test file exercises both backends, so it builds only when both
     # are on (a subset config drops it; the default all-on CI config runs it).

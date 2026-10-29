@@ -23,6 +23,7 @@ import engine.composition; // FullComposition: the factory set every host compos
 import foundation.scene;
 import engine.scene;
 import engine.render; // MeshComponent / CameraComponent + their managers
+import engine.model;  // InstantiateModel: a cooked model's nodes as entities
 import engine.animation; // SkeletalAnimation/AnimationGraph components (engine-driven skinning)
 import extensions.imgui;               // ImguiSubsystem (debug UI)
 import foundation.particles;           // ParticleEffect + the CPU sim (the campfire demo)
@@ -703,116 +704,31 @@ namespace
             const core::Float3 extent = model->boundsMax - model->boundsMin;
             const core::f32 maxExtent = core::Max(extent.x, core::Max(extent.y, extent.z));
             const core::f32 fit = (maxExtent > 0.0001f) ? (kTargetSize / maxExtent) : 1.0f;
-            scene::EntityHandle modelRoot = m_scene->CreateEntity(prefix);
-            core::Transform rootT;
-            rootT.position = position;
-            rootT.scale = core::Float3{fit, fit, fit};
-            m_scene->SetLocalTransform(modelRoot, rootT);
-
-            // All the model's materials; a mesh binds the ones its submeshes index (its slots, from
-            // MeshMaterialIndices). The resource manager keeps them alive via m_models.
-            core::Array<core::RefPtr<materials::Material>> modelMats;
-            modelMats.Reserve(model->materials.Size());
-            for (auto& mp : model->materials)
-            {
-                modelMats.PushBack(core::RefPtr<materials::Material>(mp.Get()));
-            }
-
-            core::Array<scene::EntityHandle> entities;
-            core::Array<scene::EntityHandle> skinnedEntities;
-            entities.Reserve(model->nodes.Size());
-            for (const pipeline::ModelNode& node : model->nodes)
-            {
-                scene::EntityHandle e = m_scene->CreateEntity(node.name.AsView());
-                m_scene->SetLocalTransform(e, node.localTransform);
-                entities.PushBack(e);
-            }
-            for (core::usize i = 0; i < model->nodes.Size(); ++i)
-            {
-                const pipeline::ModelNode& node = model->nodes[i];
-                if (node.parentIndex >= 0 &&
-                    static_cast<core::usize>(node.parentIndex) < entities.Size())
-                {
-                    m_scene->SetParent(entities[i],
-                                       entities[static_cast<core::usize>(node.parentIndex)]);
-                }
-                else
-                {
-                    m_scene->SetParent(entities[i],
-                                       modelRoot); // top-level node -> the scaled model root
-                }
-                if (node.meshIndex < 0 ||
-                    static_cast<core::usize>(node.meshIndex) >= model->meshes.Size())
-                {
-                    continue;
-                }
-                geometry::StaticMesh* mesh =
-                    model->meshes[static_cast<core::usize>(node.meshIndex)].Get();
-                if (mesh == nullptr)
-                {
-                    continue;
-                }
-                engine::render::MeshComponent& mc = meshes->Add(entities[i]);
-                mc.mesh = core::RefPtr<geometry::StaticMesh>(
-                    mesh); // hold a ref (manager owns the handle)
-                mc.color = core::Color{1.0f, 1.0f, 1.0f, 1.0f};
-
-                // The mesh's own material list: its submeshes index it by SubMesh::materialIndex,
-                // slot 0 covering anything out of range.
-                core::Array<core::i32> slots;
-                model->MeshMaterialIndices(static_cast<core::usize>(node.meshIndex), slots);
-                core::Array<core::RefPtr<materials::Material>> meshMats;
-                for (const core::i32 slot : slots)
-                {
-                    meshMats.PushBack(static_cast<core::usize>(slot) < modelMats.Size()
-                                          ? modelMats[static_cast<core::usize>(slot)]
-                                          : core::RefPtr<materials::Material>{});
-                }
-                mc.SetMaterials(meshMats);
-                if (mesh->IsSkinned())
-                {
-                    skinnedEntities.PushBack(entities[i]);
-                }
-            }
+            // Its nodes as entities under a root, the meshes with their materials; a graph-driven model
+            // gets an AnimationGraphComponent (a state machine over its clips) instead of the single
+            // clip the shared spawn plays.
+            engine::model::InstantiateOptions options;
+            options.rootTransform.position = position;
+            options.rootTransform.scale = core::Float3{fit, fit, fit};
+            options.animate = !useGraph;
+            const engine::model::ModelInstance instance = engine::model::InstantiateModel(*m_scene, *model, prefix, options);
             m_models.PushBack(model); // keep the model (and its resources) alive
 
-            // If the model is skinned + animated, hand it to the animation subsystem: attach a component
-            // to the model root + list its skinned mesh nodes as the feed targets. The subsystem ticks
-            // the player each frame and writes the skinning matrices into those MeshComponents - no
-            // per-frame driving in app code. A graph-driven model gets an AnimationGraphComponent (a
-            // state machine over its clips); everything else gets a single-clip SkeletalAnimationComponent.
-            if (model->skeleton && model->animations.Size() > 0 && model->animations[0] &&
-                skinnedEntities.Size() > 0)
+            if (useGraph && model->skeleton && model->animations.Size() > 0 && model->animations[0] &&
+                !instance.skinned.IsEmpty())
             {
-                if (useGraph)
+                if (auto* graphMgr = m_scene->GetSystem<engine::animation::AnimationGraphComponentManager>())
                 {
-                    if (auto* graphMgr =
-                            m_scene->GetSystem<engine::animation::AnimationGraphComponentManager>())
+                    core::RefPtr<animation::AnimationGraph> graph = BuildClipCyclerGraph(*model);
+                    engine::animation::AnimationGraphComponent& gc = graphMgr->Add(instance.root);
+                    gc.skeleton = model->skeleton.Get();
+                    gc.graph = graph.Get();
+                    for (scene::EntityHandle e : instance.skinned)
                     {
-                        core::RefPtr<animation::AnimationGraph> graph =
-                            BuildClipCyclerGraph(*model);
-                        engine::animation::AnimationGraphComponent& gc = graphMgr->Add(modelRoot);
-                        gc.skeleton = model->skeleton.Get();
-                        gc.graph = graph.Get();
-                        for (scene::EntityHandle e : skinnedEntities)
-                        {
-                            gc.meshEntities.PushBack(m_scene->GetEntityId(e));
-                        }
-                        m_graphs.PushBack(static_cast<core::RefPtr<animation::AnimationGraph>&&>(
-                            graph));             // keep alive
-                        m_graphChar = modelRoot; // G drives this one
+                        gc.meshEntities.PushBack(m_scene->GetEntityId(e));
                     }
-                }
-                else if (auto* skelMgr =
-                             m_scene->GetSystem<engine::animation::SkeletalAnimationComponentManager>())
-                {
-                    engine::animation::SkeletalAnimationComponent& sa = skelMgr->Add(modelRoot);
-                    sa.skeleton = model->skeleton.Get();
-                    sa.clip = model->animations[0].Get();
-                    for (scene::EntityHandle e : skinnedEntities)
-                    {
-                        sa.meshEntities.PushBack(m_scene->GetEntityId(e));
-                    }
+                    m_graphs.PushBack(static_cast<core::RefPtr<animation::AnimationGraph>&&>(graph)); // keep alive
+                    m_graphChar = instance.root;                                                       // G drives this one
                 }
             }
         }

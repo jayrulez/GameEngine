@@ -8,6 +8,7 @@ target_link_libraries(Sandbox PRIVATE
     Foundation::Core
     Foundation::Runtime
     Foundation::Runtime.Client
+    Engine::Model # InstantiateModel (the shared spawn of a cooked model)
     Foundation::Shell.Desktop Foundation::Runtime.Desktop
     Foundation::Graphics
     Foundation::Graphics.Gpu

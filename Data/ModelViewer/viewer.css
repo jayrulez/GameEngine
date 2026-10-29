@@ -1,0 +1,11 @@
+/*
+  The model viewer's own rules (Documentation/Specs/model-viewer.md), after the editor's sheet and
+  its density, whose tokens they use: the viewer looks like the editor.
+*/
+.viewer { background-color: var(--chrome); flex-direction: column; width: 100%; height: 100%; }
+.viewer-bar { background-color: var(--surface); border-bottom: 1px solid var(--separator); }
+.viewer-title { color: var(--text-strong); font-weight: 600; }
+.viewer-file { color: var(--text-dim); text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
+.viewer-stage { flex-grow: 1; min-height: 0; flex-direction: column; }
+.viewer-stage > .preview-view { flex-grow: 1; }
+.viewer-empty { flex-grow: 1; }

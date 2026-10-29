@@ -1,0 +1,19 @@
+<!--
+  The model viewer's window (Documentation/Specs/model-viewer.md): its bar over the stage the 3D view
+  fills. With nothing open, the stage says how to open a model. Its look is the editor's sheet with
+  the viewer's own after it (ModelViewer/viewer.css). Code puts the viewport in `viewer-stage`.
+-->
+<Panel class="viewer">
+    <Panel id="viewer-bar" class="panel-toolbar viewer-bar">
+        <Label class="viewer-title" text="Model Viewer"/>
+        <Label id="viewer-file" class="viewer-file"/>
+        <Spacer/>
+        <Label class="preview-hint" text="Alt drag orbits · right drag looks, WASD flies · middle drag pans · wheel zooms · F frames"/>
+    </Panel>
+    <Panel id="viewer-stage" class="viewer-stage">
+        <Panel id="viewer-empty" class="state-box viewer-empty">
+            <Label class="state-title" text="No model open"/>
+            <Label id="viewer-empty-text" class="state-text" text="Pass a glTF, GLB, FBX or OBJ file on the command line."/>
+        </Panel>
+    </Panel>
+</Panel>

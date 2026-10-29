@@ -354,6 +354,7 @@ export namespace foundation::graphics
 #endif
             auto gd = core::MakeUnique<GraphicsDevice>(core::DefaultAllocator(), backend, device,
                                                        queue, frames);
+            gd->m_adapter = adapters[0]->Info();
             return core::Result<core::UniquePtr<GraphicsDevice>>(
                 static_cast<core::UniquePtr<GraphicsDevice>&&>(gd));
         }
@@ -470,6 +471,9 @@ export namespace foundation::graphics
 
         [[nodiscard]] rhi::Device* Raw() noexcept { return m_device; }
         [[nodiscard]] rhi::Queue* GfxQueue() noexcept { return m_queue; }
+        /// The adapter the device was made on: its name, vendor and type (a CPU adapter draws in
+        /// software, many times slower than a GPU).
+        [[nodiscard]] const rhi::AdapterInfo& Adapter() const noexcept { return m_adapter; }
         [[nodiscard]] core::u32 FramesInFlight() const noexcept { return m_framesInFlight; }
         [[nodiscard]] core::u32 CurrentFrame() const noexcept { return m_currentFrame; }
 
@@ -479,6 +483,7 @@ export namespace foundation::graphics
 
     private:
         rhi::Backend* m_backend; // owned
+        rhi::AdapterInfo m_adapter;
         rhi::Device* m_device;   // owned
         rhi::Queue* m_queue;     // borrowed from device
         core::u32 m_framesInFlight;

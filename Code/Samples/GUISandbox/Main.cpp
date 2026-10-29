@@ -334,7 +334,7 @@ public:
         if (m_mirrorAudit)
             return m_mirrorAuditDone ? (m_mirrorMisplaced == 0 ? 0 : 1) : 77;
         if (!m_imageTests)
-            return m_sweep ? SweepExitCode() : runCode;
+            return m_sweepSkipped ? 77 : (m_sweep ? SweepExitCode() : runCode);
         if (m_imagesDone == 0)
             return 77;
         return m_imageFailures == 0 ? 0 : 1;
@@ -462,6 +462,7 @@ private:
     // GUI.Sweep ctest entries, skipped without a device).
     bool m_sweep = false;
     bool m_sweepDone = false;
+    bool m_sweepSkipped = false; // a WebGPU sweep on a CPU adapter: not run (77)
     bool m_mirrorAudit = false;
     bool m_mirrorAuditDone = false;
     u32 m_mirrorMisplaced = 0;
@@ -702,6 +703,18 @@ void GUISandbox::OnStartup(runtime::IApplicationHost& host)
     }
     m_window = &m_mainWindow->Window();
     m_device = host.Graphics()->Raw();
+    // A WebGPU sweep on a CPU adapter (Windows CI's WARP) takes past twenty minutes for what the
+    // other backend covers in one: skipped, said so, as a run with no device is.
+    if (m_sweep && m_soakSeconds <= 0.0f && m_backendName == StringView(u8"webgpu") &&
+        host.Graphics()->Adapter().type == rhi::AdapterType::Cpu)
+    {
+        std::printf("GUISandbox: the sweep skipped: WebGPU on a CPU adapter (%s)\n",
+                    reinterpret_cast<const char*>(host.Graphics()->Adapter().name.CStr()));
+        m_sweep = false;
+        m_sweepSkipped = true;
+        host.RequestExit(77);
+        return;
+    }
     m_width = m_window->Width();
     m_height = m_window->Height();
     // The data folder: fonts, pages, pictures, and the VG shaders (cooked, or compiled from Shaders/).

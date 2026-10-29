@@ -25,9 +25,9 @@ endforeach()
 
 # The sweep (E10 of Specs/gui-lab-evolution-2.md): every page's widgets clicked and right-clicked,
 # every page walked by keys and the pad, the game menu opened, on each backend; it fails when
-# anything warns or errs while it runs, and is skipped (77) without a device. A software adapter
-# (Windows CI's WebGPU runs on the CPU) takes about ten minutes for its 702 steps, past ctest's
-# default 300 s, so the sweeps have 1200.
+# anything warns or errs while it runs, and is skipped (77) without a device, and on WebGPU on a
+# CPU adapter (Windows CI's WARP took past twenty minutes; the Vulkan sweep covers the same GUI in
+# about one). Debug's sweep is slow on some machines, so the sweeps have 1200 seconds.
 foreach(backend vulkan webgpu)
     add_test(NAME GUI.Sweep.${backend} COMMAND GUISandbox --${backend} --sweep)
     set_tests_properties(GUI.Sweep.${backend} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 1200 ENVIRONMENT "${_sandbox_test_env}")

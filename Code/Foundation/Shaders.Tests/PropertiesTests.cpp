@@ -199,3 +199,211 @@ TEST_CASE("properties: the expanded source compiles, and keeps the author's line
     CHECK(Contains(messages.AsView(), u8"Toon.hlsl:10:"));
     compiler->Destroy();
 }
+
+// --- Effect blocks (Specs/wind-for-every-shader.md): the properties grammar in an include, for
+// a vertex effect's own parameters, with a header naming the effect and its variant flag. ---
+
+namespace
+{
+    ShaderPropertyError OnlyEffectError(const char* source)
+    {
+        const ShaderEffectBlock block = ParseShaderEffect(View(source));
+        REQUIRE(block.present);
+        REQUIRE(block.errors.Size() == 1u);
+        return block.errors[0];
+    }
+}
+
+TEST_CASE("effects: the block's name, flag, table, offsets and gate")
+{
+    const ShaderEffectBlock block = ParseShaderEffect(View(
+        "// wind\n"                                    // 1
+        "effect Wind : WIND\n"                         // 2
+        "{\n"                                          // 3
+        "    float  Strength  = 0 [0, 2] (gate);\n"    // 4
+        "    float  Speed     = 1 [0, 20];\n"          // 5
+        "    float  Height    = 1 [0.01, 100]; // m\n" // 6
+        "    float3 Direction = (1, 0, 0);\n"          // 7
+        "}\n"                                          // 8
+        "float Sway() { return Strength; }\n"));
+    REQUIRE(block.present);
+    CHECK(block.IsOk());
+    CHECK(block.firstLine == 2u);
+    CHECK(block.lastLine == 8u);
+    CHECK(block.effect.name.AsView() == View("Wind"));
+    CHECK(block.effect.flag == ShaderFlags::Wind);
+    REQUIRE(block.effect.properties.Size() == 4u);
+    CHECK(block.effect.gateIndex == 0u);
+    REQUIRE(block.effect.Gate() != nullptr);
+    CHECK(block.effect.Gate()->name.AsView() == View("Strength"));
+
+    const ShaderProperty& strength = block.effect.properties[0];
+    CHECK(strength.offset == 0u);
+    CHECK(strength.size == 4u);
+    CHECK(strength.hasRange);
+    CHECK(strength.rangeMax == 2.0f);
+    CHECK(strength.line == 4u);
+    CHECK(block.effect.properties[1].offset == 4u);
+    CHECK(block.effect.properties[1].value.x == 1.0f);
+    CHECK(block.effect.properties[2].offset == 8u);
+    CHECK(block.effect.properties[2].rangeMin == doctest::Approx(0.01f));
+    CHECK(block.effect.properties[3].offset == 16u); // a float3 at 12 would cross a row
+    CHECK(block.effect.uniformSize == 32u);
+    CHECK(block.effect.FindProperty(u8"Speed") == &block.effect.properties[1]);
+    CHECK(block.effect.FindProperty(u8"WindSpeed") == nullptr);
+}
+
+TEST_CASE("effects: a source without an effect block has none, and several are found in order")
+{
+    CHECK_FALSE(ParseShaderEffect(View("// an effect is described here\nfloat x;\n")).present);
+    CHECK_FALSE(HasShaderEffect(View("float effects;\n  effective = 1;\n")));
+    CHECK(HasShaderEffect(View("\n  effect A : WIND {\n}\n")));
+
+    const Array<ShaderEffectBlock> blocks = ParseShaderEffects(View(
+        "effect Wind : WIND {\n"             // 1
+        "    float Strength = 0 (gate);\n"   // 2
+        "}\n"                                // 3
+        "float x;\n"                         // 4
+        "effect Fade : DITHER\n"             // 5
+        "{\n"                                // 6
+        "    float Amount (gate);\n"         // 7
+        "    Color Tint;\n"                  // 8
+        "}\n"));
+    REQUIRE(blocks.Size() == 2u);
+    CHECK(blocks[0].IsOk());
+    CHECK(blocks[0].effect.name.AsView() == View("Wind"));
+    CHECK(blocks[1].IsOk());
+    CHECK(blocks[1].firstLine == 5u);
+    CHECK(blocks[1].effect.flag == ShaderFlags::Dither);
+    CHECK(blocks[1].effect.properties[1].offset == 16u);
+    CHECK(blocks[1].effect.properties[1].value.w == 1.0f); // a colour's default, as in properties
+}
+
+TEST_CASE("effects: every malformed header and body is reported with its line")
+{
+    // The header: a name, a colon, one of the engine's flags.
+    CHECK(OnlyEffectError("effect Wind : WINDY {\n  float S = 0 (gate);\n}\n").line == 1u);
+    const ShaderPropertyError unknownFlag =
+        OnlyEffectError("effect Wind : WINDY {\n  float S (gate);\n}\n");
+    CHECK(Contains(unknownFlag.message.AsView(), u8"unknown variant flag 'WINDY'"));
+    CHECK(Contains(unknownFlag.message.AsView(), u8"(SKINNED, ")); // the flags it may be
+    CHECK(OnlyEffectError("effect Wind WIND {\n  float S (gate);\n}\n").line == 1u); // no colon
+    CHECK(Contains(OnlyEffectError("effect Wind WIND {\n  float S (gate);\n}\n").message.AsView(),
+                   u8"colon"));
+    CHECK(OnlyEffectError("effect : WIND {\n  float S (gate);\n}\n").line == 1u); // no name
+    CHECK(Contains(OnlyEffectError("effect : WIND {\n  float S (gate);\n}\n").message.AsView(),
+                   u8"needs a name"));
+    CHECK(OnlyEffectError("effect Wind : WIND extra {\n  float S (gate);\n}\n").line == 1u);
+
+    // Uniforms only: a texture, a cube or a sampler is an error at its line.
+    CHECK(OnlyEffectError("effect W : WIND {\n  float S (gate);\n  Texture T;\n}\n").line == 3u);
+    CHECK(Contains(
+        OnlyEffectError("effect W : WIND {\n  float S (gate);\n  Texture T;\n}\n").message.AsView(),
+        u8"uniforms only"));
+    CHECK(OnlyEffectError("effect W : WIND {\n  float S (gate);\n  Sampler T;\n}\n").line == 3u);
+    CHECK(OnlyEffectError("effect W : WIND {\n  TextureCube T;\n  float S (gate);\n}\n").line ==
+          2u);
+
+    // One gate, a float: none, two, or a gate of another type.
+    CHECK(OnlyEffectError("effect W : WIND {\n  float S = 1;\n}\n").line == 1u);
+    CHECK(Contains(OnlyEffectError("effect W : WIND {\n  float S = 1;\n}\n").message.AsView(),
+                   u8"(gate)"));
+    CHECK(OnlyEffectError("effect W : WIND {\n  float A (gate);\n  float B = 1 [0, 1] (gate);\n}\n")
+              .line == 3u);
+    CHECK(OnlyEffectError("effect W : WIND {\n  int S = 1 (gate);\n}\n").line == 2u);
+    CHECK(Contains(OnlyEffectError("effect W : WIND {\n  float2 S (gate);\n}\n").message.AsView(),
+                   u8"is a float"));
+    CHECK(OnlyEffectError("effect W : WIND {\n  float S (gat);\n}\n").line == 2u);
+
+    // The properties grammar's errors hold in an effect too.
+    CHECK(OnlyEffectError("effect W : WIND {\n  float S (gate)\n  float B;\n}\n").line == 2u);
+    CHECK(OnlyEffectError("effect W : WIND\n").line == 1u); // no {
+}
+
+TEST_CASE("effects: a properties block knows no gate, and keeps its errors as they were")
+{
+    // `(gate)` belongs to an effect; in a properties block it is the missing `;` it always was.
+    CHECK(OnlyError("properties {\n  float A = 0 (gate);\n}\n").line == 2u);
+    CHECK(Contains(OnlyError("properties {\n  float A = 0 (gate);\n}\n").message.AsView(),
+                   u8"ends with ;"));
+    CHECK(Contains(OnlyError("properties\n").message.AsView(), u8"properties needs a {"));
+    CHECK(Contains(OnlyError("\nproperties {\n  float A;\n").message.AsView(),
+                   u8"the properties block has no closing }"));
+    // A properties block still takes its textures; an effect line is not a properties line.
+    const ShaderPropertiesBlock block = ParseShaderProperties(View(
+        "effect W : WIND {\n  float S (gate);\n}\nproperties {\n  Texture T;\n}\n"));
+    CHECK(block.IsOk());
+    CHECK(block.firstLine == 4u);
+    REQUIRE(block.properties.Size() == 1u);
+}
+
+TEST_CASE("effects: the generated cbuffer binds at b1 of the material's set, members as declared")
+{
+    const ShaderEffectBlock block = ParseShaderEffect(View("effect Wind : WIND\n"
+                                                           "{\n"
+                                                           "    float Strength = 0 [0, 2] (gate);\n"
+                                                           "    float Speed = 1 [0, 20];\n"
+                                                           "    float Height = 1 [0.01, 100];\n"
+                                                           "}\n"));
+    REQUIRE(block.IsOk());
+    const String declaration = GenerateEffectDeclaration(block.effect);
+    CHECK(declaration.AsView() == View("cbuffer Wind : register(b1, space2) {\n"
+                                       "    float Strength; // offset 0\n"
+                                       "    float Speed; // offset 4\n"
+                                       "    float Height; // offset 8\n"
+                                       "};\n"));
+
+    // The expansion replaces the block and keeps the later lines' numbers.
+    String expanded;
+    const Array<ShaderEffectBlock> blocks = ExpandShaderEffects(
+        View("// head\n"
+             "effect Wind : WIND\n"
+             "{\n"
+             "    float Strength = 0 (gate);\n"
+             "}\n"
+             "float Sway() { return Strength; }\n"),
+        u8"wind.hlsli", expanded);
+    REQUIRE(blocks.Size() == 1u);
+    CHECK(expanded.AsView() == View("// head\n"
+                                    "cbuffer Wind : register(b1, space2) {\n"
+                                    "    float Strength; // offset 0\n"
+                                    "};\n"
+                                    "#line 6 \"wind.hlsli\"\n"
+                                    "float Sway() { return Strength; }\n"));
+
+    // A block with errors becomes an #error at each error's line, so a compile reaching it
+    // fails naming the file and line.
+    String broken;
+    const Array<ShaderEffectBlock> bad = ExpandShaderEffects(
+        View("effect Wind : WIND {\n  float S (gate);\n  Texture T;\n}\nfloat x;\n"),
+        u8"wind.hlsli", broken);
+    REQUIRE(bad.Size() == 1u);
+    CHECK_FALSE(bad[0].IsOk());
+    CHECK(Contains(broken.AsView(), u8"#line 3 \"wind.hlsli\"\n#error effect: 'Texture'"));
+    CHECK(Contains(broken.AsView(), u8"#line 5 \"wind.hlsli\"\nfloat x;\n"));
+
+    // A source without a block is returned as it is.
+    String same;
+    CHECK(ExpandShaderEffects(View("float x;\n"), u8"a.hlsli", same).IsEmpty());
+    CHECK(same.AsView() == View("float x;\n"));
+}
+
+TEST_CASE("effects: a library holds each effect once, by name and by flag")
+{
+    ShaderEffectLibrary library;
+    String error;
+    const ShaderEffect wind =
+        ParseShaderEffect(View("effect Wind : WIND {\n float S (gate);\n}\n")).effect;
+    REQUIRE(library.Add(wind, error));
+    CHECK(library.Find(u8"Wind") != nullptr);
+    CHECK(library.ForFlag(ShaderFlags::Wind) != nullptr);
+    CHECK(library.ForFlag(ShaderFlags::Dither) == nullptr);
+
+    CHECK_FALSE(library.Add(wind, error)); // the same name
+    CHECK(Contains(error.AsView(), u8"declared twice"));
+    const ShaderEffect gust =
+        ParseShaderEffect(View("effect Gust : WIND {\n float S (gate);\n}\n")).effect;
+    CHECK_FALSE(library.Add(gust, error)); // the same flag
+    CHECK(Contains(error.AsView(), u8"share a variant flag"));
+    CHECK(library.Size() == 1u);
+}

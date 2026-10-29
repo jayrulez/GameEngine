@@ -23,6 +23,7 @@ export module foundation.shaders:compiler;
 
 import foundation.core;
 import :types;
+import :properties;
 
 using namespace foundation::core;
 
@@ -124,17 +125,41 @@ namespace foundation::shaders
         return out;
     }
 
-    // The include handler DXC calls when CompileOptions::includeResolver is set: every
-    // candidate path the preprocessor forms is normalized (backslashes -> '/', leading "./"
-    // stripped - DXC prefixes the includer's "current dir" that way) and handed to the
-    // resolver; a miss returns the not-found HRESULT so the preprocessor keeps searching /
-    // reports the include as missing. Lives for one Compile call (stack-owned; DXC does not
-    // retain it), so the refcount is nominal.
-    class ResolverIncludeHandler final : public IDxcIncludeHandler
+    // An include path as the preprocessor formed it, as a resolver and a `#line` want it:
+    // backslashes -> '/', any leading "./" stripped (DXC prefixes the includer's "current dir"
+    // that way).
+    static std::string normalizeIncludePath(LPCWSTR pFilename)
+    {
+        std::string path = narrow(pFilename);
+        for (char& c : path)
+        {
+            if (c == '\\')
+            {
+                c = '/';
+            }
+        }
+        while (path.size() >= 2 && path[0] == '.' && path[1] == '/')
+        {
+            path.erase(0, 2);
+        }
+        return path;
+    }
+
+    // The one include handler every compile gives DXC. The preprocessor forms each candidate path
+    // itself, as it always has (a quoted include: the includer's directory first, then each -I
+    // directory in order) and asks for it; this handler serves the candidate from the caller's
+    // resolver when one is set (no disk access, a miss is "not found"), else from disk through
+    // DXC's default handler. Either way an `effect` block in the served text is expanded before
+    // DXC sees it, so an effect's include works on the cook's disk route and the editor's
+    // resolver route alike (Specs/wind-for-every-shader.md). A text without an effect block is
+    // served as it was read. Lives for one Compile call (stack-owned; DXC does not retain it),
+    // so the refcount is nominal.
+    class EngineIncludeHandler final : public IDxcIncludeHandler
     {
     public:
-        ResolverIncludeHandler(IDxcUtils& utils, IShaderIncludeResolver& resolver) noexcept
-            : m_utils(&utils), m_resolver(&resolver)
+        EngineIncludeHandler(IDxcUtils& utils, IShaderIncludeResolver* resolver,
+                             IDxcIncludeHandler& disk) noexcept
+            : m_utils(&utils), m_resolver(resolver), m_disk(&disk)
         {
         }
 
@@ -165,27 +190,55 @@ namespace foundation::shaders
                 return E_POINTER;
             }
             *ppIncludeSource = nullptr;
-            std::string path = narrow(pFilename);
-            for (char& c : path)
+            const std::string path = normalizeIncludePath(pFilename);
+            const StringView pathView(reinterpret_cast<const utf8char*>(path.data()), path.size());
+            if (m_resolver != nullptr)
             {
-                if (c == '\\')
+                String source;
+                if (!m_resolver->LoadInclude(pathView, source))
                 {
-                    c = '/';
+                    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
                 }
+                return Serve(source.AsView(), pathView, ppIncludeSource);
             }
-            while (path.size() >= 2 && path[0] == '.' && path[1] == '/')
+
+            IDxcBlob* diskBlob = nullptr;
+            const HRESULT hr = m_disk->LoadSource(pFilename, &diskBlob);
+            if (FAILED(hr) || diskBlob == nullptr)
             {
-                path.erase(0, 2);
+                return FAILED(hr) ? hr : HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
             }
-            String source;
-            if (!m_resolver->LoadInclude(
-                    StringView(reinterpret_cast<const utf8char*>(path.data()), path.size()),
-                    source))
+            StringView text(static_cast<const utf8char*>(diskBlob->GetBufferPointer()),
+                            diskBlob->GetBufferSize());
+            if (text.Size() >= 3 && static_cast<u8>(text.Data()[0]) == 0xEFu &&
+                static_cast<u8>(text.Data()[1]) == 0xBBu &&
+                static_cast<u8>(text.Data()[2]) == 0xBFu)
             {
-                return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+                text = text.SubStr(3, text.Size() - 3); // a UTF-8 byte order mark
+            }
+            if (!HasShaderEffect(text))
+            {
+                *ppIncludeSource = diskBlob; // exactly what DXC's own handler read
+                return S_OK;
+            }
+            const HRESULT served = Serve(text, pathView, ppIncludeSource);
+            diskBlob->Release();
+            return served;
+        }
+
+    private:
+        // The text as DXC compiles it: effect blocks expanded (a block with errors becomes
+        // `#error` lines at their lines in this file, which fail the compile naming them).
+        HRESULT Serve(StringView text, StringView fileName, IDxcBlob** ppIncludeSource)
+        {
+            String expanded;
+            if (HasShaderEffect(text))
+            {
+                (void)ExpandShaderEffects(text, fileName, expanded);
+                text = expanded.AsView();
             }
             IDxcBlobEncoding* blob = nullptr;
-            const HRESULT hr = m_utils->CreateBlob(source.Data(), static_cast<UINT32>(source.Size()),
+            const HRESULT hr = m_utils->CreateBlob(text.Data(), static_cast<UINT32>(text.Size()),
                                                    DXC_CP_UTF8, &blob);
             if (FAILED(hr) || blob == nullptr)
             {
@@ -195,9 +248,9 @@ namespace foundation::shaders
             return S_OK;
         }
 
-    private:
         IDxcUtils* m_utils;
-        IShaderIncludeResolver* m_resolver;
+        IShaderIncludeResolver* m_resolver; // null = disk
+        IDxcIncludeHandler* m_disk;         // DXC's default handler, owned by the compiler
         ULONG m_refs = 1;
     };
 
@@ -373,6 +426,8 @@ namespace foundation::shaders
             }
             pushS(std::move(arg));
         }
+        // The search path the preprocessor forms disk candidates from (EngineIncludeHandler
+        // serves them). A resolver owns every include, so it gets none.
         if (options.includeResolver == nullptr)
         {
             for (usize i = 0; i < options.includePaths.Size(); ++i)
@@ -392,23 +447,25 @@ namespace foundation::shaders
         for (const auto& w : argStorage)
             args.push_back(w.c_str());
 
+        // An effect block in the source itself expands as one in an include does (after any
+        // properties expansion, which the caller has made).
+        const StringView sourceText(reinterpret_cast<const utf8char*>(source), sourceSize);
+        String expandedSource;
+        if (HasShaderEffect(sourceText))
+        {
+            (void)ExpandShaderEffects(sourceText, options.sourceName, expandedSource);
+            source = reinterpret_cast<const u8*>(expandedSource.Data());
+            sourceSize = expandedSource.Size();
+        }
+
         DxcBuffer src{};
         src.Ptr = source;
         src.Size = sourceSize;
         src.Encoding = DXC_CP_UTF8;
         IDxcResult* result = nullptr;
-        HRESULT hr;
-        if (options.includeResolver != nullptr)
-        {
-            ResolverIncludeHandler resolverHandler(*s->utils, *options.includeResolver);
-            hr = s->dxc->Compile(&src, args.data(), static_cast<UINT32>(args.size()),
-                                 &resolverHandler, IID_PPV_ARGS(&result));
-        }
-        else
-        {
-            hr = s->dxc->Compile(&src, args.data(), static_cast<UINT32>(args.size()),
-                                 s->includeHdlr, IID_PPV_ARGS(&result));
-        }
+        EngineIncludeHandler includeHandler(*s->utils, options.includeResolver, *s->includeHdlr);
+        const HRESULT hr = s->dxc->Compile(&src, args.data(), static_cast<UINT32>(args.size()),
+                                           &includeHandler, IID_PPV_ARGS(&result));
 
         if (FAILED(hr) || !result)
         {

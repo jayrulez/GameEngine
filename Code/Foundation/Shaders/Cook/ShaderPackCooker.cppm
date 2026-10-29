@@ -18,6 +18,7 @@ import foundation.core;
 import :types;
 import :flags;
 import :variants;
+import :properties;
 import :pack;
 import :compiler;
 import :wgsl_cook;
@@ -168,6 +169,144 @@ export namespace foundation::shaders
         }
     }
 
+    // Byte order, so a listing's order (and the pack's bytes) is reproducible across hosts:
+    // ListDirectory yields filesystem order (readdir/FindFirstFile).
+    inline void SortByBytes(Array<String>& names)
+    {
+        names.Sort(
+            [](const String& a, const String& b)
+            {
+                const usize n = a.Size() < b.Size() ? a.Size() : b.Size();
+                for (usize i = 0; i < n; ++i)
+                {
+                    if (a[i] != b[i])
+                    {
+                        return a[i] < b[i];
+                    }
+                }
+                return a.Size() < b.Size();
+            });
+    }
+
+    // Every .hlsli under `shaderDir` and its subfolders, as an include names it ("wind.hlsli",
+    // "surface/forward.hlsli"), each folder's in byte order. Depth-limited like the include
+    // expansion.
+    inline void CollectShaderLibraryFiles(StringView shaderDir, StringView relative, u32 depth,
+                                          Array<String>& out)
+    {
+        constexpr u32 kMaxFolderDepth = 8;
+        struct Listing
+        {
+            Array<String> files;
+            Array<String> folders;
+        } listing;
+        String folder(shaderDir);
+        if (!relative.IsEmpty())
+        {
+            folder += u8"/";
+            folder += relative;
+        }
+        (void)ListDirectory(
+            folder.AsView(),
+            [](void* ctx, StringView name, bool isDir)
+            {
+                Listing& l = *static_cast<Listing*>(ctx);
+                if (isDir)
+                {
+                    if (name != StringView(u8".") && name != StringView(u8".."))
+                    {
+                        l.folders.PushBack(String(name));
+                    }
+                }
+                else if (name.EndsWith(u8".hlsli"))
+                {
+                    l.files.PushBack(String(name));
+                }
+            },
+            &listing);
+        SortByBytes(listing.files);
+        SortByBytes(listing.folders);
+        for (const String& file : listing.files)
+        {
+            String path(relative);
+            if (!relative.IsEmpty())
+            {
+                path += u8"/";
+            }
+            path += file.AsView();
+            out.PushBack(Move(path));
+        }
+        if (depth >= kMaxFolderDepth)
+        {
+            return;
+        }
+        for (const String& sub : listing.folders)
+        {
+            String path(relative);
+            if (!relative.IsEmpty())
+            {
+                path += u8"/";
+            }
+            path += sub.AsView();
+            CollectShaderLibraryFiles(shaderDir, path.AsView(), depth + 1, out);
+        }
+    }
+
+    // Record every effect block the corpus's includes declare into the pack, so a game reads the
+    // effects' tables without the sources (Specs/wind-for-every-shader.md, "How 2b is built").
+    // A malformed block, or two effects sharing a name or a flag, is a cook error naming the
+    // file (and line). Returns false when any is.
+    inline bool CookShaderEffects(StringView shaderDir, CookedShaderPack& pack,
+                                  ShaderCookReport& report)
+    {
+        Array<String> files;
+        CollectShaderLibraryFiles(shaderDir, StringView{}, 0, files);
+        bool ok = true;
+        for (const String& file : files)
+        {
+            String path(shaderDir);
+            path += u8"/";
+            path += file.AsView();
+            const Result<Array<byte>> bytes = ReadFile(path.AsView());
+            if (!bytes.HasValue())
+            {
+                report.errors.PushBack(FormatError(file.AsView(), u8"could not read source"));
+                ok = false;
+                continue;
+            }
+            const StringView text(reinterpret_cast<const char8_t*>(bytes.Value().Data()),
+                                  bytes.Value().Size());
+            if (!HasShaderEffect(text))
+            {
+                continue;
+            }
+            for (ShaderEffectBlock& block : ParseShaderEffects(text))
+            {
+                if (!block.IsOk())
+                {
+                    for (const ShaderPropertyError& error : block.errors)
+                    {
+                        String where(file.AsView());
+                        where += Format(u8":{}", error.line);
+                        report.errors.PushBack(
+                            FormatError(where.AsView(), error.message.AsView()));
+                    }
+                    ok = false;
+                    continue;
+                }
+                String error;
+                if (!pack.AddEffect(Move(block.effect), error))
+                {
+                    String where(file.AsView());
+                    where += Format(u8":{}", block.firstLine);
+                    report.errors.PushBack(FormatError(where.AsView(), error.AsView()));
+                    ok = false;
+                }
+            }
+        }
+        return ok;
+    }
+
     // Fill `pack` from every stage file under opts.shaderDir. On any error the pack is left partially
     // filled and success=false - the caller decides whether to ship (a dist should not).
     inline ShaderCookReport CookEngineShaders(Compiler& compiler, const ShaderCookOptions& opts,
@@ -195,21 +334,10 @@ export namespace foundation::shaders
             report.errors.PushBack(String(u8"could not list the shader directory"));
             return report;
         }
-        // ListDirectory yields filesystem order (readdir/FindFirstFile) - actually sort, so
-        // the pack's entry order (and bytes) is reproducible across hosts and runs.
-        collector.files.Sort(
-            [](const String& a, const String& b)
-            {
-                const usize n = a.Size() < b.Size() ? a.Size() : b.Size();
-                for (usize i = 0; i < n; ++i)
-                {
-                    if (a[i] != b[i])
-                    {
-                        return a[i] < b[i];
-                    }
-                }
-                return a.Size() < b.Size();
-            });
+        SortByBytes(collector.files);
+
+        // The effects' tables, from the includes that declare them.
+        (void)CookShaderEffects(opts.shaderDir, pack, report);
 
         const StringView includePaths[] = {opts.shaderDir};
 

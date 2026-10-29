@@ -85,11 +85,13 @@ export namespace foundation::shaders
         bool enableDebugInfo = false;
         bool rowMajorMatrices = false;
         Span<const ShaderDefine> defines;
-        /// Native include directories (-I) for the default disk include handler. Ignored when
+        /// Native include directories (-I): a quoted include is looked for beside its includer
+        /// first, then in each of these in order, and read from disk. Ignored when
         /// `includeResolver` is set.
         Span<const StringView> includePaths;
         /// When set, EVERY include resolves through it (no disk access) - the dev shader
         /// provider serves includes from the data mount this way. Borrowed for the call.
+        /// On both routes the compiler expands an include's `effect` blocks (:properties).
         IShaderIncludeResolver* includeResolver = nullptr;
         BindingShifts bindingShifts;
         u32 bindingShiftSets = 1;

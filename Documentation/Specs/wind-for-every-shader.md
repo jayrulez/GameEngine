@@ -1,6 +1,6 @@
 # Wind for every shader - the sway read from the draw, not from PBR's material layout
 
-> Status: APPROVED 2026-10-29, not built (user: "Let's look into this properly.
+> Status: APPROVED 2026-10-29; 2b-1 (the effect block) BUILT 2026-10-29 on clang; 2b-2 next (user: "Let's look into this properly.
 > Explain how it is built into PBR, and why it can't be used in custom shader"; "Wind write up").
 > Phase 2 of `shader-blocks-cleanup.md`, which removes every borrowed lane, the clock's included.
 > Read CONVENTIONS.md first.
@@ -137,6 +137,38 @@ shifts), the shadow and pick passes already bind a windy draw's material set, an
 shader declares `WIND` gets the binding in its set-2 layout, one layout per material. The include
 handler that serves `wind.hlsli` expands its `effect` block (the compiler installs one handler
 over both the disk route the cook uses and the resolver the editor uses).
+
+**How 2b is built** (ruled 2026-10-29, user: "Approved as you recommend"):
+
+1. **Where an effect's parameters live at runtime.** The cook parses each `effect` block and
+   stores its table (names, types, defaults, ranges, offsets, its flag and gate) in the shader
+   pack; the shader system serves the tables (in the editor from the sources, in a game from the
+   pack). A material from an asset carries its whole group and needs nothing at runtime; a
+   material built in code takes the group from whoever holds the shader system (the factory, or
+   `MaterialBuilder` given the table). No C++ copy of an effect's table.
+2. **An effect names its variant and its switch.** `effect Wind : WIND { float Strength = 0 [0, 2]
+   (gate); float Speed = 1 [0, 20]; float Height = 1 [0.01, 100]; }`. An effect is active when its
+   gate property is above zero; an active effect turns on its variant. The renderer knows that
+   rule, not wind.
+3. **Script and per-entity overrides** reach an effect's values by `Effect.Property`
+   (`Wind.Strength`); the old `WindStrength` name goes.
+4. **Every custom shader can opt in**: the surface shaders' generated programs and the low-level
+   starter declare `WIND`.
+
+Built 2026-10-29 (2b-1): `effect <Name> : <FLAG>` blocks parse with the properties parser (one
+grammar for both: uniforms only in an effect, one float `(gate)`, one declaration per line), expand
+to `cbuffer <Name> : register(b1, space2)` with a `#line` after, and a malformed one to `#error`
+lines at its lines; every compile installs one include handler that expands them in what it
+serves, from the resolver or from disk through DXC's own handler (the search order unchanged),
+and in the top-level source; the engine cook records each `.hlsli` effect in the pack (format 4),
+and `ShaderSystem::FindEffect` / `EffectForFlag` serve them, from the pack or, in dev, parsed from
+the provider's includes.
+
+The order: (2b-1) the effect block in the shaders module: the syntax, the include handler that
+expands it, the tables in the pack and served by the shader system; (2b-2) materials, the
+renderer and the data: the material's effect groups, their binding, the migration (every stored
+material has wind off, so only the three properties go and a default group comes), `wind.hlsli`
+as an effect, overrides; (2b-3) the material page's section, the MCP tools' output, the docs.
 
 What follows from it:
 

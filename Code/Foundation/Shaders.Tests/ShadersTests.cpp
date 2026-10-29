@@ -969,3 +969,347 @@ TEST_CASE("pack: a corrupt/truncated stream fails cleanly (count guards)")
     CookedShaderPack fromTruncated;
     CHECK_FALSE(fromTruncated.Read(truncated).IsOk());
 }
+
+// --- Effect blocks through the compiler, the cook and the pack -----------------------------
+// (Specs/wind-for-every-shader.md: an include's `effect` block is expanded by the include
+// handler on the cook's disk route and the editor's resolver route alike.)
+
+namespace
+{
+    constexpr const char* kWindEffect = "// a vertex effect's parameters\n"     // 1
+                                        "effect Wind : WIND\n"                  // 2
+                                        "{\n"                                   // 3
+                                        "    float Strength = 0 [0, 2] (gate);\n" // 4
+                                        "    float Speed = 1 [0, 20];\n"        // 5
+                                        "    float Height = 1 [0.01, 100];\n"   // 6
+                                        "}\n"                                   // 7
+                                        "float WindAmount() { return Strength * Speed; }\n";
+
+    // An effect whose third line declares a texture, which an effect may not.
+    constexpr const char* kBadEffect = "effect Wind : WIND\n"
+                                       "{\n"
+                                       "    Texture Gusts;\n"
+                                       "    float Strength (gate);\n"
+                                       "}\n";
+
+    // Reads the effect's members by their declared names.
+    constexpr const char* kReadsWind = "#include \"fx_wind.hlsli\"\n"
+                                       "float4 main() : SV_Target {\n"
+                                       "    return float4(Strength, Speed, Height, WindAmount());\n"
+                                       "}\n";
+
+    void WriteScratch(StringView path, const char* text)
+    {
+        REQUIRE(WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(text),
+                                                 std::strlen(text)))
+                    .IsOk());
+    }
+
+    // Compiles `source` as a fragment stage; returns success and the messages.
+    bool CompileFragment(Compiler& compiler, const char* source, const CompileOptions& options,
+                         String& messages)
+    {
+        CompileResult result{};
+        (void)compiler.compile(reinterpret_cast<const u8*>(source), std::strlen(source),
+                               ShaderStage::Fragment, u8"main", ShaderTarget::SPIRV, options,
+                               result);
+        messages = String(StringView(reinterpret_cast<const char8_t*>(
+            result.messages != nullptr ? result.messages : "")));
+        const bool ok = result.success;
+        compiler.freeResult(result);
+        return ok;
+    }
+
+    // Serves the effect headers from memory.
+    class EffectIncludeResolver final : public IShaderIncludeResolver
+    {
+    public:
+        bool LoadInclude(StringView path, String& outSource) override
+        {
+            if (path == u8"fx_wind.hlsli")
+            {
+                outSource = String(Hlsl(kWindEffect));
+                return true;
+            }
+            if (path == u8"fx_bad.hlsli")
+            {
+                outSource = String(Hlsl(kBadEffect));
+                return true;
+            }
+            return false;
+        }
+    };
+}
+
+TEST_CASE("effects: an include's effect block compiles from disk, beside its includer or on -I")
+{
+    Compiler* compiler = MakeCompiler();
+    if (compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping");
+        return;
+    }
+    (void)CreateDirectory(u8".test-scratch");
+    (void)CreateDirectory(u8".test-scratch/fxdisk");
+    (void)CreateDirectory(u8".test-scratch/fxdisk/sub");
+    WriteScratch(u8".test-scratch/fxdisk/fx_wind.hlsli", kWindEffect);
+    // Only beside its includer (sub/), never on the search path: found relative to the includer
+    // first, as DXC's own handler did, and its effect expanded there too.
+    WriteScratch(u8".test-scratch/fxdisk/sub/fx_sibling.hlsli",
+                 "effect Fade : DITHER\n{\n    float Amount = 1 (gate);\n}\n");
+    WriteScratch(u8".test-scratch/fxdisk/sub/fx_nested.hlsli",
+                 "#include \"fx_sibling.hlsli\"\nfloat FadeAmount() { return Amount; }\n");
+
+    const StringView includePaths[] = {u8".test-scratch/fxdisk"};
+    CompileOptions options;
+    options.includePaths = Span<const StringView>(includePaths, 1);
+    options.sourceName = u8"reads_wind.hlsl";
+
+    String messages;
+    CHECK(CompileFragment(*compiler, kReadsWind, options, messages));
+    INFO(doctest::String(reinterpret_cast<const char*>(messages.CStr())));
+
+    constexpr const char* kNested = "#include \"sub/fx_nested.hlsli\"\n"
+                                    "float4 main() : SV_Target { return FadeAmount(); }\n";
+    CHECK(CompileFragment(*compiler, kNested, options, messages));
+
+    // An include without an effect block is served as it was read.
+    WriteScratch(u8".test-scratch/fxdisk/fx_plain.hlsli", "float Plain() { return 2; }\n");
+    constexpr const char* kPlain = "#include \"fx_plain.hlsli\"\n"
+                                   "float4 main() : SV_Target { return Plain(); }\n";
+    CHECK(CompileFragment(*compiler, kPlain, options, messages));
+
+    // A missing include is still a reported error.
+    constexpr const char* kMissing = "#include \"fx_absent.hlsli\"\n"
+                                     "float4 main() : SV_Target { return 0; }\n";
+    CHECK_FALSE(CompileFragment(*compiler, kMissing, options, messages));
+    compiler->Destroy();
+}
+
+TEST_CASE("effects: an include's effect block compiles through a resolver")
+{
+    Compiler* compiler = MakeCompiler();
+    if (compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping");
+        return;
+    }
+    EffectIncludeResolver resolver;
+    CompileOptions options;
+    options.includeResolver = &resolver;
+    String messages;
+    CHECK(CompileFragment(*compiler, kReadsWind, options, messages));
+    INFO(doctest::String(reinterpret_cast<const char*>(messages.CStr())));
+    compiler->Destroy();
+}
+
+TEST_CASE("effects: an effect block in the source itself is expanded too")
+{
+    Compiler* compiler = MakeCompiler();
+    if (compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping");
+        return;
+    }
+    constexpr const char* kTop = "effect Wind : WIND\n"                  // 1
+                                 "{\n"                                   // 2
+                                 "    float Strength = 0 (gate);\n"      // 3
+                                 "}\n"                                   // 4
+                                 "float4 main() : SV_Target {\n"         // 5
+                                 "    return Strength * Sped;\n"         // 6: the mistake
+                                 "}\n";
+    CompileOptions options;
+    options.sourceName = u8"Top.hlsl";
+    String messages;
+    CHECK_FALSE(CompileFragment(*compiler, kTop, options, messages));
+    INFO(doctest::String(reinterpret_cast<const char*>(messages.CStr())));
+    CHECK(Contains(messages.AsView(), u8"Top.hlsl:6:")); // the line kept after the block
+    CHECK(Contains(messages.AsView(), u8"Sped"));
+    CHECK_FALSE(Contains(messages.AsView(), u8"'Strength'")); // the block's member is declared
+    compiler->Destroy();
+}
+
+TEST_CASE("effects: a malformed effect in an include fails the compile naming its file and line")
+{
+    Compiler* compiler = MakeCompiler();
+    if (compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping");
+        return;
+    }
+    constexpr const char* kReadsBad = "#include \"fx_bad.hlsli\"\n"
+                                      "float4 main() : SV_Target { return Strength; }\n";
+    // Disk.
+    (void)CreateDirectory(u8".test-scratch");
+    (void)CreateDirectory(u8".test-scratch/fxdisk");
+    WriteScratch(u8".test-scratch/fxdisk/fx_bad.hlsli", kBadEffect);
+    const StringView includePaths[] = {u8".test-scratch/fxdisk"};
+    CompileOptions disk;
+    disk.includePaths = Span<const StringView>(includePaths, 1);
+    String messages;
+    CHECK_FALSE(CompileFragment(*compiler, kReadsBad, disk, messages));
+    INFO(doctest::String(reinterpret_cast<const char*>(messages.CStr())));
+    CHECK(Contains(messages.AsView(), u8"fx_bad.hlsli:3:"));
+    CHECK(Contains(messages.AsView(), u8"uniforms only"));
+
+    // A resolver.
+    EffectIncludeResolver resolver;
+    CompileOptions resolved;
+    resolved.includeResolver = &resolver;
+    String resolvedMessages;
+    CHECK_FALSE(CompileFragment(*compiler, kReadsBad, resolved, resolvedMessages));
+    INFO(doctest::String(reinterpret_cast<const char*>(resolvedMessages.CStr())));
+    CHECK(Contains(resolvedMessages.AsView(), u8"fx_bad.hlsli:3:"));
+    CHECK(Contains(resolvedMessages.AsView(), u8"uniforms only"));
+    compiler->Destroy();
+}
+
+TEST_CASE("cook: the corpus's effect blocks are stored in the pack, and a stage reading one cooks")
+{
+    Compiler* compiler = MakeCompiler();
+    if (compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping");
+        return;
+    }
+    (void)CreateDirectory(u8".test-scratch");
+    (void)CreateDirectory(u8".test-scratch/fxcook");
+    (void)CreateDirectory(u8".test-scratch/fxcook/surface");
+    WriteScratch(u8".test-scratch/fxcook/fx_wind.hlsli", kWindEffect);
+    // An include in a subfolder is scanned too (the corpus's surface/ templates live there).
+    WriteScratch(u8".test-scratch/fxcook/surface/fx_fade.hlsli",
+                 "effect Fade : DITHER\n{\n    float Amount = 1 (gate);\n}\n");
+    WriteScratch(u8".test-scratch/fxcook/fxsway.vs.hlsl",
+                 "// variants: WIND\n"
+                 "#include \"fx_wind.hlsli\"\n"
+                 "float4 main(uint id : SV_VertexID) : SV_Position {\n"
+                 "#ifdef WIND\n"
+                 "    return float4(Strength, Speed, Height, 1);\n"
+                 "#else\n"
+                 "    return float4(0, 0, 0, 1);\n"
+                 "#endif\n"
+                 "}\n");
+
+    const CookedShaderFormat formats[] = {CookedShaderFormat::SpirV};
+    ShaderCookOptions opts;
+    opts.shaderDir = u8".test-scratch/fxcook";
+    opts.scratchDir = u8".test-scratch";
+    opts.formats = Span<const CookedShaderFormat>(formats, 1);
+
+    CookedShaderPack pack;
+    const ShaderCookReport report = CookEngineShaders(*compiler, opts, pack);
+    for (const String& e : report.errors)
+    {
+        MESSAGE(doctest::String(reinterpret_cast<const char*>(e.CStr())));
+    }
+    CHECK(report.success);
+    CHECK(report.variantsCooked == 2u); // None and WIND
+    CHECK(pack.Find(u8"fxsway", ShaderStage::Vertex, ShaderFlags::Wind,
+                    CookedShaderFormat::SpirV) != nullptr);
+
+    REQUIRE(pack.Effects().Size() == 2u);
+    const ShaderEffect* wind = pack.Effects().Find(u8"Wind");
+    REQUIRE(wind != nullptr);
+    CHECK(wind->flag == ShaderFlags::Wind);
+    CHECK(wind->gateIndex == 0u);
+    CHECK(wind->uniformSize == 16u);
+    REQUIRE(wind->properties.Size() == 3u);
+    CHECK(wind->properties[2].name.AsView() == Hlsl("Height"));
+    CHECK(wind->properties[2].offset == 8u);
+    CHECK(pack.Effects().ForFlag(ShaderFlags::Dither) == pack.Effects().Find(u8"Fade"));
+
+    (void)FileDelete(u8".test-scratch/fxcook/fxsway.vs.hlsl");
+    (void)FileDelete(u8".test-scratch/fxcook/fx_wind.hlsli");
+    (void)FileDelete(u8".test-scratch/fxcook/surface/fx_fade.hlsli");
+    compiler->Destroy();
+}
+
+TEST_CASE("cook: two effects with one name or one flag, or a malformed one, fail the cook")
+{
+    Compiler* compiler = MakeCompiler();
+    if (compiler == nullptr)
+    {
+        MESSAGE("DXC runtime unavailable; skipping");
+        return;
+    }
+    (void)CreateDirectory(u8".test-scratch");
+    (void)CreateDirectory(u8".test-scratch/fxdup");
+    WriteScratch(u8".test-scratch/fxdup/a.hlsli", kWindEffect);
+    WriteScratch(u8".test-scratch/fxdup/b.hlsli",
+                 "effect Gust : WIND\n{\n    float Amount = 1 (gate);\n}\n");
+    WriteScratch(u8".test-scratch/fxdup/c.hlsli", kBadEffect);
+
+    const CookedShaderFormat formats[] = {CookedShaderFormat::SpirV};
+    ShaderCookOptions opts;
+    opts.shaderDir = u8".test-scratch/fxdup";
+    opts.scratchDir = u8".test-scratch";
+    opts.formats = Span<const CookedShaderFormat>(formats, 1);
+
+    CookedShaderPack pack;
+    const ShaderCookReport report = CookEngineShaders(*compiler, opts, pack);
+    CHECK_FALSE(report.success);
+    bool sharedFlag = false;
+    bool badLine = false;
+    for (const String& e : report.errors)
+    {
+        sharedFlag = sharedFlag || (Contains(e.AsView(), u8"b.hlsli:1") &&
+                                    Contains(e.AsView(), u8"share a variant flag"));
+        badLine = badLine || Contains(e.AsView(), u8"c.hlsli:3: ");
+    }
+    CHECK(sharedFlag);
+    CHECK(badLine);
+    CHECK(pack.Effects().Size() == 1u); // the first Wind only
+
+    (void)FileDelete(u8".test-scratch/fxdup/a.hlsli");
+    (void)FileDelete(u8".test-scratch/fxdup/b.hlsli");
+    (void)FileDelete(u8".test-scratch/fxdup/c.hlsli");
+    compiler->Destroy();
+}
+
+TEST_CASE("pack: effect tables survive the round trip")
+{
+    CookedShaderPack pack;
+    String error;
+    REQUIRE(pack.AddEffect(ParseShaderEffect(Hlsl(kWindEffect)).effect, error));
+    CHECK_FALSE(pack.AddEffect(ParseShaderEffect(Hlsl(kWindEffect)).effect, error));
+
+    MemoryStream buffer;
+    REQUIRE(pack.Write(buffer).IsOk());
+    REQUIRE(buffer.Seek(0, SeekOrigin::Begin) == 0);
+    CookedShaderPack loaded;
+    REQUIRE(loaded.Read(buffer).IsOk());
+
+    REQUIRE(loaded.Effects().Size() == 1u);
+    const ShaderEffect* wind = loaded.Effects().ForFlag(ShaderFlags::Wind);
+    REQUIRE(wind != nullptr);
+    CHECK(wind->name.AsView() == Hlsl("Wind"));
+    CHECK(wind->gateIndex == 0u);
+    CHECK(wind->uniformSize == 16u);
+    REQUIRE(wind->properties.Size() == 3u);
+    const ShaderProperty& height = wind->properties[2];
+    CHECK(height.name.AsView() == Hlsl("Height"));
+    CHECK(height.type == ShaderPropertyType::Float);
+    CHECK(height.value.x == 1.0f);
+    CHECK(height.hasRange);
+    CHECK(height.rangeMin == doctest::Approx(0.01f));
+    CHECK(height.rangeMax == 100.0f);
+    CHECK(height.line == 6u);
+    CHECK(height.offset == 8u);
+    CHECK(height.size == 4u);
+    CHECK(wind->properties[1].hasRange); // Speed's [0, 20]
+
+    // A pack of the previous version (3, before effect tables) is refused: packs are recooked.
+    MemoryStream old;
+    {
+        BinaryWriter w(old);
+        w.Write<u32>(0x4b505344u); // "DSPK"
+        w.Write<u32>(3u);
+        w.Write<u32>(0u); // names
+        w.Write<u32>(0u); // declared masks
+        w.Write<u32>(0u); // entry points
+        w.Write<u32>(0u); // entries
+    }
+    REQUIRE(old.Seek(0, SeekOrigin::Begin) == 0);
+    CookedShaderPack refused;
+    CHECK_FALSE(refused.Read(old).IsOk());
+}

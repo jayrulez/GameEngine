@@ -560,3 +560,72 @@ TEST_CASE("shader system: with a compiler, a stripped registered shader is serve
     }
     compiler->Destroy();
 }
+
+// The effects the engine's includes declare (Specs/wind-for-every-shader.md): a game reads their
+// tables from the cooked pack, the editor parses them from the sources it serves.
+TEST_CASE("shader system: effects are served by name and by flag from the pack")
+{
+    rhi::null::NullDevice device{DefaultAllocator()};
+    CookedShaderPack pack;
+    String error;
+    const ShaderEffectBlock wind = ParseShaderEffect(u8"effect Wind : WIND\n"
+                                                     u8"{\n"
+                                                     u8"    float Strength = 0 [0, 2] (gate);\n"
+                                                     u8"    float Speed = 1 [0, 20];\n"
+                                                     u8"    float Height = 1 [0.01, 100];\n"
+                                                     u8"}\n");
+    REQUIRE(wind.IsOk());
+    REQUIRE(pack.AddEffect(wind.effect, error));
+
+    ShaderSystem ss(device); // a game's: no compiler
+    CHECK(ss.FindEffect(u8"Wind") == nullptr); // no pack, no provider: nothing declares one
+    ss.SetCookedPack(&pack);
+    const ShaderEffect* byName = ss.FindEffect(u8"Wind");
+    REQUIRE(byName != nullptr);
+    CHECK(byName->flag == ShaderFlags::Wind);
+    CHECK(byName->properties.Size() == 3u);
+    CHECK(byName->gateIndex == 0u);
+    CHECK(byName->uniformSize == 16u);
+    CHECK(ss.EffectForFlag(ShaderFlags::Wind) == byName);
+    CHECK(ss.EffectForFlag(ShaderFlags::Dither) == nullptr);
+    CHECK(ss.FindEffect(u8"Gust") == nullptr);
+    CHECK(ss.Effects().Size() == 1u);
+}
+
+TEST_CASE("shader system: in dev, effects are parsed from the provider's includes")
+{
+    const std::filesystem::path root = "shader_effect_corpus";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "surface");
+    {
+        std::ofstream stage(root / "sway.vs.hlsl", std::ios::binary);
+        stage << "// variants: WIND\n#include \"surface/wind_fx.hlsli\"\n"
+              << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
+        // An include in a subfolder, as the corpus's surface templates are.
+        std::ofstream include(root / "surface" / "wind_fx.hlsli", std::ios::binary);
+        include << "effect Wind : WIND\n{\n    float Strength = 0 (gate);\n}\n";
+        std::ofstream plain(root / "plain.hlsli", std::ios::binary);
+        plain << "float Plain() { return 1; }\n";
+    }
+
+    rhi::null::NullDevice device{DefaultAllocator()};
+    {
+        foundation::vfs::NativeFileSystem fs(u8"shader_effect_corpus", DefaultAllocator());
+        FileShaderSourceProvider provider{DefaultAllocator()};
+        REQUIRE(provider.Initialize(fs, u8"").IsOk());
+
+        Array<String> includes;
+        provider.CollectIncludeNames(includes);
+        CHECK(includes.Size() == 2u);
+
+        ShaderSystem ss(device);
+        ss.SetSourceProvider(&provider);
+        ss.SetIncludeResolver(&provider);
+        const ShaderEffect* wind = ss.FindEffect(u8"Wind");
+        REQUIRE(wind != nullptr);
+        CHECK(wind->flag == ShaderFlags::Wind);
+        CHECK(ss.EffectForFlag(ShaderFlags::Wind) == wind);
+        CHECK(ss.Effects().Size() == 1u);
+    }
+    std::filesystem::remove_all(root);
+}

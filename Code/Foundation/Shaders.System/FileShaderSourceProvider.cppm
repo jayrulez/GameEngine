@@ -146,6 +146,16 @@ export namespace foundation::shaders
             }
         }
 
+        // Every .hlsli in the folder and its subfolders ("surface/forward.hlsli"), as an include
+        // names it from the folder: LoadInclude serves each name back.
+        void CollectIncludeNames(core::Array<core::String>& out) override
+        {
+            if (m_fileSystem != nullptr)
+            {
+                CollectIncludes(core::StringView{}, 0, out);
+            }
+        }
+
         bool PollChanges(core::Array<core::String>& outChangedNames) override
         {
             if (m_changes == nullptr)
@@ -202,6 +212,45 @@ export namespace foundation::shaders
             path.PushBack(core::utf8char('/'));
             path.Append(fileName);
             return path;
+        }
+
+        // The .hlsli under `relative` (folder-relative) and its subfolders, depth-limited.
+        void CollectIncludes(core::StringView relative, core::u32 depth,
+                             core::Array<core::String>& out) const
+        {
+            constexpr core::u32 kMaxFolderDepth = 8;
+            vfs::IEnumerableFileSystem* enumerable = m_fileSystem->AsEnumerable();
+            if (enumerable == nullptr)
+            {
+                return;
+            }
+            const core::String folder =
+                relative.IsEmpty() ? core::String(m_folder.AsView()) : Locate(relative);
+            core::Array<vfs::DirEntry> entries(*m_allocator);
+            if (!enumerable->Enumerate(folder.AsView(), entries).IsOk())
+            {
+                return;
+            }
+            for (const vfs::DirEntry& entry : entries)
+            {
+                core::String path(relative);
+                if (!relative.IsEmpty())
+                {
+                    path.PushBack(core::utf8char('/'));
+                }
+                path.Append(entry.name.AsView());
+                if (entry.isDirectory)
+                {
+                    if (depth < kMaxFolderDepth)
+                    {
+                        CollectIncludes(path.AsView(), depth + 1, out);
+                    }
+                }
+                else if (EndsWith(entry.name.AsView(), u8".hlsli"))
+                {
+                    out.PushBack(core::Move(path));
+                }
+            }
         }
 
         static bool EndsWith(core::StringView text, core::StringView suffix)

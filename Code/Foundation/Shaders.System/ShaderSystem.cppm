@@ -44,6 +44,11 @@ export namespace foundation::shaders
         /// Every shader name the provider can serve (tooling: builtin dropdowns).
         virtual void CollectShaderNames(core::Array<core::String>& out) = 0;
 
+        /// Every shared include (.hlsli) the provider serves, as an include names it
+        /// ("wind.hlsli", "surface/forward.hlsli"). The shader system reads them through its
+        /// include resolver for the effect blocks they declare.
+        virtual void CollectIncludeNames(core::Array<core::String>& out) = 0;
+
         /// Appends names whose source changed since the last poll (dev file watch);
         /// returns true if any did. Called once per frame - implementations throttle.
         virtual bool PollChanges(core::Array<core::String>& outChangedNames) = 0;
@@ -113,7 +118,11 @@ export namespace foundation::shaders
         }
 
         // The source-pull seam (borrowed; may be null - see IShaderSourceProvider).
-        void SetSourceProvider(IShaderSourceProvider* provider) { m_provider = provider; }
+        void SetSourceProvider(IShaderSourceProvider* provider)
+        {
+            m_provider = provider;
+            m_effectsScanned = false;
+        }
         [[nodiscard]] IShaderSourceProvider* SourceProvider() const noexcept
         {
             return m_provider;
@@ -123,7 +132,11 @@ export namespace foundation::shaders
         // canonicalizes the request against the stage's declared mask and looks up the prebuilt
         // blob for this device's backend format - no DXC, no source. A miss is a loud cook-coverage
         // bug. Set by the render subsystem when a shader pack ships beside the executable.
-        void SetCookedPack(const CookedShaderPack* pack) { m_pack = pack; }
+        void SetCookedPack(const CookedShaderPack* pack)
+        {
+            m_pack = pack;
+            m_effectsScanned = false;
+        }
         [[nodiscard]] const CookedShaderPack* CookedPack() const noexcept { return m_pack; }
 
         // Dev hot reload: asks the provider which sources changed, drops their
@@ -148,6 +161,8 @@ export namespace foundation::shaders
             // A registered shader (a project's) may include a changed library file; the provider
             // cannot say which, so every remembered failure gets another compile.
             m_failedVariants.Clear();
+            // An include may have changed an effect block; read them again on the next ask.
+            m_effectsScanned = false;
             return changed.Size();
         }
 
@@ -174,10 +189,45 @@ export namespace foundation::shaders
         // Where `#include`s resolve during on-demand compiles (borrowed; may be null = the
         // compiler's disk handler with no search path). The dev file provider is one - it serves
         // the shared .hlsli from the same mount the sources come from.
-        void SetIncludeResolver(IShaderIncludeResolver* resolver) { m_includeResolver = resolver; }
+        void SetIncludeResolver(IShaderIncludeResolver* resolver)
+        {
+            m_includeResolver = resolver;
+            m_effectsScanned = false;
+        }
         [[nodiscard]] IShaderIncludeResolver* IncludeResolver() const noexcept
         {
             return m_includeResolver;
+        }
+
+        // The effects the engine's shaders declare (`effect` blocks in the corpus's includes,
+        // Specs/wind-for-every-shader.md): the cooked pack's tables when a pack is set, else
+        // parsed from the provider's includes, read through the include resolver, on the first
+        // ask and again after a reload. What a material whose shader declares an effect's flag
+        // takes its effect group from. The library, and pointers into it, stay valid until the
+        // next reload, pack, provider or resolver change.
+        [[nodiscard]] const ShaderEffectLibrary& Effects() const
+        {
+            if (m_pack != nullptr)
+            {
+                return m_pack->Effects();
+            }
+            if (!m_effectsScanned)
+            {
+                ScanSourceEffects();
+            }
+            return m_sourceEffects;
+        }
+
+        // An effect by its name (`Wind`); null when no include declares it.
+        [[nodiscard]] const ShaderEffect* FindEffect(core::StringView name) const
+        {
+            return Effects().Find(name);
+        }
+
+        // The effect a variant flag turns on (one flag, `ShaderFlags::Wind`); null when none.
+        [[nodiscard]] const ShaderEffect* EffectForFlag(ShaderFlags flag) const
+        {
+            return Effects().ForFlag(flag);
         }
 
         // Get (compile-on-demand + cache) the GPU module for a variant. Returns null if the
@@ -434,6 +484,55 @@ export namespace foundation::shaders
             return (mr == core::ErrorCode::Ok) ? module : nullptr;
         }
 
+        // Dev: parse the effect blocks of every include the provider serves. A malformed block
+        // or a second effect for a name or flag is logged and left out (the compile that includes
+        // it fails naming the line; the cook refuses it).
+        void ScanSourceEffects() const
+        {
+            m_sourceEffects.Clear();
+            m_effectsScanned = true;
+            if (m_provider == nullptr || m_includeResolver == nullptr)
+            {
+                return;
+            }
+            core::Array<core::String> includes;
+            m_provider->CollectIncludeNames(includes);
+            for (const core::String& include : includes)
+            {
+                core::String text;
+                if (!m_includeResolver->LoadInclude(include.AsView(), text) ||
+                    !HasShaderEffect(text.AsView()))
+                {
+                    continue;
+                }
+                for (ShaderEffectBlock& block : ParseShaderEffects(text.AsView()))
+                {
+                    if (!block.IsOk())
+                    {
+                        for (const ShaderPropertyError& error : block.errors)
+                        {
+                            rhi::LogErrorf("Shader effect in '%.*s' line %u: %.*s",
+                                           static_cast<int>(include.Size()),
+                                           reinterpret_cast<const char*>(include.Data()),
+                                           static_cast<unsigned>(error.line),
+                                           static_cast<int>(error.message.Size()),
+                                           reinterpret_cast<const char*>(error.message.Data()));
+                        }
+                        continue;
+                    }
+                    core::String error;
+                    if (!m_sourceEffects.Add(core::Move(block.effect), error))
+                    {
+                        rhi::LogErrorf("Shader effect in '%.*s': %.*s",
+                                       static_cast<int>(include.Size()),
+                                       reinterpret_cast<const char*>(include.Data()),
+                                       static_cast<int>(error.Size()),
+                                       reinterpret_cast<const char*>(error.Data()));
+                    }
+                }
+            }
+        }
+
         void DestroyAll()
         {
             for (auto& e : m_cache)
@@ -501,6 +600,10 @@ export namespace foundation::shaders
             m_cache;                                    // variant -> GPU module (owned)
         core::HashMap<core::u64, core::u64> m_versions; // nameHash -> version
         IShaderIncludeResolver* m_includeResolver = nullptr; // borrowed
+        // Dev: the effects parsed from the provider's includes (Effects()); read lazily from a
+        // const accessor, so mutable.
+        mutable ShaderEffectLibrary m_sourceEffects;
+        mutable bool m_effectsScanned = false;
     };
 
 } // namespace foundation::shaders

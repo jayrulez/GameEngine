@@ -17,6 +17,7 @@ export module foundation.shaders:pack;
 import foundation.core;
 import :types;
 import :flags;
+import :properties;
 
 using namespace foundation::core;
 
@@ -137,6 +138,17 @@ export namespace foundation::shaders
             }
         }
 
+        // Record an effect's table (an `effect` block of the corpus's includes), so a game reads
+        // an effect's parameters without its sources. False, with the reason, when its name or
+        // its flag is already recorded.
+        bool AddEffect(ShaderEffect effect, String& outError)
+        {
+            return m_effects.Add(Move(effect), outError);
+        }
+
+        // The effect tables the cook recorded. Stable while the pack is not modified.
+        [[nodiscard]] const ShaderEffectLibrary& Effects() const noexcept { return m_effects; }
+
         [[nodiscard]] usize Count() const noexcept { return m_entries.Size(); }
         [[nodiscard]] bool IsEmpty() const noexcept { return m_entries.IsEmpty(); }
 
@@ -178,6 +190,32 @@ export namespace foundation::shaders
                 w.Write<u32>(static_cast<u32>(e.blob.Size()));
                 w.WriteBytes(e.blob.Data(), e.blob.Size());
             }
+
+            w.Write<u32>(static_cast<u32>(m_effects.Size()));
+            for (const ShaderEffect& effect : m_effects.All())
+            {
+                w.WriteString(effect.name.AsView());
+                w.Write<u32>(static_cast<u32>(effect.flag));
+                w.Write<u32>(effect.gateIndex);
+                w.Write<u32>(effect.uniformSize);
+                w.Write<u32>(static_cast<u32>(effect.properties.Size()));
+                for (const ShaderProperty& p : effect.properties)
+                {
+                    w.WriteString(p.name.AsView());
+                    w.Write<u32>(static_cast<u32>(p.type));
+                    w.Write<f32>(p.value.x);
+                    w.Write<f32>(p.value.y);
+                    w.Write<f32>(p.value.z);
+                    w.Write<f32>(p.value.w);
+                    w.Write<u32>(p.hasRange ? 1u : 0u);
+                    w.Write<f32>(p.rangeMin);
+                    w.Write<f32>(p.rangeMax);
+                    w.Write<u32>(p.line);
+                    w.Write<u32>(p.offset);
+                    w.Write<u32>(p.size);
+                    w.Write<u32>(p.binding);
+                }
+            }
             return w.IsOk() ? Status{} : Status{ErrorCode::Internal};
         }
 
@@ -188,6 +226,7 @@ export namespace foundation::shaders
             m_names.Clear();
             m_declaredMasks.Clear();
             m_entryPoints.Clear();
+            m_effects.Clear();
 
             BinaryReader r(in);
             u32 magic = 0;
@@ -291,14 +330,69 @@ export namespace foundation::shaders
                 m_index.InsertOrAssign(key, m_entries.Size());
                 m_entries.PushBack(Move(e));
             }
+            if (!r.IsOk())
+            {
+                return Status{ErrorCode::Internal};
+            }
+
+            u32 effectCount = 0;
+            r.Read(effectCount);
+            if (effectCount > remaining() / 20) // name length + flag + gate + size + count
+            {
+                return Status{ErrorCode::InvalidArgument};
+            }
+            for (u32 i = 0; i < effectCount && r.IsOk(); ++i)
+            {
+                ShaderEffect effect;
+                u32 flag = 0;
+                u32 propertyCount = 0;
+                r.ReadString(effect.name);
+                r.Read(flag);
+                r.Read(effect.gateIndex);
+                r.Read(effect.uniformSize);
+                r.Read(propertyCount);
+                effect.flag = static_cast<ShaderFlags>(flag);
+                if (!r.IsOk() || propertyCount > remaining() / 52) // fixed bytes per property
+                {
+                    return Status{ErrorCode::InvalidArgument};
+                }
+                for (u32 k = 0; k < propertyCount && r.IsOk(); ++k)
+                {
+                    ShaderProperty p;
+                    u32 type = 0;
+                    u32 hasRange = 0;
+                    r.ReadString(p.name);
+                    r.Read(type);
+                    r.Read(p.value.x);
+                    r.Read(p.value.y);
+                    r.Read(p.value.z);
+                    r.Read(p.value.w);
+                    r.Read(hasRange);
+                    r.Read(p.rangeMin);
+                    r.Read(p.rangeMax);
+                    r.Read(p.line);
+                    r.Read(p.offset);
+                    r.Read(p.size);
+                    r.Read(p.binding);
+                    p.type = static_cast<ShaderPropertyType>(type);
+                    p.hasRange = hasRange != 0u;
+                    effect.properties.PushBack(Move(p));
+                }
+                String error;
+                if (!r.IsOk() || !m_effects.Add(Move(effect), error))
+                {
+                    return Status{ErrorCode::InvalidArgument}; // a cook records each effect once
+                }
+            }
             return r.IsOk() ? Status{} : Status{ErrorCode::Internal};
         }
 
     private:
         static constexpr u32 kMagic = 0x4b505344u;   // "DSPK" little-endian
         // v2 added the declared-mask table; v3 the entry-point table (an older pack is refused:
-        // it would run every stage as `main`, so the export cooks it again).
-        static constexpr u32 kVersion = 3u;
+        // it would run every stage as `main`, so the export cooks it again); v4 the effect
+        // tables (refused below it too: a pack is cooked with the engine that reads it).
+        static constexpr u32 kVersion = 4u;
 
         [[nodiscard]] static u64 MaskKey(u64 nameHash, ShaderStage stage) noexcept
         {
@@ -328,5 +422,6 @@ export namespace foundation::shaders
         HashMap<u64, String> m_names;        // nameHash -> name (enumeration)
         HashMap<u64, u32> m_declaredMasks;   // MaskKey(nameHash, stage) -> ShaderFlags bits
         HashMap<u64, String> m_entryPoints;  // MaskKey(nameHash, stage) -> entry point
+        ShaderEffectLibrary m_effects;       // the corpus's effect tables
     };
 }

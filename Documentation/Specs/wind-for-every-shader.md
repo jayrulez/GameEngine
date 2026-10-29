@@ -1,7 +1,8 @@
 # Wind for every shader - the sway read from the draw, not from PBR's material layout
 
-> Status: APPROVED 2026-10-29; 2b-1 (the effect block, 6460a54b1) and 2b-2 (materials, renderer, data)
-> BUILT 2026-10-29 on clang; 2b-3 (the material page, MCP output, docs) next (user: "Let's look into this properly.
+> Status: APPROVED 2026-10-29; BUILT 2026-10-29 on clang: 2b-1 (the effect block, 6460a54b1), 2b-2
+> (materials, renderer, data, 40e7b2924), 2b-3 (the material page, MCP output, docs); the other
+> lanes owed (user: "Let's look into this properly.
 > Explain how it is built into PBR, and why it can't be used in custom shader"; "Wind write up").
 > Phase 2 of `shader-blocks-cleanup.md`, which removes every borrowed lane, the clock's included.
 > Read CONVENTIONS.md first.

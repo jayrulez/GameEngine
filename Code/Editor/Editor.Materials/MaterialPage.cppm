@@ -15,7 +15,10 @@
 // pipeline state (blend, depth, cull); under Properties each value its shader declares, by its
 // type (a number, with the shader's range; two, three or four; an integer; a colour; a colour
 // that may pass white, with its intensity); under Textures each texture slot, a slot taking a
-// texture or a render texture. A shader switched, undone or recooked lays the rows out again. What
+// texture or a render texture; then a section per effect group the material carries (Wind: its
+// Strength, Speed and Height, Specs/wind-for-every-shader.md), its rows from the effect's table as
+// a custom shader's are, its values the group's (`Wind.Strength`), and none for a material whose
+// shader declares no effect. A shader switched, undone or recooked lays the rows out again. What
 // the preview shows the material on (a shape, or a mesh from the project) is on the preview's bar,
 // not among the material's rows, and kept per material with the project.
 //
@@ -44,6 +47,7 @@ import foundation.texture.resource;
 import foundation.resource;
 import foundation.shaders;
 import foundation.shaders.resource;
+import foundation.shaders.system; // the effects' tables (their ranges; a group the material lacks)
 import foundation.rhi;
 import foundation.gui;
 import foundation.gui.toolkit;
@@ -120,6 +124,8 @@ export namespace editor
         [[nodiscard]] foundation::gui::PropertyBag& MaterialRows() noexcept { return *m_materialRows; }
         [[nodiscard]] foundation::gui::PropertyBag& PropertyRows() noexcept { return *m_propertyRows; }
         [[nodiscard]] foundation::gui::PropertyBag& TextureRows() noexcept { return *m_textureRows; }
+        /// An effect group's section (`Wind`), or null when the material carries no such group.
+        [[nodiscard]] foundation::gui::PropertyBag* EffectRows(StringView effect) noexcept;
         /// Writes `value` to row `path` of `rows` as the grid commits an edit (one undo step).
         void EditRow(foundation::gui::PropertyBag& rows, StringView path, const foundation::gui::Variant& value);
         /// The rows shown again from the source (after an undo), or laid out again (a shader switched).
@@ -205,9 +211,25 @@ export namespace editor
         // Binds the material's shader asset and re-lays the material by its current table.
         void BindShader();
 
-        // Uniform blob access by property name (offset/size from the source's tables).
+        // The material's effect groups laid on the effects' tables by what its shader's vertex
+        // stage declares (a group it lacks added at the effect's defaults), when the page has the
+        // shader system; `source` is the live one (a layout, not an edit) or an edit's.
+        void AdoptEffects(materials::MaterialSource& source, foundation::shaders::ShaderFlags vertexVariants);
+        // The vertex variants the source's shader declares: a built-in's, or its shader asset's.
+        [[nodiscard]] foundation::shaders::ShaderFlags VertexVariantsOf(const materials::MaterialSource& source) const;
+
+        // A value's row, its value shown, and an edit of it written, by its type: one way for the
+        // shader's properties and an effect group's parameters. `path` is the row's in `rows`;
+        // `name` addresses the value (`Metallic`, `Wind.Strength`); `declared` gives its range.
+        void AddValueRow(foundation::gui::PropertyBag& rows, StringView path, MaterialPropertyRow row,
+                         const foundation::shaders::ShaderProperty* declared);
+        void ShowValue(foundation::gui::PropertyBag& rows, StringView path, StringView name, MaterialPropertyRow row);
+        void CommitValue(StringView name, StringView part, MaterialPropertyRow row, const foundation::gui::Variant& value);
+
+        // Uniform blob access by property name (offset/size from the source's tables); an
+        // `Effect.Property` name reaches the effect group's values instead.
         void ReadUniform(StringView name, void* out, usize bytes) const;
-        void WriteUniform(materials::MaterialSource& source, StringView name, const void* value, usize bytes);
+        void WriteUniform(materials::MaterialSource& source, StringView name, const void* value, usize bytes) const;
 
         UniquePtr<app::PreviewPane> m_pane;
         RefPtr<foundation::gui::ComboBox> m_shapeChoice; // the preview bar's
@@ -215,6 +237,9 @@ export namespace editor
         UniquePtr<foundation::gui::PropertyBag> m_materialRows;
         UniquePtr<foundation::gui::PropertyBag> m_propertyRows;
         UniquePtr<foundation::gui::PropertyBag> m_textureRows;
+        // A section per effect group, in the source's order, and the group each shows.
+        Array<UniquePtr<foundation::gui::PropertyBag>> m_effectRows;
+        Array<String> m_effectRowNames;
         bool m_rowsDirty = false; // the layout changed: built again on the next Refresh
         bool m_reshow = false;    // the values changed under the rows: shown again on the next Refresh
         // A gesture under way (a drag, a scrub, a picker open): its previews are written to the
@@ -237,6 +262,9 @@ export namespace editor
         foundation::resource::Proxy<foundation::shaders::ShaderResource> m_shader;
         u64 m_shaderVersion = 0;
         Array<foundation::shaders::ShaderProperty> m_shaderTable;
+        foundation::shaders::ShaderFlags m_shaderVertexVariants = foundation::shaders::ShaderFlags::None;
+        // The renderer's shader system (borrowed; null without a host): the effects' tables.
+        foundation::shaders::ShaderSystem* m_effectSystem = nullptr;
     };
 
     class MaterialEditorPageFactory final : public IEditorPageFactory

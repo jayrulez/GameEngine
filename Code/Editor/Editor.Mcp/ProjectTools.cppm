@@ -774,7 +774,7 @@ export namespace editor::mcp
         RegisterScriptValidateTool(server);
         RegisterShaderValidateTool(server, paths.shaderLibrary.AsView());
         RegisterGuiValidateTool(server);
-        RegisterMaterialShaderTool(server, session);
+        RegisterMaterialShaderTool(server, session, paths.shaderLibrary.AsView());
         RegisterScriptCreateTool(server, session);
         RegisterProjectExportTool(server, session, operations);
     }

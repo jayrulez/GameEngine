@@ -205,7 +205,10 @@ is refused while anything uses it - the refusal names the users, as `asset_uses`
 and bindings, a material, a physics material, a sound cue) is edited through its envelope:
 `asset_data_read` gives the XML, and `asset_data_write` takes the edited whole back, loading it
 exactly as the engine would and refusing it, unchanged, when it does not load. Enum fields are
-numbers there; `type_info` on the field's type names the cases.
+numbers there; `type_info` on the field's type names the cases. A material's envelope holds its
+shader's values in `uniformDefaults` and each effect group (Wind; see **Shaders**) apart, in
+`effects`: the effect's `name`, its `flag`, its parameters' `propertyNames`, types, offsets and
+sizes, and their `values` bytes.
 The engine GUI's assets are linked text, as scripts are:
 `asset_create` with `GUI Document` (`.xml` markup) or `GUI Style Sheet` (`.css`), or
 `asset_import` of such a file, each validated by its cook (what the loader or parser dropped is a
@@ -243,7 +246,9 @@ and a hex code show (0.5 is `#808080`): component colours, the environment's amb
 material's `Color` properties, particle colours, debug draw. The renderer decodes them; never
 pre-convert. Brightness above white is an intensity, not a component above 1: a light's
 `intensity`, or the w of a material's `ColorHdr` (its emissive). In a material's
-`uniformDefaults` a colour is four floats (rgba, or rgb and the intensity).
+`uniformDefaults` a colour is four floats (rgba, or rgb and the intensity); an effect group's
+values (Wind's Strength, Speed and Height) are floats in the group's own `values`, never in
+`uniformDefaults`.
 
 **Scripts**: `script_api` first - the LIVE bound API per backend (angelscript | luau);
 never trust memorized signatures. A member with `readOnly: true` (a network identity's
@@ -267,7 +272,30 @@ use (`Tint`) is an error at its line. A surface reads the camera and the clock t
 and `Time()`, not the frame's constants. A material goes on a shader by `material_set_shader` (the shader cooked
 first): laid out by the shader's properties and saved, the values whose name and type fit kept;
 `pbr`, `unlit` or `phong` puts it back on a built-in (Phong: Blinn-Phong lighting, for a model authored with Phong). Not by `asset_data_write` of its `shaderId`, which
-leaves it in its old layout, warned about on every cook.
+leaves it in its old layout, warned about on every cook. Its result lists the material's
+`properties` and its `effects`.
+
+**Effects (wind)**: an effect is a vertex behaviour the engine provides, with parameters of its
+own that every material on a shader opting into it carries as a GROUP, apart from the shader's
+properties. Wind is the one effect today: its group has `Strength` (metres of sway at the top of
+the mesh; above zero sways, 0 is off), `Speed` (radians per second) and `Height` (the local
+height where the sway is full; roots at or below the mesh's origin stay put), and the shadow and
+the picking sway with the mesh. A shader opts in by `WIND` in its vertex variants: the built-in
+PBR, Phong and Unlit do, every surface shader does (the engine's programs declare it), and the
+`Low-Level Shader` starter's `// variants(vertex):` line lists it; strike it there and the
+shader's materials have no Wind group. `material_set_shader` gives the material the group of
+every effect its new shader declares (the values kept when the old shader declared it too) and
+drops the rest; its result's `effects` lists each group: `name` (`Wind`), `flag` (`WIND`) and
+`properties` (`name`, `type`, `value`). The material page shows the group as a section of its own
+("Wind"). A shader on the engine's vertex stage (a surface shader, a low-level one including
+`forward_vs.hlsli`) writes nothing for wind: that stage applies the sway. One that needs the values
+reads them as `Wind.Strength`, `Wind.Speed` and `Wind.Height` in vertex code under `#ifdef WIND`
+once `wind.hlsli` is included (`forward_vs.hlsli` includes it; a surface shader's `Vertex()` and a
+pixel stage cannot), and they need no line in its `properties` block. Scripts and a per-entity
+material override address them the same way (`Wind.Strength`; the old `WindStrength` property is
+gone). An
+override changes how an already swaying material sways; whether it sways at all is the shared
+material's Strength.
 
 **Diagnostics**: `log_write` a marker -> do the risky thing -> `log_read` with
 `sinceSequence` = the marker's sequence to see exactly what the engine said after it.

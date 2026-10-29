@@ -5,7 +5,7 @@ target_link_libraries(Editor.Materials PUBLIC
     Foundation::RHI Foundation::Shell Foundation::Graphics Foundation::Runtime
     Foundation::Runtime.Client Foundation::Scene Engine::Scene Foundation::Render Engine::Render
     Foundation::Geometry Foundation::Materials Foundation::Materials.Resource Pipeline::Materials
-    Foundation::Shaders Foundation::Shaders.Resource Foundation::Texture.Resource
+    Foundation::Shaders Foundation::Shaders.Resource Foundation::Shaders.System Foundation::Texture.Resource
     Foundation::GUI Foundation::GUI.Toolkit Editor::Core Editor::App Editor::Preview Foundation::Policy)
 target_sources(Editor.Materials
     PRIVATE

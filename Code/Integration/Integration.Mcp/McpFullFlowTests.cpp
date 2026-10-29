@@ -1152,8 +1152,10 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     editor::mcp::InlineProjectOperations operations(session, builders, String(), String());
     pipeline::AssetCreatorRegistry creators{DefaultAllocator()};
     (void)pipeline::RegisterAllCreators(creators);
-    editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer,
-                                     editor::mcp::EngineToolPaths{}, operations);
+    // The engine's shader library: where the effects' tables (wind.hlsli's Wind) are read from.
+    editor::mcp::EngineToolPaths paths;
+    paths.shaderLibrary = foundation::vfs::DataPath(foundation::vfs::FindDataRoot().AsView(), u8"Engine/Shaders");
+    editor::mcp::RegisterEngineTools(server, session, builders, importers, creators, logBuffer, paths, operations);
     editor::mcp::RegisterProjectOpenTools(server, session, owner);
     (void)FfCall(server, u8"project_create",
                  FfStr(FfStr(JsonValue::MakeObject(), u8"directory", u8"mcp_material_shader_project"),
@@ -1165,6 +1167,31 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
     const JsonValue lava = FfCall(server, u8"asset_create",
                                   FfStr(FfStr(JsonValue::MakeObject(), u8"creator", u8"Lit Surface Shader"),
                                         u8"name", u8"Lava"));
+    // A low-level shader whose vertex stage does not declare WIND (the starter's, WIND struck).
+    const JsonValue still = FfCall(server, u8"asset_create",
+                                   FfStr(FfStr(JsonValue::MakeObject(), u8"creator", u8"Low-Level Shader"),
+                                         u8"name", u8"Still"));
+    {
+        const String path = PathJoin(session.project->SourcesRoot().AsView(), u8"Still.hlsl");
+        Result<Array<byte>> bytes = ReadFile(path.AsView());
+        REQUIRE(bytes.HasValue());
+        const String text(StringView(reinterpret_cast<const char8_t*>(bytes.Value().Data()), bytes.Value().Size()));
+        const StringView declared = u8"// variants(vertex): SKINNED INSTANCED WIND";
+        REQUIRE(Contains(text.AsView(), declared));
+        String struck;
+        for (usize i = 0; i < text.Size();)
+        {
+            if (i + declared.Size() <= text.Size() && text.AsView().SubStr(i, declared.Size()) == declared)
+            {
+                struck.Append(StringView(u8"// variants(vertex): SKINNED INSTANCED"));
+                i += declared.Size();
+                continue;
+            }
+            struck.Append(text.AsView().SubStr(i, 1));
+            ++i;
+        }
+        REQUIRE(WriteFile(path.AsView(), Span<const byte>(reinterpret_cast<const byte*>(struck.Data()), struck.Size())).IsOk());
+    }
     const JsonValue cooked = FfCall(server, u8"asset_cook", JsonValue::MakeObject());
     if (cooked.Get(u8"failed").AsNumber() != 0.0)
     {
@@ -1183,6 +1210,9 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
               lava.Get(u8"guid").AsString().AsView()));
     REQUIRE(onLava.Get(u8"properties").Count() == 5);
     CHECK(onLava.Get(u8"shaderName").AsString() == StringView(u8"Lava"));
+    // A surface shader declares WIND: the material gains the Wind group (a new material had none).
+    REQUIRE(onLava.Get(u8"effects").Count() == 1);
+    CHECK(onLava.Get(u8"effects").At(0).Get(u8"name").AsString() == StringView(u8"Wind"));
     // Saved: the material's own asset holds the shader's layout, none of PBR's.
     const String xml = FfCall(server, u8"asset_data_read",
                               FfStr(JsonValue::MakeObject(), u8"guid", materialId.AsView()))
@@ -1198,6 +1228,28 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
         FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"pbr"));
     CHECK(onPbr.Get(u8"properties").Count() == 13);
     CHECK(onPbr.Get(u8"shaderName").AsString() == StringView(u8"forward"));
+    // Its Wind group: the effect's three parameters, its gate at zero (still).
+    REQUIRE(onPbr.Get(u8"effects").Count() == 1);
+    const JsonValue& wind = onPbr.Get(u8"effects").At(0);
+    CHECK(wind.Get(u8"name").AsString() == StringView(u8"Wind"));
+    CHECK(wind.Get(u8"flag").AsString() == StringView(u8"WIND"));
+    REQUIRE(wind.Get(u8"properties").Count() == 3);
+    CHECK(wind.Get(u8"properties").At(0).Get(u8"name").AsString() == StringView(u8"Strength"));
+    CHECK(wind.Get(u8"properties").At(0).Get(u8"value").AsNumber() == doctest::Approx(0.0));
+    CHECK(wind.Get(u8"properties").At(1).Get(u8"name").AsString() == StringView(u8"Speed"));
+
+    // On a shader whose vertex stage does not declare WIND: no group.
+    const JsonValue onStill = FfCall(
+        server, u8"material_set_shader",
+        FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader",
+              still.Get(u8"guid").AsString().AsView()));
+    CHECK(onStill.Get(u8"shaderName").AsString() == StringView(u8"Still"));
+    CHECK(onStill.Get(u8"effects").Count() == 0);
+    CHECK_FALSE(Contains(FfCall(server, u8"asset_data_read", FfStr(JsonValue::MakeObject(), u8"guid", materialId.AsView()))
+                             .Get(u8"xml")
+                             .AsString()
+                             .AsView(),
+                         u8"<string>Wind</string>"));
 
     // On the built-in Phong: its eleven (six values, four maps, the sampler).
     const JsonValue onPhong = FfCall(
@@ -1205,6 +1257,9 @@ TEST_CASE("integration.mcp: material_set_shader lays a material out by its shade
         FfStr(FfStr(JsonValue::MakeObject(), u8"material", materialId.AsView()), u8"shader", u8"phong"));
     CHECK(onPhong.Get(u8"properties").Count() == 11);
     CHECK(onPhong.Get(u8"shaderName").AsString() == StringView(u8"phong"));
+    // Phong declares WIND as PBR does: the group again, at the effect's defaults.
+    REQUIRE(onPhong.Get(u8"effects").Count() == 1);
+    CHECK(onPhong.Get(u8"effects").At(0).Get(u8"name").AsString() == StringView(u8"Wind"));
 
     std::filesystem::remove_all("mcp_material_shader_project", ec);
 }

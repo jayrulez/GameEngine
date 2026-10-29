@@ -229,9 +229,11 @@ is one undo step, and the props save with the scene. A layer whose mesh does not
 deleted or stale asset) draws nothing: the panel marks it "(no mesh)", the status bar says so
 while it is selected, and the log warns once.
 
-**Wind.** A layer's material sways when its **Wind Strength** (metres at the card's top) is above
-zero; set **Wind Speed** (radians per second) and **Wind Height** (the local height, in the
-mesh's own units, where the sway is full - roots at or below the mesh origin stay put). Card and
+**Wind.** A layer's material sways when the **Strength** in its **Wind** section (metres at the
+card's top) is above zero; set **Speed** (radians per second) and **Height** (the local height, in
+the mesh's own units, where the sway is full - roots at or below the mesh origin stay put). Any
+material whose shader can sway has the section: PBR, Phong, Unlit and custom shaders (a script or
+an override names the values `Wind.Strength`, `Wind.Speed`, `Wind.Height`). Card and
 tuft meshes authored with their root at the origin sway naturally; a rock material leaves the
 strength at zero and never moves. The sway follows the card into its shadow and its selection.
 

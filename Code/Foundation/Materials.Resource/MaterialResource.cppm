@@ -392,6 +392,58 @@ export namespace foundation::materials
         return true;
     }
 
+    /// The source's effect groups set on `material`, each as stored: names, types, offsets, gate,
+    /// buffer size and values.
+    inline void RestoreEffectGroups(const MaterialSource& src, Material& material)
+    {
+        for (const MaterialEffectGroupSource& group : src.effects)
+        {
+            Array<MaterialPropertyDef> defs;
+            const usize n = group.propertyNames.Size();
+            for (usize i = 0; i < n; ++i)
+            {
+                MaterialPropertyDef d{};
+                d.name = group.propertyNames[i].AsView();
+                d.type = i < group.propertyTypes.Size() ? static_cast<MaterialPropertyType>(group.propertyTypes[i])
+                                                        : MaterialPropertyType::Float;
+                d.binding = static_cast<u32>(i);
+                d.offset = i < group.propertyOffsets.Size() ? group.propertyOffsets[i] : 0u;
+                d.size = i < group.propertySizes.Size() ? group.propertySizes[i] : 0u;
+                defs.PushBack(d);
+            }
+            material.SetEffectGroup(group.name.AsView(), static_cast<shaders::ShaderFlags>(group.flag),
+                                    group.gateIndex, group.uniformSize,
+                                    Span<const MaterialPropertyDef>{defs.Data(), defs.Size()},
+                                    Span<const u8>{group.values.Data(), group.values.Size()});
+        }
+    }
+
+    /// The source's effect groups laid on the effects' tables by what its shader's vertex stage
+    /// declares (Material::AdoptDeclaredEffects, on the stored form; Specs/wind-for-every-shader.md):
+    /// a declared effect the source has no group for gains one at the effect's defaults, a group
+    /// carried keeps the values whose name, type and size still fit, and a group whose effect is
+    /// not declared goes. The factory does this to a runtime material; an authoring tool that has
+    /// the tables (the material page, material_set_shader) does it to the source, so a material
+    /// made before it had a group (every new one: the builders know no effect's table) shows and
+    /// saves the group its shader draws. An empty library says nothing: the stored groups stand.
+    inline void AdoptDeclaredEffects(IAllocator& allocator, MaterialSource& src,
+                                     Span<const shaders::ShaderEffect> effects,
+                                     shaders::ShaderFlags vertexVariants)
+    {
+        if (effects.Size() == 0)
+        {
+            return;
+        }
+        RefPtr<Material> scratch = MakeRef<Material>(allocator);
+        RestoreEffectGroups(src, *scratch);
+        scratch->AdoptDeclaredEffects(effects, vertexVariants);
+        src.effects.Clear();
+        for (const MaterialEffectGroup& group : scratch->EffectGroups())
+        {
+            src.effects.PushBack(MaterialSource::EffectGroupSourceOf(group));
+        }
+    }
+
     /// A runtime material from a cooked source, drawn with `shaderName`: its property layout,
     /// default values, render state and sampler addressing; its textures are left unbound (the
     /// factory resolves them through the resource manager, an editor preview through its own).
@@ -420,26 +472,7 @@ export namespace foundation::materials
         material->SetRawDefaultUniformData(
             Span<const u8>{src.uniformDefaults.Data(), src.uniformDefaults.Size()});
         // The effect groups, each as stored (the material needs nothing else to draw them).
-        for (const MaterialEffectGroupSource& group : src.effects)
-        {
-            Array<MaterialPropertyDef> defs;
-            const usize n = group.propertyNames.Size();
-            for (usize i = 0; i < n; ++i)
-            {
-                MaterialPropertyDef d{};
-                d.name = group.propertyNames[i].AsView();
-                d.type = i < group.propertyTypes.Size() ? static_cast<MaterialPropertyType>(group.propertyTypes[i])
-                                                        : MaterialPropertyType::Float;
-                d.binding = static_cast<u32>(i);
-                d.offset = i < group.propertyOffsets.Size() ? group.propertyOffsets[i] : 0u;
-                d.size = i < group.propertySizes.Size() ? group.propertySizes[i] : 0u;
-                defs.PushBack(d);
-            }
-            material->SetEffectGroup(group.name.AsView(), static_cast<shaders::ShaderFlags>(group.flag),
-                                     group.gateIndex, group.uniformSize,
-                                     Span<const MaterialPropertyDef>{defs.Data(), defs.Size()},
-                                     Span<const u8>{group.values.Data(), group.values.Size()});
-        }
+        RestoreEffectGroups(src, *material);
 
         material->pipeline = PipelineConfig{};
         material->pipeline.shaderName = material->shaderName.AsView();

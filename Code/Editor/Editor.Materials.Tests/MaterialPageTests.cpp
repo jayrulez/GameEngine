@@ -4,7 +4,8 @@
 // MaterialEditorPage tests: which row a property gets is a pure function of its declared type;
 // then the page from the preview pages' markup over a PBR material in a project, without a host
 // (no preview): its rows laid out from its shader's table (the material's, its properties, its
-// textures), an edit one undo step, and the preview's shape kept per material.
+// textures, a section per effect group), an edit one undo step, and the preview's shape kept per
+// material.
 
 #include <doctest/doctest.h>
 
@@ -15,6 +16,7 @@ import foundation.content;
 import foundation.settings;
 import foundation.materials;
 import foundation.materials.resource; // MaterialSource (what the tests read back)
+import foundation.shaders;            // the Wind effect's table, parsed as the cook parses wind.hlsli
 import foundation.texture.resource;
 import materials.pipeline;
 import foundation.gui;
@@ -305,4 +307,126 @@ TEST_CASE("material page: a shader that has not cooked is refused, saying so; th
     REQUIRE(notices.Size() == 1u);
     CHECK(notices[0].AsView().ContainsIgnoreCase(u8"has not cooked"));
     bed.context.OnNotice = {};
+}
+
+// A material's effect groups (Specs/wind-for-every-shader.md): a section each, titled by the
+// effect, its rows from the group's parameters, its values the group's, edited through the same
+// undo as every other row. Without a host the page has no shader system, so the rows are the
+// group's own layout (no ranges) and no group is added for a material that lacks one.
+namespace
+{
+    foundation::shaders::ShaderEffect WindTable()
+    {
+        const foundation::shaders::ShaderEffectBlock block = foundation::shaders::ParseShaderEffect(
+            u8"effect Wind : WIND\n"
+            u8"{\n"
+            u8"    float Strength = 0 [0, 2] (gate);\n"
+            u8"    float Speed = 1 [0, 20];\n"
+            u8"    float Height = 1 [0.01, 100];\n"
+            u8"}\n");
+        REQUIRE(block.IsOk());
+        return block.effect;
+    }
+
+    // A float of an effect group in the material's source; -1 when it has none such.
+    f32 SourceEffectFloat(const materials::MaterialSource& s, StringView effect, StringView name)
+    {
+        for (const materials::MaterialEffectGroupSource& group : s.effects)
+        {
+            if (group.name.AsView() != effect)
+                continue;
+            for (usize i = 0; i < group.propertyNames.Size() && i < group.propertyOffsets.Size(); ++i)
+                if (group.propertyNames[i].AsView() == name && group.propertyOffsets[i] + sizeof(f32) <= group.values.Size())
+                {
+                    f32 v = 0.0f;
+                    MemCopy(&v, group.values.Data() + group.propertyOffsets[i], sizeof(v));
+                    return v;
+                }
+        }
+        return -1.0f;
+    }
+
+    // The bed's Wood as a PBR material carrying the Wind group, at a strength of 0.25.
+    void GiveWoodWind(Bed& bed)
+    {
+        RefPtr<materials::Material> card = materials::CreatePBR(u8"Wood");
+        card->AddEffectGroup(WindTable());
+        card->SetDefaultFloat(u8"Wind.Strength", 0.25f);
+        pipeline::MaterialAsset asset;
+        pipeline::MaterialImporter::Import(*card, Guid{}, asset);
+        REQUIRE(asset.source.effects.Size() == 1u);
+        REQUIRE(bed.wood->WriteObject(asset).IsOk());
+    }
+}
+
+TEST_CASE("material page: a material carrying the Wind group has a Wind section; one without has none")
+{
+    Bed bed;
+    {
+        UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+        REQUIRE(page->Source() != nullptr);
+        CHECK(page->Source()->effects.IsEmpty());
+        CHECK(page->EffectRows(u8"Wind") == nullptr);
+        CHECK(page->Sections().SectionCount() == 5u); // notices, the material, properties, textures, facts
+    }
+
+    GiveWoodWind(bed);
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    REQUIRE_FALSE(page->LoadFailed());
+    CHECK(page->Sections().SectionCount() == 6u); // and Wind
+    gui::PropertyBag* wind = page->EffectRows(u8"Wind");
+    REQUIRE(wind != nullptr);
+    const gui::PropertyInfo* strength = wind->FindInfo(u8"Strength");
+    REQUIRE(strength != nullptr);
+    CHECK(strength->Kind == gui::PropertyKind::Float);
+    CHECK(strength->DisplayName == String(u8"Strength"));
+    CHECK(wind->FindInfo(u8"Speed") != nullptr);
+    CHECK(wind->FindInfo(u8"Height") != nullptr);
+    CHECK(wind->GetValue(u8"Strength", 0).AsFloat() == doctest::Approx(0.25));
+    CHECK(wind->GetValue(u8"Speed", 0).AsFloat() == doctest::Approx(1.0));
+    // The shader's own rows keep no wind of theirs.
+    CHECK(page->PropertyRows().FindInfo(u8"WindStrength") == nullptr);
+}
+
+TEST_CASE("material page: an edit of Wind Strength lands in the source's Wind group, one undo step")
+{
+    Bed bed;
+    GiveWoodWind(bed);
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    gui::PropertyBag* wind = page->EffectRows(u8"Wind");
+    REQUIRE(wind != nullptr);
+    page->EditRow(*wind, u8"Strength", gui::Variant(0.8));
+    page->Refresh();
+    CHECK(page->IsDirty());
+    CHECK(SourceEffectFloat(*page->Source(), u8"Wind", u8"Strength") == doctest::Approx(0.8f));
+    CHECK(SourceEffectFloat(*page->Source(), u8"Wind", u8"Speed") == doctest::Approx(1.0f)); // its neighbours untouched
+    REQUIRE(page->EffectRows(u8"Wind") != nullptr);
+    CHECK(page->EffectRows(u8"Wind")->GetValue(u8"Strength", 0).AsFloat() == doctest::Approx(0.8));
+    page->Commands().Undo();
+    page->Refresh();
+    CHECK(SourceEffectFloat(*page->Source(), u8"Wind", u8"Strength") == doctest::Approx(0.25f));
+    REQUIRE(page->EffectRows(u8"Wind") != nullptr);
+    CHECK(page->EffectRows(u8"Wind")->GetValue(u8"Strength", 0).AsFloat() == doctest::Approx(0.25));
+}
+
+// The section follows the group across a shader switch: a built-in that declares WIND (all three
+// do) keeps the group, values and all, and the rows laid out again for the new shader keep its
+// section; the undo too. (A shader that does not declare WIND drops the group: the pipeline's
+// KeepDeclaredEffects, tested in Materials.Pipeline.Tests.)
+TEST_CASE("material page: a built-in switched keeps the Wind group and its section, and its undo too")
+{
+    Bed bed;
+    GiveWoodWind(bed);
+    UniquePtr<editor::MaterialEditorPage> page = bed.Open();
+    REQUIRE(page->EffectRows(u8"Wind") != nullptr);
+    // Unlit declares WIND as PBR does: the group, and its section, stay.
+    page->EditRow(page->MaterialRows(), u8"builtIn", gui::Variant(static_cast<i64>(1)));
+    page->Refresh();
+    CHECK(page->Source()->shaderName == StringView(u8"unlit"));
+    REQUIRE(page->EffectRows(u8"Wind") != nullptr);
+    CHECK(page->EffectRows(u8"Wind")->GetValue(u8"Strength", 0).AsFloat() == doctest::Approx(0.25));
+    page->Commands().Undo();
+    page->Refresh();
+    CHECK(page->Source()->shaderName == StringView(u8"forward"));
+    CHECK(page->EffectRows(u8"Wind") != nullptr);
 }

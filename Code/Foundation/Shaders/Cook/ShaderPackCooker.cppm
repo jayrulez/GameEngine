@@ -252,12 +252,13 @@ export namespace foundation::shaders
         }
     }
 
-    // Record every effect block the corpus's includes declare into the pack, so a game reads the
-    // effects' tables without the sources (Specs/wind-for-every-shader.md, "How 2b is built").
-    // A malformed block, or two effects sharing a name or a flag, is a cook error naming the
-    // file (and line). Returns false when any is.
-    inline bool CookShaderEffects(StringView shaderDir, CookedShaderPack& pack,
-                                  ShaderCookReport& report)
+    // Every effect block the library's includes declare (Specs/wind-for-every-shader.md), into
+    // `out`: what the cook records in the pack, and where a tool with no shader system (the
+    // headless MCP host's material_set_shader) reads the effects' tables from. A malformed block,
+    // or two effects sharing a name or a flag, is left out with an error naming the file (and
+    // line) in `errors`. Returns false when any is.
+    inline bool CollectShaderLibraryEffects(StringView shaderDir, ShaderEffectLibrary& out,
+                                            Array<String>& errors)
     {
         Array<String> files;
         CollectShaderLibraryFiles(shaderDir, StringView{}, 0, files);
@@ -270,7 +271,7 @@ export namespace foundation::shaders
             const Result<Array<byte>> bytes = ReadFile(path.AsView());
             if (!bytes.HasValue())
             {
-                report.errors.PushBack(FormatError(file.AsView(), u8"could not read source"));
+                errors.PushBack(FormatError(file.AsView(), u8"could not read source"));
                 ok = false;
                 continue;
             }
@@ -288,20 +289,41 @@ export namespace foundation::shaders
                     {
                         String where(file.AsView());
                         where += Format(u8":{}", error.line);
-                        report.errors.PushBack(
-                            FormatError(where.AsView(), error.message.AsView()));
+                        errors.PushBack(FormatError(where.AsView(), error.message.AsView()));
                     }
                     ok = false;
                     continue;
                 }
                 String error;
-                if (!pack.AddEffect(Move(block.effect), error))
+                if (!out.Add(Move(block.effect), error))
                 {
                     String where(file.AsView());
                     where += Format(u8":{}", block.firstLine);
-                    report.errors.PushBack(FormatError(where.AsView(), error.AsView()));
+                    errors.PushBack(FormatError(where.AsView(), error.AsView()));
                     ok = false;
                 }
+            }
+        }
+        return ok;
+    }
+
+    // Record every effect block the corpus's includes declare into the pack, so a game reads the
+    // effects' tables without the sources (Specs/wind-for-every-shader.md, "How 2b is built").
+    // A malformed block, or two effects sharing a name or a flag, is a cook error naming the
+    // file (and line). Returns false when any is.
+    inline bool CookShaderEffects(StringView shaderDir, CookedShaderPack& pack,
+                                  ShaderCookReport& report)
+    {
+        ShaderEffectLibrary library;
+        bool ok = CollectShaderLibraryEffects(shaderDir, library, report.errors);
+        for (const ShaderEffect& effect : library.All())
+        {
+            // The library refused a second name or flag already, as the pack would.
+            String error;
+            if (!pack.AddEffect(effect, error))
+            {
+                report.errors.PushBack(FormatError(effect.name.AsView(), error.AsView()));
+                ok = false;
             }
         }
         return ok;

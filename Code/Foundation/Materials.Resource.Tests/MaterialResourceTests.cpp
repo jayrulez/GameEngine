@@ -674,3 +674,46 @@ TEST_CASE("material resource: with the shader system, the factory gives a materi
     RemoveDirectory(u8"scratch_mat_effect_db");
 }
 
+
+// An authoring tool with the effects' tables (the material page, material_set_shader) lays a
+// source's groups on them as the factory does a runtime material's: a declared effect the source
+// lacks a group for gains one at its defaults, a group carried keeps its values, a group whose
+// effect is not declared goes, and an empty library leaves the stored groups as they are.
+TEST_CASE("material source: AdoptDeclaredEffects gives a source the groups its shader declares, keeping values")
+{
+    shaders::ShaderEffectLibrary library;
+    String error;
+    REQUIRE(library.Add(WindTable(), error));
+    const shaders::ShaderFlags declares = shaders::ShaderFlags::Skinned | shaders::ShaderFlags::Wind;
+
+    // Made where no table was at hand (every new material): no group, then the effect's defaults.
+    MaterialSource fresh;
+    MaterialSource::FromMaterial(*CreatePBR(u8"fresh"), Guid{}, fresh);
+    REQUIRE(fresh.effects.IsEmpty());
+    AdoptDeclaredEffects(DefaultAllocator(), fresh, library.All(), declares);
+    REQUIRE(fresh.effects.Size() == 1u);
+    CHECK(fresh.effects[0].name == u8"Wind");
+    CHECK(fresh.effects[0].flag == static_cast<u32>(shaders::ShaderFlags::Wind));
+    CHECK(fresh.effects[0].propertyNames.Size() == 3u);
+    CHECK(FloatAt(fresh.effects[0].values, fresh.effects[0].propertyOffsets[0]) == doctest::Approx(0.0f)); // Strength: off
+    CHECK(FloatAt(fresh.effects[0].values, fresh.effects[0].propertyOffsets[1]) == doctest::Approx(1.0f)); // Speed
+
+    // A group carried keeps its values.
+    RefPtr<Material> windy = CreatePBR(u8"windy");
+    windy->AddEffectGroup(WindTable());
+    windy->SetDefaultFloat(u8"Wind.Strength", 0.6f);
+    MaterialSource kept;
+    MaterialSource::FromMaterial(*windy, Guid{}, kept);
+    AdoptDeclaredEffects(DefaultAllocator(), kept, library.All(), declares);
+    REQUIRE(kept.effects.Size() == 1u);
+    CHECK(FloatAt(kept.effects[0].values, kept.effects[0].propertyOffsets[0]) == doctest::Approx(0.6f));
+
+    // An empty library says nothing: the group stands.
+    const shaders::ShaderEffectLibrary none;
+    AdoptDeclaredEffects(DefaultAllocator(), kept, none.All(), shaders::ShaderFlags::Skinned);
+    CHECK(kept.effects.Size() == 1u);
+
+    // A shader that does not declare WIND: the group goes.
+    AdoptDeclaredEffects(DefaultAllocator(), kept, library.All(), shaders::ShaderFlags::Skinned);
+    CHECK(kept.effects.IsEmpty());
+}

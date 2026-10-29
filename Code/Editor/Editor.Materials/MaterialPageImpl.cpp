@@ -28,6 +28,7 @@ import foundation.texture.resource;
 import foundation.resource;
 import foundation.shaders;
 import foundation.shaders.resource;
+import foundation.shaders.system;
 import foundation.render;
 import engine.render;
 import foundation.gui;
@@ -91,6 +92,36 @@ namespace editor
             for (usize i = 0; i < items.Size(); ++i)
                 info.Choices.PushBack(gui::PropertyChoice{String(items[i]), static_cast<i64>(i)});
         }
+        // A row's value set only when it differs, so a row the user is on is not disturbed.
+        void ShowIfChanged(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
+        {
+            if (rows.FindInfo(path) == nullptr)
+                return;
+            const gui::Variant now = rows.GetValue(path, 0);
+            if (now.GetType() != value.GetType() || now.Compare(value) != 0)
+                rows.SetValue(path, 0, value);
+        }
+        // What the rows are laid out from: the shader's property names, then each effect group's
+        // `Effect.Property` names. A change of it (a shader switched, its undo) lays them out again.
+        Array<String> RowLayoutOf(const materials::MaterialSource& s)
+        {
+            Array<String> names;
+            for (const String& name : s.propertyNames)
+                names.PushBack(String(name.AsView()));
+            for (const materials::MaterialEffectGroupSource& group : s.effects)
+                for (const String& name : group.propertyNames)
+                    names.PushBack(Format(u8"{}.{}", group.name, name));
+            return names;
+        }
+        bool SameLayout(const Array<String>& a, const Array<String>& b)
+        {
+            if (a.Size() != b.Size())
+                return false;
+            for (usize i = 0; i < a.Size(); ++i)
+                if (a[i].AsView() != b[i].AsView())
+                    return false;
+            return true;
+        }
         // A number's part by its name in a group (x, y, z, w); -1 when it is none.
         i32 PartIndex(StringView part)
         {
@@ -125,6 +156,11 @@ namespace editor
             }
             AddPreviewControls();
         }
+        // The renderer's shader system serves the effects' tables: a group's ranges, and the group
+        // of an effect the material's shader declares that the material does not carry yet.
+        if (Services().host != nullptr)
+            if (auto* render = Services().host->Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+                m_effectSystem = render->Shaders();
         BindShader(); // a material on a shader asset shows the shader's current properties
         BuildPreviewScene();
         LoadPreviewPref(); // the shape or mesh this material was last shown on
@@ -255,6 +291,8 @@ namespace editor
         m_materialRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
         m_propertyRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
         m_textureRows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+        m_effectRows.Clear();
+        m_effectRowNames.Clear();
         if (Asset() == nullptr)
             return;
         const materials::MaterialSource& src = Asset()->source;
@@ -283,91 +321,66 @@ namespace editor
             const auto type = static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]);
             const MaterialPropertyRow row = MaterialPropertyRowFor(type);
             const StringView name = src.propertyNames[i].AsView();
-            const String shown = PrettifyPropertyName(name);
-            gui::PropertyBag& rows = row == MaterialPropertyRow::Texture ? *m_textureRows : *m_propertyRows;
-            gui::PropertyInfo* info = nullptr;
-            switch (row)
-            {
-            case MaterialPropertyRow::None:
+            if (row == MaterialPropertyRow::None)
                 continue; // a sampler has no value to edit (the material system binds it)
-            case MaterialPropertyRow::Number:
+            if (row == MaterialPropertyRow::Texture)
             {
-                info = &rows.Add(name, gui::PropertyKind::Float);
-                // A shader asset's property declares its range; the standard PBR factors are 0..1
-                // (the normal scale 0..2); any other float is unbounded.
-                bool ranged = false;
-                for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
-                    if (p.name.AsView() == name && p.hasRange)
-                    {
-                        info->HasRange = true;
-                        info->Min = p.rangeMin;
-                        info->Max = p.rangeMax;
-                        ranged = true;
-                    }
-                const bool zeroToOne = name == u8"Metallic" || name == u8"Roughness" || name == u8"OcclusionStrength" || name == u8"AlphaCutoff";
-                if (!ranged && (zeroToOne || name == u8"NormalScale"))
-                {
-                    info->HasRange = true;
-                    info->Min = 0.0;
-                    info->Max = zeroToOne ? 1.0 : 2.0;
-                }
-                info->Step = 0.01;
-                if (info->HasRange)
-                    info->Hint = String(u8"slider"); // over its range, as the old page's were
-                break;
-            }
-            case MaterialPropertyRow::Numbers2:
-            case MaterialPropertyRow::Numbers3:
-            case MaterialPropertyRow::Numbers4:
-            {
-                const i32 count = row == MaterialPropertyRow::Numbers2 ? 2 : row == MaterialPropertyRow::Numbers3 ? 3 : 4;
-                info = &rows.Add(name, gui::PropertyKind::Group);
-                info->Hint = Format(u8"Float{}", count);
-                const StringView parts[] = {u8"x", u8"y", u8"z", u8"w"};
-                for (i32 p = 0; p < count; ++p)
-                    rows.Add(gui::JoinPropertyPath(name, parts[p]).AsView(), gui::PropertyKind::Float).Step = 0.01;
-                break;
-            }
-            case MaterialPropertyRow::Integer:
-            {
-                info = &rows.Add(name, gui::PropertyKind::Integer);
-                for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
-                    if (p.name.AsView() == name && p.hasRange)
-                    {
-                        info->HasRange = true;
-                        info->Min = p.rangeMin;
-                        info->Max = p.rangeMax;
-                    }
-                break;
-            }
-            case MaterialPropertyRow::Color:
-                info = &rows.Add(name, gui::PropertyKind::Color);
-                break;
-            case MaterialPropertyRow::ColorWithIntensity:
-            {
-                // A colour that may pass white: its colour as entered, its intensity in w (the
-                // grid's HDR colour, as a reflected one's parts are named).
-                info = &rows.Add(name, gui::PropertyKind::Group);
-                info->Hint = String(u8"ColorHdr");
-                rows.Add(gui::JoinPropertyPath(name, u8"color").AsView(), gui::PropertyKind::Color).ShowsAlpha = false;
-                gui::PropertyInfo& intensity = rows.Add(gui::JoinPropertyPath(name, u8"intensity").AsView(), gui::PropertyKind::Float);
-                intensity.HasRange = true;
-                intensity.Min = 0.0;
-                intensity.Max = 1e6;
-                intensity.Step = 0.05;
-                break;
-            }
-            case MaterialPropertyRow::Texture:
                 // A texture or a render texture (a monitor's screen, a mirror): what makes a
                 // Texture, asked of the builders.
-                info = &rows.Add(name, gui::PropertyKind::Reference);
-                info->ReferenceType = &foundation::texture::Texture::StaticType();
-                break;
+                gui::PropertyInfo& info = m_textureRows->Add(name, gui::PropertyKind::Reference);
+                info.ReferenceType = &foundation::texture::Texture::StaticType();
+                info.DisplayName = PrettifyPropertyName(name);
+                continue;
             }
-            if (info != nullptr)
-                info->DisplayName = shown;
+            // A shader asset's property declares its range.
+            const foundation::shaders::ShaderProperty* declared = nullptr;
+            for (const foundation::shaders::ShaderProperty& p : m_shaderTable)
+                if (p.name.AsView() == name)
+                    declared = &p;
+            AddValueRow(*m_propertyRows, name, row, declared);
+            gui::PropertyInfo* info = m_propertyRows->FindInfo(name);
+            if (info == nullptr)
+                continue;
+            // The standard PBR factors are 0..1 (the normal scale 0..2); any other float a shader
+            // gives no range is unbounded.
+            const bool zeroToOne = name == u8"Metallic" || name == u8"Roughness" || name == u8"OcclusionStrength" || name == u8"AlphaCutoff";
+            if (row == MaterialPropertyRow::Number && !info->HasRange && (zeroToOne || name == u8"NormalScale"))
+            {
+                info->HasRange = true;
+                info->Min = 0.0;
+                info->Max = zeroToOne ? 1.0 : 2.0;
+                info->Hint = String(u8"slider");
+            }
+            info->DisplayName = PrettifyPropertyName(name);
         }
-        gui::PropertyBag* const bags[] = {m_materialRows.Get(), m_propertyRows.Get(), m_textureRows.Get()};
+
+        // Each effect group the material carries (Wind), a section of its own: its rows from the
+        // effect's table, as a custom shader's properties are, with the table's ranges when the
+        // page has the shader system serving it; else the group's own layout, unbounded.
+        for (const materials::MaterialEffectGroupSource& group : src.effects)
+        {
+            UniquePtr<gui::PropertyBag> rows = MakeUnique<gui::PropertyBag>(Allocator(), Allocator());
+            const foundation::shaders::ShaderEffect* table = m_effectSystem != nullptr ? m_effectSystem->FindEffect(group.name.AsView()) : nullptr;
+            for (usize i = 0; i < group.propertyNames.Size() && i < group.propertyTypes.Size(); ++i)
+            {
+                const StringView name = group.propertyNames[i].AsView();
+                const MaterialPropertyRow row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(group.propertyTypes[i]));
+                if (row == MaterialPropertyRow::None || row == MaterialPropertyRow::Texture)
+                    continue; // an effect takes uniforms only
+                AddValueRow(*rows, name, row, table != nullptr ? table->FindProperty(name) : nullptr);
+                if (gui::PropertyInfo* info = rows->FindInfo(name))
+                    info->DisplayName = PrettifyPropertyName(name);
+            }
+            m_effectRows.PushBack(Move(rows));
+            m_effectRowNames.PushBack(String(group.name.AsView()));
+        }
+
+        Array<gui::PropertyBag*> bags;
+        bags.PushBack(m_materialRows.Get());
+        bags.PushBack(m_propertyRows.Get());
+        bags.PushBack(m_textureRows.Get());
+        for (const UniquePtr<gui::PropertyBag>& rows : m_effectRows)
+            bags.PushBack(rows.Get());
         for (gui::PropertyBag* rows : bags)
         {
             rows->SetOnCommit([self, rows](const gui::PropertyBag::Commit& commit)
@@ -391,6 +404,81 @@ namespace editor
         AddSection(u8"material", u8"Material", *m_materialRows);
         AddSection(u8"properties", u8"Properties", *m_propertyRows);
         AddSection(u8"textures", u8"Textures", *m_textureRows);
+        // After the shader's own: an effect's values are the material's, not its shader's.
+        for (usize g = 0; g < m_effectRows.Size(); ++g)
+            AddSection(Format(u8"effect-{}", m_effectRowNames[g]).AsView(), m_effectRowNames[g].AsView(), *m_effectRows[g]);
+    }
+
+    gui::PropertyBag* MaterialEditorPage::EffectRows(StringView effect) noexcept
+    {
+        for (usize g = 0; g < m_effectRowNames.Size(); ++g)
+            if (m_effectRowNames[g].AsView() == effect)
+                return m_effectRows[g].Get();
+        return nullptr;
+    }
+
+    void MaterialEditorPage::AddValueRow(gui::PropertyBag& rows, StringView path, MaterialPropertyRow row,
+                                         const foundation::shaders::ShaderProperty* declared)
+    {
+        const bool ranged = declared != nullptr && declared->hasRange;
+        switch (row)
+        {
+        case MaterialPropertyRow::Number:
+        {
+            gui::PropertyInfo& info = rows.Add(path, gui::PropertyKind::Float);
+            if (ranged)
+            {
+                info.HasRange = true;
+                info.Min = declared->rangeMin;
+                info.Max = declared->rangeMax;
+                info.Hint = String(u8"slider"); // over its range, as the old page's were
+            }
+            info.Step = 0.01;
+            break;
+        }
+        case MaterialPropertyRow::Numbers2:
+        case MaterialPropertyRow::Numbers3:
+        case MaterialPropertyRow::Numbers4:
+        {
+            const i32 count = row == MaterialPropertyRow::Numbers2 ? 2 : row == MaterialPropertyRow::Numbers3 ? 3 : 4;
+            gui::PropertyInfo& info = rows.Add(path, gui::PropertyKind::Group);
+            info.Hint = Format(u8"Float{}", count);
+            const StringView parts[] = {u8"x", u8"y", u8"z", u8"w"};
+            for (i32 p = 0; p < count; ++p)
+                rows.Add(gui::JoinPropertyPath(path, parts[p]).AsView(), gui::PropertyKind::Float).Step = 0.01;
+            break;
+        }
+        case MaterialPropertyRow::Integer:
+        {
+            gui::PropertyInfo& info = rows.Add(path, gui::PropertyKind::Integer);
+            if (ranged)
+            {
+                info.HasRange = true;
+                info.Min = declared->rangeMin;
+                info.Max = declared->rangeMax;
+            }
+            break;
+        }
+        case MaterialPropertyRow::Color:
+            (void)rows.Add(path, gui::PropertyKind::Color);
+            break;
+        case MaterialPropertyRow::ColorWithIntensity:
+        {
+            // A colour that may pass white: its colour as entered, its intensity in w (the
+            // grid's HDR colour, as a reflected one's parts are named).
+            gui::PropertyInfo& info = rows.Add(path, gui::PropertyKind::Group);
+            info.Hint = String(u8"ColorHdr");
+            rows.Add(gui::JoinPropertyPath(path, u8"color").AsView(), gui::PropertyKind::Color).ShowsAlpha = false;
+            gui::PropertyInfo& intensity = rows.Add(gui::JoinPropertyPath(path, u8"intensity").AsView(), gui::PropertyKind::Float);
+            intensity.HasRange = true;
+            intensity.Min = 0.0;
+            intensity.Max = 1e6;
+            intensity.Step = 0.05;
+            break;
+        }
+        default:
+            break; // a texture's row is a slot (BuildRows); a sampler has none
+        }
     }
 
     void MaterialEditorPage::ShowValues()
@@ -398,83 +486,45 @@ namespace editor
         if (Asset() == nullptr)
             return;
         const materials::MaterialSource& src = Asset()->source;
-        const auto show = [](gui::PropertyBag& rows, StringView path, const gui::Variant& value)
-        {
-            if (rows.FindInfo(path) == nullptr)
-                return;
-            const gui::Variant now = rows.GetValue(path, 0);
-            if (now.GetType() != value.GetType() || now.Compare(value) != 0)
-                rows.SetValue(path, 0, value);
-        };
-        show(*m_materialRows, u8"shader", gui::Variant(GuidText(src.shaderId)));
+        ShowIfChanged(*m_materialRows, u8"shader", gui::Variant(GuidText(src.shaderId)));
         const materials::BuiltinShadingInfo* builtin = materials::FindBuiltinShadingByShader(src.shaderName.AsView());
-        show(*m_materialRows, u8"builtIn", gui::Variant(static_cast<i64>(builtin != nullptr ? builtin->shading : materials::BuiltinShading::Pbr)));
+        ShowIfChanged(*m_materialRows, u8"builtIn", gui::Variant(static_cast<i64>(builtin != nullptr ? builtin->shading : materials::BuiltinShading::Pbr)));
         if (gui::PropertyInfo* builtIn = m_materialRows->FindInfo(u8"builtIn"); builtIn != nullptr && builtIn->Visible != src.shaderId.IsNil())
         {
             builtIn->Visible = src.shaderId.IsNil(); // a built-in only while it is on no shader asset
             m_materialRows->PropertiesChanged();
         }
         for (const PipelineRow& row : kPipelineRows)
-            show(*m_materialRows, row.path, gui::Variant(static_cast<i64>(row.field(const_cast<materials::MaterialSource&>(src)))));
+            ShowIfChanged(*m_materialRows, row.path, gui::Variant(static_cast<i64>(row.field(const_cast<materials::MaterialSource&>(src)))));
         for (usize i = 0; i < src.propertyNames.Size() && i < src.propertyTypes.Size(); ++i)
         {
             const StringView name = src.propertyNames[i].AsView();
-            switch (MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i])))
-            {
-            case MaterialPropertyRow::Number:
-            {
-                f32 v = 0.0f;
-                ReadUniform(name, &v, sizeof(v));
-                show(*m_propertyRows, name, gui::Variant(static_cast<f64>(v)));
-                break;
-            }
-            case MaterialPropertyRow::Numbers2:
-            case MaterialPropertyRow::Numbers3:
-            case MaterialPropertyRow::Numbers4:
-            {
-                Float4 v{0, 0, 0, 0};
-                const auto row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]));
-                const i32 count = row == MaterialPropertyRow::Numbers2 ? 2 : row == MaterialPropertyRow::Numbers3 ? 3 : 4;
-                ReadUniform(name, &v, sizeof(f32) * static_cast<usize>(count));
-                const f32 parts[] = {v.x, v.y, v.z, v.w};
-                const StringView names[] = {u8"x", u8"y", u8"z", u8"w"};
-                for (i32 p = 0; p < count; ++p)
-                    show(*m_propertyRows, gui::JoinPropertyPath(name, names[p]).AsView(), gui::Variant(static_cast<f64>(parts[p])));
-                break;
-            }
-            case MaterialPropertyRow::Integer:
-            {
-                i32 v = 0;
-                ReadUniform(name, &v, sizeof(v));
-                show(*m_propertyRows, name, gui::Variant(static_cast<i64>(v)));
-                break;
-            }
-            case MaterialPropertyRow::Color:
-            {
-                Float4 v{1, 1, 1, 1};
-                ReadUniform(name, &v, sizeof(v));
-                show(*m_propertyRows, name, gui::Variant(Color{v.x, v.y, v.z, v.w}));
-                break;
-            }
-            case MaterialPropertyRow::ColorWithIntensity:
-            {
-                Float4 v{1, 1, 1, 1};
-                ReadUniform(name, &v, sizeof(v));
-                show(*m_propertyRows, gui::JoinPropertyPath(name, u8"color").AsView(), gui::Variant(Color{v.x, v.y, v.z, 1.0f}));
-                show(*m_propertyRows, gui::JoinPropertyPath(name, u8"intensity").AsView(), gui::Variant(static_cast<f64>(v.w)));
-                break;
-            }
-            case MaterialPropertyRow::Texture:
+            const MaterialPropertyRow row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]));
+            if (row == MaterialPropertyRow::Texture)
             {
                 Guid bound;
                 for (usize t = 0; t < src.textureSlots.Size() && t < src.textureIds.Size(); ++t)
                     if (src.textureSlots[t].AsView() == name)
                         bound = src.textureIds[t];
-                show(*m_textureRows, name, gui::Variant(GuidText(bound)));
-                break;
+                ShowIfChanged(*m_textureRows, name, gui::Variant(GuidText(bound)));
+                continue;
             }
-            default:
-                break;
+            ShowValue(*m_propertyRows, name, name, row);
+        }
+        // Each effect group's values, addressed as `Effect.Property`.
+        for (usize g = 0; g < m_effectRows.Size(); ++g)
+        {
+            for (const materials::MaterialEffectGroupSource& group : src.effects)
+            {
+                if (group.name.AsView() != m_effectRowNames[g].AsView())
+                    continue;
+                for (usize i = 0; i < group.propertyNames.Size() && i < group.propertyTypes.Size(); ++i)
+                {
+                    const StringView name = group.propertyNames[i].AsView();
+                    const String qualified = Format(u8"{}.{}", group.name, name);
+                    ShowValue(*m_effectRows[g], name, qualified.AsView(),
+                              MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(group.propertyTypes[i])));
+                }
             }
         }
         // The preview bar's choices.
@@ -494,6 +544,57 @@ namespace editor
         }
     }
 
+    void MaterialEditorPage::ShowValue(gui::PropertyBag& rows, StringView path, StringView name, MaterialPropertyRow row)
+    {
+        switch (row)
+        {
+        case MaterialPropertyRow::Number:
+        {
+            f32 v = 0.0f;
+            ReadUniform(name, &v, sizeof(v));
+            ShowIfChanged(rows, path, gui::Variant(static_cast<f64>(v)));
+            break;
+        }
+        case MaterialPropertyRow::Numbers2:
+        case MaterialPropertyRow::Numbers3:
+        case MaterialPropertyRow::Numbers4:
+        {
+            Float4 v{0, 0, 0, 0};
+            const i32 count = row == MaterialPropertyRow::Numbers2 ? 2 : row == MaterialPropertyRow::Numbers3 ? 3 : 4;
+            ReadUniform(name, &v, sizeof(f32) * static_cast<usize>(count));
+            const f32 parts[] = {v.x, v.y, v.z, v.w};
+            const StringView names[] = {u8"x", u8"y", u8"z", u8"w"};
+            for (i32 p = 0; p < count; ++p)
+                ShowIfChanged(rows, gui::JoinPropertyPath(path, names[p]).AsView(), gui::Variant(static_cast<f64>(parts[p])));
+            break;
+        }
+        case MaterialPropertyRow::Integer:
+        {
+            i32 v = 0;
+            ReadUniform(name, &v, sizeof(v));
+            ShowIfChanged(rows, path, gui::Variant(static_cast<i64>(v)));
+            break;
+        }
+        case MaterialPropertyRow::Color:
+        {
+            Float4 v{1, 1, 1, 1};
+            ReadUniform(name, &v, sizeof(v));
+            ShowIfChanged(rows, path, gui::Variant(Color{v.x, v.y, v.z, v.w}));
+            break;
+        }
+        case MaterialPropertyRow::ColorWithIntensity:
+        {
+            Float4 v{1, 1, 1, 1};
+            ReadUniform(name, &v, sizeof(v));
+            ShowIfChanged(rows, gui::JoinPropertyPath(path, u8"color").AsView(), gui::Variant(Color{v.x, v.y, v.z, 1.0f}));
+            ShowIfChanged(rows, gui::JoinPropertyPath(path, u8"intensity").AsView(), gui::Variant(static_cast<f64>(v.w)));
+            break;
+        }
+        default:
+            break;
+        }
+    }
+
     void MaterialEditorPage::EditRow(gui::PropertyBag& rows, StringView path, const gui::Variant& value)
     {
         rows.SetValue(path, 0, value); // as the grid's commit leaves it
@@ -504,7 +605,6 @@ namespace editor
     {
         if (Asset() == nullptr)
             return;
-        MaterialEditorPage* self = this;
         m_reshow = true; // what the edit did, or did not, shown
         if (&rows == m_materialRows.Get())
         {
@@ -557,14 +657,45 @@ namespace editor
                       });
             return;
         }
-        // A property, or one part of it ("Tint.x", "Emissive.intensity").
+        // A value, or one part of it ("Tint.x", "Emissive.intensity").
         const StringView name = gui::ParentPropertyPath(path).IsEmpty() ? path : gui::ParentPropertyPath(path);
         const StringView part = name.Size() == path.Size() ? StringView{} : path.SubStr(name.Size() + 1, path.Size() - name.Size() - 1);
         const materials::MaterialSource& src = Asset()->source;
-        MaterialPropertyRow row = MaterialPropertyRow::None;
-        for (usize i = 0; i < src.propertyNames.Size() && i < src.propertyTypes.Size(); ++i)
-            if (src.propertyNames[i].AsView() == name)
-                row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]));
+        if (&rows == m_propertyRows.Get())
+        {
+            MaterialPropertyRow row = MaterialPropertyRow::None;
+            for (usize i = 0; i < src.propertyNames.Size() && i < src.propertyTypes.Size(); ++i)
+                if (src.propertyNames[i].AsView() == name)
+                    row = MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(src.propertyTypes[i]));
+            CommitValue(name, part, row, value);
+            return;
+        }
+        // An effect group's parameter, written as `Effect.Property` into the group's values.
+        for (usize g = 0; g < m_effectRows.Size(); ++g)
+        {
+            if (&rows != m_effectRows[g].Get())
+                continue;
+            for (const materials::MaterialEffectGroupSource& group : src.effects)
+            {
+                if (group.name.AsView() != m_effectRowNames[g].AsView())
+                    continue;
+                for (usize i = 0; i < group.propertyNames.Size() && i < group.propertyTypes.Size(); ++i)
+                {
+                    if (group.propertyNames[i].AsView() != name)
+                        continue;
+                    const String qualified = Format(u8"{}.{}", group.name, name);
+                    CommitValue(qualified.AsView(), part,
+                                MaterialPropertyRowFor(static_cast<materials::MaterialPropertyType>(group.propertyTypes[i])), value);
+                    return;
+                }
+            }
+            return;
+        }
+    }
+
+    void MaterialEditorPage::CommitValue(StringView name, StringView part, MaterialPropertyRow row, const gui::Variant& value)
+    {
+        MaterialEditorPage* self = this;
         const String key(name);
         switch (row)
         {
@@ -645,18 +776,13 @@ namespace editor
         (void)stream.Write(blob.Data(), blob.Size());
         (void)stream.Seek(0, SeekOrigin::Begin);
         const Guid shaderBefore = asset->source.shaderId;
-        Array<String> namesBefore;
-        for (const String& name : asset->source.propertyNames)
-            namesBefore.PushBack(String(name.AsView()));
+        const Array<String> layoutBefore = RowLayoutOf(asset->source);
         BinarySerializer ar(stream, SerializeMode::Read);
         asset->source.Serialize(ar);
         // A shader switched (or its switch undone) changes the rows and what the preview binds.
         if (asset->source.shaderId != shaderBefore)
             BindShader();
-        bool sameRows = namesBefore.Size() == asset->source.propertyNames.Size();
-        for (usize i = 0; sameRows && i < namesBefore.Size(); ++i)
-            sameRows = namesBefore[i].AsView() == asset->source.propertyNames[i].AsView();
-        m_rowsDirty = m_rowsDirty || !sameRows;
+        m_rowsDirty = m_rowsDirty || !SameLayout(layoutBefore, RowLayoutOf(asset->source));
         m_reshow = true;
         ShowNotices();
         RebuildPreviewMaterial();
@@ -698,14 +824,9 @@ namespace editor
         m_inGesture = false;
         // The rows follow a change of what the material holds (a built-in switched): the command's
         // Execute below applies `after` over itself, so it cannot see that change.
-        Array<String> namesBefore;
-        for (const String& name : Asset()->source.propertyNames)
-            namesBefore.PushBack(String(name.AsView()));
+        const Array<String> layoutBefore = RowLayoutOf(Asset()->source);
         mutate(Asset()->source);
-        bool sameRows = namesBefore.Size() == Asset()->source.propertyNames.Size();
-        for (usize i = 0; sameRows && i < namesBefore.Size(); ++i)
-            sameRows = namesBefore[i].AsView() == Asset()->source.propertyNames[i].AsView();
-        m_rowsDirty = m_rowsDirty || !sameRows;
+        m_rowsDirty = m_rowsDirty || !SameLayout(layoutBefore, RowLayoutOf(Asset()->source));
         Array<byte> after = SnapshotSource();
         // The mutation already ran; Execute() re-applies `after` (idempotent).
         (void)Commands().Execute(UniquePtr<IEditorCommand>(Allocator().New<EditMaterialCommand>(*this, mergeKey, Move(before), Move(after)), Allocator()));
@@ -921,6 +1042,21 @@ namespace editor
     void MaterialEditorPage::ReadUniform(StringView name, void* out, usize bytes) const
     {
         const materials::MaterialSource& s = Asset()->source;
+        StringView effect;
+        StringView parameter;
+        if (materials::SplitEffectPropertyName(name, effect, parameter))
+        {
+            for (const materials::MaterialEffectGroupSource& group : s.effects)
+            {
+                if (group.name.AsView() != effect)
+                    continue;
+                for (usize i = 0; i < group.propertyNames.Size() && i < group.propertyOffsets.Size(); ++i)
+                    if (group.propertyNames[i].AsView() == parameter && group.propertyOffsets[i] + bytes <= group.values.Size())
+                        MemCopy(out, group.values.Data() + group.propertyOffsets[i], bytes);
+                return;
+            }
+            return;
+        }
         for (usize i = 0; i < s.propertyNames.Size(); ++i)
         {
             if (s.propertyNames[i].AsView() != name)
@@ -936,8 +1072,23 @@ namespace editor
         }
     }
 
-    void MaterialEditorPage::WriteUniform(materials::MaterialSource& s, StringView name, const void* value, usize bytes)
+    void MaterialEditorPage::WriteUniform(materials::MaterialSource& s, StringView name, const void* value, usize bytes) const
     {
+        StringView effect;
+        StringView parameter;
+        if (materials::SplitEffectPropertyName(name, effect, parameter))
+        {
+            for (materials::MaterialEffectGroupSource& group : s.effects)
+            {
+                if (group.name.AsView() != effect)
+                    continue;
+                for (usize i = 0; i < group.propertyNames.Size() && i < group.propertyOffsets.Size(); ++i)
+                    if (group.propertyNames[i].AsView() == parameter && group.propertyOffsets[i] + bytes <= group.values.Size())
+                        MemCopy(group.values.Data() + group.propertyOffsets[i], value, bytes);
+                return;
+            }
+            return;
+        }
         for (usize i = 0; i < s.propertyNames.Size(); ++i)
         {
             if (s.propertyNames[i].AsView() != name)
@@ -985,9 +1136,13 @@ namespace editor
             m_reshow = true; // the row shows the shader it still has
             return;
         }
+        MaterialEditorPage* self = this;
         ApplyEdit(u8"Shader", Function<void(materials::MaterialSource&)>{
-                                  [table, shader](materials::MaterialSource& s)
-                                  { pipeline::SetMaterialShader(s, shader, *table); }});
+                                  [self, table, shader](materials::MaterialSource& s)
+                                  {
+                                      pipeline::SetMaterialShader(s, shader, *table);
+                                      self->AdoptEffects(s, static_cast<foundation::shaders::ShaderFlags>(table->vertexVariantMask));
+                                  }});
     }
 
     void MaterialEditorPage::SwitchToBuiltIn(materials::BuiltinShading shading)
@@ -1001,9 +1156,13 @@ namespace editor
         {
             return;
         }
+        MaterialEditorPage* self = this;
         ApplyEdit(u8"Shader", Function<void(materials::MaterialSource&)>{
-                                  [shading](materials::MaterialSource& s)
-                                  { pipeline::SetMaterialBuiltInShader(s, shading); }});
+                                  [self, shading](materials::MaterialSource& s)
+                                  {
+                                      pipeline::SetMaterialBuiltInShader(s, shading);
+                                      self->AdoptEffects(s, materials::BuiltinShadingOf(shading).vertexVariants);
+                                  }});
     }
 
     void MaterialEditorPage::BindShader()
@@ -1011,8 +1170,18 @@ namespace editor
         m_shader = {};
         m_shaderVersion = 0;
         m_shaderTable.Clear();
-        if (Asset() == nullptr || Asset()->source.shaderId.IsNil())
+        m_shaderVertexVariants = foundation::shaders::ShaderFlags::None;
+        if (Asset() == nullptr)
         {
+            return;
+        }
+        if (Asset()->source.shaderId.IsNil())
+        {
+            // A built-in: its effect groups laid on the effects' tables, not an edit, as a shader
+            // asset's layout below is.
+            const Array<String> before = RowLayoutOf(Asset()->source);
+            AdoptEffects(Asset()->source, VertexVariantsOf(Asset()->source));
+            m_rowsDirty = m_rowsDirty || !SameLayout(before, RowLayoutOf(Asset()->source));
             return;
         }
         const Guid id = Asset()->source.shaderId;
@@ -1029,11 +1198,29 @@ namespace editor
             return;
         }
         m_shaderTable = table->Properties();
+        m_shaderVertexVariants = static_cast<foundation::shaders::ShaderFlags>(table->vertexVariantMask);
         // Not an edit: the material follows its shader, as the cook lays it out.
         materials::MaterialSource laid;
         pipeline::LayOutMaterialByShader(Asset()->source, *table, laid);
         pipeline::AssignMaterialSource(Asset()->source, laid);
+        AdoptEffects(Asset()->source, m_shaderVertexVariants);
         m_rowsDirty = true;
+    }
+
+    void MaterialEditorPage::AdoptEffects(materials::MaterialSource& source, foundation::shaders::ShaderFlags vertexVariants)
+    {
+        // Without the shader system (no host: a test) the groups the source carries stand.
+        if (m_effectSystem == nullptr)
+            return;
+        materials::AdoptDeclaredEffects(Allocator(), source, m_effectSystem->Effects().All(), vertexVariants);
+    }
+
+    foundation::shaders::ShaderFlags MaterialEditorPage::VertexVariantsOf(const materials::MaterialSource& source) const
+    {
+        if (!source.shaderId.IsNil())
+            return m_shaderVertexVariants;
+        const materials::BuiltinShadingInfo* builtin = materials::FindBuiltinShadingByShader(source.shaderName.AsView());
+        return builtin != nullptr ? builtin->vertexVariants : foundation::shaders::ShaderFlags::None;
     }
 
     const TypeInfo* MaterialEditorPageFactory::PrimaryType() const

@@ -559,17 +559,32 @@ MultiMesh path - no renderer of their own. Spec: `Documentation/Specs/terrain-ve
   plane with the splat brush's stroke model, one command per stroke, the source written back on
   Save; every stamp hands the manager the footprint rect it touched
   (`InvalidateFootprint`), so only those chunks regrow while painting.
-- **Wind (P1, 2026-09-22).** `ShaderFlags::Wind` (`WIND`, declared in the forward, shadow-depth
-  and pick vertex shaders' `variants:` lines, so the cooked pack carries the lattice): a
-  world-space sway in `wind.hlsli`, `sin(time * WindSpeed + hash(world XZ)) * WindStrength *
-  mask^2` with `mask = saturate(localY / WindHeight)` (roots at local y <= 0 stay, tips move),
-  applied to the current and the previous-frame position so motion vectors follow it. The three
-  parameters are MATERIAL properties in the forward set-2 cbuffer's spare lanes (offsets 24, 28
-  and 60 - the block stays 64 bytes, `CreatePBR` declares them at 0 / 0 / 1), so a material
-  without them reads zeros; the renderer selects the variant only when a material's
-  `WindStrength` default is above zero (`MeshRenderer::MaterialWantsWind`), binding set 2 to the
-  depth and pick passes for it as it does for masked casters, so every other material is
-  byte-identical to before. Time: the SCENE's clock - `EnvironmentSystem` accumulates the
+- **Wind (P1, 2026-09-22; an effect for every shader 2026-10-29).** `ShaderFlags::Wind` (`WIND`,
+  declared in the forward, shadow-depth and pick vertex shaders' `variants:` lines, so the cooked
+  pack carries the lattice): a world-space sway in `wind.hlsli`, `sin(time * Wind.Speed + hash(world
+  XZ)) * Wind.Strength * mask^2` with `mask = saturate(localY / Wind.Height)` (roots at local y <= 0
+  stay, tips move), applied to the current and the previous-frame position so motion vectors follow
+  it. Since 2026-10-29 (Specs/wind-for-every-shader.md) the three parameters are an EFFECT's, not
+  PBR's: `wind.hlsli` declares `effect Wind : WIND { float Strength = 0 [0, 2] (gate); float Speed
+  = 1 [0, 20]; float Height = 1 [0.01, 100]; }`, which expands to `ConstantBuffer<WindEffect> Wind :
+  register(b1, space2)`, binding 1 of the material's set, whatever the material's own layout. A
+  material whose shader declares `WIND` in its vertex variants (PBR, Phong, Unlit, the surface
+  shaders' generated programs, the low-level starter) carries a Wind group of its own
+  (`MaterialEffectGroup`, stored as `MaterialSource::effects`), apart from its shader's properties
+  and never in its buffer; the material system uploads it per instance at that binding. The
+  renderer's rule knows no wind: `MeshRenderer::MaterialEffectFlags` turns on the flag of every
+  group whose gate is above zero in the shared material's values, so a material whose Strength is
+  zero keeps its variants and binds nothing new. Per-entity and script overrides reach the values
+  as `Wind.Strength` (an override changes what an active effect draws with; the variant, and so the
+  shadow and pick variants, follow the shared material's gate). `DepthLikeFor` binds a windy draw's
+  material set to the depth and pick passes, as it does for masked casters, so the shadow and the
+  selection sway with the mesh. Before 2026-10-29 the three values were PBR properties
+  (`WindStrength`, `WindSpeed`, `WindHeight`) in spare lanes of its set-2 buffer, read by a
+  `wind.hlsli` that declared PBR's layout, and `MeshRenderer::MaterialWantsWind` chose the variant
+  from `WindStrength`, so only PBR could sway; PBR keeps those lanes as padding, and a stored
+  material migrates on read (the three properties go, a Wind group comes with their values). The
+  material page shows the group as a section of its own ("Wind"); `material_set_shader` lists it.
+  Every other material is byte-identical to before. Time: the SCENE's clock - `EnvironmentSystem` accumulates the
   scene's own dt (the context, group and scene time scales the scene manager composes) and
   only while the scene simulates (`Scene::SimulationEnabled`: the editing scene ticks every
   frame with simulation off, Simulate turns it on), so a paused or slowed scene's grass pauses

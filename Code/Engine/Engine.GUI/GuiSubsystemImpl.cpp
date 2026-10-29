@@ -117,12 +117,14 @@ namespace engine::gui
         }
 
         // An image's key in line with its texture's current product.
-        void Refresh(Image& entry)
+        // True when the texture has just arrived (an image that had none has one now).
+        bool Refresh(Image& entry)
         {
             foundation::texture::Texture* texture = entry.Texture.Get();
             const u64 uid = texture != nullptr && texture->View() != nullptr ? texture->Uid() : 0;
             if (uid == entry.Uid)
-                return;
+                return false;
+            const bool arrived = entry.Uid == 0 && uid != 0;
             if (uid != 0 && (!entry.Key || entry.Key->Width() != texture->Width() || entry.Key->Height() != texture->Height()))
             {
                 // A key's size is the image's natural size: another size takes a new key, the old one
@@ -136,6 +138,7 @@ namespace engine::gui
             }
             entry.Uid = uid;
             Tell(entry.Key.Get(), uid != 0 ? texture->View() : nullptr);
+            return arrived;
         }
 
         // A picture parsed again when its vector image's product changed.
@@ -223,7 +226,7 @@ namespace engine::gui
             entry = made.Get();
             state.Images.PushBack(Move(made));
         }
-        state.Refresh(*entry);
+        (void)state.Refresh(*entry);
         return entry->Uid != 0 ? entry->Key.Get() : nullptr;
     }
 
@@ -296,7 +299,7 @@ namespace engine::gui
     {
         State& state = *m_state;
         for (const UniquePtr<State::Image>& entry : state.Images)
-            state.Refresh(*entry);
+            m_imagesArrived = state.Refresh(*entry) || m_imagesArrived;
         for (const UniquePtr<State::Picture>& entry : state.Pictures)
             state.Refresh(*entry);
         bool changed = false;
@@ -935,6 +938,19 @@ namespace engine::gui
             m_render->Renderer->BeginFrame();
         if (m_resources->Poll())
             ApplySheets(); // a sheet (or a document) was cooked again: the GUI restyles
+        if (m_resources->TakeImagesArrived())
+        {
+            // A texture an image asked for before it loaded is here: every root lays out again, and
+            // the images that got nothing ask again.
+            if (m_screen.Root)
+                m_screen.Root->RequestLayoutTree();
+            for (const UniquePtr<ScreenTier>& tier : m_runTiers)
+                tier->Root->RequestLayoutTree();
+            for (const SceneTier& tier : m_sceneTiers)
+                tier.Root->RequestLayoutTree();
+            for (const UniquePtr<TextureRoot>& root : m_textureRoots)
+                root->Root->RequestLayoutTree();
+        }
         SyncPrompts();
         for (const UniquePtr<TextureRoot>& root : m_textureRoots)
             root->Seen = false;

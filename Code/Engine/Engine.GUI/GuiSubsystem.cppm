@@ -362,6 +362,14 @@ export namespace engine::gui
         /// Brings what was read in line with the current products (a re-cook, a failed load): true
         /// when a document or sheet read before has changed since the last poll.
         bool Poll();
+        /// Whether a texture an image asked for has arrived since the last call (an image asked
+        /// before it loaded got nothing, and asks again as it is laid out next).
+        [[nodiscard]] bool TakeImagesArrived() noexcept
+        {
+            const bool arrived = m_imagesArrived;
+            m_imagesArrived = false;
+            return arrived;
+        }
 
         /// The guid `path` names ("{guid}" or bare); false when it names none.
         [[nodiscard]] static bool ParseGuid(StringView path, Guid& out) noexcept;
@@ -369,6 +377,7 @@ export namespace engine::gui
     private:
         struct State;
         UniquePtr<State> m_state;
+        bool m_imagesArrived = false; // a texture an image asked for has arrived (TakeImagesArrived)
     };
 
     /// The guide to a game's touch controls, drawn over the game once a finger has touched the

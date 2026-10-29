@@ -193,9 +193,12 @@ namespace
         OneImage() : IResourceProvider(core::DefaultAllocator()) {}
         image::OwnedImageData img = MakeImage();
         int loads = 0;
+        bool lateReady = false; // "later.png": a picture that arrives after it was first asked for
         const image::ImageData* LoadImage(core::StringView path) override
         {
             ++loads;
+            if (path == core::StringView(u8"later.png"))
+                return lateReady ? &img : nullptr;
             return path == core::StringView(u8"pic.png") ? &img : nullptr;
         }
         bool LoadText(core::StringView, core::String&) override { return false; }
@@ -245,6 +248,48 @@ TEST_CASE("image: src loads through the GUI's resources when first needed; marku
     CHECK(img->GetFit() == ObjectFit::Cover);
     CHECK(img->GetObjectPositionName() == core::StringView(u8"100% 0%"));
     CHECK(img->GetImageColor().a == doctest::Approx(128.0f / 255.0f));
+}
+
+// A host's pictures load in their own time (a texture a game names, still loading): an image that got
+// nothing asks again as it is laid out next, and shows the picture once there is one.
+TEST_CASE("image: a picture not there yet is asked for again until it comes")
+{
+    OneImage resources;
+    auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+    root->SetSize(core::Float2{200.0f, 200.0f});
+    root->EditLayoutStyle([](LayoutStyle& s) { s.AlignItems = Align::Start; });
+    root->GetContext().SetResourceProvider(&resources);
+    auto w = Make<Image>();
+    w->SetSource(core::String(u8"later.png")); // the provider has none yet
+    root->AddChild(w.Get());
+    (void)root->UpdateLayout();
+    const int first = resources.loads;
+    CHECK(first >= 1);
+    CHECK(w->GetSize().x == doctest::Approx(0.0f));
+    w->RequestLayout(); // as the host does when a picture arrives
+    (void)root->UpdateLayout();
+    CHECK(resources.loads > first); // asked again
+    w->SetSource(core::String(u8"pic.png"));
+    (void)root->UpdateLayout();
+    CHECK(w->GetSize().x == doctest::Approx(4.0f));
+    const int loaded = resources.loads;
+    w->RequestLayout();
+    (void)root->UpdateLayout();
+    CHECK(resources.loads == loaded); // once it has it, never again
+
+    // A box its style sizes (a HUD's portrait) takes the picture as the host lays out again when it
+    // arrives, though its size does not change.
+    auto boxed = Make<Image>();
+    boxed->EditLayoutStyle([](LayoutStyle& s) { s.Width = LayoutLength::Px(72.0f); s.Height = LayoutLength::Px(72.0f); });
+    boxed->SetSource(core::String(u8"later.png"));
+    root->AddChild(boxed.Get());
+    (void)root->UpdateLayout();
+    CHECK(boxed->GetDrawable() == nullptr);
+    resources.lateReady = true;
+    root->RequestLayoutTree(); // the host, as a texture arrives
+    (void)root->UpdateLayout();
+    CHECK(boxed->GetDrawable() != nullptr);
+    CHECK(boxed->NeedsRedraw()); // drawn again with it
 }
 
 TEST_CASE("image: image-color draws it tinted; white draws it as it is")

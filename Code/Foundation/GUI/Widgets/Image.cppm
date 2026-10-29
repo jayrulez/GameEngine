@@ -233,6 +233,14 @@ export namespace foundation::gui
         }
 
     protected:
+        // Laid out, it asks for its picture if it has none yet: a box its style sizes is never
+        // measured by its content, and a picture still loading when it was set comes this way, as
+        // the host lays out again when one arrives.
+        void OnLayout() override
+        {
+            LoadSource();
+            UIWidget::OnLayout();
+        }
         void OnDraw(DrawContext& ctx, const Rect& localBounds) override
         {
             (void)localBounds;
@@ -261,9 +269,15 @@ export namespace foundation::gui
             IResourceProvider* resources = GetResourceProvider();
             if (resources == nullptr)
                 return; // not in a GUI with one yet: tried again when drawn or measured
-            m_sourceLoaded = true;
             m_drawable = PictureDrawable(*resources, m_source.AsView(), MemoryAllocator()); // an SVG drawn as paths
-            RequestLayout();
+            // A picture the resources do not have yet (a texture still loading) is asked for again
+            // when drawn or measured next: the host lays out again once one arrives.
+            m_sourceLoaded = static_cast<bool>(m_drawable);
+            if (m_sourceLoaded)
+            {
+                RequestLayout(); // its size may follow the picture's
+                Invalidate();    // and a box sized by its style is drawn again, picture and all
+            }
         }
         [[nodiscard]] static f32 ParseNumber(core::StringView text)
         {

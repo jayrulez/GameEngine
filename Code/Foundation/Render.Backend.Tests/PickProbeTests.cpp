@@ -7,6 +7,8 @@
 //    entity index AND generation;
 //  - three identical cubes side by side (one instanced run): each column answers its own id -
 //    the instance-stepped ids are per instance, not per run;
+//  - a MultiMesh set of two cubes: both answer the set's one entity (its InstanceSet's id, the
+//    set's pick stream carrying ids 0);
 //  - a pixel where nothing is drawn answers with no hits (the clear is "nothing");
 //  - a rect over the whole view answers every entity once (unique hits);
 //  - a second request on the same view in the same frame is answered independently.
@@ -48,6 +50,7 @@ namespace
         f32 radius = 1.0f;
         u32 entityIndex = 0;
         u32 generation = 0;
+        Array<Float4x4> instances; // non-empty: a MultiMesh set of these, one entity
     };
 
     struct Probe
@@ -125,6 +128,23 @@ namespace
             scene.SetAmbient(Float3{1.0f, 1.0f, 1.0f});
             for (const Item& item : items)
             {
+                if (!item.instances.IsEmpty())
+                {
+                    MultiMeshRenderData* set = scene.Add<MultiMeshRenderData>();
+                    set->multiMesh = true;
+                    set->key = 0x51C0u + item.entityIndex;
+                    set->transforms = item.instances.Data();
+                    set->instanceCount = static_cast<u32>(item.instances.Size());
+                    set->version = 1;
+                    set->mesh = item.mesh.Get();
+                    set->material = item.material.Get();
+                    set->rendererId = meshRenderer.RendererId();
+                    set->category = RenderCategories::Opaque;
+                    set->worldCenter = item.center;
+                    set->worldRadius = item.radius;
+                    set->entityId = EntityTag::Pack(item.entityIndex, item.generation);
+                    continue;
+                }
                 MeshRenderData* data = scene.Add<MeshRenderData>();
                 data->world = item.world;
                 data->worldCenter = item.center;
@@ -249,6 +269,20 @@ namespace
             cube.generation = 2;
             items.PushBack(cube);
         }
+        // A MultiMesh set of two cubes (entity 50 gen 4) in a row above: one entity for both.
+        const Float3 setAt[2] = {Float3{-1.6f, 3.2f, -7.0f}, Float3{1.6f, 3.2f, -7.0f}};
+        {
+            Item set;
+            set.mesh = rowMesh;
+            set.material = grey;
+            set.center = Float3{0.0f, 3.2f, -7.0f};
+            set.radius = 3.0f;
+            set.entityIndex = 50;
+            set.generation = 4;
+            set.instances.PushBack(Float4x4::Translation(setAt[0]));
+            set.instances.PushBack(Float4x4::Translation(setAt[1]));
+            items.PushBack(Move(set));
+        }
         const ViewCamera camera = Camera();
 
         Array<Probe> probes;
@@ -266,6 +300,8 @@ namespace
         add(PickRect{1, 1, 1, 1});                      // 5: nothing
         add(PickRect{0, 0, kSize, kSize});              // 6: everything
         add(PickRect{kSize / 2, kSize / 2, 1, 1});      // 7: centre again
+        add(PixelRect(camera, setAt[0]));               // 8: the set's first instance
+        add(PixelRect(camera, setAt[1]));               // 9: its second
 
         RenderAndPick(device, items, camera, probes);
 
@@ -282,13 +318,16 @@ namespace
         CHECK(HitIs(probes[3].result, 31, 2));
         CHECK(HitIs(probes[4].result, 32, 2));
         CHECK(probes[5].result.hits.IsEmpty()); // a corner nothing reached: no entity
-        CHECK(probes[6].result.hits.Size() == 5); // every entity once
+        CHECK(probes[6].result.hits.Size() == 6); // every entity once (the set is one)
         CHECK(Contains(probes[6].result, 7, 3));
         CHECK(Contains(probes[6].result, 200, 1));
         CHECK(Contains(probes[6].result, 30, 2));
         CHECK(Contains(probes[6].result, 31, 2));
         CHECK(Contains(probes[6].result, 32, 2));
+        CHECK(Contains(probes[6].result, 50, 4));
         CHECK(HitIs(probes[7].result, 7, 3));    // two requests, one frame, both answered
+        CHECK(HitIs(probes[8].result, 50, 4));   // both instances of the set answer its entity
+        CHECK(HitIs(probes[9].result, 50, 4));
     }
 }
 

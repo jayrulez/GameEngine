@@ -4,7 +4,6 @@
 // Render - foundation.render:mesh_renderer implementation unit (sec 3.2 / sec 10.6).
 module;
 #include "Core/Prelude.h"
-#include <bit>
 
 module foundation.render;
 
@@ -457,7 +456,7 @@ namespace foundation::render
         }
         // Skinned-MultiMesh POSE POOLS: M palettes (poseCount * boneCount matrices) per crowd, uploaded once
         // (no prev slab - crowd motion vectors are not produced). Each set's per-instance bone base is filled
-        // into its DataOffsets buffer in FillSkinnedMultiMeshOffsets once the pool base is known.
+        // into its draw offsets buffer in FillSkinnedMultiMeshOffsets once the pool base is known.
         for (const ExtractedScene* scene : scenes)
         for (RenderData* data : scene->Items())
         {
@@ -541,7 +540,7 @@ namespace foundation::render
         encoder.TransitionBuffer(m_boneDevice, rhi::ResourceState::CopyDst,
                                  rhi::ResourceState::ShaderRead);
         for (const ExtractedScene* scene : scenes)
-            FillSkinnedMultiMeshOffsets(*scene); // per-instance bone base into each skinned set's DataOffsets
+            FillSkinnedMultiMeshOffsets(*scene); // per-instance bone base into each skinned set's draw offsets
     }
 
     void MeshRenderer::ReleaseMultiMeshSet(MultiMeshSet& set)
@@ -564,6 +563,7 @@ namespace foundation::render
         set.activeInstanceBG = nullptr;
         RetireOrDrainBuffer(set.instanceBuf);
         RetireOrDrainBuffer(set.offsetsBuf);
+        RetireOrDrainBuffer(set.pickOffsetsBuf);
         RetireOrDrainBuffer(set.setBuf);
         set.capacity = 0;
         set.offsetsCapacity = 0;
@@ -660,17 +660,21 @@ namespace foundation::render
 
     bool MeshRenderer::EnsureRamp(u32 count)
     {
-        if (m_rampBuffer != nullptr && count <= m_rampCapacity)
+        if (m_rampBuffer != nullptr && m_pickRampBuffer != nullptr && count <= m_rampCapacity)
         {
             return true;
         }
-        // An in-flight frame may still reference the old ramp: retire when wired, drain else.
+        // An in-flight frame may still reference the old ramps: retire when wired, drain else.
         if (m_rampBuffer != nullptr)
         {
             RetireOrDrainBuffer(m_rampBuffer);
         }
+        if (m_pickRampBuffer != nullptr)
+        {
+            RetireOrDrainBuffer(m_pickRampBuffer);
+        }
         rhi::BufferDesc bd{};
-        bd.size = static_cast<u64>(count) * sizeof(GpuDataOffsets);
+        bd.size = static_cast<u64>(count) * sizeof(GpuDrawOffsets);
         bd.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
         bd.memory = rhi::MemoryLocation::CpuToGpu;
         bd.label = u8"mesh.multimesh.ramp";
@@ -680,13 +684,30 @@ namespace foundation::render
             m_rampCapacity = 0;
             return false;
         }
-        if (auto* p = static_cast<GpuDataOffsets*>(m_rampBuffer->Map()))
+        if (auto* p = static_cast<GpuDrawOffsets*>(m_rampBuffer->Map()))
         {
             for (u32 i = 0; i < count; ++i)
             {
-                p[i] = GpuDataOffsets{i, 0, 0, 0};
+                p[i] = GpuDrawOffsets{i, 0, 0, 0.0f};
             }
             m_rampBuffer->Unmap();
+        }
+        rhi::BufferDesc pd = bd;
+        pd.size = static_cast<u64>(count) * sizeof(GpuPickDrawOffsets);
+        pd.label = u8"mesh.multimesh.pick-ramp";
+        if (!m_device->CreateBuffer(pd, m_pickRampBuffer).IsOk())
+        {
+            m_pickRampBuffer = nullptr;
+            m_rampCapacity = 0;
+            return false;
+        }
+        if (auto* p = static_cast<GpuPickDrawOffsets*>(m_pickRampBuffer->Map()))
+        {
+            for (u32 i = 0; i < count; ++i)
+            {
+                p[i] = GpuPickDrawOffsets{i, 0, 0, 0};
+            }
+            m_pickRampBuffer->Unmap();
         }
         m_rampCapacity = count;
         return true;
@@ -857,7 +878,7 @@ namespace foundation::render
             }
         }
 
-        // Skinned crowds need a per-set DataOffsets buffer (dynamic per-instance bone bases). Allocate/grow
+        // Skinned crowds need a per-set draw offsets buffer (dynamic per-instance bone bases). Allocate/grow
         // it here; it's FILLED in FillSkinnedMultiMeshOffsets once the pose pool's bone base is known.
         set->skinned = (mm.posePool != nullptr && mm.poseCount > 0 && mm.boneCount > 0);
         if (set->skinned && (set->offsetsBuf == nullptr || mm.instanceCount > set->offsetsCapacity))
@@ -866,17 +887,33 @@ namespace foundation::render
             {
                 RetireOrDrainBuffer(set->offsetsBuf);
             }
+            if (set->pickOffsetsBuf != nullptr)
+            {
+                RetireOrDrainBuffer(set->pickOffsetsBuf);
+            }
             rhi::BufferDesc od{};
             // framesInFlight regions: the offsets are rewritten EVERY frame (dynamic bone bases), so each
             // frame writes its own region while the GPU reads the previous frame's - never the same bytes.
             od.size = static_cast<u64>(m_framesInFlight) * static_cast<u64>(mm.instanceCount) *
-                      sizeof(GpuDataOffsets);
+                      sizeof(GpuDrawOffsets);
             od.usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst;
             od.memory = rhi::MemoryLocation::CpuToGpu;
             od.label = u8"mesh.multimesh.offsets";
             if (!m_device->CreateBuffer(od, set->offsetsBuf).IsOk())
             {
                 set->offsetsBuf = nullptr;
+                set->offsetsCapacity = 0;
+                return;
+            }
+            rhi::BufferDesc pd = od;
+            pd.size = static_cast<u64>(m_framesInFlight) * static_cast<u64>(mm.instanceCount) *
+                      sizeof(GpuPickDrawOffsets);
+            pd.label = u8"mesh.multimesh.pick-offsets";
+            if (!m_device->CreateBuffer(pd, set->pickOffsetsBuf).IsOk())
+            {
+                RetireOrDrainBuffer(set->offsetsBuf);
+                set->offsetsBuf = nullptr;
+                set->pickOffsetsBuf = nullptr;
                 set->offsetsCapacity = 0;
                 return;
             }
@@ -969,11 +1006,14 @@ namespace foundation::render
             const u32 base =
                 region *
                 set->offsetsCapacity; // write ONLY this frame's region (GPU reads the prev one)
-            auto* od = static_cast<GpuDataOffsets*>(set->offsetsBuf->Map());
+            auto* od = static_cast<GpuDrawOffsets*>(set->offsetsBuf->Map());
             if (od == nullptr)
             {
                 continue;
             }
+            auto* pickOd = set->pickOffsetsBuf != nullptr
+                               ? static_cast<GpuPickDrawOffsets*>(set->pickOffsetsBuf->Map())
+                               : nullptr;
             const u32 M = mm->poseCount;
             for (u32 i = 0; i < mm->instanceCount; ++i)
             {
@@ -986,11 +1026,18 @@ namespace foundation::render
                 const u32 bucket = pose * mm->boneCount;     // matrix-unit offset within a palette
                 const u32 curBase = pool->base + bucket;     // current pose
                 const u32 prvBase = pool->prevBase + bucket; // last frame's pose (motion vectors)
-                od[base + i] = GpuDataOffsets{
-                    i, curBase, prvBase, 0}; // .x = Instances[] idx, .y = cur bone base, .z = prev
+                od[base + i] = GpuDrawOffsets{i, curBase, prvBase, 0.0f};
+                if (pickOd != nullptr)
+                {
+                    pickOd[base + i] = GpuPickDrawOffsets{i, curBase, 0, 0}; // ids 0: the set's own
+                }
             }
             set->offsetsBuf->Unmap();
-            set->offsetsByteOffset = base * static_cast<u32>(sizeof(GpuDataOffsets));
+            if (pickOd != nullptr)
+            {
+                set->pickOffsetsBuf->Unmap();
+            }
+            set->offsetsByteOffset = base * static_cast<u32>(sizeof(GpuDrawOffsets));
         }
     }
 
@@ -1434,7 +1481,7 @@ namespace foundation::render
             (head.material != nullptr) ? head.material : m_defaultMaterial.Get();
         materials::PipelineConfig config = ConfigFor(head, ctx, /*instanced*/ true);
         // Skinned instanced draw: the shared skin stream (joints/weights) is per-mesh; each instance's
-        // bone base rides in DataOffsets.y (current) / .z (prev) so one draw skins N characters.
+        // bone base rides in GpuDrawOffsets::boneBase (current) / prevBoneBase so one draw skins N characters.
         const bool skinned = head.boneMatrices != nullptr && head.mesh != nullptr &&
                              head.mesh->IsSkinned() && mesh.skinBuffer != nullptr;
         if (skinned)
@@ -1442,7 +1489,7 @@ namespace foundation::render
             config.vertexLayout = materials::VertexLayoutType::SkinnedMesh;
             config.shaderFlags |= shaders::ShaderFlags::Skinned;
         }
-        // The camera depth prepass already filled this group's InstanceData + DataOffsets (identical objects,
+        // The camera depth prepass already filled this group's InstanceData + draw offsets (identical objects,
         // same order) and cached the range - REUSE it instead of allocating + re-filling (build once). Falls
         // back to a fresh fill on a miss (no prepass, count mismatch, or ring exhausted). A faded run is
         // never prepassed, and a solid group of the same mesh and material must not lend it its range.
@@ -1464,7 +1511,7 @@ namespace foundation::render
                 return;
             }
             GpuInstance* id = static_cast<GpuInstance*>(inst.ptr);
-            GpuDataOffsets* od = static_cast<GpuDataOffsets*>(offs.ptr);
+            GpuDrawOffsets* od = static_cast<GpuDrawOffsets*>(offs.ptr);
             for (u32 k = 0; k < count; ++k)
             {
                 const auto* md = static_cast<const MeshRenderData*>(items[first + k].data);
@@ -1480,8 +1527,7 @@ namespace foundation::render
                         prevBase = s->prevBase;
                     }
                 }
-                // .x = Instances[] index, .y/.z = bone bases, .w = the fade's bits (0 = solid).
-                od[k] = GpuDataOffsets{inst.slotIndex + k, boneBase, prevBase, std::bit_cast<u32>(md->fade)};
+                od[k] = GpuDrawOffsets{inst.slotIndex + k, boneBase, prevBase, md->fade};
             }
             offsByteOffset = offs.byteOffset;
         }
@@ -1501,12 +1547,12 @@ namespace foundation::render
             base.vertexBuffer1 = mesh.skinBuffer;
             base.vertexOffset1 = mesh.skinOffset; // slot 1: skin stream (6/7)
             base.vertexBuffer2 = m_offsetsRing.Buffer();
-            base.vertexOffset2 = offsByteOffset; // slot 2: DataOffsets (5)
+            base.vertexOffset2 = offsByteOffset; // slot 2: draw offsets (5)
         }
         else
         {
             base.vertexBuffer1 = m_offsetsRing.Buffer();
-            base.vertexOffset1 = offsByteOffset; // slot 1: DataOffsets (5)
+            base.vertexOffset1 = offsByteOffset; // slot 1: draw offsets (5)
         }
         base.indexBuffer = mesh.indexBuffer;
         base.indexFormat = mesh.indexFormat;
@@ -1711,7 +1757,10 @@ namespace foundation::render
         }
 
         GpuInstance* id = static_cast<GpuInstance*>(inst.ptr);
-        GpuDataOffsets* od = static_cast<GpuDataOffsets*>(offs.ptr);
+        // One ring entry per instance in either pass's layout (both 16 bytes): the pick fill is
+        // pick-private, never shared with the forward, which reads the previous bone base from z.
+        GpuDrawOffsets* od = static_cast<GpuDrawOffsets*>(offs.ptr);
+        GpuPickDrawOffsets* pickOd = static_cast<GpuPickDrawOffsets*>(offs.ptr);
         // When this prepass feeds the forward (camera depth prepass, fillInstanceCache), build the FULL
         // InstanceData incl. REAL prevWorld so the forward can reuse it for motion vectors. Shadow casters
         // leave prevWorld = world (the depth/shadow shaders ignore it - no extra prev-world lookup).
@@ -1732,15 +1781,19 @@ namespace foundation::render
                     prevBase = s->prevBase;
                 }
             }
-            // Pick pass: .z/.w carry the entity id (the fill is pick-private - never shared with
-            // the forward, which reads prevBase from .z).
-            od[k] = pick ? GpuDataOffsets{inst.slotIndex + k, boneBase,
-                                       EntityTag::Generation(md->entityId),
-                                       EntityTag::Index(md->entityId) + 1u}
-                         : GpuDataOffsets{inst.slotIndex + k, boneBase, prevBase, 0};
+            if (pick)
+            {
+                pickOd[k] = GpuPickDrawOffsets{inst.slotIndex + k, boneBase,
+                                               EntityTag::Generation(md->entityId),
+                                               EntityTag::Index(md->entityId) + 1u};
+            }
+            else
+            {
+                od[k] = GpuDrawOffsets{inst.slotIndex + k, boneBase, prevBase, 0.0f};
+            }
         }
         if (feedsForward)
-        { // record this group's DataOffsets range for the forward to reuse
+        { // record this group's draw offsets range for the forward to reuse
             m_instShareCache.InsertOrAssign(InstShareKey(ctx.view, head.mesh, head.material),
                                             InstShare{offs.byteOffset, count});
         }
@@ -1760,12 +1813,12 @@ namespace foundation::render
             d.vertexBuffer1 = mesh.skinBuffer;
             d.vertexOffset1 = mesh.skinOffset; // slot 1: skin stream
             d.vertexBuffer2 = m_offsetsRing.Buffer();
-            d.vertexOffset2 = offs.byteOffset; // slot 2: DataOffsets
+            d.vertexOffset2 = offs.byteOffset; // slot 2: draw (or pick) offsets
         }
         else
         {
             d.vertexBuffer1 = m_offsetsRing.Buffer();
-            d.vertexOffset1 = offs.byteOffset; // slot 1: DataOffsets
+            d.vertexOffset1 = offs.byteOffset; // slot 1: draw (or pick) offsets
         }
         d.indexBuffer = mesh.indexBuffer;
         d.indexOffset = mesh.indexOffset;
@@ -1799,7 +1852,7 @@ namespace foundation::render
         {
             return;
         }
-        // Skinned crowd: per-instance bone base in the set's own DataOffsets buffer (+ the skin stream);
+        // Skinned crowd: per-instance bone base in the set's own draw offsets buffer (+ the skin stream);
         // static: the shared [i,0,0,0] ramp. A skinned set falls back to static if its skin data is missing.
         const bool skinned =
             set->skinned && set->offsetsBuf != nullptr && mesh.skinBuffer != nullptr;
@@ -1830,12 +1883,12 @@ namespace foundation::render
             base.vertexOffset1 = mesh.skinOffset; // slot 1: skin stream
             base.vertexBuffer2 = set->offsetsBuf;
             base.vertexOffset2 =
-                set->offsetsByteOffset; // slot 2: per-set DataOffsets (this frame's region)
+                set->offsetsByteOffset; // slot 2: per-set draw offsets (this frame's region)
         }
         else
         {
             base.vertexBuffer1 = m_rampBuffer;
-            base.vertexOffset1 = 0; // slot 1: shared DataOffsets ramp
+            base.vertexOffset1 = 0; // slot 1: shared draw offsets ramp
         }
         base.indexBuffer = mesh.indexBuffer;
         base.indexFormat = mesh.indexFormat;
@@ -1905,8 +1958,9 @@ namespace foundation::render
             return;
         }
         const bool skinned =
-            set->skinned && set->offsetsBuf != nullptr && mesh.skinBuffer != nullptr;
-        if (!skinned && m_rampBuffer == nullptr)
+            set->skinned && set->offsetsBuf != nullptr && mesh.skinBuffer != nullptr &&
+            (!pick || set->pickOffsetsBuf != nullptr);
+        if (!skinned && (pick ? m_pickRampBuffer : m_rampBuffer) == nullptr)
         {
             return;
         }
@@ -1956,14 +2010,14 @@ namespace foundation::render
         {
             d.vertexBuffer1 = mesh.skinBuffer;
             d.vertexOffset1 = mesh.skinOffset; // slot 1: skin stream
-            d.vertexBuffer2 = set->offsetsBuf;
-            d.vertexOffset2 =
-                set->offsetsByteOffset; // slot 2: per-set DataOffsets (this frame's region)
+            // Slot 2: the per-set draw offsets (this frame's region), in the pick layout for a pick.
+            d.vertexBuffer2 = pick ? set->pickOffsetsBuf : set->offsetsBuf;
+            d.vertexOffset2 = set->offsetsByteOffset; // the same stride and regions in both layouts
         }
         else
         {
-            d.vertexBuffer1 = m_rampBuffer;
-            d.vertexOffset1 = 0; // slot 1: shared DataOffsets ramp
+            d.vertexBuffer1 = pick ? m_pickRampBuffer : m_rampBuffer; // slot 1: the shared ramp, by layout
+            d.vertexOffset1 = 0;
         }
         d.indexBuffer = mesh.indexBuffer;
         d.indexOffset = mesh.indexOffset;
@@ -3040,6 +3094,14 @@ namespace foundation::render
             {
                 m_device->DestroyBuffer(kv.value.offsetsBuf);
             }
+            if (kv.value.pickOffsetsBuf != nullptr)
+            {
+                m_device->DestroyBuffer(kv.value.pickOffsetsBuf);
+            }
+            if (kv.value.setBuf != nullptr)
+            {
+                m_device->DestroyBuffer(kv.value.setBuf);
+            }
         }
         m_multiMeshSets.Clear();
         if (m_rampBuffer)
@@ -3047,6 +3109,11 @@ namespace foundation::render
             m_device->DestroyBuffer(m_rampBuffer);
             m_rampBuffer = nullptr;
             m_rampCapacity = 0;
+        }
+        if (m_pickRampBuffer)
+        {
+            m_device->DestroyBuffer(m_pickRampBuffer);
+            m_pickRampBuffer = nullptr;
         }
         for (u32 i = 0; i < kMaxClusterSlots; ++i)
         {

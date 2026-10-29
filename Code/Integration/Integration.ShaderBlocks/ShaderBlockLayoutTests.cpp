@@ -255,29 +255,9 @@ namespace
         FIELD(render::GpuView, sceneTime, "SceneTime"),
         FIELD(render::GpuView, prevSceneTime, "PrevSceneTime"),
     };
-    // The per-draw block: one C++ struct for three passes, each declaring its own part of it
-    // (phase 3 gives each pass its fields by name; until then each row records what it declares).
-    const FieldRow kForwardObject[] = {
-        FIELD(render::GpuObject, world, "World"),
-        FIELD(render::GpuObject, prevWorld, "PrevWorld"),
-        FIELD(render::GpuObject, tint, "Tint"),
-        FIELD(render::GpuObject, boneBase, "BoneBase"),
-        FIELD(render::GpuObject, prevBoneBase, "PrevBoneBase"),
-        FIELD(render::GpuObject, pickIndex, "_objPad"),
-        FIELD(render::GpuObject, fade, "Fade"),
-        FieldRow{u8"_fadePad0", offsetof(render::GpuObject, _fadePad) + 0u},
-        FieldRow{u8"_fadePad1", offsetof(render::GpuObject, _fadePad) + 4u},
-        FieldRow{u8"_fadePad2", offsetof(render::GpuObject, _fadePad) + 8u},
-    };
-    const FieldRow kShadowObject[] = {
-        FIELD(render::GpuObject, world, "World"),
-        FIELD(render::GpuObject, prevWorld, "PrevWorld"),
-        FIELD(render::GpuObject, tint, "Tint"),
-        FIELD(render::GpuObject, boneBase, "BoneBase"),
-        FIELD(render::GpuObject, prevBoneBase, "PrevBoneBase"),
-        FIELD(render::GpuObject, pickIndex, "_objPad"),
-    };
-    const FieldRow kPickObject[] = {
+    // The per-draw block: one C++ struct and one declaration (object_block.hlsli) that the forward,
+    // shadow depth and pick vertex stages all include, every field by its name in each.
+    const FieldRow kObject[] = {
         FIELD(render::GpuObject, world, "World"),
         FIELD(render::GpuObject, prevWorld, "PrevWorld"),
         FIELD(render::GpuObject, tint, "Tint"),
@@ -285,6 +265,10 @@ namespace
         FIELD(render::GpuObject, prevBoneBase, "PrevBoneBase"),
         FIELD(render::GpuObject, pickIndex, "PickIndex"),
         FIELD(render::GpuObject, pickGeneration, "PickGeneration"),
+        FIELD(render::GpuObject, fade, "Fade"),
+        FIELD(render::GpuObject, _objectPad0, "_objectPad0"),
+        FIELD(render::GpuObject, _objectPad1, "_objectPad1"),
+        FIELD(render::GpuObject, _objectPad2, "_objectPad2"),
     };
     const FieldRow kInstance[] = {
         FIELD(render::GpuInstance, world, "World"),
@@ -645,12 +629,12 @@ namespace
     using shaders::ShaderStage;
     const BlockRow kBlocks[] = {
         {u8"forward", ShaderStage::Fragment, ShaderFlags::None, u8"type.View", Span<const FieldRow>(kView)},
-        {u8"forward", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kForwardObject)},
+        {u8"forward", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kObject)},
         {u8"forward", ShaderStage::Vertex, ShaderFlags::Instanced, u8"InstanceData", Span<const FieldRow>(kInstance)},
-        {u8"shadow_depth", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kShadowObject)},
+        {u8"shadow_depth", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kObject)},
         {u8"shadow_depth", ShaderStage::Vertex, ShaderFlags::Instanced, u8"InstanceData", Span<const FieldRow>(kInstance)},
         {u8"shadow_depth", ShaderStage::Vertex, ShaderFlags::None, u8"type.ShadowView", Span<const FieldRow>(kShadowView)},
-        {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kPickObject)},
+        {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kObject)},
         {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::Instanced, u8"InstanceData", Span<const FieldRow>(kInstance)},
         {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::None, u8"type.PickView", Span<const FieldRow>(kPickView)},
         {u8"forward", ShaderStage::Vertex, ShaderFlags::Instanced, u8"type.InstanceSet", Span<const FieldRow>(kInstanceSet)},
@@ -662,9 +646,9 @@ namespace
         {u8"forward", ShaderStage::Fragment, ShaderFlags::None, u8"GpuProbe", Span<const FieldRow>(kGpuProbe)},
         {u8"decal", ShaderStage::Fragment, ShaderFlags::None, u8"type.DecalUniforms", Span<const FieldRow>(kDecalUniforms)},
         // Phong and Unlit share forward's vertex stage (forward_vs.hlsli) and its view (view.hlsli).
-        {u8"phong", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kForwardObject)},
+        {u8"phong", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kObject)},
         {u8"phong", ShaderStage::Fragment, ShaderFlags::None, u8"type.View", Span<const FieldRow>(kView)},
-        {u8"unlit", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kForwardObject)},
+        {u8"unlit", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kObject)},
         {u8"unlit", ShaderStage::Fragment, ShaderFlags::GBuffer, u8"type.View", Span<const FieldRow>(kView)},
         {u8"sky", ShaderStage::Vertex, ShaderFlags::None, u8"type.Sky", Span<const FieldRow>(kSky)},
         {u8"sky", ShaderStage::Fragment, ShaderFlags::None, u8"type.Sky", Span<const FieldRow>(kSky)},

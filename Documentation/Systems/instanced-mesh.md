@@ -2,6 +2,11 @@
 
 > Status: CURRENT
 > Verified: 2026-08-12 @ 7e4ebae7
+>
+> Since 2026-10-29 (shader-blocks-cleanup phase 3) the per-instance stream called `DataOffsets`
+> below is `drawOffsets` in the forward and depth passes (`render::GpuDrawOffsets`: instance index,
+> bone base, last frame's bone base, fade) and `pickOffsets` in the pick pass
+> (`render::GpuPickDrawOffsets`: instance index, bone base, entity generation, entity index + 1).
 > Track: [[instanced-mesh]] / [[renderer-instancing]]
 
 IMPLEMENTED - static (SS1-6) AND skinned crowds (SS7) shipped.

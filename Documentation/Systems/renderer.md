@@ -440,10 +440,16 @@ Which entity is under a pixel (or inside a rect) of a view, answered by the GPU 
   (256-byte rows, the WebGPU/D3D12 pitch); the slot retires when the device ring has LEFT and
   RETURNED to the submitting frame index (the ThumbnailStage rule), then maps and decodes. Never
   WaitIdle.
-- **Ids per draw kind.** Single objects: the `Object` cbuffer's two pad words (`PickIndex`,
-  `PickGeneration`). Instanced runs: the instance-stepped `DataOffsets.zw` - the pick pass fills
-  its own ramp, never the forward's. MultiMesh sets: one entity for all instances, so the id rides
-  a per-set `PickView` slot (the shadow-view ring; `kMaxPickMultiMeshSets` per pass). Terrain: a
+- **Ids per draw kind.** Single objects: the `Object` block's `PickIndex` and `PickGeneration`
+  (`object_block.hlsli`, `render::GpuObject`, one declaration the forward, depth and pick stages
+  all include). Instanced runs: the instance-stepped `pickOffsets` (`render::GpuPickDrawOffsets`:
+  instance, bone base, generation, index + 1), which the pick pass fills itself, never the
+  forward's `drawOffsets` (`render::GpuDrawOffsets`: instance, bone base, last frame's bone base,
+  the fade as a float by its bits). MultiMesh sets: one entity for all instances, so the id rides
+  the set's `InstanceSet` block (`SetPickIndex`, `SetPickGeneration`); their pick draw binds a
+  stream in the pick layout with ids 0, a pick ramp or the set's pick offsets (shader-blocks-cleanup
+  phase 3, 2026-10-29; before, the pick ids sat in lanes the other passes declared as padding, and
+  both passes' streams were one `DataOffsets` read by lane). Terrain: a
   `PickView` prefix in its view slot. Masked materials keep their cutout; a two-sided material
   picks both faces (cull from the material). Sprites/particles do not implement it (the editor's
   CPU origin pick covers their entities).

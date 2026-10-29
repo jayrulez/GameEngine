@@ -11,13 +11,14 @@
 /// a single INSTANCED draw; a lone draw takes the simpler per-object path. Both read the
 /// view-projection from a shared per-view UBO (set 0). The per-object path adds a per-object
 /// UBO (set 1, world + tint, dynamic offset); the instanced path adds a per-instance
-/// `StructuredBuffer<InstanceData>` (set 1) indexed by a uint4 DataOffsets vertex stream
+/// `StructuredBuffer<InstanceData>` (set 1) indexed by a uint4 draw offsets vertex stream
 /// (location 5, instance-stepped) - the portable base+offset addressing (NOT SV_InstanceID,
 /// which differs between DX12 and Vulkan). Transparent draws are never instanced (back-to-front
 /// order must dominate).
 
 module;
 #include "Core/Prelude.h"
+#include <cstddef> // offsetof
 
 export module foundation.render:mesh_renderer;
 
@@ -101,6 +102,9 @@ export namespace foundation::render
         f32 prevSceneTime = 0.0f; // last frame's (motion vectors)
     };
     static_assert(sizeof(GpuView) == 688, "cbuffer View layout drift");
+    // A single object's per-draw block (cbuffer Object, object_block.hlsli; set 1 binding 0), one
+    // declaration the forward, shadow depth and pick vertex stages all include: each pass writes
+    // and reads the fields it uses, by name.
     struct GpuObject
     {
         Float4x4 world;
@@ -109,7 +113,7 @@ export namespace foundation::render
         u32 boneBase = 0, prevBoneBase = 0;
         u32 pickIndex = 0, pickGeneration = 0; // pick pass only (EntityTag index + 1, generation)
         f32 fade = 0.0f; // the screen-door fade, 0 = solid (forward pass, the DITHER variant)
-        u32 _fadePad[3] = {};
+        u32 _objectPad0 = 0, _objectPad1 = 0, _objectPad2 = 0;
     }; // 176 (cbuffer Object)
     struct GpuInstance
     {
@@ -133,10 +137,41 @@ export namespace foundation::render
         u32 _pad2 = 0;
     };
     static_assert(sizeof(GpuInstanceSet) == 32, "cbuffer InstanceSet layout drift");
-    struct GpuDataOffsets
+    // The instance-stepped uint4 at location 5 an instanced draw binds beside its instances, one
+    // entry per instance, in two layouts by pass. GpuDrawOffsets is the forward's and the shadow
+    // depth's (drawOffsets in forward_vs/shadow_depth_vs.hlsli): written by their instanced fills,
+    // the shared MultiMesh ramp and a skinned set's per-instance offsets. The fade is a float whose
+    // bits travel in the uint4 lane w; the shader reads it with asfloat. A depth fill writes 0 (a
+    // faded run is never prepassed, so the forward reuses only solid ranges).
+    struct GpuDrawOffsets
     {
-        u32 x, y, z, w;
-    }; // 16  (instance-stepped vertex attr; forward: .w = the fade's bits)
+        u32 instanceIndex = 0; // into the draw's Instances[]
+        u32 boneBase = 0;      // the instance's first bone matrix (skinned); 0 otherwise
+        u32 prevBoneBase = 0;  // last frame's bone base (skinned motion vectors)
+        f32 fade = 0.0f;       // the screen-door fade, 0 = solid (forward pass, the DITHER variant)
+    };
+    static_assert(sizeof(GpuDrawOffsets) == 16, "drawOffsets vertex stream layout drift");
+    static_assert(offsetof(GpuDrawOffsets, instanceIndex) == 0);
+    static_assert(offsetof(GpuDrawOffsets, boneBase) == 4);
+    static_assert(offsetof(GpuDrawOffsets, prevBoneBase) == 8);
+    static_assert(offsetof(GpuDrawOffsets, fade) == 12);
+    // The pick pass's (pickOffsets in pick_ids_vs.hlsli): the instance and bone base, then the
+    // entity id. Its instanced fill writes them per draw; a MultiMesh set's pick draw binds the
+    // pick ramp or the set's pick offsets, whose ids are 0 (the set picks as its InstanceSet's).
+    struct GpuPickDrawOffsets
+    {
+        u32 instanceIndex = 0;  // into the draw's Instances[]
+        u32 boneBase = 0;       // the instance's first bone matrix (skinned); 0 otherwise
+        u32 pickGeneration = 0; // the entity's generation
+        u32 pickIndex = 0;      // the entity's index + 1, 0 = nothing
+    };
+    static_assert(sizeof(GpuPickDrawOffsets) == 16, "pickOffsets vertex stream layout drift");
+    static_assert(offsetof(GpuPickDrawOffsets, instanceIndex) == 0);
+    static_assert(offsetof(GpuPickDrawOffsets, boneBase) == 4);
+    static_assert(offsetof(GpuPickDrawOffsets, pickGeneration) == 8);
+    static_assert(offsetof(GpuPickDrawOffsets, pickIndex) == 12);
+    static_assert(sizeof(GpuPickDrawOffsets) == sizeof(GpuDrawOffsets),
+                  "both passes' entries share one ring stride");
     struct GpuShadowView
     {
         Float4x4 lightViewProj;
@@ -184,7 +219,7 @@ export namespace foundation::render
               m_instanceRing(device, framesInFlight, sizeof(GpuInstance),
                              rhi::BufferUsage::StorageRead | rhi::BufferUsage::CopyDst,
                              u8"mesh.instances"),
-              m_offsetsRing(device, framesInFlight, sizeof(GpuDataOffsets),
+              m_offsetsRing(device, framesInFlight, sizeof(GpuDrawOffsets),
                             rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst, u8"mesh.offsets"),
               m_lightRing(device, framesInFlight, sizeof(GpuLight),
                           rhi::BufferUsage::StorageRead | rhi::BufferUsage::CopyDst, u8"mesh.lights"),
@@ -259,13 +294,13 @@ export namespace foundation::render
         // Write every distinct skinned instance's matrices into the bone pool ONCE this frame (current
         // slab then previous slab, per Sedulous's [cur][prev] layout) + copy the populated range to the
         // device mirror. Builds m_boneStart: boneMatrices ptr -> { current base, prev base } in MATRIX
-        // units, which Resolve uses for the per-draw bone base (DataOffsets.y/.z later). Called once per
+        // units, which Resolve uses for the per-draw bone base (GpuDrawOffsets::boneBase/prevBoneBase later). Called once per
         // frame before any pass, with every scene the frame draws; replaces the old per-pass MemCopy into
         // the ring.
         void UploadSkinning(Span<const ExtractedScene* const> scenes, rhi::CommandEncoder& encoder) override;
 
         // Ensure every instanced-mesh SET in the snapshot has an up-to-date persistent GPU buffer, and grow
-        // the shared DataOffsets ramp to the largest set. Called once per frame (from UploadSkinning). Static
+        // the shared draw offsets ramp to the largest set. Called once per frame (from UploadSkinning). Static
         // sets fall through instantly after their first upload - that O(1)/frame path is the whole point.
         void UploadMultiMeshes(Span<const ExtractedScene* const> scenes);
 
@@ -329,9 +364,9 @@ export namespace foundation::render
         // Test read-back of a set's InstanceSet block for `region` (its fade window, count, pick id).
         [[nodiscard]] bool ReadMultiMeshInstanceSet(u64 key, u32 region, GpuInstanceSet& out);
 
-        // Grow the shared DataOffsets ramp to at least `count` slots: [{0,0,0,0},{1,0,0,0},...]. Filled once
-        // per (re)allocation (values are static per index - never rewritten). .x is each instance's index into
-        // its set's own StructuredBuffer<InstanceData>; .y/.z (bone bases) stay 0 - MultiMesh v1 is non-skinned.
+        // Grow the shared draw offsets ramp (GpuDrawOffsets) to at least `count` slots: [{0,0,0,0},{1,0,0,0},...]. Filled once
+        // per (re)allocation (values are static per index - never rewritten). instanceIndex is each instance's index into
+        // its set's own StructuredBuffer<InstanceData>; the bone bases and the fade stay 0 - MultiMesh v1 is non-skinned.
         bool EnsureRamp(u32 count);
 
         // Ensure this set's persistent InstanceData buffer + set-1 bind group exist and hold the current
@@ -340,8 +375,8 @@ export namespace foundation::render
         // (static sets upload exactly once). InstanceData.prevWorld = world (static content has no motion).
         void EnsureMultiMeshSet(const MultiMeshRenderData& mm);
 
-        // Fill each skinned MultiMesh set's per-instance DataOffsets: .x = instance index into its InstanceData
-        // buffer, .y/.z = the instance's pose base in the shared bone pool = poolBase + (Hash(i) % poseCount)*boneCount.
+        // Fill each skinned MultiMesh set's per-instance GpuDrawOffsets: instanceIndex = instance index into its InstanceData
+        // buffer, boneBase/prevBoneBase = the instance's pose base in the shared bone pool = poolBase + (Hash(i) % poseCount)*boneCount.
         // Runs after the bone upload (pool bases known). O(N) 16-byte writes, once per frame, shared across passes.
         void FillSkinnedMultiMeshOffsets(const ExtractedScene& scene);
 
@@ -447,9 +482,9 @@ export namespace foundation::render
                                    Span<const DrawItem> items, usize first, u32 count,
                                    const GpuMesh& mesh, Array<ResolvedDraw>& out, bool pick);
 
-        // Forward draw for a MultiMesh: bind THIS set's persistent InstanceData (set 1) + the shared DataOffsets
+        // Forward draw for a MultiMesh: bind THIS set's persistent InstanceData (set 1) + the shared draw offsets
         // ramp, one instanced draw per submesh material. NO fill loop - the buffer already holds the instances
-        // (uploaded once in UploadMultiMeshes). The shader is the identical instanced path (Instances[DataOffsets.x]).
+        // (uploaded once in UploadMultiMeshes). The shader is the identical instanced path (Instances[drawOffsets.x]).
         void ResolveMultiMesh(const RenderRecordContext& ctx, u32 viewOffset,
                               rhi::BindGroup* clusterBG, const MultiMeshRenderData& mm,
                               const GpuMesh& mesh, Array<ResolvedDraw>& out);
@@ -678,7 +713,7 @@ export namespace foundation::render
         [[nodiscard]] Float4x4 PrevWorldFor(u64 entityId, const Float4x4& cur);
 
         // Camera depth-prepass -> forward instance sharing. The prepass fills the FULL InstanceData (world +
-        // real prevWorld + tint) for each opaque (mesh,material) group once and records the group's DataOffsets
+        // real prevWorld + tint) for each opaque (mesh,material) group once and records the group's draw offsets
         // range here; the forward looks it up and REUSES that instance data instead of re-filling it (build once,
         // not twice). Keyed by (viewIndex, mesh, material); cleared each frame. Instanced path only.
         struct InstShare
@@ -770,8 +805,9 @@ export namespace foundation::render
         // Each InstancedMeshComponent (a "set") owns a PERSISTENT InstanceData storage buffer + a set-1 bind
         // group over it, keyed by the component's stable key. Uploaded only when the set's version changes -
         // a static set uploads once, then costs nothing per frame (the whole point). A single shared
-        // DataOffsets ramp [{0,..},{1,..},...] serves EVERY set (.x indexes each set's own buffer), grown to
-        // the largest set. Bound identically for the depth prepass, forward, and all shadow cascades.
+        // draw offsets ramp [{0,..},{1,..},...] serves EVERY set (.x indexes each set's own buffer), grown to
+        // the largest set. Bound identically for the depth prepass, forward, all shadow cascades and the
+        // pick pass (which reads only its instanceIndex and boneBase, the lanes GpuPickDrawOffsets shares).
         static constexpr u32 kMultiMeshMaxFiF =
             4; // upper bound on frames-in-flight for the per-region arrays
         struct MultiMeshSet
@@ -798,17 +834,23 @@ export namespace foundation::render
             u32 regionVersion[kMultiMeshMaxFiF] = {};
             u32 regionCount[kMultiMeshMaxFiF] = {};
             u32 lastFrame = 0; // last frame this set was extracted (for eviction)
-            // Skinned crowds: a PER-SET DataOffsets buffer (dynamic, refilled each frame with per-instance bone
+            // Skinned crowds: a PER-SET draw offsets buffer (dynamic, refilled each frame with per-instance bone
             // bases) - replaces the shared static ramp, whose .y is always 0. Only allocated for skinned sets.
             rhi::Buffer* offsetsBuf =
-                nullptr;             // Vertex, CpuToGpu: framesInFlight x capacity x DataOffsets
+                nullptr;             // Vertex, CpuToGpu: framesInFlight x capacity x GpuDrawOffsets
+            // The same instances in the pick pass's layout ({i, bone base, 0, 0}: the ids 0, so the set
+            // picks as its InstanceSet's entity), filled beside offsetsBuf with the same regions.
+            rhi::Buffer* pickOffsetsBuf = nullptr; // Vertex, CpuToGpu: framesInFlight x capacity x GpuPickDrawOffsets
             u32 offsetsCapacity = 0; // instances per frame region
             u32 offsetsByteOffset =
                 0; // this frame's region byte offset (rewritten every frame -> FiF-slotted)
             bool skinned = false; // drew skinned this frame (posePool present)
         };
         HashMap<u64, MultiMeshSet> m_multiMeshSets{*m_allocator};
-        rhi::Buffer* m_rampBuffer = nullptr; // shared DataOffsets ramp (Vertex, CpuToGpu)
+        rhi::Buffer* m_rampBuffer = nullptr; // shared draw offsets ramp (Vertex, CpuToGpu)
+        // The ramp in the pick pass's layout, {i, 0, 0, 0}: a MultiMesh set's pick draws bind it (its ids
+        // 0, so the set picks as its InstanceSet's entity), never the forward layout's ramp.
+        rhi::Buffer* m_pickRampBuffer = nullptr;
         u32 m_rampCapacity = 0;
         u32 m_multiMeshFrame = 0; // bumped each UploadMultiMeshes (eviction clock)
 

@@ -124,6 +124,21 @@ material for now, read by the renderer by name; removing them is a data version 
 The change: each pass's per-draw block declares every field it reads by its name (one C++ struct
 whose fields all three shaders name, or a struct per pass); the stream gets named fields per pass.
 
+Built 2026-10-29: `cbuffer Object` is declared once, in `object_block.hlsli` (`render::GpuObject`),
+which the forward, shadow depth and pick vertex stages include in their non-instanced branch: every
+field by its name (`PickIndex`, `PickGeneration`, `Fade` in all three) and honest padding
+`_objectPad0..2` (the C++ `_fadePad[3]` became `_objectPad0..2`, the same bytes). The stream is two
+C++ structs with offset asserts, `GpuDrawOffsets` (instance index, bone base, previous bone base,
+the fade as an `f32`) for the forward and depth fills, the MultiMesh ramp and a skinned set's
+offsets, and `GpuPickDrawOffsets` (instance index, bone base, pick generation, pick index) for the
+pick fill; the shaders call it `drawOffsets` (forward, depth; w read with `asfloat`) and
+`pickOffsets` (pick). A MultiMesh set's pick draw binds a stream in the pick layout too, ids 0 (it
+picks as its `InstanceSet`'s entity): a pick ramp beside the forward's, and a skinned set's pick
+offsets filled beside its forward ones (it bound the forward's at first, the pick shader reading
+the previous bone base and the fade as an id it then ignored). Location, format and stride are
+unchanged. The renderer also frees a live set's InstanceSet and pick buffers at shutdown. Tests: `Integration.ShaderBlocks` checks one `Object`
+table in the forward, shadow depth, pick, Phong and Unlit vertex stages.
+
 ### Phase 4: probes and lights
 
 - **F3** `View.ProbeCenter`: `.x` = the scene's base index into `Probes[]`, `.w` = the count, `.yz`

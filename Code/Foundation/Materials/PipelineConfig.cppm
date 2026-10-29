@@ -40,9 +40,10 @@ export namespace foundation::materials
         VertexLayoutType vertexLayout = VertexLayoutType::Mesh;
         u32 customVertexStride = 0;
         u8 customAttributeCount = 0;
-        // When set, the PSO gains a second, instance-stepped vertex buffer: a uint4 DataOffsets
-        // stream (location 5) whose .x indexes a per-instance StructuredBuffer. Pair with
-        // ShaderFlags::Instanced (the shader's INSTANCED permutation reads it).
+        // When set, the PSO gains a second, instance-stepped vertex buffer: a uint4 offsets stream
+        // (location 5; render::GpuDrawOffsets or, in the pick pass, GpuPickDrawOffsets) whose .x
+        // indexes a per-instance StructuredBuffer. Pair with ShaderFlags::Instanced (the shader's
+        // INSTANCED permutation reads it).
         bool instanced = false;
 
         // --- primitive assembly ---
@@ -244,10 +245,11 @@ export namespace foundation::materials
             return l;
         }
 
-        // The instance-stepped vertex buffer an instanced draw binds: a uint4 DataOffsets entry
-        // per instance (location 5), stride 16. `.x` indexes the per-instance StructuredBuffer;
-        // hardware instance stepping makes this portable (unlike the SV_InstanceID system value,
-        // which differs between DX12 and Vulkan). Bound as buffer 1 alongside the mesh stream.
+        // The instance-stepped vertex buffer an instanced draw binds: a uint4 offsets entry per
+        // instance (location 5; render::GpuDrawOffsets or GpuPickDrawOffsets), stride 16. `.x`
+        // indexes the per-instance StructuredBuffer; hardware instance stepping makes this portable
+        // (unlike the SV_InstanceID system value, which differs between DX12 and Vulkan). Bound as
+        // buffer 1 alongside the mesh stream.
         [[nodiscard]] static rhi::VertexBufferLayout InstanceOffsetsBufferLayout() noexcept
         {
             rhi::VertexBufferLayout l{};
@@ -259,8 +261,9 @@ export namespace foundation::materials
 
         // The skinning vertex buffer a skinned draw binds: joints (location 6) + weights (location 7),
         // stride 24 - matches foundation.geometry::VertexSkinning. Skinned draws are ALWAYS instanced now, so
-        // the instance-stepped DataOffsets takes location 5 and DXC (which assigns input locations
-        // sequentially by declaration order, dataOffsets declared before joints/weights) lands these at 6/7.
+        // the instance-stepped offsets take location 5 and DXC (which assigns input locations
+        // sequentially by declaration order, drawOffsets/pickOffsets declared before joints/weights) lands
+        // these at 6/7.
         [[nodiscard]] static u32 SkinningStreamStride() noexcept { return 24; }
         [[nodiscard]] static Span<const rhi::VertexAttribute> SkinningStreamAttributes() noexcept
         {
@@ -288,10 +291,10 @@ export namespace foundation::materials
                                         {VF::Float32x2, 24, 2},
                                         {VF::Unorm8x4, 32, 3},
                                         {VF::Float32x4, 36, 4}}; // tangent.w = handedness
-        // Skinning stream: joints (uint16x4 packed as uint32x2) + weights, at locations 6/7 (DataOffsets
-        // takes 5; skinned draws are always instanced).
+        // Skinning stream: joints (uint16x4 packed as uint32x2) + weights, at locations 6/7 (the offsets
+        // take 5; skinned draws are always instanced).
         static constexpr VA kSkinningStream[2] = {{VF::Uint32x2, 0, 6}, {VF::Float32x4, 8, 7}};
-        // Instance offsets stream: a uint4 DataOffsets at location 5.
+        // Instance offsets stream: a uint4 at location 5 (drawOffsets, or pickOffsets in the pick pass).
         static constexpr VA kInstanceOffsets[1] = {{VF::Uint32x4, 0, 5}};
     };
 

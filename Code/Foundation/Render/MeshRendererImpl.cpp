@@ -100,13 +100,37 @@ namespace foundation::render
             return Status{ErrorCode::Unknown};
         }
 
-        // set 1 (instanced): per-instance StructuredBuffer (read-only storage).
-        rhi::BindGroupLayoutEntry instEntry = rhi::BindGroupLayoutEntry::StorageBuffer(
-            0, rhi::ShaderStage::Vertex, /*readOnly*/ true,
-            /*stride*/ sizeof(GpuInstance)); // StructuredBuffer<InstanceData>
-        if (!MakeLayout(instEntry, m_instanceLayout))
+        // set 1 (instanced): per-instance StructuredBuffer (read-only storage) and the draw's
+        // InstanceSet block (its fade window, instance count and set pick id).
         {
-            return Status{ErrorCode::Unknown};
+            const rhi::BindGroupLayoutEntry instEntries[] = {
+                rhi::BindGroupLayoutEntry::StorageBuffer(0, rhi::ShaderStage::Vertex, /*readOnly*/ true,
+                                                         /*stride*/ sizeof(GpuInstance)), // StructuredBuffer<InstanceData>
+                rhi::BindGroupLayoutEntry::UniformBuffer(1, rhi::ShaderStage::Vertex),    // cbuffer InstanceSet
+            };
+            rhi::BindGroupLayoutDesc d{};
+            d.entries = Span<const rhi::BindGroupLayoutEntry>{instEntries, 2};
+            if (!m_device->CreateBindGroupLayout(d, m_instanceLayout).IsOk())
+            {
+                return Status{ErrorCode::Unknown};
+            }
+        }
+        // The InstanceSet every per-frame instanced batch binds: no fade, each instance its own id.
+        {
+            rhi::BufferDesc bd{};
+            bd.size = sizeof(GpuInstanceSet);
+            bd.usage = rhi::BufferUsage::Uniform | rhi::BufferUsage::CopyDst;
+            bd.memory = rhi::MemoryLocation::CpuToGpu;
+            bd.label = u8"mesh.instance-set.unfaded";
+            if (!m_device->CreateBuffer(bd, m_noFadeSetBuf).IsOk())
+            {
+                return Status{ErrorCode::Unknown};
+            }
+            if (auto* p = static_cast<GpuInstanceSet*>(m_noFadeSetBuf->Map()))
+            {
+                *p = GpuInstanceSet{};
+                m_noFadeSetBuf->Unmap();
+            }
         }
 
         // set 2 (material) is NOT a fixed renderer layout: it is derived per material from the
@@ -266,11 +290,10 @@ namespace foundation::render
         const u32 drawCap = InstanceSlotsPerFrame(
             maxDraws, m_shadowCasterDraws, ShadowCascades::kCount + m_localShadowPassCount,
             m_captureFacePasses + m_pickPasses);
-        // Pick passes take shadow-view slots too: one per pass + one per MultiMesh set they id.
-        const u32 shadowViewCap = kMaxShadowPasses + m_pickPasses * (1u + kMaxPickMultiMeshSets) +
-                                  kMaxFadedSetSlots;
-        // The view ring: one slot per pass view, plus the faded sets' private copies.
-        if (!m_viewRing.Reserve(maxDraws + kMaxFadedSetSlots) ||
+        // Pick passes take a shadow-view slot each, as shadow passes do.
+        const u32 shadowViewCap = kMaxShadowPasses + m_pickPasses;
+        // The view ring: one slot per pass view.
+        if (!m_viewRing.Reserve(maxDraws) ||
             !m_shadowViewRing.Reserve(shadowViewCap) ||
             !m_objectRing.Reserve(drawCap) || !m_instanceRing.Reserve(drawCap) ||
             !m_offsetsRing.Reserve(drawCap) || !m_lightRing.Reserve(kMaxLights) ||
@@ -286,7 +309,7 @@ namespace foundation::render
             !EnsureBindGroup(m_objectRing, m_objectLayout, sizeof(GpuObject), m_objectBG,
                              m_objectBGGen, /*whole*/ false) ||
             !EnsureBindGroup(m_instanceRing, m_instanceLayout, 0, m_instanceBG, m_instanceBGGen,
-                             /*whole*/ true))
+                             /*whole*/ true, m_noFadeSetBuf))
         {
             return;
         }
@@ -541,6 +564,7 @@ namespace foundation::render
         set.activeInstanceBG = nullptr;
         RetireOrDrainBuffer(set.instanceBuf);
         RetireOrDrainBuffer(set.offsetsBuf);
+        RetireOrDrainBuffer(set.setBuf);
         set.capacity = 0;
         set.offsetsCapacity = 0;
     }
@@ -733,16 +757,34 @@ namespace foundation::render
                 set->capacity = 0;
                 return;
             }
+            // The set's InstanceSet block, one slot per region (kept across a capacity change).
+            if (set->setBuf == nullptr)
+            {
+                rhi::BufferDesc sd{};
+                sd.size = static_cast<u64>(kMultiMeshMaxFiF) * kViewSlot;
+                sd.usage = rhi::BufferUsage::Uniform | rhi::BufferUsage::CopyDst;
+                sd.memory = rhi::MemoryLocation::CpuToGpu;
+                sd.label = u8"mesh.multimesh.instance-set";
+                if (!m_device->CreateBuffer(sd, set->setBuf).IsOk())
+                {
+                    set->setBuf = nullptr;
+                    return;
+                }
+            }
             // A set-1 bind group per region (each over its own slice of the buffer, so the shader's
-            // Instances[i] indexes within the bound region - the shared static ramp / skinned offsets stay 0-based).
+            // Instances[i] indexes within the bound region - the shared static ramp / skinned offsets stay 0-based),
+            // with that region's InstanceSet.
             bool ok = true;
             for (u32 r = 0; r < fif; ++r)
             {
-                rhi::BindGroupEntry be = rhi::BindGroupEntry::BufferEntry(
-                    set->instanceBuf, static_cast<u64>(r) * regionBytes, regionBytes);
+                const rhi::BindGroupEntry be[] = {
+                    rhi::BindGroupEntry::BufferEntry(set->instanceBuf, static_cast<u64>(r) * regionBytes, regionBytes),
+                    rhi::BindGroupEntry::BufferEntry(set->setBuf, static_cast<u64>(r) * kViewSlot,
+                                                     sizeof(GpuInstanceSet)),
+                };
                 rhi::BindGroupDesc bgd{};
                 bgd.layout = m_instanceLayout;
-                bgd.entries = Span<const rhi::BindGroupEntry>{&be, 1};
+                bgd.entries = Span<const rhi::BindGroupEntry>{be, 2};
                 if (!m_device->CreateBindGroup(bgd, set->instanceBG[r]).IsOk())
                 {
                     set->instanceBG[r] = nullptr;
@@ -775,6 +817,24 @@ namespace foundation::render
         set->count = mm.instanceCount;
         set->activeInstanceBG = set->instanceBG[region];
 
+        // This frame's InstanceSet (its region, so the GPU's read of the last frame's is untouched):
+        // the fade window, the count each instance's rank divides by (the whole list, of which a
+        // faded set draws a prefix), and the one entity the set picks as.
+        if (set->setBuf != nullptr)
+        {
+            if (auto* base = static_cast<byte*>(set->setBuf->Map()))
+            {
+                GpuInstanceSet block{};
+                block.fadeStart = mm.fadeStart;
+                block.fadeEnd = mm.fadeEnd;
+                block.instanceCount = Max(uploadCount, 1u);
+                block.pickIndex = EntityTag::Index(mm.entityId) + 1u;
+                block.pickGeneration = EntityTag::Generation(mm.entityId);
+                MemCopy(base + static_cast<usize>(region) * kViewSlot, &block, sizeof(block));
+                set->setBuf->Unmap();
+            }
+        }
+
         // Each frame writes ONLY its own region while the GPU reads the previous one (hazard-free),
         // and only when that region is behind the item: a new version (a static set thus writes
         // once per region, a per-frame-dynamic set every frame) or a draw count above what the
@@ -786,14 +846,9 @@ namespace foundation::render
             if (auto* dst = static_cast<GpuInstance*>(set->instanceBuf->Map()))
             {
                 GpuInstance* r = dst + static_cast<usize>(region) * set->capacity;
-                const bool ranked = mm.fadeEnd > 0.0f; // a faded set: the rank rides the tint alpha
                 for (u32 i = 0; i < uploadCount; ++i)
                 {
-                    Color tint = (mm.tints != nullptr) ? mm.tints[i] : mm.color; // per-instance or shared
-                    if (ranked)
-                    {
-                        tint.a = (static_cast<f32>(i) + 0.5f) / static_cast<f32>(uploadCount);
-                    }
+                    const Color tint = (mm.tints != nullptr) ? mm.tints[i] : mm.color; // per-instance or shared
                     r[i] = GpuInstance{mm.transforms[i], mm.transforms[i], tint};
                 }
                 set->instanceBuf->Unmap();
@@ -844,6 +899,23 @@ namespace foundation::render
         }
         out = data[static_cast<usize>(region) * set->capacity + index].tint;
         set->instanceBuf->Unmap();
+        return true;
+    }
+
+    bool MeshRenderer::ReadMultiMeshInstanceSet(u64 key, u32 region, GpuInstanceSet& out)
+    {
+        MultiMeshSet* set = m_multiMeshSets.Find(key);
+        if (set == nullptr || set->setBuf == nullptr || region >= kMultiMeshMaxFiF)
+        {
+            return false;
+        }
+        const auto* base = static_cast<const byte*>(set->setBuf->Map());
+        if (base == nullptr)
+        {
+            return false;
+        }
+        MemCopy(&out, base + static_cast<usize>(region) * kViewSlot, sizeof(out));
+        set->setBuf->Unmap();
         return true;
     }
 
@@ -1139,7 +1211,7 @@ namespace foundation::render
             GpuPickView pv{};
             pv.viewProj = ctx.viewProj;
             pv.windTime = ctx.timeSeconds;
-            pv.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
+            pv.camera = ctx.cameraPos;
             *static_cast<GpuPickView*>(sv.ptr) = pv;
         }
         else
@@ -1147,7 +1219,10 @@ namespace foundation::render
             GpuShadowView svd{};
             svd.lightViewProj = ctx.viewProj;
             svd.wind.x = ctx.timeSeconds;
-            svd.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
+            svd.camera = ctx.cameraPos;
+            // A faded set's shadow fades from the camera the pass couples to; a pass with none
+            // (no view) draws every instance.
+            svd.fadeFromCamera = ctx.view != nullptr ? 1u : 0u;
             *static_cast<GpuShadowView*>(sv.ptr) = svd;
         }
         const u32 shadowViewOffset = sv.byteOffset;
@@ -1738,21 +1813,6 @@ namespace foundation::render
             config.shaderFlags |= shaders::ShaderFlags::Skinned;
         }
 
-        // A faded set draws through a PRIVATE copy of the pass's view block carrying its window
-        // in ShadowParams.zw (the instanced path binds no per-draw block; instance_fade.hlsli).
-        if (mm.fadeEnd > 0.0f)
-        {
-            const DynamicUniformRing::Range slot = m_viewRing.Allocate();
-            if (slot.ok) // past the budget: the pass's slot, drawn unfaded rather than dropped
-            {
-                GpuView faded = m_passView;
-                faded.shadowParams.z = mm.fadeStart;
-                faded.shadowParams.w = mm.fadeEnd;
-                *static_cast<GpuView*>(slot.ptr) = faded;
-                viewOffset = slot.byteOffset;
-            }
-        }
-
         ResolvedDraw base{};
         base.viewSet = m_viewBG;
         base.viewOffset = viewOffset;
@@ -1847,41 +1907,6 @@ namespace foundation::render
         if (!skinned && m_rampBuffer == nullptr)
         {
             return;
-        }
-        if (pick)
-        {
-            // The set is ONE entity: its id rides a private view slot (persistent instance data +
-            // the shared ramp carry no per-set id). Budgeted by kMaxPickMultiMeshSets; a set past
-            // the budget is not pickable this frame (the editor's CPU pick still finds it).
-            const DynamicUniformRing::Range sv = m_shadowViewRing.Allocate();
-            if (!sv.ok)
-            {
-                return;
-            }
-            GpuPickView pv{};
-            pv.viewProj = ctx.viewProj;
-            pv.windTime = ctx.timeSeconds;
-            pv.pickIndex = EntityTag::Index(mm.entityId) + 1u;
-            pv.pickGeneration = EntityTag::Generation(mm.entityId);
-            pv.fadeStart = mm.fadeStart;
-            pv.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, mm.fadeEnd};
-            *static_cast<GpuPickView*>(sv.ptr) = pv;
-            shadowViewOffset = sv.byteOffset;
-        }
-        else if (mm.fadeEnd > 0.0f && ctx.view != nullptr)
-        {
-            // A faded set's shadow: its window rides a private ShadowView slot, the fade measured
-            // from the CAMERA the pass couples to (no view = a pass with no camera: no fade).
-            const DynamicUniformRing::Range sv = m_shadowViewRing.Allocate();
-            if (sv.ok) // past the budget: the pass's slot, unfaded rather than dropped
-            {
-                GpuShadowView svd{};
-                svd.lightViewProj = ctx.viewProj;
-                svd.wind = Float4{ctx.timeSeconds, mm.fadeStart, mm.fadeEnd, 0.0f};
-                svd.camera = Float4{ctx.cameraPos.x, ctx.cameraPos.y, ctx.cameraPos.z, 0.0f};
-                *static_cast<GpuShadowView*>(sv.ptr) = svd;
-                shadowViewOffset = sv.byteOffset;
-            }
         }
         const DepthLikeChoice choice = DepthLikeFor(ctx, mm.material, /*instanced*/ true, pick);
         materials::PipelineConfig config = choice.config;
@@ -2448,7 +2473,8 @@ namespace foundation::render
     }
 
     bool MeshRenderer::EnsureBindGroup(DynamicUniformRing& ring, rhi::BindGroupLayout* layout,
-                                       u64 bindSize, rhi::BindGroup*& bg, u32& bgGen, bool whole)
+                                       u64 bindSize, rhi::BindGroup*& bg, u32& bgGen, bool whole,
+                                       rhi::Buffer* secondUniform)
     {
         if (bg != nullptr && bgGen == ring.Generation())
         {
@@ -2461,11 +2487,14 @@ namespace foundation::render
         {
             return false;
         }
-        rhi::BindGroupEntry be =
-            rhi::BindGroupEntry::BufferEntry(buffer, 0, whole ? ring.ByteCapacity() : bindSize);
+        const rhi::BindGroupEntry be[] = {
+            rhi::BindGroupEntry::BufferEntry(buffer, 0, whole ? ring.ByteCapacity() : bindSize),
+            rhi::BindGroupEntry::BufferEntry(secondUniform, 0,
+                                             secondUniform != nullptr ? secondUniform->GetSize() : 0u),
+        };
         rhi::BindGroupDesc bgd{};
         bgd.layout = layout;
-        bgd.entries = Span<const rhi::BindGroupEntry>{&be, 1};
+        bgd.entries = Span<const rhi::BindGroupEntry>{be, secondUniform != nullptr ? 2u : 1u};
         if (!m_device->CreateBindGroup(bgd, bg).IsOk())
         {
             bg = nullptr;
@@ -2973,6 +3002,11 @@ namespace foundation::render
         {
             m_device->DestroyBindGroup(m_objectBG);
             m_objectBG = nullptr;
+        }
+        if (m_noFadeSetBuf)
+        {
+            m_device->DestroyBuffer(m_noFadeSetBuf);
+            m_noFadeSetBuf = nullptr;
         }
         if (m_instanceBG)
         {

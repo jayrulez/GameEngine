@@ -345,10 +345,11 @@ TEST_CASE("multimesh: a set with an uploadCount holds its whole list from the fi
     CHECK(world.m[3][1] == doctest::Approx(0.0f));
 }
 
-TEST_CASE("multimesh: a faded set uploads each instance's rank in its tint alpha; an unfaded set keeps its tint")
+TEST_CASE("multimesh: a faded set's InstanceSet carries its window, the whole list's count and its entity; tints keep their alpha")
 {
-    // The vertex shaders dissolve an instance whose rank is above the density at its own
-    // distance (instance_fade.hlsli): the rank is its position in the set's random order.
+    // The vertex shaders dissolve an instance whose rank, (index + 0.5) / count, is above the
+    // density at its own distance (instance_fade.hlsli); the window and the count are the set's
+    // InstanceSet, so no instance's tint carries anything but its colour.
     Systems s;
     if (!s.Init())
     {
@@ -376,7 +377,7 @@ TEST_CASE("multimesh: a faded set uploads each instance's rank in its tint alpha
     faded->key = 0x52u;
     faded->transforms = transforms.Data();
     faded->instanceCount = 2; // the prefix: the far half is already out
-    faded->uploadCount = 4;   // the whole list carries its ranks
+    faded->uploadCount = 4;   // the whole list: the count each rank divides by
     faded->version = 1;
     faded->mesh = cube.Get();
     faded->material = material.Get();
@@ -385,6 +386,7 @@ TEST_CASE("multimesh: a faded set uploads each instance's rank in its tint alpha
     faded->worldRadius = 2.0f;
     faded->fadeStart = 40.0f;
     faded->fadeEnd = 80.0f;
+    faded->entityId = EntityTag::Pack(6u, 3u);
     renderer.PrepareFrame(2, 0);
     UploadOne(renderer, scene);
 
@@ -394,7 +396,16 @@ TEST_CASE("multimesh: a faded set uploads each instance's rank in its tint alpha
     for (u32 i = 0; i < 4; ++i)
     {
         REQUIRE(renderer.ReadMultiMeshInstanceTint(0x52u, 0, i, tint));
-        CHECK(tint.a == doctest::Approx((static_cast<f32>(i) + 0.5f) / 4.0f)); // its rank
+        CHECK(tint.a == doctest::Approx(1.0f)); // faded too: the colour, not a rank
     }
+    GpuInstanceSet block{};
+    REQUIRE(renderer.ReadMultiMeshInstanceSet(0x52u, 0, block));
+    CHECK(block.fadeStart == doctest::Approx(40.0f));
+    CHECK(block.fadeEnd == doctest::Approx(80.0f));
+    CHECK(block.instanceCount == 4u); // the whole list, not the drawn prefix
+    CHECK(block.pickIndex == 7u);     // the entity's index + 1
+    CHECK(block.pickGeneration == 3u);
+    REQUIRE(renderer.ReadMultiMeshInstanceSet(0x51u, 0, block));
+    CHECK(block.fadeEnd == doctest::Approx(0.0f)); // unfaded
 }
 

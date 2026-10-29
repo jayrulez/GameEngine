@@ -92,8 +92,7 @@ export namespace foundation::render
         Float4 probeCenter = Float4{0, 0, 0, 0};
         Float4 probeBoxMin = Float4{0, 0, 0, 0};
         Float4 probeBoxMax = Float4{0, 0, 0, 0};
-        // x = CSM far-fade width (world units), y = the shadow map's uv Y sign; zw = a faded
-        // instanced set's window, in its private copy of this block (phase 1 moves it out).
+        // x = CSM far-fade width (world units), y = the shadow map's uv Y sign; zw unused.
         Float4 shadowParams = Float4{40.0f, 0, 0, 0};
         Float4 debugParams = Float4{0, 0, 0, 0}; // x = semantic debug-view mode, 0 = off
         // x = IBL diffuse intensity, y = IBL specular; zw = the WIND clock, this frame's and the
@@ -117,6 +116,22 @@ export namespace foundation::render
         Float4x4 prevWorld;
         Color tint;
     }; // 144 (StructuredBuffer element)
+    // An instanced draw's set (cbuffer InstanceSet, instance_fade.hlsli; set 1 beside the instances
+    // in the forward, shadow and pick passes): its distance fade's window (FadeEnd <= 0 = none), its
+    // instance count (each instance's rank in the fade is (index + 0.5) / count), and the entity a
+    // MultiMesh set picks as (index + 1, generation; 0 = each instance's own id).
+    struct GpuInstanceSet
+    {
+        f32 fadeStart = 0.0f;
+        f32 fadeEnd = 0.0f;
+        u32 instanceCount = 1;
+        u32 _pad0 = 0;
+        u32 pickIndex = 0;
+        u32 pickGeneration = 0;
+        u32 _pad1 = 0;
+        u32 _pad2 = 0;
+    };
+    static_assert(sizeof(GpuInstanceSet) == 32, "cbuffer InstanceSet layout drift");
     struct GpuDataOffsets
     {
         u32 x, y, z, w;
@@ -124,8 +139,9 @@ export namespace foundation::render
     struct GpuShadowView
     {
         Float4x4 lightViewProj;
-        Float4 wind = Float4{0, 0, 0, 0};   // x = time (s) for the WIND sway, y/z = a faded set's window
-        Float4 camera = Float4{0, 0, 0, 0}; // xyz = the camera's position (the instance fade's distance)
+        Float4 wind = Float4{0, 0, 0, 0};    // x = time (s) for the WIND sway; yzw unused
+        Float3 camera = Float3{0, 0, 0};     // the camera's position (the instance fade's distance)
+        u32 fadeFromCamera = 0;              // 1: the pass couples to a camera, so instances fade
     }; // 96  (cbuffer ShadowView)
     // GPU-layout contract: these mirror HLSL cbuffer/StructuredBuffer elements and use the PACKED
     // Float4x4 (64B, tight). A stray SIMD Matrix4 (also 64B but 16-byte aligned) would still trip the
@@ -133,16 +149,15 @@ export namespace foundation::render
     static_assert(sizeof(GpuObject) == 176, "cbuffer Object layout drift");
     static_assert(sizeof(GpuInstance) == 144,
                   "StructuredBuffer<GpuInstance> element layout drift");
-    // The pick pass's set-0 view (cbuffer PickView in pick_ids.vs): the cropped VP plus a
-    // per-DRAW-GROUP id override (a MultiMesh set is one entity for all its instances, and its
-    // instance data is persistent - the id rides the view slot instead; 0 = per-object id).
+    // The pick pass's set-0 view (cbuffer PickView in pick_ids.vs): the cropped VP, the WIND clock
+    // and the camera the instance fade measures from. A MultiMesh set's own id is its InstanceSet's.
     struct GpuPickView
     {
         Float4x4 viewProj;
-        u32 pickIndex = 0, pickGeneration = 0;
-        f32 windTime = 0.0f;  // time (s) for the WIND sway (the pick follows the swayed card)
-        f32 fadeStart = 0.0f; // a faded set's window start (camera.w = its end; 0 = none)
-        Float4 camera = Float4{0, 0, 0, 0}; // xyz = the camera's position, w = fade end
+        f32 windTime = 0.0f; // time (s) for the WIND sway (the pick follows the swayed card)
+        f32 _pad0 = 0.0f, _pad1 = 0.0f, _pad2 = 0.0f;
+        Float3 camera = Float3{0, 0, 0}; // the camera's position (the instance fade's distance)
+        f32 _pad3 = 0.0f;
     }; // 96  (cbuffer PickView; shares the shadow-view ring's 256B slots)
     static_assert(sizeof(GpuShadowView) == 96, "cbuffer ShadowView layout drift");
     static_assert(sizeof(GpuPickView) == 96, "cbuffer PickView layout drift");
@@ -301,8 +316,10 @@ export namespace foundation::render
         // set keyed `key` (false when there is no such set, region or slot). Maps the buffer, so it
         // is for host-visible test devices.
         [[nodiscard]] bool ReadMultiMeshInstance(u64 key, u32 region, u32 index, Float4x4& out);
-        // Test read-back of the tint written for instance `index` (a faded set's rank rides its alpha).
+        // Test read-back of the tint written for instance `index`.
         [[nodiscard]] bool ReadMultiMeshInstanceTint(u64 key, u32 region, u32 index, Color& out);
+        // Test read-back of a set's InstanceSet block for `region` (its fade window, count, pick id).
+        [[nodiscard]] bool ReadMultiMeshInstanceSet(u64 key, u32 region, GpuInstanceSet& out);
 
         // Grow the shared DataOffsets ramp to at least `count` slots: [{0,0,0,0},{1,0,0,0},...]. Filled once
         // per (re)allocation (values are static per index - never rewritten). .x is each instance's index into
@@ -363,13 +380,6 @@ export namespace foundation::render
         // Sweep sets whose lastFrame is older than kMultiMeshEvictFrames.
         void EvictStaleMultiMeshSets();
         GpuRetireQueue* m_retire = nullptr; // borrowed; null = WaitIdle on grow
-        // MultiMesh sets a pick pass can id per frame (each takes a shadow-view ring slot).
-        static constexpr u32 kMaxPickMultiMeshSets = 64;
-        // Faded instanced sets per frame that get a PRIVATE view slot carrying their window (the
-        // forward view ring and the shadow-view ring each budget this many beyond their passes).
-        // A set past the budget draws through the pass's own slot: visible, just not faded.
-        static constexpr u32 kMaxFadedSetSlots = 256;
-
         static constexpr u64 kViewSlot = 256; // dynamic UBO offset alignment (object/shadow-view)
         static constexpr u64 kViewDataSlot =
             1024;                              // view UBO slot (GpuView is 688 bytes)
@@ -536,8 +546,10 @@ export namespace foundation::render
 
         // (Re)create a bind group over a ring's buffer when the ring (re)allocated. `whole` binds
         // the entire buffer (storage, indexed); otherwise a `bindSize` window (dynamic-offset UBO).
+        // `secondUniform`, when given, is bound whole as binding 1 (the instanced set's InstanceSet).
         bool EnsureBindGroup(DynamicUniformRing& ring, rhi::BindGroupLayout* layout, u64 bindSize,
-                             rhi::BindGroup*& bg, u32& bgGen, bool whole);
+                             rhi::BindGroup*& bg, u32& bgGen, bool whole,
+                             rhi::Buffer* secondUniform = nullptr);
 
         // The set-0 bind group spans two rings: the per-view UBO (dynamic-offset window of one
         // GpuView) + the light list (whole light buffer, read as Lights[lightOffset + i]). PER-VIEW
@@ -711,6 +723,8 @@ export namespace foundation::render
         u32 m_shadowViewBGBoneGen = 0;
         rhi::BindGroup* m_objectBG = nullptr;
         rhi::BindGroup* m_instanceBG = nullptr;
+        // The InstanceSet a per-frame instanced batch binds: no fade, each instance its own id.
+        rhi::Buffer* m_noFadeSetBuf = nullptr;
         // The set-0 bind group spans the view UBO + light SB + shadow map + sampler; rebuild it when any
         // of those change (rings roll over, or the active shadow map view changes).
         // The set-0 shadow binding is cached by (view pointer, ShadowSystem generation): a freed shadow
@@ -761,6 +775,9 @@ export namespace foundation::render
                 {}; // one set-1 bind group per FiF region
             rhi::BindGroup* activeInstanceBG =
                 nullptr;      // this frame's region bind group (set in EnsureMultiMeshSet)
+            // Its InstanceSet block (fade window, instance count, pick id), one kViewSlot per
+            // frame-in-flight region, rewritten each frame the set draws (Uniform, CpuToGpu).
+            rhi::Buffer* setBuf = nullptr;
             u32 capacity = 0; // instances per region
             u32 count = 0;    // live instance count this frame
             // Per region: the version its bytes hold and how many instances were written with it.

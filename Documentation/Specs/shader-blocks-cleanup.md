@@ -1,7 +1,7 @@
 # Shader blocks cleanup - every value in a field named for it
 
-> Status: APPROVED 2026-10-29; phase 0 BUILT 2026-10-29 on clang (gcc and the other lanes owed),
-> uncommitted (user: "just slotting unrelated things in
+> Status: APPROVED 2026-10-29; phase 0 BUILT and committed (f1e5416e1); phase 1 BUILT 2026-10-29 on
+> clang, uncommitted; gcc and the other lanes owed (user: "just slotting unrelated things in
 > unused blocks"; "I'd like if we could clean up all those shader things slopped in").
 > The wind's own design is `wind-for-every-shader.md`, phase 2 here.
 > Mirror: Sedulous ports each phase after it lands.
@@ -75,7 +75,18 @@ four borrowed places, in a different form per pass:
 The change: the set's window (`FadeStart`, `FadeEnd`) as named fields of a per-set block (the
 `Object` block of the set's draw, or a block of its own), the same in the three passes; the rank
 computed in the vertex stage from the instance's index and a named `InstanceCount`, not uploaded in
-the tint; the tint keeps its alpha. The private view-block copies per set go. Tests: the existing
+the tint; the tint keeps its alpha. The private view-block copies per set go.
+
+Built 2026-10-29: `cbuffer InstanceSet` (instance_fade.hlsli; `render::GpuInstanceSet`), set 1
+binding 1 beside the instances in the forward, shadow and pick passes: `FadeStart`, `FadeEnd`,
+`InstanceCount` and the set's pick id (`SetPickIndex`/`SetPickGeneration`, which left the pick
+view's private slot with the window, rule 6). A MultiMesh set owns one per frame-in-flight region,
+written each frame it draws; a per-frame instanced batch binds a constant one (no fade, each
+instance its own id). The rank is `(index + 0.5) / InstanceCount` in the vertex stage; the tint
+keeps its alpha. The shadow view says by a named `ShadowFadeFromCamera` whether its pass couples
+to a camera (a pass with none never faded); `ShadowCamera` and `PickCamera` became float3. The
+private view-block copies per set, and their budgets (`kMaxFadedSetSlots`, `kMaxPickMultiMeshSets`),
+are gone. Tests: the existing
 `Render.Tests/MultiMeshLifecycleTests.cpp:348` (rank in the tint) is replaced by one on the named
 fields; `Render.Backend.Tests/InstanceFadeProbeTests.cpp` (GPU) passes unchanged.
 

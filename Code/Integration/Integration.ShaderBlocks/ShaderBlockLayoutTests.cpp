@@ -292,13 +292,27 @@ namespace
         FIELD(render::GpuShadowView, lightViewProj, "LightViewProj"),
         FIELD(render::GpuShadowView, wind, "ShadowWind"),
         FIELD(render::GpuShadowView, camera, "ShadowCamera"),
+        FIELD(render::GpuShadowView, fadeFromCamera, "ShadowFadeFromCamera"),
     };
     const FieldRow kPickView[] = {
         FIELD(render::GpuPickView, viewProj, "ViewProj"),
-        FIELD(render::GpuPickView, pickIndex, "SetPickId"),
         FIELD(render::GpuPickView, windTime, "WindTime"),
-        FIELD(render::GpuPickView, fadeStart, "FadeStart"),
+        FIELD(render::GpuPickView, _pad0, "_pickPad0"),
+        FIELD(render::GpuPickView, _pad1, "_pickPad1"),
+        FIELD(render::GpuPickView, _pad2, "_pickPad2"),
         FIELD(render::GpuPickView, camera, "PickCamera"),
+        FIELD(render::GpuPickView, _pad3, "_pickPad3"),
+    };
+    // An instanced draw's set: its fade window, count and set pick id (instance_fade.hlsli).
+    const FieldRow kInstanceSet[] = {
+        FIELD(render::GpuInstanceSet, fadeStart, "FadeStart"),
+        FIELD(render::GpuInstanceSet, fadeEnd, "FadeEnd"),
+        FIELD(render::GpuInstanceSet, instanceCount, "InstanceCount"),
+        FIELD(render::GpuInstanceSet, _pad0, "_setPad0"),
+        FIELD(render::GpuInstanceSet, pickIndex, "SetPickIndex"),
+        FIELD(render::GpuInstanceSet, pickGeneration, "SetPickGeneration"),
+        FIELD(render::GpuInstanceSet, _pad1, "_setPad1"),
+        FIELD(render::GpuInstanceSet, _pad2, "_setPad2"),
     };
 
     // ---- Sky and image lighting ----
@@ -633,6 +647,9 @@ namespace
         {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::None, u8"type.Object", Span<const FieldRow>(kPickObject)},
         {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::Instanced, u8"InstanceData", Span<const FieldRow>(kInstance)},
         {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::None, u8"type.PickView", Span<const FieldRow>(kPickView)},
+        {u8"forward", ShaderStage::Vertex, ShaderFlags::Instanced, u8"type.InstanceSet", Span<const FieldRow>(kInstanceSet)},
+        {u8"shadow_depth", ShaderStage::Vertex, ShaderFlags::Instanced, u8"type.InstanceSet", Span<const FieldRow>(kInstanceSet)},
+        {u8"pick_ids", ShaderStage::Vertex, ShaderFlags::Instanced, u8"type.InstanceSet", Span<const FieldRow>(kInstanceSet)},
         {u8"forward", ShaderStage::Fragment, ShaderFlags::None, u8"GpuLight", Span<const FieldRow>(kGpuLight)},
         {u8"cluster_build", ShaderStage::Compute, ShaderFlags::None, u8"GpuLight", Span<const FieldRow>(kGpuLight)},
         {u8"forward", ShaderStage::Fragment, ShaderFlags::None, u8"GpuLocalShadow", Span<const FieldRow>(kGpuLocalShadow)},

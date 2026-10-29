@@ -225,3 +225,22 @@ website and the flagship game.
   and `scripts/build-export-templates.*` are the starting point), and the sample projects
   packaged so users have something to open and play with. Perhaps the project launcher lists
   remote samples too, to download and open from there (pairs with the launcher polish above).
+- **The players' size in the export templates** (user 2026-10-29), measured 2026-10-29:
+  - Native: neither template's player is fully stripped, so every exported game carries 5.5 to
+    5.8 MB of symbol names (Linux 22.8 MB, Deck 24.9 MB). The Linux template strips only the debug
+    info (its `.debug` is kept beside the build); the Deck template is made from the build's
+    unstripped player (`build-steamdeck.sh` runs `Tools.Export --template create "$BIN"`), while
+    the container strips only the copy it stages into `dist/` (19.0 MB). First find whether the
+    crash log names its backtrace from the symbol table; then strip fully, keeping a `.debug`
+    beside each build (the Deck build keeps none). The Deck player is larger by its static C++
+    runtime (about 1 MB, needed for SteamOS) and, plausibly, `-O3` against `-O2`.
+  - The code itself (13 MB on Linux): the engine's own about 7 MB, of which the reflection and
+    script-binding glue is 1.7 MB in 5,330 small template instances and the GUI 1.4 MB; SDL3
+    1.7 MB, Jolt 1.2 MB, HarfBuzz 0.9 MB, AngelScript 0.8 MB and Luau 0.4 MB (both languages
+    linked, a game uses one), miniaudio 0.5 MB. Unwind tables 2.1 MB.
+  - Web: the shipping wasm is 15.2 MB (4.5 MB gzipped), almost all code (14.6 MB), and already
+    carries no names. It is built at `-O3` with `-sASYNCIFY` unrestricted, which instruments
+    every function that may reach a yield and is commonly a large part of a wasm's size;
+    `ASYNCIFY_ONLY`/`ASYNCIFY_REMOVE` lists, JSPI where browsers have it, `-Os`/`-Oz` and LTO are
+    the levers to measure. The web profile player is no larger than the shipping one (15.18
+    against 15.22 MB), not yet explained.

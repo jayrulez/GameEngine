@@ -128,6 +128,29 @@ today), against references of their own; the splash, the window icons and export
 `.ico`, Steam artwork) rendered from one SVG instead of PNGs at each size; vector thumbnails in a
 host with no GPU. The splash took a 2x PNG instead for now (scripts/logo-splash.py).
 
+## GPU particles: the simulation mode that is a stub today (user 2026-10-29)
+
+A particle system's `SimulationMode` offers CPU, GPU and Auto (`Foundation/Particles/
+ParticleTypes.cppm`), and each behavior declares whether it runs on the CPU, the GPU or both
+(`BehaviorSupport`), but the GPU simulator was never built: `ParticleEffect::ResolveSimulationMode`
+records the choice and every system still updates on the CPU ("GPU is stubbed (Phase 6)"). Build
+it: a compute pass that spawns, updates and compacts each GPU system's particles in a buffer the
+billboard, trail and mesh renderers draw from, the behaviors that declare GPU support given
+compute versions, Auto choosing it for large systems, on Vulkan, Direct3D 12 and WebGPU (the
+engine already runs compute there: the light clusters). Found by the Traktor comparison
+(`Documentation/Comparisons/engine-vs-traktor.md`, "Particles"); Traktor's GPU emitters are
+`code/Spray/EmitterInstanceGPU.cpp` beside its CPU ones.
+
+## A GPU test that draws reflection probes (user 2026-10-29)
+
+No GPU test renders a reflection probe: `Render.Tests` checks which records each scene gets and
+their values by name, and `Integration.ShaderBlocks` that the record and `lighting.hlsli` agree,
+but nothing captures a probe and reads back what it reflects. Found while naming the probe lanes
+(shader-blocks-cleanup phase 4). A probe in `Render.Backend.Tests`, Vulkan and WebGPU: a metallic
+sphere inside a probe's box with a coloured surround the probe captures (through the capture pass,
+`ReflectionProbeSystem::Captures`), its reflection read back at a texel; the same sphere outside
+the box reflects the sky instead; parallax on and off move the reflection.
+
 ## The GUI lab's inspector as MCP tools: a phase of its own (user 2026-10-17)
 
 The lab's inspector (`Specs/gui-lab-evolution.md`, E8e) answers its questions through a C++ API

@@ -554,7 +554,8 @@ if(OPTION_BUILD_TOOLS)
     add_subdirectory(Code/Editor/Editor.Mcp) # MCP project tools (project_create/open/info); headless
     # The editor is on the GUI (Documentation/Specs/editor-gui.md; its ledger, 4.1, says where each
     # library moved); the old editor's files went at the swap (5.6).
-    add_subdirectory(Code/Editor/Editor.Preview) # the thumbnail stage and the preview viewport
+    add_subdirectory(Code/Editor/Editor.Preview.Viewport) # the preview viewport (no editor core: tools link it too)
+    add_subdirectory(Code/Editor/Editor.Preview) # the thumbnail stage, the preview viewport re-exported
     add_subdirectory(Code/Editor/Editor.App)
     add_subdirectory(Code/Pipeline/Physics.Pipeline)    # collision/material assets + builders (tooling)
     add_subdirectory(Code/Pipeline/Render.Pipeline)     # render profile assets + builders (tooling)

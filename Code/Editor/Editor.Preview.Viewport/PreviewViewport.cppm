@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Editor::Preview - `editor.preview`: the shared 3D-preview substrate for bespoke asset
-// editor pages (mesh / clip / skeleton / material / particle / animgraph / collision).
+// Editor::Preview.Viewport - `editor.preview.viewport`: the shared 3D-preview substrate for
+// bespoke asset editor pages (mesh / clip / skeleton / material / particle / animgraph /
+// collision), and for standalone tools on the engine (the model viewer). It needs nothing of the
+// editor's core: its owner hands it the allocator it builds from.
 //
 // PreviewViewport owns the whole substrate each of those pages would otherwise hand-roll: a GUI
 // Viewport (GUI.Viewport, hosted by the window's GuiHost, which places it and routes its input), a
@@ -28,9 +30,7 @@
 module;
 #include "Core/Prelude.h"
 
-export module editor.preview;
-
-export import :thumbnail_stage; // the GPU thumbnail renderer (shares this substrate's home)
+export module editor.preview.viewport;
 
 import foundation.core;
 import foundation.runtime.client; // IApplicationHost
@@ -59,7 +59,8 @@ export namespace editor
         // Builds the viewport + a private preview scene named `sceneName` (e.g. "mesh.preview"),
         // hosted by `gui` (null: not hosted, a test: it neither draws nor takes input). The scene
         // has simulation disabled; the page adds its own entities via Scene().
-        PreviewViewport(runtime::IApplicationHost& host, foundation::gui::GuiHost* gui, StringView sceneName);
+        PreviewViewport(IAllocator& allocator, runtime::IApplicationHost& host, foundation::gui::GuiHost* gui,
+                        StringView sceneName);
         ~PreviewViewport();
 
         PreviewViewport(const PreviewViewport&) = delete;

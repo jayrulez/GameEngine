@@ -35,7 +35,7 @@ export namespace editor::app
         PreviewPane(gui::Node& root, const AssetPageServices& services, StringView sceneName)
         {
             if (services.host != nullptr)
-                m_viewport = MakeUnique<PreviewViewport>(EditorRootAllocator(), *services.host, services.gui, sceneName);
+                m_viewport = MakeUnique<PreviewViewport>(EditorRootAllocator(), EditorRootAllocator(), *services.host, services.gui, sceneName);
             m_stage = FindById<gui::Node>(root, u8"preview-stage");
             m_empty = FindById<gui::Node>(root, u8"preview-empty");
             m_emptyTitle = FindById<gui::Label>(root, u8"preview-empty-title");

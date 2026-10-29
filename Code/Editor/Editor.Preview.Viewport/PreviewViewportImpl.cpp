@@ -12,7 +12,7 @@
 module;
 #include "Core/Prelude.h"
 
-module editor.preview;
+module editor.preview.viewport;
 
 import foundation.core;
 import foundation.shell;
@@ -40,7 +40,9 @@ namespace editor
     struct PreviewViewport::Impl
     {
         engine::scene::SceneSubsystem* scenes = nullptr;
-        scene::SceneManager sceneManager{editor::EditorRootAllocator()}; // this preview's OWN scene group
+        explicit Impl(IAllocator& allocator) : sceneManager(allocator) {}
+
+        scene::SceneManager sceneManager; // this preview's OWN scene group
         engine::render::RenderSubsystem* render = nullptr;
         scene::Scene* scene = nullptr;
         EditorCamera camera = PreviewCamera();
@@ -71,8 +73,9 @@ namespace editor
         }
     };
 
-    PreviewViewport::PreviewViewport(runtime::IApplicationHost& host, gui::GuiHost* gui, StringView sceneName)
-        : m_impl(MakeUnique<Impl>(editor::EditorRootAllocator()))
+    PreviewViewport::PreviewViewport(IAllocator& allocator, runtime::IApplicationHost& host, gui::GuiHost* gui,
+                                     StringView sceneName)
+        : m_impl(MakeUnique<Impl>(allocator, allocator))
     {
         m_impl->scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
         m_impl->render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
@@ -82,7 +85,7 @@ namespace editor
             m_impl->scene = m_impl->sceneManager.CreateScene(sceneName);
             m_impl->scene->SetSimulationEnabled(false);
         }
-        m_impl->view = MakeRef<gui::Viewport>(editor::EditorRootAllocator());
+        m_impl->view = MakeRef<gui::Viewport>(allocator);
         m_impl->view->AddClass(u8"preview-view");
         m_impl->view->ClearColor = kBackdrop;
         if (gui != nullptr)

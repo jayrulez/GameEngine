@@ -98,7 +98,6 @@ namespace
             CHECK(false);
         }
         REQUIRE(check.IsOk());
-        REQUIRE(check.hasVertex); // forward's wind
         // The engine's vertex stages sway every surface shader by its material's Wind group, so its
         // programs declare WIND (Specs/wind-for-every-shader.md, rule 4).
         REQUIRE_FALSE(check.programs.IsEmpty());
@@ -109,12 +108,9 @@ namespace
         return out;
     }
 
-    // The forward PBR material the scene uses, swaying by its Wind group, and the same values on
-    // the surface PBR, laid out by its properties block (forward's, in forward's layout, with its
-    // own wind properties in the lanes forward's buffer leaves as padding), swaying by its own
-    // Vertex(). The surface material carries the Wind group too (its programs declare WIND), off:
-    // so it sways once, by its Vertex(), and its own WindStrength does not collide with the
-    // effect's Strength.
+    // The forward PBR material the scene uses and the same values on the surface PBR, laid out by
+    // its properties block (forward's, at forward's offsets); both sway by the same Wind group,
+    // through the engine's vertex stages, which both programs' WIND variants run.
     RefPtr<materials::Material> PbrMaterial(StringView name, Float4 color, f32 metallic,
                                             f32 roughness, bool surface, const SurfacePrograms& cooked,
                                             const shaders::ShaderEffect& wind, f32 windStrength)
@@ -160,9 +156,9 @@ namespace
         m->SetDefaultColor(u8"BaseColor", color);
         m->SetDefaultFloat(u8"Metallic", metallic);
         m->SetDefaultFloat(u8"Roughness", roughness);
-        m->SetDefaultFloat(u8"WindStrength", windStrength);
-        m->SetDefaultFloat(u8"WindSpeed", 1.0f);
-        m->SetDefaultFloat(u8"WindHeight", 0.5f);
+        m->SetDefaultFloat(u8"Wind.Strength", windStrength);
+        m->SetDefaultFloat(u8"Wind.Speed", 1.0f);
+        m->SetDefaultFloat(u8"Wind.Height", 0.5f);
         // Laid out as forward's: the values mean the same on both.
         REQUIRE(m->FindProperty(u8"EmissiveColor") != nullptr);
         CHECK(m->FindProperty(u8"EmissiveColor")->offset == 32u);

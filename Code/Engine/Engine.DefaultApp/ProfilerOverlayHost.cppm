@@ -100,7 +100,7 @@ export namespace engine::runtime
         [[nodiscard]] foundation::profiler::gui::ProfilerOverlay* Overlay() noexcept { return m_overlay.Get(); }
 
     private:
-        IAllocator* m_allocator;
+        [[maybe_unused]] IAllocator* m_allocator; // read only where the profiler is built in (not Shipping)
         foundation::profiler::Profiler* m_profiler;
         engine::gui::GuiSubsystem* m_gui = nullptr; // while shown
         UniquePtr<foundation::profiler::LiveProfileSource> m_source;

@@ -220,3 +220,40 @@ TEST_CASE("keyframes: removing the animation stops it and the target shows")
     bed.root->GetContext().Update(Secs(0.5));
     CHECK(bed.w->GetAlpha() == doctest::Approx(1.0f));
 }
+
+// A label's text scales with its node (Masquerade's clock): a scale pulse beside an opacity one,
+// started on the label from the first styling or later by a class, reaches the world transform it
+// draws through.
+TEST_CASE("keyframes: a label's scale pulse reaches its world transform, from the start or by a class")
+{
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        const bool byClass = pass == 1;
+        CAPTURE(byClass);
+        auto root = core::MakeRef<SceneRoot>(core::DefaultAllocator(), core::MakeRef<GUIContext>(core::DefaultAllocator()));
+        auto label = Make<Label>();
+        label->SetText(core::StringView(u8"3:55"));
+        label->AddClass(core::StringView(u8"a"));
+        if (!byClass)
+            label->AddClass(core::StringView(u8"late"));
+        root->AddChild(label.Get());
+        StyleManager mgr;
+        mgr.SetStyleSheet(CSSParser::Parse(core::StringView(
+            u8"@keyframes pulse { from { transform: scale(1); opacity: 1; } to { transform: scale(1.5); opacity: 0.5; } } "
+            u8".a { width: 100; height: 40; } .a.late { animation: pulse 1s linear infinite alternate; }")));
+        mgr.ApplyTree(*root.Get());
+        root->UpdateLayout();
+        if (byClass)
+        {
+            root->GetContext().Update(Secs(0.5)); // no pulse yet
+            CHECK(label->GetWorldTransform().TransformRect(label->GetLocalBounds()).width == doctest::Approx(100.0f));
+            label->AddClass(core::StringView(u8"late"));
+            mgr.ApplyTree(*root.Get());
+        }
+        root->GetContext().Update(Secs(0.5)); // halfway up: scale 1.25 about the centre, opacity 0.75
+        CHECK(label->GetAlpha() == doctest::Approx(0.75f));
+        const auto drawn = label->GetWorldTransform().TransformRect(label->GetLocalBounds());
+        CHECK(drawn.width == doctest::Approx(125.0f));
+        CHECK(drawn.height == doctest::Approx(50.0f));
+    }
+}

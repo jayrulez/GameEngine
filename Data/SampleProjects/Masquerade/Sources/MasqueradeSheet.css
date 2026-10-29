@@ -5,6 +5,14 @@
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 screen.fades:entering { animation: fade-in 0.3s ease-out; }
 
+/* A menu over the ball (pause, the results): the ball dims and blurs behind it. The dim and the blur
+   grow in rather than the screen's opacity, as a faded screen draws through a layer of its own,
+   where its backdrop blur would see nothing behind it. */
+screen.dimmed { background-color: rgba(4, 6, 16, 0.55); backdrop-filter: blur(6px); }
+screen.dimmed:entering { animation: dim-in 0.3s ease-out; }
+@keyframes dim-in { from { background-color: rgba(4, 6, 16, 0); backdrop-filter: blur(0px); }
+                    to { background-color: rgba(4, 6, 16, 0.55); backdrop-filter: blur(6px); } }
+
 .card { flex-direction: column; background-color: rgba(10, 16, 32, 0.91); border-radius: 16px; }
 .centre { flex-grow: 1; flex-direction: column; justify-content: center; align-items: center; padding: 12px; }
 
@@ -101,9 +109,14 @@ textfield.address:focus-visible { border: 3px solid #F4D080; }
 .pause-card { padding: 24px; gap: 10px; width: 628px; }
 .pause-title { font-size: 36px; color: #F4D080; }
 button.wide { height: 44px; font-size: 22px; }
-.results-card { padding: 26px; align-items: center; gap: 8px; width: 572px; }
-.results-title { font-size: 40px; color: #F4D080; }
-.results-you { font-size: 22px; color: #F4E6C8; margin-bottom: 4px; }
-.results-line { font-size: 18px; color: #E0D0B0; }
-.results-best { font-size: 15px; color: #B8A080; margin-bottom: 8px; }
-button.results { width: 320px; height: 42px; font-size: 21px; }
+.results-card { padding: 28px 40px; align-items: center; gap: 8px; width: 560px; }
+.results-title { font-size: 42px; color: #F4D080; }
+.results-you { font-size: 20px; color: #F4E6C8; margin-bottom: 8px; }
+.rank-table { flex-direction: column; align-items: stretch; gap: 4px; width: 420px; }
+.rank-row { flex-direction: row; align-items: center; height: 40px; padding: 0px 14px; border-radius: 8px; background-color: rgba(255, 255, 255, 0.04); }
+.rank-row.you { background-color: #2A1E0C; border: 2px solid #C8963C; }
+.rank-place { width: 52px; font-size: 18px; color: #B8A080; }
+.rank-name { flex-grow: 1; font-size: 20px; color: #E0D0B0; }
+.rank-points { width: 90px; font-size: 20px; color: #F4E6C8; text-align: end; }
+.rank-row.you .rank-name { color: #F4D080; }
+.results-best { font-size: 15px; color: #B8A080; margin-top: 6px; }

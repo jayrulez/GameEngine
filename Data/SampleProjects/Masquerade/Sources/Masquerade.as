@@ -456,10 +456,35 @@ class Game
         screens().push(kResultsDoc);
         setText("res-title", place == 1 ? "The ball is yours" : "The music stops");
         setText("res-you", "You came " + this.place(place) + " with " + you + " points");
-        setText("res-0", "You        " + you);
-        setText("res-1", "Hunter 1   " + int(scores.y));
-        setText("res-2", "Hunter 2   " + int(scores.z));
-        setText("res-3", "Hunter 3   " + int(scores.w));
+        // Every hunter by points, the most first (yours first among equals), your row lit.
+        array<string> names = {"You", "Hunter 1", "Hunter 2", "Hunter 3"};
+        array<int> points = {you, int(scores.y), int(scores.z), int(scores.w)};
+        array<int> order = {0, 1, 2, 3};
+        for (int i = 1; i < 4; ++i)
+        {
+            for (int j = i; j > 0 && points[order[j]] > points[order[j - 1]]; --j)
+            {
+                int t = order[j];
+                order[j] = order[j - 1];
+                order[j - 1] = t;
+            }
+        }
+        for (int row = 0; row < 4; ++row)
+        {
+            int who = order[row];
+            setText("rank-place-" + row, this.place(row + 1));
+            setText("rank-name-" + row, names[who]);
+            setText("rank-points-" + row, "" + points[who]);
+            UIWidget@ line = UIWidget::of(find("rank-" + row));
+            if (who == 0)
+            {
+                line.addClass("you");
+            }
+            else
+            {
+                line.removeClass("you");
+            }
+        }
         setText("res-best", record ? "Your best round yet" : "Your best: " + best + " points");
         wire("again-btn", EventHandler(this.onAgain));
         find("again-btn").visible = m_mode != kJoining; // the host starts the next round

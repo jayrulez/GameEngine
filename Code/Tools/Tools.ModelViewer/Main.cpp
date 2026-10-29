@@ -8,7 +8,9 @@
 // viewer's rules after them), the view a preview viewport in it. A model opens through the
 // `modelviewer` library: cooked into the viewer's cache, bound, put into the preview scene.
 //
-//   Tools.ModelViewer [model files...] [--screenshot <png> [--screenshot-exit] ...]
+//   Tools.ModelViewer [model files...] [--rest] [--screenshot <png> [--screenshot-exit] ...]
+//
+// --rest shows the model in its rest pose, no clip playing.
 //
 // P0: the window, the view, one model from the command line, framed, on a grid scaled to it.
 
@@ -65,6 +67,8 @@ namespace
     {
     public:
         void AddFile(StringView path) { m_files.PushBack(String(path)); }
+        /// --rest: the model in its rest pose, no clip playing.
+        void SetRest(bool rest) { m_rest = rest; }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
@@ -262,7 +266,9 @@ namespace
             }
             m_failure = {};
             LOG_INFO(u8"ModelViewer", u8"opened {} ({})", path, OutcomeText(outcome));
-            m_instance = engine::model::InstantiateModel(*m_viewport->Scene(), *m_open.Model(), u8"model");
+            engine::model::InstantiateOptions options;
+            options.animate = !m_rest;
+            m_instance = engine::model::InstantiateModel(*m_viewport->Scene(), *m_open.Model(), u8"model", options);
             MeasureBounds();
             if (auto* file = FindAs<gui::Label>(u8"viewer-file"))
                 file->SetText(path);
@@ -383,6 +389,7 @@ namespace
         String m_dataRoot;
         String m_cacheRoot;
         Array<String> m_files;
+        bool m_rest = false;
         UniquePtr<vfs::NativeFileSystem> m_data;
         UniquePtr<gui::VgShaderLibrary> m_shaders;
         UniquePtr<fonts::TrueTypeFontService> m_fonts;
@@ -405,6 +412,11 @@ int main(int argc, char** argv)
     for (int i = 1; i < argc; ++i)
     {
         const StringView arg(reinterpret_cast<const utf8char*>(argv[i]));
+        if (arg == StringView(u8"--rest"))
+        {
+            app.SetRest(true);
+            continue;
+        }
         if (arg.Size() > 0 && arg[0] == u8'-')
         {
             if (arg.StartsWith(u8"--screenshot") && i + 1 < argc && arg != StringView(u8"--screenshot-exit"))

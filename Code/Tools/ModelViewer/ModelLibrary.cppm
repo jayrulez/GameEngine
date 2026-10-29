@@ -70,8 +70,12 @@ export namespace modelviewer
         return false;
     }
 
-    /// The folder `path`'s cooked files live in under `cacheRoot`: named by the path, its size and
-    /// its modification time. Empty when the file is not there.
+    /// What the cache's cooked files were made by: raised when the import changes what it makes, so
+    /// a model opened again cooks afresh.
+    inline constexpr u32 kCacheVersion = 3;
+
+    /// The folder `path`'s cooked files live in under `cacheRoot`: named by the path, its size, its
+    /// modification time and the cache version. Empty when the file is not there.
     [[nodiscard]] inline String CacheFolderFor(StringView cacheRoot, StringView path)
     {
         u64 size = 0;
@@ -81,6 +85,7 @@ export namespace modelviewer
         u64 hash = HashBytes(path.Data(), path.Size());
         hash = HashBytes(&size, sizeof(size), hash);
         hash = HashBytes(&modified, sizeof(modified), hash);
+        hash = HashBytes(&kCacheVersion, sizeof(kCacheVersion), hash);
         utf8char name[16];
         for (u32 i = 0; i < 16; ++i)
             name[i] = static_cast<utf8char>(u8"0123456789abcdef"[(hash >> (60 - 4 * i)) & 0xFu]);

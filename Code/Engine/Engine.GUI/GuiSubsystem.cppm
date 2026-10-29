@@ -451,6 +451,9 @@ export namespace engine::gui
         /// default and the others, each a family a label picks by `font-family`. Without a default
         /// the built-in font serves (the others wait for one). The products are held.
         void SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others);
+        /// Font services SetFonts replaced and not yet let go (they go two frames after, once every
+        /// root has been styled with the new one).
+        [[nodiscard]] usize RetiredFontServices() const noexcept { return m_retiredFonts.Size(); }
 
         /// Where asset guids resolve (the application's resource manager); null resolves nothing.
         void SetResourceManager(resource::ResourceManager* resources);
@@ -666,6 +669,11 @@ export namespace engine::gui
         UniquePtr<GuiResourceProvider> m_resources;
         UniquePtr<foundation::fonts::IFontService> m_fonts;        // the built-in font
         UniquePtr<foundation::fonts::IFontService> m_projectFonts; // the project's, when it names a default
+        // Services SetFonts replaced, kept until every root has been styled again: a label holds
+        // its font from the service it was styled with, and input may lay a root out (a hit test)
+        // before the frame's style pass gives it the new one.
+        Array<UniquePtr<foundation::fonts::IFontService>> m_retiredFonts;
+        u32 m_retiredFontsFrames = 0; // frames begun since the last retirement
         RefPtr<foundation::fonts::Font> m_defaultFont;
         Array<RefPtr<foundation::fonts::Font>> m_otherFonts;
         Array<Guid> m_sheets;

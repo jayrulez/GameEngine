@@ -510,8 +510,10 @@ TEST_CASE("engine.gui: the domain brings the documents' and sheets' resource mod
     const engine::DomainModule& domain = engine::gui::GuiDomain();
     CHECK(domain.id == StringView(u8"gui"));
     bool documents = false;
+    // By its id, as the composition tells modules apart: in a shared build the test and Engine.GUI
+    // each have their own copy of the module's record, at another address.
     for (const foundation::resource::ResourceModule* module : domain.resources)
-        documents = documents || module == &kGuiResourceModule;
+        documents = documents || module->id == kGuiResourceModule.id;
     CHECK(documents);
     CHECK(domain.HasScene()); // its components
 }
@@ -1128,6 +1130,25 @@ TEST_CASE("engine.gui: the project's fonts, a default and others each a family, 
     engine.gui->SetFonts(nullptr, {});
     CHECK(engine.gui->Fonts() == builtIn);
     CHECK(engine.gui->Context().GetFontService() == builtIn);
+}
+
+// The editor sets the fonts again when the project's content changes (a sheet's cook). A label
+// keeps the font it was styled with, and input lays a root out (a hit test) before the frame's
+// style pass gives it the new one: the service it came from lives until every root was styled
+// again (the user's Masquerade crashed in a hit test's text measure).
+TEST_CASE("engine.gui: a replaced font service lives until the roots are styled with the new one")
+{
+    Engine engine;
+    RefPtr<foundation::fonts::Font> body = MakeFontProduct(u8"Body");
+    RefPtr<foundation::fonts::Font> again = MakeFontProduct(u8"Body");
+    engine.gui->SetFonts(body.Get(), {});
+    CHECK(engine.gui->RetiredFontServices() == 0u); // the built-in one is no project service
+    engine.gui->SetFonts(again.Get(), {});
+    CHECK(engine.gui->RetiredFontServices() == 1u); // the first, still alive
+    engine.Frame();
+    CHECK(engine.gui->RetiredFontServices() == 1u); // one frame: the scene tiers may not have restyled
+    engine.Frame();
+    CHECK(engine.gui->RetiredFontServices() == 0u);
 }
 
 TEST_CASE("engine.gui: the screen is placed as the game's image is: fitted at its resolution, turned for its orientation")

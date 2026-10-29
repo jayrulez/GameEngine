@@ -744,6 +744,11 @@ namespace engine::gui
         for (const foundation::fonts::Font* font : others)
             if (font != nullptr)
                 m_otherFonts.PushBack(RefPtr<foundation::fonts::Font>(const_cast<foundation::fonts::Font*>(font)));
+        if (m_projectFonts)
+        {
+            m_retiredFonts.PushBack(Move(m_projectFonts)); // labels styled with it hold its fonts yet
+            m_retiredFontsFrames = 0;
+        }
         m_projectFonts = nullptr;
         if (m_defaultFont)
         {
@@ -957,6 +962,10 @@ namespace engine::gui
             StyleAndLayOut(*m_screen.Root, m_screen.Root->GetViewportSize());
         for (const UniquePtr<ScreenTier>& tier : m_runTiers)
             StyleAndLayOut(*tier->Root, tier->Root->GetViewportSize());
+        // The replaced font services go once a whole frame has styled every root (the scene tiers
+        // are styled as their scenes draw, after this).
+        if (!m_retiredFonts.IsEmpty() && ++m_retiredFontsFrames >= 2)
+            m_retiredFonts.Clear();
     }
 
     void GuiSubsystem::SetResourceManager(resource::ResourceManager* resources)

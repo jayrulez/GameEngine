@@ -427,6 +427,8 @@ namespace
                 host.RequestExit(1);
                 return;
             }
+            if (auto* text = FindAs<gui::Label>(u8"viewer-empty-text"))
+                m_emptyText = String(text->GetText());
             m_viewport = MakeUnique<editor::PreviewViewport>(m_allocator, m_allocator, host, m_guiHost.Get(), u8"model.viewer");
             m_viewport->SetSimulationEnabled(true); // the animation plays
             if (gui::Node* view = FindById(u8"viewer-view"))
@@ -488,7 +490,11 @@ namespace
                     m_tabs.At(i).open->Resources()->Pump();
             m_guiHost->Update(deltaTime);
             if (m_thumbnails)
+            {
                 m_thumbnails->Update();
+                ShowProgress();
+            }
+            TakeReads();
             if (m_mcpHost)
                 (void)m_mcpHost->Pump();
             if (!m_browsing && m_viewport->Update(deltaTime))
@@ -701,6 +707,7 @@ namespace
                 t.Set(String(u8"tab"), Number(i));
                 t.Set(String(u8"path"), Text(m_tabs.At(i).path.AsView()));
                 t.Set(String(u8"front"), Flag(!m_browsing && i == m_tabs.Active()));
+                t.Set(String(u8"ready"), Flag(m_tabs.At(i).ready));
                 tabs.Add(foundation::core::Move(t));
             }
             v.Set(String(u8"tabs"), foundation::core::Move(tabs));
@@ -740,6 +747,11 @@ namespace
             if (tab == nullptr)
             {
                 why = String(u8"no model is in front");
+                return nullptr;
+            }
+            if (!tab->ready)
+            {
+                why = Format(u8"{} is still cooking", tab->title.AsView());
                 return nullptr;
             }
             if (tab->playback.Get() == nullptr || !tab->playback->HasClips())
@@ -782,6 +794,7 @@ namespace
                         return CommandResult::Fail(self->m_failure.AsView());
                     JsonValue v = JsonValue::MakeObject();
                     v.Set(String(u8"tab"), Number(tab));
+                    v.Set(String(u8"ready"), Flag(self->m_tabs.At(tab).ready));
                     return CommandResult::Ok(foundation::core::Move(v));
                 });
             reg(u8"model.close", [self](const JsonValue& a)
@@ -811,6 +824,8 @@ namespace
                     const modelviewer::ModelTab* tab = self->m_browsing ? nullptr : self->m_tabs.ActiveTab();
                     if (tab == nullptr)
                         return CommandResult::Fail(u8"no model is in front to take a picture of");
+                    if (!tab->ready)
+                        return CommandResult::Fail(Format(u8"{} is still cooking: ask tabs_list until it is ready", tab->title.AsView()).AsView());
                     String path = a.Get(String(u8"path")).AsString();
                     if (path.IsEmpty())
                     {
@@ -826,8 +841,8 @@ namespace
             reg(u8"view.camera", [self](const JsonValue& a)
                 {
                     modelviewer::ModelTab* tab = self->m_browsing ? nullptr : self->m_tabs.ActiveTab();
-                    if (tab == nullptr)
-                        return CommandResult::Fail(u8"no model is in front");
+                    if (tab == nullptr || !tab->ready)
+                        return CommandResult::Fail(tab == nullptr ? u8"no model is in front" : u8"the model in front is still cooking");
                     editor::EditorCamera& camera = self->m_viewport->Camera();
                     if (a.Has(String(u8"yaw")) || a.Has(String(u8"pitch")))
                     {
@@ -1123,7 +1138,7 @@ namespace
         void OpenFile(StringView path)
         {
             SaveCamera();
-            const modelviewer::ModelTabs::Opened opened = m_tabs.Open(path, m_cacheRoot.AsView(), m_device, m_settings.value.looseTextures);
+            const modelviewer::ModelTabs::Opened opened = m_tabs.Begin(path, m_cacheRoot.AsView(), m_device, m_settings.value.looseTextures);
             if (opened.index < 0)
             {
                 m_failure = Format(u8"{} did not open ({}).", path, OutcomeText(opened.outcome));
@@ -1135,23 +1150,73 @@ namespace
             m_settings.Recent(false, m_tabs.At(opened.index).path.AsView());
             if (opened.added)
             {
-                LOG_INFO(u8"ModelViewer", u8"opened {} ({})", path, OutcomeText(opened.outcome));
                 modelviewer::ModelTab& tab = m_tabs.At(opened.index);
-                engine::model::InstantiateOptions options;
-                options.animate = !m_rest;
-                tab.instance = engine::model::InstantiateModel(*m_viewport->Scene(), *tab.open->Model(), tab.title.AsView(), options);
-                tab.playback = MakeUnique<modelviewer::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
-                tab.playback->SetLooping(m_settings.value.loop);
-                KeepStats(tab.path.AsView(), tab.open->Stats());
-                MeasureBounds(tab);
                 if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
                 {
                     gui::Tab* added = bar->AddTab(tab.title.AsView());
                     added->SetClosable(true);
                     added->SetTooltip(tab.path.AsView());
                 }
+                if (opened.needsFile)
+                    m_tabLoads.Request(tab.path.AsView(), m_settings.value.looseTextures); // the tab shows "cooking" till it comes
+                else
+                    PlaceModel(tab, opened.outcome);
             }
             ShowTab(opened.index);
+        }
+
+        // The grid's count line, with how far the thumbnails have got while they are drawn
+        // ("12 of 12 models, drawing 3 of 12").
+        void ShowProgress()
+        {
+            String line = m_gridCount;
+            if (!line.IsEmpty() && m_thumbnails->Remaining() > 0)
+                line += Format(u8", drawing {} of {}", modelviewer::GroupedCount(m_thumbnails->Done() + 1).AsView(),
+                               modelviewer::GroupedCount(m_thumbnails->Queued()).AsView())
+                            .AsView();
+            if (line == m_shownProgress)
+                return;
+            m_shownProgress = line;
+            if (auto* count = FindAs<gui::Label>(u8"viewer-grid-count"))
+                count->SetText(line.AsView());
+        }
+
+        // A tab's model, ready, put into the scene: its instance, its playback, its bounds.
+        void PlaceModel(modelviewer::ModelTab& tab, modelviewer::OpenModel::Outcome outcome)
+        {
+            LOG_INFO(u8"ModelViewer", u8"opened {} ({})", tab.path.AsView(), OutcomeText(outcome));
+            engine::model::InstantiateOptions options;
+            options.animate = !m_rest;
+            tab.instance = engine::model::InstantiateModel(*m_viewport->Scene(), *tab.open->Model(), tab.title.AsView(), options);
+            tab.playback = MakeUnique<modelviewer::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
+            tab.playback->SetLooping(m_settings.value.loop);
+            KeepStats(tab.path.AsView(), tab.open->Stats());
+            MeasureBounds(tab);
+        }
+
+        // The files the worker has read: each tab waiting for one finished (cooked, bound, placed;
+        // shown when in front), or closed saying why it did not open.
+        void TakeReads()
+        {
+            modelviewer::FileRead read;
+            while (m_tabLoads.Take(read))
+            {
+                const i32 index = m_tabs.Find(read.path.AsView());
+                if (index < 0 || m_tabs.At(index).ready)
+                    continue; // closed while it was read, or read twice
+                const modelviewer::OpenModel::Outcome outcome = m_tabs.Finish(index, read);
+                if (outcome != modelviewer::OpenModel::Outcome::Opened)
+                {
+                    m_failure = Format(u8"{} did not open ({}).", read.path.AsView(), OutcomeText(outcome));
+                    LOG_ERROR(u8"ModelViewer", u8"{}", m_failure.AsView());
+                    CloseTab(index);
+                    ShowEmpty();
+                    continue;
+                }
+                PlaceModel(m_tabs.At(index), outcome);
+                if (index == m_tabs.Active() && !m_browsing)
+                    ShowTab(index);
+            }
         }
 
         // The tab in front: its model the only one active in the scene, its camera back (framed
@@ -1202,8 +1267,8 @@ namespace
         void SaveCamera()
         {
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
-            if (tab == nullptr || !m_viewport || m_browsing)
-                return;
+            if (tab == nullptr || !tab->ready || !m_viewport || m_browsing)
+                return; // a tab still cooking has no view of its own yet
             const editor::EditorCamera& camera = m_viewport->Camera();
             tab->camera.saved = true;
             tab->camera.position = camera.position;
@@ -1629,8 +1694,10 @@ namespace
                 shown.PushBack(path);
             }
             m_browseGrid.Reset();
+            m_gridCount = Format(u8"{} of {} models", modelviewer::GroupedCount(shown.Size()).AsView(),
+                                 modelviewer::GroupedCount(m_folderModels.Size()).AsView());
             if (auto* count = FindAs<gui::Label>(u8"viewer-grid-count"))
-                count->SetText(Format(u8"{} of {} models", shown.Size(), m_folderModels.Size()).AsView());
+                count->SetText(m_gridCount.AsView());
             if (m_thumbnails)
                 m_thumbnails->SetQueue(shown.AsSpan());
         }
@@ -2617,7 +2684,8 @@ namespace
             gui::Node* empty = FindById(u8"viewer-empty");
             if (empty == nullptr)
                 return;
-            const bool open = m_tabs.Count() > 0 && m_tabs.ActiveTab() != nullptr;
+            const modelviewer::ModelTab* front = m_tabs.Count() > 0 ? m_tabs.ActiveTab() : nullptr;
+            const bool open = front != nullptr && front->ready;
             empty->SetDisplayed(!open);
             m_viewport->View()->SetDisplayed(open);
             if (!open)
@@ -2628,8 +2696,15 @@ namespace
                     while (rows->ChildCount() > 0)
                         rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
             }
-            if (auto* text = FindAs<gui::Label>(u8"viewer-empty-text"); text != nullptr && !m_failure.IsEmpty())
-                text->SetText(m_failure.AsView());
+            if (auto* text = FindAs<gui::Label>(u8"viewer-empty-text"))
+            {
+                if (front != nullptr && !front->ready)
+                    text->SetText(Format(u8"Cooking {}...", front->title.AsView()).AsView());
+                else if (!m_failure.IsEmpty())
+                    text->SetText(m_failure.AsView());
+                else if (front == nullptr)
+                    text->SetText(m_emptyText.AsView());
+            }
         }
 
         // A model's bounds as placed: each of its meshes' boxes through its entity's world (a
@@ -2782,6 +2857,10 @@ namespace
         modelviewer_window::GridModel m_libraryGrid;
         RefPtr<gui::Menu> m_gridMenu;
         modelviewer::SettingsStore m_settings;
+        modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' files, read off the main thread
+        String m_emptyText; // the empty view's own words, from the markup
+        String m_gridCount; // the browse grid's "n of m models"
+        String m_shownProgress;
         String m_density; // the density whose sheet is applied
         u32 m_thumbnailSize = 128;
         UniquePtr<modelviewer::PreferencesDialog> m_preferences;

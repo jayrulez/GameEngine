@@ -25,4 +25,5 @@ target_sources(ModelViewer
             ModelCommands.cppm
             ModelMcp.cppm
             WindowCommands.cppm
-            ViewerSettings.cppm)
+            ViewerSettings.cppm
+            FileLoads.cppm)

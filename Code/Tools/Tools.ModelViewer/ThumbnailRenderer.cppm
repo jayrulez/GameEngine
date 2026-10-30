@@ -6,7 +6,9 @@
 // cache), put into a private scene of the renderer's in its rest pose under the viewer's light,
 // framed from the front and a little above, rendered into a target of its own, and read back to a
 // PNG in the thumbnail cache (modelviewer::ThumbnailPathFor), which is what the grid shows. A
-// model drawn before is not drawn again while its file is unchanged.
+// model drawn before is not drawn again while its file is unchanged. A model's file is read on a
+// worker of the renderer's own (FileLoads, P10), so a folder of large models never stalls the
+// window; a new queue drops a read under way, and nothing is written for it.
 //
 // The render is declared in one frame and runs at its end (after the frame encoder's own
 // commands), so the copy back is recorded on the frame after, and the PNG written once the GPU has
@@ -46,7 +48,8 @@ export namespace modelviewer
     public:
         /// `size`: the pixels of a thumbnail's side (the settings' 96, 128 or 192).
         ThumbnailRenderer(IAllocator& allocator, foundation::runtime::IApplicationHost& host, StringView cacheRoot, StringView thumbRoot, u32 size = 128)
-            : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot), m_size(size)
+            : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot), m_size(size),
+              m_loads(allocator)
         {
             m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
             m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
@@ -62,6 +65,13 @@ export namespace modelviewer
         /// The models to draw, in order, in place of what was queued.
         void SetQueue(Span<const String> models)
         {
+            if (m_state == State::Reading)
+            {
+                // The model being read is not wanted now: dropped, nothing written for it.
+                m_loads.Cancel();
+                DropModel();
+                m_state = State::Idle;
+            }
             m_queue.Clear();
             for (const String& model : models)
                 m_queue.PushBack(model);
@@ -83,6 +93,9 @@ export namespace modelviewer
         }
 
         [[nodiscard]] usize Remaining() const noexcept { return m_queue.Size() - m_next + (m_state != State::Idle ? 1u : 0u); }
+        /// The queue's length, and how many of it are done, for the progress line.
+        [[nodiscard]] usize Queued() const noexcept { return m_queue.Size(); }
+        [[nodiscard]] usize Done() const noexcept { return Remaining() > m_queue.Size() ? 0 : m_queue.Size() - Remaining(); } // one finishing from a queue replaced counts none
 
         /// Each frame, before rendering: hands over drawn files, starts the next model.
         void Update()
@@ -93,6 +106,21 @@ export namespace modelviewer
                 foundation::image::Image written;
                 const Status saved = m_capture.Complete(*m_device, *m_allocator, written);
                 Finish(saved.IsOk() ? m_png.AsView() : StringView{});
+            }
+            if (m_state == State::Reading)
+            {
+                FileRead read;
+                while (m_state == State::Reading && m_loads.Take(read))
+                    if (read.path == m_model)
+                    {
+                        if (read.outcome == OpenModel::Outcome::Opened && m_open->Finish(read.model, read.stats) == OpenModel::Outcome::Opened)
+                            Stage();
+                        else
+                        {
+                            LOG_WARNING(u8"ModelViewer", u8"no thumbnail for {}: it did not open", m_model.AsView());
+                            Finish({});
+                        }
+                    }
             }
             if (m_state == State::Staged && ++m_settleFrames >= 2)
                 m_state = State::RenderPending; // the pose fed and the transforms composed
@@ -166,6 +194,7 @@ export namespace modelviewer
         enum class State : u8
         {
             Idle,
+            Reading,       // its file read on the worker
             Staged,        // in the scene; the pose and transforms settle over a frame or two
             RenderPending, // the next Render declares its view
             CopyPending,   // declared; the next Render records the copy back
@@ -193,13 +222,26 @@ export namespace modelviewer
             }
             m_open = MakeUnique<OpenModel>(*m_allocator, *m_allocator);
             m_open->SetLooseTextures(m_looseTextures);
-            (void)m_open->Open(model, m_cacheRoot.AsView(), m_device);
-            if (!m_open->IsOpen())
+            OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
+            const OpenModel::Begun begun = m_open->Begin(model, m_cacheRoot.AsView(), m_device, outcome);
+            if (begun == OpenModel::Begun::NeedsFile)
+            {
+                m_loads.Request(model, m_looseTextures);
+                m_state = State::Reading;
+                return;
+            }
+            if (begun == OpenModel::Begun::Failed)
             {
                 LOG_WARNING(u8"ModelViewer", u8"no thumbnail for {}: it did not open", model);
                 Finish({});
                 return;
             }
+            Stage();
+        }
+
+        // The opened model put into the scene in its rest pose, to settle and be drawn.
+        void Stage()
+        {
             engine::model::InstantiateOptions options;
             options.animate = false; // the rest pose
             m_instance = engine::model::InstantiateModel(*m_scene, *m_open->Model(), u8"thumbnail", options);
@@ -327,5 +369,6 @@ export namespace modelviewer
         f32 m_radius = 1.0f;
         u32 m_settleFrames = 0;
         bool m_looseTextures = true;
+        FileLoads m_loads; // last: its worker stops before the rest goes
     };
 }

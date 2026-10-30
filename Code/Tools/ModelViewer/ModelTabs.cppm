@@ -6,7 +6,9 @@
 // second one; closing a tab hands the front to its neighbour, as the editor's tabs do. Each tab
 // keeps its model bound and what the window puts in the scene for it (its instance, its bounds,
 // the camera it was left with), so switching back finds it as it was. The side panel's rows come
-// from a tab's numbers (StatRows).
+// from a tab's numbers (StatRows). P10: a tab can be added before its model is ready (Begin), its
+// file read on a worker and the open finished when it comes (Finish), so the window shows the
+// tab at once.
 
 module;
 #include "Core/Prelude.h"
@@ -18,6 +20,7 @@ import foundation.rhi;
 import engine.model;
 import :library;
 import :playback;
+import :loads;
 
 using namespace foundation::core;
 
@@ -39,6 +42,7 @@ export namespace modelviewer
         String path;
         String title; // the file's name
         UniquePtr<OpenModel> open;
+        bool ready = false;                    // its model bound (false while its file is read)
         engine::model::ModelInstance instance; // what the window put in the scene for it
         UniquePtr<ClipPlayback> playback;      // its animation bar's state, over that instance
         Float3 center{};                       // its bounds as placed, measured by the window
@@ -56,13 +60,13 @@ export namespace modelviewer
         {
             i32 index = -1;     // the tab it is in, -1 when it did not open
             bool added = false; // a new tab (false: it was open already)
+            bool needsFile = false; // added before its model is ready: read the file, then Finish
             OpenModel::Outcome outcome = OpenModel::Outcome::NotFound;
         };
 
-        /// Opens `path` into a new tab at the end and brings it to the front; a file open already
-        /// is brought to the front instead. A file that does not open adds no tab.
-        /// `looseTextures` as OpenModel::SetLooseTextures.
-        Opened Open(StringView path, StringView cacheRoot, foundation::rhi::Device* device, bool looseTextures = true)
+        /// As Open, without reading the file: a model cooked before is bound and its tab ready; one
+        /// whose file must be read gets its tab now (`needsFile`), to Finish once it is read.
+        Opened Begin(StringView path, StringView cacheRoot, foundation::rhi::Device* device, bool looseTextures = true)
         {
             Opened result;
             if (const i32 existing = Find(path); existing >= 0)
@@ -74,17 +78,57 @@ export namespace modelviewer
             }
             UniquePtr<OpenModel> open = MakeUnique<OpenModel>(*m_allocator, *m_allocator);
             open->SetLooseTextures(looseTextures);
-            result.outcome = open->Open(path, cacheRoot, device);
-            if (!open->IsOpen())
+            const OpenModel::Begun begun = open->Begin(path, cacheRoot, device, result.outcome);
+            if (begun == OpenModel::Begun::Failed)
                 return result;
             ModelTab tab;
             tab.path = String(path);
             tab.title = FileTitle(path);
             tab.open = foundation::core::Move(open);
+            tab.ready = begun == OpenModel::Begun::Bound;
             m_tabs.PushBack(foundation::core::Move(tab));
             m_active = static_cast<i32>(m_tabs.Size()) - 1;
             result.index = m_active;
             result.added = true;
+            result.needsFile = !m_tabs[static_cast<usize>(m_active)].ready;
+            return result;
+        }
+
+        /// The open of a tab Begin left waiting, with its file as read (`read`, from FileLoads or
+        /// OpenModel::LoadFile). Opened and the tab ready; else the outcome, the tab left for the
+        /// caller to close.
+        OpenModel::Outcome Finish(i32 index, FileRead& read)
+        {
+            if (!Valid(index))
+                return OpenModel::Outcome::NotFound;
+            ModelTab& tab = m_tabs[static_cast<usize>(index)];
+            if (read.outcome != OpenModel::Outcome::Opened)
+                return read.outcome;
+            const OpenModel::Outcome outcome = tab.open->Finish(read.model, read.stats);
+            tab.ready = outcome == OpenModel::Outcome::Opened;
+            return outcome;
+        }
+
+        /// Opens `path` into a new tab at the end and brings it to the front; a file open already
+        /// is brought to the front instead. A file that does not open adds no tab.
+        /// `looseTextures` as OpenModel::SetLooseTextures.
+        Opened Open(StringView path, StringView cacheRoot, foundation::rhi::Device* device, bool looseTextures = true)
+        {
+            const i32 before = m_active;
+            Opened result = Begin(path, cacheRoot, device, looseTextures);
+            if (!result.needsFile)
+                return result;
+            FileRead read;
+            read.outcome = OpenModel::LoadFile(path, looseTextures, read.model, read.stats);
+            result.outcome = Finish(result.index, read);
+            result.needsFile = false;
+            if (result.outcome != OpenModel::Outcome::Opened)
+            {
+                (void)Close(result.index);
+                m_active = Valid(before) ? before : m_active; // a file that does not open adds no tab
+                result.index = -1;
+                result.added = false;
+            }
             return result;
         }
 

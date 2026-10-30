@@ -88,9 +88,9 @@ The window's tools (a viewer started with `--headless` has no window, and says s
 
 | Tool | What it does |
 | --- | --- |
-| `model_open` | Opens a model file in a tab of its own (or brings its tab to the front). |
+| `model_open` | Opens a model file in a tab of its own (or brings its tab to the front); `ready` is false while its file is read and cooked. |
 | `model_close` | Closes a model's tab (the one in front by default). |
-| `tabs_list` | The model tabs: each one's place, file and whether it is in front; and whether Browse or Library is. |
+| `tabs_list` | The model tabs: each one's place, file, whether it is in front and whether it is ready; and whether Browse or Library is. |
 | `tabs_select` | Brings a tab to the front (-1: Browse, -2: Library, where the user sees the library). |
 | `view_screenshot` | Saves the 3D view (no panels) as a PNG within a frame, by default in the screenshot folder named by the pattern; returns the file. |
 | `view_camera` | Frames the model, or looks at it from a yaw and pitch in degrees. |
@@ -102,8 +102,10 @@ The window's tools (a viewer started with `--headless` has no window, and says s
 | `browse_folder` | Browses a folder: the Browse tab with every model under it. |
 | `thumbnail_get` | A model's thumbnail file, or `queued` (it is drawn soon: ask again). |
 
-To show the user something, open it (`model_open`), pick the clip and angle, and take a
-`view_screenshot`; the file is written within a frame.
+To show the user something, open it (`model_open`), wait until `tabs_list` says it is `ready` (a
+large file takes a moment; a file that does not open loses its tab), pick the clip and angle, and
+take a `view_screenshot`; the file is written within a frame. The view and clip tools refuse a
+model still cooking.
 
 ## Running it
 

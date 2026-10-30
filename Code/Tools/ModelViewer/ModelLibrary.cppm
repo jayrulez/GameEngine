@@ -353,16 +353,70 @@ export namespace modelviewer
         ~OpenModel() { Close(); }
 
         /// Open `path`, its cooked files under `cacheRoot`. `device` (may be null: no textures)
-        /// is what the texture factory uploads with.
+        /// is what the texture factory uploads with. Begin, the file read here when it must be
+        /// (LoadFile), then Finish: what a window does in three steps, the read on a worker.
         Outcome Open(StringView path, StringView cacheRoot, foundation::rhi::Device* device)
+        {
+            Outcome outcome = Outcome::NotFound;
+            if (Begin(path, cacheRoot, device, outcome) != Begun::NeedsFile)
+                return outcome;
+            foundation::model::Model model;
+            ModelStats stats;
+            outcome = LoadFile(path, m_looseTextures, model, stats);
+            if (outcome != Outcome::Opened)
+                return outcome;
+            return Finish(model, stats);
+        }
+
+        /// The file read into `model` and counted, the loose textures applied when asked: the slow
+        /// part of an open, safe on any thread (its loaders are its own, not the registry's).
+        /// Opened when it read.
+        static Outcome LoadFile(StringView path, bool looseTextures, foundation::model::Model& model, ModelStats& stats)
+        {
+            if (!FileExists(path))
+                return Outcome::NotFound;
+            foundation::model::gltf::GltfLoader gltf;
+            foundation::model::fbx::FbxLoader fbx;
+            StringView extension; // with its dot, as the loaders take it
+            for (usize i = path.Size(); i > 0 && path[i - 1] != u8'/' && path[i - 1] != u8'\\'; --i)
+                if (path[i - 1] == u8'.')
+                {
+                    extension = path.SubStr(i - 1, path.Size() - i + 1);
+                    break;
+                }
+            foundation::model::io::ModelLoader* loader = nullptr;
+            if (gltf.supportsExtension(extension))
+                loader = &gltf;
+            else if (fbx.supportsExtension(extension))
+                loader = &fbx;
+            if (loader == nullptr || loader->load(path, model) != foundation::model::ModelLoadResult::Ok)
+                return Outcome::LoadFailed;
+            if (looseTextures)
+                (void)ApplyLooseTextures(model, path);
+            stats = CountModel(model);
+            return Outcome::Opened;
+        }
+
+        enum class Begun : u8
+        {
+            Bound,     // cooked before: bound from the cache, open now
+            NeedsFile, // the file must be read (LoadFile, on any thread) and Finish called
+            Failed,
+        };
+        /// The first step, on the thread that owns the resources: the cache folder, its database
+        /// and resources made, and the model bound when an earlier open cooked it. `outcome` says
+        /// how it went when it is not NeedsFile.
+        Begun Begin(StringView path, StringView cacheRoot, foundation::rhi::Device* device, Outcome& outcome)
         {
             Close();
             m_path = String(path);
             const String folder = CacheFolderFor(cacheRoot, path, m_looseTextures);
+            outcome = Outcome::NotFound;
             if (folder.IsEmpty())
-                return Outcome::NotFound;
+                return Begun::Failed;
+            outcome = Outcome::CookFailed;
             if (!CreateDirectories(folder.AsView()))
-                return Outcome::CookFailed;
+                return Begun::Failed;
             m_folder = folder;
             m_fileSystem = MakeUnique<foundation::vfs::NativeFileSystem>(*m_allocator, folder.AsView(), *m_allocator);
             m_database = MakeUnique<content::ContentDatabase>(*m_allocator, *m_allocator, *m_fileSystem, BinarySerializerFactory(),
@@ -375,38 +429,32 @@ export namespace modelviewer
             m_factories.Register(*m_resources);
             engine::RegisterAllResourceTypes();
 
-            const String recordPath = PathJoin(folder.AsView(), StringView(kRecordName));
-            Guid guid;
-            Outcome result = Outcome::FromCache;
             String text;
-            if (Result<Array<byte>> bytes = ReadFile(recordPath.AsView()); bytes.HasValue())
+            if (Result<Array<byte>> bytes = ReadFile(RecordPath().AsView()); bytes.HasValue())
                 text = String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+            Guid guid;
             if (text.IsEmpty() || !ReadRecord(text.AsView(), guid, m_stats))
             {
                 m_stats = {};
-                foundation::model::gltf::GltfLoader gltf;
-                foundation::model::fbx::FbxLoader fbx;
-                foundation::model::io::registerLoader(&gltf);
-                foundation::model::io::registerLoader(&fbx);
-                foundation::model::Model model;
-                const foundation::model::ModelLoadResult loaded = foundation::model::io::loadModel(path, model);
-                foundation::model::io::unregisterLoader(&fbx);
-                foundation::model::io::unregisterLoader(&gltf);
-                if (loaded != foundation::model::ModelLoadResult::Ok)
-                    return Outcome::LoadFailed;
-                if (m_looseTextures)
-                    (void)ApplyLooseTextures(model, path);
-                m_stats = CountModel(model);
-                if (!pipeline::CookModel(model, *m_database, u8"model", guid).IsOk())
-                    return Outcome::CookFailed;
-                const String record = WriteRecord(guid, m_stats);
-                (void)WriteFile(recordPath.AsView(), Span<const byte>(reinterpret_cast<const byte*>(record.Data()), record.Size()));
-                result = Outcome::Opened;
+                return Begun::NeedsFile;
             }
-            m_model = m_resources->Bind<foundation::model::ModelResource>(guid);
-            if (!m_model)
-                return Outcome::BindFailed;
-            return result;
+            outcome = BindCooked(guid, Outcome::FromCache);
+            return outcome == Outcome::FromCache ? Begun::Bound : Begun::Failed;
+        }
+
+        /// The last step, after Begin said NeedsFile: `model` (as LoadFile read it) cooked into
+        /// the cache, its record written, and bound.
+        Outcome Finish(foundation::model::Model& model, const ModelStats& stats)
+        {
+            if (!m_database)
+                return Outcome::CookFailed;
+            m_stats = stats;
+            Guid guid;
+            if (!pipeline::CookModel(model, *m_database, u8"model", guid).IsOk())
+                return Outcome::CookFailed;
+            const String record = WriteRecord(guid, m_stats);
+            (void)WriteFile(RecordPath().AsView(), Span<const byte>(reinterpret_cast<const byte*>(record.Data()), record.Size()));
+            return BindCooked(guid, Outcome::Opened);
         }
 
         /// The model and everything it bound let go.
@@ -430,6 +478,13 @@ export namespace modelviewer
         static constexpr const char8_t* kRecordName = u8"viewer-record.txt";
 
     private:
+        [[nodiscard]] String RecordPath() const { return PathJoin(m_folder.AsView(), StringView(kRecordName)); }
+        Outcome BindCooked(const Guid& guid, Outcome done)
+        {
+            m_model = m_resources->Bind<foundation::model::ModelResource>(guid);
+            return m_model ? done : Outcome::BindFailed;
+        }
+
         IAllocator* m_allocator;
         String m_path;
         bool m_looseTextures = true;

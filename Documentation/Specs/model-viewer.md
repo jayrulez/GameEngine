@@ -312,7 +312,14 @@ A tab beside Browse, both always first.
 - **P10 Polish.** The worker-thread cook and the progress line, the menu bar, the shortcuts, the
   grid's size slider and right-click menu, thumbnails on tabs. Tests: a cook on the worker ends in
   the same cooked model as on the main thread; a queue cancelled mid-way leaves no half-written
-  thumbnail.
+  thumbnail. P10a built 2026-10-30: timed in Debug, reading the file is 75 to 90% of an open (a
+  large FBX 60 to 170 ms, its cook and bind a few ms to 25), so the file is read on a worker
+  (`:loads`, FileLoads; OpenModel's Begin, LoadFile and Finish) and the cook and bind stay on the
+  main thread. A model tab shows at once with "Cooking" over the view (`ready` in `model.open` and
+  `tabs.list`); the thumbnails read on a worker of their own, a new queue dropping a read under
+  way; the grid's count line says how far the drawing has got. Tests: the worker's read finished
+  on the main thread cooks the same model; a missing file; a cancelled queue hands nothing over; a
+  tab finished from the worker's read.
 - **P11 Exports.** A collection's CSV and Copy files to folder (`export.csv`,
   `export.copy_files`). Tests: the CSV's rows with and without sub-collections; the copy's layout,
   the renames, the images taken and the missing ones reported.

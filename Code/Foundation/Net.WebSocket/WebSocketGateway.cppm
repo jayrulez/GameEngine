@@ -23,9 +23,10 @@
 /// resends simply never fire (acks flow; redundant but correct - the keep-v1-simple
 /// ruling).
 ///
-/// The module holds both halves: the native accept path, the browser-side client socket
-/// (`WebSocketClientSocket`, emscripten/websocket.h, web builds only), and what they share
-/// (frame codec, handshake math), unit-tested on desktop where sockets work headless.
+/// The module holds both halves: the native accept path, the client socket
+/// (`WebSocketClientSocket`: the browser's WebSocket in a web build, this module's own client
+/// natively), and what they share (frame codec, handshake math), unit-tested on desktop where
+/// sockets work headless.
 
 module;
 #include "Core/Prelude.h"
@@ -82,12 +83,15 @@ export namespace foundation::net
         Array<byte> payload;
     };
 
-    /// Incremental frame decoder for the SERVER side of a connection. Push bytes as they
-    /// arrive; drain complete frames via Next(). Enforces: client frames masked, FIN only
-    /// (no fragmentation), size cap. Failed() latches - close the connection.
+    /// Incremental frame decoder for one side of a connection. Push bytes as they arrive;
+    /// drain complete frames via Next(). Enforces: the server reads masked frames (a client's)
+    /// and the client unmasked ones (a server's), FIN only (no fragmentation), size cap.
+    /// Failed() latches - close the connection.
     class WebSocketFrameParser
     {
     public:
+        /// `serverSide`: reading what a client sent (masked), else what a server sent.
+        explicit WebSocketFrameParser(bool serverSide = true) noexcept : m_serverSide(serverSide) {}
         void Push(Span<const byte> bytes);
         [[nodiscard]] bool Next(WsFrame& out);
         [[nodiscard]] bool Failed() const noexcept { return m_failed; }
@@ -100,6 +104,7 @@ export namespace foundation::net
         Array<WsFrame> m_frames;
         usize m_frameHead = 0;
         bool m_failed = false;
+        bool m_serverSide = true;
     };
 
     // ==================================================================================
@@ -200,23 +205,44 @@ export namespace foundation::net
         return static_cast<u32>(e.value & 0xFFFFFFFFull);
     }
 
-#if PLATFORM_WEB
-    /// The BROWSER side: one WebSocket connection to a native host's gateway, presented as
-    /// an IDatagramSocket (each binary frame = one datagram; the single remote is
-    /// kWebSocketServerEndpoint). The browser handshake is ASYNC - sends queue until the
-    /// socket opens, so the session's immediate connect packet survives the open latency.
+    /// The single remote a WebSocketClientSocket talks to: the host's gateway.
     inline constexpr DatagramEndpoint kWebSocketServerEndpoint{kWebSocketEndpointBit | 1ull};
 
+    /// Where a WebSocketClientSocket connects, and how.
+    struct WebSocketClientConfig
+    {
+        String host;                ///< a name or a dotted quad
+        u16 port = 0;
+        bool secure = false;        ///< wss:// (TLS); ws:// otherwise
+        String path = String(u8"/");
+        /// Native wss only: the TLS backend (the application's, outliving the socket) and what
+        /// the host's certificate is checked against. A browser does its own TLS.
+        ITlsBackend* tls = nullptr;
+        TlsTrust trust;
+        /// Native only: a host that has not upgraded the connection by then is given up on.
+        f32 upgradeTimeoutSeconds = 10.0f;
+    };
+
+    /// One WebSocket connection to a host's gateway, presented as an IDatagramSocket (each
+    /// binary frame = one datagram; the single remote is kWebSocketServerEndpoint). In a
+    /// browser it is the browser's WebSocket; natively it is this module's own client over a
+    /// plain or TLS stream, so a desktop or Deck client can join a host that only speaks
+    /// wss. The handshake is ASYNC either way - sends queue until the upgrade, so the
+    /// session's immediate connect packet survives the open latency. Natively the name
+    /// lookup in the constructor blocks, as a UDP join's does.
     class WebSocketClientSocket final : public IDatagramSocket
     {
     public:
-        /// Connect to ws://host:port (dotted-quad or hostname - the browser resolves).
-        WebSocketClientSocket(IAllocator& allocator, StringView host, u16 port);
+        WebSocketClientSocket(IAllocator& allocator, const WebSocketClientConfig& config);
         ~WebSocketClientSocket() override;
         WebSocketClientSocket(const WebSocketClientSocket&) = delete;
         WebSocketClientSocket& operator=(const WebSocketClientSocket&) = delete;
 
-        [[nodiscard]] bool IsOpen() const noexcept; // created (may still be connecting)
+        [[nodiscard]] bool IsOpen() const noexcept;      // created and not failed (may still be connecting)
+        [[nodiscard]] bool IsConnected() const noexcept; // the upgrade done: sends go at once
+        /// Why it failed or closed, said for a person; empty while it lives. (A browser keeps
+        /// the reason from the page: there it says only that the connection failed.)
+        [[nodiscard]] StringView Failure() const noexcept;
 
         void Send(const DatagramEndpoint& to, Span<const byte> data) override;
         [[nodiscard]] bool Receive(DatagramEndpoint& from, Array<byte>& out) override;
@@ -229,7 +255,6 @@ export namespace foundation::net
         struct Impl;
         UniquePtr<Impl> m_impl;
     };
-#endif
 
     class WebSocketHybridSocket final : public IDatagramSocket
     {

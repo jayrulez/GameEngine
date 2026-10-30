@@ -270,9 +270,9 @@ namespace foundation::net
             }
             const auto opcode = static_cast<WsOpcode>(b0 & 0x0Fu);
             const bool masked = (b1 & 0x80u) != 0;
-            if (!masked)
+            if (masked != m_serverSide)
             {
-                m_failed = true; // RFC 6455 5.1: client frames MUST be masked
+                m_failed = true; // RFC 6455 5.1: client frames MUST be masked, server frames MUST NOT
                 return;
             }
             u64 length = b1 & 0x7Fu;
@@ -305,13 +305,20 @@ namespace foundation::net
                 m_failed = true;
                 return;
             }
-            if (m_buffer.Size() - cursor < 4 + length)
+            const usize keyBytes = masked ? 4 : 0;
+            if (m_buffer.Size() - cursor < keyBytes + length)
             {
                 break; // need the masking key + full payload
             }
-            byte key[4] = {m_buffer[cursor], m_buffer[cursor + 1], m_buffer[cursor + 2],
-                           m_buffer[cursor + 3]};
-            cursor += 4;
+            byte key[4] = {};
+            if (masked)
+            {
+                key[0] = m_buffer[cursor];
+                key[1] = m_buffer[cursor + 1];
+                key[2] = m_buffer[cursor + 2];
+                key[3] = m_buffer[cursor + 3];
+                cursor += 4;
+            }
 
             WsFrame frame;
             frame.opcode = opcode;
@@ -431,6 +438,7 @@ namespace foundation::net
             u32 id = 0;
             UniquePtr<INetByteStream> stream; // plain, or TLS (wss://); it buffers what would block
             bool upgraded = false;
+            bool started = false; // the request's first byte has arrived
             UniquePtr<http::HttpMessageParser> handshake; // until upgraded
             WebSocketFrameParser frames;                  // after
             bool dead = false;
@@ -511,6 +519,19 @@ namespace foundation::net
                     // not the HTTP parser - Push reports no consumed count.
                     while (offset < static_cast<usize>(got))
                     {
+                        // A request starts with its method's letters: anything else (a TLS hello
+                        // at a ws:// gateway) is refused at once, rather than waiting on a head
+                        // that never ends.
+                        if (!client.started)
+                        {
+                            const u8 first = static_cast<u8>(chunk[offset]);
+                            if (first < 'A' || first > 'Z')
+                            {
+                                client.dead = true;
+                                return;
+                            }
+                            client.started = true;
+                        }
                         const http::HttpParseState state =
                             client.handshake->Push(Span<const byte>{chunk + offset, 1});
                         ++offset;
@@ -787,9 +808,11 @@ namespace foundation::net
         }
     };
 
-    WebSocketClientSocket::WebSocketClientSocket(IAllocator& allocator, StringView host, u16 port)
+    WebSocketClientSocket::WebSocketClientSocket(IAllocator& allocator, const WebSocketClientConfig& config)
         : m_impl(MakeUnique<Impl>(allocator))
     {
+        const StringView host = config.host.AsView();
+        const u16 port = config.port;
         if (!emscripten_websocket_is_supported())
         {
             m_impl->failed = true;
@@ -804,7 +827,7 @@ namespace foundation::net
                 url[cursor++] = static_cast<char>(text[i]);
             }
         };
-        append(u8"ws://");
+        append(config.secure ? StringView(u8"wss://") : StringView(u8"ws://"));
         append(host);
         append(u8":");
         char portText[8];
@@ -814,6 +837,7 @@ namespace foundation::net
         {
             url[cursor++] = portText[i];
         }
+        append(config.path.IsEmpty() ? StringView(u8"/") : config.path.AsView());
         url[cursor] = '\0';
         EmscriptenWebSocketCreateAttributes attributes = {url, nullptr, EM_TRUE};
         m_impl->socket = emscripten_websocket_new(&attributes);
@@ -841,6 +865,13 @@ namespace foundation::net
     bool WebSocketClientSocket::IsOpen() const noexcept
     {
         return m_impl->socket > 0 && !m_impl->failed;
+    }
+
+    bool WebSocketClientSocket::IsConnected() const noexcept { return m_impl->open && !m_impl->failed; }
+
+    StringView WebSocketClientSocket::Failure() const noexcept
+    {
+        return m_impl->failed ? StringView(u8"the WebSocket connection failed or closed") : StringView();
     }
 
     void WebSocketClientSocket::Send(const DatagramEndpoint&, Span<const byte> data)
@@ -882,4 +913,268 @@ namespace foundation::net
         return true;
     }
 #endif // PLATFORM_WEB
+
+#if !PLATFORM_WEB
+    // ---- the native client socket --------------------------------------------------------
+    // The client half of RFC 6455 over a plain or TLS stream: the upgrade request goes at
+    // once (a TLS stream holds it until its handshake ends), the 101 is checked against the
+    // key, then masked frames out and unmasked frames in. Pumped from Receive, which the
+    // session drains every frame, as the hybrid socket pumps its gateway.
+
+    struct WebSocketClientSocket::Impl
+    {
+        explicit Impl(IAllocator& alloc)
+            : allocator(&alloc), random(GetTicks() ^ reinterpret_cast<uptr>(this))
+        {
+        }
+        IAllocator* allocator;
+        UniquePtr<INetByteStream> stream;
+        String key; // the Sec-WebSocket-Key sent
+        UniquePtr<http::HttpMessageParser> handshake;
+        WebSocketFrameParser frames{false};
+        bool upgraded = false;
+        bool failed = false;
+        String failure;
+        Array<Array<byte>> pending; // datagrams sent before the upgrade
+        Array<Array<byte>> received;
+        usize receivedHead = 0;
+        Stopwatch sinceStart = Stopwatch::StartNew();
+        f64 upgradeSeconds = 10.0; // a host that never answers is given up on
+        // Masking keys and the handshake key: unpredictable to a page script is what the RFC
+        // asks (they defeat cache poisoning through proxies); a seeded PCG is not
+        // cryptographic, and over wss the TLS layer makes the mask moot.
+        Random random;
+
+        void Fail(StringView why)
+        {
+            if (!failed)
+            {
+                failed = true;
+                failure = String(why);
+            }
+        }
+
+        void SendFrame(WsOpcode opcode, Span<const byte> payload)
+        {
+            Array<byte> frame;
+            EncodeWebSocketFrame(opcode, payload, true, random.NextU32(), frame);
+            if (stream->Send(Span<const byte>{frame.Data(), frame.Size()}) < 0)
+            {
+                Fail(u8"the connection closed");
+            }
+        }
+
+        // The 101, checked: the status, the upgrade, and the accept key for ours.
+        void Upgrade()
+        {
+            const StringView accept = http::FindHeader(handshake->Headers(), u8"Sec-WebSocket-Accept");
+            if (handshake->Status() != 101)
+            {
+                Fail(Format(u8"the server answered {} instead of upgrading to a WebSocket", handshake->Status()).AsView());
+                return;
+            }
+            if (accept != ComputeWebSocketAccept(key.AsView()).AsView())
+            {
+                Fail(u8"the server's upgrade does not answer this client's key");
+                return;
+            }
+            upgraded = true;
+            handshake = {};
+            for (const Array<byte>& datagram : pending)
+            {
+                SendFrame(WsOpcode::Binary, Span<const byte>{datagram.Data(), datagram.Size()});
+            }
+            pending.Clear();
+        }
+
+        void Pump()
+        {
+            if (failed)
+            {
+                return;
+            }
+            const bool alive = stream->Pump();
+            byte chunk[4096];
+            while (!failed)
+            {
+                const i64 got = stream->Receive(Span<byte>{chunk, sizeof(chunk)});
+                if (got < 0)
+                {
+                    const StringView why = stream->Failure();
+                    Fail(why.IsEmpty() ? StringView(u8"the server closed the connection") : why);
+                    return;
+                }
+                if (got == 0)
+                {
+                    break;
+                }
+                usize offset = 0;
+                if (!upgraded)
+                {
+                    // Byte-wise, so frames arriving with the 101 land in the frame parser.
+                    while (offset < static_cast<usize>(got) && !upgraded && !failed)
+                    {
+                        const http::HttpParseState state = handshake->Push(Span<const byte>{chunk + offset, 1});
+                        ++offset;
+                        if (state == http::HttpParseState::Failed)
+                        {
+                            Fail(u8"the server's answer is not HTTP");
+                        }
+                        else if (state == http::HttpParseState::Complete)
+                        {
+                            Upgrade();
+                        }
+                    }
+                    if (!upgraded)
+                    {
+                        continue;
+                    }
+                }
+                frames.Push(Span<const byte>{chunk + offset, static_cast<usize>(got) - offset});
+                if (frames.Failed())
+                {
+                    Fail(u8"the server sent a frame this client does not take");
+                    return;
+                }
+                WsFrame frame;
+                while (!failed && frames.Next(frame))
+                {
+                    switch (frame.opcode)
+                    {
+                    case WsOpcode::Binary:
+                        received.PushBack(static_cast<Array<byte>&&>(frame.payload));
+                        break;
+                    case WsOpcode::Ping:
+                        SendFrame(WsOpcode::Pong, Span<const byte>{frame.payload.Data(), frame.payload.Size()});
+                        break;
+                    case WsOpcode::Pong:
+                        break;
+                    case WsOpcode::Close:
+                        SendFrame(WsOpcode::Close, {});
+                        Fail(u8"the server closed the connection");
+                        break;
+                    default:
+                        Fail(u8"the server sent a frame this client does not take");
+                        break;
+                    }
+                }
+            }
+            if (!alive && !failed)
+            {
+                const StringView why = stream->Failure();
+                Fail(why.IsEmpty() ? StringView(u8"the server closed the connection") : why);
+            }
+            if (!upgraded && !failed && sinceStart.Elapsed().AsSeconds() > upgradeSeconds)
+            {
+                Fail(u8"the server did not upgrade the connection in time (is it a WebSocket host, and ws or wss as asked?)");
+            }
+        }
+    };
+
+    WebSocketClientSocket::WebSocketClientSocket(IAllocator& allocator, const WebSocketClientConfig& config)
+        : m_impl(MakeUnique<Impl>(allocator, allocator))
+    {
+        Impl& impl = *m_impl;
+        impl.upgradeSeconds = static_cast<f64>(config.upgradeTimeoutSeconds);
+        if (config.secure && config.tls == nullptr)
+        {
+            impl.Fail(u8"wss needs a TLS backend, and none was given");
+            return;
+        }
+        TcpSocket socket = TcpSocket::Connect(config.host.AsView(), config.port);
+        if (!socket.IsOpen())
+        {
+            impl.Fail(Format(u8"'{}' could not be found", config.host.AsView()).AsView());
+            return;
+        }
+        if (config.secure)
+        {
+            TlsClientConfig tls;
+            tls.serverName = config.host;
+            tls.trust = config.trust;
+            tls.alpn.PushBack(String(u8"http/1.1"));
+            impl.stream = MakeUnique<TlsStream>(allocator, static_cast<TcpSocket&&>(socket), config.tls->CreateClient(tls));
+        }
+        else
+        {
+            impl.stream = MakeUnique<PlainStream>(allocator, static_cast<TcpSocket&&>(socket));
+        }
+
+        byte nonce[16];
+        for (usize i = 0; i < sizeof(nonce); i += 4)
+        {
+            const u32 r = impl.random.NextU32();
+            nonce[i] = static_cast<byte>(r);
+            nonce[i + 1] = static_cast<byte>(r >> 8);
+            nonce[i + 2] = static_cast<byte>(r >> 16);
+            nonce[i + 3] = static_cast<byte>(r >> 24);
+        }
+        impl.key = Base64Encode(Span<const byte>{nonce, sizeof(nonce)});
+        impl.handshake = MakeUnique<http::HttpMessageParser>(allocator, http::HttpMessageParser::Mode::Response, usize{4096});
+        const String request = Format(u8"GET {} HTTP/1.1\r\nHost: {}:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                                      u8"Sec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n\r\n",
+                                      config.path.IsEmpty() ? StringView(u8"/") : config.path.AsView(), config.host.AsView(),
+                                      config.port, impl.key.AsView());
+        if (impl.stream->Send(Span<const byte>{reinterpret_cast<const byte*>(request.Data()), request.Size()}) < 0)
+        {
+            impl.Fail(u8"the connection closed before the upgrade went");
+        }
+    }
+
+    WebSocketClientSocket::~WebSocketClientSocket()
+    {
+        Impl& impl = *m_impl;
+        if (impl.stream)
+        {
+            if (impl.upgraded && !impl.failed)
+            {
+                impl.SendFrame(WsOpcode::Close, {});
+            }
+            impl.stream->Close();
+        }
+    }
+
+    bool WebSocketClientSocket::IsOpen() const noexcept { return m_impl->stream && !m_impl->failed; }
+    bool WebSocketClientSocket::IsConnected() const noexcept { return m_impl->upgraded && !m_impl->failed; }
+    StringView WebSocketClientSocket::Failure() const noexcept { return m_impl->failure.AsView(); }
+
+    void WebSocketClientSocket::Send(const DatagramEndpoint&, Span<const byte> data)
+    {
+        Impl& impl = *m_impl;
+        if (impl.failed || !impl.stream)
+        {
+            return;
+        }
+        if (!impl.upgraded)
+        {
+            Array<byte> copy;
+            copy.Reserve(data.Size());
+            for (byte b : data)
+            {
+                copy.PushBack(b);
+            }
+            impl.pending.PushBack(static_cast<Array<byte>&&>(copy));
+            return;
+        }
+        impl.SendFrame(WsOpcode::Binary, data);
+    }
+
+    bool WebSocketClientSocket::Receive(DatagramEndpoint& from, Array<byte>& out)
+    {
+        Impl& impl = *m_impl;
+        if (impl.receivedHead >= impl.received.Size() && impl.stream)
+        {
+            impl.received.Clear();
+            impl.receivedHead = 0;
+            impl.Pump();
+        }
+        if (impl.receivedHead >= impl.received.Size())
+        {
+            return false;
+        }
+        from = kWebSocketServerEndpoint;
+        out = static_cast<Array<byte>&&>(impl.received[impl.receivedHead++]);
+        return true;
+    }
+#endif // !PLATFORM_WEB
 }

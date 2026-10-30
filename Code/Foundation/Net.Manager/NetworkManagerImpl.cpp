@@ -114,8 +114,11 @@ namespace foundation::net
         // Browsers have no UDP: join over a WebSocket to the host's gateway (`port` here is
         // the host's WEB SOCKET port). Sends buffer through the async browser handshake, so
         // the session's immediate connect packet is safe.
+        WebSocketClientConfig webSocket;
+        webSocket.host = String(host);
+        webSocket.port = port;
         UniquePtr<WebSocketClientSocket> socket =
-            MakeUnique<WebSocketClientSocket>(allocator, allocator, host, port);
+            MakeUnique<WebSocketClientSocket>(allocator, allocator, webSocket);
         if (!socket->IsOpen())
         {
             return {};

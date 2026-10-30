@@ -181,6 +181,19 @@ page showing the cooked SPIR-V or WGSL of a chosen variant (the parity doc's "li
 from the cook's own output), and a project's own `.hlsli` include files with their dependency
 tracking (today `#include` reaches the engine's shader library only).
 
+## A dedicated-server launch of the player, with its TLS files (user 2026-10-30)
+
+A game hosts only when its script calls `Net.startServer`, from its menu: the player has no
+headless or command-line hosting (`DefaultApplication::SetNetworkStartup` exists and nothing calls
+it), so a public server is a desktop player left running on the server machine. The item: launch
+the player as a dedicated server from the command line (port, map or start scene, no window or
+GPU), and let it take a certificate and key for its browser gateway (`--tls-cert <file>
+--tls-key <file>` into `WebSocketTls`), reloading them when the files change, since certificates
+last 90 days or less and a host restarted to renew drops its players. Never a project or player
+setting: a private key must not ship in an export. Until then a TLS proxy in front of the gateway
+is the documented way (`Documentation/Shipping/Hosting.md`). From the TLS spec's open host-side
+question (`Specs/tls-http-wss.md`, P5).
+
 ## A sound cue's thumbnail: its variants' waveforms stacked (user 2026-10-26)
 
 A sound cue shows only its type icon in the assets browser and the pickers; no editor ever drew it

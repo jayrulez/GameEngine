@@ -288,8 +288,11 @@ From a survey of the code (2026-10-14):
 - **P6 Ship**: web, Steam Deck, README pictures, the website's card, a docs page. The README and its
   pictures done 2026-10-29 (the project's own and the root's); the docs page's section was written
   with P5b; web, the Deck and the website's card wait for publishing.
-- **P7 `wss://`** (gap 8): the client's choice of `wss://`, and a docs page on putting a TLS
-  reverse proxy (Caddy, nginx) in front of a dedicated host, so the site's demo can join a hosted
+- **P7 `wss://`** (gap 8): DONE 2026-10-30 in the engine and the docs (Specs/tls-http-wss.md P4,
+  P5): the Join field takes `wss://host:443` as typed, and `Shipping/Hosting.md` puts a Caddy or
+  nginx proxy in front of the host; a headless host is the 0.2 backlog's. Was: the client's
+  choice of `wss://`, and a docs page on putting a TLS reverse proxy (Caddy, nginx) in front of a
+  dedicated host, so the site's demo can join a hosted
   game.
 
 ## Open questions

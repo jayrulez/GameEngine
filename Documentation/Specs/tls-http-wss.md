@@ -146,7 +146,12 @@ asks; a game in the editor's play mode is a game like any other.
   running game (so a script's join can use wss natively) is P5's.
 - **P5 Scripts and docs.** The `Http` facade in AngelScript and Luau (tested in
   `Code/Integration`), the docs pages (the HTTP client; hosting over wss, with a certificate or
-  behind a proxy), Masquerade P7.
+  behind a proxy), Masquerade P7. Built 2026-10-30: the facade (`foundation.http.script`) and
+  the run's composition (a GameInstance's TLS backend and HTTP client, made on first use; Net's
+  join through the same backend); Scripting.md's web requests and `Shipping/Hosting.md`
+  (addresses and ports, a Caddy or nginx proxy in front of the gateway). A host's own certificate
+  stays C++ only (`WebSocketTls`): the user chose the proxy as the documented way and backlogged a
+  dedicated-server launch with TLS files for 0.2.
 
 ## Open questions
 

@@ -139,7 +139,7 @@ entity outside a run, each running behaviour's properties under `live` beside wh
 2. `host_info` - pid (kill a hung host by it) and `buildStamp`. After rebuilding the
    engine, compare stamps: a stale host serves yesterday's engine.
 3. `resources/list` - the curated `docs://` shipping docs (Scripting/Assets/Scenes/
-   KnownIssues), the scene format reference this host generated from its own build
+   Hosting/KnownIssues), the scene format reference this host generated from its own build
    (`docs://generated/SceneSchema.json` + `docs://generated/SceneExample.scene.xml`) and,
    once a project is open, every scene/prefab as `project://scene|prefab/<guid>`.
 

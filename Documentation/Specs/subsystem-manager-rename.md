@@ -2,7 +2,8 @@
 
 Status: APPROVED and built 2026-10-30 (user: "we do it, SubsystemManager and Subsystems()", now,
 before 0.1, while such a change is still cheap). Split out of `Specs/run-context.md`, where it was
-that spec's P0; no longer its prerequisite (the run is `run::Run`).
+that spec's P0, and done on its own; the run type's name is still open there (`run::Run` or
+`run::Context`).
 
 Decisions: rename (question 1), to `SubsystemManager` with `Ctx()` -> `Subsystems()` (2), alone
 and now (3). As built: the type, its partition (`:subsystem_manager`) and file

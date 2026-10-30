@@ -115,7 +115,9 @@ asks; a game in the editor's play mode is a game like any other.
   ECDSA, for tests and a LAN host), 6 cases green on clang and gcc, the libraries built for wasm.
 - **P1 `TlsStream`.** A session over a `TcpSocket`. Tests: a TLS server and client over loopback
   sockets. (The system's roots, first planned here, came with P0 so the seam's default trust worked
-  from the start.)
+  from the start.) Built 2026-10-30: `INetByteStream` with `PlainStream` and `TlsStream` (the
+  socket's conventions: bytes moved, 0 for would-block, -1 for done), so the HTTP and WebSocket
+  clients are written once for both schemes.
 - **P2 The HTTP client, native.** `IHttpClient` and its native backend. Tests against the in-repo
   `HttpServer` (http) and a TLS-wrapped one (https): GET and POST, Content-Length and chunked
   bodies, a redirect followed and a loop stopped, an https-to-http redirect refused, a timeout, a

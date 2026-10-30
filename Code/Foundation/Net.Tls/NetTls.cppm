@@ -14,7 +14,13 @@
 /// LoadSystemRoots), roots the game ships as PEM (a private backend's own CA), or, for a test only,
 /// nothing (InsecureForTests: never the default, never reachable from a script).
 ///
-/// Threading: a session is single-threaded; a backend makes sessions from any one thread at a time.
+/// A connection that may or may not be secured is an INetByteStream: PlainStream over a bare
+/// TcpSocket, TlsStream over a socket and a session, both speaking the socket's own conventions
+/// (bytes moved, 0 for would-block, -1 for closed), so the HTTP client and the WebSocket client are
+/// written once for http and https, ws and wss.
+///
+/// Threading: a session and a stream are single-threaded; a backend makes sessions from any one
+/// thread at a time.
 
 module;
 #include "Core/Prelude.h"
@@ -22,6 +28,7 @@ module;
 export module foundation.net.tls;
 
 import foundation.core;
+import foundation.net;
 
 using namespace foundation::core;
 
@@ -141,4 +148,69 @@ export namespace foundation::net
     /// the usual paths that exists), the ROOT store on Windows; empty where none is found (a web
     /// build, a box without a bundle). `where` says what was read, or where it looked.
     [[nodiscard]] TlsRoots LoadSystemRoots(String* where = nullptr);
+
+    /// A connection's plaintext, over whatever carries it: Pump moves the bytes (and the
+    /// connect and the handshake on), then Send and Receive work as a TcpSocket's do.
+    class INetByteStream
+    {
+    public:
+        virtual ~INetByteStream() = default;
+        /// Moves what it can, connecting and shaking hands as it goes; false once it is done
+        /// (closed, or failed: Failure says why), true while it lives.
+        virtual bool Pump() = 0;
+        /// Connected, and for TLS the handshake done: what is sent now goes at once.
+        [[nodiscard]] virtual bool Ready() const = 0;
+        /// Plaintext to send: all of it taken (`data.Size()`), or -1 when the stream is done.
+        virtual i64 Send(Span<const byte> data) = 0;
+        /// Plaintext received: bytes read (>0), 0 when none is ready yet, -1 when the stream is done.
+        virtual i64 Receive(Span<byte> out) = 0;
+        virtual void Close() = 0;
+        [[nodiscard]] virtual StringView Failure() const = 0;
+    };
+
+    /// A bare TcpSocket as a stream (http://, ws://).
+    class PlainStream final : public INetByteStream
+    {
+    public:
+        explicit PlainStream(TcpSocket socket) : m_socket(Move(socket)) {}
+        bool Pump() override;
+        [[nodiscard]] bool Ready() const override { return m_connected && !m_done; }
+        i64 Send(Span<const byte> data) override;
+        i64 Receive(Span<byte> out) override;
+        void Close() override;
+        [[nodiscard]] StringView Failure() const override { return m_failure.AsView(); }
+
+    private:
+        TcpSocket m_socket;
+        Array<byte> m_out; // what the socket did not take yet
+        bool m_connected = false;
+        bool m_done = false;
+        String m_failure;
+    };
+
+    /// A TcpSocket carrying a TLS session (https://, wss://): the session's bytes to and from the
+    /// socket, the socket's connect first. Plaintext sent before the handshake ends waits in the
+    /// session.
+    class TlsStream final : public INetByteStream
+    {
+    public:
+        TlsStream(TcpSocket socket, UniquePtr<ITlsSession> session) : m_socket(Move(socket)), m_session(Move(session)) {}
+        bool Pump() override;
+        [[nodiscard]] bool Ready() const override;
+        i64 Send(Span<const byte> data) override;
+        i64 Receive(Span<byte> out) override;
+        void Close() override;
+        [[nodiscard]] StringView Failure() const override;
+        [[nodiscard]] ITlsSession& Session() { return *m_session; }
+
+    private:
+        bool Flush(); // the session's bytes to the socket; false when the socket is gone
+
+        TcpSocket m_socket;
+        UniquePtr<ITlsSession> m_session;
+        Array<byte> m_out; // ciphertext the socket did not take yet
+        bool m_connected = false;
+        bool m_socketGone = false;
+        String m_failure;
+    };
 }

@@ -484,6 +484,7 @@ add_subdirectory(Code/Foundation/Net.Tls)           # the TLS seam: a session as
 add_subdirectory(Code/Foundation/Net.Tls.MbedTLS)   # the Mbed TLS backend (the only module linking ThirdParty::MbedTLS)
 add_subdirectory(Code/Foundation/Http.Client)       # the HTTP client seam + native HTTP/1.1 client over plain and TLS streams
 add_subdirectory(Code/Foundation/Net.Manager)       # per-instance networked endpoint (NetworkManager) + Net script facade (over Net + Script)
+add_subdirectory(Code/Foundation/Http.Script)       # the Http script facade over a run's HTTP client
 add_subdirectory(Code/Engine/Engine.Net)     # once-per-context NetworkSubsystem (injects NetworkComponentManager into scenes)
 add_subdirectory(Code/Foundation/Shell)     # raw platform/OS service (IShell: window/input/events) over Core; below Runtime
 # --- Shell backends (Null always; browser shell on emscripten, SDL3 desktop otherwise) ---

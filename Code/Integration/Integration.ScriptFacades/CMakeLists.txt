@@ -4,9 +4,10 @@
 # backend-neutral. Each backend leg is #ifdef OPTION_HAS_<backend>-guarded (the global presence
 # macros on policy); link only the enabled backends via the ${SCRIPTLIB_*} target-or-empty aliases.
 add_executable(Integration.ScriptFacades TestsMain.cpp
-    NetFacadeScriptTests.cpp AudioFacadeScriptTests.cpp)
+    NetFacadeScriptTests.cpp AudioFacadeScriptTests.cpp HttpFacadeScriptTests.cpp)
 target_link_libraries(Integration.ScriptFacades PRIVATE
     Foundation::Core Foundation::Script Foundation::Net Foundation::Net.Manager
+    Foundation::Http Foundation::Http.Client Foundation::Http.Script
     Foundation::Audio Engine::Audio Foundation::Audio.Resource
     Foundation::Content Foundation::Resource Foundation::VFS
     Foundation::Scene Foundation::Scene.Resource Foundation::Net.Replication

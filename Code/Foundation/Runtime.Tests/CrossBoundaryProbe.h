@@ -14,7 +14,7 @@
 namespace crossprobe
 {
     // Registered by the HOST before the plugin loads; the plugin must resolve it
-    // through the (single, shared-engine) Context by TypeId.
+    // through the (single, shared-engine) SubsystemManager by TypeId.
     class HostProbeSubsystem final : public foundation::runtime::Subsystem
     {
     public:

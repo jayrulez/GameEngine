@@ -179,7 +179,7 @@ that fans `BeginFrame`/`Update` over the registry.
 
 ```cpp
 // app: CreateInstance/Configure path
-m_scenes = host.Ctx().AddSubsystem<SceneSubsystem>();
+m_scenes = host.Subsystems().AddSubsystem<SceneSubsystem>();
 m_scenes->RegisterManager(&instance.Scenes());
 instance.Scenes().SetAwareRegistry(&m_scenes->AwareRegistry());   // 3-step, pointer-matching
 

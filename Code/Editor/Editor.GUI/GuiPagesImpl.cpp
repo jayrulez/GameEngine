@@ -36,7 +36,7 @@ namespace editor
                              kind == Kind::Document ? pipeline::GuiDocumentAsset::StaticType() : pipeline::GuiStyleSheetAsset::StaticType(), kPath),
           m_kind(kind)
     {
-        m_gui = Services().host != nullptr ? Services().host->Ctx().GetSubsystem<engine::gui::GuiSubsystem>() : nullptr;
+        m_gui = Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::gui::GuiSubsystem>() : nullptr;
         GuiAssetEditorPage* self = this;
 
         // A sheet's preview markup: the page's, kept for the sheet in the project's editor settings

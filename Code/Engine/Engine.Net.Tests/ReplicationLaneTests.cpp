@@ -182,7 +182,7 @@ TEST_CASE("net-subsystem: the transport pump drives every enumerated endpoint pe
     server.StartServer(/*dedicated=*/true);
     (void)client.ConnectTo(sv->LocalEndpoint());
 
-    foundation::runtime::Context ctx(foundation::core::DefaultAllocator());
+    foundation::runtime::SubsystemManager ctx(foundation::core::DefaultAllocator());
     engine::net::NetworkSubsystem* netSub = ctx.AddSubsystem<engine::net::NetworkSubsystem>();
     ctx.Startup();
     netSub->SetEndpointSource(

@@ -1880,7 +1880,7 @@ export namespace engine::script
         void OnReady() override
         {
             ConfigureRunHost(m_ownedRunHost); // wire the default (editor-scene) run host once
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {
@@ -1891,7 +1891,7 @@ export namespace engine::script
         }
         void OnShutdown() override
         {
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {

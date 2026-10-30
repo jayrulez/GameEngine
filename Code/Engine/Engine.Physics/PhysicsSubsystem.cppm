@@ -1044,7 +1044,7 @@ export namespace engine::physics
         void OnInit() override { RegisterPhysicsComponentReflection(); }
         void OnReady() override
         {
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {
@@ -1055,7 +1055,7 @@ export namespace engine::physics
         }
         void OnShutdown() override
         {
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {

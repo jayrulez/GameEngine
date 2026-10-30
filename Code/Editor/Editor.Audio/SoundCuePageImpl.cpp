@@ -66,7 +66,7 @@ namespace editor
     {
         Provide<IPlaybackPage>(*this);
         HideAssetRows(); // the cue reflects nothing of its own: its rows are the page's
-        m_voice = MakeUnique<AuditionVoice>(Allocator(), Services().host != nullptr ? Services().host->Ctx().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr);
+        m_voice = MakeUnique<AuditionVoice>(Allocator(), Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr);
         m_state = Find<gui::Label>(u8"cue-state");
         BuildRows();
         BindAction(Find<gui::ButtonBase>(u8"cue-restart"), u8"playback.restart");

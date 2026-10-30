@@ -99,7 +99,7 @@ and loaded back on Vulkan + WebGPU).
 The editor holds EXACTLY TWO contexts, forever: the editor-app context (chrome/tools/UIHost) and ONE
 persistent embedded runtime `Context` owning all scene hosting (editing scenes, Simulate, preview
 pages, and the Game tab's runs) plus every engine + game subsystem. `EmbeddedApplicationHost`
-(`EmbeddedHost.cppm`) is the adapter: it routes `Ctx()` to the embedded runtime context (distinct from
+(`EmbeddedHost.cppm`) is the adapter: it routes `Subsystems()` to the embedded runtime context (distinct from
 the outer editor-app context) while SHARING the outer host's shell and the REAL `GraphicsDevice` (a
 deliberate deviation from Sedulous's Graphics=null, which forced re-pointing subsystem device/window
 after Configure). The embedded app renders into viewport textures, so `MainRenderWindow` is null and

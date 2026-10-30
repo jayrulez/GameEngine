@@ -100,7 +100,7 @@ namespace
     public:
         void OnStartup(runtime::IApplicationHost& host) override
         {
-            auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+            auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
             if (render == nullptr || render->Shaders() == nullptr ||
                 !RegisterToonShader(*render->Shaders()))
             {

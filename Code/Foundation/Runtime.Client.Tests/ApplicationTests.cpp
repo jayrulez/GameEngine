@@ -41,7 +41,7 @@ namespace
         String clipboard;
     };
 
-    // Counts the frame phases the host drives into the Context. NOTE no FixedUpdate: the
+    // Counts the frame phases the host drives into the SubsystemManager. NOTE no FixedUpdate: the
     // context-level fixed lane was deleted in the FrameTime cutover (zero overriders existed);
     // the host's fixed accumulator now drives ONLY the app-level OnFixedUpdate hook (counted
     // on the apps below) - fixed-rate engine work lives per scene.
@@ -79,7 +79,7 @@ namespace
         void Configure(IApplicationHost& host) override
         {
             order.PushBack(1);
-            sys = host.Ctx().AddSubsystem<CountingSys>();
+            sys = host.Subsystems().AddSubsystem<CountingSys>();
         }
         void OnStartup(IApplicationHost&) override
         {
@@ -104,7 +104,7 @@ TEST_CASE("client: Start configures the app, starts subsystems, then launches")
     CHECK(app.order[0] == 1);    // Configure (app registers subsystems)
     CHECK(app.order[1] == 2);    // OnStartup
     CHECK(app.order[2] == 3);    // OnLaunch
-    CHECK(app.sysLiveAtStartup); // Configure ran before Context.Startup, so Init happened
+    CHECK(app.sysLiveAtStartup); // Configure ran before SubsystemManager.Startup, so Init happened
     CHECK(host.IsRunning());
 
     host.Stop();
@@ -113,7 +113,7 @@ TEST_CASE("client: Start configures the app, starts subsystems, then launches")
     CHECK(app.order[app.order.Size() - 1] == 6); // OnExit then OnShutdown last
 }
 
-TEST_CASE("client: Tick drives Context phases with a fixed-step accumulator")
+TEST_CASE("client: Tick drives SubsystemManager phases with a fixed-step accumulator")
 {
     LifecycleApp app;
     ApplicationHost host(DefaultAllocator());
@@ -133,7 +133,7 @@ TEST_CASE("client: Tick drives Context phases with a fixed-step accumulator")
     host.Tick(0.5f); // another full step
     CHECK(app.fixed == 2);
 
-    // OnUpdate fired once per Tick, after Context::Update each time.
+    // OnUpdate fired once per Tick, after SubsystemManager::Update each time.
     int updates = 0;
     for (usize i = 0; i < app.order.Size(); ++i)
     {
@@ -163,7 +163,7 @@ namespace
         }
         void Configure(IApplicationHost& host) override
         {
-            sys = host.Ctx().AddSubsystem<CountingSys>();
+            sys = host.Subsystems().AddSubsystem<CountingSys>();
         }
         void OnFixedUpdate(IApplicationHost&, f32) override { ++fixed; }
     };

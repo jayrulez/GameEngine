@@ -72,14 +72,14 @@ namespace
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
 
         void OnLaunch(runtime::IApplicationHost& host) override
         {
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;
@@ -206,7 +206,7 @@ namespace
 
             // Crosshair shove: ray along the camera forward; impulse along the ray.
             // Gated on UI consumption: a click that lands ON the HUD never shoves.
-            auto* gameGui = host.Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
+            auto* gameGui = host.Subsystems().GetSubsystem<engine::gui::GuiSubsystem>();
             const bool uiAte = gameGui != nullptr && gameGui->PointerOverGui();
             if (!uiAte && input->Mouse()->IsButtonPressed(shell::MouseButton::Left) &&
                 m_physics != nullptr && m_physics->World() != nullptr)
@@ -263,7 +263,7 @@ namespace
                 }
             }
 
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(input, dt);
                 DrawHud(host);
@@ -284,7 +284,7 @@ namespace
                 }
             }
             RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -546,10 +546,10 @@ namespace
                     m_physics->World()->SetGravity(gravity);
                 }
             }
-            float scale = host.Ctx().TimeScale();
+            float scale = host.Subsystems().TimeScale();
             if (ImGui::SliderFloat("time scale", &scale, 0.0f, 2.0f))
             {
-                host.Ctx().SetTimeScale(scale);
+                host.Subsystems().SetTimeScale(scale);
             }
             if (m_haveSurface)
             {
@@ -568,7 +568,7 @@ namespace
             ImGui::End();
 
             // Drive the sweeper in a circle through SCENE transforms (kinematic follow).
-            m_sweepAngle += 0.6f * (1.0f / 60.0f) * host.Ctx().TimeScale();
+            m_sweepAngle += 0.6f * (1.0f / 60.0f) * host.Subsystems().TimeScale();
             if (m_sweeper.IsAssigned())
             {
                 core::Transform t = m_scene->GetLocalTransform(m_sweeper);

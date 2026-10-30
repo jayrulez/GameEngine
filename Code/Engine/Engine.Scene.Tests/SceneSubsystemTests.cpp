@@ -46,7 +46,7 @@ namespace
 
         void OnReady() override
         {
-            if (SceneSubsystem* ss = GetContext()->GetSubsystem<SceneSubsystem>())
+            if (SceneSubsystem* ss = Manager()->GetSubsystem<SceneSubsystem>())
             {
                 ss->RegisterObserver(this, SceneLifecycleStage::SystemsReady);
                 ss->RegisterObserver(this, SceneLifecycleStage::Destroying);
@@ -77,7 +77,7 @@ namespace
 
 TEST_CASE("the composition assembles a scene; SystemsReady observers then wire reactive state")
 {
-    runtime::Context ctx(DefaultAllocator());
+    runtime::SubsystemManager ctx(DefaultAllocator());
     SceneSubsystem* scenes = ctx.AddSubsystem<SceneSubsystem>();
     FakeRenderSubsystem* render = ctx.AddSubsystem<FakeRenderSubsystem>();
     ctx.Startup(); // OnReady -> FakeRenderSubsystem registers as a scene observer
@@ -101,7 +101,7 @@ TEST_CASE("the composition assembles a scene; SystemsReady observers then wire r
 
 TEST_CASE("the subsystem ticks its scenes each Context update")
 {
-    runtime::Context ctx(DefaultAllocator());
+    runtime::SubsystemManager ctx(DefaultAllocator());
     SceneSubsystem* scenes = ctx.AddSubsystem<SceneSubsystem>();
     FakeRenderSubsystem* render = ctx.AddSubsystem<FakeRenderSubsystem>();
     ctx.Startup();
@@ -126,7 +126,7 @@ TEST_CASE("the subsystem ticks its scenes each Context update")
 
 TEST_CASE("destroying a scene fires Destroying observers + drops it from the active list")
 {
-    runtime::Context ctx(DefaultAllocator());
+    runtime::SubsystemManager ctx(DefaultAllocator());
     SceneSubsystem* scenes = ctx.AddSubsystem<SceneSubsystem>();
     FakeRenderSubsystem* render = ctx.AddSubsystem<FakeRenderSubsystem>();
     ctx.Startup();
@@ -153,7 +153,7 @@ TEST_CASE("destroying a scene fires Destroying observers + drops it from the act
 
 TEST_CASE("per-scene time: scales isolate scenes; pause stops one without the other")
 {
-    runtime::Context ctx(DefaultAllocator());
+    runtime::SubsystemManager ctx(DefaultAllocator());
     SceneSubsystem* scenes = ctx.AddSubsystem<SceneSubsystem>();
     ctx.Startup();
     SceneManager sm{DefaultAllocator()};
@@ -204,7 +204,7 @@ TEST_CASE("per-scene time: scales isolate scenes; pause stops one without the ot
 
 TEST_CASE("per-scene time: fixed alpha is the scene's own leftover fraction")
 {
-    runtime::Context ctx(DefaultAllocator());
+    runtime::SubsystemManager ctx(DefaultAllocator());
     SceneSubsystem* scenes = ctx.AddSubsystem<SceneSubsystem>();
     ctx.Startup();
     SceneManager sm{DefaultAllocator()};

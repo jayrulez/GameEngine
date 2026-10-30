@@ -30,7 +30,7 @@ namespace
     class StubHost final : public runtime::IApplicationHost
     {
     public:
-        runtime::Context& Ctx() noexcept override { return m_context; }
+        runtime::SubsystemManager& Subsystems() noexcept override { return m_context; }
         foundation::shell::IShell* Shell() noexcept override { return nullptr; }
         foundation::graphics::GraphicsDevice* Graphics() noexcept override { return nullptr; }
         foundation::graphics::RenderWindow* MainRenderWindow() noexcept override { return nullptr; }
@@ -42,7 +42,7 @@ namespace
         void RequestExit(int) override {}
 
     private:
-        runtime::Context m_context{DefaultAllocator()};
+        runtime::SubsystemManager m_context{DefaultAllocator()};
     };
 }
 

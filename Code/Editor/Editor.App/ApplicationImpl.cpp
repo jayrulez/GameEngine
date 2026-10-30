@@ -1092,7 +1092,7 @@ namespace editor::app
     void EditorApplication::UpdateCaptures(runtime::IApplicationHost& host, f32 dt)
     {
         if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
-            m_windowCapture.Complete(*gfx->Raw(), host.Ctx().Allocator());
+            m_windowCapture.Complete(*gfx->Raw(), host.Subsystems().Allocator());
         if (m_windowCapture.Busy())
         {
             Array<u32> open(m_editorAllocator);

@@ -55,7 +55,7 @@ namespace
         GuiDocumentFactory documents{DefaultAllocator()};
         UniquePtr<foundation::resource::ResourceManager> resources;
         foundation::vfs::NativeFileSystem data{foundation::vfs::FindDataRoot(), DefaultAllocator()};
-        foundation::runtime::Context context{DefaultAllocator()};
+        foundation::runtime::SubsystemManager context{DefaultAllocator()};
         engine::gui::GuiSubsystem* gui = nullptr;
         Guid menu;
 

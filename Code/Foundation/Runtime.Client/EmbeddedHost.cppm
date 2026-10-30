@@ -6,7 +6,7 @@
 // EmbeddedApplicationHost: the editor-embedding adapter (Sedulous
 // EditorApplicationHost lineage). An IApplication programs against IApplicationHost and
 // runs UNCHANGED whether hosted standalone or inside the editor: this adapter routes
-// Ctx() to an EMBEDDED runtime Context (owned by the embedder, distinct from the outer
+// Subsystems() to an EMBEDDED runtime SubsystemManager (owned by the embedder, distinct from the outer
 // host's editor-app context) while sharing the outer host's shell and REAL graphics
 // device (deviation from Sedulous's Graphics=null, which forced it to re-point subsystem
 // device/window after Configure). The embedded app renders into viewport textures, so
@@ -36,13 +36,13 @@ export namespace foundation::runtime
     {
     public:
         /// `outer` = the real host (shell/graphics are borrowed from it);
-        /// `runtimeContext` = the embedded context the hosted app configures/runs in.
-        EmbeddedApplicationHost(IApplicationHost& outer, Context& runtimeContext)
-            : m_outer(&outer), m_runtimeContext(&runtimeContext)
+        /// `subsystems` = the embedded subsystem manager the hosted app configures/runs in.
+        EmbeddedApplicationHost(IApplicationHost& outer, SubsystemManager& subsystems)
+            : m_outer(&outer), m_subsystems(&subsystems)
         {
         }
 
-        [[nodiscard]] Context& Ctx() noexcept override { return *m_runtimeContext; }
+        [[nodiscard]] SubsystemManager& Subsystems() noexcept override { return *m_subsystems; }
         [[nodiscard]] IShell* Shell() noexcept override { return m_outer->Shell(); }
         [[nodiscard]] GraphicsDevice* Graphics() noexcept override { return m_outer->Graphics(); }
 
@@ -73,7 +73,7 @@ export namespace foundation::runtime
 
     private:
         IApplicationHost* m_outer;
-        Context* m_runtimeContext;
+        SubsystemManager* m_subsystems;
         core::Function<void(int)> m_onExit;
     };
 }

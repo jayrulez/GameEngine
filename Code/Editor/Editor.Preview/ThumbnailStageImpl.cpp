@@ -196,8 +196,8 @@ namespace editor
         m_impl->host = &host;
         m_impl->service = &service;
         m_impl->resources = resources;
-        m_impl->scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-        m_impl->render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+        m_impl->scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
+        m_impl->render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
         if (m_impl->scenes != nullptr)
         {
             m_impl->scenes->RegisterManager(&m_impl->sceneManager);

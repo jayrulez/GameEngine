@@ -39,7 +39,7 @@ namespace
     class StubHost final : public runtime::IApplicationHost
     {
     public:
-        runtime::Context& Ctx() noexcept override { return m_context; }
+        runtime::SubsystemManager& Subsystems() noexcept override { return m_context; }
         foundation::shell::IShell* Shell() noexcept override { return nullptr; }
         foundation::graphics::GraphicsDevice* Graphics() noexcept override { return nullptr; }
         foundation::graphics::RenderWindow* MainRenderWindow() noexcept override
@@ -56,7 +56,7 @@ namespace
         void RequestExit(int) override {}
 
     private:
-        runtime::Context m_context{DefaultAllocator()};
+        runtime::SubsystemManager m_context{DefaultAllocator()};
     };
 }
 
@@ -105,7 +105,7 @@ TEST_CASE("defaultapp: with the GUI built every game has the engine GUI, and it 
     engine::runtime::DefaultApplication app;
     app.Configure(host);
     REQUIRE(app.GUI() != nullptr);
-    CHECK(host.Ctx().GetSubsystem<engine::gui::GuiSubsystem>() == app.GUI());
+    CHECK(host.Subsystems().GetSubsystem<engine::gui::GuiSubsystem>() == app.GUI());
     app.AttachResourceManager(&resources, host);
     CHECK(app.GUI()->Resources().GetResourceManager() == &resources);
     app.AttachResourceManager(nullptr, host);

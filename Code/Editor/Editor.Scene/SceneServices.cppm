@@ -148,7 +148,7 @@ export namespace editor
                                                                    : UniquePtr<IStream>{};
                                     }};
                                 if (auto* scenes =
-                                        appHost->Ctx().GetSubsystem<engine::scene::SceneSubsystem>())
+                                        appHost->Subsystems().GetSubsystem<engine::scene::SceneSubsystem>())
                                 {
                                     scenes->ForEachScene(
                                         [&](scene::Scene& scene)

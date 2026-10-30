@@ -51,8 +51,8 @@ export namespace modelviewer
             : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot), m_size(size),
               m_loads(allocator)
         {
-            m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-            m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+            m_scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
+            m_render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
             m_device = host.Graphics() != nullptr ? host.Graphics()->Raw() : nullptr;
             (void)CreateDirectories(m_thumbRoot.AsView());
         }

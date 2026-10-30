@@ -151,7 +151,7 @@ export namespace editor
         [[nodiscard]] const Guid& InstanceId() const noexcept { return m_instanceId; }
         void SetInstanceId(const Guid& id) noexcept { m_instanceId = id; }
 
-        // === Services: the interfaces this page publishes (the RuntimeContext / Scene
+        // === Services: the interfaces this page publishes (the SubsystemManager / Scene
         // pattern - a TypeId-keyed table - scoped to one page) ===
 
         /// Publish an interface this page implements, from its constructor. The table dies
@@ -179,7 +179,7 @@ export namespace editor
         bool m_dirty = false;
 
     private:
-        HashMap<TypeId, IPageService*> m_services; // keyed like RuntimeContext's subsystems
+        HashMap<TypeId, IPageService*> m_services; // keyed like the SubsystemManager's subsystems
     };
 
     // Creates pages for one primary-object type (and, via nearest-type dispatch, its

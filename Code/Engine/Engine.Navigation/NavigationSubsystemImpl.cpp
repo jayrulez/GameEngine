@@ -154,7 +154,7 @@ namespace engine::navigation
 
     void NavigationSubsystem::Update(f32)
     {
-        foundation::runtime::Context* context = GetContext();
+        foundation::runtime::SubsystemManager* context = Manager();
         if (context == nullptr)
         {
             return;

@@ -36,11 +36,11 @@ namespace
 
         // The plugin owns its subsystem; it registers it non-owningly and removes
         // it on unload, before the host closes this library.
-        void OnLoad(Context& context) override
+        void OnLoad(SubsystemManager& context) override
         {
             context.RegisterSubsystem<PluginSubsystem>(&m_subsystem);
         }
-        void OnUnload(Context& context) override { context.RemoveSubsystem<PluginSubsystem>(); }
+        void OnUnload(SubsystemManager& context) override { context.RemoveSubsystem<PluginSubsystem>(); }
 
     private:
         PluginSubsystem m_subsystem;

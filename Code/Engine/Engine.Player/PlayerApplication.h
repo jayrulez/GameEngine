@@ -134,13 +134,13 @@ namespace engine::player
             }
 
             // Native game plugin (game-native-code.md N2). Placed AFTER the base startup so
-            // OnLoad can resolve engine subsystems from Ctx(), and BEFORE the initial scene
+            // OnLoad can resolve engine subsystems from Subsystems(), and BEFORE the initial scene
             // resolves so plugin-registered types deserialize. Two convergent paths:
             // a SHIP stub hands the statically-linked plugin through PlayerOptions; a dev
             // build loads the manifest's nativeModule (a project-relative path to the
             // built module - shared-engine builds only, the ruled plugin model). A missing
             // or unloadable module is reported and the run continues (scripts still work).
-            m_plugins = MakeUnique<runtime::PluginHost>(AppRoot(), host.Ctx());
+            m_plugins = MakeUnique<runtime::PluginHost>(AppRoot(), host.Subsystems());
             // Record the managers/systems the game contributes to scenes so unload reverses
             // them (game-native-code.md S1).
             m_plugins->AddRecorder(&engine::scene::GlobalSceneContributionRecorder());
@@ -178,7 +178,7 @@ namespace engine::player
             {
                 return;
             }
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;
@@ -237,7 +237,7 @@ namespace engine::player
             // (1 = off = the default, which also avoids forcing the global-post path on).
             if (m_settings.renderMsaaSamples > 1)
             {
-                if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+                if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                 {
                     render->SetMsaaSamples(m_settings.renderMsaaSamples);
                     LOG_INFO(u8"Player", u8"scene-pass MSAA requested: {}x",
@@ -413,7 +413,7 @@ namespace engine::player
         void OnShutdown(runtime::IApplicationHost& host) override
         {
             // Native game teardown FIRST: OnUnload deregisters the plugin's subsystems
-            // while Ctx() and the engine are still alive (game-native-code.md N2).
+            // while Subsystems() and the engine are still alive (game-native-code.md N2).
             if (m_plugins.Get() != nullptr)
             {
                 m_plugins->UnloadAll();

@@ -289,7 +289,7 @@ export namespace editor
         /// A capture recorded last frame, written once the GPU finished the copy.
         void CompleteCapture(foundation::runtime::IApplicationHost& host)
         {
-            m_capture.Complete(host.Graphics() != nullptr ? host.Graphics()->Raw() : nullptr, host.Ctx().Allocator());
+            m_capture.Complete(host.Graphics() != nullptr ? host.Graphics()->Raw() : nullptr, host.Subsystems().Allocator());
         }
         /// The next rendered frame to `path`; `clean`, without the editor's overlays.
         Status RequestCapture(StringView path, bool clean)

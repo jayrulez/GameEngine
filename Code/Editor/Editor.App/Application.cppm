@@ -229,7 +229,7 @@ export namespace editor::app
         EditorAppConfig m_config;
         runtime::IApplicationHost* m_host = nullptr; // borrowed
         foundation::render::ISceneRenderer* m_sceneRenderer = nullptr;
-        runtime::Context m_runtimeContext{editor::EditorRootAllocator()}; // the editor process's root
+        runtime::SubsystemManager m_runtimeContext{editor::EditorRootAllocator()}; // the editor process's root
         UniquePtr<runtime::EmbeddedApplicationHost> m_embeddedHost;
         UniquePtr<engine::runtime::DefaultApplication> m_embeddedApp;
 

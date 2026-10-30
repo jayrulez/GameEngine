@@ -977,7 +977,7 @@ namespace engine::render
     void RenderSubsystem::OnReady()
     {
         // Register as a scene observer (reactive provider cleanup).
-        if (foundation::runtime::Context* ctx = GetContext())
+        if (foundation::runtime::SubsystemManager* ctx = Manager())
         {
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {
@@ -1007,7 +1007,7 @@ namespace engine::render
 
     void RenderSubsystem::OnShutdown()
     {
-        if (foundation::runtime::Context* ctx = GetContext())
+        if (foundation::runtime::SubsystemManager* ctx = Manager())
         {
             if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
             {

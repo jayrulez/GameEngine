@@ -59,9 +59,9 @@ export namespace engine::scene
         // While registered, this subsystem is the contribution registry's LIVE-SCENE sink:
         // a manager a plugin contributes (or withdraws) after scenes exist is applied to every
         // live scene here, and preserved records of its type resolve into it (S3).
-        void OnRegister(foundation::runtime::Context* context) override
+        void OnRegister(foundation::runtime::SubsystemManager* manager) override
         {
-            Subsystem::OnRegister(context);
+            Subsystem::OnRegister(manager);
             SceneModuleContributions::Global().SetLiveSceneSink(
                 [](void* ctx, void (*fn)(void*, Scene&), void* fnContext)
                 {
@@ -169,9 +169,9 @@ export namespace engine::scene
             // never sees FrameTime; the bridge constructs it and hands it DOWN). Captured for
             // Update so both lanes see one consistent chain per frame.
             m_frameTime = FrameTime(deltaTime,
-                                    GetContext() != nullptr ? GetContext()->TimeScale() : 1.0f,
+                                    Manager() != nullptr ? Manager()->TimeScale() : 1.0f,
                                     /*group*/ 1.0f, /*scene*/ 1.0f,
-                                    GetContext() != nullptr ? GetContext()->FixedTimeStep() : 0.0f);
+                                    Manager() != nullptr ? Manager()->FixedTimeStep() : 0.0f);
             m_scenes.BeginFrame(m_frameTime);
         }
         void Update(f32 /*contextScaledDt - superseded by the captured FrameTime*/) override

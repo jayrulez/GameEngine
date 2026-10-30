@@ -68,7 +68,7 @@ namespace samples
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<extensions::imgui::ImguiSubsystem>(
+                host.Subsystems().AddSubsystem<extensions::imgui::ImguiSubsystem>(
                     *gfx->Raw(), gfx->FramesInFlight(), DataFileSystem());
             }
         }
@@ -80,7 +80,7 @@ namespace samples
             // (GuiSubsystem::EnsureRenderReady) - skip it and the GUI silently never draws.
             engine::runtime::DefaultApplication::OnStartup(host);
             core::ConsoleWrite(u8"WebScene: building the full-renderer scene...\n");
-            if (host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>() == nullptr)
+            if (host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>() == nullptr)
             {
                 core::ConsoleWrite(u8"WebScene: no scene subsystem.\n");
                 return;
@@ -89,7 +89,7 @@ namespace samples
 
             // The exercise scene turns the optional passes ON by default - it exists to
             // exercise them (the panel can toggle everything off).
-            if (auto* renderSub = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* renderSub = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 renderSub->SetSsrEnabled(true);
                 renderSub->SetExposure(0.9f);
@@ -125,10 +125,10 @@ namespace samples
             }
 
 #if OPTION_HAS_EXTENSION_IMGUI
-            if (auto* g = host.Ctx().GetSubsystem<extensions::imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<extensions::imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
-                BuildTweakPanel(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
+                BuildTweakPanel(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
             }
 #endif
 
@@ -199,7 +199,7 @@ namespace samples
             // Debug draw: immediate-mode, re-issued every frame. The gizmos exercise the 3D pass
             // (lines + bitmap text through the scene camera); the FPS readout stays on regardless
             // and exercises the screen-space pass.
-            if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 if (m_showDebugDraw)
                 {
@@ -269,7 +269,7 @@ namespace samples
             engine::runtime::DefaultApplication::OnRenderWindow(host, frame);
 #if OPTION_HAS_EXTENSION_IMGUI
             // The debug panel draws over the finished scene on the backbuffer.
-            if (auto* g = host.Ctx().GetSubsystem<extensions::imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<extensions::imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -615,7 +615,7 @@ namespace samples
             // Screen-tier badge: OUTSIDE any scene (it survives scene swaps), in the bottom-right
             // corner. Passive (pointer-events none on its root): an overlay that takes the pointer
             // is modal, which would shield the scene's HUD from every click.
-            if (auto* gameGui = host.Ctx().GetSubsystem<engine::gui::GuiSubsystem>())
+            if (auto* gameGui = host.Subsystems().GetSubsystem<engine::gui::GuiSubsystem>())
             {
                 m_badgeDocument = core::MakeRef<gui::GuiDocument>(AppRoot());
                 m_badgeDocument->markup = core::String(

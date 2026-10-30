@@ -3,9 +3,9 @@
 
 // Runtime - :subsystem partition
 //
-// Subsystem: the unit of engine functionality the Context owns and drives.
+// Subsystem: the unit of engine functionality the SubsystemManager owns and drives.
 // Lifecycle: OnRegister -> Init/Ready -> (frames) -> PrepareShutdown/Shutdown.
-// Frame phases run in UpdateOrder() order within the Context.
+// Frame phases run in UpdateOrder() order within the SubsystemManager.
 
 module;
 #include "Core/Prelude.h"
@@ -18,24 +18,24 @@ namespace core = foundation::core;
 
 export namespace foundation::runtime
 {
-    class Context;
+    class SubsystemManager;
 
     class Subsystem
     {
     public:
         virtual ~Subsystem() = default;
 
-        [[nodiscard]] Context* GetContext() const noexcept { return m_context; }
+        [[nodiscard]] SubsystemManager* Manager() const noexcept { return m_manager; }
         [[nodiscard]] bool IsInitialized() const noexcept { return m_initialized; }
 
         // Lower runs earlier in each frame phase (and in Init/Ready order).
         [[nodiscard]] virtual core::i32 UpdateOrder() const noexcept { return 0; }
 
-        // --- registration (called by Context) ---
-        virtual void OnRegister(Context* context) { m_context = context; }
-        virtual void OnUnregister() { m_context = nullptr; }
+        // --- registration (called by SubsystemManager) ---
+        virtual void OnRegister(SubsystemManager* manager) { m_manager = manager; }
+        virtual void OnUnregister() { m_manager = nullptr; }
 
-        // --- lifecycle (called by Context; guard once) ---
+        // --- lifecycle (called by SubsystemManager; guard once) ---
         void Init()
         {
             if (!m_initialized)
@@ -68,7 +68,7 @@ export namespace foundation::runtime
         virtual void OnShutdown() {}
 
     private:
-        Context* m_context = nullptr;
+        SubsystemManager* m_manager = nullptr;
         bool m_initialized = false;
     };
 }

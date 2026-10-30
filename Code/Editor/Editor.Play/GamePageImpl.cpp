@@ -214,10 +214,10 @@ namespace editor
         Provide<IPieInstancePage>(*this); // what the PIE tools act through
         Provide<IGameScenePage>(*this);   // what the scene tools read of the run
         Provide<IGameRunPage>(*this);     // what the editor stops before a native reload
-        m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-        m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
-        m_audio = host.Ctx().GetSubsystem<engine::audio::AudioSubsystem>();
-        m_input = host.Ctx().GetSubsystem<engine::input::InputSubsystem>();
+        m_scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
+        m_render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
+        m_audio = host.Subsystems().GetSubsystem<engine::audio::AudioSubsystem>();
+        m_input = host.Subsystems().GetSubsystem<engine::input::InputSubsystem>();
         m_shellInput = host.Shell() != nullptr ? host.Shell()->Input() : nullptr;
 
         m_viewport = MakeRef<gui::Viewport>(Allocator());
@@ -1074,7 +1074,7 @@ namespace editor
 
     void GameEditorPage::BindBusLayout(runtime::IApplicationHost& host)
     {
-        auto* audio = host.Ctx().GetSubsystem<engine::audio::AudioSubsystem>();
+        auto* audio = host.Subsystems().GetSubsystem<engine::audio::AudioSubsystem>();
         if (audio == nullptr || audio->Engine() == nullptr)
         {
             return;

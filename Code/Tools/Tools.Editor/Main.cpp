@@ -294,7 +294,7 @@ int main(int argc, char** argv)
     // 4.1): each one's RegisterEditor comes back here with its port.
     config.registerEditors = [](editor::app::EditorApplication& app, foundation::runtime::IApplicationHost& host)
     {
-        app.SetSceneRenderer(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
+        app.SetSceneRenderer(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
         editor::navigation::RegisterNavigationEditorSettings(app.Context());
         // The scene editor: its pages, its actions, its MCP live tools, and its services (the
         // document types, the export's scene seams, a model import's prefab and scene).

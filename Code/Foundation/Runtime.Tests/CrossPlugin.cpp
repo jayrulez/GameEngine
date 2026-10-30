@@ -6,7 +6,7 @@
 // static engine would re-embed Core and duplicate every global; explicitly
 // unsupported). Loaded by the RuntimeTests cross-boundary case, it proves the
 // shared-libraries work end to end across a real dlopen boundary:
-//   - resolves a HOST-registered subsystem via TypeId-keyed Context lookup
+//   - resolves a HOST-registered subsystem via TypeId-keyed SubsystemManager lookup
 //   - creates a ref-counted object through the (single) MakeRef handshake slot
 //   - registers a type the host then finds in the (single) GlobalTypeRegistry
 
@@ -36,7 +36,7 @@ namespace
     public:
         [[nodiscard]] StringView Name() const noexcept override { return u8"CrossPlugin"; }
 
-        void OnLoad(Context& context) override
+        void OnLoad(SubsystemManager& context) override
         {
             // TypeId-keyed lookup of a subsystem the HOST registered: this binary's
             // TypeOf<HostProbeSubsystem>() static is its own copy at its own address -
@@ -57,7 +57,7 @@ namespace
             fancy.systemType = TypeOf<crossprobe::FancyManager>().id;
             foundation::scene::SceneModuleContributions::Global().Add(fancy);
         }
-        void OnUnload(Context&) override {}
+        void OnUnload(SubsystemManager&) override {}
     };
 } // namespace
 

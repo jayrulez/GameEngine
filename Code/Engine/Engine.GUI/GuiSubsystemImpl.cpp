@@ -886,7 +886,7 @@ namespace engine::gui
 
     void GuiSubsystem::OnReady()
     {
-        foundation::runtime::Context* context = GetContext();
+        foundation::runtime::SubsystemManager* context = Manager();
         if (context == nullptr)
             return;
         m_input = context->GetSubsystem<engine::input::InputSubsystem>();
@@ -915,7 +915,7 @@ namespace engine::gui
             m_screenRenderer->UnregisterOverlay(static_cast<render::IScreenOverlay*>(this));
         m_sceneRenderer = nullptr;
         m_screenRenderer = nullptr;
-        if (foundation::runtime::Context* context = GetContext())
+        if (foundation::runtime::SubsystemManager* context = Manager())
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 scenes->UnregisterObserver(this);
         m_activeRoot = nullptr;

@@ -97,7 +97,7 @@ export namespace engine::render
 
     // The per-script-context render hook: a service the app installs so the `DebugDraw` facade can
     // reach RenderSubsystem::DebugScene from a script (mirrors Audio/Input/UI's ExposeToScript). A
-    // facade has no GetContext(), but it has CurrentScriptContext() -> GetService().
+    // facade has no Manager(), but it has CurrentScriptContext() -> GetService().
     class RenderSubsystem; // forward for the binding
     inline constexpr StringView kRenderScriptService = u8"render.runtime";
     struct RenderScriptBinding

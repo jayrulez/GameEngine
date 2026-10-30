@@ -72,7 +72,7 @@ export namespace engine::particles
 
         void OnReady() override
         {
-            foundation::runtime::Context* ctx = GetContext();
+            foundation::runtime::SubsystemManager* ctx = Manager();
             if (ctx == nullptr)
             {
                 return;
@@ -88,7 +88,7 @@ export namespace engine::particles
     private:
         void OnShutdown() override
         {
-            if (foundation::runtime::Context* ctx = GetContext())
+            if (foundation::runtime::SubsystemManager* ctx = Manager())
             {
                 if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
@@ -110,7 +110,7 @@ export namespace engine::particles
             {
                 return;
             }
-            foundation::runtime::Context* context = GetContext();
+            foundation::runtime::SubsystemManager* context = Manager();
             IAllocator& allocator =
                 context != nullptr ? context->Allocator() : DefaultAllocator();
             m_renderer = MakeUnique<ParticleRenderer>(allocator, *device, *sh,

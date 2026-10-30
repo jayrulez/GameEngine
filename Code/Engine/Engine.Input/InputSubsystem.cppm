@@ -146,7 +146,7 @@ export namespace engine::input
 
         void Update(f32 deltaTime) override
         {
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
                 m_runtime.SetTimeScale(context->TimeScale());
             }

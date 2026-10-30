@@ -434,7 +434,7 @@ namespace engine::physics
 
     void PhysicsSubsystem::Update(f32)
     {
-        foundation::runtime::Context* context = GetContext();
+        foundation::runtime::SubsystemManager* context = Manager();
         if (context == nullptr)
         {
             return;

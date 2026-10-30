@@ -54,7 +54,7 @@ export namespace editor::app
             editor::ThumbnailService* thumbnails = nullptr;
             foundation::settings::Settings* userSettings = nullptr;
             editor::ProjectManagerController* projects = nullptr;
-            foundation::runtime::Context* runtime = nullptr;
+            foundation::runtime::SubsystemManager* runtime = nullptr;
             foundation::runtime::IApplicationHost* embeddedHost = nullptr;
             engine::runtime::DefaultApplication* embeddedApp = nullptr;
             EditorNativeModule* native = nullptr;

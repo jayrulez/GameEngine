@@ -75,7 +75,7 @@ TEST_CASE("native module: a reload with none declared says so and loads nothing"
     EditorContext context{DefaultAllocator()};
     String said;
     context.OnNotice = [&said](NoticeKind, StringView message) { said = String(message); };
-    foundation::runtime::Context runtime{DefaultAllocator()};
+    foundation::runtime::SubsystemManager runtime{DefaultAllocator()};
     app::EditorNativeModule native(DefaultAllocator());
     native.Reload(bench.project.Get(), context, runtime, nullptr);
     CHECK_FALSE(native.IsLoaded());

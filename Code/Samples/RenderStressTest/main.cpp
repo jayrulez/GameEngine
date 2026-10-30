@@ -87,14 +87,14 @@ namespace
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;
@@ -159,7 +159,7 @@ namespace
             AddSphereBatch(); // start with one batch
 
             // Lower default exposure: the procedural-sky IBL + sun are bright, so AgX washes out at 1.0.
-            if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 render->SetExposure(0.5f);
             }
@@ -193,7 +193,7 @@ namespace
             RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
 
             // HUD over the scene (backbuffer is RenderTarget after the default render path).
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -206,10 +206,10 @@ namespace
 
             // Smooth the frame time every frame + build the ImGui HUD (drawn in OnRenderWindow).
             m_frameMs = m_frameMs * 0.9f + (deltaTime * 1000.0f) * 0.1f;
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
-                BuildHud(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
+                BuildHud(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
             }
             if (m_scene == nullptr)
             {
@@ -267,7 +267,7 @@ namespace
             }
             if (kb->IsKeyPressed(shell::KeyCode::T))
             { // toggle TAA (activates per-instance motion-vector prev-world path)
-                if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+                if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                 {
                     const bool on = !render->TaaEnabled();
                     render->SetTaaEnabled(on);
@@ -276,7 +276,7 @@ namespace
             }
             if (kb->IsKeyPressed(shell::KeyCode::I))
             { // toggle prepass->forward instance-data sharing (A/B regression/perf)
-                if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+                if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                 {
                     const bool on = !render->InstanceSharing();
                     render->SetInstanceSharing(on);

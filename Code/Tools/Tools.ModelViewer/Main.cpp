@@ -536,7 +536,7 @@ namespace
                 return;
             if (frame.window == m_window && frame.encoder != nullptr)
             {
-                if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>(); render != nullptr && render->IsReady())
+                if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>(); render != nullptr && render->IsReady())
                 {
                     render->BeginRendering(*frame.encoder, frame.frameIndex);
                     m_viewport->RenderFrame(frame);

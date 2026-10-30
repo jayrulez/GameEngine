@@ -41,7 +41,7 @@ export namespace editor::app
 
         /// The project opened: its declared module loads into `runtime` (nothing when it declares
         /// none). A failure says so and the project opens without it (scripts work regardless).
-        void Load(editor::EditorProject& project, editor::EditorContext& context, foundation::runtime::Context& runtime)
+        void Load(editor::EditorProject& project, editor::EditorContext& context, foundation::runtime::SubsystemManager& runtime)
         {
             if (project.Settings().nativeModule.IsEmpty())
                 return;
@@ -72,7 +72,7 @@ export namespace editor::app
         /// a pointer the teardown missed), the new one loads, and the scenes are restored, its
         /// components rehydrating through its registrations. The scenes are restored even when the
         /// load fails, never left stripped.
-        void Reload(editor::EditorProject* project, editor::EditorContext& context, foundation::runtime::Context& runtime,
+        void Reload(editor::EditorProject* project, editor::EditorContext& context, foundation::runtime::SubsystemManager& runtime,
                     foundation::resource::ResourceManager* resources)
         {
             if (project == nullptr || project->Settings().nativeModule.IsEmpty())

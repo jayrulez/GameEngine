@@ -485,7 +485,7 @@ namespace engine::animation
 
     void AnimationSubsystem::Update(f32)
     {
-        foundation::runtime::Context* context = GetContext();
+        foundation::runtime::SubsystemManager* context = Manager();
         auto* render = context != nullptr ? context->GetSubsystem<engine::render::RenderSubsystem>() : nullptr;
         if (render == nullptr)
         {

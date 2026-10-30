@@ -121,14 +121,14 @@ namespace samples
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;
@@ -200,7 +200,7 @@ namespace samples
                 // Wind: the tufts sway (their tips; the cone's base sits at local y = -0.7). The
                 // Wind group comes from the effect's table, which the shader system serves (a
                 // material built in code takes it from whoever holds the shader system).
-                auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+                auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
                 const foundation::shaders::ShaderEffect* wind =
                     render != nullptr && render->Shaders() != nullptr
                         ? render->Shaders()->EffectForFlag(foundation::shaders::ShaderFlags::Wind)
@@ -240,7 +240,7 @@ namespace samples
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
         {
             engine::runtime::DefaultApplication::OnRenderWindow(host, frame);
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -251,7 +251,7 @@ namespace samples
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime);
             m_frameSmooth = m_frameSmooth * 0.9f + deltaTime * 0.1f;
 
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
                 BuildHud();

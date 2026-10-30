@@ -4,7 +4,7 @@
 // Runtime - :pluginhost partition
 //
 // PluginHost: owns the set of loaded plugins and their backing shared libraries
-// and drives the load/unload contract against a Context. Statically-created
+// and drives the load/unload contract against a SubsystemManager. Statically-created
 // plugins are registered with Add() (caller keeps ownership of the object);
 // shared-library plugins with Load() (the host owns the library handle and
 // closes it on teardown).
@@ -15,7 +15,7 @@ module;
 export module foundation.runtime:pluginhost;
 
 import foundation.core;
-import :context;
+import :subsystem_manager;
 import :plugin;
 
 namespace core = foundation::core;
@@ -38,7 +38,7 @@ export namespace foundation::runtime
     class PluginHost
     {
     public:
-        explicit PluginHost(Context& context) noexcept : m_context(&context) {}
+        explicit PluginHost(SubsystemManager& subsystems) noexcept : m_subsystems(&subsystems) {}
 
         // Registers an extra recorder (borrowed; must outlive the host). Add BEFORE loading
         // plugins - later loads record through it, earlier ones do not.
@@ -111,7 +111,7 @@ export namespace foundation::runtime
             {
                 if (m_entries[i].plugin != nullptr)
                 {
-                    m_entries[i].plugin->OnUnload(*m_context);
+                    m_entries[i].plugin->OnUnload(*m_subsystems);
                 }
                 ReverseRecorded(m_entries[i]);
                 if (!closeLibraries)
@@ -162,7 +162,7 @@ export namespace foundation::runtime
             {
                 m_recorders[i]->Arm(entry.recorded[i]);
             }
-            entry.plugin->OnLoad(*m_context);
+            entry.plugin->OnLoad(*m_subsystems);
             for (core::usize i = m_recorders.Size(); i-- > 0;)
             {
                 m_recorders[i]->Disarm();
@@ -198,7 +198,7 @@ export namespace foundation::runtime
             entry.registeredSerializables.Clear();
         }
 
-        Context* m_context;
+        SubsystemManager* m_subsystems;
         core::Array<Entry> m_entries;
         core::Array<IRegistrationRecorder*> m_recorders; // borrowed
     };

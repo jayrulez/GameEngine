@@ -162,11 +162,11 @@ namespace
             }
             m_dataFileSystem = MakeUnique<foundation::vfs::NativeFileSystem>(
                 core::DefaultAllocator(), dataRoot.AsView(), core::DefaultAllocator());
-            m_input = host.Ctx().AddSubsystem<engine::input::InputSubsystem>(
+            m_input = host.Subsystems().AddSubsystem<engine::input::InputSubsystem>(
                 host.Shell() != nullptr ? host.Shell()->Input() : nullptr);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     *m_dataFileSystem);
             }
         }
@@ -186,7 +186,7 @@ namespace
         {
             input::ActionRuntime& actions = m_input->Runtime();
 
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, dt);
                 DrawDebugPanel(host);
@@ -237,7 +237,7 @@ namespace
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
         {
             frame.Clear(0.1f + 0.8f * m_x, 0.1f + 0.8f * m_y, 0.25f, 1.0f);
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -309,10 +309,10 @@ namespace
             ImGui::Text("Jump  %s", actions.IsDown(m_jump) ? "DOWN" : "up");
 
             // Engine time scale: flagged actions (Move) scale, Jump's press does not.
-            float scale = host.Ctx().TimeScale();
+            float scale = host.Subsystems().TimeScale();
             if (ImGui::SliderFloat("time scale", &scale, 0.0f, 2.0f))
             {
-                host.Ctx().SetTimeScale(scale);
+                host.Subsystems().SetTimeScale(scale);
             }
 
             // Exclusive menu toggle (suppression + held latching, live).

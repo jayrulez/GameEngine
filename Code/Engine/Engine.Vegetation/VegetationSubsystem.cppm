@@ -48,7 +48,7 @@ export namespace engine::vegetation
 
         void OnReady() override
         {
-            foundation::runtime::Context* ctx = GetContext();
+            foundation::runtime::SubsystemManager* ctx = Manager();
             if (ctx == nullptr)
             {
                 return;
@@ -63,7 +63,7 @@ export namespace engine::vegetation
     private:
         void OnShutdown() override
         {
-            if (foundation::runtime::Context* ctx = GetContext())
+            if (foundation::runtime::SubsystemManager* ctx = Manager())
             {
                 if (auto* scenes = ctx->GetSubsystem<engine::scene::SceneSubsystem>())
                 {

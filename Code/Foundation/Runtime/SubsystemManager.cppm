@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Runtime - :context partition
+// Runtime - :subsystem_manager partition
 //
-// Context: owns the engine's subsystems, looks them up by type, and drives
+// SubsystemManager: owns the engine's subsystems, looks them up by type, and drives
 // their lifecycle and per-frame phases in UpdateOrder. Type identity uses the
 // reflection TypeOf<T>() (We have -fno-rtti, so no std::type_index).
 
@@ -11,7 +11,7 @@ module;
 #include "Core/Prelude.h"
 #include <type_traits>
 
-export module foundation.runtime:context;
+export module foundation.runtime:subsystem_manager;
 
 import foundation.core;
 import :subsystem;
@@ -20,18 +20,18 @@ namespace core = foundation::core;
 
 export namespace foundation::runtime
 {
-    class Context
+    class SubsystemManager
     {
     public:
-        explicit Context(core::IAllocator& allocator) noexcept
+        explicit SubsystemManager(core::IAllocator& allocator) noexcept
             : m_allocator(&allocator)
         {
         }
 
-        ~Context() { Dispose(); }
+        ~SubsystemManager() { Dispose(); }
 
-        Context(const Context&) = delete;
-        Context& operator=(const Context&) = delete;
+        SubsystemManager(const SubsystemManager&) = delete;
+        SubsystemManager& operator=(const SubsystemManager&) = delete;
 
         [[nodiscard]] bool IsRunning() const noexcept { return m_running; }
 
@@ -41,7 +41,7 @@ export namespace foundation::runtime
         [[nodiscard]] core::IAllocator& Allocator() const noexcept { return *m_allocator; }
 
         // Constructs and registers a subsystem of type T (one per type). Returns
-        // a borrowed pointer; the Context owns it. If the Context is already
+        // a borrowed pointer; the SubsystemManager owns it. If the SubsystemManager is already
         // running, the subsystem is brought up (Init + Ready) immediately.
         template <typename T, typename... Args>
         T* AddSubsystem(Args&&... args)
@@ -55,8 +55,8 @@ export namespace foundation::runtime
         }
 
         // Registers a subsystem the caller owns (e.g. a plugin owns its own
-        // subsystems). The Context tracks it for lookup and per-frame phases but
-        // never destroys it. Brings it up immediately if the Context is running.
+        // subsystems). The SubsystemManager tracks it for lookup and per-frame phases but
+        // never destroys it. Brings it up immediately if the SubsystemManager is running.
         template <typename T>
         T* RegisterSubsystem(T* subsystem)
         {
@@ -66,7 +66,7 @@ export namespace foundation::runtime
         }
 
         // Removes the subsystem of type T (shutting it down first if running) and,
-        // if the Context owns it, destroys it. No-op if not registered.
+        // if the SubsystemManager owns it, destroys it. No-op if not registered.
         template <typename T>
         void RemoveSubsystem()
         {
@@ -190,7 +190,7 @@ export namespace foundation::runtime
         }
 
         // Detaches a subsystem by type: shut it down (if running), unregister,
-        // drop from the lookup/phase lists, and destroy it if Context-owned.
+        // drop from the lookup/phase lists, and destroy it if SubsystemManager-owned.
         void RemoveByType(const core::TypeInfo* type)
         {
             Subsystem* const* found = m_byType.Find(type->id);
@@ -217,7 +217,7 @@ export namespace foundation::runtime
             }
             m_byType.Remove(type->id);
 
-            // If the Context owns it, destroying the UniquePtr frees the object.
+            // If the SubsystemManager owns it, destroying the UniquePtr frees the object.
             for (core::usize i = 0; i < m_owned.Size(); ++i)
             {
                 if (m_owned[i].Get() == subsystem)

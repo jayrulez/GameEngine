@@ -258,7 +258,7 @@ namespace
     // devices), started.
     struct Engine
     {
-        runtime::Context context{DefaultAllocator()};
+        runtime::SubsystemManager context{DefaultAllocator()};
         scene::SceneManager scenes{DefaultAllocator()};
         FakeDevices devices;
         engine::input::InputSubsystem* input = nullptr;

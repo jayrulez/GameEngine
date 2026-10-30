@@ -34,7 +34,7 @@ namespace
 
 TEST_CASE("profiler overlay host: off until shown, then on the overlay layer, armed and reading")
 {
-    runtime::Context ctx(DefaultAllocator());
+    runtime::SubsystemManager ctx(DefaultAllocator());
     auto* scenes = ctx.AddSubsystem<engine::scene::SceneSubsystem>();
     scene::SceneManager sm{DefaultAllocator()};
     scenes->RegisterManager(&sm);

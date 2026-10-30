@@ -82,14 +82,14 @@ namespace
             engine::runtime::DefaultApplication::Configure(host); // registers AudioSubsystem
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
 
         void OnLaunch(runtime::IApplicationHost& host) override
         {
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr || Audio() == nullptr)
             {
                 return;
@@ -237,7 +237,7 @@ namespace
             }
 
             DrawEmitterGizmos(host);
-            if (auto* gui = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* gui = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 gui->NewFrame(input, deltaTime);
                 DrawHud();
@@ -258,7 +258,7 @@ namespace
                 }
             }
             RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
-            if (auto* gui = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* gui = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 gui->Render(frame);
             }
@@ -274,7 +274,7 @@ namespace
 
         void DrawEmitterGizmos(runtime::IApplicationHost& host)
         {
-            auto* renderer = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+            auto* renderer = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
             if (renderer == nullptr || m_scene == nullptr)
             {
                 return;

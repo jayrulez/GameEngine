@@ -116,14 +116,14 @@ namespace
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;
@@ -187,7 +187,7 @@ namespace
             LoadImportedModel(host); // cook the character + spawn the initial grid
 
             // Lower default exposure: the procedural-sky IBL + sun are bright, so AgX washes out at 1.0.
-            if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 render->SetExposure(0.5f);
             }
@@ -714,7 +714,7 @@ namespace
             RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
 
             // HUD over the scene (backbuffer is RenderTarget after the default render path).
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -726,10 +726,10 @@ namespace
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime); // keep the P-key profiling dump
 
             // ImGui HUD: open the frame + build the stats window (drawn in OnRenderWindow).
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
-                BuildHud(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
+                BuildHud(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
             }
 
             // Fly camera (WASD/QE move, RMB/Tab look, Shift fast). Drives the scene camera entity; Esc exits.
@@ -756,7 +756,7 @@ namespace
                     }
                     if (kb->IsKeyPressed(shell::KeyCode::I))
                     { // toggle prepass->forward instance-data sharing (A/B)
-                        if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+                        if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                         {
                             const bool on = !render->InstanceSharing();
                             render->SetInstanceSharing(on);

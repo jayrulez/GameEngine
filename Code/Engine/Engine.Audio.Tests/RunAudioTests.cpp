@@ -87,7 +87,7 @@ namespace
 
 TEST_CASE("run audio: ending a run fades out its scenes and its music, not another run's")
 {
-    foundation::runtime::Context ctx(DefaultAllocator());
+    foundation::runtime::SubsystemManager ctx(DefaultAllocator());
     AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
     ctx.Startup();
     AudioEngine& engine = *audio->Engine();
@@ -128,7 +128,7 @@ TEST_CASE("run audio: ending a run fades out its scenes and its music, not anoth
 
 TEST_CASE("run audio: only the focused run is heard, unless every run is; pause freezes a run")
 {
-    foundation::runtime::Context ctx(DefaultAllocator());
+    foundation::runtime::SubsystemManager ctx(DefaultAllocator());
     AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
     ctx.Startup();
     AudioEngine& engine = *audio->Engine();

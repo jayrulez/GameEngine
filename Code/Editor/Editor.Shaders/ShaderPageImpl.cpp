@@ -44,7 +44,7 @@ namespace editor
         : app::CodeAssetPage(context, Move(services), instance, pipeline::ShaderAsset::StaticType(), kPath), m_shaderLibrary(shaderLibrary)
     {
         // A name of the page's own: the preview never replaces the cooked shader a scene draws.
-        auto* render = Services().host != nullptr ? Services().host->Ctx().GetSubsystem<engine::render::RenderSubsystem>() : nullptr;
+        auto* render = Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::render::RenderSubsystem>() : nullptr;
         m_previewShader.Attach(render != nullptr ? render->Shaders() : nullptr, Format(u8"editor.preview.{}", instance.Id()));
         if (Content())
         {

@@ -85,14 +85,14 @@ namespace
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;
@@ -296,7 +296,7 @@ namespace
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
         {
             RenderFrame(host, frame); // the scenes + window overlays; FinishFrame below closes the shot
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -328,7 +328,7 @@ namespace
             engine::runtime::DefaultApplication::OnUpdate(host, deltaTime);
             m_frameSmooth = m_frameSmooth * 0.9f + deltaTime * 0.1f;
 
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
                 BuildHud();
@@ -349,7 +349,7 @@ namespace
                                                      2.5f * core::Sin(m_orbitTime * 1.5f)});
 
                 // A floor label under each cell (debug-draw 3D text), so every system is identified.
-                if (auto* rs = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+                if (auto* rs = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                 {
                     static const core::StringView kNames[16] = {
                         u8"fountain", u8"mesh solid", u8"mesh glow",    u8"embers",

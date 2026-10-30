@@ -212,7 +212,7 @@ namespace
             // sample self-reports (Mover onStart lines, any behavior fault).
             core::GlobalLogger().AddSink(&m_consoleSink);
 
-            auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+            auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
             if (scenes == nullptr)
             {
                 return;

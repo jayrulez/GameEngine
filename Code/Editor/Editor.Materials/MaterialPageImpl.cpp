@@ -159,7 +159,7 @@ namespace editor
         // The renderer's shader system serves the effects' tables: a group's ranges, and the group
         // of an effect the material's shader declares that the material does not carry yet.
         if (Services().host != nullptr)
-            if (auto* render = Services().host->Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* render = Services().host->Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
                 m_effectSystem = render->Shaders();
         BindShader(); // a material on a shader asset shows the shader's current properties
         BuildPreviewScene();

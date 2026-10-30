@@ -11,7 +11,7 @@
 // Application - forced in its own default subsystems, so neither standalone nor
 // editor honored the game's actual subsystem set.)
 //
-//   IApplicationHost - what the app sees of its host (Context, services, windows).
+//   IApplicationHost - what the app sees of its host (SubsystemManager, services, windows).
 //   IApplication     - the app/game: registers subsystems + lifecycle hooks.
 //
 // DefaultApplication (the opinionated base that registers engine default
@@ -56,7 +56,7 @@ export namespace foundation::runtime
     // for per-scene time); re-exposed here for the host's app-level lane.
     using FixedStepper = core::FixedStepper;
 
-    // The host as seen by the application: register subsystems via Ctx(), reach the
+    // The host as seen by the application: register subsystems via Subsystems(), reach the
     // shell/graphics services, manage runtime windows, request exit. Implemented
     // by ApplicationHost (and by the editor for its embedded runtime).
     class IApplicationHost
@@ -64,7 +64,7 @@ export namespace foundation::runtime
     public:
         virtual ~IApplicationHost() = default;
 
-        [[nodiscard]] virtual Context& Ctx() noexcept = 0;
+        [[nodiscard]] virtual SubsystemManager& Subsystems() noexcept = 0;
         [[nodiscard]] virtual IShell* Shell() noexcept = 0;
         [[nodiscard]] virtual GraphicsDevice* Graphics() noexcept = 0;
 
@@ -106,7 +106,7 @@ export namespace foundation::runtime
         /// Web entries have no argv and never call it.
         virtual void OnCommandLine(int argc, char** argv) { (void)argc; (void)argv; }
         virtual void Configure(IApplicationHost& host) { (void)host; } // register subsystems/types
-        virtual void OnStartup(IApplicationHost& host) { (void)host; } // after Context.Startup
+        virtual void OnStartup(IApplicationHost& host) { (void)host; } // after SubsystemManager.Startup
         virtual void OnLaunch(IApplicationHost& host) { (void)host; }  // enter play
         virtual void OnUpdate(IApplicationHost& host, core::f32 deltaTime)
         {
@@ -124,6 +124,6 @@ export namespace foundation::runtime
             (void)frame;
         }
         virtual void OnExit(IApplicationHost& host) { (void)host; }     // leave play
-        virtual void OnShutdown(IApplicationHost& host) { (void)host; } // before Context.Shutdown
+        virtual void OnShutdown(IApplicationHost& host) { (void)host; } // before SubsystemManager.Shutdown
     };
 }

@@ -77,7 +77,7 @@ namespace engine::runtime
             {
                 gfx->Raw()->WaitIdle();
                 foundation::image::Image written;
-                (void)m_screenshot.Complete(*gfx->Raw(), host.Ctx().Allocator(), written);
+                (void)m_screenshot.Complete(*gfx->Raw(), host.Subsystems().Allocator(), written);
             }
             if (m_screenshotExitPending)
             {
@@ -105,7 +105,7 @@ namespace engine::runtime
 
         // Drive + tick EVERY instance (primary + any extras - multi-instance PIE / headless server).
         // Input FIRST (so the game script sees this frame's keys), then the run host clock, then tick.
-        const core::f32 contextScale = host.Ctx().TimeScale();
+        const core::f32 contextScale = host.Subsystems().TimeScale();
         ForEachInstance(
             [&](GameInstance& gi)
             {
@@ -166,7 +166,7 @@ namespace engine::runtime
 
     void DefaultApplication::TickGameScript(IApplicationHost& host, core::f32 deltaTime)
     {
-        m_instance.TickScript(deltaTime, host.Ctx().TimeScale());
+        m_instance.TickScript(deltaTime, host.Subsystems().TimeScale());
     }
 
     void DefaultApplication::Configure(IApplicationHost& host)
@@ -184,17 +184,17 @@ namespace engine::runtime
                                u8"executable or up the tree, or --data-root <dir>)");
             host.RequestExit(1);
             m_dataFileSystem = core::MakeUnique<foundation::vfs::NativeFileSystem>(
-                host.Ctx().Allocator(),
+                host.Subsystems().Allocator(),
                 core::PathJoin(core::GetExecutableDirectory().AsView(), u8"Data").AsView(),
-                host.Ctx().Allocator());
+                host.Subsystems().Allocator());
         }
         else
         {
             LOG_INFO(u8"App", u8"data root: {}", m_dataRoot);
             m_dataFileSystem = core::MakeUnique<foundation::vfs::NativeFileSystem>(
-                host.Ctx().Allocator(), m_dataRoot.AsView(), host.Ctx().Allocator());
+                host.Subsystems().Allocator(), m_dataRoot.AsView(), host.Subsystems().Allocator());
         }
-        m_scenes = host.Ctx().AddSubsystem<engine::scene::SceneSubsystem>();
+        m_scenes = host.Subsystems().AddSubsystem<engine::scene::SceneSubsystem>();
         // The scene-assembly blueprint: every registered manager's CreateScene
         // assembles from the full composition (the single source of truth).
         m_scenes->SetComposition(engine::FullSceneComposition());
@@ -206,26 +206,26 @@ namespace engine::runtime
         m_scenes->RegisterObserver(this, foundation::scene::SceneLifecycleStage::SystemsReady);
         if (GraphicsDevice* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
         {
-            m_render = host.Ctx().AddSubsystem<engine::render::RenderSubsystem>(
-                host.Ctx().Allocator(), *gfx->Raw(), gfx->FramesInFlight(), *m_dataFileSystem);
+            m_render = host.Subsystems().AddSubsystem<engine::render::RenderSubsystem>(
+                host.Subsystems().Allocator(), *gfx->Raw(), gfx->FramesInFlight(), *m_dataFileSystem);
             // Drives skeletal animation from the scene tick (injects the SkeletalAnimation manager,
             // ticks players, feeds bone matrices to mesh components). Needs the render managers.
-            host.Ctx().AddSubsystem<engine::animation::AnimationSubsystem>();
-            host.Ctx().AddSubsystem<engine::particles::ParticleSubsystem>();
+            host.Subsystems().AddSubsystem<engine::animation::AnimationSubsystem>();
+            host.Subsystems().AddSubsystem<engine::particles::ParticleSubsystem>();
             // The chunked geo-mipmap terrain renderer: registers itself on Opaque + wires the
             // TerrainComponentManager (already injected by scene composition) as the render provider.
-            host.Ctx().AddSubsystem<engine::terrain::TerrainSubsystem>();
+            host.Subsystems().AddSubsystem<engine::terrain::TerrainSubsystem>();
             // Terrain vegetation: wires the VegetationLayerComponentManager (scene composition)
             // as a render provider; its sets ride the shared MeshRenderer's instanced path.
-            host.Ctx().AddSubsystem<engine::vegetation::VegetationSubsystem>();
+            host.Subsystems().AddSubsystem<engine::vegetation::VegetationSubsystem>();
         }
-        m_physics = host.Ctx().AddSubsystem<engine::physics::PhysicsSubsystem>();
-        host.Ctx().AddSubsystem<engine::navigation::NavigationSubsystem>();
+        m_physics = host.Subsystems().AddSubsystem<engine::physics::PhysicsSubsystem>();
+        host.Subsystems().AddSubsystem<engine::navigation::NavigationSubsystem>();
         // Networking scene integration: injects the NetworkComponentManager into every scene so
         // authored NetworkComponents work (the per-instance endpoint replicates over it). The subsystem
         // also OWNS the per-frame transport pump: give it the endpoint enumerator (we own the
         // instance list; it owns the tick).
-        auto* netSubsystem = host.Ctx().AddSubsystem<engine::net::NetworkSubsystem>();
+        auto* netSubsystem = host.Subsystems().AddSubsystem<engine::net::NetworkSubsystem>();
         netSubsystem->SetEndpointSource(
             [this](const core::Function<void(foundation::net::NetworkManager&)>& visit)
             {
@@ -238,8 +238,8 @@ namespace engine::runtime
                         }
                     });
             });
-        m_audio = host.Ctx().AddSubsystem<engine::audio::AudioSubsystem>(m_audioEngineSettings);
-        m_input = host.Ctx().AddSubsystem<engine::input::InputSubsystem>(
+        m_audio = host.Subsystems().AddSubsystem<engine::audio::AudioSubsystem>(m_audioEngineSettings);
+        m_input = host.Subsystems().AddSubsystem<engine::input::InputSubsystem>(
             host.Shell() != nullptr ? host.Shell()->Input() : nullptr);
         // The primary instance's per-instance input reads the shell devices by default (the player
         // path); the editor Game tab overrides this to its gated viewport source per tab.
@@ -250,7 +250,7 @@ namespace engine::runtime
             { ForEachInstance([&visit](GameInstance& instance) { visit(instance.InputRuntime()); }); });
         // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
         // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
-        m_gui = host.Ctx().AddSubsystem<engine::gui::GuiSubsystem>(host.Ctx().Allocator(), *m_dataFileSystem);
+        m_gui = host.Subsystems().AddSubsystem<engine::gui::GuiSubsystem>(host.Subsystems().Allocator(), *m_dataFileSystem);
         // Its prompts name the game's bindings: the primary instance's runtime, which the game runs on.
         m_gui->SetPromptRuntime(&m_instance.InputRuntime());
 
@@ -258,7 +258,7 @@ namespace engine::runtime
         // batteries-included here (idempotent - entry points may register more);
         // the run context itself is created lazily by the subsystem and SHARED
         // with the game script (one gameplay context per run, the locked rule).
-        m_scripts = host.Ctx().AddSubsystem<engine::script::ScriptSubsystem>();
+        m_scripts = host.Subsystems().AddSubsystem<engine::script::ScriptSubsystem>();
         // The instance owns its run host; wire it with the app's facades
         // + Scene.spawn + entity.send routing so its context has them when the game script starts.
         // (The subsystem's own default host - for editor scenes - is wired in its OnReady.)
@@ -681,7 +681,7 @@ namespace engine::runtime
         {
             services.Add<foundation::shaders::ShaderSystem>(m_render->Shaders());
         }
-        engine::FullComposition().CreateFactories(m_factories, host.Ctx().Allocator(), services);
+        engine::FullComposition().CreateFactories(m_factories, host.Subsystems().Allocator(), services);
         m_factories.Register(resources);
     }
 
@@ -703,7 +703,7 @@ namespace engine::runtime
     {
         // Drop the net subsystem's endpoint source before teardown - the stored callback captures `this`,
         // so it must not outlive the app (the context tick has already stopped, so this is belt-and-braces).
-        if (auto* netSubsystem = host.Ctx().GetSubsystem<engine::net::NetworkSubsystem>())
+        if (auto* netSubsystem = host.Subsystems().GetSubsystem<engine::net::NetworkSubsystem>())
         {
             netSubsystem->SetEndpointSource({});
         }
@@ -781,8 +781,8 @@ namespace engine::runtime
 
     void DefaultApplication::RenderFrame(IApplicationHost& host, FrameContext& frame)
     {
-        auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
-        auto* scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
+        auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
+        auto* scenes = host.Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
         if (render == nullptr || !render->IsReady() || scenes == nullptr ||
             frame.encoder == nullptr || frame.backbufferView == nullptr || frame.window == nullptr)
         {

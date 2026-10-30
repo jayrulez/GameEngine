@@ -1020,7 +1020,7 @@ export namespace engine::audio
         }
         void OnReady() override
         {
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
                 if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
                 {
@@ -1031,7 +1031,7 @@ export namespace engine::audio
         }
         void OnShutdown() override
         {
-            if (foundation::runtime::Context* context = GetContext())
+            if (foundation::runtime::SubsystemManager* context = Manager())
             {
             if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
             {

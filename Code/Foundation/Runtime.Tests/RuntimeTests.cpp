@@ -60,7 +60,7 @@ namespace
 
 TEST_CASE("runtime: time scale clamps at zero and defaults to realtime")
 {
-    foundation::runtime::Context ctx(foundation::core::DefaultAllocator());
+    foundation::runtime::SubsystemManager ctx(foundation::core::DefaultAllocator());
     CHECK(ctx.TimeScale() == 1.0f);
     ctx.SetTimeScale(0.5f);
     CHECK(ctx.TimeScale() == 0.5f);
@@ -127,7 +127,7 @@ TEST_CASE("runtime: fixed stepper - exact cadence, alpha, and the hitch clamp")
 
 TEST_CASE("runtime: register, look up, and own subsystems by type")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     CHECK_FALSE(ctx.HasSubsystem<Sys<1>>());
 
     Sys<1>* a = ctx.AddSubsystem<Sys<1>>(0, nullptr);
@@ -137,12 +137,12 @@ TEST_CASE("runtime: register, look up, and own subsystems by type")
     CHECK(ctx.GetSubsystem<Sys<1>>() == a);
     CHECK(ctx.GetSubsystem<Sys<2>>() == b);
     CHECK(ctx.GetSubsystem<Sys<3>>() == nullptr); // never registered
-    CHECK(a->GetContext() == &ctx);               // OnRegister wired the context
+    CHECK(a->Manager() == &ctx);                 // OnRegister wired the manager
 }
 
 TEST_CASE("runtime: startup / shutdown lifecycle")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     Sys<1>* a = ctx.AddSubsystem<Sys<1>>(0, nullptr);
     CHECK_FALSE(a->IsInitialized());
     CHECK_FALSE(ctx.IsRunning());
@@ -162,7 +162,7 @@ TEST_CASE("runtime: startup / shutdown lifecycle")
 TEST_CASE("runtime: frame phases run in UpdateOrder")
 {
     Array<int> log;
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     Sys<2>* high = ctx.AddSubsystem<Sys<2>>(5, &log);  // runs later
     Sys<1>* low = ctx.AddSubsystem<Sys<1>>(-10, &log); // runs earlier
 
@@ -184,7 +184,7 @@ TEST_CASE("runtime: Dispose shuts down running subsystems")
 {
     int shutdowns = 0;
     {
-        Context ctx(DefaultAllocator());
+        SubsystemManager ctx(DefaultAllocator());
         Sys<1>* a = ctx.AddSubsystem<Sys<1>>(0, nullptr);
         ctx.Startup();
         CHECK(a->IsInitialized());
@@ -194,11 +194,11 @@ TEST_CASE("runtime: Dispose shuts down running subsystems")
     CHECK(shutdowns == 0);
 }
 
-TEST_CASE("runtime: register a caller-owned subsystem; Context does not destroy it")
+TEST_CASE("runtime: register a caller-owned subsystem; SubsystemManager does not destroy it")
 {
-    Sys<1> owned(0, nullptr); // lives on the stack; Context must not free it
+    Sys<1> owned(0, nullptr); // lives on the stack; SubsystemManager must not free it
     {
-        Context ctx(DefaultAllocator());
+        SubsystemManager ctx(DefaultAllocator());
         Sys<1>* registered = ctx.RegisterSubsystem<Sys<1>>(&owned);
         CHECK(registered == &owned);
         CHECK(ctx.GetSubsystem<Sys<1>>() == &owned);
@@ -214,7 +214,7 @@ TEST_CASE("runtime: register a caller-owned subsystem; Context does not destroy 
 
 TEST_CASE("runtime: subsystems registered after Startup come up immediately")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     ctx.Startup();
     CHECK(ctx.IsRunning());
 
@@ -229,7 +229,7 @@ TEST_CASE("runtime: subsystems registered after Startup come up immediately")
 
 TEST_CASE("runtime: RemoveSubsystem shuts down, unregisters, and destroys owned")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     ctx.AddSubsystem<Sys<1>>(0, nullptr);
     ctx.AddSubsystem<Sys<2>>(0, nullptr);
     ctx.Startup();
@@ -253,8 +253,8 @@ namespace
     {
     public:
         [[nodiscard]] StringView Name() const noexcept override { return u8"StaticTestPlugin"; }
-        void OnLoad(Context& ctx) override { ctx.RegisterSubsystem<Sys<7>>(&m_sys); }
-        void OnUnload(Context& ctx) override { ctx.RemoveSubsystem<Sys<7>>(); }
+        void OnLoad(SubsystemManager& ctx) override { ctx.RegisterSubsystem<Sys<7>>(&m_sys); }
+        void OnUnload(SubsystemManager& ctx) override { ctx.RemoveSubsystem<Sys<7>>(); }
 
         Sys<7> m_sys{0, nullptr};
     };
@@ -262,7 +262,7 @@ namespace
 
 TEST_CASE("runtime: PluginHost::Add registers a static plugin's subsystem")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     StaticTestPlugin plugin;
     {
         PluginHost host(ctx);
@@ -284,7 +284,7 @@ TEST_CASE("runtime: PluginHost::Add registers a static plugin's subsystem")
 
 TEST_CASE("runtime: PluginHost::Load loads a plugin from a shared library")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     {
         PluginHost host(ctx);
 
@@ -315,7 +315,7 @@ TEST_CASE("runtime: PluginHost::Load loads a plugin from a shared library")
 
 TEST_CASE("runtime: PluginHost::Load reports failure for a missing library")
 {
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     PluginHost host(ctx);
     auto result = host.Load(u8"./definitely-not-a-real-plugin.so");
     CHECK_FALSE(result.HasValue());
@@ -327,17 +327,17 @@ namespace
     // A minimal app that records which context it configured into.
     struct EmbeddedProbeApp final : foundation::runtime::IApplication
     {
-        foundation::runtime::Context* configuredInto = nullptr;
+        foundation::runtime::SubsystemManager* configuredInto = nullptr;
         void Configure(foundation::runtime::IApplicationHost& host) override
         {
-            configuredInto = &host.Ctx();
+            configuredInto = &host.Subsystems();
         }
     };
 
     struct NullOuterHost final : foundation::runtime::IApplicationHost
     {
-        foundation::runtime::Context editorContext{DefaultAllocator()};
-        foundation::runtime::Context& Ctx() noexcept override { return editorContext; }
+        foundation::runtime::SubsystemManager editorContext{DefaultAllocator()};
+        foundation::runtime::SubsystemManager& Subsystems() noexcept override { return editorContext; }
         foundation::shell::IShell* Shell() noexcept override { return nullptr; }
         foundation::graphics::GraphicsDevice* Graphics() noexcept override { return nullptr; }
         foundation::graphics::RenderWindow* MainRenderWindow() noexcept override { return nullptr; }
@@ -355,7 +355,7 @@ namespace
 TEST_CASE("embedded host routes Ctx to the runtime context and exit to the embedder")
 {
     NullOuterHost outer;
-    foundation::runtime::Context runtimeContext(DefaultAllocator());
+    foundation::runtime::SubsystemManager runtimeContext(DefaultAllocator());
     foundation::runtime::EmbeddedApplicationHost embedded(outer, runtimeContext);
 
     // The hosted app configures into the EMBEDDED context, not the editor's.
@@ -388,7 +388,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
 {
     const StringView path{reinterpret_cast<const utf8char*>(CROSS_PLUGIN_PATH)};
 
-    Context ctx(DefaultAllocator());
+    SubsystemManager ctx(DefaultAllocator());
     RegisterCoreTypes(); // the host image patches Float3's metadata (see 3b)
     // Host-side probe subsystem, registered BEFORE the plugin loads.
     crossprobe::HostProbeSubsystem hostProbe;
@@ -426,7 +426,7 @@ TEST_CASE("runtime: a shared-engine plugin shares identity + rendezvous with the
     DynamicLibrary probe{path};
     REQUIRE(probe.IsLoaded());
 
-    // 1. The plugin resolved the HOST's subsystem through the TypeId-keyed Context
+    // 1. The plugin resolved the HOST's subsystem through the TypeId-keyed SubsystemManager
     //    (its own TypeOf<HostProbeSubsystem> copy lives at a different address).
     const auto resolved = probe.GetSymbol<int (*)()>(u8"CrossPluginResolvedHostValue");
     REQUIRE(resolved != nullptr);

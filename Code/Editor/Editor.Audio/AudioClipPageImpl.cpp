@@ -33,7 +33,7 @@ namespace editor
         : app::AssetObjectPage(context, Move(services), instance, pipeline::AudioClipAsset::StaticType(), kPath)
     {
         Provide<IPlaybackPage>(*this);
-        m_voice = MakeUnique<AuditionVoice>(Allocator(), Services().host != nullptr ? Services().host->Ctx().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr);
+        m_voice = MakeUnique<AuditionVoice>(Allocator(), Services().host != nullptr ? Services().host->Subsystems().GetSubsystem<engine::audio::AudioSubsystem>() : nullptr);
         m_stage = Find<gui::Node>(u8"audio-stage");
         m_empty = Find<gui::Node>(u8"audio-empty");
         m_emptyText = Find<gui::Label>(u8"audio-empty-text");

@@ -75,9 +75,9 @@ namespace editor
         SceneViewport::Services view;
         if (host != nullptr)
         {
-            m_scenes = host->Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
-            view.render = host->Ctx().GetSubsystem<engine::render::RenderSubsystem>();
-            view.gameGui = host->Ctx().GetSubsystem<engine::gui::GuiSubsystem>();
+            m_scenes = host->Subsystems().GetSubsystem<engine::scene::SceneSubsystem>();
+            view.render = host->Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
+            view.gameGui = host->Subsystems().GetSubsystem<engine::gui::GuiSubsystem>();
         }
         m_viewport = MakeUnique<SceneViewport>(Allocator(), Allocator(), view);
 

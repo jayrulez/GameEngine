@@ -101,7 +101,7 @@ namespace
             engine::runtime::DefaultApplication::Configure(host);
             if (auto* gfx = host.Graphics(); gfx != nullptr && gfx->Raw() != nullptr)
             {
-                host.Ctx().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
+                host.Subsystems().AddSubsystem<imgui::ImguiSubsystem>(*gfx->Raw(), gfx->FramesInFlight(),
                                                                     DataFileSystem());
             }
         }
@@ -128,7 +128,7 @@ namespace
             }
 
             // Load an HDR equirectangular environment so F5 can cycle to it (mode starts Procedural).
-            if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 // Default exposure below 1.0 - the procedural sky + IBL ambient are bright, so the AgX
                 // tonemap washes out at 1.0. Tune live via the Environment window's Exposure slider.
@@ -1168,7 +1168,7 @@ namespace
         // swapchain). Exercises the full multi-view path + the configurable target final state.
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
         {
-            auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
+            auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>();
             auto* gfx = host.Graphics();
             if (m_scene == nullptr || render == nullptr || !render->IsReady() || gfx == nullptr ||
                 gfx->Raw() == nullptr || frame.encoder == nullptr || frame.backbuffer == nullptr ||
@@ -1228,7 +1228,7 @@ namespace
                                              rhi::ResourceState::RenderTarget);
 
             // Debug UI on top of the scene (backbuffer is RenderTarget again; ImGui loads + draws over it).
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->Render(frame);
             }
@@ -1288,10 +1288,10 @@ namespace
 
             // ImGui debug UI: open the frame (feed input + size) then build the tweakables. The draw
             // data is rendered over the scene in OnRenderWindow.
-            if (auto* g = host.Ctx().GetSubsystem<imgui::ImguiSubsystem>())
+            if (auto* g = host.Subsystems().GetSubsystem<imgui::ImguiSubsystem>())
             {
                 g->NewFrame(host.Shell() != nullptr ? host.Shell()->Input() : nullptr, deltaTime);
-                BuildDebugUI(host.Ctx().GetSubsystem<engine::render::RenderSubsystem>());
+                BuildDebugUI(host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>());
             }
 
             // Viewport-input routing. Build the router + one surface per split half once the shell
@@ -1377,7 +1377,7 @@ namespace
             // a ground grid, an arrow from the spot, 3D + screen text). Both split-screen views render
             // these, each projected through its OWN camera - and they're keyed to this scene, so a second
             // scene's gizmos would never bleed in.
-            if (auto* render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>())
+            if (auto* render = host.Subsystems().GetSubsystem<engine::render::RenderSubsystem>())
             {
                 // Debug gizmos toggle (ImGui "Debug Draw" checkbox). The FPS readout below stays on.
                 if (m_showDebugDraw)

@@ -4,7 +4,7 @@
 // Foundation::Runtime.Client - the `foundation.runtime.client` module.
 //
 // ApplicationHost: the concrete, generic host that drives exactly ONE IApplication.
-// Owns a Context, an optional (borrowed) GraphicsDevice, and the LIST of
+// Owns a SubsystemManager, an optional (borrowed) GraphicsDevice, and the LIST of
 // RenderWindows it presents. It is infrastructure, NOT subclassed - all behavior
 // lives in the IApplication. It is deliberately LOOP-AGNOSTIC: the shell layer
 // drives Start/Tick/Stop (a blocking loop on desktop, a callback on Emscripten),
@@ -51,15 +51,15 @@ export namespace foundation::runtime
     {
     public:
         // The allocator (required - the entry point decides) becomes the runtime
-        // Context's allocator authority for every subsystem this host runs.
-        explicit ApplicationHost(core::IAllocator& allocator) noexcept : m_context(allocator) {}
+        // SubsystemManager's allocator authority for every subsystem this host runs.
+        explicit ApplicationHost(core::IAllocator& allocator) noexcept : m_subsystems(allocator) {}
         ~ApplicationHost() override = default;
 
         ApplicationHost(const ApplicationHost&) = delete;
         ApplicationHost& operator=(const ApplicationHost&) = delete;
 
         // Bring the application up: read settings, register subsystems (app's
-        // Configure), start the Context, create the main RenderWindow (if shell
+        // Configure), start the SubsystemManager, create the main RenderWindow (if shell
         // +graphics), then enter play (app OnLaunch). Idempotent. The application,
         // shell, and graphics device are all BORROWED (owned by the entry point);
         // shell/graphics stay null for headless runs.
@@ -95,7 +95,7 @@ export namespace foundation::runtime
             core::InitGlobalJobSystem();
 
             m_app->Configure(*this);
-            m_context.Startup();
+            m_subsystems.Startup();
 
             // The main window already exists on the shell; give it a RenderWindow.
             if (m_shell != nullptr && m_graphics != nullptr && m_shell->WindowManager() != nullptr)
@@ -132,19 +132,19 @@ export namespace foundation::runtime
         void Tick(core::f32 deltaTime)
         {
             PROFILE_FRAME_BEGIN();
-            m_context.BeginFrame(deltaTime);
+            m_subsystems.BeginFrame(deltaTime);
 
             {
                 PROFILE_SCOPE("Update");
                 // Simulation lanes run on SCALED time (slow-mo/pause); the app hook and
                 // frame bookkeeping keep the raw dt.
-                const core::f32 scaledDelta = deltaTime * m_context.TimeScale();
+                const core::f32 scaledDelta = deltaTime * m_subsystems.TimeScale();
                 // The fixed step is CONFIG on the context (the scene bridge seeds per-scene
                 // steppers from it); there is no context-level fixed EXECUTION lane. The host
                 // stepper serves the APP-level fixed hook (OnFixedUpdate), available to any app
                 // that needs one - the default app does not use it (networking's pump runs in
                 // NetworkSubsystem::PostUpdate).
-                m_context.SetFixedTimeStep(m_settings.fixedTimeStep);
+                m_subsystems.SetFixedTimeStep(m_settings.fixedTimeStep);
                 m_stepper.step = m_settings.fixedTimeStep;
                 m_stepper.maxSteps = m_settings.maxFixedStepsPerFrame;
                 const core::u32 fixedSteps = m_stepper.Advance(scaledDelta);
@@ -153,9 +153,9 @@ export namespace foundation::runtime
                     m_app->OnFixedUpdate(*this, m_settings.fixedTimeStep);
                 }
 
-                m_context.Update(scaledDelta);
+                m_subsystems.Update(scaledDelta);
                 m_app->OnUpdate(*this, deltaTime);
-                m_context.PostUpdate(scaledDelta);
+                m_subsystems.PostUpdate(scaledDelta);
             }
 
             // Render every window uniformly (main == windows[0]).
@@ -192,7 +192,7 @@ export namespace foundation::runtime
                 }
             }
 
-            m_context.EndFrame();
+            m_subsystems.EndFrame();
             FlushPendingCloses();
 #if BUILD_PROFILING
             // The device's counts for this frame (draws, passes, binds, memory) to the profiler.
@@ -220,7 +220,7 @@ export namespace foundation::runtime
             return m_graphics != nullptr && !m_windows.IsEmpty() && !m_presented;
         }
 
-        // Tear the application down: leave play, stop the Context, destroy windows.
+        // Tear the application down: leave play, stop the SubsystemManager, destroy windows.
         // Idempotent.
         void Stop()
         {
@@ -229,13 +229,13 @@ export namespace foundation::runtime
                 return;
             }
             m_app->OnExit(*this);
-            m_context.Shutdown();
+            m_subsystems.Shutdown();
             m_app->OnShutdown(*this);
 
             m_pendingClose.Clear();
             m_windows.Clear(); // RenderWindow dtors WaitIdle + free GPU resources
 
-            // Tear down the engine-wide JobSystem last - after every subsystem (Context.Shutdown)
+            // Tear down the engine-wide JobSystem last - after every subsystem (SubsystemManager.Shutdown)
             // and all GPU resource frees (window dtors), so nothing references it afterward.
             core::ShutdownGlobalJobSystem();
 
@@ -250,7 +250,7 @@ export namespace foundation::runtime
             m_exitCode = code;
         }
 
-        [[nodiscard]] Context& Ctx() noexcept override { return m_context; }
+        [[nodiscard]] SubsystemManager& Subsystems() noexcept override { return m_subsystems; }
         [[nodiscard]] IShell* Shell() noexcept override { return m_shell; }
         [[nodiscard]] GraphicsDevice* Graphics() noexcept override { return m_graphics; }
 
@@ -349,7 +349,7 @@ export namespace foundation::runtime
             }
         }
 
-        Context m_context;
+        SubsystemManager m_subsystems;
         ApplicationSettings m_settings;
         IApplication* m_app = nullptr;                        // borrowed; owned by the entry point
         IShell* m_shell = nullptr;                            // borrowed; owned by the entry point

@@ -83,6 +83,8 @@ cp -r "Data/Editor" "$DIST/Data/Editor"
 rm -rf "$DIST/Data/Editor/Mock"
 cp -r "Data/ModelViewer" "$DIST/Data/ModelViewer"
 cp "Data/.dataroot" "$DIST/Data/.dataroot"
+# The agent's guide beside the exe, where --mcp and --headless look first (docs://ModelViewerGuide.md).
+cp "Documentation/Shipping/ModelViewerGuide.md" "$DIST/"
 
 # 5. The shader pack into the dist's data root, and the marker that makes it start from the pack.
 log "Cooking Data/Engine/Shaders/shaders.dpak ($FORMATS)"
@@ -97,10 +99,17 @@ Model Viewer (Linux x86_64)
 Look at glTF, GLB, FBX and OBJ files without a project, play their animations,
 browse a folder of models as thumbnails, and shortlist the ones you want.
 
-Run:  ./Tools.ModelViewer [model files...] [--rest] [--skeleton]
+Run:  ./Tools.ModelViewer [model files...] [--rest] [--skeleton] [--mcp]
+      ./Tools.ModelViewer --headless
 
   --rest       open models in their rest pose, no clip playing
   --skeleton   start with the bones drawn
+  --mcp        serve the library to an agent over MCP (HTTP, port 7406;
+               --mcp-port <port> for another), the token in mcp-token
+               under ~/.local/share/gameengine
+  --headless   serve the library over MCP on stdio, no window
+
+An agent's manual is ModelViewerGuide.md, beside the executable.
 
 Drop model files on the window or use Open... to open more; the Browse tab
 shows the models under a folder. The viewer keeps its cache, thumbnails,

@@ -12,7 +12,8 @@ target_link_libraries(Tools.ModelViewer PRIVATE
     Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
     Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Toolkit Foundation::GUI.VFS
     Foundation::Scene Foundation::Geometry Foundation::Render Engine::DefaultApp Engine::Render Engine::Model
-    Foundation::GUI.Viewport Foundation::RHI.Capture Foundation::Image.IO Editor::Preview.Viewport Editor::Camera Tools::ModelViewer)
+    Foundation::GUI.Viewport Foundation::RHI.Capture Foundation::Image.IO Foundation::Mcp Foundation::Mcp.Http Foundation::Json
+    Editor::Preview.Viewport Editor::Camera Tools::ModelViewer)
 util_copy_runtime_deps(Tools.ModelViewer EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB})
 if(UNIX AND NOT APPLE)
     set_property(TARGET Tools.ModelViewer APPEND PROPERTY BUILD_RPATH "$ORIGIN")

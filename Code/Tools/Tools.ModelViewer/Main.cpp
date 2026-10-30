@@ -10,9 +10,14 @@
 // open model has a tab (modelviewer::ModelTabs): its instance stays in the scene, active only while
 // its tab is in front, and the camera it was left with comes back with it.
 //
-//   Tools.ModelViewer [model files...] [--rest] [--skeleton] [--screenshot <png> [--screenshot-exit] ...]
+//   Tools.ModelViewer [model files...] [--rest] [--skeleton] [--mcp | --mcp-port <port>]
+//                     [--screenshot <png> [--screenshot-exit] ...]
+//   Tools.ModelViewer --headless
 //
 // --rest shows the model in its rest pose, no clip playing; --skeleton starts with the bones drawn.
+// --mcp serves the viewer's commands to an agent over HTTP (port 7406, or --mcp-port's), with the
+// bearer token in the user data folder's mcp-token; --headless serves them over stdio with no
+// window (Documentation/Shipping/ModelViewerGuide.md).
 //
 // P0: the window, the view, one model from the command line, framed, on a grid scaled to it.
 // P1: a tab per model (the command line, dropped files, the Open dialog), the side panel's numbers,
@@ -25,9 +30,12 @@
 // P4: the shortlist (modelviewer::Shortlist: a star and a note on the tab in front, a Starred filter
 // and a CSV export in the browser, kept in `model-viewer/shortlist.txt`) and the loose texture
 // rule's toggle (remembered in the settings, for models opened from then on).
+// P6-P7: the library (modelviewer::LibrarySession, its commands) opened at startup, and served to an
+// agent over MCP (--mcp, --headless); the window works it from P8.
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
 
@@ -64,6 +72,9 @@ import engine.model;
 import editor.preview.viewport;
 import modelviewer;
 import modelviewer.thumbnails;
+import foundation.json;
+import foundation.mcp;
+import foundation.mcp.http;
 
 using namespace foundation::core;
 namespace shell = foundation::shell;
@@ -76,8 +87,98 @@ namespace gui = foundation::gui;
 namespace scene = foundation::scene;
 namespace render = foundation::render;
 
+extern "C" const char* BuildStamp(); // Runtime.Client's: this build's identity
+
 namespace
 {
+    constexpr u16 kDefaultMcpPort = 7406; // the editor's is 7405: both may run
+
+    [[nodiscard]] String LibraryFolder() { return PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer"); }
+
+    // The bearer token an agent presents: the user data folder's mcp-token (the editor's, shared),
+    // minted from the system's entropy when there is none yet.
+    [[nodiscard]] String McpToken()
+    {
+        const String path = PathJoin(GetUserDataDirectory().AsView(), u8"mcp-token");
+        if (Result<Array<byte>> bytes = ReadFile(path.AsView()); bytes.HasValue())
+        {
+            String token(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+            while (!token.IsEmpty() && (token[token.Size() - 1] == u8'\n' || token[token.Size() - 1] == u8'\r' || token[token.Size() - 1] == u8' '))
+                token = String(token.AsView().SubStr(0, token.Size() - 1));
+            if (!token.IsEmpty())
+                return token;
+        }
+        Guid secret;
+        if (!Guid::TryGenerateFromSystemEntropy(secret))
+            return {};
+        utf8char text[37];
+        secret.ToChars(text);
+        const String token(StringView(text, 36));
+        (void)CreateDirectories(GetUserDataDirectory().AsView());
+        (void)WriteFile(path.AsView(), Span<const byte>(reinterpret_cast<const byte*>(token.Data()), token.Size()));
+        return token;
+    }
+
+    // The library opened in the user data folder, its commands and viewer.info registered.
+    void OpenLibrary(modelviewer::LibrarySession& library, StringView mode)
+    {
+        String error;
+        if (!library.Open(LibraryFolder().AsView(), error))
+            LOG_ERROR(u8"ModelViewer", u8"the library did not open: {}", error.AsView());
+        else if (library.ReadOnly())
+            LOG_WARNING(u8"ModelViewer", u8"the library is open read-only: another viewer (process {}) writes it", library.File().LockHolder());
+        modelviewer::RegisterLibraryCommands(library);
+        const String modeName(mode);
+        modelviewer::RegisterInfoCommand(library, LibraryFolder().AsView(),
+                                         [modeName]()
+                                         {
+                                             foundation::json::JsonValue v = foundation::json::JsonValue::MakeObject();
+                                             v.Set(String(u8"process"), foundation::json::JsonValue::MakeNumber(static_cast<f64>(ProcessId())));
+                                             v.Set(String(u8"version"), foundation::json::JsonValue::MakeString(String(reinterpret_cast<const char8_t*>(BuildStamp()))));
+                                             v.Set(String(u8"mode"), foundation::json::JsonValue::MakeString(modeName));
+                                             return v;
+                                         });
+    }
+
+    // The commands as the MCP server's tools, and the guide.
+    void ServeCommands(foundation::mcp::McpServer& server, modelviewer::LibrarySession& library)
+    {
+        server.SetServerInfo(String(u8"model-viewer"), String(reinterpret_cast<const char8_t*>(BuildStamp())));
+        modelviewer::RegisterCommandTools(server, library.Commands());
+        const String executable = ExecutablePath();
+        const String starts[] = {String(PathParent(executable.AsView())), GetCurrentDirectory()};
+        const String guide = modelviewer::LocateGuide(Span<const String>(starts, 2));
+        if (guide.IsEmpty())
+            LOG_WARNING(u8"ModelViewer", u8"the agent's guide ({}) was not found", modelviewer::kGuideFileName);
+        modelviewer::RegisterGuideResource(server, guide.AsView());
+    }
+
+    // Engine logs to stderr: in --headless, stdout is the protocol's.
+    class StderrSink final : public ILogSink
+    {
+    public:
+        void Write(LogLevel level, StringView category, StringView message) noexcept override
+        {
+            const String line = Format(u8"[{}] {}: {}\n", LogLevelName(level), category, message);
+            std::fwrite(line.Data(), 1, line.Size(), stderr);
+            std::fflush(stderr);
+        }
+    };
+
+    // --headless: the library's commands over stdio, no window, until the input ends.
+    int RunHeadless()
+    {
+        static StderrSink sink;
+        GlobalLogger().AddSink(&sink);
+        modelviewer::LibrarySession library(DefaultAllocator());
+        OpenLibrary(library, u8"headless");
+        foundation::mcp::McpServer server;
+        ServeCommands(server, library);
+        foundation::mcp::StdioTransport transport;
+        foundation::mcp::Serve(server, transport);
+        return 0;
+    }
+
     constexpr const char8_t* kMarkupPath = u8"ModelViewer/Viewer.xml";
     constexpr const char8_t* kSheets[] = {u8"Editor/editor.css", u8"Editor/density-default.css", u8"ModelViewer/viewer.css"};
 
@@ -89,6 +190,8 @@ namespace
         void SetRest(bool rest) { m_rest = rest; }
         /// --skeleton: the bones drawn from the start.
         void SetSkeleton(bool on) { m_showSkeleton = on; }
+        /// --mcp / --mcp-port: serve the commands to an agent over HTTP.
+        void SetMcp(u16 port) { m_mcpPort = port; }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
@@ -121,6 +224,8 @@ namespace
                                                                      PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/thumbnails").AsView());
             ModelViewerApp* self = this;
             m_thumbnails->SetOnDone([self](StringView model, StringView png) { self->ThumbnailDone(model, png); });
+            OpenLibrary(m_library, u8"window");
+            StartMcp();
             WireControls(host);
             WireBrowser(host);
             if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
@@ -151,6 +256,8 @@ namespace
             m_guiHost->Update(deltaTime);
             if (m_thumbnails)
                 m_thumbnails->Update();
+            if (m_mcpHost)
+                (void)m_mcpHost->Pump();
             if (!m_browsing && m_viewport->Update(deltaTime))
                 FrameModel();
             Turn(deltaTime);
@@ -188,6 +295,7 @@ namespace
             if (m_thumbnails)
                 m_thumbnails->Shutdown();
             m_thumbnails.Reset();
+            m_mcpHost.Reset();
             m_tiles.Clear();
             m_thumbImages.Clear();
             if (m_viewport)
@@ -999,6 +1107,30 @@ namespace
                 ShowGrid();
         }
 
+        // The commands over HTTP when asked (--mcp): localhost and the shared bearer token.
+        void StartMcp()
+        {
+            if (m_mcpPort == 0)
+                return;
+            ServeCommands(m_mcpServer, m_library);
+            foundation::mcp::McpHttpConfig config;
+            config.port = m_mcpPort;
+            config.token = McpToken();
+            if (config.token.IsEmpty())
+            {
+                LOG_ERROR(u8"ModelViewer", u8"MCP: no token could be made; not serving");
+                return;
+            }
+            m_mcpHost = MakeUnique<foundation::mcp::McpHttpHost>(m_allocator, m_allocator, m_mcpServer);
+            if (!m_mcpHost->Start(config))
+            {
+                LOG_ERROR(u8"ModelViewer", u8"MCP: port {} is not free; not serving", m_mcpPort);
+                m_mcpHost.Reset();
+                return;
+            }
+            LOG_INFO(u8"ModelViewer", u8"MCP: listening on 127.0.0.1:{} (the token is in <user-data>/mcp-token)", m_mcpHost->BoundPort());
+        }
+
         // === The shortlist and the loose texture toggle ===
 
         void WirePick(runtime::IApplicationHost& host)
@@ -1292,6 +1424,12 @@ namespace
         String m_shortlistPath;
         bool m_syncingPick = false;
         bool m_looseTextures = true;
+
+        // The library, and the agent's way in.
+        modelviewer::LibrarySession m_library{m_allocator};
+        foundation::mcp::McpServer m_mcpServer;
+        UniquePtr<foundation::mcp::McpHttpHost> m_mcpHost;
+        u16 m_mcpPort = 0;
         foundation::rhi::ScreenshotCapture m_capture;
         String m_failure;
     };
@@ -1299,6 +1437,9 @@ namespace
 
 int main(int argc, char** argv)
 {
+    for (int i = 1; i < argc; ++i)
+        if (StringView(reinterpret_cast<const utf8char*>(argv[i])) == StringView(u8"--headless"))
+            return RunHeadless();
     ModelViewerApp app;
     for (int i = 1; i < argc; ++i)
     {
@@ -1311,6 +1452,16 @@ int main(int argc, char** argv)
         if (arg == StringView(u8"--skeleton"))
         {
             app.SetSkeleton(true);
+            continue;
+        }
+        if (arg == StringView(u8"--mcp"))
+        {
+            app.SetMcp(kDefaultMcpPort);
+            continue;
+        }
+        if (arg == StringView(u8"--mcp-port") && i + 1 < argc)
+        {
+            app.SetMcp(static_cast<u16>(std::atoi(argv[++i])));
             continue;
         }
         if (arg.Size() > 0 && arg[0] == u8'-')

@@ -8,7 +8,7 @@ target_link_libraries(ModelViewer
         Foundation::Core Foundation::RHI Foundation::VFS Foundation::Content Foundation::Resource
         Foundation::Model Foundation::Model.IO Foundation::Model.GLTF Foundation::Model.FBX
         Foundation::Model.Resource Foundation::Scene Foundation::Animation Engine::Animation Engine::Composition Engine::Model
-        Pipeline::ModelImporter Foundation::Json Foundation::Xml Foundation::Xml.Serialization
+        Pipeline::ModelImporter Foundation::Json Foundation::Xml Foundation::Xml.Serialization Foundation::Mcp
         Foundation::Policy)
 
 target_sources(ModelViewer
@@ -22,4 +22,5 @@ target_sources(ModelViewer
             Shortlist.cppm
             ModelStore.cppm
             ModelSearch.cppm
-            ModelCommands.cppm)
+            ModelCommands.cppm
+            ModelMcp.cppm)

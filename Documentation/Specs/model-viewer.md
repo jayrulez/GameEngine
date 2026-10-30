@@ -274,7 +274,13 @@ A tab beside Browse, both always first.
 - **P7 MCP.** The host over the dispatcher (`--mcp`, `--mcp-port`, `--headless` over stdio), the
   tools from the commands, the guide resource and its document. Tests: the tool list is the
   command list (names, schemas, hints) and the guide names every one; a call through MCP changes
-  the library as the command does; a window command headless says there is no window.
+  the library as the command does; a window command headless says there is no window. Built
+  2026-10-29: `:mcp` (each command a tool, dots to underscores, its kind the annotations: reads,
+  creates, changes, deletes, adjusts), `viewer.info` (its process, version, mode, library,
+  writable), the guide `Documentation/Shipping/ModelViewerGuide.md` (staged beside the exe by the
+  dist script), `--mcp` / `--mcp-port` (HTTP, 7406 by default beside the editor's 7405, the
+  shared mcp-token) and `--headless` (stdio, logs to stderr). The window commands, and so the
+  headless test of one, come with P8.
 - **P8 The Library tab.** The tree, the views, the search box, adding from the browser
   (multi-select, the picker, a drop on the tree) and from the panel's Library section, tags and
   names edited, the window's commands (`model`, `tabs`, `view`, `clip`, `browse`, `thumbnail`);

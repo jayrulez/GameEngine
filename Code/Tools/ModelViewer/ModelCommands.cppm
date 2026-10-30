@@ -47,13 +47,27 @@ export namespace modelviewer
         }
     };
 
+    /// What a command does to the library or the window, as MCP's tool annotations say it: an
+    /// agent's client runs reads freely and confirms the rest. Everything but Reads is a change
+    /// (announced, and for the library undoable).
+    enum class CommandKind : u8
+    {
+        Reads,   // changes nothing
+        Creates, // adds something new (a model, a collection, a membership)
+        Changes, // replaces what is there (a name, a note, a place); the same call again lands the same
+        Deletes, // takes something away
+        Adjusts, // the window's state (a tab, the camera), nothing kept
+    };
+
     struct Command
     {
         String name;
         String description;
         JsonValue schema; // a JSON Schema object for the arguments
-        bool changes = false;
+        CommandKind kind = CommandKind::Reads;
         Function<CommandResult(const JsonValue&)> run;
+
+        [[nodiscard]] bool Changes() const noexcept { return kind != CommandKind::Reads; }
     };
 
     /// One argument of a command's schema.
@@ -123,7 +137,7 @@ export namespace modelviewer
                 return CommandResult::Fail(Format(u8"no command named {}", name).AsView());
             const JsonValue object = args.IsObject() ? args : JsonValue::MakeObject();
             CommandResult result = command->run(object);
-            if (result.ok && command->changes)
+            if (result.ok && command->Changes())
                 for (const auto& listener : m_listeners)
                     listener(name);
             return result;
@@ -326,6 +340,30 @@ export namespace modelviewer
         }
     }
 
+    /// `viewer.info`: what the host says about itself (`info`'s object: its process, version, window
+    /// or headless), with the library's folder and whether it is writable added.
+    inline void RegisterInfoCommand(LibrarySession& session, StringView libraryFolder, Function<JsonValue()> info)
+    {
+        LibrarySession* s = &session;
+        const String folder(libraryFolder);
+        Command c;
+        c.name = String(u8"viewer.info");
+        c.description = String(u8"The viewer: its process, its version, window or headless, where the library is, whether it is writable "
+                               u8"(read-only when another viewer holds it, named by its process).");
+        c.schema = ArgsSchema(Span<const CommandArg>{});
+        c.kind = CommandKind::Reads;
+        c.run = [s, folder, info = foundation::core::Move(info)](const JsonValue&)
+        {
+            JsonValue v = info ? info() : JsonValue::MakeObject();
+            v.Set(String(u8"library"), JsonValue::MakeString(folder));
+            v.Set(String(u8"writable"), JsonValue::MakeBool(!s->ReadOnly()));
+            if (s->ReadOnly() && s->File().LockHolder() != 0)
+                v.Set(String(u8"heldBy"), JsonValue::MakeNumber(static_cast<f64>(s->File().LockHolder())));
+            return CommandResult::Ok(foundation::core::Move(v));
+        };
+        (void)session.Commands().Register(foundation::core::Move(c));
+    }
+
     /// The library's commands into `session`'s set: `entry.*`, `collection.*`, `member.*`,
     /// `tag.*`, `search`, `history.*`.
     inline void RegisterLibraryCommands(LibrarySession& session)
@@ -333,13 +371,13 @@ export namespace modelviewer
         using namespace command_detail;
         LibrarySession* s = &session;
         CommandSet& set = session.Commands();
-        auto add = [&](StringView name, StringView description, Span<const CommandArg> args, bool changes, Function<CommandResult(const JsonValue&)> run)
+        auto add = [&](StringView name, StringView description, Span<const CommandArg> args, CommandKind kind, Function<CommandResult(const JsonValue&)> run)
         {
             Command c;
             c.name = String(name);
             c.description = String(description);
             c.schema = ArgsSchema(args);
-            c.changes = changes;
+            c.kind = kind;
             c.run = foundation::core::Move(run);
             (void)set.Register(foundation::core::Move(c));
         };
@@ -349,7 +387,7 @@ export namespace modelviewer
         // --- entries ---
         {
             const CommandArg args[] = {{u8"path", u8"string", u8"the model file"}};
-            add(u8"entry.add", u8"Adds a model file to the library (its entry when it has one); returns its id.", args, true,
+            add(u8"entry.add", u8"Adds a model file to the library (its entry when it has one); returns its id.", args, CommandKind::Creates,
                 [s, change](const JsonValue& a)
                 {
                     const String path = Text(a, u8"path");
@@ -368,7 +406,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the model's id"}};
-            add(u8"entry.remove", u8"Removes a model from the library, and from every collection it is in.", args, true,
+            add(u8"entry.remove", u8"Removes a model from the library, and from every collection it is in.", args, CommandKind::Deletes,
                 [s, change](const JsonValue& a)
                 {
                     Guid id;
@@ -381,7 +419,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the model's id"}, {u8"path", u8"string", u8"where the file is now"}};
-            add(u8"entry.relink", u8"Points a model at its file's new place (or a changed file), taking its size and time anew.", args, true,
+            add(u8"entry.relink", u8"Points a model at its file's new place (or a changed file), taking its size and time anew.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Guid id;
@@ -398,7 +436,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the model's id", false}, {u8"path", u8"string", u8"or its file", false}};
-            add(u8"entry.get", u8"A model in the library: its file, tags, note, numbers, and the collections it is in with its name in each.", args, false,
+            add(u8"entry.get", u8"A model in the library: its file, tags, note, numbers, and the collections it is in with its name in each.", args, CommandKind::Reads,
                 [s](const JsonValue& a)
                 {
                     const Entry* e = nullptr;
@@ -417,7 +455,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the model's id"}, {u8"note", u8"string", u8"the note (empty clears it)"}};
-            add(u8"entry.note.set", u8"Sets a model's note.", args, true,
+            add(u8"entry.note.set", u8"Sets a model's note.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Guid id;
@@ -434,7 +472,7 @@ export namespace modelviewer
         {
             const CommandArg args[] = {{u8"name", u8"string", u8"the collection's name"},
                                        {u8"parent", u8"string", u8"the collection it goes under (none: the top)", false}};
-            add(u8"collection.create", u8"Creates a collection, at the top or under another; returns its id.", args, true,
+            add(u8"collection.create", u8"Creates a collection, at the top or under another; returns its id.", args, CommandKind::Creates,
                 [s, change](const JsonValue& a)
                 {
                     Guid parent;
@@ -456,7 +494,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the collection"}, {u8"name", u8"string", u8"its new name"}};
-            add(u8"collection.rename", u8"Renames a collection.", args, true,
+            add(u8"collection.rename", u8"Renames a collection.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Guid id;
@@ -474,7 +512,7 @@ export namespace modelviewer
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the collection"},
                                        {u8"parent", u8"string", u8"the collection it goes under (none: the top)", false}};
-            add(u8"collection.move", u8"Moves a collection under another, or to the top; refused inside itself or where its names would clash.", args, true,
+            add(u8"collection.move", u8"Moves a collection under another, or to the top; refused inside itself or where its names would clash.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Guid id;
@@ -491,7 +529,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the collection"}};
-            add(u8"collection.delete", u8"Deletes a collection and those under it; the models stay in the library.", args, true,
+            add(u8"collection.delete", u8"Deletes a collection and those under it; the models stay in the library.", args, CommandKind::Deletes,
                 [s, change](const JsonValue& a)
                 {
                     Guid id;
@@ -502,12 +540,12 @@ export namespace modelviewer
                                   { return s->Get().DeleteCollection(id) ? CommandResult::Ok() : CommandResult::Fail(u8"no such collection"); });
                 });
         }
-        add(u8"collection.tree", u8"The collections, nested: each with its id, name, member count and children.", Span<const CommandArg>{}, false,
+        add(u8"collection.tree", u8"The collections, nested: each with its id, name, member count and children.", Span<const CommandArg>{}, CommandKind::Reads,
             [s](const JsonValue&) { return CommandResult::Ok(TreeJson(s->Get(), Guid{})); });
         {
             const CommandArg args[] = {{u8"id", u8"string", u8"the collection"},
                                        {u8"recursive", u8"boolean", u8"with the members of the collections under it (default true)", false}};
-            add(u8"collection.members", u8"A collection's models in order, each with its name there.", args, false,
+            add(u8"collection.members", u8"A collection's models in order, each with its name there.", args, CommandKind::Reads,
                 [s](const JsonValue& a)
                 {
                     Guid id;
@@ -541,7 +579,7 @@ export namespace modelviewer
             const CommandArg args[] = {{u8"collection", u8"string", u8"the collection"},
                                        {u8"entries", u8"array", u8"the models' ids"},
                                        {u8"at", u8"integer", u8"the place among its members (default: last)", false}};
-            add(u8"member.add", u8"Adds models to a collection (one there already stays where it is).", args, true,
+            add(u8"member.add", u8"Adds models to a collection (one there already stays where it is).", args, CommandKind::Creates,
                 [s, change](const JsonValue& a)
                 {
                     Guid collection;
@@ -559,7 +597,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"collection", u8"string", u8"the collection"}, {u8"entries", u8"array", u8"the models' ids"}};
-            add(u8"member.remove", u8"Takes models out of a collection (they stay in the library).", args, true,
+            add(u8"member.remove", u8"Takes models out of a collection (they stay in the library).", args, CommandKind::Deletes,
                 [s, change](const JsonValue& a)
                 {
                     Guid collection;
@@ -575,7 +613,7 @@ export namespace modelviewer
             const CommandArg args[] = {{u8"collection", u8"string", u8"the collection"},
                                        {u8"entry", u8"string", u8"the model's id"},
                                        {u8"name", u8"string", u8"its name there, unique across the top-level collection (empty clears it)"}};
-            add(u8"member.rename", u8"Names a model in a collection: the id a game knows it by. A name another model holds there is refused.", args, true,
+            add(u8"member.rename", u8"Names a model in a collection: the id a game knows it by. A name another model holds there is refused.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Guid collection;
@@ -595,7 +633,7 @@ export namespace modelviewer
             const CommandArg args[] = {{u8"collection", u8"string", u8"the collection"},
                                        {u8"entry", u8"string", u8"the model's id"},
                                        {u8"at", u8"integer", u8"its new place among the members"}};
-            add(u8"member.move", u8"Moves a model to another place in a collection's order.", args, true,
+            add(u8"member.move", u8"Moves a model to another place in a collection's order.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Guid collection;
@@ -612,7 +650,7 @@ export namespace modelviewer
         // --- tags ---
         {
             const CommandArg args[] = {{u8"entries", u8"array", u8"the models' ids"}, {u8"tag", u8"string", u8"the tag"}};
-            add(u8"tag.add", u8"Tags models.", args, true,
+            add(u8"tag.add", u8"Tags models.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     Array<Guid> entries;
@@ -628,7 +666,7 @@ export namespace modelviewer
                                       return CommandResult::Ok();
                                   });
                 });
-            add(u8"tag.remove", u8"Takes a tag off models.", args, true,
+            add(u8"tag.remove", u8"Takes a tag off models.", args, CommandKind::Deletes,
                 [s, change](const JsonValue& a)
                 {
                     Array<Guid> entries;
@@ -645,7 +683,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"from", u8"string", u8"the tag"}, {u8"to", u8"string", u8"its new name"}};
-            add(u8"tag.rename", u8"Renames a tag on every model that has it.", args, true,
+            add(u8"tag.rename", u8"Renames a tag on every model that has it.", args, CommandKind::Changes,
                 [s, change](const JsonValue& a)
                 {
                     const String from = Text(a, u8"from");
@@ -661,7 +699,7 @@ export namespace modelviewer
         }
         {
             const CommandArg args[] = {{u8"tag", u8"string", u8"the tag"}};
-            add(u8"tag.delete", u8"Takes a tag off every model.", args, true,
+            add(u8"tag.delete", u8"Takes a tag off every model.", args, CommandKind::Deletes,
                 [s, change](const JsonValue& a)
                 {
                     const String tag = Text(a, u8"tag");
@@ -672,7 +710,7 @@ export namespace modelviewer
                                   });
                 });
         }
-        add(u8"tag.list", u8"Every tag, with how many models have it.", Span<const CommandArg>{}, false,
+        add(u8"tag.list", u8"Every tag, with how many models have it.", Span<const CommandArg>{}, CommandKind::Reads,
             [s](const JsonValue&)
             {
                 Array<String> tags;
@@ -695,7 +733,7 @@ export namespace modelviewer
                 {u8"query", u8"string", u8"words (a name, file, note or tag), tag:x, collection:x, rigged, animated, missing; all must hold"},
                 {u8"scope", u8"string", u8"a collection to search (with those under it); none: the whole library", false},
                 {u8"limit", u8"integer", u8"at most this many (default all)", false}};
-            add(u8"search", u8"Finds models in the library.", args, false,
+            add(u8"search", u8"Finds models in the library.", args, CommandKind::Reads,
                 [s](const JsonValue& a)
                 {
                     Guid scope;
@@ -709,7 +747,7 @@ export namespace modelviewer
                     return CommandResult::Ok(foundation::core::Move(list));
                 });
         }
-        add(u8"history.undo", u8"Steps back over the last change to the library (whoever made it); says what it was.", Span<const CommandArg>{}, true,
+        add(u8"history.undo", u8"Steps back over the last change to the library (whoever made it); says what it was.", Span<const CommandArg>{}, CommandKind::Changes,
             [s](const JsonValue&)
             {
                 String label;
@@ -719,7 +757,7 @@ export namespace modelviewer
                 v.Set(String(u8"undone"), JsonValue::MakeString(label));
                 return CommandResult::Ok(foundation::core::Move(v));
             });
-        add(u8"history.list", u8"The changes undo would step back over, the last first.", Span<const CommandArg>{}, false,
+        add(u8"history.list", u8"The changes undo would step back over, the last first.", Span<const CommandArg>{}, CommandKind::Reads,
             [s](const JsonValue&)
             {
                 Array<String> labels;

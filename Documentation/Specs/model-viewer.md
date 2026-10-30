@@ -1,6 +1,8 @@
 # Model viewer: a standalone tool to look at and pick models
 
-Status: P0-P5 built 2026-10-29 (P0 committed; P1-P5 await the user's check). Approved to build now as a standalone tool (user 2026-10-29).
+Status: approved to build now as a standalone tool (user 2026-10-29). P0-P5 built 2026-10-29
+(committed; P1-P5 await the user's check). Phase two (P6-P11, the library and its MCP)
+proposed 2026-10-29.
 
 ## Why
 
@@ -122,3 +124,168 @@ cook takes skin 0; noted where the side panel says so), materials beyond the eng
 
 Each phase is checked by the user on screen; the tool's own `--screenshot` gives pictures to hand
 over.
+
+## Phase two: the library (proposed 2026-10-29)
+
+P0 to P5 made a viewer: it looks at files and picks from a folder. Phase two makes it the place a
+game's models are organised: a library of the models you keep, in collections that nest, with
+tags, notes and the names a game knows them by, searched across, and gathered into a folder for a
+project. And the polish the first phase lacked: no stalls while a folder is drawn, preferences,
+recents, multi-select, a menu bar. Decided with the user 2026-10-29: the shortlist becomes a
+collection; collections nest; a name is unique across a top-level collection; the library is XML
+in the user data folder; every operation is a command, so an agent can work the library through
+MCP as the user does through the window.
+
+### The library
+
+- **An entry** is a model you added: a stable id (a guid), its **path**, the file's size and time
+  when added (so a moved or changed file is noticed and can be relinked to the file now at that
+  place, or to one the user points at), its **tags**, a **note**, and its numbers as the last cook
+  counted them (rigged, animated, clips, triangles, size), so search never has to cook.
+- **A collection** has a name, a parent (none for a top-level collection) and its members, in
+  order. A member is an entry and the **name** it has in that collection (`knight_red`, the id a
+  game would use; empty shows the file's name). An entry may be a member of any number of
+  collections at any level. A name is unique across a top-level collection and everything under it
+  (a game's acts share one set of ids; two games may each have a `hero`); a rename that would clash
+  is refused, naming the member that holds it.
+- **Deleting** a collection takes its sub-collections and memberships with it, never an entry; an
+  entry no collection holds stays in the library (the **Unsorted** view lists them) until the user
+  removes it. Removing an entry removes its memberships.
+- **The shortlist becomes a collection**: on the first run of phase two, `shortlist.txt` is read
+  into a top-level collection named Shortlist (a member per starred model, its note the entry's
+  note), and the file is renamed `shortlist.txt.imported`. The panel's Shortlist toggle is gone:
+  collections take its place.
+- **Stored** as `model-viewer/library.xml` (the engine's XML serialization, with a data version),
+  written after each change through a temporary file and a rename, so a crash never leaves half a
+  library. A library of some thousands of entries stays small.
+
+### Commands, and MCP
+
+- **Every operation is a command**: a name (`collection.create`), its arguments as JSON with a
+  schema, its result as JSON, and whether it only reads or changes something. One dispatcher runs
+  them. The window builds its calls from commands (a button, a menu item, a drop, a shortcut: a
+  command with the arguments the window's state gives), and an agent calls the same commands
+  through MCP. Nothing is done only from the window: a missing command for something the window
+  does is a bug.
+- **Changes are announced**: each command that changes the library or the window says what
+  changed, and the window's views refresh from that, whoever ran it, so an agent's edits appear as
+  they happen.
+- **Undo**: each change to the library records its inverse; Ctrl+Z (Edit > Undo) and the
+  `history.undo` command step back through them, an agent's and the user's alike, and
+  `history.list` says what they were.
+- **The commands**, in groups:
+  - `entry.*`: add (a path; its entry when it has one), remove, relink, get, note.set;
+  - `collection.*`: create (a name and a parent), rename, move, delete, tree, members (with or
+    without what is under it);
+  - `member.*`: add (entries to a collection, at a place), remove, rename (the name a game knows
+    it by; a clash refused, saying who holds it), move;
+  - `tag.*`: add and remove (on entries), rename and delete (everywhere), list (with counts);
+  - `search` (the query language above, a scope, a limit), `export.csv`, `export.copy_files`;
+  - the window's: `model.open`, `model.close`, `tabs.list`, `tabs.select`, `view.screenshot` (a
+    path, or the screenshot folder; returns the file), `view.camera` (frame, or a place to look
+    from), `view.light`, `clip.select`, `clip.play`, `clip.scrub`, `browse.folder`,
+    `thumbnail.get` (a model's thumbnail file, drawn if needed);
+  - `settings.get` and `settings.set`, `recents.list`, `history.undo`, `history.list`.
+- **The MCP host**: `--mcp` (or `--mcp-port <port>`) serves the commands over HTTP
+  (foundation.mcp.http: localhost and a bearer token, the editor's token file), each a tool named
+  after its command (`collection_create`), with the schema and the read-only or destructive hint
+  from the command, and a `docs://ModelViewerGuide.md` resource, the agent's manual
+  (Documentation/Shipping/ModelViewerGuide.md). `--headless` serves them over stdio with no window,
+  for an agent organising a library from a terminal: the library, search and export commands, and
+  thumbnails drawn offscreen; the window's commands answer that there is no window.
+- **One writer**: a running viewer holds a lock beside the library; a second one (a window or
+  headless) opens it read-only and says so, pointing an agent at the running viewer's MCP port.
+
+### The Library tab
+
+A tab beside Browse, both always first.
+
+- **Left**: the collection tree (dragged to re-parent; right-click to add a sub-collection, rename,
+  delete), then **All models** and **Unsorted**, then the tags with their counts.
+- **Right**: the grid, the browser's tiles: the selected collection's members (with **Include
+  sub-collections**, on by default), all entries, the unsorted ones, or those with a tag. A member's
+  tile shows its name over its file's name. A missing file's tile says so and offers **Relink...**.
+- **Search**, one box: plain words match a member's name, the file's name, the note and the tags,
+  any case; `tag:boss`, `collection:act1` (with what is under it), `rigged`, `animated`, `missing`
+  narrow it; terms combine with and. It searches the selected collection (and its sub-collections)
+  or, with **Everywhere**, the whole library.
+
+### Adding and editing
+
+- **From the browser**: select tiles (click, Ctrl+click, Shift+click, Ctrl+A) and **Add to
+  collection** (a picker of the tree, or a new one), or drag them onto a collection in the Library
+  tab's tree. Adding a model makes its entry if it has none.
+- **From an open tab** (a browsed model or any file opened on its own): the side panel's
+  **Library** section shows the collections it is in and its tags as chips, each removable, with
+  **Add to collection** and a tag field that suggests existing tags; its note; and, per collection,
+  its name there (edited in place, a clash said at once).
+- **Tags** are free text, case kept, matched any case; renaming or deleting a tag in the tree does
+  it on every entry.
+
+### Exports
+
+- A collection's **CSV** (with or without what is under it): collection path, name, file, tags,
+  note.
+- **Copy files to folder...**: a collection's model files, and the images beside each that its
+  materials name (or the loose texture rule would take), into a folder, a subfolder per
+  sub-collection, a file renamed to its member's name when it has one (its extension kept); a
+  report of what was copied and what was missing. For bringing a game's models into its project.
+
+### Preferences and recents
+
+- **Preferences**, a page from the menu: the screenshot folder (default the user's Pictures folder
+  under ModelViewer; or ask each time) and its file name pattern; the thumbnail size (96, 128,
+  192); the cache folder, its size and **Clear cache**; the defaults for loose textures, loop,
+  turntable speed, the light (exposure, ambient, sky) and the grid; the interface density (the
+  editor's densities); how many recent items to keep. Kept in `model-viewer/settings.txt` as now
+  (its lines, an unknown one kept).
+- **Recents**: the models opened and the folders browsed, newest first; in **File > Open Recent**
+  and on the Browse tab when no folder is chosen.
+
+### Polish
+
+- **The cook on a worker thread**: a model loads and cooks off the main thread (the content
+  database and the resource binding stay on it, as the editor's import does), so the window never
+  stalls; a progress line under the grid ("drawing 37 of 1,106"), and opening a model shows its tab
+  at once with "cooking" over the view until it is ready.
+- **A menu bar**: File (Open, Open Recent, Close Tab, Screenshot, Preferences, Quit), View (the
+  panel, the skeleton, the turntable, the grid), Library (new collection, add to collection,
+  export, copy files).
+- **Shortcuts**: Ctrl+O open, Ctrl+W close the tab, Ctrl+Tab and Ctrl+Shift+Tab the next and
+  previous tab, Ctrl+F the search, Space play or pause, the arrows step a frame, F frame.
+- **The grid**: a tile size slider, multi-select, a right-click menu (open, add to collection, show
+  in folder, copy path); tabs show the model's thumbnail when it has one.
+
+### Phases (one commit each, with tests)
+
+- **P6 The library and its commands.** The store (entries, collections that nest, members and
+  their names, tags, notes), its XML round trip and data version, the atomic write, the lock, the
+  shortlist's import, relink; the command dispatcher, the change announcements, the undo log, and
+  the library's commands (`entry`, `collection`, `member`, `tag`, `search`, `history`). Tests,
+  through the commands: the round trip; names unique per top-level collection (a clash refused,
+  two games each with one); deleting a collection keeps its entries; the search's terms and
+  scopes; undo of each change; the shortlist imported once; a moved file noticed and relinked; a
+  second opener read-only.
+- **P7 MCP.** The host over the dispatcher (`--mcp`, `--mcp-port`, `--headless` over stdio), the
+  tools from the commands, the guide resource and its document. Tests: the tool list is the
+  command list (names, schemas, hints) and the guide names every one; a call through MCP changes
+  the library as the command does; a window command headless says there is no window.
+- **P8 The Library tab.** The tree, the views, the search box, adding from the browser
+  (multi-select, the picker, a drop on the tree) and from the panel's Library section, tags and
+  names edited, the window's commands (`model`, `tabs`, `view`, `clip`, `browse`, `thumbnail`);
+  every control a command. Tests: adding a selection; renaming and deleting a tag across entries;
+  an announced change refreshes the views it touches.
+- **P9 Preferences and recents.** The page, the settings it keeps, the screenshot folder and
+  pattern, the thumbnail size, Clear cache, the recents (`settings`, `recents`). Tests: the
+  settings' round trip (an unknown line kept); recents' order and limit.
+- **P10 Polish.** The worker-thread cook and the progress line, the menu bar, the shortcuts, the
+  grid's size slider and right-click menu, thumbnails on tabs. Tests: a cook on the worker ends in
+  the same cooked model as on the main thread; a queue cancelled mid-way leaves no half-written
+  thumbnail.
+- **P11 Exports.** A collection's CSV and Copy files to folder (`export.csv`,
+  `export.copy_files`). Tests: the CSV's rows with and without sub-collections; the copy's layout,
+  the renames, the images taken and the missing ones reported.
+
+Out of scope here: sharing a library between machines or people (it is one user's file), and
+bringing a collection into a project as assets (Copy files to folder hands the files over; the
+editor imports them).

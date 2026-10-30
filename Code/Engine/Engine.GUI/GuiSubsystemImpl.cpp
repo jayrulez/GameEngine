@@ -742,6 +742,18 @@ namespace engine::gui
 
     void GuiSubsystem::SetFonts(const foundation::fonts::Font* defaultFont, Span<const foundation::fonts::Font* const> others)
     {
+        // The editor sets the fonts again after every cook, mostly the same ones: those keep the
+        // service they are in, and every label keeps what it was styled with.
+        usize given = 0;
+        bool same = m_projectFonts && m_defaultFont.Get() == defaultFont;
+        for (const foundation::fonts::Font* font : others)
+            if (font != nullptr)
+            {
+                same = same && given < m_otherFonts.Size() && m_otherFonts[given].Get() == font;
+                ++given;
+            }
+        if (same && given == m_otherFonts.Size())
+            return;
         m_defaultFont = RefPtr<foundation::fonts::Font>(const_cast<foundation::fonts::Font*>(defaultFont));
         m_otherFonts.Clear();
         for (const foundation::fonts::Font* font : others)
@@ -750,7 +762,6 @@ namespace engine::gui
         if (m_projectFonts)
         {
             m_retiredFonts.PushBack(Move(m_projectFonts)); // labels styled with it hold its fonts yet
-            m_retiredFontsFrames = 0;
         }
         m_projectFonts = nullptr;
         if (m_defaultFont)
@@ -978,10 +989,6 @@ namespace engine::gui
             StyleAndLayOut(*m_screen.Root, m_screen.Root->GetViewportSize());
         for (const UniquePtr<ScreenTier>& tier : m_runTiers)
             StyleAndLayOut(*tier->Root, tier->Root->GetViewportSize());
-        // The replaced font services go once a whole frame has styled every root (the scene tiers
-        // are styled as their scenes draw, after this).
-        if (!m_retiredFonts.IsEmpty() && ++m_retiredFontsFrames >= 2)
-            m_retiredFonts.Clear();
     }
 
     void GuiSubsystem::SetResourceManager(resource::ResourceManager* resources)

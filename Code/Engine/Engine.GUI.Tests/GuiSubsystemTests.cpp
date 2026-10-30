@@ -1133,22 +1133,36 @@ TEST_CASE("engine.gui: the project's fonts, a default and others each a family, 
 }
 
 // The editor sets the fonts again when the project's content changes (a sheet's cook). A label
-// keeps the font it was styled with, and input lays a root out (a hit test) before the frame's
-// style pass gives it the new one: the service it came from lives until every root was styled
-// again (the user's Masquerade crashed in a hit test's text measure).
-TEST_CASE("engine.gui: a replaced font service lives until the roots are styled with the new one")
+// keeps the font it was styled with until it is styled again: input lays a root out (a hit test)
+// before the frame's style pass (the user's Masquerade crashed in a hit test's text measure), and a
+// scene tier is styled only when its scene draws, which a game's GUI may not do for many frames
+// (Sedulous's crash on a game GUI's first frame). The same fonts keep their service; new ones
+// leave the old service alive until the GUI goes.
+TEST_CASE("engine.gui: the same fonts keep their service; a replaced one lives until the GUI goes")
 {
     Engine engine;
     RefPtr<foundation::fonts::Font> body = MakeFontProduct(u8"Body");
-    RefPtr<foundation::fonts::Font> again = MakeFontProduct(u8"Body");
-    engine.gui->SetFonts(body.Get(), {});
+    RefPtr<foundation::fonts::Font> title = MakeFontProduct(u8"Title");
+    const foundation::fonts::Font* others[] = {title.Get()};
+    engine.gui->SetFonts(body.Get(), Span<const foundation::fonts::Font* const>(others, 1));
+    foundation::fonts::IFontService* first = engine.gui->Fonts();
     CHECK(engine.gui->RetiredFontServices() == 0u); // the built-in one is no project service
-    engine.gui->SetFonts(again.Get(), {});
-    CHECK(engine.gui->RetiredFontServices() == 1u); // the first, still alive
-    engine.Frame();
-    CHECK(engine.gui->RetiredFontServices() == 1u); // one frame: the scene tiers may not have restyled
-    engine.Frame();
+
+    // The same fonts again (the editor after a cook that changed none): nothing replaced.
+    engine.gui->SetFonts(body.Get(), Span<const foundation::fonts::Font* const>(others, 1));
+    CHECK(engine.gui->Fonts() == first);
     CHECK(engine.gui->RetiredFontServices() == 0u);
+
+    // Another font (or the others changed): a new service, the first kept for good.
+    RefPtr<foundation::fonts::Font> again = MakeFontProduct(u8"Body");
+    engine.gui->SetFonts(again.Get(), Span<const foundation::fonts::Font* const>(others, 1));
+    CHECK(engine.gui->Fonts() != first);
+    CHECK(engine.gui->RetiredFontServices() == 1u);
+    engine.gui->SetFonts(again.Get(), {});
+    CHECK(engine.gui->RetiredFontServices() == 2u);
+    for (int i = 0; i < 5; ++i)
+        engine.Frame();
+    CHECK(engine.gui->RetiredFontServices() == 2u); // frames later, a tier not yet styled is still safe
 }
 
 TEST_CASE("engine.gui: the screen is placed as the game's image is: fitted at its resolution, turned for its orientation")

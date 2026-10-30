@@ -3,11 +3,12 @@
 
 add_executable(ModelViewer.Tests
     TestsMain.cpp
-    ModelLibraryTests.cpp)
+    ModelLibraryTests.cpp
+    LibraryTests.cpp)
 
 target_link_libraries(ModelViewer.Tests PRIVATE
     Tools::ModelViewer Engine::Model Engine::Render Engine::Animation Foundation::Scene
-    Foundation::VFS Foundation::Model Foundation::Image Foundation::Image.IO doctest::doctest)
+    Foundation::VFS Foundation::Model Foundation::Image Foundation::Image.IO Foundation::Json doctest::doctest)
 
 target_compile_definitions(ModelViewer.Tests PRIVATE
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS)

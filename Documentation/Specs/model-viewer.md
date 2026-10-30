@@ -265,7 +265,12 @@ A tab beside Browse, both always first.
   through the commands: the round trip; names unique per top-level collection (a clash refused,
   two games each with one); deleting a collection keeps its entries; the search's terms and
   scopes; undo of each change; the shortlist imported once; a moved file noticed and relinked; a
-  second opener read-only.
+  second opener read-only. Built 2026-10-29: `modelviewer::Library` (`:store`), `Search`
+  (`:search`), `CommandSet` and `LibrarySession` with `RegisterLibraryCommands` (`:commands`, 23
+  commands); undo keeps the library as it was before each change (the last 50); names compare in
+  any case; the lock is the system's (Core's FileTryLock, f6fa381d8), held while the library is
+  open and released when the viewer ends, a crash included. The window does not use the library
+  yet (P8).
 - **P7 MCP.** The host over the dispatcher (`--mcp`, `--mcp-port`, `--headless` over stdio), the
   tools from the commands, the guide resource and its document. Tests: the tool list is the
   command list (names, schemas, hints) and the guide names every one; a call through MCP changes

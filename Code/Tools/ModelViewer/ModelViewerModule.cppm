@@ -14,3 +14,6 @@ export import :tabs;    // the models open, a tab each, and the side panel's row
 export import :playback; // the animation bar's clip, play, pause, step, scrub, loop and speed
 export import :browse;   // folders listed, models collected, thumbnails' files, the filters
 export import :shortlist; // the models starred, their notes, the CSV
+export import :store;     // the library: entries, collections that nest, members' names, tags
+export import :search;    // the library searched
+export import :commands;  // every operation as a command, the session, the undo history

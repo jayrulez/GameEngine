@@ -21,7 +21,7 @@
 .viewer-folders { flex-direction: column; background-color: var(--surface); }
 .viewer-model-page { flex-grow: 1; min-width: 0; flex-direction: column; }
 .viewer-details { flex-direction: column; }
-.viewer-details > .prop-row, .viewer-details > .viewer-stats > .prop-row { padding-left: var(--space-m); }
+.viewer-details > .prop-row, .viewer-details > .viewer-stats > .prop-row { padding-left: var(--space-m); padding-right: var(--space-m); }
 .viewer-details > .prop-row > .viewer-file { flex-grow: 1; min-width: 0; padding-left: 0; }
 .viewer-folder-tree { flex-grow: 1; min-height: 0; }
 .viewer-grid-pane { flex-grow: 1; min-width: 0; flex-direction: column; }
@@ -50,19 +50,26 @@
 .viewer-pane-title { color: var(--text-strong); font-weight: 600; }
 .viewer-filter > .search { flex-grow: 1; min-width: 160px; max-width: 360px; }
 .viewer-filter > .viewer-lib-search { max-width: none; }
-.viewer-lib-target { width: 150px; flex-shrink: 0; }
-.viewer-memberships { flex-direction: column; }
-.viewer-membership { flex-direction: row; align-items: center; column-gap: var(--space-s); padding: 1px var(--space-m); }
-.viewer-membership > label { width: 38%; flex-shrink: 0; color: var(--text-dim); text-overflow: ellipsis; white-space: nowrap; }
+/* The Library section, as an inspector's rows: a label, then its value; In, Tags and Note stack theirs. */
+.viewer-lib-row { align-items: flex-start; padding-top: var(--space-xs); padding-bottom: var(--space-xs); }
+.viewer-lib-row > .prop-name { line-height: var(--control-height); }
+.viewer-memberships { flex-direction: column; row-gap: var(--space-xs); }
+.viewer-memberships > .viewer-empty-note { padding: 0; line-height: var(--control-height); white-space: normal; }
+.viewer-membership { flex-direction: row; align-items: center; column-gap: var(--space-s); }
+.viewer-membership > label { width: 40%; flex-shrink: 0; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
 .viewer-membership > textfield { flex-grow: 1; min-width: 0; }
-.viewer-chips { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-xs); row-gap: var(--space-xs); padding: var(--space-xs) var(--space-m); }
+.viewer-tags { flex-direction: column; row-gap: var(--space-xs); }
+.viewer-note-area { flex-grow: 1; min-width: 0; min-height: 64px; }
+.viewer-chips { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-xs); row-gap: var(--space-xs); }
 button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-dim); order: 1; }
 .viewer-empty-note { color: var(--text-dim); padding: var(--space-s) var(--space-m); }
 .viewer-note { flex-grow: 1; min-width: 0; }
-.viewer-panel { flex-direction: column; background-color: var(--surface); }
+.viewer-panel { flex-direction: column; background-color: var(--surface); min-height: 0; overflow-y: auto; overflow-x: hidden; }
+/* Its rows keep their height (a stacked one grows with what it holds); the panel scrolls instead. */
+.viewer-panel > *, .viewer-details > *, .viewer-stats > * { flex-shrink: 0; }
 .viewer-file { color: var(--text-dim); padding: var(--space-s) var(--space-m); text-overflow: ellipsis; white-space: nowrap; }
 .viewer-stats { flex-direction: column; padding-bottom: var(--space-s); }
-.viewer-stats > .prop-row, .viewer-panel > .prop-row { padding-left: var(--space-m); }
+.viewer-stats > .prop-row, .viewer-panel > .prop-row { padding-left: var(--space-m); padding-right: var(--space-m); }
 .viewer-stat { flex-grow: 1; color: var(--text-strong); }
 .viewer-panel > .prop-row > slider { flex-grow: 1; min-width: 0; }
 .viewer-hint { padding: var(--space-m); white-space: normal; }

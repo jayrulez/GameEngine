@@ -2216,12 +2216,6 @@ namespace
                                     if (auto* list = self->FindAs<gui::ListView>(u8"viewer-grid"))
                                         list->SelectAll();
                                 });
-            if (auto* add = FindAs<gui::Button>(u8"viewer-add-selected"))
-                add->SetOnClick([self]()
-                                {
-                                    self->AddToCollection(self->ComboCollection(u8"viewer-add-target"),
-                                                          self->SelectedPaths(u8"viewer-grid", self->m_browseGrid).AsSpan());
-                                });
             if (auto* clear = FindAs<gui::Button>(u8"viewer-filter-clear"))
                 clear->SetOnClick([self]()
                                   {
@@ -2295,13 +2289,6 @@ namespace
                 everywhere->SetOnToggled([self](bool) { self->ShowLibraryGrid(); });
             if (auto* sub = FindAs<gui::CheckBox>(u8"viewer-lib-sub"))
                 sub->SetOnToggled([self](bool) { self->ShowLibraryGrid(); });
-            if (auto* takeOut = FindAs<gui::Button>(u8"viewer-lib-remove"))
-                takeOut->SetOnClick([self]()
-                                    {
-                                        const LibraryNode* node = self->ChosenNode();
-                                        if (node != nullptr && node->kind == LibraryNode::Kind::Collection)
-                                            self->TakeOut(node->collection, self->SelectedPaths(u8"viewer-lib-grid", self->m_libraryGrid).AsSpan());
-                                    });
             // Each Library section: the model tab's (the model in front), Browse's and Library's
             // details panes (the model chosen in their grid).
             const StringView sections[] = {u8"viewer", u8"browse", u8"library"};
@@ -2327,7 +2314,7 @@ namespace
                                          self->Run(u8"tag.add", a);
                                          tag->SetText(u8"");
                                      });
-                if (auto* note = FindAs<gui::TextField>(Format(u8"{}-note", prefix.AsView()).AsView()))
+                if (auto* note = FindAs<gui::TextEditBase>(Format(u8"{}-note", prefix.AsView()).AsView()))
                     note->SetOnTextChanged([self, prefix](StringView text)
                                            {
                                                const String path = self->SectionModel(prefix.AsView());
@@ -2574,7 +2561,7 @@ namespace
                 }
             };
             walk(walk, Guid{}, 0);
-            const StringView combos[] = {u8"viewer-add-target", u8"viewer-lib-add-target", u8"browse-lib-add-target", u8"library-lib-add-target"};
+            const StringView combos[] = {u8"viewer-lib-add-target", u8"browse-lib-add-target", u8"library-lib-add-target"};
             for (const StringView id : combos)
                 if (auto* combo = FindAs<gui::ComboBox>(id))
                 {
@@ -2757,7 +2744,7 @@ namespace
             {
                 auto note = MakeRef<gui::Label>(m_allocator);
                 note->AddClass(u8"viewer-empty-note");
-                note->SetText(u8"Not in the library: add it to a collection, or give it a tag or a note.");
+                note->SetText(u8"Not in the library yet: add it to a collection, or tag it.");
                 rows->AddChild(note.Get());
             }
             else
@@ -2805,7 +2792,7 @@ namespace
                 {
                     auto note = MakeRef<gui::Label>(m_allocator);
                     note->AddClass(u8"viewer-empty-note");
-                    note->SetText(u8"In the library, in no collection.");
+                    note->SetText(u8"In the library, in no collection yet.");
                     rows->AddChild(note.Get());
                 }
                 for (const String& t : e->tags)
@@ -2830,7 +2817,7 @@ namespace
                 }
             }
             m_syncingPanel = true;
-            if (auto* note = FindAs<gui::TextField>(Format(u8"{}-note", prefix).AsView()))
+            if (auto* note = FindAs<gui::TextEditBase>(Format(u8"{}-note", prefix).AsView()))
             {
                 const StringView text = e != nullptr ? e->note.AsView() : StringView{};
                 if (note->GetText() != text)

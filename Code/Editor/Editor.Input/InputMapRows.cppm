@@ -151,8 +151,10 @@ export namespace editor
             else if (field == u8"stickRadius")
             {
                 info.DisplayName = String(u8"Radius");
-                info.Description = String(u8"How far the stick reaches, in pixels");
-                range(0.0, 1000.0, 1.0);
+                // Normalised as the regions are: the runtime divides the touch's offset from its
+                // anchor, a fraction of the screen, by it (ActionRuntime).
+                info.Description = String(u8"How far the stick deflects for a full reading: a fraction of the screen, 0 to 1");
+                range(0.0, 1.0, 0.01);
                 info.Visible = source == Source::TouchStick;
             }
         }

@@ -479,3 +479,23 @@ TEST_CASE("input map page: a map the game cannot read says so, and Save refuses 
     f.page->Commands().Undo();
     CHECK(f.page->Notice(u8"invalid").IsEmpty());
 }
+
+// A touch stick's radius is normalised, as the runtime reads it (the touch's offset from its anchor,
+// a fraction of the screen, over the radius) and as the touch regions are: its row is bounded and
+// said the same way, not in pixels (a typed 100 saturated every touch).
+TEST_CASE("input map rows: a touch stick's radius is a fraction of the screen, as its area is")
+{
+    input::Binding stick;
+    stick.source = input::BindingSource::TouchStick;
+    gui::PropertyInfo radius;
+    editor::input_map_rows::DescribeBindingField(stick, u8"stickRadius", radius);
+    gui::PropertyInfo area;
+    editor::input_map_rows::DescribeBindingField(stick, u8"regionX", area);
+    CHECK(radius.Visible);
+    CHECK(radius.HasRange);
+    CHECK(radius.Min == area.Min);
+    CHECK(radius.Max == area.Max);
+    CHECK(radius.Step == area.Step);
+    CHECK(radius.Description.AsView().ContainsIgnoreCase(u8"fraction of the screen"));
+    CHECK(stick.stickRadius <= radius.Max); // the default sits in the range
+}

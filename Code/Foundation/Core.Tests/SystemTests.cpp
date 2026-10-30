@@ -99,6 +99,41 @@ TEST_CASE("system: file write / read / seek / size round-trip")
     CHECK_FALSE(FileExists(path));
 }
 
+TEST_CASE("system: a file lock is held by one handle at a time, and the file stays readable")
+{
+    const StringView path = u8"scratch_system_lock.tmp";
+    {
+        FileHandle f = FileOpen(path, FileMode::Write);
+        REQUIRE(FileIsValid(f));
+        CHECK(FileWrite(f, "1234\n", 5) == 5);
+        FileClose(f);
+    }
+    FileHandle first = FileOpen(path, FileMode::ReadWrite);
+    FileHandle second = FileOpen(path, FileMode::ReadWrite);
+    REQUIRE(FileIsValid(first));
+    REQUIRE(FileIsValid(second));
+    CHECK(FileTryLock(first));
+    CHECK_FALSE(FileTryLock(second)); // another handle, even in this process
+
+    // The locked file's own bytes still read through another handle (what a second tool reads
+    // to say who holds it).
+    FileHandle reader = FileOpen(path, FileMode::Read);
+    REQUIRE(FileIsValid(reader));
+    char buffer[8] = {};
+    CHECK(FileRead(reader, buffer, 5) == 5);
+    CHECK(buffer[0] == '1');
+    FileClose(reader);
+
+    FileUnlock(first);
+    CHECK(FileTryLock(second)); // released: the other takes it
+    CHECK_FALSE(FileTryLock(first));
+    FileClose(second); // closing releases it too
+    CHECK(FileTryLock(first));
+    FileClose(first);
+    CHECK_FALSE(FileTryLock(kInvalidFile));
+    CHECK(FileDelete(path));
+}
+
 TEST_CASE("system: opening a missing file fails cleanly")
 {
     FileHandle f = FileOpen(u8"scratch_definitely_missing.xyz", FileMode::Read);

@@ -129,6 +129,13 @@ export namespace foundation::core
 
     [[nodiscard]] inline i64 FileSize(FileHandle handle) noexcept { return sys::FileSize(handle); }
 
+    /// An exclusive lock on an open file, without waiting: true when taken, false when another
+    /// handle holds it, in this process or another. It lasts until FileUnlock, the handle's close,
+    /// or the process's end (a crash included), so a lock is never left behind. Advisory: it
+    /// stops other lockers, not readers or writers. For one-writer files (a tool's library).
+    [[nodiscard]] inline bool FileTryLock(FileHandle handle) noexcept { return sys::FileTryLock(handle); }
+    inline void FileUnlock(FileHandle handle) noexcept { sys::FileUnlock(handle); }
+
     [[nodiscard]] inline bool FileExists(StringView path) noexcept
     {
         return sys::FileExists(detail::NullTerminated(path).CStr());

@@ -16,6 +16,7 @@
 #include <netdb.h> // getaddrinfo
 #include <poll.h>
 #include <sys/mman.h>
+#include <sys/file.h>   // flock
 #include <sys/random.h> // getentropy
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -408,6 +409,21 @@ namespace foundation::core::sys
             return -1;
         }
         return static_cast<std::int64_t>(st.st_size);
+    }
+
+    bool FileTryLock(FileHandle handle) noexcept
+    {
+        // flock belongs to the open file description: a second open, in this process or
+        // another, conflicts; the lock goes with the last descriptor of this one.
+        return handle != kInvalidFile && flock(static_cast<int>(handle), LOCK_EX | LOCK_NB) == 0;
+    }
+
+    void FileUnlock(FileHandle handle) noexcept
+    {
+        if (handle != kInvalidFile)
+        {
+            (void)flock(static_cast<int>(handle), LOCK_UN);
+        }
     }
 
     bool FileExists(const char* path) noexcept { return access(path, F_OK) == 0; }

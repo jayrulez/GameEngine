@@ -125,6 +125,13 @@ namespace foundation::core::sys
     std::int64_t FileSeek(FileHandle handle, std::int64_t offset,
                           SeekOrigin origin) noexcept; // new pos, -1 error
     std::int64_t FileSize(FileHandle handle) noexcept; // -1 on error
+    // An exclusive lock on the open file, without waiting: true when taken, false when another
+    // handle holds it (this process's or another's). Released by FileUnlock, by closing the
+    // handle, or when the process ends, a crash included. Advisory: it stops other lockers, not
+    // readers or writers (flock on Linux; LockFileEx on one byte far past any content on Win32,
+    // so the file's own bytes stay readable).
+    bool FileTryLock(FileHandle handle) noexcept;
+    void FileUnlock(FileHandle handle) noexcept;
     bool FileExists(const char* path) noexcept;
     bool FileDelete(const char* path) noexcept;
 

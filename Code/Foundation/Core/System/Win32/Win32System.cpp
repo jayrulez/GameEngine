@@ -428,6 +428,40 @@ namespace foundation::core::sys
         return static_cast<std::int64_t>(result.QuadPart);
     }
 
+    namespace
+    {
+        // The byte FileTryLock locks: far past any content, since a Win32 range lock is
+        // mandatory (it would stop other handles reading the bytes it covers), and locking past
+        // the end of a file is allowed.
+        OVERLAPPED LockRange() noexcept
+        {
+            OVERLAPPED range{};
+            range.Offset = 0xFFFFFFFEu;
+            range.OffsetHigh = 0x7FFFFFFFu;
+            return range;
+        }
+    }
+
+    bool FileTryLock(FileHandle handle) noexcept
+    {
+        if (handle == kInvalidFile)
+        {
+            return false;
+        }
+        OVERLAPPED range = LockRange();
+        return LockFileEx(ToHandle(handle), LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &range) != 0;
+    }
+
+    void FileUnlock(FileHandle handle) noexcept
+    {
+        if (handle == kInvalidFile)
+        {
+            return;
+        }
+        OVERLAPPED range = LockRange();
+        (void)UnlockFileEx(ToHandle(handle), 0, 1, 0, &range);
+    }
+
     std::int64_t FileSize(FileHandle handle) noexcept
     {
         LARGE_INTEGER size;

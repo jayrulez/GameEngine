@@ -109,10 +109,13 @@ asks; a game in the editor's play mode is a game like any other.
   TLS sessions. Tests, headless (two sessions over an in-memory pipe, the test making a self-signed
   certificate): a handshake and data both ways (TLS 1.3, and 1.2 when asked); the client refusing a
   certificate for another name, one it does not trust, and an expired one; a close seen by the
-  peer; ALPN chosen.
-- **P1 The system's roots and `TlsStream`.** The trust store on Linux and Windows; a session over a
-  `TcpSocket`. Tests: the roots load where the box has them (skipped, said so, where it has none);
-  a TLS server and client over loopback sockets.
+  peer; ALPN chosen. Built 2026-10-30: `foundation.net.tls` (the seam, `LoadSystemRoots`: the
+  distribution's bundle on Linux and SteamOS, the ROOT store on Windows) and
+  `foundation.net.tls.mbedtls` (the sessions; `CreateSelfSignedCertificate`, a P-256 key with
+  ECDSA, for tests and a LAN host), 6 cases green on clang and gcc, the libraries built for wasm.
+- **P1 `TlsStream`.** A session over a `TcpSocket`. Tests: a TLS server and client over loopback
+  sockets. (The system's roots, first planned here, came with P0 so the seam's default trust worked
+  from the start.)
 - **P2 The HTTP client, native.** `IHttpClient` and its native backend. Tests against the in-repo
   `HttpServer` (http) and a TLS-wrapped one (https): GET and POST, Content-Length and chunked
   bodies, a redirect followed and a loop stopped, an https-to-http redirect refused, a timeout, a

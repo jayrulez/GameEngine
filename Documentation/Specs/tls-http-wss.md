@@ -65,7 +65,7 @@ client verifying the server's name and chain, the server presenting its chain. T
 chooses the backend at composition (desktop and Deck: Mbed TLS); a web build has none, since the
 browser does TLS.
 
-### The HTTP client: `foundation.net.http` (the client half)
+### The HTTP client: `foundation.http.client`
 
 ```cpp
 struct HttpRequest  { String method; String url; Array<HttpHeader> headers; Array<byte> body;
@@ -122,6 +122,11 @@ asks; a game in the editor's play mode is a game like any other.
   `HttpServer` (http) and a TLS-wrapped one (https): GET and POST, Content-Length and chunked
   bodies, a redirect followed and a loop stopped, an https-to-http redirect refused, a timeout, a
   cancel, the size cap. A test against a real site only when an environment variable asks.
+  Built 2026-10-30: `foundation.http.client` (`HttpClientRequest` / `HttpClientResponse`, named
+  apart from the server's `HttpRequest` / `HttpResponse`; `ParseHttpUrl`, `ResolveHttpLocation`;
+  `CreateNativeHttpClient`, one worker), the response parser taught chunked bodies, bodiless
+  statuses and HEAD, and a `TooLarge()` that tells the size cap from a malformed body. The live
+  test runs when `ENGINE_HTTP_LIVE` is set.
 - **P3 The HTTP client in a browser.** The `fetch` backend. Built on the wasm lane; checked by hand
   in a browser (no wasm tests run).
 - **P4 wss.** The gateway's TLS, the native WebSocket client, the browser client's `wss://`. Tests:

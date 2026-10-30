@@ -482,6 +482,7 @@ add_subdirectory(Code/Foundation/Mcp.Script)        # MCP scripting tools (scrip
 add_subdirectory(Code/Foundation/Net.WebSocket)     # native WS accept path (RFC 6455 over Http) + hybrid UDP+WS socket - browser clients join native hosts
 add_subdirectory(Code/Foundation/Net.Tls)           # the TLS seam: a session as a byte engine, the backend interface, the system's roots
 add_subdirectory(Code/Foundation/Net.Tls.MbedTLS)   # the Mbed TLS backend (the only module linking ThirdParty::MbedTLS)
+add_subdirectory(Code/Foundation/Http.Client)       # the HTTP client seam + native HTTP/1.1 client over plain and TLS streams
 add_subdirectory(Code/Foundation/Net.Manager)       # per-instance networked endpoint (NetworkManager) + Net script facade (over Net + Script)
 add_subdirectory(Code/Engine/Engine.Net)     # once-per-context NetworkSubsystem (injects NetworkComponentManager into scenes)
 add_subdirectory(Code/Foundation/Shell)     # raw platform/OS service (IShell: window/input/events) over Core; below Runtime
@@ -774,6 +775,7 @@ if(OPTION_BUILD_TESTS)
     util_test_suite(Code/Foundation/Net.Tests                       Foundation::Net)
     util_test_suite(Code/Foundation/Net.WebSocket.Tests             Foundation::Net.WebSocket)
     util_test_suite(Code/Foundation/Net.Tls.MbedTLS.Tests           Foundation::Net.Tls.MbedTLS)
+    util_test_suite(Code/Foundation/Http.Client.Tests               Foundation::Http.Client)
     util_test_suite(Code/Foundation/Http.Tests                      Foundation::Http)
     util_test_suite(Code/Foundation/Particles.Resource.Tests        Foundation::Particles.Resource)
     util_test_suite(Code/Foundation/Particles.Tests                 Foundation::Particles)

@@ -239,16 +239,34 @@ namespace foundation::http
             m_headers.PushBack(HttpHeader{String(line.SubStr(0, colon)), String(value)});
         }
 
-        // Body framing: Content-Length only. Chunked (either direction) is out of subset.
-        if (!FindHeader(m_headers, u8"Transfer-Encoding").IsEmpty())
+        // A response with no body: complete at its head (Push sees m_noBody).
+        if (m_mode == Mode::Response && (m_noBody || m_status == 204 || m_status == 304 || (m_status >= 100 && m_status < 200)))
         {
-            return false;
+            m_noBody = true;
+            return true;
+        }
+        // Body framing: Content-Length, or for a response chunked (what servers send); a chunked
+        // request stays out of the server's subset.
+        const StringView transfer = FindHeader(m_headers, u8"Transfer-Encoding");
+        if (!transfer.IsEmpty())
+        {
+            if (m_mode != Mode::Response || !transfer.ContainsIgnoreCase(u8"chunked"))
+            {
+                return false;
+            }
+            m_chunked = true;
+            return true;
         }
         const StringView contentLength = FindHeader(m_headers, u8"Content-Length");
         if (!contentLength.IsEmpty())
         {
-            if (!ParseUnsigned(contentLength, m_bodyExpected) || m_bodyExpected > m_maxBody)
+            if (!ParseUnsigned(contentLength, m_bodyExpected))
             {
+                return false;
+            }
+            if (m_bodyExpected > m_maxBody)
+            {
+                m_tooLarge = true;
                 return false;
             }
         }
@@ -303,26 +321,38 @@ namespace foundation::http
             }
             m_headParsed = true;
             m_buffer.Clear();
-            AppendBytes(m_body, spill.Data(), spill.Size());
+            if (m_noBody)
+            {
+                m_state = HttpParseState::Complete;
+                return m_state;
+            }
+            AppendBytes(m_chunked ? m_chunkRaw : m_body, spill.Data(), spill.Size());
             offset = bytes.Size(); // everything already consumed via m_buffer
         }
         else
         {
-            AppendBytes(m_body, bytes.Data(), bytes.Size());
+            AppendBytes(m_chunked ? m_chunkRaw : m_body, bytes.Data(), bytes.Size());
             offset = bytes.Size();
         }
         (void)offset;
+
+        if (m_chunked)
+        {
+            return DecodeChunks();
+        }
 
         if (m_bodyUntilClose)
         {
             if (m_body.Size() > m_maxBody)
             {
+                m_tooLarge = true;
                 m_state = HttpParseState::Failed;
             }
             return m_state; // NeedMore until the peer closes
         }
         if (m_body.Size() > m_maxBody)
         {
+            m_tooLarge = true;
             m_state = HttpParseState::Failed;
             return m_state;
         }
@@ -330,6 +360,121 @@ namespace foundation::http
         {
             m_body.Resize(m_bodyExpected); // drop any over-read (Connection: close model)
             m_state = HttpParseState::Complete;
+        }
+        return m_state;
+    }
+
+    HttpParseState HttpMessageParser::DecodeChunks()
+    {
+        usize at = 0;
+        // The CRLF-ended line starting at `at`, or false when it has not all arrived.
+        auto line = [&](StringView& out) -> bool
+        {
+            for (usize i = at; i + 1 < m_chunkRaw.Size(); ++i)
+            {
+                if (m_chunkRaw[i] == byte{'\r'} && m_chunkRaw[i + 1] == byte{'\n'})
+                {
+                    out = StringView(reinterpret_cast<const utf8char*>(m_chunkRaw.Data() + at), i - at);
+                    at = i + 2;
+                    return true;
+                }
+            }
+            return false;
+        };
+        while (m_state == HttpParseState::NeedMore)
+        {
+            if (m_chunk == Chunk::Size)
+            {
+                StringView sizeLine;
+                if (!line(sizeLine))
+                {
+                    break;
+                }
+                // Hex digits, then any extension after ';' (ignored).
+                usize size = 0;
+                usize digits = 0;
+                for (usize i = 0; i < sizeLine.Size() && sizeLine[i] != u8';'; ++i)
+                {
+                    const utf8char c = sizeLine[i];
+                    u32 v = 0;
+                    if (c >= u8'0' && c <= u8'9')
+                        v = static_cast<u32>(c - u8'0');
+                    else if (c >= u8'a' && c <= u8'f')
+                        v = static_cast<u32>(c - u8'a' + 10);
+                    else if (c >= u8'A' && c <= u8'F')
+                        v = static_cast<u32>(c - u8'A' + 10);
+                    else if (c == u8' ' || c == u8'\t')
+                        continue;
+                    else
+                    {
+                        m_state = HttpParseState::Failed;
+                        return m_state;
+                    }
+                    if (++digits > 15)
+                    {
+                        m_state = HttpParseState::Failed; // a size no body here reaches
+                        return m_state;
+                    }
+                    size = size * 16 + v;
+                }
+                if (digits == 0)
+                {
+                    m_state = HttpParseState::Failed;
+                    return m_state;
+                }
+                if (size == 0)
+                {
+                    m_chunk = Chunk::Trailers;
+                    continue;
+                }
+                if (m_body.Size() + size > m_maxBody)
+                {
+                    m_tooLarge = true;
+                    m_state = HttpParseState::Failed;
+                    return m_state;
+                }
+                m_chunk = Chunk::Data;
+                m_chunkLeft = size;
+            }
+            else if (m_chunk == Chunk::Data)
+            {
+                if (m_chunkRaw.Size() - at < m_chunkLeft + 2)
+                {
+                    break; // the chunk and its CRLF not all here yet
+                }
+                AppendBytes(m_body, m_chunkRaw.Data() + at, m_chunkLeft);
+                at += m_chunkLeft;
+                if (m_chunkRaw[at] != byte{'\r'} || m_chunkRaw[at + 1] != byte{'\n'})
+                {
+                    m_state = HttpParseState::Failed;
+                    return m_state;
+                }
+                at += 2;
+                m_chunk = Chunk::Size;
+            }
+            else
+            {
+                StringView trailer;
+                if (!line(trailer))
+                {
+                    break;
+                }
+                if (trailer.IsEmpty())
+                {
+                    m_state = HttpParseState::Complete; // trailers themselves are dropped
+                }
+            }
+        }
+        // Keep what is not decoded yet.
+        if (at > 0)
+        {
+            Array<byte> rest;
+            AppendBytes(rest, m_chunkRaw.Data() + at, m_chunkRaw.Size() - at);
+            m_chunkRaw = Move(rest);
+        }
+        if (m_chunkRaw.Size() > kMaxHeadBytes + m_maxBody)
+        {
+            m_state = HttpParseState::Failed;
         }
         return m_state;
     }

@@ -118,6 +118,65 @@ TEST_CASE("http: parser - close-delimited response body")
     CHECK(p.Body().Size() == 11u);
 }
 
+TEST_CASE("http: parser - a chunked response body, split anywhere, extensions and trailers dropped")
+{
+    const StringView wire = u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+                            u8"5\r\nhello\r\n7;ext=1\r\n, world\r\nA\r\n0123456789\r\n0\r\nX-Trailer: t\r\n\r\n";
+    // Whole, then a byte at a time: the same body.
+    const usize steps[] = {wire.Size(), 1, 3};
+    for (const usize step : steps)
+    {
+        HttpMessageParser p(HttpMessageParser::Mode::Response);
+        HttpParseState state = HttpParseState::NeedMore;
+        for (usize at = 0; at < wire.Size(); at += step)
+        {
+            const usize n = at + step <= wire.Size() ? step : wire.Size() - at;
+            state = p.Push(Bytes(wire.SubStr(at, n)));
+            if (at + n < wire.Size())
+                REQUIRE(state == HttpParseState::NeedMore);
+        }
+        CHECK(state == HttpParseState::Complete);
+        CHECK(p.Status() == 200);
+        CHECK(StringView(reinterpret_cast<const utf8char*>(p.Body().Data()), p.Body().Size()) ==
+              StringView(u8"hello, world0123456789"));
+    }
+    // A bad size line, and chunk data not ended by CRLF: refused.
+    {
+        HttpMessageParser p(HttpMessageParser::Mode::Response);
+        CHECK(p.Push(Bytes(u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n")) == HttpParseState::Failed);
+        CHECK_FALSE(p.TooLarge());
+    }
+    {
+        HttpMessageParser p(HttpMessageParser::Mode::Response);
+        CHECK(p.Push(Bytes(u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nabcd\r\n")) == HttpParseState::Failed);
+    }
+    // Past the cap: refused, and said to be too large.
+    {
+        HttpMessageParser p(HttpMessageParser::Mode::Response, /*maxBodyBytes=*/8);
+        CHECK(p.Push(Bytes(u8"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n5\r\n")) == HttpParseState::Failed);
+        CHECK(p.TooLarge());
+    }
+}
+
+TEST_CASE("http: parser - responses with no body (204, 304, 1xx, a HEAD's) complete at their head")
+{
+    const StringView heads[] = {u8"HTTP/1.1 204 No Content\r\n\r\n", u8"HTTP/1.1 304 Not Modified\r\nContent-Length: 50\r\n\r\n"};
+    for (const StringView head : heads)
+    {
+        HttpMessageParser p(HttpMessageParser::Mode::Response);
+        CHECK(p.Push(Bytes(head)) == HttpParseState::Complete);
+        CHECK(p.Body().IsEmpty());
+    }
+    HttpMessageParser head(HttpMessageParser::Mode::Response);
+    head.SetNoBody();
+    CHECK(head.Push(Bytes(u8"HTTP/1.1 200 OK\r\nContent-Length: 1234\r\n\r\n")) == HttpParseState::Complete);
+    CHECK(head.Status() == 200);
+    // A Content-Length past the cap is too large, not malformed.
+    HttpMessageParser capped(HttpMessageParser::Mode::Response, 8);
+    CHECK(capped.Push(Bytes(u8"HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n")) == HttpParseState::Failed);
+    CHECK(capped.TooLarge());
+}
+
 TEST_CASE("http: loopback - one-shot request/response, 404, and bad request")
 {
     HttpServer server(DefaultAllocator());

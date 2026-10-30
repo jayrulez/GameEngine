@@ -102,8 +102,10 @@ export namespace foundation::http
 
     /// Incremental HTTP/1.1 message parser (request or response mode). Push bytes as they
     /// arrive; when Complete, the parsed pieces are readable. Strict subset: CRLF framing,
-    /// Content-Length bodies only (chunked -> Failed), 16 KiB header cap, caller body cap.
-    /// Response mode without Content-Length = read-until-close (caller calls OnPeerClosed).
+    /// 16 KiB header cap, caller body cap. A request's body is Content-Length only (chunked ->
+    /// Failed: the server's contract); a response's is Content-Length, chunked (the client reads
+    /// what servers send), or read-until-close (caller calls OnPeerClosed). A response that
+    /// carries no body (204, 304, 1xx, or one to a HEAD: SetNoBody) is Complete at its head.
     class HttpMessageParser
     {
     public:
@@ -119,9 +121,13 @@ export namespace foundation::http
         }
 
         [[nodiscard]] HttpParseState Push(Span<const byte> bytes);
+        /// Response mode: the request was a HEAD, so the response has headers alone.
+        void SetNoBody() noexcept { m_noBody = true; }
         /// Response mode: the peer closed - a close-delimited body is now complete.
         [[nodiscard]] HttpParseState OnPeerClosed();
         [[nodiscard]] HttpParseState State() const noexcept { return m_state; }
+        /// Failed because the body is larger than the cap (not because it is malformed).
+        [[nodiscard]] bool TooLarge() const noexcept { return m_tooLarge; }
 
         // Request mode results:
         [[nodiscard]] const String& Method() const noexcept { return m_method; }
@@ -134,12 +140,25 @@ export namespace foundation::http
 
     private:
         [[nodiscard]] bool ParseHead();
+        [[nodiscard]] HttpParseState DecodeChunks(); // the chunked bytes so far into m_body
 
         Mode m_mode;
         usize m_maxBody;
         HttpParseState m_state = HttpParseState::NeedMore;
         bool m_headParsed = false;
         bool m_bodyUntilClose = false;
+        bool m_noBody = false;
+        bool m_chunked = false;
+        bool m_tooLarge = false;
+        enum class Chunk : u8
+        {
+            Size,     // a chunk's size line next
+            Data,     // m_chunkLeft bytes of data, then CRLF
+            Trailers, // after the last (0) chunk: trailer lines to the blank one
+        };
+        Chunk m_chunk = Chunk::Size;
+        usize m_chunkLeft = 0;
+        Array<byte> m_chunkRaw; // encoded bytes not yet decoded
         usize m_bodyExpected = 0;
         Array<byte> m_buffer; // head accumulation (capped), then body bytes append to m_body
         String m_method;

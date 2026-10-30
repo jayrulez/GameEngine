@@ -1535,6 +1535,83 @@ namespace
             modelviewer::ModelStats stats = tab.open->Stats();
             stats.size = tab.size;
             ShowStatRows(u8"viewer-stats", stats);
+            ShowContents(u8"viewer", stats);
+        }
+
+        // A model's materials (how each shades, the textures in its slots) and its textures (their
+        // pixels' size, their image's file or "in the file"), as rows under `prefix`-materials and
+        // `prefix`-textures.
+        void ShowContents(StringView prefix, const modelviewer::ModelStats& stats)
+        {
+            auto fill = [this](gui::Node* rows, auto&& each, usize count, StringView none)
+            {
+                if (rows == nullptr)
+                    return;
+                while (rows->ChildCount() > 0)
+                    rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
+                if (count == 0)
+                {
+                    auto note = MakeRef<gui::Label>(m_allocator);
+                    note->AddClass(u8"viewer-empty-note");
+                    note->SetText(none);
+                    rows->AddChild(note.Get());
+                    return;
+                }
+                for (usize i = 0; i < count; ++i)
+                {
+                    String label;
+                    String value;
+                    String tip;
+                    each(i, label, value, tip);
+                    auto row = MakeRef<gui::Panel>(m_allocator);
+                    row->AddClass(u8"prop-row");
+                    row->SetTooltip(tip.AsView());
+                    auto name = MakeRef<gui::Label>(m_allocator);
+                    name->AddClass(u8"prop-name");
+                    name->SetText(label.AsView());
+                    auto text = MakeRef<gui::Label>(m_allocator);
+                    text->AddClass(u8"viewer-stat");
+                    text->AddClass(u8"viewer-content");
+                    text->SetText(value.AsView());
+                    row->AddChild(name.Get());
+                    row->AddChild(text.Get());
+                    rows->AddChild(row.Get());
+                }
+            };
+            const auto textureName = [&stats](u32 index)
+            {
+                if (index >= stats.textureList.Size())
+                    return String(u8"?");
+                const modelviewer::ModelTextureInfo& t = stats.textureList[index];
+                return !t.name.IsEmpty() ? t.name : !t.file.IsEmpty() ? t.file : Format(u8"texture {}", index + 1);
+            };
+            fill(FindById(Format(u8"{}-materials", prefix).AsView()),
+                 [&](usize i, String& label, String& value, String& tip)
+                 {
+                     const modelviewer::ModelMaterialInfo& m = stats.materialList[i];
+                     label = m.name.IsEmpty() ? Format(u8"material {}", i + 1) : m.name;
+                     value = m.shading;
+                     tip = Format(u8"{}, shaded {}", label.AsView(), m.shading.AsView());
+                     if (m.slots.IsEmpty())
+                         value += u8", no textures";
+                     for (const modelviewer::ModelMaterialInfo::Slot& slot : m.slots)
+                     {
+                         value += Format(u8", {}", slot.slot.AsView()).AsView();
+                         tip += Format(u8"\n{}: {}", slot.slot.AsView(), textureName(slot.texture).AsView()).AsView();
+                     }
+                 },
+                 stats.materialList.Size(), stats.materials > 0 ? StringView(u8"Listed once it cooks again.") : StringView(u8"None."));
+            fill(FindById(Format(u8"{}-textures", prefix).AsView()),
+                 [&](usize i, String& label, String& value, String& tip)
+                 {
+                     const modelviewer::ModelTextureInfo& t = stats.textureList[i];
+                     label = textureName(static_cast<u32>(i));
+                     value = t.width > 0 ? Format(u8"{} x {}", t.width, t.height) : String(u8"size unknown");
+                     value += t.file.IsEmpty() ? StringView(u8", in the file") : Format(u8", {}", t.file.AsView()).AsView();
+                     tip = t.file.IsEmpty() ? Format(u8"{}: its image is inside the model file", label.AsView())
+                                            : Format(u8"{}: {}", label.AsView(), t.file.AsView());
+                 },
+                 stats.textureList.Size(), stats.textures > 0 ? StringView(u8"Listed once it cooks again.") : StringView(u8"None."));
         }
 
         // A model's numbers as rows in the panel `id` names (a model tab's, or a details pane's).
@@ -2711,7 +2788,10 @@ namespace
             }
             modelviewer::ModelStats stats;
             if (modelviewer::ReadCachedStats(m_cacheRoot.AsView(), path.AsView(), stats, m_settings.value.looseTextures))
+            {
                 ShowStatRows(Format(u8"{}-stats", prefix).AsView(), stats);
+                ShowContents(prefix, stats);
+            }
             else if (gui::Node* rows = FindById(Format(u8"{}-stats", prefix).AsView()))
             {
                 while (rows->ChildCount() > 0)
@@ -2721,6 +2801,7 @@ namespace
                 note->SetText(FileExists(path.AsView()) ? StringView(u8"Its numbers come once its picture is drawn.")
                                                         : StringView(u8"Its file is not there."));
                 rows->AddChild(note.Get());
+                ShowContents(prefix, modelviewer::ModelStats{}); // nothing known yet
             }
             ShowLibrarySection(prefix, path.AsView());
         }

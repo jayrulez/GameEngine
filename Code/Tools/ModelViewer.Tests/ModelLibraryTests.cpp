@@ -499,3 +499,54 @@ TEST_CASE("model viewer: a material without its texture takes the image beside t
     CHECK(modelviewer::ApplyLooseTextures(bare, u8"/no/such/folder/x.fbx") == 0u);
     CHECK(bare.materials()[0]->baseColorTextureIndex == -1);
 }
+
+// The materials and textures, listed for the side panel and the details panes: kept in the record
+// (names with spaces, a texture inside the file with no file name) and counted from a known model
+// (the Fox: one PBR material whose base color is its one texture, an image beside the file).
+TEST_CASE("model viewer: the materials and textures are listed, kept in the record, counted from the file")
+{
+    modelviewer::ModelStats stats;
+    stats.textureList.PushBack(modelviewer::ModelTextureInfo{String(u8"Body Skin"), 1024, 512, String(u8"skin.png")});
+    stats.textureList.PushBack(modelviewer::ModelTextureInfo{String(u8"inside"), 64, 64, String{}});
+    modelviewer::ModelMaterialInfo coat;
+    coat.name = String(u8"Fur coat");
+    coat.shading = String(u8"Phong");
+    coat.slots.PushBack(modelviewer::ModelMaterialInfo::Slot{String(u8"base color"), 0});
+    coat.slots.PushBack(modelviewer::ModelMaterialInfo::Slot{String(u8"normal"), 1});
+    stats.materialList.PushBack(coat);
+    modelviewer::ModelMaterialInfo bare;
+    bare.name = String(u8"Bare");
+    bare.shading = String(u8"PBR");
+    stats.materialList.PushBack(bare);
+
+    Guid id;
+    modelviewer::ModelStats read;
+    REQUIRE(modelviewer::ReadRecord(modelviewer::WriteRecord(Guid(1, 2), stats).AsView(), id, read));
+    REQUIRE(read.textureList.Size() == 2u);
+    CHECK(read.textureList[0].name == u8"Body Skin");
+    CHECK(read.textureList[0].width == 1024u);
+    CHECK(read.textureList[0].height == 512u);
+    CHECK(read.textureList[0].file == u8"skin.png");
+    CHECK(read.textureList[1].file.IsEmpty());
+    REQUIRE(read.materialList.Size() == 2u);
+    CHECK(read.materialList[0].name == u8"Fur coat");
+    CHECK(read.materialList[0].shading == u8"Phong");
+    REQUIRE(read.materialList[0].slots.Size() == 2u);
+    CHECK(read.materialList[0].slots[1].slot == u8"normal");
+    CHECK(read.materialList[0].slots[1].texture == 1u);
+    CHECK(read.materialList[1].slots.IsEmpty());
+
+    // Counted from the Fox.
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    foundation::model::Model model;
+    modelviewer::ModelStats counted;
+    REQUIRE(modelviewer::OpenModel::LoadFile(fox.AsView(), true, model, counted) == modelviewer::OpenModel::Outcome::Opened);
+    REQUIRE(counted.materialList.Size() == 1u);
+    CHECK(counted.materialList[0].name == u8"fox_material");
+    CHECK(counted.materialList[0].shading == u8"PBR");
+    REQUIRE(counted.materialList[0].slots.Size() == 1u);
+    CHECK(counted.materialList[0].slots[0].slot == u8"base color");
+    REQUIRE(counted.textureList.Size() == 1u);
+    CHECK(counted.textureList[0].file == u8"Texture.png");
+    CHECK(counted.textureList[0].width > 0u);
+}

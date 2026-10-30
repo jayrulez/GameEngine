@@ -35,6 +35,28 @@ export namespace modelviewer
     namespace resource = foundation::resource;
 
     /// What the side panel says about a model: counted from the file as it loaded.
+    /// A material as the file has it: its name, how it shades, and the textures in its slots.
+    struct ModelMaterialInfo
+    {
+        struct Slot
+        {
+            String slot;  // "base color", "normal", ...
+            u32 texture;  // its place in ModelStats::textureList
+        };
+        String name;
+        String shading;   // "PBR", "Phong", "Lambert", "Unlit"
+        Array<Slot> slots;
+    };
+
+    /// A texture as the file has it: its name, its pixels' size, and where its image is.
+    struct ModelTextureInfo
+    {
+        String name;
+        u32 width = 0;
+        u32 height = 0;
+        String file;      // the image's file name; empty: inside the model file
+    };
+
     struct ModelStats
     {
         u32 meshes = 0;
@@ -47,6 +69,8 @@ export namespace modelviewer
         Array<String> clips;    // the animations' names, in the file's order
         Array<f32> clipSeconds; // and their lengths
         Float3 size{};          // the bounds' extent, in the file's units
+        Array<ModelMaterialInfo> materialList; // each material and its textures (after the loose texture rule)
+        Array<ModelTextureInfo> textureList;
     };
 
     /// The file types the loaders read, for a dialog's filter and a folder scan.
@@ -72,7 +96,7 @@ export namespace modelviewer
 
     /// What the cache's cooked files were made by: raised when the import changes what it makes, so
     /// a model opened again cooks afresh.
-    inline constexpr u32 kCacheVersion = 5;
+    inline constexpr u32 kCacheVersion = 6; // 6: the record lists the materials and textures
 
     /// A name for what is made from the file at `path`: 16 hex digits of its path, its size, its
     /// modification time and `version`, so a changed file (or a raised version) has a new one.
@@ -239,6 +263,52 @@ export namespace modelviewer
         }
         stats.materials = static_cast<u32>(model.materials().Size());
         stats.textures = static_cast<u32>(model.textures().Size());
+        for (const foundation::model::ModelTexture* texture : model.textures())
+        {
+            ModelTextureInfo info;
+            if (texture != nullptr)
+            {
+                info.name = String(texture->name());
+                info.width = static_cast<u32>(Max(texture->width, 0));
+                info.height = static_cast<u32>(Max(texture->height, 0));
+                // Its own file (FBX, a DDS, the loose texture rule), else a glTF's uri beside the
+                // model; none when the image is inside the model file.
+                if (!texture->sourceFile().IsEmpty())
+                    info.file = FileTitle(texture->sourceFile());
+                else if (!texture->uri().IsEmpty() && !texture->uri().StartsWith(u8"data:"))
+                    info.file = FileTitle(texture->uri());
+            }
+            stats.textureList.PushBack(Move(info));
+        }
+        for (const foundation::model::ModelMaterial* material : model.materials())
+        {
+            ModelMaterialInfo info;
+            if (material != nullptr)
+            {
+                using Shading = foundation::model::ShadingModel;
+                info.name = String(material->name());
+                info.shading = String(material->shadingModel == Shading::Phong     ? StringView(u8"Phong")
+                                      : material->shadingModel == Shading::Lambert ? StringView(u8"Lambert")
+                                      : material->shadingModel == Shading::Unlit   ? StringView(u8"Unlit")
+                                                                                   : StringView(u8"PBR"));
+                const struct
+                {
+                    StringView slot;
+                    i32 index;
+                } slots[] = {{u8"base color", material->baseColorTextureIndex},
+                             {u8"normal", material->normalTextureIndex},
+                             {u8"metal rough", material->metallicRoughnessTextureIndex},
+                             {u8"roughness", material->separateRoughnessTextureIndex},
+                             {u8"metalness", material->separateMetalnessTextureIndex},
+                             {u8"occlusion", material->occlusionTextureIndex},
+                             {u8"emissive", material->emissiveTextureIndex},
+                             {u8"specular", material->specularTextureIndex}};
+                for (const auto& slot : slots)
+                    if (slot.index >= 0 && static_cast<usize>(slot.index) < stats.textureList.Size())
+                        info.slots.PushBack(ModelMaterialInfo::Slot{String(slot.slot), static_cast<u32>(slot.index)});
+            }
+            stats.materialList.PushBack(Move(info));
+        }
         // The joints of the skin the viewer animates (the cook takes the first); the model's
         // bones are all its nodes, meshes and groups among them.
         stats.bones = model.skins().Size() > 0 ? static_cast<u32>(model.skins()[0]->joints().Size()) : 0u;
@@ -262,6 +332,16 @@ export namespace modelviewer
                              stats.bones, stats.skins, stats.size.x, stats.size.y, stats.size.z);
         for (usize i = 0; i < stats.clips.Size(); ++i)
             text += Format(u8"clip {} {}\n", stats.clipSeconds[i], stats.clips[i]).AsView();
+        // A texture: its size and its name and file apart by a tab (a name may hold spaces); a
+        // material: its shading and name, then a line per slot it fills.
+        for (const ModelTextureInfo& t : stats.textureList)
+            text += Format(u8"texture {} {} {}\t{}\n", t.width, t.height, t.name.AsView(), t.file.AsView()).AsView();
+        for (const ModelMaterialInfo& m : stats.materialList)
+        {
+            text += Format(u8"material {} {}\n", m.shading.AsView(), m.name.AsView()).AsView();
+            for (const ModelMaterialInfo::Slot& slot : m.slots)
+                text += Format(u8"slot {} {}\n", slot.texture, slot.slot.AsView()).AsView();
+        }
         return text;
     }
 
@@ -316,6 +396,49 @@ export namespace modelviewer
                     at = next + 1;
                 }
                 stats.size = Float3{v[0], v[1], v[2]};
+            }
+            else if (key == StringView(u8"texture"))
+            {
+                ModelTextureInfo t;
+                usize at = 0;
+                u32 parts[2] = {};
+                for (u32 i = 0; i < 2; ++i)
+                {
+                    usize next = at;
+                    while (next < value.Size() && value[next] != u8' ')
+                        ++next;
+                    parts[i] = static_cast<u32>(ParseInt(value.SubStr(at, next - at)).ValueOr(0));
+                    at = Min(next + 1, value.Size());
+                }
+                t.width = parts[0];
+                t.height = parts[1];
+                const StringView rest = value.SubStr(at, value.Size() - at);
+                usize tab = 0;
+                while (tab < rest.Size() && rest[tab] != u8'\t')
+                    ++tab;
+                t.name = String(rest.SubStr(0, tab));
+                if (tab < rest.Size())
+                    t.file = String(rest.SubStr(tab + 1, rest.Size() - tab - 1));
+                stats.textureList.PushBack(Move(t));
+            }
+            else if (key == StringView(u8"material"))
+            {
+                usize gap = 0;
+                while (gap < value.Size() && value[gap] != u8' ')
+                    ++gap;
+                ModelMaterialInfo m;
+                m.shading = String(value.SubStr(0, gap));
+                m.name = String(gap < value.Size() ? value.SubStr(gap + 1, value.Size() - gap - 1) : StringView{});
+                stats.materialList.PushBack(Move(m));
+            }
+            else if (key == StringView(u8"slot") && !stats.materialList.IsEmpty())
+            {
+                usize gap = 0;
+                while (gap < value.Size() && value[gap] != u8' ')
+                    ++gap;
+                const u32 texture = static_cast<u32>(ParseInt(value.SubStr(0, gap)).ValueOr(0));
+                stats.materialList[stats.materialList.Size() - 1].slots.PushBack(
+                    ModelMaterialInfo::Slot{String(gap < value.Size() ? value.SubStr(gap + 1, value.Size() - gap - 1) : StringView{}), texture});
             }
             else if (key == StringView(u8"clip"))
             {

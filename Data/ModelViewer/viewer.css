@@ -54,7 +54,7 @@
 .viewer-lib-row { align-items: flex-start; padding-top: var(--space-xs); padding-bottom: var(--space-xs); }
 .viewer-lib-row > .prop-name { line-height: var(--control-height); }
 .viewer-memberships { flex-direction: column; row-gap: var(--space-xs); }
-.viewer-memberships > .viewer-empty-note { padding: 0; line-height: var(--control-height); white-space: normal; }
+.viewer-memberships > .viewer-empty-note { padding: 6px 0 0; white-space: normal; } /* level with its label's line */
 .viewer-membership { flex-direction: row; align-items: center; column-gap: var(--space-s); }
 .viewer-membership > label { width: 40%; flex-shrink: 0; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
 .viewer-membership > textfield { flex-grow: 1; min-width: 0; }
@@ -76,3 +76,5 @@ button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-di
 
 /* Preferences (P9): the folder fields wide enough for a path. */
 .pref-folder { width: 340px; }
+/* A material's or a texture's line: what it is, cut short with its whole in the row's tooltip. */
+.viewer-content { min-width: 0; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }

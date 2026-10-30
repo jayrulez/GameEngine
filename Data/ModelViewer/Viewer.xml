@@ -53,6 +53,10 @@
                         <Button id="browse-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open it in a tab (or double-click its tile)"/>
                     </Panel>
                     <Panel id="browse-stats" class="viewer-stats"/>
+                    <Panel class="component-header"><Label class="component-name" text="Materials"/></Panel>
+                    <Panel id="browse-materials" class="viewer-stats"/>
+                    <Panel class="component-header"><Label class="component-name" text="Textures"/></Panel>
+                    <Panel id="browse-textures" class="viewer-stats"/>
                     <Panel class="component-header"><Label class="component-name" text="Library"/></Panel>
                     <Panel class="prop-row viewer-lib-row">
                         <Label class="prop-name" text="In"/>
@@ -111,6 +115,10 @@
                         <Button id="library-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open it in a tab (or double-click its tile)"/>
                     </Panel>
                     <Panel id="library-stats" class="viewer-stats"/>
+                    <Panel class="component-header"><Label class="component-name" text="Materials"/></Panel>
+                    <Panel id="library-materials" class="viewer-stats"/>
+                    <Panel class="component-header"><Label class="component-name" text="Textures"/></Panel>
+                    <Panel id="library-textures" class="viewer-stats"/>
                     <Panel class="component-header"><Label class="component-name" text="Library"/></Panel>
                     <Panel class="prop-row viewer-lib-row">
                         <Label class="prop-name" text="In"/>
@@ -167,6 +175,10 @@
             <Panel class="component-header"><Label class="component-name" text="Model"/></Panel>
             <Label id="viewer-file" class="viewer-file"/>
             <Panel id="viewer-stats" class="viewer-stats"/>
+            <Panel class="component-header"><Label class="component-name" text="Materials"/></Panel>
+            <Panel id="viewer-materials" class="viewer-stats"/>
+            <Panel class="component-header"><Label class="component-name" text="Textures"/></Panel>
+            <Panel id="viewer-textures" class="viewer-stats"/>
             <Panel class="component-header"><Label class="component-name" text="Library"/></Panel>
             <Panel class="prop-row viewer-lib-row">
                 <Label class="prop-name" text="In"/>

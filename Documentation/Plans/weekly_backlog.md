@@ -13,6 +13,14 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-10-30 (user, the model viewer in use)
+
+- **A standalone model viewer build.** The viewer is in use for curating the flagship game's
+  assets, from the Debug tree. Build the relocatable release with
+  `scripts/build-model-viewer-dist.sh` (RelWithDebInfo, the clang-reldbg preset: a full build, so
+  it takes the build lane), check it starts from its own folder, and hand it over. A Windows
+  build of the same follows when there is a Windows box to make it on.
+
 ## Queued 2026-10-10 (the backlog audit, the instance fade)
 
 The per-instance distance fade (built 2026-09-23, d9ea0086; `instance_fade.hlsli`) has two gaps

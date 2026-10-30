@@ -20,14 +20,15 @@
         <Button id="viewer-preferences" class="icon-button" icon="Editor/Icons/settings.svg" tooltip="Preferences: screenshots, the view's defaults, thumbnails and the cache"/>
     </Panel>
     <Panel class="viewer-body">
-        <Panel id="viewer-browser" class="viewer-browser">
-            <Panel class="viewer-folders">
+        <!-- Browse: the folders, the grid and the chosen model's details, a splitter's panes. -->
+        <Splitter id="viewer-browser" class="viewer-browser page-body" axis="horizontal" weights="0.2 0.56 0.24">
+            <Panel class="viewer-folders page-pane">
                 <Panel class="panel-toolbar viewer-folders-bar">
                     <Button id="viewer-choose-folder" class="ghost" icon="Editor/Icons/folder-open.svg" text="Choose folder" tooltip="The folder to browse"/>
                 </Panel>
                 <TreeView id="viewer-folder-tree" class="viewer-folder-tree"/>
             </Panel>
-            <Panel class="viewer-grid-pane">
+            <Panel class="viewer-grid-pane page-pane">
                 <Panel class="panel-toolbar viewer-filter">
                     <Panel class="search viewer-filter-name">
                         <Image class="search-icon" src="Editor/Icons/search.svg"/>
@@ -45,9 +46,34 @@
                 </Panel>
                 <ListView id="viewer-grid" class="viewer-tiles" selection-mode="multi"/>
             </Panel>
-        </Panel>
-        <Panel id="viewer-library" class="viewer-browser">
-            <Panel class="viewer-folders">
+            <Panel id="browse-details" class="viewer-panel page-pane">
+                <Panel class="component-header"><Label class="component-name" text="Model"/></Panel>
+                <Label id="browse-details-empty" class="viewer-empty-note" text="Select a model to see its details."/>
+                <Panel id="browse-details-model" class="viewer-details">
+                    <Panel class="prop-row">
+                        <Label id="browse-file" class="viewer-file"/>
+                        <Button id="browse-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open it in a tab (or double-click its tile)"/>
+                    </Panel>
+                    <Panel id="browse-stats" class="viewer-stats"/>
+                    <Panel class="component-header"><Label class="component-name" text="Library"/></Panel>
+                    <Panel id="browse-lib-memberships" class="viewer-memberships"/>
+                    <Panel class="prop-row">
+                        <ComboBox id="browse-lib-add-target" class="viewer-lib-target" tooltip="A collection to put this model in"/>
+                        <Button id="browse-lib-add" class="icon-button" icon="Editor/Icons/plus.svg" tooltip="Put this model in the collection (it joins the library)"/>
+                    </Panel>
+                    <Panel id="browse-lib-tags" class="viewer-chips"/>
+                    <Panel class="prop-row">
+                        <TextField id="browse-lib-tag" class="viewer-note" placeholder="Add a tag (Enter)"/>
+                    </Panel>
+                    <Panel class="prop-row">
+                        <TextField id="browse-note" class="viewer-note" placeholder="A note"/>
+                    </Panel>
+                </Panel>
+            </Panel>
+        </Splitter>
+        <!-- Library: the collections and tags, the grid and the chosen model's details, a splitter's panes. -->
+        <Splitter id="viewer-library" class="viewer-browser page-body" axis="horizontal" weights="0.2 0.56 0.24">
+            <Panel class="viewer-folders page-pane">
                 <Panel class="panel-toolbar viewer-lib-bar">
                     <Label class="viewer-pane-title" text="Collections"/>
                     <Spacer/>
@@ -56,7 +82,7 @@
                 </Panel>
                 <TreeView id="viewer-lib-tree" class="viewer-folder-tree"/>
             </Panel>
-            <Panel class="viewer-grid-pane">
+            <Panel class="viewer-grid-pane page-pane">
                 <Panel class="panel-toolbar viewer-filter">
                     <Panel class="search viewer-lib-search">
                         <Image class="search-icon" src="Editor/Icons/search.svg"/>
@@ -71,15 +97,41 @@
                 </Panel>
                 <ListView id="viewer-lib-grid" class="viewer-tiles" selection-mode="multi"/>
             </Panel>
-        </Panel>
-        <Panel id="viewer-stage" class="viewer-stage">
-            <!-- The model tab's own bar, as an editor page's: what acts on the model in view. -->
+            <Panel id="library-details" class="viewer-panel page-pane">
+                <Panel class="component-header"><Label class="component-name" text="Model"/></Panel>
+                <Label id="library-details-empty" class="viewer-empty-note" text="Select a model to see its details."/>
+                <Panel id="library-details-model" class="viewer-details">
+                    <Panel class="prop-row">
+                        <Label id="library-file" class="viewer-file"/>
+                        <Button id="library-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open it in a tab (or double-click its tile)"/>
+                    </Panel>
+                    <Panel id="library-stats" class="viewer-stats"/>
+                    <Panel class="component-header"><Label class="component-name" text="Library"/></Panel>
+                    <Panel id="library-lib-memberships" class="viewer-memberships"/>
+                    <Panel class="prop-row">
+                        <ComboBox id="library-lib-add-target" class="viewer-lib-target" tooltip="A collection to put this model in"/>
+                        <Button id="library-lib-add" class="icon-button" icon="Editor/Icons/plus.svg" tooltip="Put this model in the collection (it joins the library)"/>
+                    </Panel>
+                    <Panel id="library-lib-tags" class="viewer-chips"/>
+                    <Panel class="prop-row">
+                        <TextField id="library-lib-tag" class="viewer-note" placeholder="Add a tag (Enter)"/>
+                    </Panel>
+                    <Panel class="prop-row">
+                        <TextField id="library-note" class="viewer-note" placeholder="A note"/>
+                    </Panel>
+                </Panel>
+            </Panel>
+        </Splitter>
+        <!-- A model tab: its own bar, as an editor page's, over its view and its side panel (a splitter's panes). -->
+        <Panel id="viewer-model-page" class="viewer-model-page">
             <ToolBar id="viewer-page-bar" class="page-toolbar">
                 <ToolButton id="viewer-frame" icon="Editor/Icons/frame-selection.svg" tooltip="Frame the model (F)"/>
                 <ToolButton id="viewer-screenshot" icon="Editor/Icons/camera.svg" tooltip="Save this view as a PNG: the 3D view only, grid and bones as shown (where and how named: Preferences)"/>
                 <Spacer/>
                 <ToolButton id="viewer-panel-toggle" toggle="true" checked="true" icon="Editor/Icons/inspector.svg" tooltip="Show or hide the side panel"/>
             </ToolBar>
+            <Splitter id="viewer-model-body" class="page-body" axis="horizontal" weights="0.76 0.24">
+            <Panel id="viewer-stage" class="viewer-stage page-pane">
             <Panel id="viewer-view" class="viewer-view">
                 <Panel id="viewer-empty" class="state-box viewer-empty">
                     <Label class="state-title" text="No model open"/>
@@ -98,7 +150,7 @@
                 <ComboBox id="viewer-speed" class="viewer-speed" items="0.25x|0.5x|1x|2x" selected="2" tooltip="Playback speed"/>
             </Panel>
         </Panel>
-        <Panel id="viewer-panel" class="viewer-panel">
+        <Panel id="viewer-panel" class="viewer-panel page-pane">
             <Panel class="component-header"><Label class="component-name" text="Model"/></Panel>
             <Label id="viewer-file" class="viewer-file"/>
             <Panel id="viewer-stats" class="viewer-stats"/>
@@ -146,6 +198,8 @@
             </Panel>
             <Spacer/>
             <Label class="preview-hint viewer-hint" text="Alt drag orbits · right drag looks, WASD flies · middle drag pans · wheel zooms · F frames"/>
+        </Panel>
+            </Splitter>
         </Panel>
     </Panel>
 </Panel>

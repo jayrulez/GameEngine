@@ -1266,11 +1266,7 @@ namespace
             if (auto* next = FindAs<gui::Button>(u8"viewer-tab-next"))
                 next->SetOnClick([self]() { self->StepTab(1); });
             if (auto* toggle = FindAs<gui::Button>(u8"viewer-panel-toggle"))
-                toggle->SetOnClick([self, toggle]()
-                                   {
-                                       self->m_panelShown = toggle->IsChecked();
-                                       self->SetPage(self->m_page);
-                                   });
+                toggle->SetOnClick([self, toggle]() { self->ShowSidePanel(toggle->IsChecked()); });
             // The panel's Grid row: the preference, as Preferences sets it.
             if (auto* grid = FindAs<gui::CheckBox>(u8"viewer-show-grid"))
                 grid->SetOnToggled([self](bool on)
@@ -1278,6 +1274,28 @@ namespace
                                        if (!self->m_syncingPanel)
                                            self->Run(u8"settings.set", Arg(u8"grid", Flag(on)));
                                    });
+        }
+
+        // A model tab's side panel, a pane of its splitter: taken out (its share to the view) and
+        // put back, as a splitter's pane comes and goes.
+        void ShowSidePanel(bool shown)
+        {
+            auto* body = FindAs<gui::Splitter>(u8"viewer-model-body");
+            if (body == nullptr || shown == m_panelShown)
+                return;
+            m_panelShown = shown;
+            if (!shown)
+            {
+                m_sidePanel = RefPtr<gui::Node>(FindById(u8"viewer-panel"));
+                if (m_sidePanel)
+                    body->RemoveChild(m_sidePanel.Get());
+                return;
+            }
+            if (m_sidePanel)
+                body->AddChild(m_sidePanel.Get());
+            m_sidePanel = {};
+            if (m_tabs.ActiveTab() != nullptr && !m_browsing)
+                ShowTab(m_tabs.Active()); // what changed while it was out
         }
 
         // A message over the window with an OK, as the editor's are.
@@ -1512,15 +1530,21 @@ namespace
         {
             if (auto* file = FindAs<gui::Label>(u8"viewer-file"))
                 file->SetText(tab.path.AsView());
-            gui::Node* rows = FindById(u8"viewer-stats");
-            if (rows == nullptr)
-                return;
-            while (rows->ChildCount() > 0)
-                rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
             // The size as it stands in the view (the file's axes turned upright, its node scale in
             // it), not the file's raw box.
             modelviewer::ModelStats stats = tab.open->Stats();
             stats.size = tab.size;
+            ShowStatRows(u8"viewer-stats", stats);
+        }
+
+        // A model's numbers as rows in the panel `id` names (a model tab's, or a details pane's).
+        void ShowStatRows(StringView id, const modelviewer::ModelStats& stats)
+        {
+            gui::Node* rows = FindById(id);
+            if (rows == nullptr)
+                return;
+            while (rows->ChildCount() > 0)
+                rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
             for (const modelviewer::StatRow& stat : modelviewer::StatRows(stats))
             {
                 auto row = MakeRef<gui::Panel>(m_allocator);
@@ -1770,10 +1794,8 @@ namespace
                 browser->SetDisplayed(page == Page::Browse);
             if (gui::Node* library = FindById(u8"viewer-library"))
                 library->SetDisplayed(page == Page::Library);
-            if (gui::Node* stage = FindById(u8"viewer-stage"))
-                stage->SetDisplayed(page == Page::Model);
-            if (gui::Node* panel = FindById(u8"viewer-panel"))
-                panel->SetDisplayed(page == Page::Model && m_panelShown);
+            if (gui::Node* model = FindById(u8"viewer-model-page"))
+                model->SetDisplayed(page == Page::Model);
         }
 
         // The Library tab in front: the collections and tags, the search, the models.
@@ -1925,6 +1947,8 @@ namespace
                     if (m_folderStatsKnown[i])
                         KeepStats(model, m_folderStats[i]);
                 }
+            if (SectionModel(u8"browse").AsView() == model)
+                ShowDetails(u8"browse"); // its numbers are known now
             if (png.IsEmpty() || ThumbImageFor(model) != nullptr)
                 return;
             auto image = MakeUnique<foundation::image::Image>(m_allocator);
@@ -2278,41 +2302,60 @@ namespace
                                         if (node != nullptr && node->kind == LibraryNode::Kind::Collection)
                                             self->TakeOut(node->collection, self->SelectedPaths(u8"viewer-lib-grid", self->m_libraryGrid).AsSpan());
                                     });
-            // The panel's Library section, for the model in front.
-            if (auto* add = FindAs<gui::Button>(u8"viewer-lib-add"))
-                add->SetOnClick([self]()
-                                {
-                                    const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
-                                    if (tab != nullptr)
-                                        self->AddToCollection(self->ComboCollection(u8"viewer-lib-add-target"), Span<const String>(&tab->path, 1));
-                                });
-            if (auto* tag = FindAs<gui::TextField>(u8"viewer-lib-tag"))
-                tag->SetOnSubmit([self, tag](StringView text)
-                                 {
-                                     const modelviewer::ModelTab* front = self->m_tabs.ActiveTab();
-                                     if (front == nullptr || text.IsEmpty())
-                                         return;
-                                     JsonValue a = Arg(u8"tag", Text(text));
-                                     a.Set(String(u8"entries"), self->EntriesFor(Span<const String>(&front->path, 1)));
-                                     self->Run(u8"tag.add", a);
-                                     tag->SetText(u8"");
-                                 });
-            if (auto* note = FindAs<gui::TextField>(u8"viewer-note"))
-                note->SetOnTextChanged([self](StringView text)
-                                       {
-                                           const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
-                                           if (tab == nullptr || self->m_syncingPanel)
-                                               return;
-                                           const modelviewer::Entry* existing = self->m_library.Get().FindEntryByPath(tab->path.AsView());
-                                           if (existing == nullptr && text.IsEmpty())
-                                               return; // nothing to keep: the model stays out of the library
-                                           String id;
-                                           if (!self->EntryFor(tab->path.AsView(), id))
-                                               return;
-                                           JsonValue a = Arg(u8"id", Text(id.AsView()));
-                                           a.Set(String(u8"note"), Text(text));
-                                           self->Run(u8"entry.note.set", a);
-                                       });
+            // Each Library section: the model tab's (the model in front), Browse's and Library's
+            // details panes (the model chosen in their grid).
+            const StringView sections[] = {u8"viewer", u8"browse", u8"library"};
+            for (const StringView section : sections)
+            {
+                const String prefix(section);
+                if (auto* add = FindAs<gui::Button>(Format(u8"{}-lib-add", prefix.AsView()).AsView()))
+                    add->SetOnClick([self, prefix]()
+                                    {
+                                        const String path = self->SectionModel(prefix.AsView());
+                                        if (!path.IsEmpty())
+                                            self->AddToCollection(self->ComboCollection(Format(u8"{}-lib-add-target", prefix.AsView()).AsView()),
+                                                                  Span<const String>(&path, 1));
+                                    });
+                if (auto* tag = FindAs<gui::TextField>(Format(u8"{}-lib-tag", prefix.AsView()).AsView()))
+                    tag->SetOnSubmit([self, tag, prefix](StringView text)
+                                     {
+                                         const String path = self->SectionModel(prefix.AsView());
+                                         if (path.IsEmpty() || text.IsEmpty())
+                                             return;
+                                         JsonValue a = Arg(u8"tag", Text(text));
+                                         a.Set(String(u8"entries"), self->EntriesFor(Span<const String>(&path, 1)));
+                                         self->Run(u8"tag.add", a);
+                                         tag->SetText(u8"");
+                                     });
+                if (auto* note = FindAs<gui::TextField>(Format(u8"{}-note", prefix.AsView()).AsView()))
+                    note->SetOnTextChanged([self, prefix](StringView text)
+                                           {
+                                               const String path = self->SectionModel(prefix.AsView());
+                                               if (path.IsEmpty() || self->m_syncingPanel)
+                                                   return;
+                                               const modelviewer::Entry* existing = self->m_library.Get().FindEntryByPath(path.AsView());
+                                               if (existing == nullptr && text.IsEmpty())
+                                                   return; // nothing to keep: the model stays out of the library
+                                               String id;
+                                               if (!self->EntryFor(path.AsView(), id))
+                                                   return;
+                                               JsonValue a = Arg(u8"id", Text(id.AsView()));
+                                               a.Set(String(u8"note"), Text(text));
+                                               self->Run(u8"entry.note.set", a);
+                                           });
+                if (auto* open = FindAs<gui::Button>(Format(u8"{}-open", prefix.AsView()).AsView()))
+                    open->SetOnClick([self, prefix]()
+                                     {
+                                         const String path = self->SectionModel(prefix.AsView());
+                                         if (!path.IsEmpty())
+                                             self->Run(u8"model.open", Arg(u8"path", Text(path.AsView())));
+                                     });
+            }
+            // A grid's choice shows in its details pane.
+            if (auto* grid = FindAs<gui::ListView>(u8"viewer-grid"))
+                grid->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowDetails(u8"browse"); });
+            if (auto* grid = FindAs<gui::ListView>(u8"viewer-lib-grid"))
+                grid->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowDetails(u8"library"); });
             if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
                 loose->SetOnToggled([self](bool on)
                                     {
@@ -2332,8 +2375,7 @@ namespace
                 ShowLibraryGrid();
             else if (m_page == Page::Browse)
                 ShowGrid();
-            else
-                ShowLibraryPanel();
+            ShowLibraryPanel(); // every Library section: the tab's and the details panes
         }
 
         // The tree: All models, Unsorted, the collections nested, then the tags with their counts;
@@ -2532,7 +2574,7 @@ namespace
                 }
             };
             walk(walk, Guid{}, 0);
-            const StringView combos[] = {u8"viewer-add-target", u8"viewer-lib-add-target"};
+            const StringView combos[] = {u8"viewer-add-target", u8"viewer-lib-add-target", u8"browse-lib-add-target", u8"library-lib-add-target"};
             for (const StringView id : combos)
                 if (auto* combo = FindAs<gui::ComboBox>(id))
                 {
@@ -2631,19 +2673,85 @@ namespace
 
         // The panel's Library section for the model in front: the collections it is in (its name
         // in each, editable; a button to take it out), its tags (a click takes one off), its note.
+        // Every Library section: the model tab's (the model in front) and Browse's and Library's
+        // details (the model chosen in each grid).
         void ShowLibraryPanel()
         {
-            const modelviewer::ModelTab* tab = m_tabs.ActiveTab();
-            gui::Node* rows = FindById(u8"viewer-lib-memberships");
-            gui::Node* chips = FindById(u8"viewer-lib-tags");
-            if (tab == nullptr || rows == nullptr || chips == nullptr)
+            if (const modelviewer::ModelTab* tab = m_tabs.ActiveTab())
+                ShowLibrarySection(u8"viewer", tab->path.AsView());
+            ShowDetails(u8"browse");
+            ShowDetails(u8"library");
+        }
+
+        // The model a Library section is about: the tab's in front, or the one chosen in a grid.
+        [[nodiscard]] String SectionModel(StringView prefix) const
+        {
+            if (prefix == StringView(u8"viewer"))
+            {
+                const modelviewer::ModelTab* tab = const_cast<ModelViewerApp*>(this)->m_tabs.ActiveTab();
+                return tab != nullptr ? tab->path : String{};
+            }
+            const bool browse = prefix == StringView(u8"browse");
+            const Array<String> chosen = SelectedPaths(browse ? StringView(u8"viewer-grid") : StringView(u8"viewer-lib-grid"),
+                                                       browse ? m_browseGrid : m_libraryGrid);
+            return chosen.Size() == 1 ? chosen[0] : String{};
+        }
+
+        // A grid's details pane (`prefix` browse or library): the model chosen, its numbers as its
+        // cook counted them (once drawn), its Library section; or what to do when none or several are.
+        void ShowDetails(StringView prefix)
+        {
+            const bool browse = prefix == StringView(u8"browse");
+            const Array<String> chosen = SelectedPaths(browse ? StringView(u8"viewer-grid") : StringView(u8"viewer-lib-grid"),
+                                                       browse ? m_browseGrid : m_libraryGrid);
+            gui::Node* model = FindById(Format(u8"{}-details-model", prefix).AsView());
+            auto* empty = FindAs<gui::Label>(Format(u8"{}-details-empty", prefix).AsView());
+            if (model == nullptr || empty == nullptr)
+                return;
+            model->SetDisplayed(chosen.Size() == 1);
+            empty->SetDisplayed(chosen.Size() != 1);
+            if (chosen.Size() != 1)
+            {
+                empty->SetText(chosen.IsEmpty() ? StringView(u8"Select a model to see its details.")
+                                                : Format(u8"{} models selected.", chosen.Size()).AsView());
+                return;
+            }
+            const String& path = chosen[0];
+            if (auto* file = FindAs<gui::Label>(Format(u8"{}-file", prefix).AsView()))
+            {
+                file->SetText(modelviewer::FileTitle(path.AsView()).AsView());
+                file->SetTooltip(path.AsView());
+            }
+            modelviewer::ModelStats stats;
+            if (modelviewer::ReadCachedStats(m_cacheRoot.AsView(), path.AsView(), stats, m_settings.value.looseTextures))
+                ShowStatRows(Format(u8"{}-stats", prefix).AsView(), stats);
+            else if (gui::Node* rows = FindById(Format(u8"{}-stats", prefix).AsView()))
+            {
+                while (rows->ChildCount() > 0)
+                    rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
+                auto note = MakeRef<gui::Label>(m_allocator);
+                note->AddClass(u8"viewer-empty-note");
+                note->SetText(FileExists(path.AsView()) ? StringView(u8"Its numbers come once its picture is drawn.")
+                                                        : StringView(u8"Its file is not there."));
+                rows->AddChild(note.Get());
+            }
+            ShowLibrarySection(prefix, path.AsView());
+        }
+
+        // A Library section (`prefix`: viewer, the model tab's; browse or library, a details pane's)
+        // about the model at `path`: the collections it is in with its name in each, its tags, its note.
+        void ShowLibrarySection(StringView prefix, StringView path)
+        {
+            gui::Node* rows = FindById(Format(u8"{}-lib-memberships", prefix).AsView());
+            gui::Node* chips = FindById(Format(u8"{}-lib-tags", prefix).AsView());
+            if (path.IsEmpty() || rows == nullptr || chips == nullptr)
                 return;
             while (rows->ChildCount() > 0)
                 rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
             while (chips->ChildCount() > 0)
                 chips->RemoveChild(chips->GetChildAt(chips->ChildCount() - 1));
             const modelviewer::Library& library = m_library.Get();
-            const modelviewer::Entry* e = library.FindEntryByPath(tab->path.AsView());
+            const modelviewer::Entry* e = library.FindEntryByPath(path);
             ModelViewerApp* self = this;
             if (e == nullptr)
             {
@@ -2722,7 +2830,7 @@ namespace
                 }
             }
             m_syncingPanel = true;
-            if (auto* note = FindAs<gui::TextField>(u8"viewer-note"))
+            if (auto* note = FindAs<gui::TextField>(Format(u8"{}-note", prefix).AsView()))
             {
                 const StringView text = e != nullptr ? e->note.AsView() : StringView{};
                 if (note->GetText() != text)
@@ -3095,7 +3203,8 @@ namespace
         String m_gridCount; // the browse grid's "n of m models"
         RefPtr<gui::MessageBox> m_message;
         bool m_syncingTiles = false;
-        bool m_panelShown = true; // the side panel, on a model's page (the bar's toggle) // the tile sliders set by code
+        bool m_panelShown = true;   // a model tab's side panel (its bar's toggle)
+        RefPtr<gui::Node> m_sidePanel; // the panel while it is out of the splitter // the tile sliders set by code
         String m_shownProgress;
         String m_density; // the density whose sheet is applied
         u32 m_thumbnailSize = 128;

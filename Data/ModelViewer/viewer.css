@@ -17,11 +17,16 @@
 .viewer-speed { width: 72px; flex-shrink: 0; }
 .viewer-empty { flex-grow: 1; }
 .viewer-browser { flex-grow: 1; min-width: 0; flex-direction: row; }
-.viewer-folders { width: 260px; flex-shrink: 0; flex-direction: column; background-color: var(--surface);
-                  border-right: 1px solid var(--separator); }
+/* Panes of a splitter (Browse's three, a model tab's two): the splitter sizes them by weight. */
+.viewer-folders { flex-direction: column; background-color: var(--surface); }
+.viewer-model-page { flex-grow: 1; min-width: 0; flex-direction: column; }
+.viewer-details { flex-direction: column; }
+.viewer-details > .prop-row, .viewer-details > .viewer-stats > .prop-row { padding-left: var(--space-m); }
+.viewer-details > .prop-row > .viewer-file { flex-grow: 1; min-width: 0; padding-left: 0; }
 .viewer-folder-tree { flex-grow: 1; min-height: 0; }
 .viewer-grid-pane { flex-grow: 1; min-width: 0; flex-direction: column; }
-.viewer-filter { background-color: var(--surface); border-bottom: 1px solid var(--separator); align-items: center; }
+.viewer-filter { background-color: var(--surface); border-bottom: 1px solid var(--separator); align-items: center;
+                 flex-wrap: wrap; row-gap: var(--space-xs); height: auto; } /* a narrow pane takes a second line */
 
 .viewer-grid-count { color: var(--text-dim); flex-grow: 1; text-align: right; }
 /* The grids: the editor's asset tiles, larger (a model's picture), the list's own selection. */
@@ -54,8 +59,7 @@
 button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-dim); order: 1; }
 .viewer-empty-note { color: var(--text-dim); padding: var(--space-s) var(--space-m); }
 .viewer-note { flex-grow: 1; min-width: 0; }
-.viewer-panel { width: 280px; flex-shrink: 0; flex-direction: column; background-color: var(--surface);
-                border-left: 1px solid var(--separator); }
+.viewer-panel { flex-direction: column; background-color: var(--surface); }
 .viewer-file { color: var(--text-dim); padding: var(--space-s) var(--space-m); text-overflow: ellipsis; white-space: nowrap; }
 .viewer-stats { flex-direction: column; padding-bottom: var(--space-s); }
 .viewer-stats > .prop-row, .viewer-panel > .prop-row { padding-left: var(--space-m); }

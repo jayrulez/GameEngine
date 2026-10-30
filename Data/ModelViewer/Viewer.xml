@@ -14,8 +14,11 @@
     <Panel id="viewer-bar" class="panel-toolbar viewer-bar">
         <MenuBar id="viewer-menubar" class="viewer-menubar"/>
         <TabBar id="viewer-tabs" class="viewer-tabs" close-display="always" reorderable="true"/>
+        <Button id="viewer-tab-previous" class="icon-button" icon="ModelViewer/Icons/chevron-left.svg" tooltip="The tab before (Ctrl+Shift+Tab)"/>
+        <Button id="viewer-tab-next" class="icon-button" icon="Editor/Icons/chevron-right.svg" tooltip="The tab after (Ctrl+Tab)"/>
         <Button id="viewer-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open model files (glTF, GLB, FBX, OBJ), or drop them on the window"/>
         <Button id="viewer-screenshot" class="icon-button" icon="Editor/Icons/camera.svg" tooltip="Save the 3D view as a PNG (where and how named: Preferences)"/>
+        <Button id="viewer-panel-toggle" class="icon-button" toggle="true" checked="true" icon="Editor/Icons/inspector.svg" tooltip="Show or hide the side panel"/>
         <Button id="viewer-recent" class="icon-button" icon="Editor/Icons/list.svg" tooltip="The models opened and the folders browsed lately"/>
         <Button id="viewer-preferences" class="icon-button" icon="Editor/Icons/settings.svg" tooltip="Preferences: screenshots, the view's defaults, thumbnails and the cache"/>
     </Panel>
@@ -124,6 +127,10 @@
             <Panel class="prop-row">
                 <Label class="prop-name" text="Turntable"/>
                 <CheckBox id="viewer-turntable" tooltip="Turn the model slowly about its middle"/>
+            </Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Grid"/>
+                <CheckBox id="viewer-show-grid" tooltip="Draw the ground grid (kept as a preference)"/>
             </Panel>
             <Panel class="prop-row">
                 <Label class="prop-name" text="Skeleton"/>

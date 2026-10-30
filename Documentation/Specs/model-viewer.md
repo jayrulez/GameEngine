@@ -319,8 +319,11 @@ A tab beside Browse, both always first.
   `tabs.list`); the thumbnails read on a worker of their own, a new queue dropping a read under
   way; the grid's count line says how far the drawing has got. Tests: the worker's read finished
   on the main thread cooks the same model; a missing file; a cancelled queue hands nothing over; a
-  tab finished from the worker's read. P10b built 2026-10-30: the menu bar (File, View, Library;
-  Library's export and copy come with P11) and the shortcuts, both from one table of the GUI's
+  tab finished from the worker's read. P10b built 2026-10-30 (revised with the user the same day:
+  File is the only menu; View's toggles are the side panel's, with a Grid row, its panel toggle an
+  icon on the bar, the next and previous tab chevrons after the tab strip; Library's items were the
+  Library tab's already, export and copy on a collection's menu; Ctrl+F finds in the page in front):
+  the menu bar and the shortcuts, both from one table of the GUI's
   commands (each with its label and keys; an item shows them, and a key no widget uses runs
   them), most pressing the window's own buttons; the tile size (small, medium, large) a slider on
   each grid and a setting (`tileSize`). Thumbnails on tabs wait on the tabs question (the tab bar

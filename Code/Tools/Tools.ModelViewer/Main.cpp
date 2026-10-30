@@ -1207,14 +1207,6 @@ namespace
             {u8"viewer.step-back", u8"Step Back a Frame", u8"left"},
             {u8"viewer.step-forward", u8"Step Forward a Frame", u8"right"},
             {u8"viewer.frame", u8"Frame the Model", u8"f"},
-            {u8"viewer.panel", u8"Side Panel", {}},
-            {u8"viewer.skeleton", u8"Skeleton", {}},
-            {u8"viewer.turntable", u8"Turntable", {}},
-            {u8"viewer.grid", u8"Grid", {}},
-            {u8"viewer.new-collection", u8"New Collection", {}},
-            {u8"viewer.add-selected", u8"Add Selected to Collection", {}},
-            {u8"viewer.export-csv", u8"Export CSV...", {}},
-            {u8"viewer.copy-files", u8"Copy Files to Folder...", {}},
         };
 
         // Presses a button of the window's, as a click would.
@@ -1255,9 +1247,9 @@ namespace
             on(u8"viewer.previous-tab", [self]() { self->StepTab(-1); });
             on(u8"viewer.find", [self]()
                {
-                   // The search of the page in front; from a model, the browser's.
+                   // The search of the page in front (a model's page has none).
                    if (self->m_page == Page::Model)
-                       self->Run(u8"tabs.select", Arg(u8"tab", Number(-1)));
+                       return;
                    if (auto* field = self->FindAs<gui::TextField>(self->m_page == Page::Library ? StringView(u8"viewer-lib-search")
                                                                                                    : StringView(u8"viewer-filter-name")))
                        field->RequestFocus();
@@ -1270,41 +1262,24 @@ namespace
                    if (self->m_page == Page::Model)
                        self->Run(u8"view.camera", Arg(u8"frame", Flag(true)));
                });
-            on(u8"viewer.panel", [self]()
-               {
-                   if (gui::Node* panel = self->FindById(u8"viewer-panel"))
-                       panel->SetDisplayed(!panel->IsDisplayed());
-                   self->m_menusStale = true;
-               });
-            on(u8"viewer.skeleton", [self]() { self->Run(u8"view.light", Arg(u8"skeleton", Flag(!self->m_showSkeleton))); });
-            on(u8"viewer.turntable", [self]() { self->Run(u8"view.light", Arg(u8"turntable", Flag(!self->m_turntable))); });
-            on(u8"viewer.grid", [self]() { self->Run(u8"settings.set", Arg(u8"grid", Flag(!self->m_settings.value.grid))); });
-            on(u8"viewer.new-collection", [self]()
-               {
-                   self->Run(u8"tabs.select", Arg(u8"tab", Number(-2)));
-                   self->Press(u8"viewer-lib-new");
-               });
-            on(u8"viewer.add-selected", [self]() { self->Press(u8"viewer-add-selected"); });
-            // The collection chosen in the Library tab (else the window says to choose one).
-            auto chosen = [self]() -> String
-            {
-                const LibraryNode* node = self->ChosenNode();
-                if (node != nullptr && node->kind == LibraryNode::Kind::Collection)
-                    return Format(u8"{}", node->collection);
-                self->Run(u8"tabs.select", Arg(u8"tab", Number(-2)));
-                self->ShowMessage(u8"Choose a collection", u8"Choose the collection to export in the Library tab's tree, then try again.");
-                return {};
-            };
-            on(u8"viewer.export-csv", [self, chosen]()
-               {
-                   if (const String id = chosen(); !id.IsEmpty())
-                       self->ExportCsvDialog(id.AsView());
-               });
-            on(u8"viewer.copy-files", [self, chosen]()
-               {
-                   if (const String id = chosen(); !id.IsEmpty())
-                       self->CopyFilesDialog(id.AsView());
-               });
+            // The bar's own: the tab before and after, and the side panel shown or not.
+            if (auto* previous = FindAs<gui::Button>(u8"viewer-tab-previous"))
+                previous->SetOnClick([self]() { self->StepTab(-1); });
+            if (auto* next = FindAs<gui::Button>(u8"viewer-tab-next"))
+                next->SetOnClick([self]() { self->StepTab(1); });
+            if (auto* toggle = FindAs<gui::Button>(u8"viewer-panel-toggle"))
+                toggle->SetOnClick([self, toggle]()
+                                   {
+                                       self->m_panelShown = toggle->IsChecked();
+                                       self->SetPage(self->m_page);
+                                   });
+            // The panel's Grid row: the preference, as Preferences sets it.
+            if (auto* grid = FindAs<gui::CheckBox>(u8"viewer-show-grid"))
+                grid->SetOnToggled([self](bool on)
+                                   {
+                                       if (!self->m_syncingPanel)
+                                           self->Run(u8"settings.set", Arg(u8"grid", Flag(on)));
+                                   });
         }
 
         // A message over the window with an OK, as the editor's are.
@@ -1393,8 +1368,9 @@ namespace
             Run(u8"tabs.select", Arg(u8"tab", Number(next == 0 ? -1 : next == 1 ? -2 : next - kFixedTabs)));
         }
 
-        // The menu bar, made again when what it lists changes (the recents) or a toggle's state;
-        // its items are the commands above, which give their labels and keys.
+        // The menu bar (File: what the viewer does with files and itself; the view's controls are
+        // the side panel's, the library's its tab's), made again when the recents change; its items
+        // are the commands above, which give their labels and keys.
         void RebuildMenus()
         {
             m_menusStale = false;
@@ -1402,13 +1378,7 @@ namespace
             if (bar == nullptr)
                 return;
             bar->ClearMenus();
-            gui::GUIContext& context = m_guiHost->Context();
             auto item = [](gui::Menu* menu, StringView command) { menu->AddItem({}, {})->SetCommand(command); };
-            auto toggle = [&context, &item](gui::Menu* menu, StringView command, bool on)
-            {
-                context.DefineCommand(command).SetChecked(on);
-                item(menu, command);
-            };
             gui::Menu* file = bar->AddMenu(u8"File");
             item(file, u8"viewer.open");
             gui::Menu* recent = file->AddSubMenu(u8"Open Recent");
@@ -1435,39 +1405,6 @@ namespace
             item(file, u8"viewer.preferences");
             file->AddSeparator();
             item(file, u8"viewer.quit");
-
-            gui::Menu* view = bar->AddMenu(u8"View");
-            const gui::Node* panel = FindById(u8"viewer-panel");
-            toggle(view, u8"viewer.panel", panel == nullptr || panel->IsDisplayed());
-            toggle(view, u8"viewer.skeleton", m_showSkeleton);
-            toggle(view, u8"viewer.turntable", m_turntable);
-            toggle(view, u8"viewer.grid", m_settings.value.grid);
-            view->AddSeparator();
-            item(view, u8"viewer.frame");
-            item(view, u8"viewer.play");
-            item(view, u8"viewer.step-back");
-            item(view, u8"viewer.step-forward");
-            view->AddSeparator();
-            item(view, u8"viewer.next-tab");
-            item(view, u8"viewer.previous-tab");
-            // The toggles' states as the user sees them when the menu opens.
-            view->SetOnOpening([self](gui::Menu&)
-                               {
-                                   gui::GUIContext& c = self->m_guiHost->Context();
-                                   const gui::Node* p = self->FindById(u8"viewer-panel");
-                                   c.DefineCommand(u8"viewer.panel").SetChecked(p == nullptr || p->IsDisplayed());
-                                   c.DefineCommand(u8"viewer.skeleton").SetChecked(self->m_showSkeleton);
-                                   c.DefineCommand(u8"viewer.turntable").SetChecked(self->m_turntable);
-                                   c.DefineCommand(u8"viewer.grid").SetChecked(self->m_settings.value.grid);
-                               });
-
-            gui::Menu* library = bar->AddMenu(u8"Library");
-            item(library, u8"viewer.new-collection");
-            item(library, u8"viewer.add-selected");
-            item(library, u8"viewer.find");
-            library->AddSeparator();
-            item(library, u8"viewer.export-csv");
-            item(library, u8"viewer.copy-files");
         }
 
         // The grid's count line, with how far the thumbnails have got while they are drawn
@@ -1877,7 +1814,9 @@ namespace
             if (gui::Node* stage = FindById(u8"viewer-stage"))
                 stage->SetDisplayed(page == Page::Model);
             if (gui::Node* panel = FindById(u8"viewer-panel"))
-                panel->SetDisplayed(page == Page::Model);
+                panel->SetDisplayed(page == Page::Model && m_panelShown);
+            if (gui::Node* toggle = FindById(u8"viewer-panel-toggle"))
+                toggle->SetDisplayed(page == Page::Model); // a model's page has the panel
         }
 
         // The Library tab in front: the collections and tags, the search, the models.
@@ -2870,13 +2809,12 @@ namespace
             if (m_thumbnails)
                 m_thumbnails->SetLooseTextures(m_settings.value.looseTextures);
             ApplyTileSize();
-            m_menusStale = true; // the View menu's Grid
+            m_syncingPanel = true;
             if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
-            {
-                m_syncingPanel = true;
                 loose->SetChecked(m_settings.value.looseTextures);
-                m_syncingPanel = false;
-            }
+            if (auto* grid = FindAs<gui::CheckBox>(u8"viewer-show-grid"))
+                grid->SetChecked(m_settings.value.grid);
+            m_syncingPanel = false;
         }
 
         // The grids' tiles at the settings' size, both sliders showing it.
@@ -3203,7 +3141,8 @@ namespace
         String m_emptyText; // the empty view's own words, from the markup
         String m_gridCount; // the browse grid's "n of m models"
         RefPtr<gui::MessageBox> m_message;
-        bool m_syncingTiles = false; // the tile sliders set by code
+        bool m_syncingTiles = false;
+        bool m_panelShown = true; // the side panel, on a model's page (the bar's toggle) // the tile sliders set by code
         bool m_menusStale = false; // the menu bar made again next frame (not from inside one of its own items)
         String m_shownProgress;
         String m_density; // the density whose sheet is applied

@@ -14,6 +14,7 @@ target_link_libraries(ModelViewer
 target_sources(ModelViewer
     PRIVATE
         ModelCommandsImpl.cpp
+        WindowCommandsImpl.cpp
     PUBLIC
         FILE_SET modelviewer_modules TYPE CXX_MODULES FILES
             ModelViewerModule.cppm

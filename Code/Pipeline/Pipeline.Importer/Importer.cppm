@@ -31,6 +31,17 @@ export namespace pipeline
     /// Everything an import needs to know about WHERE it lands - deliberately not the
     /// editor's project object: the pipeline is headless-drivable (CLI, MCP, tests), so the
     /// caller supplies the two facts imports consume and keeps its project model to itself.
+    /// What an import does when the name it would take is held by an asset of its own type that
+    /// ANOTHER file made (an asset of another type is always refused; a re-import of the same file
+    /// replaces its asset without asking). The editor asks the user and passes the answer; a
+    /// headless caller (MCP, a script) refuses unless it says.
+    enum class ImportConflictChoice : u8
+    {
+        Refuse,   // fail, naming the asset there (the default)
+        Replace,  // the asset there takes the new file: its guid, and so what refers to it, kept
+        KeepBoth, // the new asset under the next free name ("Menu.2")
+    };
+
     struct ImportContext
     {
         // The import's allocator (required - the editor page / cook tool decides).
@@ -38,6 +49,11 @@ export namespace pipeline
 
         IAllocator* allocator;
         String sourcesRoot; // absolute OS path to the project's Sources/ tree
+        ImportConflictChoice onConflict = ImportConflictChoice::Refuse;
+        // The import ledger (ImportLedgerPath: under the project's ignored .cache/): which OS
+        // file each file under Sources/ came from, so a re-import of the same file is told from
+        // another file of the same name. Empty: none kept (a file name alone decides, as before).
+        String ledgerPath;
     };
 
     /// What kind of asset an import-plan entry would create (the review dialog's grouping).
@@ -277,6 +293,8 @@ export namespace pipeline
         }
     };
 
+    struct ImportClash; // below, with the clash rule
+
     class IFileImporter
     {
     public:
@@ -313,6 +331,19 @@ export namespace pipeline
         {
             return {};
         }
+
+        /// The asset type a SINGLE-ASSET importer makes of `sourcePath` ("ImageAsset"), for the
+        /// name-clash check before an import; empty for an importer that makes several (a
+        /// model's), which keeps its own names apart.
+        [[nodiscard]] virtual StringView AssetTypeName(StringView /*sourcePath*/) const { return {}; }
+
+        /// The clash an import of `sourcePath` would meet in `group` under the names `plan` gives
+        /// (ImportClashKind): what the editor's window shows on the file's row, and what an agent's
+        /// import is refused with. Default: a single asset (AssetTypeName) under its Asset entry's
+        /// target, else the file's stem; none when AssetTypeName is empty. An importer that makes
+        /// several says what it claims (a model, its folder).
+        [[nodiscard]] virtual ImportClash FindClash(foundation::content::Group& group, StringView sourcePath, const ImportPlan& plan,
+                                                           StringView ledgerPath) const;
 
         /// Re-import memory: the selection a PREVIOUS import of this source stored in the
         /// target group (empty = none / unsupported). The editor merges it onto the fresh
@@ -477,44 +508,182 @@ export namespace pipeline
         return {};
     }
 
-    /// Copy an OS file into the project's Sources/ tree. Returns the sources-relative name the
-    /// Asset should reference. An existing SAME-CONTENT file is reused untouched; changed
-    /// bytes OVERWRITE it (a re-import must see the edited file - the old skip-if-exists
-    /// behavior silently kept stale sources). The copy goes through the core file API and the
-    /// context's sources root only - the pipeline reads it back through the sources MOUNT.
-    [[nodiscard]] inline Result<String> CopyIntoSources(const ImportContext& context,
-                                                        StringView sourcePath)
+    // === the import ledger ===
+
+    /// Where a project keeps its import ledger: `<cacheRoot>/imports.txt` (the project's .cache/,
+    /// ignored by version control: an OS path is the importing machine's, never the project's).
+    [[nodiscard]] inline String ImportLedgerPath(StringView cacheRoot) { return PathJoin(cacheRoot, u8"imports.txt"); }
+
+    /// The OS file `sourcesName` (a file under Sources/) was last imported from; empty when the
+    /// ledger does not say (no ledger, a file from before it, or one copied in by hand).
+    [[nodiscard]] inline String ImportOriginOf(StringView ledgerPath, StringView sourcesName)
+    {
+        if (ledgerPath.IsEmpty())
+        {
+            return {};
+        }
+        Result<Array<byte>> bytes = ReadFile(ledgerPath);
+        if (!bytes.HasValue())
+        {
+            return {};
+        }
+        const StringView text(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        String found;
+        usize start = 0;
+        while (start < text.Size())
+        {
+            usize end = start;
+            while (end < text.Size() && text[end] != utf8char('\n'))
+            {
+                ++end;
+            }
+            const StringView line = text.SubStr(start, end - start);
+            start = end + 1;
+            usize tab = 0;
+            while (tab < line.Size() && line[tab] != utf8char('\t'))
+            {
+                ++tab;
+            }
+            if (tab < line.Size() && line.SubStr(0, tab) == sourcesName)
+            {
+                found = String(line.SubStr(tab + 1, line.Size() - tab - 1)); // the last line for it wins
+            }
+        }
+        return found;
+    }
+
+    /// Notes that `sourcesName` came from `origin` (its line replaced).
+    inline void RecordImportOrigin(StringView ledgerPath, StringView sourcesName, StringView origin)
+    {
+        if (ledgerPath.IsEmpty())
+        {
+            return;
+        }
+        String text;
+        if (Result<Array<byte>> bytes = ReadFile(ledgerPath); bytes.HasValue())
+        {
+            const StringView old(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+            usize start = 0;
+            while (start < old.Size())
+            {
+                usize end = start;
+                while (end < old.Size() && old[end] != utf8char('\n'))
+                {
+                    ++end;
+                }
+                const StringView line = old.SubStr(start, end - start);
+                start = end + 1;
+                usize tab = 0;
+                while (tab < line.Size() && line[tab] != utf8char('\t'))
+                {
+                    ++tab;
+                }
+                if (line.IsEmpty() || (tab < line.Size() && line.SubStr(0, tab) == sourcesName))
+                {
+                    continue;
+                }
+                text += line;
+                text += u8"\n";
+            }
+        }
+        text += sourcesName;
+        text += u8"\t";
+        text += origin;
+        text += u8"\n";
+        for (usize i = ledgerPath.Size(); i > 0; --i)
+        {
+            if (ledgerPath[i - 1] == utf8char('/') || ledgerPath[i - 1] == utf8char('\\'))
+            {
+                (void)CreateDirectories(ledgerPath.SubStr(0, i - 1));
+                break;
+            }
+        }
+        (void)WriteFile(ledgerPath, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
+    }
+
+    namespace import_detail
+    {
+        [[nodiscard]] inline bool SameBytes(const Array<byte>& a, const Array<byte>& b)
+        {
+            if (a.Size() != b.Size())
+            {
+                return false;
+            }
+            for (usize i = 0; i < a.Size(); ++i)
+            {
+                if (a[i] != b[i])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /// The name under Sources/ a copy of `sourcePath` takes, from what is there and the ledger
+    /// alone (no file is read): its own file name when that is free or this file's own copy
+    /// (`mayOverwrite`, or the ledger saying it came from `sourcePath`); else, when that name is
+    /// ANOTHER file's (the ledger names another origin, or the caller says it may not overwrite),
+    /// the next free one ("a.2.png"). Noted in the ledger as `sourcePath`'s. For a copy made later
+    /// (a deferred write); CopyIntoSources copies at once.
+    [[nodiscard]] inline String SourcesNameFor(const ImportContext& context, StringView sourcePath, bool mayOverwrite = true,
+                                               const Array<byte>* bytes = nullptr)
     {
         const StringView fileName = FileNameOf(sourcePath);
-        if (fileName.IsEmpty())
+        const StringView stem = FileStemOf(fileName);
+        const StringView extension = fileName.SubStr(stem.Size(), fileName.Size() - stem.Size()); // with its dot
+        String name(fileName);
+        for (u32 n = 2;; ++n)
+        {
+            const String target = PathJoin(context.sourcesRoot.AsView(), name.AsView());
+            if (!FileExists(target.AsView()))
+            {
+                break;
+            }
+            const String origin = ImportOriginOf(context.ledgerPath.AsView(), name.AsView());
+            if (origin.IsEmpty() ? mayOverwrite : origin.AsView() == sourcePath)
+            {
+                break; // this file's own copy
+            }
+            if (bytes != nullptr)
+            {
+                Result<Array<byte>> existing = ReadFile(target.AsView());
+                if (existing.HasValue() && import_detail::SameBytes(existing.Value(), *bytes))
+                {
+                    break; // the very same bytes: shared, nothing lost
+                }
+            }
+            name = Format(u8"{}.{}{}", stem, n, extension); // another file's: the next name
+        }
+        RecordImportOrigin(context.ledgerPath.AsView(), name.AsView(), sourcePath);
+        return name;
+    }
+
+    /// Copy an OS file into the project's Sources/ tree under SourcesNameFor's name. Returns the
+    /// sources-relative name the Asset should reference. An existing SAME-CONTENT file is reused
+    /// untouched (no recook churn); changed bytes overwrite this file's own copy (a re-import must
+    /// see the edited file) and never another file's. The copy goes through the core file API and
+    /// the context's sources root only - the pipeline reads it back through the sources MOUNT.
+    [[nodiscard]] inline Result<String> CopyIntoSources(const ImportContext& context,
+                                                        StringView sourcePath, bool mayOverwrite = true)
+    {
+        if (FileNameOf(sourcePath).IsEmpty())
         {
             return Err(ErrorCode::InvalidArgument);
         }
-        const String target = PathJoin(context.sourcesRoot.AsView(), fileName);
-
         Result<Array<byte>> bytes = ReadFile(sourcePath);
         if (!bytes.HasValue())
         {
             return Err(bytes.Error());
         }
+        String name = SourcesNameFor(context, sourcePath, mayOverwrite, &bytes.Value());
+        const String target = PathJoin(context.sourcesRoot.AsView(), name.AsView());
         if (FileExists(target.AsView()))
         {
             Result<Array<byte>> existing = ReadFile(target.AsView());
-            if (existing.HasValue() && existing.Value().Size() == bytes.Value().Size())
+            if (existing.HasValue() && import_detail::SameBytes(existing.Value(), bytes.Value()))
             {
-                bool same = true;
-                for (usize i = 0; i < bytes.Value().Size(); ++i)
-                {
-                    if (existing.Value()[i] != bytes.Value()[i])
-                    {
-                        same = false;
-                        break;
-                    }
-                }
-                if (same)
-                {
-                    return String(fileName);
-                } // identical: no touch, no recook churn
+                return name; // identical: no touch, no recook churn
             }
         }
         const Status written = WriteFile(
@@ -523,6 +692,152 @@ export namespace pipeline
         {
             return Err(written.Code());
         }
-        return String(fileName);
+        return name;
+    }
+
+    // === name clashes ===
+
+    enum class ImportClashKind : u8
+    {
+        None,      // the name is free
+        Reimport,  // held by this file's own earlier import: it is replaced, as a re-import is
+        OtherType, // held by an asset of another type: always refused
+        SameType,  // held by an asset of its type from another file: ImportConflictChoice decides
+    };
+
+    struct ImportClash
+    {
+        ImportClashKind kind = ImportClashKind::None;
+        String name;         // the name asked for
+        String existingType; // what holds it
+        foundation::content::Instance* existing = nullptr;
+    };
+
+    /// What taking `name` in `group` for a `typeName` asset made from `sourcePath` meets. A
+    /// same-type asset whose source is this file's copy under Sources/ (same file name, and the
+    /// ledger saying it came from this path, or saying nothing) is this file's earlier import.
+    [[nodiscard]] inline ImportClash FindImportClash(foundation::content::Group& group, StringView name, StringView typeName,
+                                                     StringView sourcePath, StringView ledgerPath)
+    {
+        ImportClash clash;
+        clash.name = String(name);
+        foundation::content::Instance* existing = group.GetInstance(name);
+        if (existing == nullptr)
+        {
+            return clash;
+        }
+        clash.existing = existing;
+        clash.existingType = String(existing->TypeName());
+        if (existing->TypeName() != typeName)
+        {
+            clash.kind = ImportClashKind::OtherType;
+            return clash;
+        }
+        clash.kind = ImportClashKind::SameType;
+        RefPtr<ISerializable> object = existing->ReadObject();
+        const auto* asset = Cast<Asset>(object.Get());
+        if (asset == nullptr)
+        {
+            return clash;
+        }
+        // Its file under Sources/: this file's name, or a name the copy took beside another's ("a.2.png").
+        const StringView ownName = FileNameOf(sourcePath);
+        const StringView held = asset->fileName.View();
+        const String origin = ImportOriginOf(ledgerPath, held);
+        if (!origin.IsEmpty())
+        {
+            if (origin.AsView() == sourcePath)
+            {
+                clash.kind = ImportClashKind::Reimport;
+            }
+            return clash;
+        }
+        if (held == ownName)
+        {
+            clash.kind = ImportClashKind::Reimport; // before the ledger: the file name decides, as it did
+        }
+        return clash;
+    }
+
+    /// The clash said for a person: what holds the name and what to do.
+    [[nodiscard]] inline String DescribeImportClash(const ImportClash& clash)
+    {
+        switch (clash.kind)
+        {
+        case ImportClashKind::OtherType:
+            return Format(u8"'{}' is already a {} here: import it under another name.", clash.name.AsView(), clash.existingType.AsView());
+        case ImportClashKind::SameType:
+            return Format(u8"'{}' is already here, made from another file: replace it, or keep both.", clash.name.AsView());
+        case ImportClashKind::None:
+        case ImportClashKind::Reimport:
+            break;
+        }
+        return {};
+    }
+
+    /// Whether the import may go on over `clash` with `choice`.
+    [[nodiscard]] inline bool ImportClashAllows(const ImportClash& clash, ImportConflictChoice choice)
+    {
+        return clash.kind == ImportClashKind::None || clash.kind == ImportClashKind::Reimport ||
+               (clash.kind == ImportClashKind::SameType && choice != ImportConflictChoice::Refuse);
+    }
+
+    /// The asset a SINGLE-ASSET importer writes: its name (the user's, else the stem) claimed in
+    /// `group` by the clash rule and the context's choice, and the file copied into Sources/
+    /// (never over another file's copy). `sourcesName` gets the copy's name for the asset's
+    /// fileName. Refused (AlreadyExists) for an asset of another type, or of its type from another
+    /// file when the choice is Refuse; nothing is copied or made then.
+    [[nodiscard]] inline Result<foundation::content::Instance*> ClaimSingleAsset(const ImportContext& context, foundation::content::Group& group,
+                                                                                 const ImportOptions* options, StringView sourcePath,
+                                                                                 const TypeInfo& type, String& sourcesName)
+    {
+        const StringView stem = FileStemOf(FileNameOf(sourcePath));
+        String name(SingleAssetName(options, stem));
+        const StringView typeName(reinterpret_cast<const utf8char*>(type.name));
+        const ImportClash clash = FindImportClash(group, name.AsView(), typeName, sourcePath, context.ledgerPath.AsView());
+        if (!ImportClashAllows(clash, context.onConflict))
+        {
+            return Err(ErrorCode::AlreadyExists);
+        }
+        foundation::content::Instance* reuse = nullptr;
+        bool overwriteOwn = false; // its copy under Sources/ is the asset's own, to be overwritten
+        if (clash.kind == ImportClashKind::Reimport ||
+            (clash.kind == ImportClashKind::SameType && context.onConflict == ImportConflictChoice::Replace))
+        {
+            reuse = clash.existing;
+            RefPtr<ISerializable> object = reuse->ReadObject();
+            const auto* asset = Cast<Asset>(object.Get());
+            overwriteOwn = asset != nullptr && asset->fileName.View() == FileNameOf(sourcePath);
+        }
+        else if (clash.kind == ImportClashKind::SameType)
+        {
+            name = group.UniqueInstanceName(name.AsView()); // KeepBoth
+        }
+        Result<String> copied = CopyIntoSources(context, sourcePath, overwriteOwn);
+        if (!copied.HasValue())
+        {
+            return Err(copied.Error());
+        }
+        foundation::content::Instance* instance = reuse != nullptr ? reuse : group.CreateInstance(name.AsView(), type);
+        if (instance == nullptr)
+        {
+            return Err(ErrorCode::Unknown);
+        }
+        sourcesName = Move(copied.Value());
+        return instance;
+    }
+
+    inline ImportClash IFileImporter::FindClash(foundation::content::Group& group, StringView sourcePath, const ImportPlan& plan,
+                                                StringView ledgerPath) const
+    {
+        const StringView typeName = AssetTypeName(sourcePath);
+        if (typeName.IsEmpty())
+        {
+            return {};
+        }
+        const StringView stem = FileStemOf(FileNameOf(sourcePath));
+        const ImportPlanEntry* entry = plan.Find(ImportResourceKind::Asset, stem);
+        const StringView name = entry != nullptr && !entry->targetName.IsEmpty() ? entry->targetName.AsView() : stem;
+        return FindImportClash(group, name, typeName, sourcePath, ledgerPath);
     }
 }

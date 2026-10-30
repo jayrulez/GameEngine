@@ -350,13 +350,20 @@ export namespace editor::mcp
             u8"Import an OS file into the open project: copy it under Sources/ and create the typed "
             u8"Asset in the source database (routed by extension). When several importers claim "
             u8"the extension the first is used and the result names the alternatives under "
-            u8"`alsoClaimableBy`; pass `importer` to choose. Does not cook - call asset_cook next.",
+            u8"`alsoClaimableBy`; pass `importer` to choose. A name held by an asset of another type is "
+            u8"refused; one held by another file's asset of its type is refused unless `onConflict` says "
+            u8"`replace` (that asset takes the new file, its guid and references kept) or `keepBoth` (the "
+            u8"next free name); re-importing the same file replaces its asset. Does not cook - call "
+            u8"asset_cook next.",
             SchemaBuilder()
                 .Str(u8"source", u8"absolute path to the file to import", true)
                 .Str(u8"group", u8"source-DB group path to place it in (slash-joined; default root)")
                 .Str(u8"importer", u8"which importer to use when several claim the extension, by "
                                    u8"label (the result of an unhinted import lists them)")
                 .Property(u8"options", detail::ImportOptionsSchema())
+                .Str(u8"name", u8"the asset's name (a single-asset importer's; default: the file's stem)")
+                .Str(u8"onConflict", u8"when another file's asset of this type has the name: refuse (default), "
+                                     u8"replace, or keepBoth")
                 .Build(),
                 foundation::mcp::ToolAnnotations::Creates(),
             [s, imp, ops](foundation::mcp::ToolCall& call, const JsonValue& args) -> ToolOutcome
@@ -456,6 +463,39 @@ export namespace editor::mcp
                             return Err(Format(u8"option '{}' takes true or false", key.AsView()));
                         }
                         *found->value = value.AsBool();
+                    }
+                }
+                // The name asked for, and what to do when another file's asset holds it.
+                const String conflict = args.Get(u8"onConflict").AsString();
+                if (conflict.IsEmpty() || conflict == u8"refuse")
+                    request.onConflict = pipeline::ImportConflictChoice::Refuse;
+                else if (conflict == u8"replace")
+                    request.onConflict = pipeline::ImportConflictChoice::Replace;
+                else if (conflict == u8"keepBoth")
+                    request.onConflict = pipeline::ImportConflictChoice::KeepBoth;
+                else
+                    return Err(Format(u8"onConflict is refuse, replace or keepBoth, not '{}'", conflict.AsView()));
+                const String asked = args.Get(u8"name").AsString();
+                if (!asked.IsEmpty())
+                {
+                    if (request.options.Get() == nullptr)
+                        request.options = MakeRef<pipeline::ImportOptions>(editor::EditorRootAllocator());
+                    request.options->selection = pipeline::SingleAssetPlan(request.source.AsView());
+                    request.options->selection.entries[0].targetName = asked;
+                }
+                // The clash, refused here with what holds the name (the importer refuses too).
+                {
+                    content::Group* into = detail::ResolveGroupPath(s->project->SourceDb().RootGroup(), request.groupPath.AsView());
+                    const pipeline::ImportPlan plan = request.options.Get() != nullptr ? request.options->selection : pipeline::ImportPlan{};
+                    const pipeline::ImportClash clash = request.importer->FindClash(
+                        *into, request.source.AsView(), plan, pipeline::ImportLedgerPath(s->project->CacheRoot().AsView()).AsView());
+                    if (!pipeline::ImportClashAllows(clash, request.onConflict))
+                    {
+                        String refusal = pipeline::DescribeImportClash(clash);
+                        refusal += clash.kind == pipeline::ImportClashKind::OtherType
+                                       ? u8" Pass `name`."
+                                       : u8" Pass `onConflict`: replace or keepBoth (or `name`).";
+                        return Err(Move(refusal));
                     }
                 }
                 OperationStep<ImportOutcome> step = ops->Import(call, request);
@@ -580,6 +620,8 @@ export namespace editor::mcp
             content::Group* group = detail::ResolveGroupPath(project.SourceDb().RootGroup(),
                                                              request.groupPath.AsView());
             pipeline::ImportContext ctx{editor::EditorRootAllocator(), project.SourcesRoot().AsView()};
+            ctx.onConflict = request.onConflict;
+            ctx.ledgerPath = pipeline::ImportLedgerPath(project.CacheRoot().AsView());
             pipeline::IFileImporter& importer = *request.importer;
             const Stopwatch prepareClock = Stopwatch::StartNew();
             RefPtr<Object> prepared =

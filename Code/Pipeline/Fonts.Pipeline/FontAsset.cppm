@@ -410,6 +410,8 @@ export namespace pipeline{
             return pipeline::SingleAssetPlan(sourcePath); // one asset, named after the stem
         }
 
+        [[nodiscard]] StringView AssetTypeName(StringView) const override { return u8"FontAsset"; }
+
         [[nodiscard]] pipeline::ImportPlan StoredSelection(content::Group& group,
                                                            StringView sourcePath) override
         {
@@ -421,20 +423,17 @@ export namespace pipeline{
                content::Group& group, const pipeline::ImportOptions* options, Object*,
                Array<pipeline::DeferredImportWrite>*) override
         {
-            Result<String> fileName = pipeline::CopyIntoSources(context, sourcePath);
-            if (!fileName.HasValue())
+            // The name claimed by the clash rule, the file copied in beside any other's (pipeline::ClaimSingleAsset).
+            String fileName;
+            Result<content::Instance*> claimed = pipeline::ClaimSingleAsset(context, group, options, sourcePath, FontAsset::StaticType(), fileName);
+            if (!claimed.HasValue())
             {
-                return Err(fileName.Error());
+                return Err(claimed.Error());
             }
-            const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
-            content::Instance* instance = group.CreateInstance(
-                pipeline::SingleAssetName(options, stem), FontAsset::StaticType());
-            if (instance == nullptr)
-            {
-                return Err(ErrorCode::Unknown);
-            }
+            content::Instance* instance = claimed.Value();
+            const StringView stem = pipeline::FileStemOf(pipeline::FileNameOf(sourcePath));
             FontAsset asset;
-            asset.fileName = foundation::vfs::SourcePath(fileName.Value().AsView());
+            asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
             asset.family = String(stem); // sensible default; cook falls back to the file's name
             const Status written = instance->WriteObject(asset);
             if (!written.IsOk())

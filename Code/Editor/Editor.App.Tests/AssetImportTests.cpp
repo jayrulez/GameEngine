@@ -5,6 +5,8 @@
 // left out, said; each file described with what it would create, a previous import's choices laid
 // over it; another importer chosen describing it again; the import waiting for a file kept, saying
 // why; the commit creating what is kept under the names chosen; and a file that needs no review.
+// A name another asset holds: one of another type waits for a rename, another file's of its type
+// for Replace or Keep both.
 
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
@@ -85,6 +87,29 @@ namespace
         }
     };
 
+    // A single-asset importer of `extension` making a `typeName` asset (the clash check's input).
+    class SingleImporter final : public pipeline::IFileImporter
+    {
+    public:
+        SingleImporter(StringView extension, StringView typeName) : m_extension(extension), m_type(typeName) {}
+        [[nodiscard]] StringView Label() const override { return m_extension.AsView(); }
+        [[nodiscard]] bool Accepts(StringView extension) const override { return extension == m_extension.AsView(); }
+        [[nodiscard]] StringView AssetTypeName(StringView) const override { return m_type.AsView(); }
+        [[nodiscard]] pipeline::ImportPlan DescribeImport(StringView path, const pipeline::ImportOptions*, Object*) override
+        {
+            return pipeline::SingleAssetPlan(path);
+        }
+        [[nodiscard]] Result<content::Instance*> Import(StringView, const pipeline::ImportContext&, content::Group&, const pipeline::ImportOptions*, Object*,
+                                                        Array<pipeline::DeferredImportWrite>*) override
+        {
+            return Err(ErrorCode::NotSupported);
+        }
+
+    private:
+        String m_extension;
+        String m_type;
+    };
+
     struct Bed
     {
         UniquePtr<editor::EditorProject> project;
@@ -105,6 +130,8 @@ namespace
             if (second)
                 context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<CrateImporter>(u8"Varnish"), DefaultAllocator()));
             context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<ScriptImporter>(), DefaultAllocator()));
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"sheet", u8"SheetThing"), DefaultAllocator()));
+            context.Importers().Register(UniquePtr<pipeline::IFileImporter>(DefaultAllocator().New<SingleImporter>(u8"thing", u8"ImportedThing"), DefaultAllocator()));
             top = project->SourceDb().RootGroup();
             AssetImport::Services services;
             services.context = &context; // no cook, no jobs: at once
@@ -177,4 +204,34 @@ TEST_CASE("asset import: another importer describes the file again; the import w
     CHECK(AssetImport::NeedsNoReview(*quick));
     REQUIRE(bed.import->Commit(*quick));
     CHECK(bed.top->GetInstance(u8"Player") != nullptr);
+}
+
+TEST_CASE("asset import: a name another asset holds waits: another type for a rename, another file's for Replace or Keep both")
+{
+    Bed bed;
+    REQUIRE(bed.top->CreateInstance(u8"menu", ImportedThing::StaticType()) != nullptr);
+    String why;
+
+    // A "SheetThing" named menu over an ImportedThing: said, no import, and no import at once either.
+    const String sheet[] = {String(u8"/somewhere/menu.sheet")};
+    RefPtr<AssetImport::Session> other = bed.import->Begin(Span<const String>(sheet, 1u), *bed.top);
+    REQUIRE(other);
+    CHECK(AssetImport::ClashOf(*other, other->files[0]).kind == pipeline::ImportClashKind::OtherType);
+    CHECK_FALSE(AssetImport::CanImport(*other, why));
+    CHECK(why.AsView().ContainsIgnoreCase(u8"already a ImportedThing"));
+    CHECK_FALSE(AssetImport::NeedsNoReview(*other));
+    other->files[0].onConflict = pipeline::ImportConflictChoice::Replace; // no choice lets another type through
+    CHECK_FALSE(AssetImport::CanImport(*other, why));
+    other->files[0].plan.entries[0].targetName = String(u8"menu sheet"); // renamed: free
+    CHECK(AssetImport::CanImport(*other, why));
+
+    // An ImportedThing named menu that another file made: waits for the user's choice.
+    const String thing[] = {String(u8"/elsewhere/menu.thing")};
+    RefPtr<AssetImport::Session> same = bed.import->Begin(Span<const String>(thing, 1u), *bed.top);
+    REQUIRE(same);
+    CHECK(AssetImport::ClashOf(*same, same->files[0]).kind == pipeline::ImportClashKind::SameType);
+    CHECK_FALSE(AssetImport::CanImport(*same, why));
+    CHECK(why.AsView().ContainsIgnoreCase(u8"replace it, or keep both"));
+    same->files[0].onConflict = pipeline::ImportConflictChoice::KeepBoth;
+    CHECK(AssetImport::CanImport(*same, why));
 }

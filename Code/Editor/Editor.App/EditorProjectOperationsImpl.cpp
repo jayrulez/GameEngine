@@ -227,6 +227,8 @@ namespace editor::app
             content::Group* group = editor::mcp::detail::ResolveGroupPath(
                 project.SourceDb().RootGroup(), request.groupPath.AsView());
             pipeline::ImportContext ctx{*m_seams.allocator, project.SourcesRoot().AsView()};
+            ctx.onConflict = request.onConflict;
+            ctx.ledgerPath = pipeline::ImportLedgerPath(project.CacheRoot().AsView());
             const Stopwatch clock = Stopwatch::StartNew();
             Result<content::Instance*> imported =
                 request.importer->Import(request.source.AsView(), ctx, *group, request.options.Get(),

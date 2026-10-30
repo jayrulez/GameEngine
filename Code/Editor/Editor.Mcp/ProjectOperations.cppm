@@ -57,6 +57,9 @@ export namespace editor::mcp
         /// The importer's options, its defaults with the call's toggles applied; null when the
         /// importer has none.
         RefPtr<pipeline::ImportOptions> options;
+        /// What the import does when another file's asset of its type holds the name
+        /// (pipeline::ImportConflictChoice): refused unless the call says.
+        pipeline::ImportConflictChoice onConflict = pipeline::ImportConflictChoice::Refuse;
     };
 
     /// What asset_import reports: the created asset's identity and where the time went (the

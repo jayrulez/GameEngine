@@ -124,6 +124,8 @@ export namespace pipeline{
             return pipeline::SingleAssetPlan(sourcePath); // one asset, named after the stem
         }
 
+        [[nodiscard]] StringView AssetTypeName(StringView) const override { return u8"ImageAsset"; }
+
         [[nodiscard]] pipeline::ImportPlan StoredSelection(content::Group& group,
                                                            StringView sourcePath) override
         {
@@ -135,22 +137,17 @@ export namespace pipeline{
                const pipeline::ImportOptions* options, Object*,
                Array<pipeline::DeferredImportWrite>*) override
         {
-            Result<String> fileName = pipeline::CopyIntoSources(context, sourcePath);
-            if (!fileName.HasValue())
+            // The name claimed by the clash rule, the file copied in beside any other's (pipeline::ClaimSingleAsset).
+            String fileName;
+            Result<content::Instance*> claimed = pipeline::ClaimSingleAsset(context, group, options, sourcePath, ImageAsset::StaticType(), fileName);
+            if (!claimed.HasValue())
             {
-                return Err(fileName.Error());
+                return Err(claimed.Error());
             }
-
-            const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
-            content::Instance* instance = group.CreateInstance(
-                pipeline::SingleAssetName(options, stem), ImageAsset::StaticType());
-            if (instance == nullptr)
-            {
-                return Err(ErrorCode::Unknown);
-            }
+            content::Instance* instance = claimed.Value();
 
             ImageAsset asset;
-            asset.fileName = foundation::vfs::SourcePath(fileName.Value().AsView());
+            asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
             // .hdr is a linear (HDR) image; the LDR formats are sRGB color by default.
             asset.colorSpace = (pipeline::FileExtensionLower(sourcePath) == u8"hdr")
                                    ? ImageColorSpace::Linear

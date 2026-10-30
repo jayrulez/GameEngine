@@ -385,6 +385,26 @@ export namespace pipeline
                        : pipeline::ImportPlan{};
         }
 
+        /// A model claims its folder (named after the file) and the manifest in it: another
+        /// file's model there is a clash of its type; anything else in the folder keeps the name
+        /// apart as before (the manifest takes the next free one).
+        [[nodiscard]] pipeline::ImportClash FindClash(content::Group& group, StringView sourcePath, const pipeline::ImportPlan&,
+                                                      StringView ledgerPath) const override
+        {
+            const StringView stem = pipeline::FileStemOf(pipeline::FileNameOf(sourcePath));
+            content::Group* modelGroup = group.GetGroup(stem);
+            if (modelGroup == nullptr)
+            {
+                return {};
+            }
+            pipeline::ImportClash clash = pipeline::FindImportClash(*modelGroup, stem, u8"ModelManifestAsset", sourcePath, ledgerPath);
+            if (clash.kind == pipeline::ImportClashKind::OtherType)
+            {
+                clash = {};
+            }
+            return clash;
+        }
+
         [[nodiscard]] Result<content::Instance*>
         Import(StringView sourcePath, const pipeline::ImportContext& context, content::Group& group,
                const pipeline::ImportOptions* options, Object* prepared,
@@ -400,17 +420,41 @@ export namespace pipeline
             {
                 return Err(ErrorCode::InvalidArgument);
             }
+            // The clash rule (pipeline::FindImportClash) over the model's folder: another file's
+            // model there is refused, replaced or kept beside under the next folder name, as the
+            // context says; this file's own earlier import is re-imported in place.
+            const pipeline::ImportClash clash = FindClash(group, sourcePath, {}, context.ledgerPath.AsView());
+            if (!pipeline::ImportClashAllows(clash, context.onConflict))
+            {
+                return Err(ErrorCode::AlreadyExists);
+            }
+            String folderName(pipeline::FileStemOf(sourceFileName));
+            bool overwriteOwn = false; // a new model never writes over a file another one copied in
+            if (clash.kind == pipeline::ImportClashKind::Reimport ||
+                (clash.kind == pipeline::ImportClashKind::SameType && context.onConflict == pipeline::ImportConflictChoice::Replace))
+            {
+                RefPtr<ISerializable> previous = clash.existing->ReadObject();
+                const auto* asset = Cast<pipeline::Asset>(previous.Get());
+                overwriteOwn = asset != nullptr && asset->fileName.View() == sourceFileName;
+            }
+            else if (clash.kind == pipeline::ImportClashKind::SameType)
+            {
+                folderName = group.UniqueGroupName(folderName.AsView()); // KeepBoth
+                overwriteOwn = false;
+            }
             Result<String> fileName = Result<String>(String(sourceFileName));
             if (deferredWrites != nullptr)
             {
+                // Named now (from what is there and the ledger), copied on the worker.
                 pipeline::DeferredImportWrite copy;
                 copy.copyFrom = String(sourcePath);
-                copy.copyTo = PathJoin(context.sourcesRoot.AsView(), sourceFileName);
+                fileName = pipeline::SourcesNameFor(context, sourcePath, overwriteOwn);
+                copy.copyTo = PathJoin(context.sourcesRoot.AsView(), fileName.Value().AsView());
                 deferredWrites->PushBack(static_cast<pipeline::DeferredImportWrite&&>(copy));
             }
             else
             {
-                fileName = pipeline::CopyIntoSources(context, sourcePath);
+                fileName = pipeline::CopyIntoSources(context, sourcePath, overwriteOwn);
                 if (!fileName.HasValue())
                 {
                     return Err(fileName.Error());
@@ -458,7 +502,7 @@ export namespace pipeline
             {
                 into = static_cast<i64>(phaseClock.Elapsed().AsMilliseconds());
             };
-            const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
+            const StringView stem = folderName.AsView(); // the folder's and the manifest's name
             content::Group* modelGroup = group.CreateGroup(stem);
             if (modelGroup == nullptr)
             {

@@ -10,7 +10,9 @@
 // when several take it), its options, and what it would create by kind, each kept or not and
 // named, a kind's box keeping or leaving all of it. A file still being read says so and shows when
 // it is ready. The line under it says what Import does, or why it waits, Import waiting with it.
-// It is the view of an AssetImport session, which does the work.
+// A name another asset holds is said on the file (AssetImport::ClashOf): one of another type
+// waits for a rename; another file's of its type offers Replace or Keep both, Import waiting for
+// the choice. It is the view of an AssetImport session, which does the work.
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
@@ -271,6 +273,7 @@ export namespace editor::app
                                       });
                     detail->AddChild(box.Get());
                 }
+            ShowClash(*detail, file, index);
             if (file.plan.IsEmpty())
             {
                 detail->AddChild(Text(u8"It makes one asset, named after the file.", u8"form-help").Get());
@@ -328,12 +331,54 @@ export namespace editor::app
                                             {
                                                 if (self->m_session && index < self->m_session->files.Size() && e < self->m_session->files[index].plan.entries.Size())
                                                     self->m_session->files[index].plan.entries[e].targetName = String(text);
+                                                self->ShowWhy(); // a rename may free the name, or take one
                                             });
+                    // Committed (Enter, or leaving it): the clash line says what the name meets now.
+                    (void)name->AddEventListener(gui::EventType::Changed, [self](const gui::Event&) { self->Later([self]() { self->ShowDetail(); }); });
                     line->AddChild(on.Get());
                     line->AddChild(name.Get());
                     detail->AddChild(line.Get());
                 }
             }
+        }
+
+        // What the file's name meets (AssetImport::ClashOf): nothing said when it is free or the
+        // file's own earlier import; another type's asset said, to rename; another file's of its
+        // type said, with Replace and Keep both.
+        void ShowClash(gui::UIWidget& detail, const AssetImport::File& file, usize index)
+        {
+            const pipeline::ImportClash clash = AssetImport::ClashOf(*m_session, file);
+            if (clash.kind == pipeline::ImportClashKind::None || clash.kind == pipeline::ImportClashKind::Reimport)
+                return;
+            const bool chosen = pipeline::ImportClashAllows(clash, file.onConflict);
+            detail.AddChild(Text(pipeline::DescribeImportClash(clash).AsView(), chosen ? u8"form-help" : u8"form-help refused").Get());
+            if (clash.kind != pipeline::ImportClashKind::SameType)
+                return;
+            ImportWindow* self = this;
+            RefPtr<gui::Panel> choices = Row(u8"segmented");
+            auto option = [&](StringView text, StringView tip, pipeline::ImportConflictChoice choice)
+            {
+                RefPtr<gui::Button> segment = MakeRef<gui::Button>(m_allocator);
+                segment->AddClass(u8"segment");
+                segment->SetText(text);
+                segment->SetTooltip(tip);
+                segment->SetToggle(true);
+                segment->SetChecked(file.onConflict == choice);
+                segment->SetOnClick([self, index, choice]()
+                                    {
+                                        if (self->m_session && index < self->m_session->files.Size())
+                                            self->m_session->files[index].onConflict = choice;
+                                        self->Later([self]()
+                                                    {
+                                                        self->ShowDetail();
+                                                        self->ShowWhy();
+                                                    });
+                                    });
+                choices->AddChild(segment.Get());
+            };
+            option(u8"Replace", u8"The asset there takes this file; what refers to it keeps working", pipeline::ImportConflictChoice::Replace);
+            option(u8"Keep both", u8"This one under the next free name", pipeline::ImportConflictChoice::KeepBoth);
+            detail.AddChild(choices.Get());
         }
 
         // What Import does, or why it waits; Import with it.

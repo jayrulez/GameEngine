@@ -245,6 +245,11 @@ export namespace pipeline
             return pipeline::SingleAssetPlan(sourcePath); // one asset, named after the stem
         }
 
+        [[nodiscard]] StringView AssetTypeName(StringView sourcePath) const override
+        {
+            return IsSheet(sourcePath) ? StringView(u8"GuiStyleSheetAsset") : StringView(u8"GuiDocumentAsset");
+        }
+
         [[nodiscard]] pipeline::ImportPlan StoredSelection(foundation::content::Group& group, StringView sourcePath) override
         {
             return pipeline::SingleAssetStoredSelection(group, sourcePath, IsSheet(sourcePath) ? u8"GuiStyleSheetAsset" : u8"GuiDocumentAsset");
@@ -255,26 +260,26 @@ export namespace pipeline
                                                                      const pipeline::ImportOptions* options, Object*,
                                                                      Array<pipeline::DeferredImportWrite>*) override
         {
-            Result<String> fileName = pipeline::CopyIntoSources(context, sourcePath);
-            if (!fileName.HasValue())
-                return Err(fileName.Error());
-            const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
+            // The name claimed by the clash rule (a document never lands in a sheet's asset, nor a
+            // sheet in a document's), the file copied in beside any other's.
             const bool sheet = IsSheet(sourcePath);
-            foundation::content::Instance* instance = group.CreateInstance(
-                pipeline::SingleAssetName(options, stem), sheet ? GuiStyleSheetAsset::StaticType() : GuiDocumentAsset::StaticType());
-            if (instance == nullptr)
-                return Err(ErrorCode::Unknown);
+            String fileName;
+            Result<foundation::content::Instance*> claimed = pipeline::ClaimSingleAsset(
+                context, group, options, sourcePath, sheet ? GuiStyleSheetAsset::StaticType() : GuiDocumentAsset::StaticType(), fileName);
+            if (!claimed.HasValue())
+                return Err(claimed.Error());
+            foundation::content::Instance* instance = claimed.Value();
             Status written;
             if (sheet)
             {
                 GuiStyleSheetAsset asset;
-                asset.fileName = foundation::vfs::SourcePath(fileName.Value().AsView());
+                asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
                 written = instance->WriteObject(asset);
             }
             else
             {
                 GuiDocumentAsset asset;
-                asset.fileName = foundation::vfs::SourcePath(fileName.Value().AsView());
+                asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
                 written = instance->WriteObject(asset);
             }
             if (!written.IsOk())

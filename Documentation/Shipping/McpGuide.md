@@ -197,6 +197,12 @@ a scene with `Generate scene`). Its materials come in as authored: an FBX Phong 
 material and a classic OBJ `.mtl` on the built-in Phong, a glTF material with
 `KHR_materials_unlit` on Unlit, everything else (glTF, Blender's FBX, an `.mtl` with PBR keys) on
 PBR; to draw one another way, `material_set_shader` after the import.
+Names: re-importing the same file replaces its asset (guid and references kept), so an authoring
+script can run again as it is. A name held by an asset of ANOTHER type is refused (pass `name`);
+one held by an asset of its type that a DIFFERENT file made (two `a.png`s from two folders) is
+refused unless `onConflict` says `replace` (that asset takes this file) or `keepBoth` (this one
+under the next free name, "a.2"). A model claims its folder the same way. Under Sources/, a copy
+never overwrites another file's: it takes the next free name ("a.2.png").
 `asset_list`/`asset_info` to inspect either database. `asset_delete` removes a source asset as the
 Assets browser does (the next cook sweeps its product; the original file under Sources/ stays); it
 is refused while anything uses it - the refusal names the users, as `asset_uses` would - unless

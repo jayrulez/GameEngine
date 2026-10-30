@@ -145,3 +145,88 @@ TEST_CASE("importer: CopyIntoSources lands the bytes in the project's Sources tr
     }
     RemoveDirectory(dir);
 }
+
+// The import ledger and the copy into Sources/ (the clash rule's file half): a second file of
+// the same name from another folder never overwrites the first's copy, it takes "a.2.png"; the
+// first file imported again (changed) overwrites its own copy; the same bytes again are shared,
+// untouched. Without a ledger, the caller's say decides.
+TEST_CASE("importer: a copy never overwrites another file's; a re-import overwrites its own")
+{
+    const String dir = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_importer_ledger");
+    (void)RemoveDirectoryRecursive(dir.AsView());
+    const String sources = PathJoin(dir.AsView(), u8"Sources");
+    const String one = PathJoin(dir.AsView(), u8"one");
+    const String two = PathJoin(dir.AsView(), u8"two");
+    for (const String* d : {&sources, &one, &two})
+    {
+        REQUIRE(CreateDirectories(d->AsView()));
+    }
+    auto write = [](const String& folder, StringView text)
+    {
+        const String path = PathJoin(folder.AsView(), u8"a.png");
+        REQUIRE(WriteFile(path.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())).IsOk());
+        return path;
+    };
+    auto read = [&](StringView name)
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(sources.AsView(), name).AsView());
+        REQUIRE(bytes.HasValue());
+        return String(StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size()));
+    };
+    ImportContext context{DefaultAllocator(), sources.AsView()};
+    context.ledgerPath = ImportLedgerPath(PathJoin(dir.AsView(), u8".cache").AsView());
+
+    const String first = write(one, u8"first");
+    Result<String> a = CopyIntoSources(context, first.AsView(), false);
+    REQUIRE(a.HasValue());
+    CHECK(a.Value() == StringView(u8"a.png"));
+    CHECK(ImportOriginOf(context.ledgerPath.AsView(), u8"a.png") == first);
+
+    // Another folder's a.png: beside it, the first's copy untouched.
+    const String second = write(two, u8"second");
+    Result<String> b = CopyIntoSources(context, second.AsView(), true); // even when the caller would allow it
+    REQUIRE(b.HasValue());
+    CHECK(b.Value() == StringView(u8"a.2.png"));
+    CHECK(read(u8"a.png") == StringView(u8"first"));
+    CHECK(read(u8"a.2.png") == StringView(u8"second"));
+
+    // The first, changed, imported again: its own copy overwritten.
+    (void)write(one, u8"first, edited");
+    Result<String> again = CopyIntoSources(context, first.AsView(), false);
+    REQUIRE(again.HasValue());
+    CHECK(again.Value() == StringView(u8"a.png"));
+    CHECK(read(u8"a.png") == StringView(u8"first, edited"));
+    // The second again, unchanged: the same copy.
+    CHECK(CopyIntoSources(context, second.AsView(), false).Value() == StringView(u8"a.2.png"));
+    // Named without copying (a deferred write's), from the ledger alone.
+    CHECK(SourcesNameFor(context, second.AsView(), false) == StringView(u8"a.2.png"));
+
+    // No ledger: a copy there of unknown origin is overwritten only when the caller allows it.
+    ImportContext bare{DefaultAllocator(), sources.AsView()};
+    const String third = PathJoin(dir.AsView(), u8"third.png");
+    REQUIRE(WriteFile(third.AsView(), Span<const byte>(reinterpret_cast<const byte*>(u8"x"), 1)).IsOk());
+    REQUIRE(CopyIntoSources(bare, third.AsView()).HasValue()); // third.png, new
+    REQUIRE(WriteFile(third.AsView(), Span<const byte>(reinterpret_cast<const byte*>(u8"y"), 1)).IsOk());
+    CHECK(CopyIntoSources(bare, third.AsView(), false).Value() == StringView(u8"third.2.png"));
+    CHECK(CopyIntoSources(bare, third.AsView(), true).Value() == StringView(u8"third.png"));
+    (void)RemoveDirectoryRecursive(dir.AsView());
+}
+
+TEST_CASE("importer: the ledger keeps one line per file, the last origin")
+{
+    const String ledger = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_importer_ledger_lines/.cache/imports.txt");
+    (void)FileDelete(ledger.AsView());
+    CHECK(ImportOriginOf(ledger.AsView(), u8"a.png").IsEmpty());
+    RecordImportOrigin(ledger.AsView(), u8"a.png", u8"/one/a.png");
+    RecordImportOrigin(ledger.AsView(), u8"b.png", u8"/one/b.png");
+    RecordImportOrigin(ledger.AsView(), u8"a.png", u8"/two/a.png");
+    CHECK(ImportOriginOf(ledger.AsView(), u8"a.png") == StringView(u8"/two/a.png"));
+    CHECK(ImportOriginOf(ledger.AsView(), u8"b.png") == StringView(u8"/one/b.png"));
+    Result<Array<byte>> bytes = ReadFile(ledger.AsView());
+    REQUIRE(bytes.HasValue());
+    usize lines = 0;
+    for (const byte c : bytes.Value())
+        lines += c == byte{'\n'} ? 1u : 0u;
+    CHECK(lines == 2u);
+    CHECK(ImportOriginOf({}, u8"a.png").IsEmpty()); // no ledger: says nothing
+}

@@ -11,7 +11,9 @@
 // import's choices in that group laid over it). The import waits until every file kept is read
 // and described, saying why; then each is imported (its bulk writes flushed on a worker), the
 // editor is told, and the group's assets are cooked. Nothing changes the databases while a cook
-// reads them: an import waits for it, saying so. The import window is its view.
+// reads them: an import waits for it, saying so. A name another asset holds (pipeline::
+// FindImportClash) is said on the file: one of another type must be renamed; another file's of its
+// type is replaced or kept beside as the user chooses. The import window is its view.
 module;
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
@@ -56,6 +58,9 @@ export namespace editor::app
             RefPtr<Object> prepared;                   ///< what a worker read, for the import
             pipeline::ImportPlan plan;                 ///< what it would create, kept and named
             bool kept = true;                          ///< in the import
+            /// What it does over another file's asset of its type under its name (ImportClash):
+            /// Refuse until the user chooses.
+            pipeline::ImportConflictChoice onConflict = pipeline::ImportConflictChoice::Refuse;
             State state = State::Reading;
             u64 generation = 0;                        ///< a read for an importer since replaced is let go
 
@@ -69,6 +74,7 @@ export namespace editor::app
         public:
             Array<File> files;
             content::Group* group = nullptr;
+            String ledgerPath; ///< the project's import ledger (pipeline::ImportLedgerPath)
             /// A file's state or plan changed (a worker's read arrived): its view shows it again.
             Function<void(usize)> onChanged;
             bool closed = false; // the window went: a read that arrives after is let go
@@ -82,6 +88,8 @@ export namespace editor::app
         {
             RefPtr<Session> session = MakeRef<Session>(Context().Importers().Allocator());
             session->group = &into;
+            if (Project() != nullptr)
+                session->ledgerPath = pipeline::ImportLedgerPath(Project()->CacheRoot().AsView());
             for (const String& path : paths)
             {
                 Array<pipeline::IFileImporter*> importers = Context().Importers().FindAllFor(pipeline::FileExtensionLower(path.AsView()).AsView());
@@ -110,7 +118,16 @@ export namespace editor::app
                 return false;
             const File& file = session.files[0];
             return file.state == File::State::Ready && file.plan.IsEmpty() && file.options && file.options->Toggles().IsEmpty() &&
-                   file.importers.Size() == 1;
+                   file.importers.Size() == 1 && pipeline::ImportClashAllows(ClashOf(session, file), pipeline::ImportConflictChoice::Refuse);
+        }
+
+        /// The name clash a file's import would meet in the session's group, under its plan's
+        /// names (none while it is being read).
+        [[nodiscard]] static pipeline::ImportClash ClashOf(const Session& session, const File& file)
+        {
+            if (file.state != File::State::Ready || file.Importer() == nullptr || session.group == nullptr)
+                return {};
+            return file.Importer()->FindClash(*session.group, file.path.AsView(), file.plan, session.ledgerPath.AsView());
         }
 
         /// Chooses another importer for a file: its options anew, described again.
@@ -149,6 +166,12 @@ export namespace editor::app
                     why = Format(u8"{} could not be read: leave it out.", file.Name());
                     return false;
                 }
+                const pipeline::ImportClash clash = ClashOf(session, file);
+                if (!pipeline::ImportClashAllows(clash, file.onConflict))
+                {
+                    why = pipeline::DescribeImportClash(clash);
+                    return false;
+                }
             }
             if (kept == 0)
             {
@@ -171,7 +194,7 @@ export namespace editor::app
                 if (!file.kept)
                     continue;
                 file.options->selection = file.plan;
-                ImportOne(file.path, file.Importer(), file.options, file.prepared, *session.group);
+                ImportOne(file.path, file.Importer(), file.options, file.prepared, *session.group, file.onConflict, session.ledgerPath);
             }
             return true;
         }
@@ -235,14 +258,16 @@ export namespace editor::app
         }
 
         // One file into the group: waiting for a cook; its bulk writes flushed on a worker.
-        void ImportOne(String path, pipeline::IFileImporter* importer, RefPtr<pipeline::ImportOptions> options, RefPtr<Object> prepared, content::Group& group)
+        void ImportOne(String path, pipeline::IFileImporter* importer, RefPtr<pipeline::ImportOptions> options, RefPtr<Object> prepared, content::Group& group,
+                       pipeline::ImportConflictChoice onConflict, String ledgerPath)
         {
             if (Project() == nullptr)
                 return;
             content::Group* into = &group;
             if (m_services.cook != nullptr && m_services.cook->MutationLocked())
             {
-                m_services.cook->RunWhenIdle([this, path, importer, options, prepared, into]() { ImportOne(path, importer, options, prepared, *into); });
+                m_services.cook->RunWhenIdle([this, path, importer, options, prepared, into, onConflict, ledgerPath]()
+                                             { ImportOne(path, importer, options, prepared, *into, onConflict, ledgerPath); });
                 Context().Notify(editor::NoticeKind::Info, u8"The import waits for the cook to finish.");
                 return;
             }
@@ -250,8 +275,11 @@ export namespace editor::app
             IAllocator* owner = &allocator;
             auto deferred = MakeUnique<Array<pipeline::DeferredImportWrite>>(allocator);
             const Stopwatch clock = Stopwatch::StartNew();
+            pipeline::ImportContext context{allocator, Project()->SourcesRoot()};
+            context.onConflict = onConflict;
+            context.ledgerPath = ledgerPath;
             Result<content::Instance*> imported =
-                importer->Import(path.AsView(), pipeline::ImportContext{allocator, Project()->SourcesRoot()}, group, options.Get(), prepared.Get(),
+                importer->Import(path.AsView(), context, group, options.Get(), prepared.Get(),
                                  m_services.jobs != nullptr ? deferred.Get() : nullptr);
             LOG_INFO(u8"Import", u8"'{}': {} ms on the main thread, {} deferred write(s)", pipeline::FileNameOf(path.AsView()),
                      static_cast<i64>(clock.Elapsed().AsMilliseconds()), deferred->Size());

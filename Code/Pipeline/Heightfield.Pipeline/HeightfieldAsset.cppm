@@ -248,6 +248,8 @@ export namespace pipeline
             return pipeline::SingleAssetPlan(sourcePath); // one asset, named after the stem
         }
 
+        [[nodiscard]] StringView AssetTypeName(StringView) const override { return u8"HeightfieldAsset"; }
+
         [[nodiscard]] pipeline::ImportPlan StoredSelection(content::Group& group,
                                                            StringView sourcePath) override
         {
@@ -259,20 +261,16 @@ export namespace pipeline
                const pipeline::ImportOptions* options, Object*,
                Array<pipeline::DeferredImportWrite>*) override
         {
-            Result<String> fileName = pipeline::CopyIntoSources(context, sourcePath);
-            if (!fileName.HasValue())
+            // The name claimed by the clash rule, the file copied in beside any other's (pipeline::ClaimSingleAsset).
+            String fileName;
+            Result<content::Instance*> claimed = pipeline::ClaimSingleAsset(context, group, options, sourcePath, HeightfieldAsset::StaticType(), fileName);
+            if (!claimed.HasValue())
             {
-                return Err(fileName.Error());
+                return Err(claimed.Error());
             }
-            const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
-            content::Instance* instance = group.CreateInstance(
-                pipeline::SingleAssetName(options, stem), HeightfieldAsset::StaticType());
-            if (instance == nullptr)
-            {
-                return Err(ErrorCode::Unknown);
-            }
+            content::Instance* instance = claimed.Value();
             HeightfieldAsset asset;
-            asset.fileName = foundation::vfs::SourcePath(fileName.Value().AsView());
+            asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
             const Status written = instance->WriteObject(asset);
             if (!written.IsOk())
             {

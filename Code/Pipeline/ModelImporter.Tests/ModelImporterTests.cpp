@@ -2547,3 +2547,57 @@ TEST_CASE("model-cook: a mesh, a texture and a material of one name all cook (3d
     for (const RefPtr<geometry::StaticMesh>& mesh : cooked->meshes)
         CHECK(mesh.Get() != nullptr);
 }
+
+// A model claims its folder by the import's clash rule (pipeline::FindImportClash): the same file
+// again is a re-import in place (its manifest's guid kept); another folder's file of the same name
+// is refused, or kept beside in the next folder ("character-oozi.2") with its own copy under
+// Sources/, the first model's untouched.
+TEST_CASE("model import: the same file re-imports in place; another file of its name is refused or kept beside")
+{
+    pipeline::RegisterModelManifestAsset(); // the clash check reads the manifest back
+    pipeline::RegisterTextureAsset();
+    pipeline::RegisterMeshAssets();
+    pipeline::RegisterMaterialAsset();
+    pipeline::RegisterAnimationAssets();
+    const String dir = PathJoin(GetCurrentDirectory().AsView(), u8"scratch_model_clash");
+    (void)RemoveDirectoryRecursive(dir.AsView());
+    REQUIRE(editor::EditorProject::Create(DefaultAllocator(), dir.AsView(), u8"P").IsOk());
+    UniquePtr<editor::EditorProject> project = editor::EditorProject::Open(DefaultAllocator(), dir.AsView());
+    REQUIRE(static_cast<bool>(project));
+    // Another folder's character-oozi.glb: another file (a different model) of the same name.
+    const String elsewhere = PathJoin(dir.AsView(), u8"elsewhere");
+    REQUIRE(CreateDirectories(elsewhere.AsView()));
+    const String other = PathJoin(elsewhere.AsView(), u8"character-oozi.glb");
+    REQUIRE(FileCopyPreserving(MiPath(u8"Tests/Models/KenneyPlatformerCharacters/GLB/character-oobi.glb").AsView(), other.AsView()));
+
+    pipeline::ModelFileImporter modelImporter;
+    pipeline::IFileImporter& importer = modelImporter;
+    pipeline::ImportContext context{DefaultAllocator(), project->SourcesRoot()};
+    context.ledgerPath = pipeline::ImportLedgerPath(project->CacheRoot().AsView());
+    foundation::content::Group& root = *project->SourceDb().RootGroup();
+
+    Result<foundation::content::Instance*> first = importer.Import(MiGlb().AsView(), context, root);
+    REQUIRE(first.HasValue());
+    const Guid manifest = first.Value()->Id();
+    CHECK(importer.FindClash(root, MiGlb().AsView(), {}, context.ledgerPath.AsView()).kind == pipeline::ImportClashKind::Reimport);
+    Result<foundation::content::Instance*> again = importer.Import(MiGlb().AsView(), context, root);
+    REQUIRE(again.HasValue());
+    CHECK(again.Value()->Id() == manifest);
+    CHECK(root.GetGroup(u8"character-oozi.2") == nullptr);
+
+    CHECK(importer.FindClash(root, other.AsView(), {}, context.ledgerPath.AsView()).kind == pipeline::ImportClashKind::SameType);
+    CHECK_FALSE(importer.Import(other.AsView(), context, root).HasValue());
+    context.onConflict = pipeline::ImportConflictChoice::KeepBoth;
+    Result<foundation::content::Instance*> beside = importer.Import(other.AsView(), context, root);
+    REQUIRE(beside.HasValue());
+    CHECK(beside.Value()->Id() != manifest);
+    foundation::content::Group* second = root.GetGroup(u8"character-oozi.2");
+    REQUIRE(second != nullptr);
+    CHECK(&beside.Value()->OwningGroup() == second);
+    RefPtr<ISerializable> object = beside.Value()->ReadObject();
+    CHECK(Cast<pipeline::Asset>(object.Get())->fileName.View() == StringView(u8"character-oozi.2.glb"));
+    RefPtr<ISerializable> firstObject = project->SourceDb().GetInstance(manifest)->ReadObject();
+    CHECK(Cast<pipeline::Asset>(firstObject.Get())->fileName.View() == StringView(u8"character-oozi.glb"));
+    project.Reset();
+    (void)RemoveDirectoryRecursive(dir.AsView());
+}

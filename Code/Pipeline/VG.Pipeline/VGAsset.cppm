@@ -128,6 +128,8 @@ export namespace pipeline
             return pipeline::SingleAssetPlan(sourcePath); // one asset, named after the stem
         }
 
+        [[nodiscard]] StringView AssetTypeName(StringView) const override { return u8"VectorImageAsset"; }
+
         [[nodiscard]] pipeline::ImportPlan StoredSelection(foundation::content::Group& group,
                                                            StringView sourcePath) override
         {
@@ -140,20 +142,16 @@ export namespace pipeline
                const pipeline::ImportOptions* options, Object*,
                Array<pipeline::DeferredImportWrite>*) override
         {
-            Result<String> fileName = pipeline::CopyIntoSources(context, sourcePath);
-            if (!fileName.HasValue())
+            // The name claimed by the clash rule, the file copied in beside any other's (pipeline::ClaimSingleAsset).
+            String fileName;
+            Result<foundation::content::Instance*> claimed = pipeline::ClaimSingleAsset(context, group, options, sourcePath, VectorImageAsset::StaticType(), fileName);
+            if (!claimed.HasValue())
             {
-                return Err(fileName.Error());
+                return Err(claimed.Error());
             }
-            const StringView stem = pipeline::FileStemOf(fileName.Value().AsView());
-            foundation::content::Instance* instance =
-                group.CreateInstance(pipeline::SingleAssetName(options, stem), VectorImageAsset::StaticType());
-            if (instance == nullptr)
-            {
-                return Err(ErrorCode::Unknown);
-            }
+            foundation::content::Instance* instance = claimed.Value();
             VectorImageAsset asset;
-            asset.fileName = foundation::vfs::SourcePath(fileName.Value().AsView());
+            asset.fileName = foundation::vfs::SourcePath(fileName.AsView());
             if (const Status written = instance->WriteObject(asset); !written.IsOk())
             {
                 return Err(written.Code());

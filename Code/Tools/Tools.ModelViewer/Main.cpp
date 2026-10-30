@@ -1590,6 +1590,10 @@ namespace
             if (level != nullptr && level->IsValid(m_tabs.At(index).instance.root))
                 level->DestroyEntity(m_tabs.At(index).instance.root);
             const bool wasActive = index == m_tabs.Active();
+            // The frames in flight still draw the model's textures (their views are in the
+            // frame's descriptor sets): the GPU finishes them before the model lets them go.
+            if (m_device != nullptr)
+                m_device->WaitIdle();
             const i32 next = m_tabs.Close(index);
             if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
             {

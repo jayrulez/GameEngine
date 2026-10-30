@@ -492,7 +492,10 @@ file(GLOB util_mbedtls_sources
     ${util_tfpsa_dir}/utilities/*.c
     ${util_tfpsa_dir}/extras/*.c
     ${util_tfpsa_dir}/drivers/builtin/src/*.c
-    ${util_tfpsa_dir}/drivers/everest/library/*.c
+    # Everest as upstream builds it: the joined unit picks the 128-bit Curve25519 where the
+    # compiler has the type, the portable one elsewhere (MSVC); the parts never build alone.
+    ${util_tfpsa_dir}/drivers/everest/library/Hacl_Curve25519_joined.c
+    ${util_tfpsa_dir}/drivers/everest/library/x25519.c
     ${util_tfpsa_dir}/drivers/p256-m/*.c
     ${util_tfpsa_dir}/drivers/p256-m/p256-m/*.c
     ${util_tfpsa_dir}/drivers/pqcp/src/*.c)

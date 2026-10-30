@@ -80,8 +80,8 @@ The window's tools (a viewer started with `--headless` has no window, and says s
 | --- | --- |
 | `model_open` | Opens a model file in a tab of its own (or brings its tab to the front). |
 | `model_close` | Closes a model's tab (the one in front by default). |
-| `tabs_list` | The model tabs: each one's place, file and whether it is in front; and whether Browse is. |
-| `tabs_select` | Brings a tab to the front (-1: Browse). |
+| `tabs_list` | The model tabs: each one's place, file and whether it is in front; and whether Browse or Library is. |
+| `tabs_select` | Brings a tab to the front (-1: Browse, -2: Library, where the user sees the library). |
 | `view_screenshot` | Saves the 3D view (no panels) as a PNG within a frame; returns the file. |
 | `view_camera` | Frames the model, or looks at it from a yaw and pitch in degrees. |
 | `view_light` | Sets exposure, ambient, sky, the turntable and the skeleton overlay; returns them all. |

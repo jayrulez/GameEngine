@@ -33,7 +33,7 @@ export namespace modelviewer
     {
         inline constexpr CommandArg kPath[] = {{u8"path", u8"string", u8"the model file", true}};
         inline constexpr CommandArg kTab[] = {{u8"tab", u8"integer", u8"the tab's place among the model tabs, from 0 (default: the one in front)", false}};
-        inline constexpr CommandArg kSelect[] = {{u8"tab", u8"integer", u8"the tab's place among the model tabs, from 0; -1 for the Browse tab"}};
+        inline constexpr CommandArg kSelect[] = {{u8"tab", u8"integer", u8"the tab's place among the model tabs, from 0; -1 for Browse, -2 for Library"}};
         inline constexpr CommandArg kShot[] = {{u8"path", u8"string", u8"the PNG to write (default: the screenshot folder)", false}};
         inline constexpr CommandArg kCamera[] = {{u8"frame", u8"boolean", u8"frame the model (the F key)", false},
                                                  {u8"yaw", u8"number", u8"turn about the model, degrees (0: from the front)", false},
@@ -53,8 +53,8 @@ export namespace modelviewer
         inline const WindowCommandSpec kSpecs[] = {
             {u8"model.open", u8"Opens a model file in a tab of its own (or brings its tab to the front); returns the tab.", kPath, CommandKind::Adjusts},
             {u8"model.close", u8"Closes a model's tab.", kTab, CommandKind::Adjusts},
-            {u8"tabs.list", u8"The model tabs: each one's place, file and whether it is in front; and whether Browse is.", {}, CommandKind::Reads},
-            {u8"tabs.select", u8"Brings a tab to the front (-1: Browse).", kSelect, CommandKind::Adjusts},
+            {u8"tabs.list", u8"The model tabs: each one's place, file and whether it is in front; and whether Browse or Library is.", {}, CommandKind::Reads},
+            {u8"tabs.select", u8"Brings a tab to the front (-1: Browse, -2: Library).", kSelect, CommandKind::Adjusts},
             {u8"view.screenshot", u8"Saves the 3D view (no panels) as a PNG, written within a frame; returns the file.", kShot, CommandKind::Creates},
             {u8"view.camera", u8"Moves the camera: frames the model, or looks at it from an angle.", kCamera, CommandKind::Adjusts},
             {u8"view.light", u8"Sets the view's light, turntable and skeleton; returns them all.", kLight, CommandKind::Adjusts},

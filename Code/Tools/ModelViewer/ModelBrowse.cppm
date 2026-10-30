@@ -130,21 +130,21 @@ export namespace modelviewer
     }
 
     /// What the grid shows: names containing `name` (any case), and with the rigged, animated or
-    /// starred box ticked only models known to be so.
+    /// in-library box ticked only models known to be so.
     struct BrowseFilter
     {
         String name;
         bool riggedOnly = false;
         bool animatedOnly = false;
-        bool starredOnly = false;
+        bool inLibraryOnly = false;
     };
 
     /// Whether the model at `path` passes `filter`. `stats` is its numbers when known (cooked
     /// before); a model not cooked yet passes the rigged and animated boxes only once it is.
-    /// `starred`: it is on the shortlist.
-    [[nodiscard]] inline bool Matches(const BrowseFilter& filter, StringView path, const ModelStats* stats, bool starred = false)
+    /// `inLibrary`: the library has it.
+    [[nodiscard]] inline bool Matches(const BrowseFilter& filter, StringView path, const ModelStats* stats, bool inLibrary = false)
     {
-        if (filter.starredOnly && !starred)
+        if (filter.inLibraryOnly && !inLibrary)
             return false;
         if (!filter.name.IsEmpty())
         {

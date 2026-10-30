@@ -31,13 +31,18 @@
 // and a CSV export in the browser, kept in `model-viewer/shortlist.txt`) and the loose texture
 // rule's toggle (remembered in the settings, for models opened from then on).
 // P6-P7: the library (modelviewer::LibrarySession, its commands) opened at startup, and served to an
-// agent over MCP (--mcp, --headless); the window works it from P8.
+// agent over MCP (--mcp, --headless).
+// P8: every control runs one of the window's commands (WindowCommandSpecs); the Library tab (the
+// collections and tags, the search, the models of what is chosen), the browser's selection and
+// Add selected, and the panel's Library section (the collections a model is in, its names there,
+// its tags and note). The views refresh from the library's change announcements, whoever made them.
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include "Core/Prelude.h"
 #include "Core/Log/Log.h"
+#include "Core/Reflection/Reflect.h"
 
 import foundation.core;
 import foundation.shell;
@@ -88,6 +93,125 @@ namespace scene = foundation::scene;
 namespace render = foundation::render;
 
 extern "C" const char* BuildStamp(); // Runtime.Client's: this build's identity
+
+namespace modelviewer_window
+{
+    namespace gui = foundation::gui;
+
+    /// One model as a grid draws it, as the editor's asset tiles do: its picture (its kind's
+    /// glyph until one is drawn) with a mark in its corner when it is in the library and a badge
+    /// when its file is missing, then its name, and under it the name it has in the collection shown.
+    class ModelCell final : public gui::UIWidget
+    {
+        RTTI_OBJECT(ModelCell, gui::UIWidget)
+    public:
+        struct Shown
+        {
+            String name;
+            String sub;
+            bool inLibrary = false;
+            bool missing = false;
+            RefPtr<gui::Drawable> picture;
+        };
+
+        ModelCell()
+        {
+            AddClass(u8"model-cell");
+            m_thumb = Part<gui::Panel>(*this, u8"model-thumb");
+            m_glyph = Part<gui::Image>(*m_thumb, u8"model-glyph");
+            m_glyph->SetSource(String(u8"Editor/Icons/cube.svg"));
+            m_picture = Part<gui::Image>(*m_thumb, u8"model-picture");
+            m_mark = Part<gui::Panel>(*m_thumb, u8"model-mark");
+            m_mark->SetTooltip(u8"In the library");
+            m_mark->SetHitTestVisible(true); // its tooltip
+            m_badge = Part<gui::Label>(*m_thumb, u8"badge");
+            m_badge->AddClass(u8"danger");
+            m_badge->SetText(u8"Missing");
+            m_name = Part<gui::Label>(*this, u8"model-name");
+            m_sub = Part<gui::Label>(*this, u8"model-sub");
+        }
+
+        void Show(const Shown& shown)
+        {
+            m_picture->SetDrawable(shown.picture);
+            m_picture->SetDisplayed(shown.picture.Get() != nullptr);
+            m_glyph->SetDisplayed(shown.picture.Get() == nullptr);
+            m_mark->SetDisplayed(shown.inLibrary);
+            m_badge->SetDisplayed(shown.missing);
+            m_name->SetText(shown.name.AsView());
+            m_sub->SetText(shown.sub.AsView());
+            m_sub->SetDisplayed(!shown.sub.IsEmpty());
+            SetTooltip(shown.name.AsView());
+        }
+
+    private:
+        template <typename T>
+        RefPtr<T> Part(gui::Node& into, StringView cls)
+        {
+            RefPtr<T> part = MakeRef<T>(MemoryAllocator());
+            part->AddClass(cls);
+            part->SetHitTestVisible(false);
+            into.AddChild(part.Get());
+            return part;
+        }
+
+        RefPtr<gui::Panel> m_thumb;
+        RefPtr<gui::Image> m_glyph;
+        RefPtr<gui::Image> m_picture;
+        RefPtr<gui::Panel> m_mark;
+        RefPtr<gui::Label> m_badge;
+        RefPtr<gui::Label> m_name;
+        RefPtr<gui::Label> m_sub;
+    };
+    RTTI_DEFINE_OBJECT(ModelCell, "rtti::modelviewer::window")
+
+    /// A grid's rows: a model file each, its id the path's hash (so a selection survives a refill).
+    struct GridRow
+    {
+        String path;
+        String sub;     // its name in the collection shown
+        bool inLibrary = false;
+        bool missing = false;
+        Guid entry;     // its library entry, when it has one
+    };
+
+    class GridModel final : public gui::IModel
+    {
+    public:
+        Array<GridRow> rows;
+
+        [[nodiscard]] usize RowCount(const gui::ModelIndex& parent = {}) const override { return parent.IsValid() ? 0 : rows.Size(); }
+        [[nodiscard]] usize ColumnCount() const override { return 1; }
+        [[nodiscard]] gui::Variant Data(const gui::ModelIndex& index, gui::ModelRole role = gui::ModelRole::Display) const override
+        {
+            return role == gui::ModelRole::Display && Valid(index.Row) ? gui::Variant(rows[static_cast<usize>(index.Row)].path.AsView()) : gui::Variant{};
+        }
+        [[nodiscard]] gui::ItemId IdOf(const gui::ModelIndex& index) const override
+        {
+            return Valid(index.Row) ? IdOfPath(rows[static_cast<usize>(index.Row)].path.AsView()) : gui::kNoItem;
+        }
+        [[nodiscard]] gui::ModelIndex IndexOfId(gui::ItemId id) const override
+        {
+            for (usize i = 0; i < rows.Size(); ++i)
+                if (IdOfPath(rows[i].path.AsView()) == id)
+                    return gui::ModelIndex{static_cast<i32>(i), 0};
+            return {};
+        }
+        [[nodiscard]] static gui::ItemId IdOfPath(StringView path) { return Hash<StringView>{}(path) & ~(1ull << 63); }
+        [[nodiscard]] bool Valid(i32 row) const noexcept { return row >= 0 && static_cast<usize>(row) < rows.Size(); }
+        [[nodiscard]] const GridRow* RowOfId(gui::ItemId id) const
+        {
+            const gui::ModelIndex index = IndexOfId(id);
+            return Valid(index.Row) ? &rows[static_cast<usize>(index.Row)] : nullptr;
+        }
+        void Reset() { NotifyReset(); }
+        void Changed()
+        {
+            if (!rows.IsEmpty())
+                NotifyRowsChanged(gui::ModelIndex{}, 0, static_cast<i32>(rows.Size()));
+        }
+    };
+}
 
 namespace
 {
@@ -183,6 +307,73 @@ namespace
     constexpr const char8_t* kMarkupPath = u8"ModelViewer/Viewer.xml";
     constexpr const char8_t* kSheets[] = {u8"Editor/editor.css", u8"Editor/density-default.css", u8"ModelViewer/viewer.css"};
 
+    constexpr i32 kFixedTabs = 2; // Browse and Library, before the model tabs
+    constexpr StringView kModelsDrag = u8"modelviewer.models"; // a drag of grid tiles: their paths, a line each
+    constexpr f32 kTileWidth = 152.0f;
+    constexpr f32 kTileHeight = 184.0f;
+
+    enum class Page : u8
+    {
+        Model,
+        Browse,
+        Library,
+    };
+
+    /// The Library tab's tree model: its collection and tag rows rename in place (the view's commit
+    /// hook runs the rename command; the tree is rebuilt from the library after, so the model
+    /// itself keeps nothing).
+    class LibraryTreeModel final : public gui::TreeModel
+    {
+    public:
+        Function<bool(i32 node)> renamable;
+        /// A collection's row, for models dropped on it (`kModelsDrag`'s paths); null elsewhere.
+        Function<bool(i32 node)> takesModels;
+        Function<void(i32 node, StringView paths)> dropModels;
+
+        [[nodiscard]] bool IsEditable(const gui::ModelIndex& index) const override
+        {
+            return renamable && index.IsValid() && renamable(static_cast<i32>(index.InternalId));
+        }
+        bool SetData(const gui::ModelIndex&, const gui::Variant&) override { return true; }
+        // Grid tiles dropped onto a collection's row join it.
+        [[nodiscard]] gui::DropEffect CanDrop(const gui::ModelDrop& drop, String& reason) const override
+        {
+            if (drop.Payload == nullptr || drop.Payload->Type.AsView() != kModelsDrag)
+                return gui::TreeModel::CanDrop(drop, reason);
+            if (drop.Place == gui::DropPlace::On && drop.Index.IsValid() && takesModels && takesModels(static_cast<i32>(drop.Index.InternalId)))
+                return gui::DropEffect::Copy;
+            reason = String(u8"Drop the models on a collection");
+            return gui::DropEffect::None;
+        }
+        bool Drop(const gui::ModelDrop& drop) override
+        {
+            if (drop.Payload == nullptr || drop.Payload->Type.AsView() != kModelsDrag)
+                return false; // the tree's own rows do not move: the library says where they are
+            String ignored;
+            if (CanDrop(drop, ignored) == gui::DropEffect::None || !dropModels)
+                return false;
+            dropModels(static_cast<i32>(drop.Index.InternalId), drop.Payload->Value.Get<String>().AsView());
+            return true;
+        }
+    };
+
+    /// What a row of the Library tab's tree stands for.
+    struct LibraryNode
+    {
+        enum class Kind : u8
+        {
+            All,
+            Unsorted,
+            Collection,
+            TagsRoot,
+            Tag,
+        };
+        explicit LibraryNode(Kind k = Kind::All) : kind(k) {}
+        Kind kind;
+        Guid collection;
+        String tag;
+    };
+
     class ModelViewerApp final : public engine::runtime::DefaultApplication
     {
     public:
@@ -218,15 +409,13 @@ namespace
             SetUpScene();
             m_cacheRoot = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/cache");
             m_settingsPath = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/settings.txt");
-            m_shortlistPath = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/shortlist.txt");
-            if (Result<Array<byte>> list = ReadFile(m_shortlistPath.AsView()); list.HasValue())
-                m_shortlist.Read(StringView(reinterpret_cast<const utf8char*>(list.Value().Data()), list.Value().Size()));
             m_thumbnailRoot = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/thumbnails");
             m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(), m_thumbnailRoot.AsView());
             ModelViewerApp* self = this;
             m_thumbnails->SetOnDone([self](StringView model, StringView png) { self->ThumbnailDone(model, png); });
             OpenLibrary(m_library, u8"window");
             RegisterWindowCommands();
+            m_library.Commands().AddListener([self](StringView) { self->m_libraryStale = true; });
             StartMcp();
             WireControls(host);
             WireBrowser(host);
@@ -235,12 +424,17 @@ namespace
                 gui::Tab* browse = bar->AddTab(u8"Browse");
                 browse->SetClosable(false);
                 browse->SetTooltip(u8"The models under a folder, a picture each");
+                gui::Tab* library = bar->AddTab(u8"Library");
+                library->SetClosable(false);
+                library->SetTooltip(u8"The models kept, in their collections, with their tags and names");
             }
             LoadSettings();
             m_thumbnails->SetLooseTextures(m_looseTextures);
             if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
                 loose->SetChecked(m_looseTextures);
-            WirePick(host);
+            WireLibrary(host);
+            WireGrids();
+            RefreshLibrary();
             for (const String& file : m_files)
                 OpenFile(file.AsView());
             if (m_tabs.Count() == 0)
@@ -263,6 +457,8 @@ namespace
             if (!m_browsing && m_viewport->Update(deltaTime))
                 FrameModel();
             Turn(deltaTime);
+            if (m_libraryStale)
+                RefreshLibrary();
             ShowPlayback();
             DrawGrid();
             DrawSkeleton();
@@ -298,7 +494,10 @@ namespace
                 m_thumbnails->Shutdown();
             m_thumbnails.Reset();
             m_mcpHost.Reset();
-            m_tiles.Clear();
+            const StringView grids[] = {u8"viewer-grid", u8"viewer-lib-grid"};
+            for (const StringView id : grids)
+                if (auto* list = FindAs<gui::ListView>(id))
+                    list->SetModel(nullptr);
             m_thumbImages.Clear();
             if (m_viewport)
                 m_viewport->Shutdown();
@@ -457,7 +656,8 @@ namespace
                 tabs.Add(foundation::core::Move(t));
             }
             v.Set(String(u8"tabs"), foundation::core::Move(tabs));
-            v.Set(String(u8"browsing"), Flag(m_browsing));
+            v.Set(String(u8"browsing"), Flag(m_page == Page::Browse));
+            v.Set(String(u8"library"), Flag(m_page == Page::Library));
             return v;
         }
         [[nodiscard]] JsonValue LightJson()
@@ -547,9 +747,11 @@ namespace
             reg(u8"tabs.list", [self](const JsonValue&) { return CommandResult::Ok(self->TabsJson()); });
             reg(u8"tabs.select", [self](const JsonValue& a)
                 {
-                    const i32 tab = static_cast<i32>(a.Get(String(u8"tab")).AsInt(-2));
+                    const i32 tab = static_cast<i32>(a.Get(String(u8"tab")).AsInt(-3));
                     if (tab == -1)
                         self->ShowBrowser();
+                    else if (tab == -2)
+                        self->ShowLibrary();
                     else if (self->m_tabs.Valid(tab))
                         self->ShowTab(tab);
                     else
@@ -733,27 +935,28 @@ namespace
                 // The bar's first tab is Browse; a model's tab is one after its place in m_tabs.
                 tabs->SetOnSelected([self](i32 index)
                                     {
+                                        // Browse and Library first: -1 and -2, then the models from 0.
                                         if (!self->m_syncingTabs)
-                                            self->Run(u8"tabs.select", Arg(u8"tab", Number(index - 1))); // Browse first: -1
+                                            self->Run(u8"tabs.select", Arg(u8"tab", Number(index == 0 ? -1 : index == 1 ? -2 : index - kFixedTabs)));
                                     });
                 tabs->SetCloseHandler([self](i32 index)
                                       {
-                                          if (index > 0)
-                                              self->Run(u8"model.close", Arg(u8"tab", Number(index - 1)));
+                                          if (index >= kFixedTabs)
+                                              self->Run(u8"model.close", Arg(u8"tab", Number(index - kFixedTabs)));
                                       });
                 tabs->SetOnTabMoved([self, tabs](i32 from, i32 to)
                                     {
                                         if (self->m_syncingTabs)
                                             return;
-                                        if (from == 0 || to == 0)
+                                        if (from < kFixedTabs || to < kFixedTabs)
                                         {
-                                            // Browse stays first: dragged, it goes back.
+                                            // Browse and Library stay first: dragged, they go back.
                                             self->m_syncingTabs = true;
                                             tabs->MoveTab(to, from);
                                             self->m_syncingTabs = false;
                                             return;
                                         }
-                                        (void)self->m_tabs.Move(from - 1, to - 1);
+                                        (void)self->m_tabs.Move(from - kFixedTabs, to - kFixedTabs);
                                     });
             }
             if (auto* open = FindAs<gui::Button>(u8"viewer-open"))
@@ -881,6 +1084,7 @@ namespace
                 options.animate = !m_rest;
                 tab.instance = engine::model::InstantiateModel(*m_viewport->Scene(), *tab.open->Model(), tab.title.AsView(), options);
                 tab.playback = MakeUnique<modelviewer::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
+                KeepStats(tab.path.AsView(), tab.open->Stats());
                 MeasureBounds(tab);
                 if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
                 {
@@ -903,7 +1107,7 @@ namespace
             }
             if (index != m_tabs.Active() && !m_browsing)
                 SaveCamera();
-            SetBrowsing(false);
+            SetPage(Page::Model);
             m_tabs.SetActive(index);
             scene::Scene* level = m_viewport->Scene();
             for (i32 i = 0; i < m_tabs.Count(); ++i)
@@ -924,14 +1128,14 @@ namespace
             }
             else
                 FrameModel(/*snap*/ true);
-            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"); bar != nullptr && bar->GetSelectedIndex() != index + 1)
+            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"); bar != nullptr && bar->GetSelectedIndex() != index + kFixedTabs)
             {
                 m_syncingTabs = true;
-                bar->SetSelectedIndex(index + 1);
+                bar->SetSelectedIndex(index + kFixedTabs);
                 m_syncingTabs = false;
             }
             ShowStats(tab);
-            ShowPick(tab);
+            ShowLibraryPanel();
             ShowClips(tab);
             ShowEmpty();
         }
@@ -962,7 +1166,7 @@ namespace
             if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
             {
                 m_syncingTabs = true;
-                bar->RemoveTab(index + 1);
+                bar->RemoveTab(index + kFixedTabs);
                 m_syncingTabs = false;
             }
             if (wasActive)
@@ -1221,30 +1425,48 @@ namespace
                                            self->m_filter.animatedOnly = on;
                                            self->ShowGrid();
                                        });
-            if (auto* starred = FindAs<gui::CheckBox>(u8"viewer-filter-starred"))
-                starred->SetOnToggled([self](bool on)
-                                      {
-                                          self->m_filter.starredOnly = on;
-                                          self->ShowGrid();
-                                      });
+            if (auto* inLibrary = FindAs<gui::CheckBox>(u8"viewer-filter-library"))
+                inLibrary->SetOnToggled([self](bool on)
+                                        {
+                                            self->m_filter.inLibraryOnly = on;
+                                            self->ShowGrid();
+                                        });
         }
 
-        void SetBrowsing(bool browsing)
+        // Which page fills the window: a model (the stage and the panel), the browser or the library.
+        void SetPage(Page page)
         {
-            m_browsing = browsing;
+            m_page = page;
+            m_browsing = page != Page::Model;
             if (gui::Node* browser = FindById(u8"viewer-browser"))
-                browser->SetDisplayed(browsing);
+                browser->SetDisplayed(page == Page::Browse);
+            if (gui::Node* library = FindById(u8"viewer-library"))
+                library->SetDisplayed(page == Page::Library);
             if (gui::Node* stage = FindById(u8"viewer-stage"))
-                stage->SetDisplayed(!browsing);
+                stage->SetDisplayed(page == Page::Model);
             if (gui::Node* panel = FindById(u8"viewer-panel"))
-                panel->SetDisplayed(!browsing);
+                panel->SetDisplayed(page == Page::Model);
+        }
+
+        // The Library tab in front: the collections and tags, the search, the models.
+        void ShowLibrary()
+        {
+            SaveCamera();
+            SetPage(Page::Library);
+            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"); bar != nullptr && bar->GetSelectedIndex() != 1)
+            {
+                m_syncingTabs = true;
+                bar->SetSelectedIndex(1);
+                m_syncingTabs = false;
+            }
+            RefreshLibrary();
         }
 
         // The Browse tab in front: the models' instances stay where they are, the browser shows.
         void ShowBrowser()
         {
             SaveCamera();
-            SetBrowsing(true);
+            SetPage(Page::Browse);
             if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"); bar != nullptr && bar->GetSelectedIndex() != 0)
             {
                 m_syncingTabs = true;
@@ -1283,6 +1505,7 @@ namespace
         {
             const String title = modelviewer::FileTitle(path);
             const i32 id = m_folderModel->AddNode(parent, title.IsEmpty() ? path : title.AsView());
+            m_folderModel->SetIcon(id, u8"Editor/Icons/folder.svg");
             if (static_cast<usize>(id) >= m_folderNodes.Size())
                 m_folderNodes.Resize(static_cast<usize>(id) + 1);
             m_folderNodes[static_cast<usize>(id)] = FolderNode{String(path), parent, false};
@@ -1329,35 +1552,24 @@ namespace
         // The grid for the folder's models that pass the filter, their thumbnails queued in order.
         void ShowGrid()
         {
-            gui::Node* grid = FindById(u8"viewer-grid");
-            if (grid == nullptr)
-                return;
-            while (grid->ChildCount() > 0)
-                grid->RemoveChild(grid->GetChildAt(grid->ChildCount() - 1));
-            m_tiles.Clear();
+            m_browseGrid.rows.Clear();
             m_doneSinceFilter = 0;
             Array<String> shown;
-            ModelViewerApp* self = this;
             for (usize i = 0; i < m_folderModels.Size(); ++i)
             {
                 const String& path = m_folderModels[i];
-                const bool starred = m_shortlist.IsStarred(path.AsView());
-                if (!modelviewer::Matches(m_filter, path.AsView(), m_folderStatsKnown[i] ? &m_folderStats[i] : nullptr, starred))
+                const modelviewer::Entry* entry = m_library.Get().FindEntryByPath(path.AsView());
+                if (!modelviewer::Matches(m_filter, path.AsView(), m_folderStatsKnown[i] ? &m_folderStats[i] : nullptr, entry != nullptr))
                     continue;
-                auto tile = MakeRef<gui::Button>(m_allocator);
-                tile->AddClass(u8"viewer-tile");
-                if (starred)
-                    tile->AddClass(u8"starred");
-                tile->SetText(modelviewer::FileTitle(path.AsView()).AsView());
-                tile->SetTooltip(path.AsView());
-                const String opened = path;
-                tile->SetOnClick([self, opened]() { self->Run(u8"model.open", Arg(u8"path", Text(opened.AsView()))); });
-                if (const foundation::image::Image* image = ThumbImageFor(path.AsView()))
-                    tile->SetIcon(MakeRef<gui::ImageDrawable>(m_allocator, image));
-                grid->AddChild(tile.Get());
-                m_tiles.PushBack(Tile{path, tile.Get()});
+                modelviewer_window::GridRow row;
+                row.path = path;
+                row.inLibrary = entry != nullptr;
+                if (entry != nullptr)
+                    row.entry = entry->id;
+                m_browseGrid.rows.PushBack(foundation::core::Move(row));
                 shown.PushBack(path);
             }
+            m_browseGrid.Reset();
             if (auto* count = FindAs<gui::Label>(u8"viewer-grid-count"))
                 count->SetText(Format(u8"{} of {} models", shown.Size(), m_folderModels.Size()).AsView());
             if (m_thumbnails)
@@ -1377,7 +1589,11 @@ namespace
         {
             for (usize i = 0; i < m_folderModels.Size(); ++i)
                 if (m_folderModels[i].AsView() == model && !m_folderStatsKnown[i])
+                {
                     m_folderStatsKnown[i] = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model, m_folderStats[i], m_looseTextures);
+                    if (m_folderStatsKnown[i])
+                        KeepStats(model, m_folderStats[i]);
+                }
             if (png.IsEmpty() || ThumbImageFor(model) != nullptr)
                 return;
             auto image = MakeUnique<foundation::image::Image>(m_allocator);
@@ -1385,9 +1601,9 @@ namespace
                 return;
             const foundation::image::Image* raw = image.Get();
             m_thumbImages.PushBack(ThumbImage{String(model), foundation::core::Move(image)});
-            for (const Tile& tile : m_tiles)
-                if (tile.path.AsView() == model && tile.button != nullptr)
-                    tile.button->SetIcon(MakeRef<gui::ImageDrawable>(m_allocator, raw));
+            (void)raw;
+            m_browseGrid.Changed(); // the cells bind their pictures anew
+            m_libraryGrid.Changed();
             // The rigged and animated boxes learn as models are drawn: the grid catches up now and then.
             if ((m_filter.riggedOnly || m_filter.animatedOnly) && (++m_doneSinceFilter >= 25 || (m_thumbnails && m_thumbnails->Remaining() == 0)))
                 ShowGrid();
@@ -1417,33 +1633,355 @@ namespace
             LOG_INFO(u8"ModelViewer", u8"MCP: listening on 127.0.0.1:{} (the token is in <user-data>/mcp-token)", m_mcpHost->BoundPort());
         }
 
-        // === The shortlist and the loose texture toggle ===
+        // === The library in the window ===
 
-        void WirePick(runtime::IApplicationHost& host)
+        [[nodiscard]] bool ModifierHeld(shell::KeyModifiers which) const
+        {
+            shell::IInputManager* input = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Input() : nullptr;
+            shell::IKeyboard* keyboard = input != nullptr ? input->Keyboard() : nullptr;
+            return keyboard != nullptr && (keyboard->Modifiers() & which) != shell::KeyModifiers::None;
+        }
+        /// The files of a grid's selected rows, in the grid's order.
+        [[nodiscard]] Array<String> SelectedPaths(StringView listId, const modelviewer_window::GridModel& grid) const
+        {
+            Array<String> paths;
+            auto* list = FindAs<gui::ListView>(listId);
+            if (list == nullptr)
+                return paths;
+            Array<gui::ItemId> ids;
+            list->GetSelectedIds(ids);
+            for (const modelviewer_window::GridRow& row : grid.rows)
+                for (const gui::ItemId id : ids)
+                    if (modelviewer_window::GridModel::IdOfPath(row.path.AsView()) == id)
+                    {
+                        paths.PushBack(row.path);
+                        break;
+                    }
+            return paths;
+        }
+
+        // Both grids: the editor's asset tiles, a cell per model, selection the list's own (click,
+        // Ctrl, Shift, Ctrl+A), a double click opening, a drag carrying the models (onto a
+        // collection in the Library tab), a right-click menu for the row pressed.
+        void WireGrids()
         {
             ModelViewerApp* self = this;
-            if (auto* star = FindAs<gui::CheckBox>(u8"viewer-star"))
-                star->SetOnToggled([self](bool on)
+            const StringView lists[] = {u8"viewer-grid", u8"viewer-lib-grid"};
+            for (usize which = 0; which < 2; ++which)
+            {
+                auto* list = FindAs<gui::ListView>(lists[which]);
+                if (list == nullptr)
+                    continue;
+                modelviewer_window::GridModel* grid = which == 0 ? &m_browseGrid : &m_libraryGrid;
+                gui::RowFactory rows;
+                rows.Create = [self](u32) -> RefPtr<gui::Node> { return MakeRef<modelviewer_window::ModelCell>(self->m_allocator); };
+                rows.Bind = [self, grid](gui::Node& cell, const gui::ModelIndex& index)
+                {
+                    if (!grid->Valid(index.Row))
+                        return;
+                    const modelviewer_window::GridRow& row = grid->rows[static_cast<usize>(index.Row)];
+                    modelviewer_window::ModelCell::Shown shown;
+                    shown.name = modelviewer::FileTitle(row.path.AsView());
+                    shown.sub = row.sub;
+                    shown.inLibrary = row.inLibrary && grid == &self->m_browseGrid; // the library's are all in it
+                    shown.missing = row.missing;
+                    if (const foundation::image::Image* image = self->ThumbImageFor(row.path.AsView()))
+                        shown.picture = MakeRef<gui::ImageDrawable>(self->m_allocator, image);
+                    static_cast<modelviewer_window::ModelCell&>(cell).Show(shown);
+                };
+                list->SetLayoutMode(gui::ItemLayout::Grid);
+                list->SetCellWidth(kTileWidth);
+                list->SetCellHeight(kTileHeight);
+                list->SetRowFactory(foundation::core::Move(rows));
+                list->SetModel(grid);
+                list->SetOnActivated([self, grid](gui::ModelIndex index)
+                                     {
+                                         if (!grid->Valid(index.Row))
+                                             return;
+                                         const modelviewer_window::GridRow& row = grid->rows[static_cast<usize>(index.Row)];
+                                         if (row.missing)
+                                             self->RelinkDialog(row.entry);
+                                         else
+                                             self->Run(u8"model.open", Arg(u8"path", Text(row.path.AsView())));
+                                     });
+                list->SetDragType(String(kModelsDrag));
+                list->SetOnDragPayload([grid](gui::DragPayload& payload, Span<const gui::ItemId> ids)
+                                       {
+                                           String paths;
+                                           usize count = 0;
+                                           for (const gui::ItemId id : ids)
+                                               if (const modelviewer_window::GridRow* row = grid->RowOfId(id))
+                                               {
+                                                   if (!paths.IsEmpty())
+                                                       paths += u8"\n";
+                                                   paths += row->path.AsView();
+                                                   ++count;
+                                               }
+                                           if (count == 0)
+                                               return;
+                                           payload.Type = String(kModelsDrag);
+                                           payload.Value = Variant::From<String>(paths);
+                                           payload.Label = count == 1 ? modelviewer::FileTitle(paths.AsView()) : Format(u8"{} models", count);
+                                       });
+                const bool library = which == 1;
+                (void)list->AddEventListener(gui::EventType::ContextMenu, [self, list, grid, library](const gui::Event& e)
+                                             {
+                                                 const Float2 at = static_cast<const gui::MouseEvent&>(e).Position;
+                                                 self->ShowGridMenu(*list, *grid, library, list->ItemAt(at), at);
+                                                 e.Handled = true;
+                                             });
+            }
+        }
+
+        // A tile's menu: open it, add the selection to a collection, take it out of the one shown,
+        // copy its path, show its folder, take it out of the library. A press on a tile not
+        // selected selects it alone first, so the menu acts on it (the editor's way).
+        void ShowGridMenu(gui::ListView& list, const modelviewer_window::GridModel& grid, bool library, i32 item, Float2 at)
+        {
+            if (item < 0 || !grid.Valid(list.GetItemIndex(item).Row))
+                return;
+            const modelviewer_window::GridRow& row = grid.rows[static_cast<usize>(list.GetItemIndex(item).Row)];
+            const gui::ItemId id = modelviewer_window::GridModel::IdOfPath(row.path.AsView());
+            if (!list.IsItemSelected(item))
+            {
+                const gui::ItemId only[] = {id};
+                list.SetSelectedIds(Span<const gui::ItemId>(only, 1));
+            }
+            const Array<String> paths = SelectedPaths(library ? u8"viewer-lib-grid" : u8"viewer-grid", grid);
+            ModelViewerApp* self = this;
+            m_gridMenu = MakeRef<gui::Menu>(m_allocator);
+            const String path = row.path;
+            if (!row.missing)
+                (void)m_gridMenu->AddItem(u8"Open", [self, path]() { self->Run(u8"model.open", Arg(u8"path", Text(path.AsView()))); });
+            else
+            {
+                const Guid entry = row.entry;
+                (void)m_gridMenu->AddItem(u8"Relink...", [self, entry]() { self->RelinkDialog(entry); });
+            }
+            if (!m_comboCollections.IsEmpty())
+            {
+                gui::Menu* into = m_gridMenu->AddSubMenu(paths.Size() > 1 ? Format(u8"Add {} to", paths.Size()).AsView() : StringView(u8"Add to"));
+                for (const Guid& collection : m_comboCollections)
+                {
+                    const modelviewer::Collection* c = m_library.Get().FindCollection(collection);
+                    (void)into->AddItem(c->name.AsView(), [self, collection, paths]() { self->AddToCollection(collection, paths.AsSpan()); });
+                }
+            }
+            const LibraryNode* node = ChosenNode();
+            if (library && node != nullptr && node->kind == LibraryNode::Kind::Collection)
+            {
+                const Guid collection = node->collection;
+                (void)m_gridMenu->AddItem(u8"Take out of this collection", [self, collection, paths]() { self->TakeOut(collection, paths.AsSpan()); });
+            }
+            m_gridMenu->AddSeparator();
+            (void)m_gridMenu->AddItem(u8"Copy path", [self, path]()
+                                      {
+                                          if (self->m_host != nullptr && self->m_host->Shell() != nullptr)
+                                              self->m_host->Shell()->SetClipboardText(path.AsView());
+                                      });
+            (void)m_gridMenu->AddItem(u8"Show in folder", [self, path]()
+                                      {
+                                          shell::IDialogService* dialogs = self->m_host != nullptr && self->m_host->Shell() != nullptr ? self->m_host->Shell()->Dialogs() : nullptr;
+                                          if (dialogs != nullptr)
+                                              dialogs->OpenPath(PathParent(path.AsView()));
+                                      });
+            if (library)
+            {
+                m_gridMenu->AddSeparator();
+                (void)m_gridMenu->AddItem(u8"Remove from the library", [self, paths]()
+                                          {
+                                              for (const String& p : paths)
+                                                  if (const modelviewer::Entry* e = self->m_library.Get().FindEntryByPath(p.AsView()))
+                                                      self->Run(u8"entry.remove", Arg(u8"id", Text(Format(u8"{}", e->id).AsView())));
+                                          });
+            }
+            m_gridMenu->Open(list, at);
+        }
+
+        void TakeOut(const Guid& collection, Span<const String> paths)
+        {
+            JsonValue ids = JsonValue::MakeArray();
+            for (const String& p : paths)
+                if (const modelviewer::Entry* e = m_library.Get().FindEntryByPath(p.AsView()))
+                    ids.Add(Text(Format(u8"{}", e->id).AsView()));
+            if (ids.Count() == 0)
+                return;
+            JsonValue a = Arg(u8"collection", Text(Format(u8"{}", collection).AsView()));
+            a.Set(String(u8"entries"), ids);
+            Run(u8"member.remove", a);
+        }
+
+        /// The model at `path` as a library entry (added when it is not one yet); false when the
+        /// file is not there or the library refused.
+        bool EntryFor(StringView path, String& id)
+        {
+            const modelviewer::CommandResult r = m_library.Commands().Execute(u8"entry.add", Arg(u8"path", Text(path)));
+            if (!r.ok)
+            {
+                LOG_WARNING(u8"ModelViewer", u8"{}", r.error.AsView());
+                return false;
+            }
+            id = r.value.Get(String(u8"id")).AsString();
+            return true;
+        }
+        /// The ids of the models at `paths`, each added to the library when it is not in it.
+        JsonValue EntriesFor(Span<const String> paths)
+        {
+            JsonValue ids = JsonValue::MakeArray();
+            for (const String& path : paths)
+            {
+                String id;
+                if (EntryFor(path.AsView(), id))
+                    ids.Add(Text(id.AsView()));
+            }
+            return ids;
+        }
+        /// The collection a combo's choice names (its items are the tree's collections in order).
+        [[nodiscard]] Guid ComboCollection(StringView comboId) const
+        {
+            auto* combo = FindAs<gui::ComboBox>(comboId);
+            const i32 at = combo != nullptr ? combo->GetSelectedIndex() : -1;
+            return at >= 0 && static_cast<usize>(at) < m_comboCollections.Size() ? m_comboCollections[static_cast<usize>(at)] : Guid{};
+        }
+        void AddToCollection(const Guid& collection, Span<const String> paths)
+        {
+            if (collection.IsNil() || paths.IsEmpty())
+                return;
+            JsonValue a = Arg(u8"collection", Text(Format(u8"{}", collection).AsView()));
+            a.Set(String(u8"entries"), EntriesFor(paths));
+            Run(u8"member.add", a);
+        }
+
+        void WireLibrary(runtime::IApplicationHost&)
+        {
+            ModelViewerApp* self = this;
+            // The browser: select all, and add the selection to a collection.
+            if (auto* all = FindAs<gui::Button>(u8"viewer-select-all"))
+                all->SetOnClick([self]()
+                                {
+                                    if (auto* list = self->FindAs<gui::ListView>(u8"viewer-grid"))
+                                        list->SelectAll();
+                                });
+            if (auto* add = FindAs<gui::Button>(u8"viewer-add-selected"))
+                add->SetOnClick([self]()
+                                {
+                                    self->AddToCollection(self->ComboCollection(u8"viewer-add-target"),
+                                                          self->SelectedPaths(u8"viewer-grid", self->m_browseGrid).AsSpan());
+                                });
+            if (auto* clear = FindAs<gui::Button>(u8"viewer-filter-clear"))
+                clear->SetOnClick([self]()
+                                  {
+                                      if (auto* field = self->FindAs<gui::TextField>(u8"viewer-filter-name"))
+                                          field->SetText(u8"");
+                                      self->m_filter.name = {};
+                                      self->ShowGrid();
+                                  });
+            if (auto* clear = FindAs<gui::Button>(u8"viewer-lib-clear"))
+                clear->SetOnClick([self]()
+                                  {
+                                      if (auto* field = self->FindAs<gui::TextField>(u8"viewer-lib-search"))
+                                          field->SetText(u8"");
+                                      self->ShowLibraryGrid();
+                                  });
+            // The library's tree: a choice shows its models; the toolbar acts on it.
+            if (auto* tree = FindAs<gui::TreeView>(u8"viewer-lib-tree"))
+                tree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                            {
+                                                if (!index.IsValid() || self->m_syncingLibrary)
+                                                    return;
+                                                self->m_libraryChoice = static_cast<i32>(index.InternalId);
+                                                self->ShowLibraryGrid();
+                                            });
+            if (auto* tree = FindAs<gui::TreeView>(u8"viewer-lib-tree"))
+            {
+                (void)tree->AddEventListener(gui::EventType::ContextMenu, [self, tree](const gui::Event& e)
+                                             {
+                                                 self->ShowLibraryMenu(*tree, static_cast<const gui::MouseEvent&>(e).Position);
+                                                 e.Handled = true;
+                                             });
+                // A rename in place runs the command; a refusal (a clash) keeps the row editing.
+                tree->SetOnEditCommit([self](const gui::ModelIndex& index, StringView text)
+                                      {
+                                          const LibraryNode* node = self->NodeAt(static_cast<i32>(index.InternalId));
+                                          if (node == nullptr || text.IsEmpty())
+                                              return false;
+                                          modelviewer::CommandResult r;
+                                          if (node->kind == LibraryNode::Kind::Collection)
+                                          {
+                                              JsonValue a = Arg(u8"id", Text(Format(u8"{}", node->collection).AsView()));
+                                              a.Set(String(u8"name"), Text(text));
+                                              r = self->m_library.Commands().Execute(u8"collection.rename", a);
+                                          }
+                                          else
+                                          {
+                                              JsonValue a = Arg(u8"from", Text(node->tag.AsView()));
+                                              a.Set(String(u8"to"), Text(text));
+                                              r = self->m_library.Commands().Execute(u8"tag.rename", a);
+                                          }
+                                          if (!r.ok)
+                                              LOG_WARNING(u8"ModelViewer", u8"rename: {}", r.error.AsView());
+                                          return r.ok;
+                                      });
+            }
+            if (auto* create = FindAs<gui::Button>(u8"viewer-lib-new"))
+                create->SetOnClick([self]()
                                    {
-                                       const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
-                                       if (tab == nullptr || self->m_syncingPick)
-                                           return;
-                                       self->m_shortlist.SetStarred(tab->path.AsView(), on);
-                                       if (!on)
-                                           self->ShowPick(*tab); // its note went with it
-                                       self->SaveShortlist();
+                                       // Inside the collection chosen, else at the top.
+                                       const LibraryNode* node = self->ChosenNode();
+                                       self->NewCollection(node != nullptr && node->kind == LibraryNode::Kind::Collection
+                                                               ? Format(u8"{}", node->collection).AsView()
+                                                               : StringView{});
                                    });
+            if (auto* undo = FindAs<gui::Button>(u8"viewer-lib-undo"))
+                undo->SetOnClick([self]() { self->Run(u8"history.undo"); });
+            // The library's grid: the search and its scope; take the selection out.
+            if (auto* search = FindAs<gui::TextField>(u8"viewer-lib-search"))
+                search->SetOnTextChanging([self](StringView) { self->ShowLibraryGrid(); });
+            if (auto* everywhere = FindAs<gui::CheckBox>(u8"viewer-lib-everywhere"))
+                everywhere->SetOnToggled([self](bool) { self->ShowLibraryGrid(); });
+            if (auto* sub = FindAs<gui::CheckBox>(u8"viewer-lib-sub"))
+                sub->SetOnToggled([self](bool) { self->ShowLibraryGrid(); });
+            if (auto* takeOut = FindAs<gui::Button>(u8"viewer-lib-remove"))
+                takeOut->SetOnClick([self]()
+                                    {
+                                        const LibraryNode* node = self->ChosenNode();
+                                        if (node != nullptr && node->kind == LibraryNode::Kind::Collection)
+                                            self->TakeOut(node->collection, self->SelectedPaths(u8"viewer-lib-grid", self->m_libraryGrid).AsSpan());
+                                    });
+            // The panel's Library section, for the model in front.
+            if (auto* add = FindAs<gui::Button>(u8"viewer-lib-add"))
+                add->SetOnClick([self]()
+                                {
+                                    const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
+                                    if (tab != nullptr)
+                                        self->AddToCollection(self->ComboCollection(u8"viewer-lib-add-target"), Span<const String>(&tab->path, 1));
+                                });
+            if (auto* tag = FindAs<gui::TextField>(u8"viewer-lib-tag"))
+                tag->SetOnSubmit([self, tag](StringView text)
+                                 {
+                                     const modelviewer::ModelTab* front = self->m_tabs.ActiveTab();
+                                     if (front == nullptr || text.IsEmpty())
+                                         return;
+                                     JsonValue a = Arg(u8"tag", Text(text));
+                                     a.Set(String(u8"entries"), self->EntriesFor(Span<const String>(&front->path, 1)));
+                                     self->Run(u8"tag.add", a);
+                                     tag->SetText(u8"");
+                                 });
             if (auto* note = FindAs<gui::TextField>(u8"viewer-note"))
                 note->SetOnTextChanged([self](StringView text)
                                        {
                                            const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
-                                           if (tab == nullptr || self->m_syncingPick)
+                                           if (tab == nullptr || self->m_syncingPanel)
                                                return;
-                                           if (text.IsEmpty() && !self->m_shortlist.IsStarred(tab->path.AsView()))
+                                           const modelviewer::Entry* existing = self->m_library.Get().FindEntryByPath(tab->path.AsView());
+                                           if (existing == nullptr && text.IsEmpty())
+                                               return; // nothing to keep: the model stays out of the library
+                                           String id;
+                                           if (!self->EntryFor(tab->path.AsView(), id))
                                                return;
-                                           self->m_shortlist.SetNote(tab->path.AsView(), text);
-                                           self->ShowPick(*tab); // a note stars it
-                                           self->SaveShortlist();
+                                           JsonValue a = Arg(u8"id", Text(id.AsView()));
+                                           a.Set(String(u8"note"), Text(text));
+                                           self->Run(u8"entry.note.set", a);
                                        });
             if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
                 loose->SetOnToggled([self](bool on)
@@ -1453,41 +1991,431 @@ namespace
                                             self->m_thumbnails->SetLooseTextures(on);
                                         self->SaveSettings();
                                     });
-            if (auto* exportCsv = FindAs<gui::Button>(u8"viewer-export"))
-                exportCsv->SetOnClick([self, &host]()
+        }
+
+        // The library changed (or the window started): the tree, the grids' marks, the combos
+        // and the panel brought up to date.
+        void RefreshLibrary()
+        {
+            m_libraryStale = false;
+            RefreshLibraryTree();
+            RefreshCollectionCombos();
+            if (m_page == Page::Library)
+                ShowLibraryGrid();
+            else if (m_page == Page::Browse)
+                ShowGrid();
+            else
+                ShowLibraryPanel();
+        }
+
+        // The tree: All models, Unsorted, the collections nested, then the tags with their counts;
+        // the choice kept by what it names.
+        void RefreshLibraryTree()
+        {
+            auto* tree = FindAs<gui::TreeView>(u8"viewer-lib-tree");
+            if (tree == nullptr)
+                return;
+            const LibraryNode kept = ChosenNode() != nullptr ? *ChosenNode() : LibraryNode{};
+            m_syncingLibrary = true;
+            tree->SetModel(nullptr);
+            m_libraryModel = MakeUnique<LibraryTreeModel>(m_allocator);
+            ModelViewerApp* self = this;
+            m_libraryModel->renamable = [self](i32 node)
+            {
+                const LibraryNode* n = self->NodeAt(node);
+                return n != nullptr && (n->kind == LibraryNode::Kind::Collection || n->kind == LibraryNode::Kind::Tag);
+            };
+            m_libraryModel->takesModels = [self](i32 node)
+            {
+                const LibraryNode* n = self->NodeAt(node);
+                return n != nullptr && n->kind == LibraryNode::Kind::Collection;
+            };
+            m_libraryModel->dropModels = [self](i32 node, StringView joined)
+            {
+                const LibraryNode* n = self->NodeAt(node);
+                if (n == nullptr)
+                    return;
+                Array<String> paths;
+                usize start = 0;
+                while (start < joined.Size())
+                {
+                    usize end = start;
+                    while (end < joined.Size() && joined[end] != u8'\n')
+                        ++end;
+                    if (end > start)
+                        paths.PushBack(String(joined.SubStr(start, end - start)));
+                    start = end + 1;
+                }
+                self->AddToCollection(n->collection, paths.AsSpan());
+            };
+            m_libraryNodes.Clear();
+            const modelviewer::Library& library = m_library.Get();
+            (void)AddLibraryNode(gui::TreeModel::kRoot, Format(u8"All models ({})", library.Entries().Size()).AsView(), LibraryNode{LibraryNode::Kind::All});
+            (void)AddLibraryNode(gui::TreeModel::kRoot, u8"Unsorted", LibraryNode{LibraryNode::Kind::Unsorted});
+            AddCollectionNodes(gui::TreeModel::kRoot, Guid{});
+            Array<String> tags;
+            Array<u32> counts;
+            library.TagCounts(tags, counts);
+            if (!tags.IsEmpty())
+            {
+                const i32 tagsRoot = AddLibraryNode(gui::TreeModel::kRoot, u8"Tags", LibraryNode{LibraryNode::Kind::TagsRoot});
+                for (usize i = 0; i < tags.Size(); ++i)
+                {
+                    LibraryNode node{LibraryNode::Kind::Tag};
+                    node.tag = tags[i];
+                    (void)AddLibraryNode(tagsRoot, Format(u8"{} ({})", tags[i].AsView(), counts[i]).AsView(), node);
+                }
+            }
+            tree->SetModel(m_libraryModel.Get());
+            i32 choice = 0;
+            for (usize i = 0; i < m_libraryNodes.Size(); ++i)
+            {
+                const LibraryNode& n = m_libraryNodes[i];
+                tree->SetIdExpanded(static_cast<gui::ItemId>(i), true);
+                if (n.kind == kept.kind && n.collection == kept.collection && n.tag == kept.tag)
+                    choice = static_cast<i32>(i);
+            }
+            if (!m_renameAfterRefresh.IsNil())
+                for (usize i = 0; i < m_libraryNodes.Size(); ++i)
+                    if (m_libraryNodes[i].kind == LibraryNode::Kind::Collection && m_libraryNodes[i].collection == m_renameAfterRefresh)
+                        choice = static_cast<i32>(i);
+            m_libraryChoice = choice;
+            const gui::ItemId chosen[] = {static_cast<gui::ItemId>(choice)};
+            tree->SetSelectedIds(Span<const gui::ItemId>(chosen, 1));
+            m_syncingLibrary = false;
+            if (!m_renameAfterRefresh.IsNil())
+            {
+                m_renameAfterRefresh = Guid{};
+                for (i32 item = 0; item < static_cast<i32>(tree->GetItemCount()); ++item)
+                    if (static_cast<i32>(tree->GetItemIndex(item).InternalId) == choice)
+                        (void)tree->BeginEdit(item);
+            }
+        }
+        [[nodiscard]] const LibraryNode* NodeAt(i32 node) const
+        {
+            return node >= 0 && static_cast<usize>(node) < m_libraryNodes.Size() ? &m_libraryNodes[static_cast<usize>(node)] : nullptr;
+        }
+
+        // A row's menu (the hierarchy's way: the press's row, a menu built for it): a collection
+        // makes one inside, renames or goes; a tag renames or goes; elsewhere, a new collection.
+        void ShowLibraryMenu(gui::TreeView& tree, Float2 at)
+        {
+            const i32 item = tree.ItemAt(at);
+            const i32 nodeId = item >= 0 ? static_cast<i32>(tree.GetItemIndex(item).InternalId) : -1;
+            const LibraryNode* node = NodeAt(nodeId);
+            ModelViewerApp* self = this;
+            m_libraryMenu = MakeRef<gui::Menu>(m_allocator);
+            auto rename = [self, &tree, item]()
+            {
+                gui::TreeView* view = &tree;
+                (void)self;
+                (void)view->BeginEdit(item);
+            };
+            if (node != nullptr && node->kind == LibraryNode::Kind::Collection)
+            {
+                const String id = Format(u8"{}", node->collection);
+                (void)m_libraryMenu->AddItem(u8"New collection inside", [self, id]() { self->NewCollection(id.AsView()); });
+                (void)m_libraryMenu->AddItem(u8"Rename", rename);
+                m_libraryMenu->AddSeparator();
+                (void)m_libraryMenu->AddItem(u8"Delete (its models stay in the library)", [self, id]() { self->Run(u8"collection.delete", Arg(u8"id", Text(id.AsView()))); });
+            }
+            else if (node != nullptr && node->kind == LibraryNode::Kind::Tag)
+            {
+                const String tag = node->tag;
+                (void)m_libraryMenu->AddItem(u8"Rename tag", rename);
+                (void)m_libraryMenu->AddItem(u8"Delete tag (from every model)", [self, tag]() { self->Run(u8"tag.delete", Arg(u8"tag", Text(tag.AsView()))); });
+            }
+            else
+                (void)m_libraryMenu->AddItem(u8"New collection", [self]() { self->NewCollection({}); });
+            m_libraryMenu->Open(tree, at);
+        }
+
+        // A collection named "New collection" (inside `parent`, a collection's id, when given),
+        // its row then renaming in place.
+        void NewCollection(StringView parent)
+        {
+            JsonValue a = Arg(u8"name", Text(u8"New collection"));
+            if (!parent.IsEmpty())
+                a.Set(String(u8"parent"), Text(parent));
+            const modelviewer::CommandResult made = m_library.Commands().Execute(u8"collection.create", a);
+            if (!made.ok)
+            {
+                LOG_WARNING(u8"ModelViewer", u8"collection.create: {}", made.error.AsView());
+                return;
+            }
+            (void)Guid::TryParse(made.value.Get(String(u8"id")).AsString().AsView(), m_renameAfterRefresh);
+            RefreshLibrary();
+        }
+        i32 AddLibraryNode(i32 parent, StringView text, const LibraryNode& node)
+        {
+            const i32 id = m_libraryModel->AddNode(parent, text);
+            switch (node.kind)
+            {
+            case LibraryNode::Kind::All: m_libraryModel->SetIcon(id, u8"Editor/Icons/tiles.svg"); break;
+            case LibraryNode::Kind::Unsorted: m_libraryModel->SetIcon(id, u8"Editor/Icons/file.svg"); break;
+            case LibraryNode::Kind::Collection: m_libraryModel->SetIcon(id, u8"Editor/Icons/folder.svg"); break;
+            case LibraryNode::Kind::TagsRoot: m_libraryModel->SetIcon(id, u8"Editor/Icons/filter.svg"); break;
+            case LibraryNode::Kind::Tag: break;
+            }
+            if (static_cast<usize>(id) >= m_libraryNodes.Size())
+                m_libraryNodes.Resize(static_cast<usize>(id) + 1);
+            m_libraryNodes[static_cast<usize>(id)] = node;
+            return id;
+        }
+        void AddCollectionNodes(i32 parentNode, const Guid& parent)
+        {
+            for (const modelviewer::Collection& c : m_library.Get().Collections())
+            {
+                if (c.parent != parent)
+                    continue;
+                LibraryNode node{LibraryNode::Kind::Collection};
+                node.collection = c.id;
+                const i32 id = AddLibraryNode(parentNode, Format(u8"{} ({})", c.name.AsView(), c.members.Size()).AsView(), node);
+                AddCollectionNodes(id, c.id);
+            }
+        }
+        [[nodiscard]] const LibraryNode* ChosenNode() const
+        {
+            return m_libraryChoice >= 0 && static_cast<usize>(m_libraryChoice) < m_libraryNodes.Size() ? &m_libraryNodes[static_cast<usize>(m_libraryChoice)] : nullptr;
+        }
+
+        // The combos that name a collection (the browser's and the panel's): the tree's
+        // collections in order, nested ones indented.
+        void RefreshCollectionCombos()
+        {
+            m_comboCollections.Clear();
+            String items;
+            auto walk = [&](auto& self, const Guid& parent, u32 depth) -> void
+            {
+                for (const modelviewer::Collection& c : m_library.Get().Collections())
+                {
+                    if (c.parent != parent)
+                        continue;
+                    if (!items.IsEmpty())
+                        items += u8"|";
+                    for (u32 d = 0; d < depth; ++d)
+                        items += u8"  ";
+                    items += c.name.AsView();
+                    m_comboCollections.PushBack(c.id);
+                    self(self, c.id, depth + 1);
+                }
+            };
+            walk(walk, Guid{}, 0);
+            const StringView combos[] = {u8"viewer-add-target", u8"viewer-lib-add-target"};
+            for (const StringView id : combos)
+                if (auto* combo = FindAs<gui::ComboBox>(id))
+                {
+                    const i32 kept = combo->GetSelectedIndex();
+                    combo->SetItemsText(items);
+                    combo->SetSelectedIndex(m_comboCollections.IsEmpty() ? -1 : Clamp(kept, 0, static_cast<i32>(m_comboCollections.Size()) - 1));
+                }
+        }
+
+        // The library's grid: the models of the tree's choice that the search finds.
+        void ShowLibraryGrid()
+        {
+            const modelviewer::Library& library = m_library.Get();
+            const LibraryNode* node = ChosenNode();
+            auto* searchField = FindAs<gui::TextField>(u8"viewer-lib-search");
+            auto* everywhereBox = FindAs<gui::CheckBox>(u8"viewer-lib-everywhere");
+            auto* subBox = FindAs<gui::CheckBox>(u8"viewer-lib-sub");
+            const bool everywhere = everywhereBox != nullptr && everywhereBox->IsChecked();
+            const bool sub = subBox == nullptr || subBox->IsChecked();
+            modelviewer::SearchQuery query = modelviewer::ParseQuery(searchField != nullptr ? searchField->GetText() : StringView{});
+            Guid scope;
+            Guid named; // the collection whose member names the cells show
+            if (node != nullptr && !everywhere)
+            {
+                if (node->kind == LibraryNode::Kind::Collection)
+                {
+                    scope = node->collection;
+                    named = node->collection;
+                }
+                else if (node->kind == LibraryNode::Kind::Tag)
+                    query.tags.PushBack(node->tag);
+            }
+            Array<Guid> found = modelviewer::Search(library, query, scope);
+            if (node != nullptr && !everywhere && node->kind == LibraryNode::Kind::Collection && !sub)
+            {
+                const modelviewer::Collection* c = library.FindCollection(node->collection);
+                for (usize i = found.Size(); i-- > 0;)
+                {
+                    bool own = false;
+                    for (const modelviewer::Member& m : c->members)
+                        own = own || m.entry == found[i];
+                    if (!own)
+                        found.RemoveAt(i);
+                }
+            }
+            if (node != nullptr && !everywhere && node->kind == LibraryNode::Kind::Unsorted)
+                for (usize i = found.Size(); i-- > 0;)
+                {
+                    Array<Guid> in;
+                    library.CollectionsOf(found[i], in);
+                    if (!in.IsEmpty())
+                        found.RemoveAt(i);
+                }
+            m_libraryGrid.rows.Clear();
+            Array<String> undrawn;
+            for (const Guid& id : found)
+            {
+                const modelviewer::Entry* e = library.FindEntry(id);
+                modelviewer_window::GridRow row;
+                row.path = e->path;
+                row.entry = id;
+                row.inLibrary = true;
+                row.missing = modelviewer::Library::IsMissing(*e);
+                if (!named.IsNil())
+                    row.sub = String(library.MemberName(named, id));
+                if (!row.missing && ThumbImageFor(e->path.AsView()) == nullptr)
+                    undrawn.PushBack(e->path);
+                m_libraryGrid.rows.PushBack(foundation::core::Move(row));
+            }
+            m_libraryGrid.Reset();
+            if (auto* count = FindAs<gui::Label>(u8"viewer-lib-count"))
+                count->SetText(Format(u8"{} models", m_libraryGrid.rows.Size()).AsView());
+            if (m_thumbnails)
+                m_thumbnails->SetQueue(undrawn.AsSpan());
+        }
+
+        // A missing model pointed at its file's new place.
+        void RelinkDialog(const Guid& entry)
+        {
+            shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
+            if (dialogs == nullptr)
+                return;
+            const shell::FileFilter filters[] = {{u8"Models", modelviewer::kModelExtensions}};
+            ModelViewerApp* self = this;
+            const String id = Format(u8"{}", entry);
+            dialogs->ShowOpenFile([self, id](Span<const String> paths)
+                                  {
+                                      if (paths.IsEmpty())
+                                          return;
+                                      JsonValue a = Arg(u8"id", Text(id.AsView()));
+                                      a.Set(String(u8"path"), Text(paths[0].AsView()));
+                                      self->Run(u8"entry.relink", a);
+                                  },
+                                  Span<const shell::FileFilter>(filters, 1));
+        }
+
+        // The panel's Library section for the model in front: the collections it is in (its name
+        // in each, editable; a button to take it out), its tags (a click takes one off), its note.
+        void ShowLibraryPanel()
+        {
+            const modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            gui::Node* rows = FindById(u8"viewer-lib-memberships");
+            gui::Node* chips = FindById(u8"viewer-lib-tags");
+            if (tab == nullptr || rows == nullptr || chips == nullptr)
+                return;
+            while (rows->ChildCount() > 0)
+                rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
+            while (chips->ChildCount() > 0)
+                chips->RemoveChild(chips->GetChildAt(chips->ChildCount() - 1));
+            const modelviewer::Library& library = m_library.Get();
+            const modelviewer::Entry* e = library.FindEntryByPath(tab->path.AsView());
+            ModelViewerApp* self = this;
+            if (e == nullptr)
+            {
+                auto note = MakeRef<gui::Label>(m_allocator);
+                note->AddClass(u8"viewer-empty-note");
+                note->SetText(u8"Not in the library: add it to a collection, or give it a tag or a note.");
+                rows->AddChild(note.Get());
+            }
+            else
+            {
+                Array<Guid> in;
+                library.CollectionsOf(e->id, in);
+                const String entryId = Format(u8"{}", e->id);
+                for (const Guid& g : in)
+                {
+                    auto row = MakeRef<gui::Panel>(m_allocator);
+                    row->AddClass(u8"viewer-membership");
+                    auto label = MakeRef<gui::Label>(m_allocator);
+                    label->SetText(library.FindCollection(g)->name.AsView());
+                    auto name = MakeRef<gui::TextField>(m_allocator);
+                    name->SetPlaceholder(u8"its name here");
+                    name->SetText(library.MemberName(g, e->id));
+                    name->SetTooltip(u8"The id a game knows it by, unique across the top-level collection (Enter)");
+                    const String collectionId = Format(u8"{}", g);
+                    name->SetOnSubmit([self, collectionId, entryId](StringView text)
                                       {
-                                          shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
-                                          if (dialogs == nullptr)
-                                              return;
-                                          const shell::FileFilter filters[] = {{u8"CSV files", u8"csv"}};
-                                          dialogs->ShowSaveFile([self](Span<const String> paths)
-                                                                {
-                                                                    if (paths.IsEmpty())
-                                                                        return;
-                                                                    const String csv = self->m_shortlist.ToCsv();
-                                                                    if (WriteFile(paths[0].AsView(), Span<const byte>(reinterpret_cast<const byte*>(csv.Data()), csv.Size())))
-                                                                        LOG_INFO(u8"ModelViewer", u8"saved the shortlist ({} models) to {}", self->m_shortlist.Count(), paths[0].AsView());
-                                                                },
-                                                                Span<const shell::FileFilter>(filters, 1), u8"shortlist.csv");
+                                          JsonValue a = Arg(u8"collection", Text(collectionId.AsView()));
+                                          a.Set(String(u8"entry"), Text(entryId.AsView()));
+                                          a.Set(String(u8"name"), Text(text));
+                                          self->Run(u8"member.rename", a);
+                                          self->m_libraryStale = true; // a refused name goes back
                                       });
+                    auto out = MakeRef<gui::Button>(m_allocator);
+                    out->AddClass(u8"slot-button");
+                    out->SetIconSource(String(u8"Editor/Icons/close.svg"));
+                    out->SetTooltip(u8"Take it out of this collection");
+                    out->SetOnClick([self, collectionId, entryId]()
+                                    {
+                                        JsonValue a = Arg(u8"collection", Text(collectionId.AsView()));
+                                        JsonValue ids = JsonValue::MakeArray();
+                                        ids.Add(Text(entryId.AsView()));
+                                        a.Set(String(u8"entries"), ids);
+                                        self->Run(u8"member.remove", a);
+                                    });
+                    row->AddChild(label.Get());
+                    row->AddChild(name.Get());
+                    row->AddChild(out.Get());
+                    rows->AddChild(row.Get());
+                }
+                if (in.IsEmpty())
+                {
+                    auto note = MakeRef<gui::Label>(m_allocator);
+                    note->AddClass(u8"viewer-empty-note");
+                    note->SetText(u8"In the library, in no collection.");
+                    rows->AddChild(note.Get());
+                }
+                for (const String& t : e->tags)
+                {
+                    auto chip = MakeRef<gui::Button>(m_allocator);
+                    chip->AddClass(u8"chip");
+                    chip->AddClass(u8"checked");
+                    chip->AddClass(u8"viewer-tag");
+                    chip->SetText(t.AsView());
+                    chip->SetIconSource(String(u8"Editor/Icons/close.svg"));
+                    chip->SetTooltip(u8"Take this tag off");
+                    const String tag = t;
+                    chip->SetOnClick([self, tag, entryId]()
+                                     {
+                                         JsonValue a = Arg(u8"tag", Text(tag.AsView()));
+                                         JsonValue ids = JsonValue::MakeArray();
+                                         ids.Add(Text(entryId.AsView()));
+                                         a.Set(String(u8"entries"), ids);
+                                         self->Run(u8"tag.remove", a);
+                                     });
+                    chips->AddChild(chip.Get());
+                }
+            }
+            m_syncingPanel = true;
+            if (auto* note = FindAs<gui::TextField>(u8"viewer-note"))
+            {
+                const StringView text = e != nullptr ? e->note.AsView() : StringView{};
+                if (note->GetText() != text)
+                    note->SetText(text);
+            }
+            m_syncingPanel = false;
         }
 
-        // The tab in front's star and note.
-        void ShowPick(const modelviewer::ModelTab& tab)
+        /// What a cook counted, kept on the model's entry (when it has one) for the search.
+        void KeepStats(StringView path, const modelviewer::ModelStats& stats)
         {
-            m_syncingPick = true;
-            if (auto* star = FindAs<gui::CheckBox>(u8"viewer-star"))
-                star->SetChecked(m_shortlist.IsStarred(tab.path.AsView()));
-            if (auto* note = FindAs<gui::TextField>(u8"viewer-note"); note != nullptr && note->GetText() != m_shortlist.Note(tab.path.AsView()))
-                note->SetText(m_shortlist.Note(tab.path.AsView()));
-            m_syncingPick = false;
-        }
-
-        void SaveShortlist()
-        {
-            const String text = m_shortlist.Write();
-            (void)CreateDirectories(PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer").AsView());
-            (void)WriteFile(m_shortlistPath.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
+            const modelviewer::Entry* e = m_library.Get().FindEntryByPath(path);
+            if (e == nullptr || m_library.ReadOnly())
+                return;
+            modelviewer::EntryStats kept;
+            kept.known = true;
+            kept.rigged = stats.skins > 0;
+            kept.clips = static_cast<u32>(stats.clips.Size());
+            kept.triangles = stats.triangles;
+            kept.size = stats.size;
+            if (e->stats.known && e->stats.rigged == kept.rigged && e->stats.clips == kept.clips && e->stats.triangles == kept.triangles)
+                return;
+            (void)m_library.Get().SetStats(e->id, kept);
+            (void)m_library.File().Save(m_library.Get());
         }
 
         // The viewer's settings: the folder it browses (a line `folder <path>`) and the loose
@@ -1677,11 +2605,6 @@ namespace
         Array<Float4x4> m_bonePoses;
 
         // The browser.
-        struct Tile
-        {
-            String path;
-            gui::Button* button = nullptr; // held by the grid
-        };
         struct ThumbImage
         {
             String path;
@@ -1693,7 +2616,21 @@ namespace
             i32 parent = -1;
             bool listed = false; // its subfolders added
         };
-        bool m_browsing = false;
+        bool m_browsing = false; // a fixed page (Browse or Library) is in front, not a model
+        Page m_page = Page::Browse;
+
+        // The library in the window.
+        bool m_libraryStale = true;
+        bool m_syncingLibrary = false;
+        UniquePtr<LibraryTreeModel> m_libraryModel;
+        RefPtr<gui::Menu> m_libraryMenu;
+        Guid m_renameAfterRefresh; // a collection just made: its row starts its rename
+        Array<LibraryNode> m_libraryNodes; // by the tree model's node id
+        i32 m_libraryChoice = 0;
+        Array<Guid> m_comboCollections;    // what each combo item names
+        modelviewer_window::GridModel m_browseGrid;
+        modelviewer_window::GridModel m_libraryGrid;
+        RefPtr<gui::Menu> m_gridMenu;
         String m_settingsPath;
         String m_browseRoot;
         UniquePtr<modelviewer::ThumbnailRenderer> m_thumbnails;
@@ -1703,14 +2640,11 @@ namespace
         Array<modelviewer::ModelStats> m_folderStats;
         Array<bool> m_folderStatsKnown;
         modelviewer::BrowseFilter m_filter;
-        Array<Tile> m_tiles;
         Array<ThumbImage> m_thumbImages;
         u32 m_doneSinceFilter = 0;
 
         // The shortlist and the loose texture toggle.
-        modelviewer::Shortlist m_shortlist{m_allocator};
-        String m_shortlistPath;
-        bool m_syncingPick = false;
+        bool m_syncingPanel = false; // the panel's note set by code, not by a hand
         bool m_looseTextures = true;
 
         // The library, and the agent's way in.

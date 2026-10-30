@@ -323,3 +323,64 @@ TEST_CASE("model viewer library: a second opener is read-only while the first ho
     CHECK_FALSE(third.session.ReadOnly());
     CHECK(third.Found(u8"") == 1u);
 }
+
+TEST_CASE("model viewer library: a selection added at once lands in order, at the place asked")
+{
+    const String folder = Folder(u8"scratch_library_selection");
+    Session s(folder.AsView());
+    const String a = s.Add(Model(folder.AsView(), u8"A.fbx").AsView());
+    const String b = s.Add(Model(folder.AsView(), u8"B.fbx").AsView());
+    const String c = s.Add(Model(folder.AsView(), u8"C.fbx").AsView());
+    const String game = s.Collection(u8"Moonfall");
+    s.Join(game.AsView(), Span<const String>(&a, 1));
+    JsonValue add = Args({{u8"collection", game.AsView()}});
+    const String selection[] = {b, c, a}; // a is in already: it stays where it is
+    add.Set(String(u8"entries"), List(Span<const String>(selection, 3)));
+    add.Set(String(u8"at"), JsonValue::MakeNumber(0));
+    (void)s.Ok(u8"member.add", add);
+    const JsonValue members = s.Ok(u8"collection.members", Args({{u8"id", game.AsView()}}));
+    REQUIRE(members.Count() == 3);
+    CHECK(Field(members.At(0), u8"file") == u8"B.fbx");
+    CHECK(Field(members.At(1), u8"file") == u8"C.fbx");
+    CHECK(Field(members.At(2), u8"file") == u8"A.fbx");
+}
+
+TEST_CASE("model viewer library: renaming or deleting a tag does it on every model")
+{
+    const String folder = Folder(u8"scratch_library_tags");
+    Session s(folder.AsView());
+    const String a = s.Add(Model(folder.AsView(), u8"A.fbx").AsView());
+    const String b = s.Add(Model(folder.AsView(), u8"B.fbx").AsView());
+    s.Tag(a.AsView(), u8"boss");
+    s.Tag(b.AsView(), u8"Boss"); // any case: one tag
+    s.Tag(b.AsView(), u8"villain");
+    JsonValue counts = s.Ok(u8"tag.list");
+    REQUIRE(counts.Count() == 2);
+    CHECK(counts.At(0).Get(String(u8"count")).AsNumber() == doctest::Approx(2.0));
+
+    (void)s.Ok(u8"tag.rename", Args({{u8"from", u8"BOSS"}, {u8"to", u8"villain"}})); // b has both: merged
+    counts = s.Ok(u8"tag.list");
+    REQUIRE(counts.Count() == 1);
+    CHECK(Field(counts.At(0), u8"tag") == u8"villain");
+    CHECK(counts.At(0).Get(String(u8"count")).AsNumber() == doctest::Approx(2.0));
+    CHECK(s.Ok(u8"entry.get", Args({{u8"id", b.AsView()}})).Get(String(u8"tags")).Count() == 1);
+
+    (void)s.Ok(u8"tag.delete", Args({{u8"tag", u8"Villain"}}));
+    CHECK(s.Ok(u8"tag.list").Count() == 0);
+    CHECK(s.Found(u8"tag:villain") == 0u);
+}
+
+TEST_CASE("model viewer library: a change is announced to the views; a read or a refused change is not")
+{
+    const String folder = Folder(u8"scratch_library_announce");
+    Session s(folder.AsView());
+    Array<String> heard;
+    s.session.Commands().AddListener([&heard](StringView name) { heard.PushBack(String(name)); });
+    const String game = s.Collection(u8"Moonfall");
+    (void)s.Ok(u8"collection.tree");                               // a read
+    CHECK_FALSE(s.Run(u8"collection.create", Args({{u8"name", u8""}})).ok); // refused
+    (void)s.Ok(u8"collection.rename", Args({{u8"id", game.AsView()}, {u8"name", u8"Moonfall II"}}));
+    REQUIRE(heard.Size() == 2u);
+    CHECK(heard[0] == u8"collection.create");
+    CHECK(heard[1] == u8"collection.rename");
+}

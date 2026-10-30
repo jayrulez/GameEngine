@@ -410,8 +410,8 @@ TEST_CASE("model viewer: the grid's filters by name, rigged and animated; number
     CHECK(modelviewer::Matches(filter, u8"/m/Knight.fbx", &rigged));
     CHECK_FALSE(modelviewer::Matches(filter, u8"/m/crate.fbx", &prop));
     filter.animatedOnly = false;
-    filter.starredOnly = true;
-    CHECK(modelviewer::Matches(filter, u8"/m/crate.fbx", &prop, /*starred*/ true));
+    filter.inLibraryOnly = true;
+    CHECK(modelviewer::Matches(filter, u8"/m/crate.fbx", &prop, /*inLibrary*/ true));
     CHECK_FALSE(modelviewer::Matches(filter, u8"/m/Knight.fbx", &rigged, false));
 
     // A model cooked once has its numbers in the cache; one never opened has none.

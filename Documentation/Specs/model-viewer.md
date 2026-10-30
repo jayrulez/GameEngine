@@ -285,7 +285,18 @@ A tab beside Browse, both always first.
   (multi-select, the picker, a drop on the tree) and from the panel's Library section, tags and
   names edited, the window's commands (`model`, `tabs`, `view`, `clip`, `browse`, `thumbnail`);
   every control a command. Tests: adding a selection; renaming and deleting a tag across entries;
-  an announced change refreshes the views it touches.
+  an announced change refreshes the views it touches. Built 2026-10-29: P8a the window's commands
+  (`:window`, one table; a --headless viewer answers each that there is no window), every control
+  running one. P8b the Library tab (second, after Browse: the tree of All models, Unsorted, the
+  collections and the tags with their counts; a row's right-click menu and an in-place rename,
+  the hierarchy's way; the search box, Everywhere, Sub-collections), both grids rebuilt as the
+  editor's asset tiles (a ListView over a model with a cell per model: its picture, name, its
+  name in the collection shown, an in-library mark, a missing badge; the list's own selection,
+  double-click to open, a tile's right-click menu, a drag onto a collection in the tree), and the
+  panel's Library section in place of P4's Pick (the collections it is in with its name in each,
+  add to one, its tags as chips, its note). The browser's Starred filter is In library; the
+  shortlist's file comes in through the library (P6). Icons throughout, from the editor's set
+  and the viewer's own step back and forward.
 - **P9 Preferences and recents.** The page, the settings it keeps, the screenshot folder and
   pattern, the thumbnail size, Clear cache, the recents (`settings`, `recents`). Tests: the
   settings' round trip (an unknown line kept); recents' order and limit.

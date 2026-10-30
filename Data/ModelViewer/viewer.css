@@ -23,16 +23,33 @@
 .viewer-folder-tree { flex-grow: 1; min-height: 0; }
 .viewer-grid-pane { flex-grow: 1; min-width: 0; flex-direction: column; }
 .viewer-filter { background-color: var(--surface); border-bottom: 1px solid var(--separator); align-items: center; }
-.viewer-filter-name { width: 220px; flex-shrink: 0; }
+
 .viewer-grid-count { color: var(--text-dim); flex-grow: 1; text-align: right; }
-.viewer-grid-scroll { flex-grow: 1; min-height: 0; overflow-x: hidden; }
-.viewer-grid { flex-direction: row; flex-wrap: wrap; width: 100%; padding: var(--space-m); column-gap: var(--space-m); row-gap: var(--space-m); }
-button.viewer-tile { flex-direction: column; align-items: center; width: 144px; padding: var(--space-s);
-                     background-color: transparent; border-radius: var(--radius-small); row-gap: var(--space-xs); }
-button.viewer-tile:hover { background-color: var(--ghost-hover); }
-button.viewer-tile > icon { width: 128px; height: 128px; }
-button.viewer-tile > label { width: 132px; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); text-align: center; }
-button.viewer-tile.starred > label { color: var(--accent-strong); font-weight: 600; }
+/* The grids: the editor's asset tiles, larger (a model's picture), the list's own selection. */
+.viewer-tiles { flex-grow: 1; min-height: 0; background-color: var(--surface); padding: var(--space-m); }
+.viewer-tiles listviewrow { border-radius: var(--radius); }
+.viewer-tiles::selection { border-radius: var(--radius); }
+.model-cell { flex-direction: column; align-items: center; row-gap: var(--space-xs); padding: var(--space-s); }
+.model-thumb { width: 128px; height: 128px; border-radius: var(--radius-small); background-color: var(--surface-sunken);
+               align-items: center; justify-content: center; }
+.model-glyph { width: 32px; height: 32px; image-color: var(--icon-dim); }
+.model-picture { width: 128px; height: 128px; border-radius: var(--radius-small); object-fit: cover; }
+.model-mark { position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 4px; background-color: var(--accent-strong); }
+.model-thumb > .badge { position: absolute; left: 4px; bottom: 4px; font-size: 10px; padding: 0 3px; }
+.model-name { font-size: var(--font-small); color: var(--text); max-width: 136px; text-overflow: ellipsis; white-space: nowrap; }
+.model-sub { font-size: var(--font-small); color: var(--accent-strong); max-width: 136px; text-overflow: ellipsis; white-space: nowrap; }
+.viewer-lib-bar { background-color: var(--surface); border-bottom: 1px solid var(--separator); }
+.viewer-pane-title { color: var(--text-strong); font-weight: 600; }
+.viewer-filter > .search { flex-grow: 1; min-width: 160px; max-width: 360px; }
+.viewer-filter > .viewer-lib-search { max-width: none; }
+.viewer-lib-target { width: 150px; flex-shrink: 0; }
+.viewer-memberships { flex-direction: column; }
+.viewer-membership { flex-direction: row; align-items: center; column-gap: var(--space-s); padding: 1px var(--space-m); }
+.viewer-membership > label { width: 38%; flex-shrink: 0; color: var(--text-dim); text-overflow: ellipsis; white-space: nowrap; }
+.viewer-membership > textfield { flex-grow: 1; min-width: 0; }
+.viewer-chips { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-xs); row-gap: var(--space-xs); padding: var(--space-xs) var(--space-m); }
+button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-dim); order: 1; }
+.viewer-empty-note { color: var(--text-dim); padding: var(--space-s) var(--space-m); }
 .viewer-note { flex-grow: 1; min-width: 0; }
 .viewer-panel { width: 280px; flex-shrink: 0; flex-direction: column; background-color: var(--surface);
                 border-left: 1px solid var(--separator); }

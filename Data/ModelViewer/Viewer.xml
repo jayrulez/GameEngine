@@ -7,7 +7,7 @@
   `viewer-tabs` after the Browse and Library tabs, the numbers in `viewer-stats` and the clips in
   `viewer-clip`. With the Browse tab in front, the browser takes the stage's place: the folders,
   the filters and a thumbnail per model under the chosen folder (`viewer-grid`). With the Library
-  tab in front, the library: its collections and tags (`viewer-lib-tree`), the search, and the
+  tab in front, the library: its collections (`viewer-lib-tree`) and its tags as chips (`viewer-tag-chips`), the search, and the
   models of what is chosen (`viewer-lib-grid`).
 -->
 <Panel class="viewer">
@@ -91,6 +91,13 @@
                     <Button id="viewer-lib-undo" class="icon-button" icon="Editor/Icons/undo.svg" tooltip="Undo the last change to the library"/>
                 </Panel>
                 <TreeView id="viewer-lib-tree" class="viewer-folder-tree"/>
+                <!-- The tags, each on or off: the grid shows the models with any tag that is on. -->
+                <Panel class="panel-toolbar viewer-lib-bar">
+                    <Label class="viewer-pane-title" text="Tags"/>
+                    <Spacer/>
+                    <Button id="viewer-tags-clear" class="ghost" text="Clear" tooltip="Turn every tag off: the grid shows what the tree chose"/>
+                </Panel>
+                <Panel id="viewer-tag-chips" class="viewer-chips viewer-tag-filter"/>
             </Panel>
             <Panel class="viewer-grid-pane page-pane">
                 <Panel class="panel-toolbar viewer-filter">

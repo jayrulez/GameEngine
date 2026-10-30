@@ -153,4 +153,23 @@ export namespace modelviewer
                     consider(*e);
         return found;
     }
+
+    /// The models of `ids` with ANY of `tags` (in any case), in their order; all of them when
+    /// `tags` is empty. The Library tab's tag chips: each tag that is on adds its models, where a
+    /// query's tag: terms must all hold.
+    [[nodiscard]] inline Array<Guid> WithAnyTag(const Library& library, Span<const Guid> ids, Span<const String> tags)
+    {
+        Array<Guid> kept;
+        for (const Guid& id : ids)
+        {
+            const Entry* e = library.FindEntry(id);
+            bool tagged = tags.IsEmpty();
+            for (usize i = 0; e != nullptr && !tagged && i < e->tags.Size(); ++i)
+                for (const String& tag : tags)
+                    tagged = tagged || (e->tags[i].Size() == tag.Size() && e->tags[i].AsView().ContainsIgnoreCase(tag.AsView()));
+            if (e != nullptr && tagged)
+                kept.PushBack(id);
+        }
+        return kept;
+    }
 }

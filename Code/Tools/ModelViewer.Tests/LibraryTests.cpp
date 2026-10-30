@@ -384,3 +384,39 @@ TEST_CASE("model viewer library: a change is announced to the views; a read or a
     CHECK(heard[0] == u8"collection.create");
     CHECK(heard[1] == u8"collection.rename");
 }
+
+// The Library tab's tag chips: each tag that is on adds its models (any of them, in any case),
+// in the order the models came; none on keeps them all.
+TEST_CASE("model viewer library: the tags that are on show the models with any of them")
+{
+    const String folder = Folder(u8"scratch_library_any_tag");
+    Session s(folder.AsView());
+    const String knight = s.Add(Model(folder.AsView(), u8"Knight.fbx").AsView());
+    const String rogue = s.Add(Model(folder.AsView(), u8"Rogue.fbx").AsView());
+    const String crate = s.Add(Model(folder.AsView(), u8"Crate.obj").AsView());
+    s.Tag(knight.AsView(), u8"hero");
+    s.Tag(rogue.AsView(), u8"Hero");
+    s.Tag(rogue.AsView(), u8"boss");
+    s.Tag(crate.AsView(), u8"prop");
+    Array<Guid> all;
+    for (const String* id : {&knight, &rogue, &crate})
+    {
+        Guid g;
+        REQUIRE(Guid::TryParse(id->AsView(), g));
+        all.PushBack(g);
+    }
+    const modelviewer::Library& library = s.session.Get();
+    const String heroes[] = {String(u8"hero")};
+    const Array<Guid> found = modelviewer::WithAnyTag(library, all.AsSpan(), Span<const String>(heroes, 1));
+    REQUIRE(found.Size() == 2u); // in any case
+    CHECK(found[0] == all[0]);
+    CHECK(found[1] == all[1]);
+    const String two[] = {String(u8"boss"), String(u8"prop")};
+    const Array<Guid> either = modelviewer::WithAnyTag(library, all.AsSpan(), Span<const String>(two, 2));
+    REQUIRE(either.Size() == 2u); // each tag adds its own
+    CHECK(either[0] == all[1]);
+    CHECK(either[1] == all[2]);
+    CHECK(modelviewer::WithAnyTag(library, all.AsSpan(), Span<const String>{}).Size() == 3u);
+    const String none[] = {String(u8"missing")};
+    CHECK(modelviewer::WithAnyTag(library, all.AsSpan(), Span<const String>(none, 1)).IsEmpty());
+}

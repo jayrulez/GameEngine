@@ -83,3 +83,7 @@ button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-di
                     border: 1px solid var(--border-strong); border-radius: var(--radius); }
 .viewer-light-pop > .prop-row { padding-left: var(--space-m); padding-right: var(--space-m); }
 .viewer-light-pop > .prop-row > slider { flex-grow: 1; min-width: 0; }
+/* The Library tab's tags: chips that turn on and off, under the collections. */
+.viewer-tag-filter { padding: var(--space-s) var(--space-m) var(--space-m); flex-shrink: 0; max-height: 40%; overflow-y: auto; }
+.viewer-tag-filter > textfield { width: 120px; }
+

@@ -395,13 +395,10 @@ namespace
             All,
             Unsorted,
             Collection,
-            TagsRoot,
-            Tag,
         };
         explicit LibraryNode(Kind k = Kind::All) : kind(k) {}
         Kind kind;
         Guid collection;
-        String tag;
     };
 
     class ModelViewerApp final : public engine::runtime::DefaultApplication
@@ -1314,6 +1311,13 @@ namespace
                    if (self->m_page == Page::Model)
                        self->Run(u8"view.camera", Arg(u8"frame", Flag(true)));
                });
+            if (auto* clear = FindAs<gui::Button>(u8"viewer-tags-clear"))
+                clear->SetOnClick([self]()
+                                  {
+                                      self->m_activeTags.Clear();
+                                      self->ShowTagChips();
+                                      self->ShowLibraryGrid();
+                                  });
             // The bar's: the tab before and after. The model tab's own bar: frame, and the side panel shown or not.
             if (auto* frame = FindAs<gui::Button>(u8"viewer-frame"))
                 frame->SetOnClick([self]() { self->Run(u8"view.camera", Arg(u8"frame", Flag(true))); });
@@ -2411,18 +2415,9 @@ namespace
                                           if (node == nullptr || text.IsEmpty())
                                               return false;
                                           modelviewer::CommandResult r;
-                                          if (node->kind == LibraryNode::Kind::Collection)
-                                          {
-                                              JsonValue a = Arg(u8"id", Text(Format(u8"{}", node->collection).AsView()));
-                                              a.Set(String(u8"name"), Text(text));
-                                              r = self->m_library.Commands().Execute(u8"collection.rename", a);
-                                          }
-                                          else
-                                          {
-                                              JsonValue a = Arg(u8"from", Text(node->tag.AsView()));
-                                              a.Set(String(u8"to"), Text(text));
-                                              r = self->m_library.Commands().Execute(u8"tag.rename", a);
-                                          }
+                                          JsonValue a = Arg(u8"id", Text(Format(u8"{}", node->collection).AsView()));
+                                          a.Set(String(u8"name"), Text(text));
+                                          r = self->m_library.Commands().Execute(u8"collection.rename", a);
                                           if (!r.ok)
                                               LOG_WARNING(u8"ModelViewer", u8"rename: {}", r.error.AsView());
                                           return r.ok;
@@ -2531,7 +2526,7 @@ namespace
             m_libraryModel->renamable = [self](i32 node)
             {
                 const LibraryNode* n = self->NodeAt(node);
-                return n != nullptr && (n->kind == LibraryNode::Kind::Collection || n->kind == LibraryNode::Kind::Tag);
+                return n != nullptr && n->kind == LibraryNode::Kind::Collection;
             };
             m_libraryModel->takesModels = [self](i32 node)
             {
@@ -2561,26 +2556,14 @@ namespace
             (void)AddLibraryNode(gui::TreeModel::kRoot, Format(u8"All models ({})", library.Entries().Size()).AsView(), LibraryNode{LibraryNode::Kind::All});
             (void)AddLibraryNode(gui::TreeModel::kRoot, u8"Unsorted", LibraryNode{LibraryNode::Kind::Unsorted});
             AddCollectionNodes(gui::TreeModel::kRoot, Guid{});
-            Array<String> tags;
-            Array<u32> counts;
-            library.TagCounts(tags, counts);
-            if (!tags.IsEmpty())
-            {
-                const i32 tagsRoot = AddLibraryNode(gui::TreeModel::kRoot, u8"Tags", LibraryNode{LibraryNode::Kind::TagsRoot});
-                for (usize i = 0; i < tags.Size(); ++i)
-                {
-                    LibraryNode node{LibraryNode::Kind::Tag};
-                    node.tag = tags[i];
-                    (void)AddLibraryNode(tagsRoot, Format(u8"{} ({})", tags[i].AsView(), counts[i]).AsView(), node);
-                }
-            }
+            ShowTagChips();
             tree->SetModel(m_libraryModel.Get());
             i32 choice = 0;
             for (usize i = 0; i < m_libraryNodes.Size(); ++i)
             {
                 const LibraryNode& n = m_libraryNodes[i];
                 tree->SetIdExpanded(static_cast<gui::ItemId>(i), true);
-                if (n.kind == kept.kind && n.collection == kept.collection && n.tag == kept.tag)
+                if (n.kind == kept.kind && n.collection == kept.collection)
                     choice = static_cast<i32>(i);
             }
             if (!m_renameAfterRefresh.IsNil())
@@ -2599,13 +2582,134 @@ namespace
                         (void)tree->BeginEdit(item);
             }
         }
+        // The Library tab's tags as chips, each on or off (the grid shows the models with any tag
+        // that is on), its count beside it; a chip's right-click menu renames it (in place) or
+        // deletes it from every model.
+        void ShowTagChips()
+        {
+            gui::Node* chips = FindById(u8"viewer-tag-chips");
+            if (chips == nullptr)
+                return;
+            while (chips->ChildCount() > 0)
+                chips->RemoveChild(chips->GetChildAt(chips->ChildCount() - 1));
+            Array<String> tags;
+            Array<u32> counts;
+            m_library.Get().TagCounts(tags, counts);
+            // A tag that went (renamed, deleted) is no longer on.
+            for (usize i = m_activeTags.Size(); i-- > 0;)
+            {
+                bool there = false;
+                for (const String& t : tags)
+                    there = there || SameTag(t.AsView(), m_activeTags[i].AsView());
+                if (!there)
+                    m_activeTags.RemoveAt(i);
+            }
+            if (auto* clear = FindById(u8"viewer-tags-clear"))
+                clear->SetDisplayed(!m_activeTags.IsEmpty());
+            ModelViewerApp* self = this;
+            if (tags.IsEmpty())
+            {
+                auto note = MakeRef<gui::Label>(m_allocator);
+                note->AddClass(u8"viewer-empty-note");
+                note->SetText(u8"No tags yet: tag a model in its side panel.");
+                chips->AddChild(note.Get());
+                return;
+            }
+            for (usize i = 0; i < tags.Size(); ++i)
+            {
+                const String tag = tags[i];
+                bool on = false;
+                for (const String& active : m_activeTags)
+                    on = on || SameTag(active.AsView(), tag.AsView());
+                auto chip = MakeRef<gui::Button>(m_allocator);
+                chip->AddClass(u8"chip");
+                if (on)
+                    chip->AddClass(u8"checked");
+                chip->SetText(Format(u8"{} ({})", tag.AsView(), counts[i]).AsView());
+                chip->SetTooltip(on ? StringView(u8"On: its models show. Click to turn it off; right-click to rename or delete")
+                                    : StringView(u8"Click to show its models (with any other tag that is on); right-click to rename or delete"));
+                chip->SetOnClick([self, tag]() { self->ToggleTag(tag.AsView()); });
+                gui::Button* raw = chip.Get();
+                (void)chip->AddEventListener(gui::EventType::ContextMenu,
+                                             [self, tag, raw](const gui::Event& e)
+                                             {
+                                                 e.Handled = true;
+                                                 self->ShowTagMenu(*raw, tag.AsView());
+                                             });
+                chips->AddChild(chip.Get());
+            }
+        }
+
+        // Tags match in any case, as the library's search matches them.
+        [[nodiscard]] static bool SameTag(StringView a, StringView b) { return a.Size() == b.Size() && a.ContainsIgnoreCase(b); }
+
+        void ToggleTag(StringView tag)
+        {
+            bool removed = false;
+            for (usize i = 0; i < m_activeTags.Size(); ++i)
+                if (SameTag(m_activeTags[i].AsView(), tag))
+                {
+                    m_activeTags.RemoveAt(i);
+                    removed = true;
+                    break;
+                }
+            if (!removed)
+                m_activeTags.PushBack(String(tag));
+            ShowTagChips();
+            ShowLibraryGrid();
+        }
+
+        void ShowTagMenu(gui::Button& chip, StringView tag)
+        {
+            ModelViewerApp* self = this;
+            const String name(tag);
+            gui::Button* at = &chip;
+            m_libraryMenu = MakeRef<gui::Menu>(m_allocator);
+            (void)m_libraryMenu->AddItem(u8"Rename", [self, name, at]() { self->RenameTagInPlace(*at, name.AsView()); });
+            (void)m_libraryMenu->AddItem(u8"Delete (from every model)", [self, name]() { self->Run(u8"tag.delete", Arg(u8"tag", Text(name.AsView()))); });
+            m_libraryMenu->OpenBelow(chip, chip);
+        }
+
+        // A field where the chip was, its name in it: Enter renames the tag on every model,
+        // leaving it puts the chip back.
+        void RenameTagInPlace(gui::Button& chip, StringView tag)
+        {
+            gui::Node* chips = chip.GetParent();
+            if (chips == nullptr)
+                return;
+            ModelViewerApp* self = this;
+            auto field = MakeRef<gui::TextField>(m_allocator);
+            field->SetText(tag);
+            const String from(tag);
+            field->SetOnSubmit([self, from](StringView text)
+                               {
+                                   if (!text.IsEmpty() && text != from.AsView())
+                                   {
+                                       JsonValue a = Arg(u8"from", Text(from.AsView()));
+                                       a.Set(String(u8"to"), Text(text));
+                                       for (String& active : self->m_activeTags)
+                                           if (SameTag(active.AsView(), from.AsView()))
+                                               active = String(text); // still on under its new name
+                                       self->Run(u8"tag.rename", a);
+                                   }
+                                   self->m_libraryStale = true;
+                               });
+            (void)field->AddEventListener(gui::EventType::FocusLost, [self](const gui::Event&) { self->m_libraryStale = true; });
+            usize at = 0;
+            while (at < chips->ChildCount() && chips->GetChildAt(at) != &chip)
+                ++at;
+            chips->AddChildAt(field.Get(), at);
+            chip.SetDisplayed(false);
+            field->RequestFocus();
+        }
+
         [[nodiscard]] const LibraryNode* NodeAt(i32 node) const
         {
             return node >= 0 && static_cast<usize>(node) < m_libraryNodes.Size() ? &m_libraryNodes[static_cast<usize>(node)] : nullptr;
         }
 
         // A row's menu (the hierarchy's way: the press's row, a menu built for it): a collection
-        // makes one inside, renames or goes; a tag renames or goes; elsewhere, a new collection.
+        // makes one inside, renames or goes; elsewhere, a new collection.
         void ShowLibraryMenu(gui::TreeView& tree, Float2 at)
         {
             const i32 item = tree.ItemAt(at);
@@ -2629,12 +2733,6 @@ namespace
                 (void)m_libraryMenu->AddItem(u8"Copy Files to Folder...", [self, id]() { self->CopyFilesDialog(id.AsView()); });
                 m_libraryMenu->AddSeparator();
                 (void)m_libraryMenu->AddItem(u8"Delete (its models stay in the library)", [self, id]() { self->Run(u8"collection.delete", Arg(u8"id", Text(id.AsView()))); });
-            }
-            else if (node != nullptr && node->kind == LibraryNode::Kind::Tag)
-            {
-                const String tag = node->tag;
-                (void)m_libraryMenu->AddItem(u8"Rename tag", rename);
-                (void)m_libraryMenu->AddItem(u8"Delete tag (from every model)", [self, tag]() { self->Run(u8"tag.delete", Arg(u8"tag", Text(tag.AsView()))); });
             }
             else
                 (void)m_libraryMenu->AddItem(u8"New collection", [self]() { self->NewCollection({}); });
@@ -2665,8 +2763,6 @@ namespace
             case LibraryNode::Kind::All: m_libraryModel->SetIcon(id, u8"Editor/Icons/tiles.svg"); break;
             case LibraryNode::Kind::Unsorted: m_libraryModel->SetIcon(id, u8"Editor/Icons/file.svg"); break;
             case LibraryNode::Kind::Collection: m_libraryModel->SetIcon(id, u8"Editor/Icons/folder.svg"); break;
-            case LibraryNode::Kind::TagsRoot: m_libraryModel->SetIcon(id, u8"Editor/Icons/filter.svg"); break;
-            case LibraryNode::Kind::Tag: break;
             }
             if (static_cast<usize>(id) >= m_libraryNodes.Size())
                 m_libraryNodes.Resize(static_cast<usize>(id) + 1);
@@ -2742,8 +2838,6 @@ namespace
                     scope = node->collection;
                     named = node->collection;
                 }
-                else if (node->kind == LibraryNode::Kind::Tag)
-                    query.tags.PushBack(node->tag);
             }
             Array<Guid> found = modelviewer::Search(library, query, scope);
             if (node != nullptr && !everywhere && node->kind == LibraryNode::Kind::Collection && !sub)
@@ -2766,6 +2860,8 @@ namespace
                     if (!in.IsEmpty())
                         found.RemoveAt(i);
                 }
+            // The tags that are on: the models with any of them (each tag adds its models).
+            found = modelviewer::WithAnyTag(library, found.AsSpan(), m_activeTags.AsSpan());
             m_libraryGrid.rows.Clear();
             Array<String> undrawn;
             for (const Guid& id : found)
@@ -3349,6 +3445,7 @@ namespace
         String m_gridCount; // the browse grid's "n of m models"
         RefPtr<gui::ToastHost> m_toasts;
         bool m_syncingTiles = false;
+        Array<String> m_activeTags; // the Library tab's tags that are on
         bool m_panelShown = true;   // a model tab's side panel (its bar's toggle)
         RefPtr<gui::Node> m_sidePanel; // the panel while it is out of the splitter
         RefPtr<gui::Node> m_lightPopover; // the light's sliders, the Lighting button's popover // the tile sliders set by code

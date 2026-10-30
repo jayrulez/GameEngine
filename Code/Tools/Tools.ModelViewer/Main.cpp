@@ -1258,7 +1258,9 @@ namespace
                    if (self->m_page == Page::Model)
                        self->Run(u8"view.camera", Arg(u8"frame", Flag(true)));
                });
-            // The bar's own: the tab before and after, and the side panel shown or not.
+            // The bar's: the tab before and after. The model tab's own bar: frame, and the side panel shown or not.
+            if (auto* frame = FindAs<gui::Button>(u8"viewer-frame"))
+                frame->SetOnClick([self]() { self->Run(u8"view.camera", Arg(u8"frame", Flag(true))); });
             if (auto* previous = FindAs<gui::Button>(u8"viewer-tab-previous"))
                 previous->SetOnClick([self]() { self->StepTab(-1); });
             if (auto* next = FindAs<gui::Button>(u8"viewer-tab-next"))
@@ -1772,8 +1774,6 @@ namespace
                 stage->SetDisplayed(page == Page::Model);
             if (gui::Node* panel = FindById(u8"viewer-panel"))
                 panel->SetDisplayed(page == Page::Model && m_panelShown);
-            if (gui::Node* toggle = FindById(u8"viewer-panel-toggle"))
-                toggle->SetDisplayed(page == Page::Model); // a model's page has the panel
         }
 
         // The Library tab in front: the collections and tags, the search, the models.

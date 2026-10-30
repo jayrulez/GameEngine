@@ -321,7 +321,8 @@ A tab beside Browse, both always first.
   on the main thread cooks the same model; a missing file; a cancelled queue hands nothing over; a
   tab finished from the worker's read. P10b built 2026-10-30 (revised with the user the same day:
   no menus at all, File's items being the bar's buttons already (Open, Recent, the tab's close,
-  Screenshot, Preferences) and its keys kept; View's toggles are the side panel's, with a Grid row, its panel toggle an
+  Screenshot, Preferences) and its keys kept; a model tab has its own toolbar over the view, Frame,
+  Screenshot and the side panel's toggle, as an editor page has; View's toggles are the side panel's, with a Grid row, its panel toggle an
   icon on the bar, the next and previous tab chevrons after the tab strip; Library's items were the
   Library tab's already, export and copy on a collection's menu; Ctrl+F finds in the page in front):
   the menu bar and the shortcuts, both from one table of the GUI's

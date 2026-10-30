@@ -16,8 +16,6 @@
         <Button id="viewer-tab-previous" class="icon-button" icon="ModelViewer/Icons/chevron-left.svg" tooltip="The tab before (Ctrl+Shift+Tab)"/>
         <Button id="viewer-tab-next" class="icon-button" icon="Editor/Icons/chevron-right.svg" tooltip="The tab after (Ctrl+Tab)"/>
         <Button id="viewer-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open model files (glTF, GLB, FBX, OBJ), or drop them on the window (Ctrl+O)"/>
-        <Button id="viewer-screenshot" class="icon-button" icon="Editor/Icons/camera.svg" tooltip="Save the 3D view as a PNG (where and how named: Preferences)"/>
-        <Button id="viewer-panel-toggle" class="icon-button" toggle="true" checked="true" icon="Editor/Icons/inspector.svg" tooltip="Show or hide the side panel"/>
         <Button id="viewer-recent" class="icon-button" icon="Editor/Icons/list.svg" tooltip="The models opened and the folders browsed lately"/>
         <Button id="viewer-preferences" class="icon-button" icon="Editor/Icons/settings.svg" tooltip="Preferences: screenshots, the view's defaults, thumbnails and the cache"/>
     </Panel>
@@ -75,6 +73,13 @@
             </Panel>
         </Panel>
         <Panel id="viewer-stage" class="viewer-stage">
+            <!-- The model tab's own bar, as an editor page's: what acts on the model in view. -->
+            <ToolBar id="viewer-page-bar" class="page-toolbar">
+                <ToolButton id="viewer-frame" icon="Editor/Icons/frame-selection.svg" tooltip="Frame the model (F)"/>
+                <ToolButton id="viewer-screenshot" icon="Editor/Icons/camera.svg" tooltip="Save this view as a PNG: the 3D view only, grid and bones as shown (where and how named: Preferences)"/>
+                <Spacer/>
+                <ToolButton id="viewer-panel-toggle" toggle="true" checked="true" icon="Editor/Icons/inspector.svg" tooltip="Show or hide the side panel"/>
+            </ToolBar>
             <Panel id="viewer-view" class="viewer-view">
                 <Panel id="viewer-empty" class="state-box viewer-empty">
                     <Label class="state-title" text="No model open"/>

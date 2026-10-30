@@ -459,6 +459,9 @@ namespace
                                                      self->CacheCleared();
                                              });
             StartMcp();
+            // The toasts stack over the window's corner, as the editor's do.
+            m_toasts = MakeRef<gui::ToastHost>(m_allocator);
+            m_frame->AddChild(m_toasts.Get());
             WireControls(host);
             if (gui::Node* popover = FindById(u8"viewer-light-pop"))
             {
@@ -705,9 +708,54 @@ namespace
         /// Runs a command for a control; a refusal is logged (an agent gets it as its answer).
         void Run(StringView name, const JsonValue& args = JsonValue::MakeObject())
         {
+            Array<String> before;
+            m_library.HistoryLabels(before);
             const CommandResult result = m_library.Commands().Execute(name, args);
             if (!result.ok)
+            {
                 LOG_WARNING(u8"ModelViewer", u8"{}: {}", name, result.error.AsView());
+                // What the user asked for and could not have, said where they look.
+                Toast(gui::ToastSeverity::Warning, Capitalized(result.error.AsView()).AsView(), name);
+                return;
+            }
+            // A change to the library, said as its undo step names it, with Undo beside it.
+            if (name == StringView(u8"history.undo"))
+            {
+                Toast(gui::ToastSeverity::Info, Format(u8"Undone: {}", result.value.Get(String(u8"undone")).AsString().AsView()).AsView(), u8"library");
+                return;
+            }
+            Array<String> after;
+            m_library.HistoryLabels(after);
+            if (!after.IsEmpty() && (after.Size() != before.Size() || before.IsEmpty() || after[0] != before[0]) &&
+                name != StringView(u8"entry.note.set")) // a note saves as it is typed: no notice each time
+                Toast(gui::ToastSeverity::Success, Capitalized(after[0].AsView()).AsView(), u8"library", /*undo*/ true);
+        }
+
+        // A notice in the window's corner (the editor's toasts): `key` folds repeats into one; an
+        // Undo button steps back over the library's last change.
+        void Toast(gui::ToastSeverity severity, StringView message, StringView key = {}, bool undo = false)
+        {
+            if (!m_toasts)
+                return;
+            gui::ToastRequest request;
+            request.Message = String(message);
+            request.Severity = severity;
+            request.Key = String(key);
+            if (!undo)
+            {
+                (void)m_toasts->Post(foundation::core::Move(request));
+                return;
+            }
+            request.Actions.PushBack(gui::ToastAction{String(u8"undo"), String(u8"Undo"), String{}});
+            ModelViewerApp* self = this;
+            (void)m_toasts->Post(foundation::core::Move(request), [self](const gui::ToastAction&) { self->Run(u8"history.undo"); });
+        }
+        [[nodiscard]] static String Capitalized(StringView text)
+        {
+            String out(text);
+            if (!out.IsEmpty() && out[0] >= u8'a' && out[0] <= u8'z')
+                out[0] = static_cast<utf8char>(out[0] - (u8'a' - u8'A'));
+            return out;
         }
         [[nodiscard]] static JsonValue Arg(StringView key, JsonValue value)
         {
@@ -1323,15 +1371,6 @@ namespace
             dispatcher->OpenPopup(*m_root, *m_lightPopover, Move(options));
         }
 
-        // A message over the window with an OK, as the editor's are.
-        void ShowMessage(StringView title, StringView text)
-        {
-            if (!m_root)
-                return;
-            m_message = MakeRef<gui::MessageBox>(m_allocator);
-            m_message->Configure(title, text, gui::MessageBox::Buttons::Ok);
-            m_message->OpenModal(*m_root);
-        }
 
         // A collection's CSV to a file the save dialog names.
         void ExportCsvDialog(StringView collection)
@@ -1352,9 +1391,10 @@ namespace
                                       a.Set(String(u8"path"), Text(paths[0].AsView()));
                                       const CommandResult result = self->m_library.Commands().Execute(u8"export.csv", a);
                                       if (result.ok)
-                                          self->ShowMessage(u8"Exported", Format(u8"{} rows written to {}.", result.value.Get(String(u8"rows")).AsInt(), paths[0].AsView()).AsView());
+                                          self->Toast(gui::ToastSeverity::Success,
+                                                      Format(u8"Exported {} rows to {}", result.value.Get(String(u8"rows")).AsInt(), modelviewer::FileTitle(paths[0].AsView()).AsView()).AsView());
                                       else
-                                          self->ShowMessage(u8"Not exported", result.error.AsView());
+                                          self->Toast(gui::ToastSeverity::Error, Format(u8"Not exported: {}", result.error.AsView()).AsView());
                                   },
                                   Span<const shell::FileFilter>(filters, 1), Format(u8"{}.csv", modelviewer::export_detail::SafeName(c->name.AsView()).AsView()).AsView());
         }
@@ -1376,7 +1416,7 @@ namespace
                                         const CommandResult result = self->m_library.Commands().Execute(u8"export.copy_files", a);
                                         if (!result.ok)
                                         {
-                                            self->ShowMessage(u8"Not copied", result.error.AsView());
+                                            self->Toast(gui::ToastSeverity::Error, Format(u8"Not copied: {}", result.error.AsView()).AsView());
                                             return;
                                         }
                                         String text = Format(u8"{} files copied into {}.", result.value.Get(String(u8"copied")).Count(), paths[0].AsView());
@@ -1396,7 +1436,22 @@ namespace
                                             for (i64 i = 0; i < clashes.Count() && i < 10; ++i)
                                                 text += Format(u8"\n{}", clashes.At(i).AsString().AsView()).AsView();
                                         }
-                                        self->ShowMessage(u8"Files copied", text.AsView());
+                                        // What went wrong, if anything, with its list in the log; the toast stays until
+                                        // closed then (a warning's), else it goes by itself.
+                                        const bool trouble = missing.Count() > 0 || clashes.Count() > 0;
+                                        if (!trouble)
+                                        {
+                                            self->Toast(gui::ToastSeverity::Success, text.AsView());
+                                            return;
+                                        }
+                                        LOG_WARNING(u8"ModelViewer", u8"{}", text.AsView());
+                                        String summary = Format(u8"{} files copied.", result.value.Get(String(u8"copied")).Count());
+                                        if (missing.Count() > 0)
+                                            summary += Format(u8" {} missing.", missing.Count()).AsView();
+                                        if (clashes.Count() > 0)
+                                            summary += Format(u8" {} left as they were, a different file there already.", clashes.Count()).AsView();
+                                        summary += u8" The log lists them.";
+                                        self->Toast(gui::ToastSeverity::Warning, summary.AsView());
                                     });
         }
 
@@ -3292,7 +3347,7 @@ namespace
         modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' files, read off the main thread
         String m_emptyText; // the empty view's own words, from the markup
         String m_gridCount; // the browse grid's "n of m models"
-        RefPtr<gui::MessageBox> m_message;
+        RefPtr<gui::ToastHost> m_toasts;
         bool m_syncingTiles = false;
         bool m_panelShown = true;   // a model tab's side panel (its bar's toggle)
         RefPtr<gui::Node> m_sidePanel; // the panel while it is out of the splitter

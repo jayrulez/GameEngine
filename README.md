@@ -21,7 +21,7 @@ reflection, its script API, project operations and play in editor, and the five 
 in this repository were each built and playtested through those tools, and ship to the web and
 the Steam Deck.
 
-![The editor, with PaperKid's first block open](Documentation/Images/Editor.png)
+![The editor](Documentation/Images/Editor.png)
 
 ## What is here
 

@@ -236,7 +236,7 @@ export template, so the export packages a game for the Deck. macOS has no backen
 
 Vendored under `ThirdParty/`: SDL3 (prebuilt on Windows, the system's on Linux), wgpu-native,
 DXC, naga and tint, JoltPhysics, recastnavigation, miniaudio, AngelScript and Luau, cgltf and
-ufbx, meshoptimizer, msdfgen, stb, astcenc, bc7enc and bcdec, Dear ImGui, and doctest. The Vulkan
+ufbx, meshoptimizer, msdfgen, stb, astcenc, bc7enc and bcdec, Mbed TLS, Dear ImGui, and doctest. The Vulkan
 SDK is a system install.
 
 ## Community

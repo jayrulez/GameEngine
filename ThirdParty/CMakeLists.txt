@@ -471,3 +471,55 @@ target_include_directories(recast SYSTEM PUBLIC
 target_compile_features(recast PUBLIC cxx_std_17)
 set_target_properties(recast PROPERTIES POSITION_INDEPENDENT_CODE ON
                                         OUTPUT_NAME thirdparty_recast)
+
+# Mbed TLS 4.2.0 with its crypto, TF-PSA-Crypto - TLS (1.2 and 1.3) and X.509 for the engine's
+# HTTP client and secure WebSockets (wss), vendored BY COPY (github.com/Mbed-TLS/mbedtls release
+# mbedtls-4.2.0, Apache-2.0 OR GPL-2.0-or-later, taken under Apache-2.0; see
+# mbedtls/README.vendored.md). Compiled from source as one static C library, the source list
+# upstream's own CMake configures with its default configuration (no defines: the configuration
+# is its headers, include/mbedtls/mbedtls_config.h and tf-psa-crypto/include/psa/crypto_config.h),
+# its generated sources shipped in the release (no Python at build time). The public include
+# dirs are PUBLIC + SYSTEM (<mbedtls/ssl.h>, <psa/crypto.h>); the rest are private. Windows takes
+# ws2_32 (net_sockets) and bcrypt (the entropy source). Built for Emscripten too, though a game in
+# a browser speaks TLS through the browser's fetch and WebSocket. Does not link policy (vendored
+# code builds without our -Werror).
+set(util_mbedtls_dir ${CMAKE_CURRENT_SOURCE_DIR}/mbedtls)
+set(util_tfpsa_dir ${util_mbedtls_dir}/tf-psa-crypto)
+file(GLOB util_mbedtls_sources
+    ${util_mbedtls_dir}/library/*.c
+    ${util_tfpsa_dir}/core/*.c
+    ${util_tfpsa_dir}/platform/*.c
+    ${util_tfpsa_dir}/utilities/*.c
+    ${util_tfpsa_dir}/extras/*.c
+    ${util_tfpsa_dir}/drivers/builtin/src/*.c
+    ${util_tfpsa_dir}/drivers/everest/library/*.c
+    ${util_tfpsa_dir}/drivers/p256-m/*.c
+    ${util_tfpsa_dir}/drivers/p256-m/p256-m/*.c
+    ${util_tfpsa_dir}/drivers/pqcp/src/*.c)
+add_library(mbedtls STATIC ${util_mbedtls_sources})
+add_library(ThirdParty::MbedTLS ALIAS mbedtls)
+target_include_directories(mbedtls SYSTEM PUBLIC
+    ${util_mbedtls_dir}/include
+    ${util_tfpsa_dir}/include
+    ${util_tfpsa_dir}/drivers/builtin/include
+    ${util_tfpsa_dir}/drivers/everest/include
+    ${util_tfpsa_dir}/drivers/pqcp/include)
+target_include_directories(mbedtls PRIVATE
+    ${util_mbedtls_dir}/library
+    ${util_tfpsa_dir}/core
+    ${util_tfpsa_dir}/dispatch
+    ${util_tfpsa_dir}/extras
+    ${util_tfpsa_dir}/platform
+    ${util_tfpsa_dir}/utilities
+    ${util_tfpsa_dir}/drivers/builtin/src
+    ${util_tfpsa_dir}/drivers/p256-m
+    ${util_tfpsa_dir}/drivers/p256-m/p256-m
+    ${util_tfpsa_dir}/drivers/pqcp/src
+    ${util_tfpsa_dir}/drivers/everest/include/tf-psa-crypto/private/everest
+    ${util_tfpsa_dir}/drivers/everest/include/tf-psa-crypto/private/everest/kremlib)
+if(WIN32)
+    target_link_libraries(mbedtls PUBLIC ws2_32 bcrypt)
+endif()
+set_target_properties(mbedtls PROPERTIES C_STANDARD 99
+                                         POSITION_INDEPENDENT_CODE ON
+                                         OUTPUT_NAME thirdparty_mbedtls)

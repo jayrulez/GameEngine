@@ -20,5 +20,5 @@ target_sources(Scene
         SceneComposition.cppm
             SceneModule.cppm)
 
-# The Context-level scene driver (bridges Scene + Runtime - the scene-composition registry).
+# The application-level scene driver (bridges Scene + Runtime - the scene-composition registry).
 

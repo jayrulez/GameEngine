@@ -2479,7 +2479,7 @@ TEST_CASE("script.scene: disabling a behavior cancels its pending coroutine (nev
 }
 
 // ---- physics contact events -> behaviors (end-to-end, real Jolt + real Scene) ----
-// A full runtime Context wiring SceneSubsystem + PhysicsSubsystem + ScriptSubsystem: the
+// A full subsystem manager wiring SceneSubsystem + PhysicsSubsystem + ScriptSubsystem: the
 // physics tick resolves contacts to entities and pushes them to the script subsystem
 // (registered as an IContactListener at OnReady), which enqueues them onto the owning
 // scene's deferred queue; the scene tick drains and dispatches the on<Event> handler.
@@ -2488,7 +2488,7 @@ namespace
 {
     namespace runtime = foundation::runtime;
 
-    // Builds a Context with all three subsystems started + a live scene, returns the scene.
+    // Builds a SubsystemManager with all three subsystems started + a live scene, returns the scene.
     // Acts as its OWN composition root: bridges physics contacts to the script subsystem's
     // neutral DeliverContact ingress with the SAME adapter DefaultApplication uses in a real
     // run (engine.integration) - so these contact tests also exercise that bridge, and

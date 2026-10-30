@@ -2,7 +2,7 @@
 // Copyright (c) 2026-Present Robert Campbell
 
 // The reference native game plugin (game-native-code.md): the ONE registration entry is
-// OnLoad(Context&) - components, subsystems, and script facades all register explicitly
+// OnLoad(SubsystemManager&) - components, subsystems, and script facades all register explicitly
 // there (never via static initializers), and OnUnload reverses it. The exported
 // CreatePlugin below is the whole contract: PluginHost dlopens it in dev builds, and the
 // ship player's checked-in stub references it statically.
@@ -29,13 +29,13 @@ namespace
     public:
         [[nodiscard]] StringView Name() const noexcept override { return u8"NativeSample"; }
 
-        void OnLoad(Context&) override
+        void OnLoad(SubsystemManager&) override
         {
-            // Registration point: context.RegisterSubsystem<...>, script facades,
+            // Registration point: subsystems.RegisterSubsystem<...>, script facades,
             // component managers - all explicit, all reversed in OnUnload.
             LOG_INFO(u8"Game", u8"NativeSample plugin loaded");
         }
-        void OnUnload(Context&) override {}
+        void OnUnload(SubsystemManager&) override {}
     };
 }
 

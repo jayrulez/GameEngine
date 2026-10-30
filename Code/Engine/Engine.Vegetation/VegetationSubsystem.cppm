@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.vegetation:subsystem - the Context-level VegetationSubsystem.
+// engine.vegetation:subsystem - the application-level VegetationSubsystem.
 //
 // The TerrainSubsystem pattern without a renderer of its own: per scene it registers the
 // TerrainVegetationComponentManager (injected by scene composition) as an IRenderDataProvider on

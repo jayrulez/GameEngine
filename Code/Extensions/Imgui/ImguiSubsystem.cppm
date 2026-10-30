@@ -3,7 +3,7 @@
 
 /// Extensions::Imgui - the `:subsystem` partition.
 ///
-/// ImguiSubsystem: a Context-level subsystem that owns the Dear ImGui context + the RHI renderer and
+/// ImguiSubsystem: an application-level subsystem that owns the Dear ImGui context + the RHI renderer and
 /// exposes the per-frame hooks an app drives - NewFrame (feed input + display size, begin the UI frame)
 /// and Render (record the built draw data onto the frame's target). Apps register it, call NewFrame at
 /// the top of their update, build UI with ImGui:: directly, and call Render after the scene. The

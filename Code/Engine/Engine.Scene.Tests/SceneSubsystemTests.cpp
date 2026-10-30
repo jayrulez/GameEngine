@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// Phase 4 - the Context-level scene driver: an owner registers its own SceneManager, the subsystem
+// Phase 4 - the application-level scene driver: an owner registers its own SceneManager, the subsystem
 // assembles every scene from a SceneComposition, fans the SystemsReady/Destroying observer stages, and
 // ticks each group on the Context lane.
 #include <doctest/doctest.h>
@@ -36,7 +36,7 @@ namespace
 
     const SceneModule kRenderModule{u8"render", &InstallRenderManagers, nullptr};
 
-    // A Context-level subsystem that reacts to scene lifecycle (the ISceneObserver role): it observes
+    // An application-level subsystem that reacts to scene lifecycle (the ISceneObserver role): it observes
     // SystemsReady + Destroying, but leaves ASSEMBLY to the composition. This mirrors a real domain's
     // split between declarative assembly and reactive wiring.
     class FakeRenderSubsystem : public runtime::Subsystem, public ISceneObserver

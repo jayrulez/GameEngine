@@ -3,7 +3,7 @@
 
 /// Engine::Animation - the `:subsystem` partition.
 ///
-/// AnimationSubsystem: a Context-level subsystem that registers the animation component reflection and
+/// AnimationSubsystem: an application-level subsystem that registers the animation component reflection and
 /// contributes the per-scene animation managers to the declarative scene composition (SceneModule). So
 /// attaching a SkeletalAnimationComponent or AnimationGraphComponent is all an app needs - the scene's
 /// per-scene tick then advances the players (PostUpdate) and feeds the skinning matrices to the mesh

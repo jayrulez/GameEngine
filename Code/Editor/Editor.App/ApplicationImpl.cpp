@@ -301,7 +301,7 @@ namespace editor::app
             m_config.startupFinished();
     }
 
-    // The editor owns a second, persistent runtime Context populated by the SAME DefaultApplication
+    // The editor owns a second, persistent subsystem manager populated by the SAME DefaultApplication
     // the player runs: gameplay subsystems live there, and every scene (editing pages, Simulate,
     // previews, the Game tab) is hosted there. It starts with no resource manager: projects open
     // and close at runtime, so each project's manager attaches and detaches (EditorSession).

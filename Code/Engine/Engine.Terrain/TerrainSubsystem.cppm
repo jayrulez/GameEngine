@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.terrain:subsystem - the Context-level TerrainSubsystem.
+// engine.terrain:subsystem - the application-level TerrainSubsystem.
 //
 // Mirrors ParticleSubsystem: owns the dedicated TerrainRenderer and wires it into RenderSubsystem via
 // the generic seam - registers the renderer (-> dispatch id), and per scene registers the

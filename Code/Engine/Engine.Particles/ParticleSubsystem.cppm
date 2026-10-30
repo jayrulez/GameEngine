@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// engine.particles:subsystem - the Context-level ParticleSubsystem.
+// engine.particles:subsystem - the application-level ParticleSubsystem.
 //
 // Mirrors AnimationSubsystem: injects the ParticleEffectComponentManager into every scene (so
 // attaching a ParticleEffectComponent is all an app needs). Additionally it owns the dedicated

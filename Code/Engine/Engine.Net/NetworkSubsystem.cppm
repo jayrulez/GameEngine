@@ -3,7 +3,7 @@
 
 /// Engine::Net - the `engine.net` module.
 ///
-/// A Context-level subsystem (once-per-context BY CONTRACT) that integrates networking into scenes:
+/// An application-level subsystem (once per subsystem manager BY CONTRACT) that integrates networking into scenes:
 /// it contributes the NetworkComponentManager to the declarative scene composition (SceneModule), so
 /// authoring a NetworkComponent on an entity is all a game needs for that entity to be replicable. It
 /// also registers the replicated-component reflection.

@@ -3,7 +3,7 @@
 
 /// Engine::Scene - `engine.scene`.
 ///
-/// The Context-level scene driver: it owns the pure scene registry
+/// The application-level scene driver: it owns the pure scene registry
 /// (foundation.scene:composition's `SceneRegistry`) and drives every registered manager's per-frame
 /// update + fixed update (UpdateOrder -500, so scenes tick before rendering reads them). It owns NO
 /// scenes itself - there is no implicit "default" group. Every owner of scenes (a GameInstance, an
@@ -164,7 +164,7 @@ export namespace engine::scene
         // RAW host dt (context scale applied inside the manager); Update gets context-scaled dt.
         void BeginFrame(f32 deltaTime) override
         {
-            // THE bridge: the one legal crossing point between the runtime Context (plain
+            // THE bridge: the one legal crossing point between the subsystem manager (plain
             // floats) and scene::FrameTime (layering rules - runtime
             // never sees FrameTime; the bridge constructs it and hands it DOWN). Captured for
             // Update so both lanes see one consistent chain per frame.

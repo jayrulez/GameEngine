@@ -1958,7 +1958,7 @@ export namespace engine::script
         ScriptRunHost m_ownedRunHost{
             foundation::core::DefaultAllocator()}; // the DEFAULT run host (editor/editing scenes;
                                                    // process root until the subsystem phase
-                                                   // threads the runtime Context's)
+                                                   // threads the subsystem manager's)
         Array<SceneEntry> m_systems;
         Function<void(IScriptContext&)>
             m_configurator; // app services, applied to every host via ConfigureRunHost

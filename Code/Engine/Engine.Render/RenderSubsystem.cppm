@@ -3,7 +3,7 @@
 
 /// Engine::Render - the `:subsystem` partition.
 ///
-/// RenderSubsystem: the Context-level driver that connects scenes to the (scene-agnostic)
+/// RenderSubsystem: the application-level driver that connects scenes to the (scene-agnostic)
 /// renderer. It owns the GPU systems - the DXC compiler, ShaderSystem, PipelineStateCache,
 /// the MeshRenderer + RendererRegistry, and the per-frame RenderFrame driver - and, as an
 /// As an ISceneObserver it reacts to scene teardown; assembly happens via the scene composition.

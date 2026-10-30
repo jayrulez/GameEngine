@@ -3,7 +3,7 @@
 
 // engine.particles - scene/render integration for the particle system: the ECS
 // component + manager (which ticks the CPU sim and provides billboard render-data), the dedicated
-// ParticleRenderer, and the Context-level ParticleSubsystem that wires them into RenderSubsystem via
+// ParticleRenderer, and the application-level ParticleSubsystem that wires them into RenderSubsystem via
 // its generic register-renderer / register-provider seam. Depends on render.subsystem + scene +
 // foundation.particles; foundation.render stays ignorant of particles.
 

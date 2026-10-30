@@ -8,7 +8,7 @@
 
 import foundation.core;
 import engine.gameinstance;
-import foundation.runtime;      // foundation runtime Context/Subsystem (was transitively reachable pre-namespace-split)
+import foundation.runtime;      // foundation runtime SubsystemManager/Subsystem (was transitively reachable pre-namespace-split)
 import foundation.scene;
 import foundation.scene.resource;    // SceneDocument + LoadScene round-trip
 import foundation.content;           // ContentDatabase / Instance

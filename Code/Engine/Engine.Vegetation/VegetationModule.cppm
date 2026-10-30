@@ -3,7 +3,7 @@
 
 // engine.vegetation - the terrain vegetation module's public face: the per-layer scene component +
 // its manager (the render-data provider that scatters per chunk and emits instanced sets), and the
-// Context-level VegetationSubsystem that registers the manager as a render provider per scene.
+// application-level VegetationSubsystem that registers the manager as a render provider per scene.
 
 export module engine.vegetation;
 

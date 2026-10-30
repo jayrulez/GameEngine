@@ -1,4 +1,4 @@
-# Engine::Scene - `engine.scene` (the Context-level scene driver +
+# Engine::Scene - `engine.scene` (the application-level scene driver +
 # the scene-composition registry). Bridges foundation.scene and foundation.runtime; keeps
 # runtime-free.
 util_add_engine_library(Engine.Scene ALIAS Engine::Scene)

@@ -460,6 +460,12 @@ namespace
                                              });
             StartMcp();
             WireControls(host);
+            if (gui::Node* popover = FindById(u8"viewer-light-pop"))
+            {
+                m_lightPopover = RefPtr<gui::Node>(popover);
+                if (gui::Node* home = popover->GetParent())
+                    home->RemoveChild(popover); // shown only as the Lighting button's popover
+            }
             WireBrowser(host);
             if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
             {
@@ -906,14 +912,14 @@ namespace
                     if (a.Has(String(u8"turntable")))
                     {
                         self->SetTurntable(a.Get(String(u8"turntable")).AsBool());
-                        if (auto* box = self->FindAs<gui::CheckBox>(u8"viewer-turntable"))
-                            box->SetChecked(self->m_turntable);
+                        if (auto* toggle = self->FindAs<gui::Button>(u8"viewer-turntable-toggle"))
+                            toggle->SetChecked(self->m_turntable);
                     }
                     if (a.Has(String(u8"skeleton")))
                     {
                         self->m_showSkeleton = a.Get(String(u8"skeleton")).AsBool();
-                        if (auto* box = self->FindAs<gui::CheckBox>(u8"viewer-skeleton"))
-                            box->SetChecked(self->m_showSkeleton);
+                        if (auto* toggle = self->FindAs<gui::Button>(u8"viewer-skeleton-toggle"))
+                            toggle->SetChecked(self->m_showSkeleton);
                     }
                     self->m_syncingView = false;
                     return CommandResult::Ok(self->LightJson());
@@ -1063,13 +1069,15 @@ namespace
                 ambient->SetOnValueChanging([light](f64 value) { light(u8"ambient", Number(value)); });
             if (auto* sky = FindAs<gui::Slider>(u8"viewer-sky"))
                 sky->SetOnValueChanging([light](f64 value) { light(u8"sky", Number(value)); });
-            if (auto* turntable = FindAs<gui::CheckBox>(u8"viewer-turntable"))
-                turntable->SetOnToggled([light](bool on) { light(u8"turntable", Flag(on)); });
-            if (auto* skeleton = FindAs<gui::CheckBox>(u8"viewer-skeleton"))
+            if (auto* turntable = FindAs<gui::Button>(u8"viewer-turntable-toggle"))
+                turntable->SetOnClick([light, turntable]() { light(u8"turntable", Flag(turntable->IsChecked())); });
+            if (auto* skeleton = FindAs<gui::Button>(u8"viewer-skeleton-toggle"))
             {
                 skeleton->SetChecked(m_showSkeleton);
-                skeleton->SetOnToggled([light](bool on) { light(u8"skeleton", Flag(on)); });
+                skeleton->SetOnClick([light, skeleton]() { light(u8"skeleton", Flag(skeleton->IsChecked())); });
             }
+            if (auto* lighting = FindAs<gui::Button>(u8"viewer-light"))
+                lighting->SetOnClick([self, lighting]() { self->ShowLightPopover(*lighting); });
             WireAnimationBar();
             m_guiHost->SetDropObserver([self](const shell::DroppedFile& file)
                                        {
@@ -1267,13 +1275,13 @@ namespace
                 next->SetOnClick([self]() { self->StepTab(1); });
             if (auto* toggle = FindAs<gui::Button>(u8"viewer-panel-toggle"))
                 toggle->SetOnClick([self, toggle]() { self->ShowSidePanel(toggle->IsChecked()); });
-            // The panel's Grid row: the preference, as Preferences sets it.
-            if (auto* grid = FindAs<gui::CheckBox>(u8"viewer-show-grid"))
-                grid->SetOnToggled([self](bool on)
-                                   {
-                                       if (!self->m_syncingPanel)
-                                           self->Run(u8"settings.set", Arg(u8"grid", Flag(on)));
-                                   });
+            // The toolbar's grid: the preference, as Preferences sets it.
+            if (auto* grid = FindAs<gui::Button>(u8"viewer-grid-toggle"))
+                grid->SetOnClick([self, grid]()
+                                 {
+                                     if (!self->m_syncingPanel)
+                                         self->Run(u8"settings.set", Arg(u8"grid", Flag(grid->IsChecked())));
+                                 });
         }
 
         // A model tab's side panel, a pane of its splitter: taken out (its share to the view) and
@@ -1296,6 +1304,23 @@ namespace
             m_sidePanel = {};
             if (m_tabs.ActiveTab() != nullptr && !m_browsing)
                 ShowTab(m_tabs.Active()); // what changed while it was out
+        }
+
+        // The light's popover under the toolbar's Lighting button: its sliders, shut by a click
+        // elsewhere or Escape, as a menu is.
+        void ShowLightPopover(gui::Node& anchor)
+        {
+            gui::EventDispatcher* dispatcher = m_root ? m_root->GetEventDispatcher() : nullptr;
+            if (!m_lightPopover || dispatcher == nullptr || dispatcher->IsPopupOpen(*m_lightPopover))
+                return;
+            gui::PopupOptions options;
+            options.Kind = gui::PopupKind::Auto;
+            options.Anchor = &anchor;
+            options.Placement.Side = gui::PopupSide::Below;
+            options.Placement.Align = gui::PopupAlign::Start;
+            options.Placement.Gap = 4.0f;
+            options.FitContent = true;
+            dispatcher->OpenPopup(*m_root, *m_lightPopover, Move(options));
         }
 
         // A message over the window with an OK, as the editor's are.
@@ -2420,12 +2445,6 @@ namespace
                 grid->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowDetails(u8"browse"); });
             if (auto* grid = FindAs<gui::ListView>(u8"viewer-lib-grid"))
                 grid->SetOnSelectionChanged([self](gui::ModelIndex) { self->ShowDetails(u8"library"); });
-            if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
-                loose->SetOnToggled([self](bool on)
-                                    {
-                                        if (!self->m_syncingPanel)
-                                            self->Run(u8"settings.set", Arg(u8"looseTextures", Flag(on)));
-                                    });
         }
 
         // The library changed (or the window started): the tree, the grids' marks, the combos
@@ -2939,9 +2958,7 @@ namespace
                 m_thumbnails->SetLooseTextures(m_settings.value.looseTextures);
             ApplyTileSize();
             m_syncingPanel = true;
-            if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
-                loose->SetChecked(m_settings.value.looseTextures);
-            if (auto* grid = FindAs<gui::CheckBox>(u8"viewer-show-grid"))
+            if (auto* grid = FindAs<gui::Button>(u8"viewer-grid-toggle"))
                 grid->SetChecked(m_settings.value.grid);
             m_syncingPanel = false;
         }
@@ -3195,7 +3212,13 @@ namespace
             m_viewport->SceneDebugDraw().DrawGridPlane(grid);
         }
 
-        [[nodiscard]] gui::Node* FindById(StringView id) const { return m_frame ? FindIn(*m_frame, id) : nullptr; }
+        // A node of the window's by id: in the page, else in the light's popover (out of the page
+        // while it is shut, and in the popup layer while it is open).
+        [[nodiscard]] gui::Node* FindById(StringView id) const
+        {
+            gui::Node* found = m_frame ? FindIn(*m_frame, id) : nullptr;
+            return found != nullptr || !m_lightPopover ? found : FindIn(*m_lightPopover, id);
+        }
         template <typename T>
         [[nodiscard]] T* FindAs(StringView id) const
         {
@@ -3272,7 +3295,8 @@ namespace
         RefPtr<gui::MessageBox> m_message;
         bool m_syncingTiles = false;
         bool m_panelShown = true;   // a model tab's side panel (its bar's toggle)
-        RefPtr<gui::Node> m_sidePanel; // the panel while it is out of the splitter // the tile sliders set by code
+        RefPtr<gui::Node> m_sidePanel; // the panel while it is out of the splitter
+        RefPtr<gui::Node> m_lightPopover; // the light's sliders, the Lighting button's popover // the tile sliders set by code
         String m_shownProgress;
         String m_density; // the density whose sheet is applied
         u32 m_thumbnailSize = 128;

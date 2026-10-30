@@ -148,6 +148,12 @@
             <ToolBar id="viewer-page-bar" class="page-toolbar">
                 <ToolButton id="viewer-frame" icon="Editor/Icons/frame-selection.svg" tooltip="Frame the model (F)"/>
                 <ToolButton id="viewer-screenshot" icon="Editor/Icons/camera.svg" tooltip="Save this view as a PNG: the 3D view only, grid and bones as shown (where and how named: Preferences)"/>
+                <Separator/>
+                <!-- The view's options: the stage every model tab shares (one scene, one light). -->
+                <ToolButton id="viewer-grid-toggle" toggle="true" icon="Editor/Icons/grid.svg" tooltip="The ground grid (kept as a preference)"/>
+                <ToolButton id="viewer-skeleton-toggle" toggle="true" icon="Editor/Icons/character.svg" tooltip="Draw the bones over the model"/>
+                <ToolButton id="viewer-turntable-toggle" toggle="true" icon="Editor/Icons/rotate.svg" tooltip="Turn the model slowly about its middle"/>
+                <ToolButton id="viewer-light" icon="Editor/Icons/sun.svg" tooltip="The light: exposure, ambient and sky"/>
                 <Spacer/>
                 <ToolButton id="viewer-panel-toggle" toggle="true" checked="true" icon="Editor/Icons/inspector.svg" tooltip="Show or hide the side panel"/>
             </ToolBar>
@@ -200,39 +206,25 @@
                 <Label class="prop-name" text="Note"/>
                 <TextArea id="viewer-note" class="viewer-note-area" placeholder="A note on this model"/>
             </Panel>
-            <Panel class="component-header"><Label class="component-name" text="View"/></Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Exposure"/>
-                <Slider id="viewer-exposure" min="-4" max="4" step="0.1" value="0" tooltip="Stops brighter or darker"/>
-            </Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Ambient"/>
-                <Slider id="viewer-ambient" min="0" max="2" step="0.05" value="0.3" tooltip="The flat fill on top of the sky's light"/>
-            </Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Sky"/>
-                <Slider id="viewer-sky" min="0" max="3" step="0.05" value="1" tooltip="The sky's brightness and the light it gives"/>
-            </Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Turntable"/>
-                <CheckBox id="viewer-turntable" tooltip="Turn the model slowly about its middle"/>
-            </Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Grid"/>
-                <CheckBox id="viewer-show-grid" tooltip="Draw the ground grid (kept as a preference)"/>
-            </Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Skeleton"/>
-                <CheckBox id="viewer-skeleton" tooltip="Draw the bones over the model"/>
-            </Panel>
-            <Panel class="prop-row">
-                <Label class="prop-name" text="Loose textures"/>
-                <CheckBox id="viewer-loose" checked="true" tooltip="A material that lost its texture takes the image beside the model with its name (or the model's, or the first); for models opened from now on"/>
-            </Panel>
             <Spacer/>
             <Label class="preview-hint viewer-hint" text="Alt drag orbits · right drag looks, WASD flies · middle drag pans · wheel zooms · F frames"/>
         </Panel>
             </Splitter>
+            <!-- The light's popover (code takes it out of the page and opens it under the Lighting button). -->
+            <Panel id="viewer-light-pop" class="viewer-light-pop">
+                <Panel class="prop-row">
+                    <Label class="prop-name" text="Exposure"/>
+                    <Slider id="viewer-exposure" min="-4" max="4" step="0.1" value="0" tooltip="Stops brighter or darker"/>
+                </Panel>
+                <Panel class="prop-row">
+                    <Label class="prop-name" text="Ambient"/>
+                    <Slider id="viewer-ambient" min="0" max="2" step="0.05" value="0.3" tooltip="The flat fill on top of the sky's light"/>
+                </Panel>
+                <Panel class="prop-row">
+                    <Label class="prop-name" text="Sky"/>
+                    <Slider id="viewer-sky" min="0" max="3" step="0.05" value="1" tooltip="The sky's brightness and the light it gives"/>
+                </Panel>
+            </Panel>
         </Panel>
     </Panel>
 </Panel>

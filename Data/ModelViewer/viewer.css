@@ -78,3 +78,8 @@ button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-di
 .pref-folder { width: 340px; }
 /* A material's or a texture's line: what it is, cut short with its whole in the row's tooltip. */
 .viewer-content { min-width: 0; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+/* The light's popover under the toolbar's Lighting button: its three sliders as panel rows. */
+.viewer-light-pop { flex-direction: column; width: 280px; padding: var(--space-s) 0; background-color: var(--surface-overlay);
+                    border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.viewer-light-pop > .prop-row { padding-left: var(--space-m); padding-right: var(--space-m); }
+.viewer-light-pop > .prop-row > slider { flex-grow: 1; min-width: 0; }

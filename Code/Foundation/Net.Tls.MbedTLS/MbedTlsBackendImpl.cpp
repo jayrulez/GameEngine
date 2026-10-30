@@ -172,13 +172,24 @@ namespace foundation::net
             {
                 if (m_state != TlsState::Open || plaintext.IsEmpty())
                     return 0;
-                for (;;)
+                for (u32 round = 0;; ++round)
                 {
+                    const usize before = m_in.Size() - m_inHead;
                     const int r = mbedtls_ssl_read(&m_ssl, reinterpret_cast<unsigned char*>(plaintext.Data()), plaintext.Size());
                     if (r > 0)
                         return static_cast<usize>(r);
                     if (r == MBEDTLS_ERR_SSL_WANT_READ || r == MBEDTLS_ERR_SSL_WANT_WRITE)
+                    {
+                        // After a post-handshake message (TLS 1.3's tickets) Mbed TLS answers
+                        // WANT_READ with records still unread, here or in its own buffer; read
+                        // on while some are, or data that arrived with the peer's close would be
+                        // lost. (Bounded: each round consumes a record.)
+                        const usize after = m_in.Size() - m_inHead;
+                        const bool unread = (after > 0 && after < before) || mbedtls_ssl_check_pending(&m_ssl) != 0;
+                        if (r == MBEDTLS_ERR_SSL_WANT_READ && unread && round < 64)
+                            continue;
                         return 0;
+                    }
                     if (r == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET)
                         continue; // TLS 1.3's after-handshake ticket: read on
                     if (r == 0 || r == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY)

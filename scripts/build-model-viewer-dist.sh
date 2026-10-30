@@ -112,8 +112,11 @@ Run:  ./Tools.ModelViewer [model files...] [--rest] [--skeleton] [--mcp]
 An agent's manual is ModelViewerGuide.md, beside the executable.
 
 Drop model files on the window or use Open... to open more; the Browse tab
-shows the models under a folder. The viewer keeps its cache, thumbnails,
-settings and shortlist under ~/.local/share/gameengine/model-viewer.
+shows the models under a folder; the Recent button reopens what you had.
+Preferences (the gear) say where screenshots go and how they are named,
+the view's defaults, the thumbnail size and the cache. The viewer keeps its
+cache, thumbnails, settings and library under
+~/.local/share/gameengine/model-viewer.
 
 Requires GPU drivers with Vulkan support and the Vulkan loader installed
 (e.g. on Ubuntu:  sudo apt install libvulkan1 mesa-vulkan-drivers).

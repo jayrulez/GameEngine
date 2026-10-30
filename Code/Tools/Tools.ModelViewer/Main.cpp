@@ -77,6 +77,7 @@ import engine.model;
 import editor.preview.viewport;
 import modelviewer;
 import modelviewer.thumbnails;
+import modelviewer.preferences;
 import foundation.json;
 import foundation.mcp;
 import foundation.mcp.http;
@@ -243,8 +244,18 @@ namespace
         return token;
     }
 
-    // The library opened in the user data folder, its commands and viewer.info registered.
-    void OpenLibrary(modelviewer::LibrarySession& library, StringView mode)
+    // The viewer's folder in the user data folder: the settings, and by default the cache.
+    [[nodiscard]] String ViewerDataFolder() { return PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer"); }
+    [[nodiscard]] String SettingsPath() { return PathJoin(ViewerDataFolder().AsView(), u8"settings.txt"); }
+    // Where the cooked models and the thumbnails go, as the settings say.
+    [[nodiscard]] String CacheBase(const modelviewer::ViewerSettings& settings)
+    {
+        return modelviewer::CacheBaseOf(settings, ViewerDataFolder().AsView());
+    }
+
+    // The library opened in the user data folder, its commands, the settings' and viewer.info
+    // registered; cache.clear refused while `busy` says why.
+    void OpenLibrary(modelviewer::LibrarySession& library, StringView mode, modelviewer::SettingsStore& settings, Function<String()> busy)
     {
         String error;
         if (!library.Open(LibraryFolder().AsView(), error))
@@ -252,6 +263,9 @@ namespace
         else if (library.ReadOnly())
             LOG_WARNING(u8"ModelViewer", u8"the library is open read-only: another viewer (process {}) writes it", library.File().LockHolder());
         modelviewer::RegisterLibraryCommands(library);
+        const String base = CacheBase(settings.value);
+        const String cacheFolders[] = {PathJoin(base.AsView(), u8"cache"), PathJoin(base.AsView(), u8"thumbnails")};
+        modelviewer::RegisterSettingsCommands(library.Commands(), settings, Span<const String>(cacheFolders, 2), foundation::core::Move(busy));
         const String modeName(mode);
         modelviewer::RegisterInfoCommand(library, LibraryFolder().AsView(),
                                          [modeName]()
@@ -295,7 +309,17 @@ namespace
         static StderrSink sink;
         GlobalLogger().AddSink(&sink);
         modelviewer::LibrarySession library(DefaultAllocator());
-        OpenLibrary(library, u8"headless");
+        modelviewer::SettingsStore settings;
+        settings.Open(SettingsPath().AsView());
+        modelviewer::LibrarySession* held = &library;
+        OpenLibrary(library, u8"headless", settings,
+                    [held]()
+                    {
+                        // A window viewer holding the library is using the cache too.
+                        return held->ReadOnly()
+                                   ? Format(u8"another viewer (process {}) is using the cache: clear it there", held->File().LockHolder())
+                                   : String{};
+                    });
         modelviewer::RegisterWindowlessCommands(library.Commands());
         foundation::mcp::McpServer server;
         ServeCommands(server, library);
@@ -305,7 +329,7 @@ namespace
     }
 
     constexpr const char8_t* kMarkupPath = u8"ModelViewer/Viewer.xml";
-    constexpr const char8_t* kSheets[] = {u8"Editor/editor.css", u8"Editor/density-default.css", u8"ModelViewer/viewer.css"};
+    constexpr StringView kDensities[] = {u8"compact", u8"default", u8"comfortable"}; // the editor's: Editor/density-<name>.css
 
     constexpr i32 kFixedTabs = 2; // Browse and Library, before the model tabs
     constexpr StringView kModelsDrag = u8"modelviewer.models"; // a drag of grid tiles: their paths, a line each
@@ -397,6 +421,7 @@ namespace
                 return;
             }
             m_device = host.Graphics()->Raw();
+            m_settings.Open(SettingsPath().AsView());
             if (!OpenGui(host))
             {
                 host.RequestExit(1);
@@ -407,15 +432,24 @@ namespace
             if (gui::Node* view = FindById(u8"viewer-view"))
                 view->AddChild(m_viewport->View().Get());
             SetUpScene();
-            m_cacheRoot = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/cache");
-            m_settingsPath = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/settings.txt");
-            m_thumbnailRoot = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/thumbnails");
-            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(), m_thumbnailRoot.AsView());
+            // The cache's folder and the thumbnails' size are the settings' at the start.
+            const String cacheBase = CacheBase(m_settings.value);
+            m_cacheRoot = PathJoin(cacheBase.AsView(), u8"cache");
+            m_thumbnailSize = m_settings.value.thumbnailSize;
+            m_thumbnailRoot = PathJoin(PathJoin(cacheBase.AsView(), u8"thumbnails").AsView(), Format(u8"{}", m_thumbnailSize).AsView());
+            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(), m_thumbnailRoot.AsView(),
+                                                                      m_thumbnailSize);
             ModelViewerApp* self = this;
             m_thumbnails->SetOnDone([self](StringView model, StringView png) { self->ThumbnailDone(model, png); });
-            OpenLibrary(m_library, u8"window");
+            OpenLibrary(m_library, u8"window", m_settings, [self]() { return self->CacheBusy(); });
+            m_settings.onChanged = [self]() { self->ApplySettings(); };
             RegisterWindowCommands();
-            m_library.Commands().AddListener([self](StringView) { self->m_libraryStale = true; });
+            m_library.Commands().AddListener([self](StringView name)
+                                             {
+                                                 self->m_libraryStale = true;
+                                                 if (name == StringView(u8"cache.clear"))
+                                                     self->CacheCleared();
+                                             });
             StartMcp();
             WireControls(host);
             WireBrowser(host);
@@ -428,10 +462,13 @@ namespace
                 library->SetClosable(false);
                 library->SetTooltip(u8"The models kept, in their collections, with their tags and names");
             }
-            LoadSettings();
-            m_thumbnails->SetLooseTextures(m_looseTextures);
-            if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
-                loose->SetChecked(m_looseTextures);
+            ApplySettings();
+            // The view's light starts as the settings have it.
+            JsonValue light = JsonValue::MakeObject();
+            light.Set(String(u8"exposure"), Number(m_settings.value.exposure));
+            light.Set(String(u8"ambient"), Number(m_settings.value.ambient));
+            light.Set(String(u8"sky"), Number(m_settings.value.sky));
+            Run(u8"view.light", light);
             WireLibrary(host);
             WireGrids();
             RefreshLibrary();
@@ -516,6 +553,29 @@ namespace
     private:
         // The window's GUI: the GUI's shaders, the faces, the host, the editor's sheet with the
         // viewer's after it, the frame from the viewer's markup.
+        // The editor's sheet, the density's after it (the settings', else default), the viewer's.
+        void ApplySheets()
+        {
+            m_density = String(u8"default");
+            for (StringView density : kDensities)
+                if (m_settings.value.density.AsView() == density)
+                    m_density = String(density);
+            const String paths[] = {String(u8"Editor/editor.css"), Format(u8"Editor/density-{}.css", m_density.AsView()), String(u8"ModelViewer/viewer.css")};
+            String sheet;
+            for (const String& path : paths)
+            {
+                String part;
+                if (m_provider->LoadText(path.AsView(), part))
+                {
+                    sheet += part.AsView();
+                    sheet += u8"\n";
+                }
+                else
+                    LOG_WARNING(u8"ModelViewer", u8"the sheet {} is not there", path.AsView());
+            }
+            m_guiHost->Styles().SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"ModelViewer/viewer.css")));
+        }
+
         bool OpenGui(runtime::IApplicationHost& host)
         {
             m_dataRoot = String(DataRoot());
@@ -546,19 +606,7 @@ namespace
             const String theme = Format(u8"{}\n{}", gui::DefaultThemeCSS(), gui::ToolkitSheetCSS());
             styles.SetUserAgentSheet(gui::CSSParser::Parse(theme.AsView(), StringView(u8"theme")));
             m_guiHost->Context().SetColorScheme(true); // dark, as the editor is by default
-            String sheet;
-            for (const char8_t* path : kSheets)
-            {
-                String part;
-                if (m_provider->LoadText(StringView(path), part))
-                {
-                    sheet += part.AsView();
-                    sheet += u8"\n";
-                }
-                else
-                    LOG_WARNING(u8"ModelViewer", u8"the sheet {} is not there", StringView(path));
-            }
-            styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView(), StringView(u8"ModelViewer/viewer.css")));
+            ApplySheets();
 
             m_root = MakeRef<gui::SceneRoot>(m_allocator, m_guiHost->ContextRef());
             String markup;
@@ -766,9 +814,9 @@ namespace
                     String path = a.Get(String(u8"path")).AsString();
                     if (path.IsEmpty())
                     {
-                        const String folder = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/screenshots");
+                        const String folder = modelviewer::ScreenshotFolderOf(self->m_settings.value);
                         (void)CreateDirectories(folder.AsView());
-                        path = PathJoin(folder.AsView(), Format(u8"{}_{}.png", modelviewer::FileTitle(tab->path.AsView()), GetTicks()).AsView());
+                        path = PathJoin(folder.AsView(), self->ScreenshotNameFor(*tab).AsView());
                     }
                     self->m_capture.Request(path.AsView());
                     JsonValue v = JsonValue::MakeObject();
@@ -962,7 +1010,17 @@ namespace
             if (auto* open = FindAs<gui::Button>(u8"viewer-open"))
                 open->SetOnClick([self, &host]() { self->ShowOpenDialog(host); });
             if (auto* shot = FindAs<gui::Button>(u8"viewer-screenshot"))
-                shot->SetOnClick([self, &host]() { self->ShowScreenshotDialog(host); });
+                shot->SetOnClick([self, &host]()
+                                 {
+                                     if (self->m_settings.value.askScreenshot)
+                                         self->ShowScreenshotDialog(host);
+                                     else
+                                         self->Run(u8"view.screenshot");
+                                 });
+            if (auto* recent = FindAs<gui::Button>(u8"viewer-recent"))
+                recent->SetOnClick([self, recent]() { self->ShowRecentMenu(*recent); });
+            if (auto* preferences = FindAs<gui::Button>(u8"viewer-preferences"))
+                preferences->SetOnClick([self]() { self->ShowPreferences(); });
             auto light = [self](StringView key, JsonValue value)
             {
                 if (!self->m_syncingView)
@@ -1023,11 +1081,9 @@ namespace
             if (dialogs == nullptr || tab == nullptr)
                 return;
             const shell::FileFilter filters[] = {{u8"PNG images", u8"png"}};
-            usize stem = tab->title.Size();
-            while (stem > 0 && tab->title[stem - 1] != u8'.')
-                --stem;
-            String suggested(tab->title.AsView().SubStr(0, stem > 0 ? stem - 1 : tab->title.Size()));
-            suggested += u8".png";
+            const String folder = modelviewer::ScreenshotFolderOf(m_settings.value);
+            (void)CreateDirectories(folder.AsView());
+            const String suggested = PathJoin(folder.AsView(), ScreenshotNameFor(*tab).AsView());
             ModelViewerApp* self = this;
             dialogs->ShowSaveFile([self](Span<const String> paths)
                                   {
@@ -1067,7 +1123,7 @@ namespace
         void OpenFile(StringView path)
         {
             SaveCamera();
-            const modelviewer::ModelTabs::Opened opened = m_tabs.Open(path, m_cacheRoot.AsView(), m_device, m_looseTextures);
+            const modelviewer::ModelTabs::Opened opened = m_tabs.Open(path, m_cacheRoot.AsView(), m_device, m_settings.value.looseTextures);
             if (opened.index < 0)
             {
                 m_failure = Format(u8"{} did not open ({}).", path, OutcomeText(opened.outcome));
@@ -1076,6 +1132,7 @@ namespace
                 return;
             }
             m_failure = {};
+            m_settings.Recent(false, m_tabs.At(opened.index).path.AsView());
             if (opened.added)
             {
                 LOG_INFO(u8"ModelViewer", u8"opened {} ({})", path, OutcomeText(opened.outcome));
@@ -1084,6 +1141,7 @@ namespace
                 options.animate = !m_rest;
                 tab.instance = engine::model::InstantiateModel(*m_viewport->Scene(), *tab.open->Model(), tab.title.AsView(), options);
                 tab.playback = MakeUnique<modelviewer::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
+                tab.playback->SetLooping(m_settings.value.loop);
                 KeepStats(tab.path.AsView(), tab.open->Stats());
                 MeasureBounds(tab);
                 if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
@@ -1226,7 +1284,7 @@ namespace
             modelviewer::ModelTab* tab = m_tabs.ActiveTab();
             if (!m_turntable || tab == nullptr)
                 return;
-            m_turnAngle += deltaTime * 0.5f;
+            m_turnAngle += deltaTime * m_settings.value.turntableSpeed * kPi / 180.0f;
             PlaceTurned(*tab);
         }
 
@@ -1399,7 +1457,7 @@ namespace
                                                                    if (!paths.IsEmpty())
                                                                        self->Run(u8"browse.folder", Arg(u8"path", Text(paths[0].AsView())));
                                                                },
-                                                               self->m_browseRoot.AsView());
+                                                               self->m_settings.value.folder.AsView());
                                    });
             if (auto* tree = FindAs<gui::TreeView>(u8"viewer-folder-tree"))
                 tree->SetOnSelectionChanged([self](gui::ModelIndex index)
@@ -1473,9 +1531,9 @@ namespace
                 bar->SetSelectedIndex(0);
                 m_syncingTabs = false;
             }
-            if (m_folderModel.Get() == nullptr && !m_browseRoot.IsEmpty())
-                SetBrowseRoot(m_browseRoot.AsView());
-            if (m_browseRoot.IsEmpty())
+            if (m_folderModel.Get() == nullptr && !m_settings.value.folder.IsEmpty())
+                SetBrowseRoot(m_settings.value.folder.AsView());
+            if (m_settings.value.folder.IsEmpty())
                 if (auto* count = FindAs<gui::Label>(u8"viewer-grid-count"))
                     count->SetText(u8"Choose a folder to browse");
         }
@@ -1483,9 +1541,10 @@ namespace
         // A new folder to browse: the tree starts over at it, it is selected and its models shown.
         void SetBrowseRoot(StringView chosen)
         {
-            const String folderCopy(chosen); // `chosen` may be a view of m_browseRoot itself
+            const String folderCopy(chosen); // `chosen` may be a view of m_settings.value.folder itself
             const StringView folder = folderCopy.AsView();
-            m_browseRoot = folderCopy;
+            m_settings.value.folder = folderCopy;
+            m_settings.Recent(true, folder);
             auto* tree = FindAs<gui::TreeView>(u8"viewer-folder-tree");
             if (tree == nullptr)
                 return;
@@ -1542,7 +1601,7 @@ namespace
             for (const String& model : m_folderModels)
             {
                 modelviewer::ModelStats stats;
-                const bool known = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model.AsView(), stats, m_looseTextures);
+                const bool known = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model.AsView(), stats, m_settings.value.looseTextures);
                 m_folderStats.PushBack(foundation::core::Move(stats));
                 m_folderStatsKnown.PushBack(known);
             }
@@ -1590,7 +1649,7 @@ namespace
             for (usize i = 0; i < m_folderModels.Size(); ++i)
                 if (m_folderModels[i].AsView() == model && !m_folderStatsKnown[i])
                 {
-                    m_folderStatsKnown[i] = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model, m_folderStats[i], m_looseTextures);
+                    m_folderStatsKnown[i] = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model, m_folderStats[i], m_settings.value.looseTextures);
                     if (m_folderStatsKnown[i])
                         KeepStats(model, m_folderStats[i]);
                 }
@@ -1986,10 +2045,8 @@ namespace
             if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
                 loose->SetOnToggled([self](bool on)
                                     {
-                                        self->m_looseTextures = on;
-                                        if (self->m_thumbnails)
-                                            self->m_thumbnails->SetLooseTextures(on);
-                                        self->SaveSettings();
+                                        if (!self->m_syncingPanel)
+                                            self->Run(u8"settings.set", Arg(u8"looseTextures", Flag(on)));
                                     });
         }
 
@@ -2418,33 +2475,126 @@ namespace
             (void)m_library.File().Save(m_library.Get());
         }
 
-        // The viewer's settings: the folder it browses (a line `folder <path>`) and the loose
-        // texture rule (`loose 0` when off).
-        void LoadSettings()
+        void SaveSettings() { (void)m_settings.Save(); }
+
+        // The settings changed (or the window started): the density's sheet, the loose texture
+        // rule, the panel's toggle. The thumbnails' size and the cache's folder wait for the next start.
+        void ApplySettings()
         {
-            Result<Array<byte>> bytes = ReadFile(m_settingsPath.AsView());
-            if (!bytes.HasValue())
-                return;
-            const StringView text(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
-            usize start = 0;
-            while (start < text.Size())
+            if (m_settings.value.density != m_density)
+                ApplySheets();
+            if (m_thumbnails)
+                m_thumbnails->SetLooseTextures(m_settings.value.looseTextures);
+            if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
             {
-                usize end = start;
-                while (end < text.Size() && text[end] != u8'\n')
-                    ++end;
-                const StringView line = text.SubStr(start, end - start);
-                if (line.StartsWith(u8"folder "))
-                    m_browseRoot = String(line.SubStr(7, line.Size() - 7));
-                else if (line == StringView(u8"loose 0"))
-                    m_looseTextures = false;
-                start = end + 1;
+                m_syncingPanel = true;
+                loose->SetChecked(m_settings.value.looseTextures);
+                m_syncingPanel = false;
             }
         }
-        void SaveSettings()
+
+        // Why the cache cannot be cleared now (a model open reads its cooked files; a thumbnail
+        // being drawn writes there), or empty.
+        [[nodiscard]] String CacheBusy() const
         {
-            const String text = Format(u8"folder {}\nloose {}\n", m_browseRoot.AsView(), m_looseTextures ? 1 : 0);
-            (void)CreateDirectories(PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer").AsView());
-            (void)WriteFile(m_settingsPath.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
+            if (m_tabs.Count() > 0)
+                return String(u8"close the model tabs first: an open model reads its cooked files");
+            if (m_thumbnails && m_thumbnails->Remaining() > 0)
+                return String(u8"thumbnails are being drawn: try again when they are done");
+            return {};
+        }
+        // The cache cleared: the thumbnails' folder back for what is drawn next. The pictures shown
+        // stay in memory (the grid's tiles draw them); their files are drawn again when next queued.
+        void CacheCleared() { (void)CreateDirectories(m_thumbnailRoot.AsView()); }
+
+        // A screenshot's file name for the model in `tab`, by the settings' pattern.
+        [[nodiscard]] String ScreenshotNameFor(const modelviewer::ModelTab& tab) const
+        {
+            const StringView clip = tab.playback.Get() != nullptr && tab.playback->HasClips() ? tab.playback->ClipName(tab.playback->Selected()).AsView() : StringView{};
+            return modelviewer::ScreenshotName(m_settings.value.screenshotPattern.AsView(), tab.path.AsView(), clip, GetTicks());
+        }
+
+        // The Recent button's menu: the models opened lately, then the folders browsed.
+        void ShowRecentMenu(gui::Button& anchor)
+        {
+            ModelViewerApp* self = this;
+            m_recentMenu = MakeRef<gui::Menu>(m_allocator);
+            for (const String& model : m_settings.value.recentModels)
+            {
+                const String path = model;
+                gui::MenuItem* item = m_recentMenu->AddItem(modelviewer::FileTitle(path.AsView()).AsView(),
+                                                            [self, path]() { self->Run(u8"model.open", Arg(u8"path", Text(path.AsView()))); });
+                item->SetTooltip(path.AsView());
+            }
+            if (!m_settings.value.recentModels.IsEmpty() && !m_settings.value.recentFolders.IsEmpty())
+                m_recentMenu->AddSeparator();
+            for (const String& folder : m_settings.value.recentFolders)
+            {
+                const String path = folder;
+                (void)m_recentMenu->AddItem(Format(u8"Browse {}", path.AsView()).AsView(), [self, path]() { self->Run(u8"browse.folder", Arg(u8"path", Text(path.AsView()))); });
+            }
+            if (m_settings.value.recentModels.IsEmpty() && m_settings.value.recentFolders.IsEmpty())
+                m_recentMenu->AddItem(u8"Nothing opened yet", []() {})->SetEnabled(false);
+            m_recentMenu->OpenBelow(anchor, anchor);
+        }
+
+        // Preferences, a modal window over the viewer; Save runs settings.set.
+        void ShowPreferences()
+        {
+            if (!m_preferences)
+            {
+                String markup;
+                if (!m_provider->LoadText(StringView(modelviewer::PreferencesDialog::kPath), markup))
+                {
+                    LOG_ERROR(u8"ModelViewer", u8"the Preferences markup ({}) is not there", StringView(modelviewer::PreferencesDialog::kPath));
+                    return;
+                }
+                gui::MarkupLoader loader(gui::ElementSet::All(), m_allocator, nullptr, m_fonts.Get());
+                loader.SetDataModel(m_guiHost->Context().GetDataRef());
+                RefPtr<gui::Node> body = loader.LoadFromString(markup.AsView());
+                if (!body)
+                    return;
+                ModelViewerApp* self = this;
+                modelviewer::PreferencesDialog::Services services;
+                services.save = [self](const JsonValue& changes)
+                {
+                    const CommandResult result = self->m_library.Commands().Execute(u8"settings.set", changes);
+                    return result.ok ? String{} : result.error;
+                };
+                services.clearCache = [self]()
+                {
+                    const CommandResult result = self->m_library.Commands().Execute(u8"cache.clear");
+                    return result.ok ? Format(u8"Cleared {}.", Megabytes(static_cast<u64>(result.value.Get(String(u8"freed")).AsNumber())).AsView())
+                                     : Format(u8"Not cleared: {}.", result.error.AsView());
+                };
+                services.cacheSize = [self]()
+                {
+                    const String base = CacheBase(self->m_settings.value);
+                    return Megabytes(modelviewer::FolderBytes(PathJoin(base.AsView(), u8"cache").AsView()) +
+                                     modelviewer::FolderBytes(PathJoin(base.AsView(), u8"thumbnails").AsView()));
+                };
+                services.chooseFolder = [self](StringView start, Function<void(StringView)> chosen)
+                {
+                    shell::IDialogService* dialogs = self->m_host != nullptr && self->m_host->Shell() != nullptr ? self->m_host->Shell()->Dialogs() : nullptr;
+                    if (dialogs == nullptr)
+                        return;
+                    dialogs->ShowOpenFolder([done = foundation::core::Move(chosen)](Span<const String> paths)
+                                            {
+                                                if (!paths.IsEmpty())
+                                                    done(paths[0].AsView());
+                                            },
+                                            start);
+                };
+                services.defaultScreenshots = modelviewer::DefaultScreenshotFolder();
+                services.defaultCache = ViewerDataFolder();
+                m_preferences = MakeUnique<modelviewer::PreferencesDialog>(m_allocator, m_allocator, foundation::core::Move(services), foundation::core::Move(body));
+            }
+            (void)m_preferences->Open(*m_root, m_settings.value);
+        }
+
+        [[nodiscard]] static String Megabytes(u64 bytes)
+        {
+            return Format(u8"{} MB", FormatFixed(static_cast<f64>(bytes) / (1024.0 * 1024.0), 1).AsView());
         }
 
         [[nodiscard]] static StringView OutcomeText(modelviewer::OpenModel::Outcome outcome)
@@ -2547,7 +2697,7 @@ namespace
         // and fading at twenty times it, so a 2 cm prop and a 200 m building both sit on one.
         void DrawGrid()
         {
-            if (!m_viewport || !m_viewport->IsValid())
+            if (!m_settings.value.grid || !m_viewport || !m_viewport->IsValid())
                 return;
             Float3 center;
             f32 radius;
@@ -2631,8 +2781,11 @@ namespace
         modelviewer_window::GridModel m_browseGrid;
         modelviewer_window::GridModel m_libraryGrid;
         RefPtr<gui::Menu> m_gridMenu;
-        String m_settingsPath;
-        String m_browseRoot;
+        modelviewer::SettingsStore m_settings;
+        String m_density; // the density whose sheet is applied
+        u32 m_thumbnailSize = 128;
+        UniquePtr<modelviewer::PreferencesDialog> m_preferences;
+        RefPtr<gui::Menu> m_recentMenu;
         UniquePtr<modelviewer::ThumbnailRenderer> m_thumbnails;
         UniquePtr<gui::TreeModel> m_folderModel;
         Array<FolderNode> m_folderNodes; // by the tree model's node id
@@ -2645,7 +2798,6 @@ namespace
 
         // The shortlist and the loose texture toggle.
         bool m_syncingPanel = false; // the panel's note set by code, not by a hand
-        bool m_looseTextures = true;
 
         // The library, and the agent's way in.
         modelviewer::LibrarySession m_library{m_allocator};

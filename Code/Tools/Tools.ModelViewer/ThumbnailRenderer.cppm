@@ -44,10 +44,9 @@ export namespace modelviewer
     class ThumbnailRenderer
     {
     public:
-        static constexpr u32 kSize = 128;
-
-        ThumbnailRenderer(IAllocator& allocator, foundation::runtime::IApplicationHost& host, StringView cacheRoot, StringView thumbRoot)
-            : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot)
+        /// `size`: the pixels of a thumbnail's side (the settings' 96, 128 or 192).
+        ThumbnailRenderer(IAllocator& allocator, foundation::runtime::IApplicationHost& host, StringView cacheRoot, StringView thumbRoot, u32 size = 128)
+            : m_allocator(&allocator), m_sceneManager(allocator), m_queue(allocator), m_cacheRoot(cacheRoot), m_thumbRoot(thumbRoot), m_size(size)
         {
             m_scenes = host.Ctx().GetSubsystem<engine::scene::SceneSubsystem>();
             m_render = host.Ctx().GetSubsystem<engine::render::RenderSubsystem>();
@@ -108,7 +107,7 @@ export namespace modelviewer
             if (m_state == State::CopyPending && m_target != nullptr)
             {
                 m_capture.Request(m_png.AsView());
-                if (m_capture.Record(*m_device, encoder, m_target, rhi::TextureFormat::RGBA16Float, kSize, kSize, rhi::ResourceState::CopySrc))
+                if (m_capture.Record(*m_device, encoder, m_target, rhi::TextureFormat::RGBA16Float, m_size, m_size, rhi::ResourceState::CopySrc))
                     m_state = State::Copied;
                 else
                     Finish({});
@@ -136,8 +135,8 @@ export namespace modelviewer
             target.texture = m_target;
             target.currentState = m_targetState;
             target.finalState = rhi::ResourceState::CopySrc; // only ever copied out, never sampled
-            m_render->RenderScene(*m_scene, m_targetView, rhi::TextureFormat::RGBA16Float, kSize, kSize,
-                                  render::ViewportRect{0, 0, kSize, kSize}, &cameraOverride, target);
+            m_render->RenderScene(*m_scene, m_targetView, rhi::TextureFormat::RGBA16Float, m_size, m_size,
+                                  render::ViewportRect{0, 0, m_size, m_size}, &cameraOverride, target);
             m_targetState = rhi::ResourceState::CopySrc;
             m_state = State::CopyPending;
         }
@@ -281,8 +280,8 @@ export namespace modelviewer
             if (m_device == nullptr)
                 return false;
             rhi::TextureDesc desc;
-            desc.width = kSize;
-            desc.height = kSize;
+            desc.width = m_size;
+            desc.height = m_size;
             desc.format = rhi::TextureFormat::RGBA16Float;
             desc.usage = rhi::TextureUsage::RenderTarget | rhi::TextureUsage::CopySrc;
             if (!m_device->CreateTexture(desc, m_target).IsOk() || m_target == nullptr)
@@ -316,6 +315,7 @@ export namespace modelviewer
         usize m_next = 0;
         String m_cacheRoot;
         String m_thumbRoot;
+        u32 m_size = 128;
         Function<void(StringView, StringView)> m_onDone;
 
         State m_state = State::Idle;

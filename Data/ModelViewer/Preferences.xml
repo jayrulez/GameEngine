@@ -1,0 +1,83 @@
+<!--
+  The model viewer's Preferences (Documentation/Specs/model-viewer.md, P9), the editor's dialog
+  (Editor/Preferences.xml) in its classes: a tab per category, Save keeps the changes (through the
+  settings.set command, as an agent changes them), Cancel or closing forgets them. Clear cache acts
+  at once, through cache.clear.
+-->
+<Panel class="preferences">
+    <TabView id="pref-tabs" class="pref-tabs">
+        <TabPage title="General">
+            <Panel class="dialog-body form">
+                <Label class="form-label" text="Screenshots"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><TextField id="pref-shot-folder" class="pref-folder"/><Button id="pref-shot-browse" class="icon-button" icon="Editor/Icons/folder-open.svg" tooltip="Choose the folder"/></Panel>
+                    <Label id="pref-shot-help" class="form-help"/>
+                    <CheckBox id="pref-shot-ask" text="Ask where to save each one"/>
+                </Panel>
+                <Label class="form-label" text="File name"/>
+                <Panel class="form-field">
+                    <TextField id="pref-shot-pattern" class="pref-folder"/>
+                    <Label class="form-help" text="{model} the file's name, {clip} the clip playing, {time} a stamp; .png is added."/>
+                </Panel>
+                <Label class="form-label" text="Density"/>
+                <Panel class="form-field">
+                    <Panel class="segmented"><Button id="pref-density-compact" class="segment" name="pref-density" toggle="true" text="Compact"/><Button id="pref-density-default" class="segment" name="pref-density" toggle="true" text="Default"/><Button id="pref-density-comfortable" class="segment" name="pref-density" toggle="true" text="Comfortable"/></Panel>
+                </Panel>
+                <Label class="form-label" text="Recent items"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><Slider id="pref-recent-count" min="0" max="50" step="1"/><Label id="pref-recent-count-value" class="pref-scale-value"/></Panel>
+                    <Label class="form-help" text="How many recent models and folders the Recent menu keeps."/>
+                </Panel>
+            </Panel>
+        </TabPage>
+        <TabPage title="View">
+            <Panel class="dialog-body form">
+                <Label class="form-label" text="Models"/>
+                <Panel class="form-field">
+                    <CheckBox id="pref-loop" text="Clips start looping"/>
+                    <CheckBox id="pref-loose" text="Look for loose textures beside the file"/>
+                    <Label class="form-help" text="For models opened after; one open already keeps what it was opened with."/>
+                </Panel>
+                <Label class="form-label" text="Ground"/>
+                <Panel class="form-field"><CheckBox id="pref-grid" text="Draw the grid"/></Panel>
+                <Label class="form-label" text="Turntable"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><Slider id="pref-turntable" min="5" max="180" step="5"/><Label id="pref-turntable-value" class="pref-scale-value"/></Panel>
+                </Panel>
+                <Label class="form-label" text="Exposure"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><Slider id="pref-exposure" min="-4" max="4" step="0.1"/><Label id="pref-exposure-value" class="pref-scale-value"/></Panel>
+                </Panel>
+                <Label class="form-label" text="Ambient"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><Slider id="pref-ambient" min="0" max="2" step="0.05"/><Label id="pref-ambient-value" class="pref-scale-value"/></Panel>
+                </Panel>
+                <Label class="form-label" text="Sky"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><Slider id="pref-sky" min="0" max="3" step="0.05"/><Label id="pref-sky-value" class="pref-scale-value"/></Panel>
+                    <Label class="form-help" text="The light the view starts with; the View section changes it for now."/>
+                </Panel>
+            </Panel>
+        </TabPage>
+        <TabPage title="Cache">
+            <Panel class="dialog-body form">
+                <Label class="form-label" text="Thumbnails"/>
+                <Panel class="form-field">
+                    <Panel class="segmented"><Button id="pref-thumb-96" class="segment" name="pref-thumb" toggle="true" text="96"/><Button id="pref-thumb-128" class="segment" name="pref-thumb" toggle="true" text="128"/><Button id="pref-thumb-192" class="segment" name="pref-thumb" toggle="true" text="192"/></Panel>
+                    <Label class="form-help" text="The pixels a thumbnail is drawn at, from the viewer's next start."/>
+                </Panel>
+                <Label class="form-label" text="Folder"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><TextField id="pref-cache-folder" class="pref-folder"/><Button id="pref-cache-browse" class="icon-button" icon="Editor/Icons/folder-open.svg" tooltip="Choose the folder"/></Panel>
+                    <Label id="pref-cache-help" class="form-help"/>
+                </Panel>
+                <Label class="form-label" text="Size"/>
+                <Panel class="form-field">
+                    <Panel class="pref-scale"><Button id="pref-cache-clear" text="Clear cache"/><Label id="pref-cache-size" class="pref-scale-value"/></Panel>
+                    <Label id="pref-cache-result" class="form-help" text="The cooked models and the thumbnails; each is made again when next needed."/>
+                </Panel>
+            </Panel>
+        </TabPage>
+    </TabView>
+    <Panel class="dialog-buttons"><Spacer/><Button id="pref-cancel" text="Cancel"/><Button id="pref-save" class="primary" text="Save"/></Panel>
+</Panel>

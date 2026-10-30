@@ -62,6 +62,7 @@ namespace
     struct Host
     {
         modelviewer::LibrarySession session{DefaultAllocator()};
+        modelviewer::SettingsStore settings;
         foundation::mcp::McpServer server;
         explicit Host(StringView folder)
         {
@@ -76,6 +77,7 @@ namespace
                                                  return v;
                                              });
             modelviewer::RegisterWindowlessCommands(session.Commands()); // as --headless serves them
+            modelviewer::RegisterSettingsCommands(session.Commands(), settings, Span<const String>{});
             modelviewer::RegisterCommandTools(server, session.Commands());
         }
     };

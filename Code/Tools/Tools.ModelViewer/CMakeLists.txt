@@ -4,7 +4,7 @@
 # Data/ModelViewer, its look the editor's sheet (Data/Editor).
 
 add_executable(Tools.ModelViewer Main.cpp)
-target_sources(Tools.ModelViewer PRIVATE FILE_SET viewer_modules TYPE CXX_MODULES FILES ThumbnailRenderer.cppm)
+target_sources(Tools.ModelViewer PRIVATE FILE_SET viewer_modules TYPE CXX_MODULES FILES ThumbnailRenderer.cppm PreferencesDialog.cppm)
 target_link_libraries(Tools.ModelViewer PRIVATE
     Foundation::Core Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop
     Foundation::Shell Foundation::Shell.Desktop Foundation::Graphics Foundation::Graphics.Gpu

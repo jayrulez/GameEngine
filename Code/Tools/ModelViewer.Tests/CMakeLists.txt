@@ -5,7 +5,8 @@ add_executable(ModelViewer.Tests
     TestsMain.cpp
     ModelLibraryTests.cpp
     LibraryTests.cpp
-    McpToolTests.cpp)
+    McpToolTests.cpp
+    SettingsTests.cpp)
 
 target_link_libraries(ModelViewer.Tests PRIVATE
     Tools::ModelViewer Engine::Model Engine::Render Engine::Animation Foundation::Scene

@@ -24,4 +24,5 @@ target_sources(ModelViewer
             ModelSearch.cppm
             ModelCommands.cppm
             ModelMcp.cppm
-            WindowCommands.cppm)
+            WindowCommands.cppm
+            ViewerSettings.cppm)

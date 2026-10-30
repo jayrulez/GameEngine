@@ -74,6 +74,16 @@ none searches the whole library.
 | `history_undo` | Steps back over the last change. |
 | `history_list` | The changes undo would step back over, the last first. |
 
+The viewer's preferences and the cache (in a window or headless; the window applies a change at
+once, except where it says "from the next start"):
+
+| Tool | What it does |
+| --- | --- |
+| `settings_get` | The preferences: where screenshots go and their names, the thumbnail size, the cache folder and its size, the view's defaults, the density, how many recents are kept. |
+| `settings_set` | Changes the preferences named, the rest as they were; refused, changing nothing, when one is out of its range. |
+| `recents_list` | The models opened and the folders browsed lately, newest first. |
+| `cache_clear` | Deletes the cooked models and the thumbnails (each made again when next needed); refused while a model is open in a tab. Ask the user first. |
+
 The window's tools (a viewer started with `--headless` has no window, and says so):
 
 | Tool | What it does |
@@ -82,7 +92,7 @@ The window's tools (a viewer started with `--headless` has no window, and says s
 | `model_close` | Closes a model's tab (the one in front by default). |
 | `tabs_list` | The model tabs: each one's place, file and whether it is in front; and whether Browse or Library is. |
 | `tabs_select` | Brings a tab to the front (-1: Browse, -2: Library, where the user sees the library). |
-| `view_screenshot` | Saves the 3D view (no panels) as a PNG within a frame; returns the file. |
+| `view_screenshot` | Saves the 3D view (no panels) as a PNG within a frame, by default in the screenshot folder named by the pattern; returns the file. |
 | `view_camera` | Frames the model, or looks at it from a yaw and pitch in degrees. |
 | `view_light` | Sets exposure, ambient, sky, the turntable and the skeleton overlay; returns them all. |
 | `clip_list` | The clips of the model in front, and the playback. |

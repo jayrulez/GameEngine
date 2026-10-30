@@ -15,7 +15,9 @@
         <Label class="viewer-title" text="Model Viewer"/>
         <TabBar id="viewer-tabs" class="viewer-tabs" close-display="always" reorderable="true"/>
         <Button id="viewer-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open model files (glTF, GLB, FBX, OBJ), or drop them on the window"/>
-        <Button id="viewer-screenshot" class="icon-button" icon="Editor/Icons/camera.svg" tooltip="Save the 3D view as a PNG"/>
+        <Button id="viewer-screenshot" class="icon-button" icon="Editor/Icons/camera.svg" tooltip="Save the 3D view as a PNG (where and how named: Preferences)"/>
+        <Button id="viewer-recent" class="icon-button" icon="Editor/Icons/list.svg" tooltip="The models opened and the folders browsed lately"/>
+        <Button id="viewer-preferences" class="icon-button" icon="Editor/Icons/settings.svg" tooltip="Preferences: screenshots, the view's defaults, thumbnails and the cache"/>
     </Panel>
     <Panel class="viewer-body">
         <Panel id="viewer-browser" class="viewer-browser">

@@ -19,3 +19,4 @@ export import :search;    // the library searched
 export import :commands;  // every operation as a command, the session, the undo history
 export import :mcp;       // the commands as MCP tools, and the agent's guide
 export import :window;    // the window's commands, and their windowless stand-ins
+export import :settings;  // the preferences and recents, and their commands

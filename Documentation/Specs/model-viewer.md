@@ -299,7 +299,16 @@ A tab beside Browse, both always first.
   and the viewer's own step back and forward.
 - **P9 Preferences and recents.** The page, the settings it keeps, the screenshot folder and
   pattern, the thumbnail size, Clear cache, the recents (`settings`, `recents`). Tests: the
-  settings' round trip (an unknown line kept); recents' order and limit.
+  settings' round trip (an unknown line kept); recents' order and limit. Built 2026-10-29:
+  `:settings` (the file read and written line by line, an unknown line kept; `settings.get`,
+  `settings.set` taking any part and refusing a value out of range whole, `recents.list`, and
+  `cache.clear`, refused while a model tab is open or thumbnails are drawing, and in a headless
+  viewer while a window viewer holds the library); the Preferences window in the editor's
+  dialog classes (General, View, Cache), Save one `settings.set`. The density and the view's
+  defaults apply at once; the thumbnail size (thumbnails under `thumbnails/<size>`) and the cache
+  folder from the next start. Recents are a bar button's menu until P10's menu bar takes them
+  into File > Open Recent; not on the Browse tab, since the folder browsed is kept, so Browse is
+  without one only before any folder was browsed, when there are no recents to show.
 - **P10 Polish.** The worker-thread cook and the progress line, the menu bar, the shortcuts, the
   grid's size slider and right-click menu, thumbnails on tabs. Tests: a cook on the worker ends in
   the same cooked model as on the main thread; a queue cancelled mid-way leaves no half-written

@@ -59,3 +59,6 @@ button.viewer-tag > icon { width: 10px; height: 10px; image-color: var(--icon-di
 .viewer-stat { flex-grow: 1; color: var(--text-strong); }
 .viewer-panel > .prop-row > slider { flex-grow: 1; min-width: 0; }
 .viewer-hint { padding: var(--space-m); white-space: normal; }
+
+/* Preferences (P9): the folder fields wide enough for a path. */
+.pref-folder { width: 340px; }

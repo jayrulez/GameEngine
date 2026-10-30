@@ -20,4 +20,5 @@ export import :commands;  // every operation as a command, the session, the undo
 export import :mcp;       // the commands as MCP tools, and the agent's guide
 export import :window;    // the window's commands, and their windowless stand-ins
 export import :loads;     // model files read on a thread of their own
-export import :settings;  // the preferences and recents, and their commands
+export import :settings;
+export import :exports;   // a collection as CSV, or its files copied out  // the preferences and recents, and their commands

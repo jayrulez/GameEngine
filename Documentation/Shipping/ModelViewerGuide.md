@@ -71,6 +71,8 @@ none searches the whole library.
 | `tag_delete` | Takes a tag off every model. |
 | `tag_list` | Every tag, with how many models have it. |
 | `search` | Finds models: the query above, a scope, a limit. |
+| `export_csv` | A collection as CSV (with the collections under it by default), returned or written to a file: collection path, name, file, tags, note. |
+| `export_copy_files` | Copies a collection's model files into a folder (a subfolder per sub-collection), each renamed to its name there, with the images and buffers it needs; reports what was copied, what was missing and what was there already and different (never overwritten). |
 | `history_undo` | Steps back over the last change. |
 | `history_list` | The changes undo would step back over, the last first. |
 

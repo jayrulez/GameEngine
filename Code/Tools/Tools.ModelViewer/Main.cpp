@@ -266,6 +266,8 @@ namespace
         const String base = CacheBase(settings.value);
         const String cacheFolders[] = {PathJoin(base.AsView(), u8"cache"), PathJoin(base.AsView(), u8"thumbnails")};
         modelviewer::RegisterSettingsCommands(library.Commands(), settings, Span<const String>(cacheFolders, 2), foundation::core::Move(busy));
+        modelviewer::SettingsStore* kept = &settings;
+        modelviewer::RegisterExportCommands(library, [kept]() { return kept->value.looseTextures; });
         const String modeName(mode);
         modelviewer::RegisterInfoCommand(library, LibraryFolder().AsView(),
                                          [modeName]()
@@ -1211,6 +1213,8 @@ namespace
             {u8"viewer.grid", u8"Grid", {}},
             {u8"viewer.new-collection", u8"New Collection", {}},
             {u8"viewer.add-selected", u8"Add Selected to Collection", {}},
+            {u8"viewer.export-csv", u8"Export CSV...", {}},
+            {u8"viewer.copy-files", u8"Copy Files to Folder...", {}},
         };
 
         // Presses a button of the window's, as a click would.
@@ -1281,6 +1285,103 @@ namespace
                    self->Press(u8"viewer-lib-new");
                });
             on(u8"viewer.add-selected", [self]() { self->Press(u8"viewer-add-selected"); });
+            // The collection chosen in the Library tab (else the window says to choose one).
+            auto chosen = [self]() -> String
+            {
+                const LibraryNode* node = self->ChosenNode();
+                if (node != nullptr && node->kind == LibraryNode::Kind::Collection)
+                    return Format(u8"{}", node->collection);
+                self->Run(u8"tabs.select", Arg(u8"tab", Number(-2)));
+                self->ShowMessage(u8"Choose a collection", u8"Choose the collection to export in the Library tab's tree, then try again.");
+                return {};
+            };
+            on(u8"viewer.export-csv", [self, chosen]()
+               {
+                   if (const String id = chosen(); !id.IsEmpty())
+                       self->ExportCsvDialog(id.AsView());
+               });
+            on(u8"viewer.copy-files", [self, chosen]()
+               {
+                   if (const String id = chosen(); !id.IsEmpty())
+                       self->CopyFilesDialog(id.AsView());
+               });
+        }
+
+        // A message over the window with an OK, as the editor's are.
+        void ShowMessage(StringView title, StringView text)
+        {
+            if (!m_root)
+                return;
+            m_message = MakeRef<gui::MessageBox>(m_allocator);
+            m_message->Configure(title, text, gui::MessageBox::Buttons::Ok);
+            m_message->OpenModal(*m_root);
+        }
+
+        // A collection's CSV to a file the save dialog names.
+        void ExportCsvDialog(StringView collection)
+        {
+            shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
+            Guid id;
+            const modelviewer::Collection* c = Guid::TryParse(collection, id) ? m_library.Get().FindCollection(id) : nullptr;
+            if (dialogs == nullptr || c == nullptr)
+                return;
+            const shell::FileFilter filters[] = {{u8"CSV files", u8"csv"}};
+            ModelViewerApp* self = this;
+            const String target(collection);
+            dialogs->ShowSaveFile([self, target](Span<const String> paths)
+                                  {
+                                      if (paths.IsEmpty())
+                                          return;
+                                      JsonValue a = Arg(u8"id", Text(target.AsView()));
+                                      a.Set(String(u8"path"), Text(paths[0].AsView()));
+                                      const CommandResult result = self->m_library.Commands().Execute(u8"export.csv", a);
+                                      if (result.ok)
+                                          self->ShowMessage(u8"Exported", Format(u8"{} rows written to {}.", result.value.Get(String(u8"rows")).AsInt(), paths[0].AsView()).AsView());
+                                      else
+                                          self->ShowMessage(u8"Not exported", result.error.AsView());
+                                  },
+                                  Span<const shell::FileFilter>(filters, 1), Format(u8"{}.csv", modelviewer::export_detail::SafeName(c->name.AsView()).AsView()).AsView());
+        }
+
+        // A collection's files into a folder the folder dialog names, and what happened said.
+        void CopyFilesDialog(StringView collection)
+        {
+            shell::IDialogService* dialogs = m_host != nullptr && m_host->Shell() != nullptr ? m_host->Shell()->Dialogs() : nullptr;
+            if (dialogs == nullptr)
+                return;
+            ModelViewerApp* self = this;
+            const String target(collection);
+            dialogs->ShowOpenFolder([self, target](Span<const String> paths)
+                                    {
+                                        if (paths.IsEmpty())
+                                            return;
+                                        JsonValue a = Arg(u8"id", Text(target.AsView()));
+                                        a.Set(String(u8"folder"), Text(paths[0].AsView()));
+                                        const CommandResult result = self->m_library.Commands().Execute(u8"export.copy_files", a);
+                                        if (!result.ok)
+                                        {
+                                            self->ShowMessage(u8"Not copied", result.error.AsView());
+                                            return;
+                                        }
+                                        String text = Format(u8"{} files copied into {}.", result.value.Get(String(u8"copied")).Count(), paths[0].AsView());
+                                        if (const i64 there = result.value.Get(String(u8"alreadyThere")).AsInt(); there > 0)
+                                            text += Format(u8" {} were there already.", there).AsView();
+                                        const JsonValue missing = result.value.Get(String(u8"missing"));
+                                        if (missing.Count() > 0)
+                                        {
+                                            text += Format(u8"\n\nMissing ({}):", missing.Count()).AsView();
+                                            for (i64 i = 0; i < missing.Count() && i < 10; ++i)
+                                                text += Format(u8"\n{}", missing.At(i).Get(String(u8"file")).AsString().AsView()).AsView();
+                                        }
+                                        const JsonValue clashes = result.value.Get(String(u8"clashes"));
+                                        if (clashes.Count() > 0)
+                                        {
+                                            text += Format(u8"\n\nLeft as they were, a different file there already ({}):", clashes.Count()).AsView();
+                                            for (i64 i = 0; i < clashes.Count() && i < 10; ++i)
+                                                text += Format(u8"\n{}", clashes.At(i).AsString().AsView()).AsView();
+                                        }
+                                        self->ShowMessage(u8"Files copied", text.AsView());
+                                    });
         }
 
         // The next or previous tab of the bar's (Browse, Library, then the models), round.
@@ -1364,6 +1465,9 @@ namespace
             item(library, u8"viewer.new-collection");
             item(library, u8"viewer.add-selected");
             item(library, u8"viewer.find");
+            library->AddSeparator();
+            item(library, u8"viewer.export-csv");
+            item(library, u8"viewer.copy-files");
         }
 
         // The grid's count line, with how far the thumbnails have got while they are drawn
@@ -2441,6 +2545,9 @@ namespace
                 (void)m_libraryMenu->AddItem(u8"New collection inside", [self, id]() { self->NewCollection(id.AsView()); });
                 (void)m_libraryMenu->AddItem(u8"Rename", rename);
                 m_libraryMenu->AddSeparator();
+                (void)m_libraryMenu->AddItem(u8"Export CSV...", [self, id]() { self->ExportCsvDialog(id.AsView()); });
+                (void)m_libraryMenu->AddItem(u8"Copy Files to Folder...", [self, id]() { self->CopyFilesDialog(id.AsView()); });
+                m_libraryMenu->AddSeparator();
                 (void)m_libraryMenu->AddItem(u8"Delete (its models stay in the library)", [self, id]() { self->Run(u8"collection.delete", Arg(u8"id", Text(id.AsView()))); });
             }
             else if (node != nullptr && node->kind == LibraryNode::Kind::Tag)
@@ -3091,6 +3198,7 @@ namespace
         modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' files, read off the main thread
         String m_emptyText; // the empty view's own words, from the markup
         String m_gridCount; // the browse grid's "n of m models"
+        RefPtr<gui::MessageBox> m_message;
         bool m_syncingTiles = false; // the tile sliders set by code
         bool m_menusStale = false; // the menu bar made again next frame (not from inside one of its own items)
         String m_shownProgress;

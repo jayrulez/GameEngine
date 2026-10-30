@@ -327,7 +327,15 @@ A tab beside Browse, both always first.
   takes no icons), raised with the user.
 - **P11 Exports.** A collection's CSV and Copy files to folder (`export.csv`,
   `export.copy_files`). Tests: the CSV's rows with and without sub-collections; the copy's layout,
-  the renames, the images taken and the missing ones reported.
+  the renames, the images taken and the missing ones reported. Built 2026-10-30: `:exports`
+  (`export.csv`, returned or written to a file, its fields quoted where they must be;
+  `export.copy_files`, which reads each model to find what it needs: the images its textures
+  name, from the file the loader read or a glTF's uri, and a glTF's buffers, each kept where it
+  was relative to the model, so a GLB with its texture in a Textures folder beside it takes that
+  folder along). A file there already and the same is passed over; a different one is left and
+  reported. In the window: a collection's right-click menu and the Library menu, the result said
+  in a message. The copy reads each model on the main thread (an export the user asked for and
+  waits on).
 
 Out of scope here: sharing a library between machines or people (it is one user's file), and
 bringing a collection into a project as assets (Copy files to folder hands the files over; the

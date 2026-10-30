@@ -78,6 +78,7 @@ namespace
                                              });
             modelviewer::RegisterWindowlessCommands(session.Commands()); // as --headless serves them
             modelviewer::RegisterSettingsCommands(session.Commands(), settings, Span<const String>{});
+            modelviewer::RegisterExportCommands(session, []() { return true; });
             modelviewer::RegisterCommandTools(server, session.Commands());
         }
     };

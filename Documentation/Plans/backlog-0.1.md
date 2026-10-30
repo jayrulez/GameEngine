@@ -88,6 +88,17 @@
 
 ## Engine
 
+- **Windows on X11 stay composited, as a setting** (user 2026-10-30, from
+  https://github.com/jayrulez/GameEngine/pull/15, closed): SDL asks X11 compositors to stand
+  aside for its windows by default (`SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR`), so the
+  editor, the tools and a windowed game are drawn uncomposited on an X11 desktop. The pull request
+  set the hint to 0 in `SDL3WindowManager::CreateWindow`; the review asked for the hint to be set
+  once, in the SDL3 shell's constructor with the other global hints (`SDL3ShellImpl.cpp`, before
+  SDL starts), and for it to be a setting that flows through the window settings, since a
+  fullscreen game may still want the compositor out of the way: composited by default, bypassed
+  when a game asks. The commit as `Area: what it does`, saying the problem and how it was
+  checked (an X11 desktop with a compositor; no unit test). Its author offered to take it.
+
 - **A script sets a scene's sky texture and environment profile** (user 2026-10-10): no script
   can point a scene at another sky texture or Environment Profile. `EnvironmentSettings.of(scene)`
   leaves its asset references out of AngelScript (the property loop skips a type it cannot declare)
@@ -239,6 +250,11 @@ website and the flagship game.
   (the engine's reliable UDP and replication) and a crowd (instanced skinning, navigation
   crowds), built and playtested through the MCP tools as the others were. (Lamplight's crowd
   was set aside "for later" when it was planned.)
+- **The model viewer, a standalone build** (user 2026-10-30): the viewer is in use for curating
+  the flagship game's assets, from the Debug tree. Build the relocatable release with
+  `scripts/build-model-viewer-dist.sh` (RelWithDebInfo, the clang-reldbg preset: a full build, so
+  it takes the build lane), check it starts from its own folder, and ship it with the 0.1 tools;
+  a Windows build of the same with the other Windows downloads.
 - **The 0.1 release builds and samples** (user 2026-10-09; after every other 0.1 item but the
   release notes and download links, user 2026-10-11): build and package what users
   download for 0.1: the export templates (each platform), the editor and the command-line tools

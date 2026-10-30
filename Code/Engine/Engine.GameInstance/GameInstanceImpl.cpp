@@ -22,6 +22,11 @@ import engine.script;
 import foundation.script.facades; // RegisterExtraFacadeName (run behavior-prelude hook)
 import foundation.net.manager; // NetworkManager factories + InstallNetScriptService
 import foundation.input;       // kInputScriptService (install the per-instance runtime)
+import foundation.net.tls;
+import foundation.http.script; // InstallHttpScriptService, RegisterHttpScriptFacade
+#if !PLATFORM_WEB
+import foundation.net.tls.mbedtls; // the native TLS backend (a browser does its own)
+#endif
 
 using namespace foundation::core;
 namespace content = foundation::content;
@@ -105,6 +110,18 @@ namespace engine::runtime
         // runtime the run-host configurator installed), so the run reads only ITS own source.
         context.SetService(input::kInputScriptService, &m_inputRuntime);
         InstallSaveScriptService(context, m_save); // Save.* -> this run's save
+        foundation::http::InstallHttpScriptService(context, m_http); // Http.* -> this run's client
+    }
+
+    foundation::net::ITlsBackend* GameInstance::TlsBackend()
+    {
+#if !PLATFORM_WEB
+        if (!m_tls)
+        {
+            m_tls = foundation::net::CreateMbedTlsBackend(*m_allocator);
+        }
+#endif
+        return m_tls.Get();
     }
 
     bool GameInstance::StartScript(core::StringView source, core::StringView name,
@@ -178,6 +195,7 @@ namespace engine::runtime
         m_runHost.SetGameScriptHold(false);
         m_runHost.SetExternalErrorSink(nullptr);
         StopNetworking(); // networking belongs to the run - the endpoint drops with it
+        m_http.Reset();   // so do its HTTP requests: no answer reaches a script that has stopped
         // What the game saved and did not write yet is kept: the run writes it as it ends.
         (void)m_save.Flush();
         // So does any rumble the game started: no pad is left buzzing after its run.
@@ -442,6 +460,9 @@ namespace engine::runtime
         m_runTime += static_cast<f64>(hostDeltaTime);
         m_runBinding.realDeltaSeconds = hostDeltaTime;
         m_runBinding.realSeconds = m_runTime;
+        // Answers to the run's HTTP requests reach their handlers here, on the game's thread,
+        // whether a game script or behaviours sent them.
+        m_http.Pump();
         if (m_game.Get() == nullptr)
         {
             return;
@@ -508,6 +529,7 @@ namespace engine::runtime
             {
                 RegisterRunScriptFacade();
                 RegisterSaveScriptFacade();
+                foundation::http::RegisterHttpScriptFacade(); // the run owns its scripts' HTTP
             }};
         return kModule;
     }

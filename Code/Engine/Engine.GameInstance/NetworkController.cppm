@@ -18,6 +18,7 @@ import foundation.scene;        // scene::Scene (the replicated scene) + GetSyst
 import foundation.net.manager;  // NetworkManager + INetworkController + NetScriptBinding
 import foundation.net.replication; // StateReplication::SpawnHandler (the net-spawn resolver type)
 import foundation.script;       // IScriptContext (InstallNetScriptService)
+import foundation.net.tls;      // ITlsBackend (a wss join checks the host with it)
 import engine.net;              // NetworkSceneSystem (the per-scene fixed-lane replication driver)
 
 using namespace foundation::core;
@@ -71,6 +72,9 @@ export namespace engine::runtime
             m_spawnResolverFactory = static_cast<SpawnResolverFactory&&>(factory);
         }
 
+        /// Where a wss join's TLS backend comes from (the run's, made on first use).
+        void SetTlsBackendSource(Function<net::ITlsBackend*()> source) { m_tlsSource = static_cast<Function<net::ITlsBackend*()>&&>(source); }
+
         /// Point `context` at this controller's net binding (controller=this), so the Net facade resolves
         /// THIS run's controller. Idempotent; null-safe (no-op when the context is null).
         void InstallScriptBinding(script::IScriptContext* context)
@@ -116,5 +120,6 @@ export namespace engine::runtime
         net::NetScriptBinding m_binding;            // stable; the facade resolves controller=this
         SpawnResolverFactory m_spawnResolverFactory; // app-injected; makes a resolver per endpoint
         scene::Scene* m_scene = nullptr;            // the scene a fresh endpoint replicates
+        Function<net::ITlsBackend*()> m_tlsSource;  // the run's TLS backend, for a wss join
     };
 }

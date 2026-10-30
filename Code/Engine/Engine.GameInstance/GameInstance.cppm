@@ -35,6 +35,9 @@ import engine.script;
 import foundation.script.facades; // RegisterExtraFacadeName (the run behavior-prelude hook)
 import foundation.net.manager; // NetworkManager + INetworkController + NetScriptBinding
 import foundation.input;       // ActionRuntime + IInputSourceProvider + InputMap (per-instance input)
+import foundation.net.tls;     // the run's TLS backend (https requests, wss joins)
+import foundation.http.client; // CreateHttpClient: the platform's client
+import foundation.http.script; // HttpScriptBinding: the run's HTTP for its scripts (the Http facade)
 
 using namespace foundation::core;
 using namespace foundation;
@@ -329,7 +332,17 @@ export namespace engine::runtime
             // behaviors' as much as a game script's: a project with no game script still has input.
             m_runHost.SetOwnerServices(core::Function<void(script::IScriptContext&)>{
                 [this](script::IScriptContext& context) { InstallRunServices(context); }});
+            // The run's HTTP client is made on its scripts' first request, and https and a wss
+            // join use the run's TLS backend, made when first needed.
+            m_http.SetFactory([this]() { return foundation::http::CreateHttpClient(*m_allocator, TlsBackend()); });
+            m_network.SetTlsBackendSource([this]() { return TlsBackend(); });
         }
+
+        /// The platform's TLS backend for this run (Mbed TLS natively; none in a browser, which
+        /// does TLS itself), made on first use.
+        [[nodiscard]] foundation::net::ITlsBackend* TlsBackend();
+        /// This run's HTTP for its scripts (pumped by TickScript, reset by StopScript).
+        [[nodiscard]] foundation::http::HttpScriptBinding& Http() noexcept { return m_http; }
 
         /// This run's services on a script context: run.* (and its event bus), the run's own
         /// input runtime (over the shared one the app's configurator installs) and its save.
@@ -670,12 +683,16 @@ export namespace engine::runtime
         f64 m_runTime = 0.0;        // unscaled seconds of the run's frames, game script or not (RunTime)
         engine::script::ScriptEventSubscriptions m_gameEventSubs; // Game tier's run-bus on<Event> inbox
 
+        core::IAllocator* m_allocator = &DefaultAllocator(); // what the run's TLS and HTTP are made from
+        // Before the networking and the HTTP binding, so it outlives every session they made from it.
+        core::UniquePtr<foundation::net::ITlsBackend> m_tls; // made on first use (TlsBackend)
         NetworkController m_network; // this run's networking (endpoint + INetworkController), composed
         RunScriptBinding
             m_runBinding; // stable; app fills its pointers, installed per context (StartScript)
 
         input::ActionRuntime m_inputRuntime; // this run's action state (per-instance)
         RunSave m_save{DefaultAllocator()};  // this run's save, installed per context (StartScript)
+        foundation::http::HttpScriptBinding m_http;          // installed per context; its client on first use
         void TraceInput(); // ENV_INPUT_TRACE: the input path, logged twice a second
         input::IInputSourceProvider* m_inputSource =
             nullptr; // borrowed: the viewport / shell devices

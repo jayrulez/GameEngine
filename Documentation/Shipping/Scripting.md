@@ -74,6 +74,30 @@ Save.setFloat("time.level2", 41.5)              -- Luau
 - The audio bus volumes a settings screen sets are saved by the player on its own; a game
   does not need to save them.
 
+## Web requests
+
+The `Http` facade reaches web services: a leaderboard, a news feed, the game's own server. A
+request answers by calling its handler on the game's thread a frame or more later, with the
+status, the body text, and an error (empty when a response came):
+
+```
+void scores(int status, const string &in body, const string &in error) { ... }   // AngelScript
+HttpHandler @h = scores; Http::get("https://example.com/scores", h);
+
+Http.post("https://example.com/scores", "application/json", '{"score":9}',          -- Luau
+  function(status, body, err) if status == 200 then ... end end)
+```
+
+- `Http.send(method, url, headers, body, handler)` takes any method; `headers` is
+  `"Name: value"` lines. Each call returns an id for `Http.cancel(id)`, whose handler is then
+  never called.
+- A 404 or a 500 is a response (status set, `error` empty). Status 0 means none came, and
+  `error` says why: no network, a timeout (30 s), a certificate not trusted.
+- `https` checks the server's certificate against the system's trusted roots. Bodies are text.
+- In a browser build the browser makes the request: a server on another origin must send
+  CORS headers, or the request fails without a reason the game can see.
+- Requests stop with the run: a handler is never called after its script has stopped.
+
 ## Working through the MCP tools
 
 - `script_api` - the live bound API for a chosen backend. Read it before writing code.

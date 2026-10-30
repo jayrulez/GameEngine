@@ -13,6 +13,8 @@ module engine.gameinstance;
 
 import foundation.core;
 import foundation.net.manager; // NetworkManager factories (HostServer/JoinServer)
+import foundation.net.websocket; // ParseWebSocketAddress: is the join address a gateway's
+import foundation.net.tls;
 
 using namespace foundation::core;
 
@@ -56,15 +58,17 @@ namespace engine::runtime
 
     bool NetworkController::Connect(core::StringView host, u16 port)
     {
-#if PLATFORM_WEB
-        // The SAME game script joins with the UDP port on every platform; the browser build
-        // redirects to the host's gateway (port + 1 - the StartServer convention above).
-        if (port != 0 && port != 0xFFFF)
+        // The SAME game script joins with the UDP port on every platform. A browser always joins
+        // the host's gateway, and so does a ws:// or wss:// address anywhere: at port + 1 (the
+        // StartServer convention above) unless the address names a port of its own.
+        net::WebSocketClientConfig address;
+        const bool gateway = PLATFORM_WEB || net::ParseWebSocketAddress(host, 0, address);
+        if (gateway && port != 0 && port != 0xFFFF)
         {
             port = static_cast<u16>(port + 1);
         }
-#endif
-        m_net = net::NetworkManager::JoinServer(foundation::core::DefaultAllocator(), host, port);
+        m_net = net::NetworkManager::JoinServer(foundation::core::DefaultAllocator(), host, port, {},
+                                                m_tlsSource ? m_tlsSource() : nullptr);
         if (!m_net)
         {
             LOG_ERROR(u8"App", u8"failed to open a client socket");

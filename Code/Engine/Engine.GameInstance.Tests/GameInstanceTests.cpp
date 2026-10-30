@@ -25,6 +25,8 @@ import foundation.net.replication; // RegisterReplicationComponents (net scene m
 import engine.net;                 // NetworkSceneSystem (the endpoint <-> scene wiring under test)
 import foundation.input;       // ActionRuntime / IInputSourceProvider (per-instance input)
 import foundation.shell;       // IKeyboard / KeyCode (a minimal fake device)
+import foundation.http;        // HttpServer (a local server the run's client fetches from)
+import foundation.http.script; // RegisterHttpScriptFacade (the run domain registers it in an app)
 
 using namespace foundation::core;
 namespace script = foundation::script; // raw manager/context for the run facade battery
@@ -217,6 +219,41 @@ TEST_CASE("game-instance: each instance owns an independent networked endpoint (
     CHECK(server.NetEndpoint() != nullptr); // the server is unaffected (isolation)
 }
 
+// A ws:// join address (Documentation/Specs/tls-http-wss.md, P4/P5): a native client joins the host's
+// browser gateway, at the game port + 1 (the StartServer convention) since the address names none.
+TEST_CASE("game-instance: a ws:// address joins the host's gateway at port + 1, natively")
+{
+    engine::runtime::GameInstance server;
+    engine::runtime::GameInstance client;
+    u16 port = 0;
+    {
+        // Two free ports in a row (the game's and its gateway's).
+        for (u32 attempt = 0; attempt < 20 && port == 0; ++attempt)
+        {
+            foundation::net::TcpListener probe(0, true);
+            const u16 candidate = probe.BoundPort();
+            foundation::net::TcpListener next(static_cast<u16>(candidate + 1), true);
+            if (candidate < 65000 && next.IsOpen())
+                port = candidate;
+        }
+    }
+    REQUIRE(port != 0);
+    REQUIRE(server.StartServer(port, /*dedicated=*/true));
+    REQUIRE(server.NetEndpoint() != nullptr);
+    REQUIRE(server.NetEndpoint()->WebSocketBoundPort() == static_cast<u16>(port + 1));
+
+    REQUIRE(client.Connect(u8"ws://127.0.0.1", port));
+    REQUIRE(client.NetEndpoint() != nullptr);
+    CHECK(client.NetEndpoint()->BoundPort() == 0u); // a WebSocket, not a UDP socket
+    for (int i = 0; i < 2000 && server.NetEndpoint()->Session().PeerCount() == 0u; ++i)
+    {
+        server.NetEndpoint()->UpdateTransport(16.0f);
+        client.NetEndpoint()->UpdateTransport(16.0f);
+        SleepMilliseconds(1);
+    }
+    CHECK(server.NetEndpoint()->Session().PeerCount() == 1u);
+}
+
 TEST_CASE("network-controller: role lifecycle - start, stop, reconnect, and the online hook")
 {
     // NetworkController, tested directly: it owns the
@@ -368,6 +405,51 @@ TEST_CASE("game-instance: starts, ticks, and stops a LUAU Game orchestrator (the
 
     gi.StopScript();
     CHECK_FALSE(gi.ScriptRunning());
+}
+
+// The run's HTTP (Documentation/Specs/tls-http-wss.md, P5): a game script's Http.get goes through the
+// client the run makes on its first request, and the answer reaches the handler on the run's tick.
+// Stopping the script drops what is still under way: its handler is never called.
+TEST_CASE("game-instance: a game script fetches over the run's HTTP client; stopping drops what waits")
+{
+    RegisterCoreTypes();
+    foundation::script::RegisterLuauScriptBackend();
+    foundation::http::RegisterHttpScriptFacade();
+    foundation::http::HttpServer server(DefaultAllocator());
+    REQUIRE(server.Start(foundation::http::HttpServerConfig{}));
+    server.SetHandler(
+        [](const foundation::http::HttpRequest& request) -> Optional<foundation::http::HttpResponse>
+        {
+            if (request.target.AsView() == StringView(u8"/slow"))
+                return {}; // never answered
+            return foundation::http::HttpResponse::Text(200, u8"text/plain", u8"best: 12.5");
+        });
+
+    engine::runtime::GameInstance gi;
+    CHECK(gi.Http().Pending() == 0);
+    const String source = Format(u8"Got = ''\n"
+                                 u8"Late = 0\n"
+                                 u8"Game = {{}}\n"
+                                 u8"Game.__index = Game\n"
+                                 u8"function Game.new() return setmetatable({{}}, Game) end\n"
+                                 u8"function Game:launch()\n"
+                                 u8"  Http.get('http://127.0.0.1:{}/best', function(status, body, err) Got = status .. ' ' .. body end)\n"
+                                 u8"  Http.get('http://127.0.0.1:{}/slow', function() Late = 1 end)\n"
+                                 u8"end\n"
+                                 u8"function Game:update(dt) end\n"
+                                 u8"function Game:exit() end\n",
+                                 server.BoundPort(), server.BoundPort());
+    REQUIRE(gi.StartScript(source.AsView(), u8"game.luau"));
+    for (u32 i = 0; i < 5000 && gi.ScriptContext()->GetGlobal(u8"Got").Get<String>().IsEmpty(); ++i)
+    {
+        (void)server.Pump();
+        gi.TickScript(0.016f, 1.0f);
+        SleepMilliseconds(1);
+    }
+    CHECK(gi.ScriptContext()->GetGlobal(u8"Got").Get<String>() == StringView(u8"200 best: 12.5"));
+    CHECK(gi.Http().Pending() == 1); // the slow one
+    gi.StopScript();
+    CHECK(gi.Http().Pending() == 0);
 }
 
 // task #123 boot reorder: the game script now launches BEFORE any scene, so a `class Game`

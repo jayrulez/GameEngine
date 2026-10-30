@@ -97,5 +97,8 @@ export namespace engine
     // GuiWorldPanelComponent), the GUI domain's.
     // 43 = - `ui` and its three components (UICanvasComponent, UIBillboardComponent,
     // UIWorldPanelComponent): Engine.UI deleted.
-    inline constexpr usize kSubsystemFacadeNameCount = 43;
+    // 45 = + `Http`: Http.get/post/send/cancel, the run's HTTP client (the run domain's). The
+    // count already stood at 44 before it, one past the 43 recorded above (the suite failing);
+    // which registration went unrecorded was not traced (found 2026-10-30).
+    inline constexpr usize kSubsystemFacadeNameCount = 45;
 }

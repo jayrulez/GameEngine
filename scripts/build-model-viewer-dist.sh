@@ -112,7 +112,7 @@ Run:  ./Tools.ModelViewer [model files...] [--rest] [--skeleton] [--mcp]
 An agent's manual is ModelViewerGuide.md, beside the executable.
 
 Drop model files on the window or use Open... to open more; the Browse tab
-shows the models under a folder; the Recent button reopens what you had.
+shows the models under a folder; File > Open Recent reopens what you had.
 Preferences (the gear) say where screenshots go and how they are named,
 the view's defaults, the thumbnail size and the cache. The viewer keeps its
 cache, thumbnails, settings and library under

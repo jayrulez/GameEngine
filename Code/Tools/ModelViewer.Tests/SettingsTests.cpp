@@ -128,6 +128,7 @@ TEST_CASE("model viewer settings: settings.set takes what it names, and refuses 
     change.Set(String(u8"thumbnailSize"), JsonValue::MakeNumber(96));
     change.Set(String(u8"loop"), JsonValue::MakeBool(false));
     change.Set(String(u8"density"), JsonValue::MakeString(String(u8"comfortable")));
+    change.Set(String(u8"tileSize"), JsonValue::MakeNumber(2));
     const modelviewer::CommandResult set1 = set.Execute(u8"settings.set", change);
     REQUIRE(set1.ok);
     CHECK(set1.value.Get(String(u8"thumbnailSize")).AsInt() == 96);
@@ -138,6 +139,7 @@ TEST_CASE("model viewer settings: settings.set takes what it names, and refuses 
     CHECK(reread.value.thumbnailSize == 96);
     CHECK_FALSE(reread.value.loop);
     CHECK(reread.value.density == u8"comfortable");
+    CHECK(reread.value.tileSize == 2);
     CHECK(reread.value.folder == u8"/kept");
     REQUIRE(reread.value.unknown.Size() == 1);
     CHECK(reread.value.unknown[0] == u8"hand-written yes");
@@ -151,7 +153,11 @@ TEST_CASE("model viewer settings: settings.set takes what it names, and refuses 
     CHECK(refused.error.AsView().ContainsIgnoreCase(u8"96, 128 or 192"));
     CHECK_FALSE(store.value.loop);
     CHECK(heard == 1);
+    JsonValue huge = JsonValue::MakeObject();
+    huge.Set(String(u8"tileSize"), JsonValue::MakeNumber(3));
+    CHECK_FALSE(set.Execute(u8"settings.set", huge).ok);
     JsonValue dark = JsonValue::MakeObject();
+
     dark.Set(String(u8"exposure"), JsonValue::MakeNumber(9));
     CHECK_FALSE(set.Execute(u8"settings.set", dark).ok);
     JsonValue blank = JsonValue::MakeObject();

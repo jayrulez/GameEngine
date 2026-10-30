@@ -42,6 +42,7 @@ export namespace modelviewer
         bool grid = true;
         String density = String(u8"default"); // the editor's: compact, default, comfortable
         u32 recentCount = 10;
+        u32 tileSize = 1;              // the grids' tiles: 0 small, 1 medium, 2 large
         Array<String> recentModels;    // newest first
         Array<String> recentFolders;
         Array<String> unknown;         // lines kept as they were
@@ -180,6 +181,8 @@ export namespace modelviewer
                 s.density = String(value);
             else if (key == StringView(u8"recent-count"))
                 s.recentCount = Whole(value, s.recentCount);
+            else if (key == StringView(u8"tile-size"))
+                s.tileSize = Min(Whole(value, s.tileSize), 2u);
             else if (key == StringView(u8"recent-model"))
                 s.recentModels.PushBack(String(value));
             else if (key == StringView(u8"recent-folder"))
@@ -193,10 +196,10 @@ export namespace modelviewer
     [[nodiscard]] inline String WriteSettings(const ViewerSettings& s)
     {
         String text = Format(u8"folder {}\nloose {}\nscreenshot-folder {}\nscreenshot-ask {}\nscreenshot-pattern {}\nthumbnail-size {}\ncache-folder {}\nloop {}\n"
-                             u8"turntable-speed {}\nexposure {}\nambient {}\nsky {}\ngrid {}\ndensity {}\nrecent-count {}\n",
+                             u8"turntable-speed {}\nexposure {}\nambient {}\nsky {}\ngrid {}\ndensity {}\nrecent-count {}\ntile-size {}\n",
                              s.folder.AsView(), s.looseTextures ? 1 : 0, s.screenshotFolder.AsView(), s.askScreenshot ? 1 : 0,
                              s.screenshotPattern.AsView(), s.thumbnailSize, s.cacheFolder.AsView(), s.loop ? 1 : 0, s.turntableSpeed, s.exposure, s.ambient, s.sky,
-                             s.grid ? 1 : 0, s.density.AsView(), s.recentCount);
+                             s.grid ? 1 : 0, s.density.AsView(), s.recentCount, s.tileSize);
         for (const String& line : s.unknown)
             text += Format(u8"{}\n", line.AsView()).AsView();
         for (const String& path : s.recentModels)
@@ -270,6 +273,7 @@ export namespace modelviewer
         v.Set(String(u8"grid"), JsonValue::MakeBool(s.grid));
         v.Set(String(u8"density"), JsonValue::MakeString(s.density));
         v.Set(String(u8"recentCount"), JsonValue::MakeNumber(s.recentCount));
+        v.Set(String(u8"tileSize"), JsonValue::MakeNumber(s.tileSize));
         return v;
     }
 
@@ -348,6 +352,16 @@ export namespace modelviewer
                 next.recentModels.PopBack();
             while (next.recentFolders.Size() > next.recentCount)
                 next.recentFolders.PopBack();
+        }
+        if (changes.Has(String(u8"tileSize")))
+        {
+            const i64 tile = changes.Get(String(u8"tileSize")).AsInt(-1);
+            if (tile < 0 || tile > 2)
+            {
+                error = String(u8"tileSize is 0 (small), 1 (medium) or 2 (large)");
+                return false;
+            }
+            next.tileSize = static_cast<u32>(tile);
         }
         if (next.screenshotPattern.IsEmpty())
         {
@@ -439,7 +453,8 @@ export namespace modelviewer
                 {u8"grid", u8"boolean", u8"the ground grid", false},
                 {u8"looseTextures", u8"boolean", u8"the loose texture rule, for models opened after", false},
                 {u8"density", u8"string", u8"compact, default or comfortable", false},
-                {u8"recentCount", u8"integer", u8"how many recent models and folders to keep, 0 to 50", false}};
+                {u8"recentCount", u8"integer", u8"how many recent models and folders to keep, 0 to 50", false},
+                {u8"tileSize", u8"integer", u8"the grids' tiles: 0 small, 1 medium, 2 large", false}};
             Command c = make(u8"settings.set", u8"Changes the preferences named (the rest stay); returns them all.", CommandKind::Changes,
                              Span<const CommandArg>(kArgs, sizeof(kArgs) / sizeof(kArgs[0])));
             c.run = [st](const JsonValue& a)

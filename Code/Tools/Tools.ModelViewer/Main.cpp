@@ -333,8 +333,12 @@ namespace
 
     constexpr i32 kFixedTabs = 2; // Browse and Library, before the model tabs
     constexpr StringView kModelsDrag = u8"modelviewer.models"; // a drag of grid tiles: their paths, a line each
-    constexpr f32 kTileWidth = 152.0f;
-    constexpr f32 kTileHeight = 184.0f;
+    // The grids' cells at each step of the tile size (small, medium, large): the picture's side
+    // (viewer.css, .tiles-small and .tiles-large) with room for the padding and two lines of name.
+    constexpr f32 kTileWidths[] = {120.0f, 152.0f, 216.0f};
+    constexpr f32 kTileHeights[] = {152.0f, 184.0f, 248.0f};
+    constexpr StringView kGridLists[] = {u8"viewer-grid", u8"viewer-lib-grid"};
+    constexpr StringView kTileSliders[] = {u8"viewer-tile-size", u8"viewer-lib-tile-size"};
 
     enum class Page : u8
     {
@@ -473,6 +477,17 @@ namespace
             Run(u8"view.light", light);
             WireLibrary(host);
             WireGrids();
+            DefineViewerCommands();
+            for (StringView id : kTileSliders)
+                if (auto* slider = FindAs<gui::Slider>(id))
+                    slider->SetOnValueChanging([self](f64 value)
+                                               {
+                                                   const i64 step = static_cast<i64>(value + 0.5);
+                                                   if (!self->m_syncingTiles && static_cast<u32>(step) != self->m_settings.value.tileSize)
+                                                       self->Run(u8"settings.set", Arg(u8"tileSize", Number(static_cast<f64>(step))));
+                                               });
+            ApplyTileSize(); // the grids exist now
+            RebuildMenus();
             RefreshLibrary();
             for (const String& file : m_files)
                 OpenFile(file.AsView());
@@ -502,6 +517,8 @@ namespace
             Turn(deltaTime);
             if (m_libraryStale)
                 RefreshLibrary();
+            if (m_menusStale)
+                RebuildMenus();
             ShowPlayback();
             DrawGrid();
             DrawSkeleton();
@@ -1147,7 +1164,7 @@ namespace
                 return;
             }
             m_failure = {};
-            m_settings.Recent(false, m_tabs.At(opened.index).path.AsView());
+            NoteRecent(false, m_tabs.At(opened.index).path.AsView());
             if (opened.added)
             {
                 modelviewer::ModelTab& tab = m_tabs.At(opened.index);
@@ -1163,6 +1180,190 @@ namespace
                     PlaceModel(tab, opened.outcome);
             }
             ShowTab(opened.index);
+        }
+
+        // The viewer's own commands (the GUI's command model): each with its label, its keys and
+        // what it does, for the menu bar's items and the shortcuts alike. Most press the button
+        // or run the command the window has for it already, so a key, a menu item and a click are
+        // one path.
+        struct ViewerCommand
+        {
+            StringView id;
+            StringView label;
+            StringView keys; // the keymap's spelling ("ctrl-o"); empty: none
+        };
+        static constexpr ViewerCommand kViewerCommands[] = {
+            {u8"viewer.open", u8"Open...", u8"ctrl-o"},
+            {u8"viewer.close-tab", u8"Close Tab", u8"ctrl-w"},
+            {u8"viewer.screenshot", u8"Screenshot", {}},
+            {u8"viewer.preferences", u8"Preferences...", {}},
+            {u8"viewer.quit", u8"Quit", u8"ctrl-q"},
+            {u8"viewer.next-tab", u8"Next Tab", u8"ctrl-tab"},
+            {u8"viewer.previous-tab", u8"Previous Tab", u8"ctrl-shift-tab"},
+            {u8"viewer.find", u8"Find", u8"ctrl-f"},
+            {u8"viewer.play", u8"Play or Pause", u8"space"},
+            {u8"viewer.step-back", u8"Step Back a Frame", u8"left"},
+            {u8"viewer.step-forward", u8"Step Forward a Frame", u8"right"},
+            {u8"viewer.frame", u8"Frame the Model", u8"f"},
+            {u8"viewer.panel", u8"Side Panel", {}},
+            {u8"viewer.skeleton", u8"Skeleton", {}},
+            {u8"viewer.turntable", u8"Turntable", {}},
+            {u8"viewer.grid", u8"Grid", {}},
+            {u8"viewer.new-collection", u8"New Collection", {}},
+            {u8"viewer.add-selected", u8"Add Selected to Collection", {}},
+        };
+
+        // Presses a button of the window's, as a click would.
+        void Press(StringView id)
+        {
+            if (auto* button = FindAs<gui::Button>(id); button != nullptr && button->IsTreeEnabled())
+                (void)button->HandleActivate();
+        }
+
+        void DefineViewerCommands()
+        {
+            gui::GUIContext& context = m_guiHost->Context();
+            ModelViewerApp* self = this;
+            for (const ViewerCommand& c : kViewerCommands)
+            {
+                context.DefineCommand(c.id).SetLabel(c.label);
+                if (!c.keys.IsEmpty())
+                    (void)context.GetKeymap().Bind(c.keys, c.id);
+            }
+            auto on = [self](StringView id, Function<void()> run)
+            {
+                (void)self->m_root->OnCommand(id, [action = foundation::core::Move(run)](gui::CommandEvent&) { action(); });
+            };
+            on(u8"viewer.open", [self]() { self->Press(u8"viewer-open"); });
+            on(u8"viewer.close-tab", [self]()
+               {
+                   if (!self->m_browsing && self->m_tabs.ActiveTab() != nullptr)
+                       self->Run(u8"model.close");
+               });
+            on(u8"viewer.screenshot", [self]() { self->Press(u8"viewer-screenshot"); });
+            on(u8"viewer.preferences", [self]() { self->ShowPreferences(); });
+            on(u8"viewer.quit", [self]()
+               {
+                   if (self->m_host != nullptr)
+                       self->m_host->RequestExit(0);
+               });
+            on(u8"viewer.next-tab", [self]() { self->StepTab(1); });
+            on(u8"viewer.previous-tab", [self]() { self->StepTab(-1); });
+            on(u8"viewer.find", [self]()
+               {
+                   // The search of the page in front; from a model, the browser's.
+                   if (self->m_page == Page::Model)
+                       self->Run(u8"tabs.select", Arg(u8"tab", Number(-1)));
+                   if (auto* field = self->FindAs<gui::TextField>(self->m_page == Page::Library ? StringView(u8"viewer-lib-search")
+                                                                                                   : StringView(u8"viewer-filter-name")))
+                       field->RequestFocus();
+               });
+            on(u8"viewer.play", [self]() { self->Press(u8"viewer-play"); });
+            on(u8"viewer.step-back", [self]() { self->Press(u8"viewer-step-back"); });
+            on(u8"viewer.step-forward", [self]() { self->Press(u8"viewer-step"); });
+            on(u8"viewer.frame", [self]()
+               {
+                   if (self->m_page == Page::Model)
+                       self->Run(u8"view.camera", Arg(u8"frame", Flag(true)));
+               });
+            on(u8"viewer.panel", [self]()
+               {
+                   if (gui::Node* panel = self->FindById(u8"viewer-panel"))
+                       panel->SetDisplayed(!panel->IsDisplayed());
+                   self->m_menusStale = true;
+               });
+            on(u8"viewer.skeleton", [self]() { self->Run(u8"view.light", Arg(u8"skeleton", Flag(!self->m_showSkeleton))); });
+            on(u8"viewer.turntable", [self]() { self->Run(u8"view.light", Arg(u8"turntable", Flag(!self->m_turntable))); });
+            on(u8"viewer.grid", [self]() { self->Run(u8"settings.set", Arg(u8"grid", Flag(!self->m_settings.value.grid))); });
+            on(u8"viewer.new-collection", [self]()
+               {
+                   self->Run(u8"tabs.select", Arg(u8"tab", Number(-2)));
+                   self->Press(u8"viewer-lib-new");
+               });
+            on(u8"viewer.add-selected", [self]() { self->Press(u8"viewer-add-selected"); });
+        }
+
+        // The next or previous tab of the bar's (Browse, Library, then the models), round.
+        void StepTab(i32 by)
+        {
+            const i32 count = kFixedTabs + m_tabs.Count();
+            const i32 current = m_page == Page::Browse ? 0 : m_page == Page::Library ? 1 : kFixedTabs + m_tabs.Active();
+            const i32 next = ((current + by) % count + count) % count;
+            Run(u8"tabs.select", Arg(u8"tab", Number(next == 0 ? -1 : next == 1 ? -2 : next - kFixedTabs)));
+        }
+
+        // The menu bar, made again when what it lists changes (the recents) or a toggle's state;
+        // its items are the commands above, which give their labels and keys.
+        void RebuildMenus()
+        {
+            m_menusStale = false;
+            auto* bar = FindAs<gui::MenuBar>(u8"viewer-menubar");
+            if (bar == nullptr)
+                return;
+            bar->ClearMenus();
+            gui::GUIContext& context = m_guiHost->Context();
+            auto item = [](gui::Menu* menu, StringView command) { menu->AddItem({}, {})->SetCommand(command); };
+            auto toggle = [&context, &item](gui::Menu* menu, StringView command, bool on)
+            {
+                context.DefineCommand(command).SetChecked(on);
+                item(menu, command);
+            };
+            gui::Menu* file = bar->AddMenu(u8"File");
+            item(file, u8"viewer.open");
+            gui::Menu* recent = file->AddSubMenu(u8"Open Recent");
+            ModelViewerApp* self = this;
+            for (const String& model : m_settings.value.recentModels)
+            {
+                const String path = model;
+                (void)recent->AddItem(modelviewer::FileTitle(path.AsView()).AsView(),
+                                      [self, path]() { self->Run(u8"model.open", Arg(u8"path", Text(path.AsView()))); });
+            }
+            if (!m_settings.value.recentModels.IsEmpty() && !m_settings.value.recentFolders.IsEmpty())
+                recent->AddSeparator();
+            for (const String& folder : m_settings.value.recentFolders)
+            {
+                const String path = folder;
+                (void)recent->AddItem(Format(u8"Browse {}", path.AsView()).AsView(),
+                                      [self, path]() { self->Run(u8"browse.folder", Arg(u8"path", Text(path.AsView()))); });
+            }
+            if (m_settings.value.recentModels.IsEmpty() && m_settings.value.recentFolders.IsEmpty())
+                recent->AddItem(u8"Nothing opened yet", []() {})->SetEnabled(false);
+            item(file, u8"viewer.close-tab");
+            file->AddSeparator();
+            item(file, u8"viewer.screenshot");
+            item(file, u8"viewer.preferences");
+            file->AddSeparator();
+            item(file, u8"viewer.quit");
+
+            gui::Menu* view = bar->AddMenu(u8"View");
+            const gui::Node* panel = FindById(u8"viewer-panel");
+            toggle(view, u8"viewer.panel", panel == nullptr || panel->IsDisplayed());
+            toggle(view, u8"viewer.skeleton", m_showSkeleton);
+            toggle(view, u8"viewer.turntable", m_turntable);
+            toggle(view, u8"viewer.grid", m_settings.value.grid);
+            view->AddSeparator();
+            item(view, u8"viewer.frame");
+            item(view, u8"viewer.play");
+            item(view, u8"viewer.step-back");
+            item(view, u8"viewer.step-forward");
+            view->AddSeparator();
+            item(view, u8"viewer.next-tab");
+            item(view, u8"viewer.previous-tab");
+            // The toggles' states as the user sees them when the menu opens.
+            view->SetOnOpening([self](gui::Menu&)
+                               {
+                                   gui::GUIContext& c = self->m_guiHost->Context();
+                                   const gui::Node* p = self->FindById(u8"viewer-panel");
+                                   c.DefineCommand(u8"viewer.panel").SetChecked(p == nullptr || p->IsDisplayed());
+                                   c.DefineCommand(u8"viewer.skeleton").SetChecked(self->m_showSkeleton);
+                                   c.DefineCommand(u8"viewer.turntable").SetChecked(self->m_turntable);
+                                   c.DefineCommand(u8"viewer.grid").SetChecked(self->m_settings.value.grid);
+                               });
+
+            gui::Menu* library = bar->AddMenu(u8"Library");
+            item(library, u8"viewer.new-collection");
+            item(library, u8"viewer.add-selected");
+            item(library, u8"viewer.find");
         }
 
         // The grid's count line, with how far the thumbnails have got while they are drawn
@@ -1609,7 +1810,7 @@ namespace
             const String folderCopy(chosen); // `chosen` may be a view of m_settings.value.folder itself
             const StringView folder = folderCopy.AsView();
             m_settings.value.folder = folderCopy;
-            m_settings.Recent(true, folder);
+            NoteRecent(true, folder);
             auto* tree = FindAs<gui::TreeView>(u8"viewer-folder-tree");
             if (tree == nullptr)
                 return;
@@ -1816,8 +2017,7 @@ namespace
                     static_cast<modelviewer_window::ModelCell&>(cell).Show(shown);
                 };
                 list->SetLayoutMode(gui::ItemLayout::Grid);
-                list->SetCellWidth(kTileWidth);
-                list->SetCellHeight(kTileHeight);
+
                 list->SetRowFactory(foundation::core::Move(rows));
                 list->SetModel(grid);
                 list->SetOnActivated([self, grid](gui::ModelIndex index)
@@ -2543,6 +2743,12 @@ namespace
         }
 
         void SaveSettings() { (void)m_settings.Save(); }
+        // A model or folder to the front of the recents, and File > Open Recent made again.
+        void NoteRecent(bool folder, StringView path)
+        {
+            m_settings.Recent(folder, path);
+            m_menusStale = true;
+        }
 
         // The settings changed (or the window started): the density's sheet, the loose texture
         // rule, the panel's toggle. The thumbnails' size and the cache's folder wait for the next start.
@@ -2552,12 +2758,37 @@ namespace
                 ApplySheets();
             if (m_thumbnails)
                 m_thumbnails->SetLooseTextures(m_settings.value.looseTextures);
+            ApplyTileSize();
+            m_menusStale = true; // the View menu's Grid
             if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
             {
                 m_syncingPanel = true;
                 loose->SetChecked(m_settings.value.looseTextures);
                 m_syncingPanel = false;
             }
+        }
+
+        // The grids' tiles at the settings' size, both sliders showing it.
+        void ApplyTileSize()
+        {
+            const u32 step = Min(m_settings.value.tileSize, 2u);
+            for (StringView id : kGridLists)
+                if (auto* list = FindAs<gui::ListView>(id))
+                {
+                    list->SetCellWidth(kTileWidths[step]);
+                    list->SetCellHeight(kTileHeights[step]);
+                    list->RemoveClass(u8"tiles-small");
+                    list->RemoveClass(u8"tiles-large");
+                    if (step == 0)
+                        list->AddClass(u8"tiles-small");
+                    else if (step == 2)
+                        list->AddClass(u8"tiles-large");
+                }
+            m_syncingTiles = true;
+            for (StringView id : kTileSliders)
+                if (auto* slider = FindAs<gui::Slider>(id))
+                    slider->SetValue(static_cast<f64>(step));
+            m_syncingTiles = false;
         }
 
         // Why the cache cannot be cleared now (a model open reads its cooked files; a thumbnail
@@ -2860,6 +3091,8 @@ namespace
         modelviewer::FileLoads m_tabLoads{m_allocator}; // the model tabs' files, read off the main thread
         String m_emptyText; // the empty view's own words, from the markup
         String m_gridCount; // the browse grid's "n of m models"
+        bool m_syncingTiles = false; // the tile sliders set by code
+        bool m_menusStale = false; // the menu bar made again next frame (not from inside one of its own items)
         String m_shownProgress;
         String m_density; // the density whose sheet is applied
         u32 m_thumbnailSize = 128;

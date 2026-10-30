@@ -79,7 +79,7 @@ once, except where it says "from the next start"):
 
 | Tool | What it does |
 | --- | --- |
-| `settings_get` | The preferences: where screenshots go and their names, the thumbnail size, the cache folder and its size, the view's defaults, the density, how many recents are kept. |
+| `settings_get` | The preferences: where screenshots go and their names, the thumbnail size, the cache folder and its size, the view's defaults, the density, the grids' tile size, how many recents are kept. |
 | `settings_set` | Changes the preferences named, the rest as they were; refused, changing nothing, when one is out of its range. |
 | `recents_list` | The models opened and the folders browsed lately, newest first. |
 | `cache_clear` | Deletes the cooked models and the thumbnails (each made again when next needed); refused while a model is open in a tab. Ask the user first. |

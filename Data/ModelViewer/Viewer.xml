@@ -12,7 +12,7 @@
 -->
 <Panel class="viewer">
     <Panel id="viewer-bar" class="panel-toolbar viewer-bar">
-        <Label class="viewer-title" text="Model Viewer"/>
+        <MenuBar id="viewer-menubar" class="viewer-menubar"/>
         <TabBar id="viewer-tabs" class="viewer-tabs" close-display="always" reorderable="true"/>
         <Button id="viewer-open" class="icon-button" icon="Editor/Icons/open.svg" tooltip="Open model files (glTF, GLB, FBX, OBJ), or drop them on the window"/>
         <Button id="viewer-screenshot" class="icon-button" icon="Editor/Icons/camera.svg" tooltip="Save the 3D view as a PNG (where and how named: Preferences)"/>
@@ -38,6 +38,7 @@
                     <CheckBox id="viewer-filter-animated" class="choice" text="Animated" tooltip="Only models with clips (known once drawn)"/>
                     <CheckBox id="viewer-filter-library" class="choice" text="In library" tooltip="Only models already in the library"/>
                     <Label id="viewer-grid-count" class="viewer-grid-count"/>
+                    <Slider id="viewer-tile-size" class="viewer-tile-size" min="0" max="2" step="1" tooltip="The tiles' size: small, medium or large"/>
                     <Button id="viewer-select-all" class="icon-button" icon="Editor/Icons/select.svg" tooltip="Select every model shown (Ctrl+A); Ctrl+click and Shift+click select some"/>
                     <ComboBox id="viewer-add-target" class="viewer-lib-target" tooltip="The collection the selected models go into"/>
                     <Button id="viewer-add-selected" class="icon-button" icon="Editor/Icons/plus.svg" tooltip="Add the selected models to the collection (or drag them onto one in the Library tab)"/>
@@ -65,6 +66,7 @@
                     <CheckBox id="viewer-lib-everywhere" class="choice" text="Everywhere" tooltip="Search the whole library, not just the collection chosen"/>
                     <CheckBox id="viewer-lib-sub" class="choice" text="Sub-collections" checked="true" tooltip="With the models of the collections inside"/>
                     <Label id="viewer-lib-count" class="viewer-grid-count"/>
+                    <Slider id="viewer-lib-tile-size" class="viewer-tile-size" min="0" max="2" step="1" tooltip="The tiles' size: small, medium or large"/>
                     <Button id="viewer-lib-remove" class="icon-button" icon="Editor/Icons/minus.svg" tooltip="Take the selected models out of the collection chosen (they stay in the library)"/>
                 </Panel>
                 <ListView id="viewer-lib-grid" class="viewer-tiles" selection-mode="multi"/>

@@ -74,6 +74,27 @@ none searches the whole library.
 | `history_undo` | Steps back over the last change. |
 | `history_list` | The changes undo would step back over, the last first. |
 
+The window's tools (a viewer started with `--headless` has no window, and says so):
+
+| Tool | What it does |
+| --- | --- |
+| `model_open` | Opens a model file in a tab of its own (or brings its tab to the front). |
+| `model_close` | Closes a model's tab (the one in front by default). |
+| `tabs_list` | The model tabs: each one's place, file and whether it is in front; and whether Browse is. |
+| `tabs_select` | Brings a tab to the front (-1: Browse). |
+| `view_screenshot` | Saves the 3D view (no panels) as a PNG within a frame; returns the file. |
+| `view_camera` | Frames the model, or looks at it from a yaw and pitch in degrees. |
+| `view_light` | Sets exposure, ambient, sky, the turntable and the skeleton overlay; returns them all. |
+| `clip_list` | The clips of the model in front, and the playback. |
+| `clip_select` | Plays a clip of the model in front, from its start. |
+| `clip_play` | Plays or pauses, sets looping and speed. |
+| `clip_scrub` | Shows a moment of the clip, paused. |
+| `browse_folder` | Browses a folder: the Browse tab with every model under it. |
+| `thumbnail_get` | A model's thumbnail file, or `queued` (it is drawn soon: ask again). |
+
+To show the user something, open it (`model_open`), pick the clip and angle, and take a
+`view_screenshot`; the file is written within a frame.
+
 ## Running it
 
 - With the window: `Tools.ModelViewer --mcp` (or `--mcp-port <port>`; 7406 by default) serves these

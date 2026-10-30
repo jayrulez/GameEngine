@@ -172,6 +172,7 @@ namespace
         GlobalLogger().AddSink(&sink);
         modelviewer::LibrarySession library(DefaultAllocator());
         OpenLibrary(library, u8"headless");
+        modelviewer::RegisterWindowlessCommands(library.Commands());
         foundation::mcp::McpServer server;
         ServeCommands(server, library);
         foundation::mcp::StdioTransport transport;
@@ -220,11 +221,12 @@ namespace
             m_shortlistPath = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/shortlist.txt");
             if (Result<Array<byte>> list = ReadFile(m_shortlistPath.AsView()); list.HasValue())
                 m_shortlist.Read(StringView(reinterpret_cast<const utf8char*>(list.Value().Data()), list.Value().Size()));
-            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(),
-                                                                     PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/thumbnails").AsView());
+            m_thumbnailRoot = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/thumbnails");
+            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(), m_thumbnailRoot.AsView());
             ModelViewerApp* self = this;
             m_thumbnails->SetOnDone([self](StringView model, StringView png) { self->ThumbnailDone(model, png); });
             OpenLibrary(m_library, u8"window");
+            RegisterWindowCommands();
             StartMcp();
             WireControls(host);
             WireBrowser(host);
@@ -417,6 +419,311 @@ namespace
             }
         }
 
+        // === The window's commands (modelviewer::WindowCommandSpecs) ===
+        //
+        // Every control runs one of these (Run), and an agent the same through MCP; each brings
+        // the controls it touches up to date, so either way the window shows what happened.
+
+        using JsonValue = foundation::json::JsonValue;
+        using CommandResult = modelviewer::CommandResult;
+
+        /// Runs a command for a control; a refusal is logged (an agent gets it as its answer).
+        void Run(StringView name, const JsonValue& args = JsonValue::MakeObject())
+        {
+            const CommandResult result = m_library.Commands().Execute(name, args);
+            if (!result.ok)
+                LOG_WARNING(u8"ModelViewer", u8"{}: {}", name, result.error.AsView());
+        }
+        [[nodiscard]] static JsonValue Arg(StringView key, JsonValue value)
+        {
+            JsonValue a = JsonValue::MakeObject();
+            a.Set(String(key), foundation::core::Move(value));
+            return a;
+        }
+        [[nodiscard]] static JsonValue Text(StringView text) { return JsonValue::MakeString(String(text)); }
+        [[nodiscard]] static JsonValue Number(f64 n) { return JsonValue::MakeNumber(n); }
+        [[nodiscard]] static JsonValue Flag(bool b) { return JsonValue::MakeBool(b); }
+
+        [[nodiscard]] JsonValue TabsJson()
+        {
+            JsonValue v = JsonValue::MakeObject();
+            JsonValue tabs = JsonValue::MakeArray();
+            for (i32 i = 0; i < m_tabs.Count(); ++i)
+            {
+                JsonValue t = JsonValue::MakeObject();
+                t.Set(String(u8"tab"), Number(i));
+                t.Set(String(u8"path"), Text(m_tabs.At(i).path.AsView()));
+                t.Set(String(u8"front"), Flag(!m_browsing && i == m_tabs.Active()));
+                tabs.Add(foundation::core::Move(t));
+            }
+            v.Set(String(u8"tabs"), foundation::core::Move(tabs));
+            v.Set(String(u8"browsing"), Flag(m_browsing));
+            return v;
+        }
+        [[nodiscard]] JsonValue LightJson()
+        {
+            JsonValue v = JsonValue::MakeObject();
+            if (auto* post = Post())
+                v.Set(String(u8"exposure"), Number(post->Post().exposureEV));
+            if (auto* environment = Environment())
+            {
+                v.Set(String(u8"ambient"), Number(environment->Environment().ambientIntensity));
+                v.Set(String(u8"sky"), Number(environment->Environment().skyIntensity));
+            }
+            v.Set(String(u8"turntable"), Flag(m_turntable));
+            v.Set(String(u8"skeleton"), Flag(m_showSkeleton));
+            return v;
+        }
+        [[nodiscard]] JsonValue PlaybackJson(const modelviewer::ClipPlayback& p)
+        {
+            JsonValue v = JsonValue::MakeObject();
+            v.Set(String(u8"clip"), Text(p.ClipName(p.Selected()).AsView()));
+            v.Set(String(u8"seconds"), Number(p.Time()));
+            v.Set(String(u8"length"), Number(p.Duration()));
+            v.Set(String(u8"playing"), Flag(p.Playing()));
+            v.Set(String(u8"loop"), Flag(p.Looping()));
+            v.Set(String(u8"speed"), Number(p.Speed()));
+            return v;
+        }
+        /// The playback of the model in front, or why there is none.
+        [[nodiscard]] modelviewer::ClipPlayback* FrontPlayback(String& why)
+        {
+            modelviewer::ModelTab* tab = m_browsing ? nullptr : m_tabs.ActiveTab();
+            if (tab == nullptr)
+            {
+                why = String(u8"no model is in front");
+                return nullptr;
+            }
+            if (tab->playback.Get() == nullptr || !tab->playback->HasClips())
+            {
+                why = Format(u8"{} has no clips", tab->title.AsView());
+                return nullptr;
+            }
+            return tab->playback.Get();
+        }
+        /// A tab argument: the one named, else the one in front; -1 when there is none.
+        [[nodiscard]] i32 TabArg(const JsonValue& a) const
+        {
+            if (a.Has(String(u8"tab")) && !a.Get(String(u8"tab")).IsNull())
+                return static_cast<i32>(a.Get(String(u8"tab")).AsInt(-1));
+            return m_tabs.Active();
+        }
+
+        void RegisterWindowCommands()
+        {
+            ModelViewerApp* self = this;
+            usize registered = 0;
+            auto reg = [&](StringView name, Function<CommandResult(const JsonValue&)> run)
+            {
+                for (const modelviewer::WindowCommandSpec& spec : modelviewer::WindowCommandSpecs())
+                    if (spec.name == name)
+                    {
+                        (void)m_library.Commands().Register(modelviewer::MakeWindowCommand(spec, foundation::core::Move(run)));
+                        ++registered;
+                        return;
+                    }
+                LOG_ERROR(u8"ModelViewer", u8"no window command named {} in the table", name);
+            };
+
+            reg(u8"model.open", [self](const JsonValue& a)
+                {
+                    const String path = a.Get(String(u8"path")).AsString();
+                    self->OpenFile(path.AsView());
+                    const i32 tab = self->m_tabs.Find(path.AsView());
+                    if (tab < 0)
+                        return CommandResult::Fail(self->m_failure.AsView());
+                    JsonValue v = JsonValue::MakeObject();
+                    v.Set(String(u8"tab"), Number(tab));
+                    return CommandResult::Ok(foundation::core::Move(v));
+                });
+            reg(u8"model.close", [self](const JsonValue& a)
+                {
+                    const i32 tab = self->TabArg(a);
+                    if (!self->m_tabs.Valid(tab))
+                        return CommandResult::Fail(u8"no such tab");
+                    self->CloseTab(tab);
+                    return CommandResult::Ok(self->TabsJson());
+                });
+            reg(u8"tabs.list", [self](const JsonValue&) { return CommandResult::Ok(self->TabsJson()); });
+            reg(u8"tabs.select", [self](const JsonValue& a)
+                {
+                    const i32 tab = static_cast<i32>(a.Get(String(u8"tab")).AsInt(-2));
+                    if (tab == -1)
+                        self->ShowBrowser();
+                    else if (self->m_tabs.Valid(tab))
+                        self->ShowTab(tab);
+                    else
+                        return CommandResult::Fail(u8"no such tab");
+                    return CommandResult::Ok(self->TabsJson());
+                });
+            reg(u8"view.screenshot", [self](const JsonValue& a)
+                {
+                    const modelviewer::ModelTab* tab = self->m_browsing ? nullptr : self->m_tabs.ActiveTab();
+                    if (tab == nullptr)
+                        return CommandResult::Fail(u8"no model is in front to take a picture of");
+                    String path = a.Get(String(u8"path")).AsString();
+                    if (path.IsEmpty())
+                    {
+                        const String folder = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/screenshots");
+                        (void)CreateDirectories(folder.AsView());
+                        path = PathJoin(folder.AsView(), Format(u8"{}_{}.png", modelviewer::FileTitle(tab->path.AsView()), GetTicks()).AsView());
+                    }
+                    self->m_capture.Request(path.AsView());
+                    JsonValue v = JsonValue::MakeObject();
+                    v.Set(String(u8"file"), Text(path.AsView()));
+                    return CommandResult::Ok(foundation::core::Move(v));
+                });
+            reg(u8"view.camera", [self](const JsonValue& a)
+                {
+                    modelviewer::ModelTab* tab = self->m_browsing ? nullptr : self->m_tabs.ActiveTab();
+                    if (tab == nullptr)
+                        return CommandResult::Fail(u8"no model is in front");
+                    editor::EditorCamera& camera = self->m_viewport->Camera();
+                    if (a.Has(String(u8"yaw")) || a.Has(String(u8"pitch")))
+                    {
+                        // From the angle asked, as near as the model fits the view.
+                        camera.yaw = static_cast<f32>(a.Get(String(u8"yaw")).AsNumber(0.0)) * kPi / 180.0f;
+                        camera.pitch = static_cast<f32>(a.Get(String(u8"pitch")).AsNumber(-15.0)) * kPi / 180.0f;
+                        const f32 distance = tab->radius / Sin(camera.fovY * 0.5f) * 1.1f;
+                        camera.position = tab->center - camera.Forward() * distance;
+                        camera.focusDistance = distance;
+                        self->ClipToModel(tab->radius);
+                    }
+                    else
+                        self->FrameModel(/*snap*/ true);
+                    return CommandResult::Ok();
+                });
+            reg(u8"view.light", [self](const JsonValue& a)
+                {
+                    auto number = [&](StringView key, f64 lo, f64 hi, auto apply)
+                    {
+                        if (a.Has(String(key)) && a.Get(String(key)).IsNumber())
+                            apply(Clamp(a.Get(String(key)).AsNumber(), lo, hi));
+                    };
+                    self->m_syncingView = true;
+                    number(u8"exposure", -4.0, 4.0, [self](f64 v)
+                           {
+                               if (auto* post = self->Post())
+                                   post->Post().exposureEV = static_cast<f32>(v);
+                               if (auto* slider = self->FindAs<gui::Slider>(u8"viewer-exposure"))
+                                   slider->SetValue(v);
+                           });
+                    number(u8"ambient", 0.0, 2.0, [self](f64 v)
+                           {
+                               if (auto* environment = self->Environment())
+                                   environment->Environment().ambientIntensity = static_cast<f32>(v);
+                               if (auto* slider = self->FindAs<gui::Slider>(u8"viewer-ambient"))
+                                   slider->SetValue(v);
+                           });
+                    number(u8"sky", 0.0, 3.0, [self](f64 v)
+                           {
+                               if (auto* environment = self->Environment())
+                                   environment->Environment().skyIntensity = static_cast<f32>(v);
+                               if (auto* slider = self->FindAs<gui::Slider>(u8"viewer-sky"))
+                                   slider->SetValue(v);
+                           });
+                    if (a.Has(String(u8"turntable")))
+                    {
+                        self->SetTurntable(a.Get(String(u8"turntable")).AsBool());
+                        if (auto* box = self->FindAs<gui::CheckBox>(u8"viewer-turntable"))
+                            box->SetChecked(self->m_turntable);
+                    }
+                    if (a.Has(String(u8"skeleton")))
+                    {
+                        self->m_showSkeleton = a.Get(String(u8"skeleton")).AsBool();
+                        if (auto* box = self->FindAs<gui::CheckBox>(u8"viewer-skeleton"))
+                            box->SetChecked(self->m_showSkeleton);
+                    }
+                    self->m_syncingView = false;
+                    return CommandResult::Ok(self->LightJson());
+                });
+            reg(u8"clip.list", [self](const JsonValue&)
+                {
+                    String why;
+                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    if (p == nullptr)
+                        return CommandResult::Fail(why.AsView());
+                    JsonValue clips = JsonValue::MakeArray();
+                    for (i32 i = 0; i < p->ClipCount(); ++i)
+                        clips.Add(Text(p->ClipName(i).AsView()));
+                    JsonValue v = self->PlaybackJson(*p);
+                    v.Set(String(u8"clips"), foundation::core::Move(clips));
+                    return CommandResult::Ok(foundation::core::Move(v));
+                });
+            reg(u8"clip.select", [self](const JsonValue& a)
+                {
+                    String why;
+                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    if (p == nullptr)
+                        return CommandResult::Fail(why.AsView());
+                    const String name = a.Get(String(u8"clip")).AsString();
+                    for (i32 i = 0; i < p->ClipCount(); ++i)
+                        if (p->ClipName(i) == name)
+                        {
+                            p->Select(i);
+                            self->ShowClips(*self->m_tabs.ActiveTab());
+                            return CommandResult::Ok();
+                        }
+                    return CommandResult::Fail(Format(u8"no clip named {} (clip.list says which there are)", name.AsView()).AsView());
+                });
+            reg(u8"clip.play", [self](const JsonValue& a)
+                {
+                    String why;
+                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    if (p == nullptr)
+                        return CommandResult::Fail(why.AsView());
+                    if (a.Has(String(u8"loop")))
+                        p->SetLooping(a.Get(String(u8"loop")).AsBool());
+                    if (a.Has(String(u8"speed")) && a.Get(String(u8"speed")).IsNumber())
+                        p->SetSpeed(static_cast<f32>(Clamp(a.Get(String(u8"speed")).AsNumber(), 0.0, 8.0)));
+                    if (a.Has(String(u8"playing")))
+                        p->SetPlaying(a.Get(String(u8"playing")).AsBool());
+                    self->ShowClips(*self->m_tabs.ActiveTab());
+                    return CommandResult::Ok(self->PlaybackJson(*p));
+                });
+            reg(u8"clip.scrub", [self](const JsonValue& a)
+                {
+                    String why;
+                    modelviewer::ClipPlayback* p = self->FrontPlayback(why);
+                    if (p == nullptr)
+                        return CommandResult::Fail(why.AsView());
+                    p->SetPlaying(false);
+                    p->Scrub(static_cast<f32>(a.Get(String(u8"seconds")).AsNumber(0.0)));
+                    return CommandResult::Ok(self->PlaybackJson(*p));
+                });
+            reg(u8"browse.folder", [self](const JsonValue& a)
+                {
+                    const String path = a.Get(String(u8"path")).AsString();
+                    if (path.IsEmpty() || !DirectoryExists(path.AsView()))
+                        return CommandResult::Fail(Format(u8"{} is not a folder", path.AsView()).AsView());
+                    self->ShowBrowser();
+                    self->SetBrowseRoot(path.AsView());
+                    self->SaveSettings();
+                    JsonValue v = JsonValue::MakeObject();
+                    v.Set(String(u8"models"), Number(static_cast<f64>(self->m_folderModels.Size())));
+                    return CommandResult::Ok(foundation::core::Move(v));
+                });
+            reg(u8"thumbnail.get", [self](const JsonValue& a)
+                {
+                    const String path = a.Get(String(u8"path")).AsString();
+                    const String png = modelviewer::ThumbnailPathFor(self->m_thumbnailRoot.AsView(), path.AsView());
+                    if (png.IsEmpty())
+                        return CommandResult::Fail(Format(u8"{} is not there", path.AsView()).AsView());
+                    JsonValue v = JsonValue::MakeObject();
+                    if (FileExists(png.AsView()))
+                        v.Set(String(u8"file"), Text(png.AsView()));
+                    else
+                    {
+                        self->m_thumbnails->Prepend(path.AsView());
+                        v.Set(String(u8"queued"), Flag(true));
+                    }
+                    return CommandResult::Ok(foundation::core::Move(v));
+                });
+            if (registered != modelviewer::WindowCommandSpecs().Size())
+                LOG_ERROR(u8"ModelViewer", u8"{} of the {} window commands have no handler", modelviewer::WindowCommandSpecs().Size() - registered,
+                          modelviewer::WindowCommandSpecs().Size());
+        }
+
         // The bar's buttons, the tabs, the panel's controls, and files dropped on the window.
         void WireControls(runtime::IApplicationHost& host)
         {
@@ -426,17 +733,13 @@ namespace
                 // The bar's first tab is Browse; a model's tab is one after its place in m_tabs.
                 tabs->SetOnSelected([self](i32 index)
                                     {
-                                        if (self->m_syncingTabs)
-                                            return;
-                                        if (index == 0)
-                                            self->ShowBrowser();
-                                        else
-                                            self->ShowTab(index - 1);
+                                        if (!self->m_syncingTabs)
+                                            self->Run(u8"tabs.select", Arg(u8"tab", Number(index - 1))); // Browse first: -1
                                     });
                 tabs->SetCloseHandler([self](i32 index)
                                       {
                                           if (index > 0)
-                                              self->CloseTab(index - 1);
+                                              self->Run(u8"model.close", Arg(u8"tab", Number(index - 1)));
                                       });
                 tabs->SetOnTabMoved([self, tabs](i32 from, i32 to)
                                     {
@@ -457,36 +760,29 @@ namespace
                 open->SetOnClick([self, &host]() { self->ShowOpenDialog(host); });
             if (auto* shot = FindAs<gui::Button>(u8"viewer-screenshot"))
                 shot->SetOnClick([self, &host]() { self->ShowScreenshotDialog(host); });
+            auto light = [self](StringView key, JsonValue value)
+            {
+                if (!self->m_syncingView)
+                    self->Run(u8"view.light", Arg(key, foundation::core::Move(value)));
+            };
             if (auto* exposure = FindAs<gui::Slider>(u8"viewer-exposure"))
-                exposure->SetOnValueChanging([self](f64 value)
-                                             {
-                                                 if (auto* post = self->Post())
-                                                     post->Post().exposureEV = static_cast<f32>(value);
-                                             });
+                exposure->SetOnValueChanging([light](f64 value) { light(u8"exposure", Number(value)); });
             if (auto* ambient = FindAs<gui::Slider>(u8"viewer-ambient"))
-                ambient->SetOnValueChanging([self](f64 value)
-                                            {
-                                                if (auto* environment = self->Environment())
-                                                    environment->Environment().ambientIntensity = static_cast<f32>(value);
-                                            });
+                ambient->SetOnValueChanging([light](f64 value) { light(u8"ambient", Number(value)); });
             if (auto* sky = FindAs<gui::Slider>(u8"viewer-sky"))
-                sky->SetOnValueChanging([self](f64 value)
-                                        {
-                                            if (auto* environment = self->Environment())
-                                                environment->Environment().skyIntensity = static_cast<f32>(value);
-                                        });
+                sky->SetOnValueChanging([light](f64 value) { light(u8"sky", Number(value)); });
             if (auto* turntable = FindAs<gui::CheckBox>(u8"viewer-turntable"))
-                turntable->SetOnToggled([self](bool on) { self->SetTurntable(on); });
+                turntable->SetOnToggled([light](bool on) { light(u8"turntable", Flag(on)); });
             if (auto* skeleton = FindAs<gui::CheckBox>(u8"viewer-skeleton"))
             {
                 skeleton->SetChecked(m_showSkeleton);
-                skeleton->SetOnToggled([self](bool on) { self->m_showSkeleton = on; });
+                skeleton->SetOnToggled([light](bool on) { light(u8"skeleton", Flag(on)); });
             }
             WireAnimationBar();
             m_guiHost->SetDropObserver([self](const shell::DroppedFile& file)
                                        {
                                            if (modelviewer::IsModelFile(file.path.AsView()))
-                                               self->OpenFile(file.path.AsView());
+                                               self->Run(u8"model.open", Arg(u8"path", Text(file.path.AsView())));
                                        });
         }
 
@@ -511,7 +807,7 @@ namespace
             dialogs->ShowOpenFile([self](Span<const String> paths)
                                   {
                                       for (const String& path : paths)
-                                          self->OpenFile(path.AsView());
+                                          self->Run(u8"model.open", Arg(u8"path", Text(path.AsView())));
                                   },
                                   Span<const shell::FileFilter>(filters, 2), {}, true);
         }
@@ -533,7 +829,7 @@ namespace
             dialogs->ShowSaveFile([self](Span<const String> paths)
                                   {
                                       if (!paths.IsEmpty())
-                                          self->m_capture.Request(paths[0].AsView());
+                                          self->Run(u8"view.screenshot", Arg(u8"path", Text(paths[0].AsView())));
                                   },
                                   Span<const shell::FileFilter>(filters, 1), suggested.AsView());
         }
@@ -742,63 +1038,56 @@ namespace
             level->SetLocalTransform(tab.instance.root, t);
         }
 
-        // The animation bar drives the tab in front's playback.
+        // The animation bar runs the clip commands on the tab in front's playback.
         void WireAnimationBar()
         {
             ModelViewerApp* self = this;
             auto playback = [self]() -> modelviewer::ClipPlayback*
             {
-                modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
-                return tab != nullptr ? tab->playback.Get() : nullptr;
+                String ignored;
+                return self->FrontPlayback(ignored);
             };
             if (auto* clip = FindAs<gui::ComboBox>(u8"viewer-clip"))
                 clip->SetOnSelectionChanged([self, playback](i32 index)
                                             {
                                                 if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
-                                                    p->Select(index);
+                                                    self->Run(u8"clip.select", Arg(u8"clip", Text(p->ClipName(index).AsView())));
                                             });
             if (auto* play = FindAs<gui::Button>(u8"viewer-play"))
-                play->SetOnClick([playback]()
+                play->SetOnClick([self, playback]()
                                  {
                                      if (modelviewer::ClipPlayback* p = playback())
-                                         p->SetPlaying(!p->Playing());
+                                         self->Run(u8"clip.play", Arg(u8"playing", Flag(!p->Playing())));
                                  });
             if (auto* stop = FindAs<gui::Button>(u8"viewer-stop"))
-                stop->SetOnClick([playback]()
-                                 {
-                                     if (modelviewer::ClipPlayback* p = playback())
-                                         p->Stop();
-                                 });
+                stop->SetOnClick([self]() { self->Run(u8"clip.scrub", Arg(u8"seconds", Number(0.0))); }); // the start, paused
+            auto step = [self, playback](i32 frames)
+            {
+                if (modelviewer::ClipPlayback* p = playback())
+                    self->Run(u8"clip.scrub", Arg(u8"seconds", Number(p->Time() + static_cast<f32>(frames) / modelviewer::ClipPlayback::kStepFps)));
+            };
             if (auto* back = FindAs<gui::Button>(u8"viewer-step-back"))
-                back->SetOnClick([playback]()
-                                 {
-                                     if (modelviewer::ClipPlayback* p = playback())
-                                         p->Step(-1);
-                                 });
-            if (auto* step = FindAs<gui::Button>(u8"viewer-step"))
-                step->SetOnClick([playback]()
-                                 {
-                                     if (modelviewer::ClipPlayback* p = playback())
-                                         p->Step(1);
-                                 });
+                back->SetOnClick([step]() { step(-1); });
+            if (auto* forward = FindAs<gui::Button>(u8"viewer-step"))
+                forward->SetOnClick([step]() { step(1); });
             if (auto* scrub = FindAs<gui::Slider>(u8"viewer-scrub"))
                 scrub->SetOnValueChanging([self, playback](f64 ratio)
                                           {
                                               if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
-                                                  p->Scrub(static_cast<f32>(ratio) * p->Duration());
+                                                  self->Run(u8"clip.scrub", Arg(u8"seconds", Number(ratio * p->Duration())));
                                           });
             if (auto* loop = FindAs<gui::CheckBox>(u8"viewer-loop"))
-                loop->SetOnToggled([self, playback](bool on)
+                loop->SetOnToggled([self](bool on)
                                    {
-                                       if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
-                                           p->SetLooping(on);
+                                       if (!self->m_syncingBar)
+                                           self->Run(u8"clip.play", Arg(u8"loop", Flag(on)));
                                    });
             if (auto* speed = FindAs<gui::ComboBox>(u8"viewer-speed"))
-                speed->SetOnSelectionChanged([self, playback](i32 index)
+                speed->SetOnSelectionChanged([self](i32 index)
                                              {
                                                  static constexpr f32 kSpeeds[] = {0.25f, 0.5f, 1.0f, 2.0f};
-                                                 if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar && index >= 0 && index < 4)
-                                                     p->SetSpeed(kSpeeds[index]);
+                                                 if (!self->m_syncingBar && index >= 0 && index < 4)
+                                                     self->Run(u8"clip.play", Arg(u8"speed", Number(kSpeeds[index])));
                                              });
         }
 
@@ -904,10 +1193,7 @@ namespace
                                        dialogs->ShowOpenFolder([self](Span<const String> paths)
                                                                {
                                                                    if (!paths.IsEmpty())
-                                                                   {
-                                                                       self->SetBrowseRoot(paths[0].AsView());
-                                                                       self->SaveSettings();
-                                                                   }
+                                                                       self->Run(u8"browse.folder", Arg(u8"path", Text(paths[0].AsView())));
                                                                },
                                                                self->m_browseRoot.AsView());
                                    });
@@ -1065,7 +1351,7 @@ namespace
                 tile->SetText(modelviewer::FileTitle(path.AsView()).AsView());
                 tile->SetTooltip(path.AsView());
                 const String opened = path;
-                tile->SetOnClick([self, opened]() { self->OpenFile(opened.AsView()); });
+                tile->SetOnClick([self, opened]() { self->Run(u8"model.open", Arg(u8"path", Text(opened.AsView()))); });
                 if (const foundation::image::Image* image = ThumbImageFor(path.AsView()))
                     tile->SetIcon(MakeRef<gui::ImageDrawable>(m_allocator, image));
                 grid->AddChild(tile.Get());
@@ -1384,6 +1670,8 @@ namespace
         bool m_turntable = false;
         f32 m_turnAngle = 0.0f;
         bool m_syncingBar = false;   // the animation bar set by code, not by a hand
+        bool m_syncingView = false;  // the View section set by a command, not by a hand
+        String m_thumbnailRoot;
         bool m_shownPlaying = true; // what the play button shows (pause while playing, as the markup starts)
         bool m_showSkeleton = false;
         Array<Float4x4> m_bonePoses;

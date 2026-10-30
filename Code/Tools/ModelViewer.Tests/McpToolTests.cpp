@@ -75,6 +75,7 @@ namespace
                                                  v.Set(String(u8"mode"), JsonValue::MakeString(String(u8"test")));
                                                  return v;
                                              });
+            modelviewer::RegisterWindowlessCommands(session.Commands()); // as --headless serves them
             modelviewer::RegisterCommandTools(server, session.Commands());
         }
     };
@@ -156,4 +157,22 @@ TEST_CASE("model viewer mcp: a call changes the library as the command does; a r
     // An undo through MCP steps back over the tool's change.
     CHECK_FALSE(CallTool(host.server, u8"history_undo", JsonValue::MakeObject()).error);
     CHECK(host.session.Commands().Execute(u8"collection.tree").value.Count() == 0);
+}
+
+TEST_CASE("model viewer mcp: without a window, each window command says there is none")
+{
+    Host host(Folder(u8"scratch_viewer_mcp_windowless").AsView());
+    for (const modelviewer::WindowCommandSpec& spec : modelviewer::WindowCommandSpecs())
+    {
+        const modelviewer::Command* command = host.session.Commands().Find(spec.name);
+        REQUIRE(command != nullptr);
+        CHECK(command->kind == spec.kind);
+        const modelviewer::CommandResult result = host.session.Commands().Execute(spec.name);
+        CHECK_FALSE(result.ok);
+        CHECK(result.error.AsView().ContainsIgnoreCase(u8"there is no window"));
+    }
+    // Through MCP, as an agent on --headless meets it.
+    const Call call = CallTool(host.server, u8"tabs_list", JsonValue::MakeObject());
+    CHECK(call.error);
+    CHECK(call.text.AsView().ContainsIgnoreCase(u8"--headless"));
 }

@@ -71,6 +71,18 @@ export namespace modelviewer
         /// Whether models open with loose textures (OpenModel::SetLooseTextures), as the viewer's tabs do.
         void SetLooseTextures(bool on) noexcept { m_looseTextures = on; }
 
+        /// One model drawn next, ahead of the queue (an agent asking for its thumbnail).
+        void Prepend(StringView model)
+        {
+            for (usize i = m_next; i < m_queue.Size(); ++i)
+                if (m_queue[i].AsView() == model)
+                {
+                    m_queue.RemoveAt(i);
+                    break;
+                }
+            m_queue.Insert(m_next, String(model));
+        }
+
         [[nodiscard]] usize Remaining() const noexcept { return m_queue.Size() - m_next + (m_state != State::Idle ? 1u : 0u); }
 
         /// Each frame, before rendering: hands over drawn files, starts the next model.

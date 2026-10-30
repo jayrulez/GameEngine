@@ -72,11 +72,12 @@ export namespace modelviewer
 
     /// What the cache's cooked files were made by: raised when the import changes what it makes, so
     /// a model opened again cooks afresh.
-    inline constexpr u32 kCacheVersion = 4;
+    inline constexpr u32 kCacheVersion = 5;
 
-    /// The folder `path`'s cooked files live in under `cacheRoot`: named by the path, its size, its
-    /// modification time and the cache version. Empty when the file is not there.
-    [[nodiscard]] inline String CacheFolderFor(StringView cacheRoot, StringView path)
+    /// A name for what is made from the file at `path`: 16 hex digits of its path, its size, its
+    /// modification time and `version`, so a changed file (or a raised version) has a new one.
+    /// Empty when the file is not there.
+    [[nodiscard]] inline String FileKey(StringView path, u32 version)
     {
         u64 size = 0;
         i64 modified = 0;
@@ -85,11 +86,143 @@ export namespace modelviewer
         u64 hash = HashBytes(path.Data(), path.Size());
         hash = HashBytes(&size, sizeof(size), hash);
         hash = HashBytes(&modified, sizeof(modified), hash);
-        hash = HashBytes(&kCacheVersion, sizeof(kCacheVersion), hash);
+        hash = HashBytes(&version, sizeof(version), hash);
         utf8char name[16];
         for (u32 i = 0; i < 16; ++i)
             name[i] = static_cast<utf8char>(u8"0123456789abcdef"[(hash >> (60 - 4 * i)) & 0xFu]);
-        return PathJoin(cacheRoot, StringView(name, 16));
+        return String(StringView(name, 16));
+    }
+
+    /// The folder `path`'s cooked files live in under `cacheRoot`: named by FileKey with the cache
+    /// version, and whether loose textures were applied (they change what cooks). Empty when the
+    /// file is not there.
+    [[nodiscard]] inline String CacheFolderFor(StringView cacheRoot, StringView path, bool looseTextures = true)
+    {
+        const String key = FileKey(path, kCacheVersion * 2u + (looseTextures ? 1u : 0u));
+        return key.IsEmpty() ? String{} : PathJoin(cacheRoot, key.AsView());
+    }
+
+    namespace library_detail
+    {
+        [[nodiscard]] inline bool EqualsIgnoreCase(StringView a, StringView b)
+        {
+            if (a.Size() != b.Size())
+                return false;
+            for (usize i = 0; i < a.Size(); ++i)
+            {
+                utf8char x = a[i];
+                utf8char y = b[i];
+                if (x >= u8'A' && x <= u8'Z')
+                    x = static_cast<utf8char>(x - u8'A' + u8'a');
+                if (y >= u8'A' && y <= u8'Z')
+                    y = static_cast<utf8char>(y - u8'A' + u8'a');
+                if (x != y)
+                    return false;
+            }
+            return true;
+        }
+        [[nodiscard]] inline bool Less(StringView a, StringView b)
+        {
+            const usize n = Min(a.Size(), b.Size());
+            for (usize i = 0; i < n; ++i)
+                if (a[i] != b[i])
+                    return a[i] < b[i];
+            return a.Size() < b.Size();
+        }
+        [[nodiscard]] inline StringView Stem(StringView name)
+        {
+            usize dot = name.Size();
+            while (dot > 0 && name[dot - 1] != u8'.')
+                --dot;
+            return dot > 0 ? name.SubStr(0, dot - 1) : name;
+        }
+        [[nodiscard]] inline bool IsImageFile(StringView name)
+        {
+            usize dot = name.Size();
+            while (dot > 0 && name[dot - 1] != u8'.')
+                --dot;
+            if (dot == 0)
+                return false;
+            const StringView extension = name.SubStr(dot, name.Size() - dot);
+            return EqualsIgnoreCase(extension, u8"png") || EqualsIgnoreCase(extension, u8"jpg") || EqualsIgnoreCase(extension, u8"jpeg");
+        }
+    }
+
+    /// The loose texture rule: a material that names no colour texture (its link lost on export,
+    /// common with FBX files from packs and extractions) takes the image beside the model file that
+    /// shares the material's name, else the model's, else the first there is (PNG or JPEG, in name
+    /// order). Returns how many materials took one.
+    inline u32 ApplyLooseTextures(foundation::model::Model& model, StringView modelPath)
+    {
+        usize slash = modelPath.Size();
+        while (slash > 0 && modelPath[slash - 1] != u8'/' && modelPath[slash - 1] != u8'\\')
+            --slash;
+        const StringView folder = slash > 0 ? modelPath.SubStr(0, slash - 1) : StringView(u8".");
+        const StringView modelStem = library_detail::Stem(modelPath.SubStr(slash, modelPath.Size() - slash));
+        Array<String> images;
+        (void)ListDirectory(folder,
+                            [](void* context, StringView name, bool isDirectory)
+                            {
+                                if (!isDirectory && library_detail::IsImageFile(name))
+                                    static_cast<Array<String>*>(context)->PushBack(String(name));
+                            },
+                            &images);
+        if (images.IsEmpty())
+            return 0;
+        for (usize i = 1; i < images.Size(); ++i) // name order, so "the first" is the same each time
+            for (usize j = i; j > 0 && library_detail::Less(images[j].AsView(), images[j - 1].AsView()); --j)
+            {
+                String moved = foundation::core::Move(images[j]);
+                images[j] = foundation::core::Move(images[j - 1]);
+                images[j - 1] = foundation::core::Move(moved);
+            }
+        auto find = [&](StringView stem) -> const String*
+        {
+            for (const String& image : images)
+                if (library_detail::EqualsIgnoreCase(library_detail::Stem(image.AsView()), stem))
+                    return &image;
+            return nullptr;
+        };
+        Array<String> added;  // a file each texture was made for
+        Array<i32> indices;   // and its index in the model
+        u32 applied = 0;
+        for (foundation::model::ModelMaterial* material : model.materials())
+        {
+            if (material == nullptr || material->baseColorTextureIndex >= 0)
+                continue;
+            const String* chosen = find(material->name());
+            if (chosen == nullptr)
+                chosen = find(modelStem);
+            if (chosen == nullptr)
+                chosen = &images[0];
+            i32 index = -1;
+            for (usize i = 0; i < added.Size(); ++i)
+                if (added[i] == *chosen)
+                    index = indices[i];
+            if (index < 0)
+            {
+                auto* texture = new foundation::model::ModelTexture();
+                texture->setName(library_detail::Stem(chosen->AsView()));
+                texture->setUri(chosen->AsView());
+                texture->setSourceFile(PathJoin(folder, chosen->AsView()).AsView());
+                index = model.addTexture(texture);
+                added.PushBack(*chosen);
+                indices.PushBack(index);
+            }
+            material->baseColorTextureIndex = index;
+            material->baseColorFactor = Float4(1.0f, 1.0f, 1.0f, 1.0f);
+            ++applied;
+        }
+        return applied;
+    }
+
+    /// A file's name: what follows its last slash (either kind).
+    [[nodiscard]] inline String FileTitle(StringView path)
+    {
+        usize start = path.Size();
+        while (start > 0 && path[start - 1] != u8'/' && path[start - 1] != u8'\\')
+            --start;
+        return String(path.SubStr(start, path.Size() - start));
     }
 
     /// The numbers of a loaded model.
@@ -100,11 +233,15 @@ export namespace modelviewer
         {
             ++stats.meshes;
             stats.vertices += static_cast<u32>(Max(mesh->vertexCount(), 0));
-            stats.triangles += static_cast<u32>(Max(mesh->indexCount(), 0)) / 3u;
+            // A mesh with no index buffer draws its vertices three at a time (glTF allows it).
+            const i32 corners = mesh->indexCount() > 0 ? mesh->indexCount() : mesh->vertexCount();
+            stats.triangles += static_cast<u32>(Max(corners, 0)) / 3u;
         }
         stats.materials = static_cast<u32>(model.materials().Size());
         stats.textures = static_cast<u32>(model.textures().Size());
-        stats.bones = static_cast<u32>(model.bones().Size());
+        // The joints of the skin the viewer animates (the cook takes the first); the model's
+        // bones are all its nodes, meshes and groups among them.
+        stats.bones = model.skins().Size() > 0 ? static_cast<u32>(model.skins()[0]->joints().Size()) : 0u;
         stats.skins = static_cast<u32>(model.skins().Size());
         for (const foundation::model::ModelAnimation* clip : model.animations())
         {
@@ -207,6 +344,10 @@ export namespace modelviewer
         };
 
         OpenModel(IAllocator& allocator) : m_allocator(&allocator) {}
+        /// Whether a material without its texture takes the image beside the model (ApplyLooseTextures).
+        /// On by default; it changes what cooks, so each choice has a cache folder of its own.
+        void SetLooseTextures(bool on) noexcept { m_looseTextures = on; }
+        [[nodiscard]] bool LooseTextures() const noexcept { return m_looseTextures; }
         OpenModel(const OpenModel&) = delete;
         OpenModel& operator=(const OpenModel&) = delete;
         ~OpenModel() { Close(); }
@@ -217,7 +358,7 @@ export namespace modelviewer
         {
             Close();
             m_path = String(path);
-            const String folder = CacheFolderFor(cacheRoot, path);
+            const String folder = CacheFolderFor(cacheRoot, path, m_looseTextures);
             if (folder.IsEmpty())
                 return Outcome::NotFound;
             if (!CreateDirectories(folder.AsView()))
@@ -253,6 +394,8 @@ export namespace modelviewer
                 foundation::model::io::unregisterLoader(&gltf);
                 if (loaded != foundation::model::ModelLoadResult::Ok)
                     return Outcome::LoadFailed;
+                if (m_looseTextures)
+                    (void)ApplyLooseTextures(model, path);
                 m_stats = CountModel(model);
                 if (!pipeline::CookModel(model, *m_database, u8"model", guid).IsOk())
                     return Outcome::CookFailed;
@@ -289,6 +432,7 @@ export namespace modelviewer
     private:
         IAllocator* m_allocator;
         String m_path;
+        bool m_looseTextures = true;
         String m_folder;
         ModelStats m_stats;
         UniquePtr<foundation::vfs::NativeFileSystem> m_fileSystem;

@@ -4,7 +4,9 @@
 // The model viewer's headless half (Documentation/Specs/model-viewer.md, P0): a model file opens
 // into a cache folder of its own and binds, with its numbers counted from the file; opened again
 // it binds what it cooked before, numbers and all, while a changed file gets a folder of its own;
-// and the bound model goes into a scene as entities, a skinned one playing its first clip.
+// and the bound model goes into a scene as entities, a skinned one playing its first clip. P1: the
+// numbers counted from a known model, the side panel's rows, and the tabs' open, reopen, move and
+// close.
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -17,6 +19,9 @@ import engine.render;
 import engine.animation;
 import engine.model;
 import modelviewer;
+import foundation.model;
+import foundation.image;
+import foundation.image.io;
 
 using namespace foundation::core;
 namespace vfs = foundation::vfs;
@@ -172,4 +177,325 @@ TEST_CASE("model viewer: the bound model goes into a scene, a skinned one playin
     engine::model::InstantiateOptions frozen;
     frozen.animate = false;
     CHECK_FALSE(engine::model::InstantiateModel(level, *open.Model(), u8"Fox2", frozen).animated);
+}
+
+TEST_CASE("model viewer: a known model's numbers, as the side panel shows them")
+{
+    // Fox.gltf: one mesh of 1728 vertices with no index buffer (576 triangles), one material and
+    // texture, one skin of 24 joints, three clips; its position accessor's bounds.
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String cache = FreshCache(u8"scratch_model_viewer_stats");
+    modelviewer::OpenModel open(DefaultAllocator());
+    REQUIRE(open.Open(fox.AsView(), cache.AsView(), nullptr) == modelviewer::OpenModel::Outcome::Opened);
+    const modelviewer::ModelStats& stats = open.Stats();
+    CHECK(stats.meshes == 1u);
+    CHECK(stats.vertices == 1728u);
+    CHECK(stats.triangles == 576u);
+    CHECK(stats.materials == 1u);
+    CHECK(stats.textures == 1u);
+    CHECK(stats.bones == 24u);
+    CHECK(stats.skins == 1u);
+    REQUIRE(stats.clips.Size() == 3u);
+    CHECK(stats.clips[0] == u8"Survey");
+    CHECK(stats.clips[2] == u8"Run");
+    CHECK(stats.size.y == doctest::Approx(79.03f).epsilon(0.001));
+
+    const Array<modelviewer::StatRow> rows = modelviewer::StatRows(stats);
+    REQUIRE(rows.Size() == 8u);
+    CHECK(rows[1].label == u8"Vertices");
+    CHECK(rows[1].value == u8"1,728");
+    CHECK(rows[2].value == u8"576");
+    CHECK(rows[5].value == u8"24");
+    CHECK(rows[6].value == u8"3");
+    CHECK(rows[7].label == u8"Size");
+    CHECK(modelviewer::GroupedCount(1234567) == u8"1,234,567");
+    CHECK(modelviewer::GroupedCount(999) == u8"999");
+}
+
+TEST_CASE("model viewer: tabs open, reopen to the front, move and close to a neighbour")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String oozi = TestModel(u8"Tests/Models/KenneyPlatformerCharacters/GLB/character-oozi.glb");
+    const String cache = FreshCache(u8"scratch_model_viewer_tabs");
+    modelviewer::ModelTabs tabs(DefaultAllocator());
+    CHECK(tabs.Active() == -1);
+
+    const modelviewer::ModelTabs::Opened first = tabs.Open(fox.AsView(), cache.AsView(), nullptr);
+    CHECK(first.index == 0);
+    CHECK(first.added);
+    CHECK(tabs.At(0).title == u8"Fox.gltf");
+    const modelviewer::ModelTabs::Opened second = tabs.Open(oozi.AsView(), cache.AsView(), nullptr);
+    CHECK(second.index == 1);
+    CHECK(tabs.Active() == 1);
+
+    // Opened again: its own tab comes to the front, no second one.
+    const modelviewer::ModelTabs::Opened again = tabs.Open(fox.AsView(), cache.AsView(), nullptr);
+    CHECK(again.index == 0);
+    CHECK_FALSE(again.added);
+    CHECK(tabs.Count() == 2);
+    CHECK(tabs.Active() == 0);
+
+    // A file that does not open adds no tab and leaves the front where it was.
+    CHECK(tabs.Open(u8"/no/such/model.fbx", cache.AsView(), nullptr).index == -1);
+    CHECK(tabs.Count() == 2);
+    CHECK(tabs.Active() == 0);
+
+    // Moved, the one in front stays in front.
+    CHECK(tabs.Move(0, 1));
+    CHECK(tabs.At(1).title == u8"Fox.gltf");
+    CHECK(tabs.Active() == 1);
+
+    // Closing the one in front hands it to the one before (none after); closing the last empties.
+    CHECK(tabs.Close(1) == 0);
+    CHECK(tabs.At(0).title == u8"character-oozi.glb");
+    CHECK(tabs.Close(0) == -1);
+    CHECK(tabs.Count() == 0);
+    CHECK(tabs.ActiveTab() == nullptr);
+}
+
+TEST_CASE("model viewer: closing a tab before the one in front keeps that one in front")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String oozi = TestModel(u8"Tests/Models/KenneyPlatformerCharacters/GLB/character-oozi.glb");
+    const String oobi = TestModel(u8"Tests/Models/KenneyPlatformerCharacters/GLB/character-oobi.glb");
+    const String cache = FreshCache(u8"scratch_model_viewer_tabs_close");
+    modelviewer::ModelTabs tabs(DefaultAllocator());
+    (void)tabs.Open(fox.AsView(), cache.AsView(), nullptr);
+    (void)tabs.Open(oozi.AsView(), cache.AsView(), nullptr);
+    (void)tabs.Open(oobi.AsView(), cache.AsView(), nullptr);
+    tabs.SetActive(1);
+    CHECK(tabs.Close(0) == 0); // oozi, now first, still in front
+    CHECK(tabs.ActiveTab()->title == u8"character-oozi.glb");
+    CHECK(tabs.Close(0) == 0); // its successor comes to the front
+    CHECK(tabs.ActiveTab()->title == u8"character-oobi.glb");
+}
+
+TEST_CASE("model viewer: the animation bar picks a clip, pauses, steps, scrubs, loops and speeds up")
+{
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String cache = FreshCache(u8"scratch_model_viewer_playback");
+    modelviewer::OpenModel open(DefaultAllocator());
+    REQUIRE(open.Open(fox.AsView(), cache.AsView(), nullptr) == modelviewer::OpenModel::Outcome::Opened);
+    scene::Scene level{DefaultAllocator(), u8"viewer"};
+    level.AddSystem<engine::render::MeshComponentManager>();
+    engine::animation::AddAnimationSceneManagers(level);
+    const engine::model::ModelInstance instance = engine::model::InstantiateModel(level, *open.Model(), u8"Fox");
+    modelviewer::ClipPlayback playback(level, instance.root, *open.Model());
+    REQUIRE(playback.HasClips());
+    CHECK(playback.ClipCount() == 3);
+    CHECK(playback.Selected() == 0); // InstantiateModel plays the first
+    CHECK(playback.ClipName(1) == u8"Walk");
+    level.Update(0.1f); // the manager builds the player and starts the clip
+    REQUIRE(playback.Player() != nullptr);
+    CHECK(playback.Playing());
+
+    // A choice plays from its start on the next update.
+    playback.Select(1);
+    level.Update(0.0f);
+    CHECK(playback.Player()->CurrentClip() == open.Model()->animations[1].Get());
+    CHECK(playback.Time() == doctest::Approx(0.0f));
+
+    // Paused, time stands; a scrub and a step move it, paused.
+    playback.SetPlaying(false);
+    level.Update(0.5f);
+    CHECK(playback.Time() == doctest::Approx(0.0f));
+    playback.Scrub(0.4f);
+    CHECK(playback.Time() == doctest::Approx(0.4f));
+    playback.Step(1);
+    CHECK(playback.Time() == doctest::Approx(0.4f + 1.0f / modelviewer::ClipPlayback::kStepFps));
+    CHECK_FALSE(playback.Playing());
+    playback.Scrub(1000.0f);
+    CHECK(playback.Time() == doctest::Approx(playback.Duration())); // clamped to the clip
+    playback.Stop();
+    CHECK(playback.Time() == doctest::Approx(0.0f));
+    CHECK_FALSE(playback.Playing());
+
+    // Twice the speed, twice the time.
+    playback.SetSpeed(2.0f);
+    playback.SetPlaying(true);
+    level.Update(0.1f);
+    CHECK(playback.Time() == doctest::Approx(0.2f));
+    playback.SetSpeed(1.0f);
+
+    // Not looping, it stops at the end; play again starts it over.
+    playback.SetLooping(false);
+    level.Update(playback.Duration() + 1.0f);
+    CHECK_FALSE(playback.Playing());
+    CHECK(playback.Time() == doctest::Approx(playback.Duration()));
+    playback.SetPlaying(true);
+    CHECK(playback.Playing());
+    CHECK(playback.Time() == doctest::Approx(0.0f));
+    // Looping, it starts over past the end.
+    playback.SetLooping(true);
+    level.Update(playback.Duration() + 0.25f);
+    CHECK(playback.Playing());
+    CHECK(playback.Time() == doctest::Approx(0.25f).epsilon(0.01));
+}
+
+namespace
+{
+    void Touch(StringView path, StringView text = u8"x")
+    {
+        REQUIRE(WriteFile(path, Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size())));
+    }
+}
+
+TEST_CASE("model viewer: a folder lists its folders and models in name order; the models under it collect")
+{
+    const String root = FreshCache(u8"scratch_model_viewer_browse");
+    REQUIRE(CreateDirectories(PathJoin(root.AsView(), u8"Knights/Armour").AsView()));
+    REQUIRE(CreateDirectories(PathJoin(root.AsView(), u8"beasts").AsView()));
+    REQUIRE(CreateDirectories(PathJoin(root.AsView(), u8".hidden").AsView()));
+    Touch(PathJoin(root.AsView(), u8"zeta.FBX").AsView());
+    Touch(PathJoin(root.AsView(), u8"Alpha.glb").AsView());
+    Touch(PathJoin(root.AsView(), u8"readme.txt").AsView());
+    Touch(PathJoin(root.AsView(), u8"Knights/knight.gltf").AsView());
+    Touch(PathJoin(root.AsView(), u8"Knights/Armour/helm.obj").AsView());
+    Touch(PathJoin(root.AsView(), u8".hidden/secret.fbx").AsView());
+
+    const modelviewer::FolderListing listing = modelviewer::ListFolder(root.AsView());
+    REQUIRE(listing.folders.Size() == 2u); // not the hidden one
+    CHECK(modelviewer::FileTitle(listing.folders[0].AsView()) == u8"beasts");
+    CHECK(modelviewer::FileTitle(listing.folders[1].AsView()) == u8"Knights");
+    REQUIRE(listing.models.Size() == 2u); // not the text file
+    CHECK(modelviewer::FileTitle(listing.models[0].AsView()) == u8"Alpha.glb");
+    CHECK(modelviewer::FileTitle(listing.models[1].AsView()) == u8"zeta.FBX");
+
+    Array<String> all;
+    modelviewer::CollectModels(root.AsView(), all);
+    REQUIRE(all.Size() == 4u); // this folder's, then each subfolder's in order
+    CHECK(modelviewer::FileTitle(all[2].AsView()) == u8"knight.gltf");
+    CHECK(modelviewer::FileTitle(all[3].AsView()) == u8"helm.obj");
+    Array<String> bounded;
+    modelviewer::CollectModels(root.AsView(), bounded, 3);
+    CHECK(bounded.Size() == 3u);
+}
+
+TEST_CASE("model viewer: a thumbnail's file is named by the model file, and changes when it does")
+{
+    const String root = FreshCache(u8"scratch_model_viewer_thumbs");
+    const String model = PathJoin(root.AsView(), u8"crate.obj");
+    Touch(model.AsView(), u8"v 0 0 0");
+    const String thumbs = PathJoin(root.AsView(), u8"thumbs");
+    const String first = modelviewer::ThumbnailPathFor(thumbs.AsView(), model.AsView());
+    REQUIRE_FALSE(first.IsEmpty());
+    CHECK(first.AsView().StartsWith(thumbs.AsView()));
+    CHECK(first.AsView().EndsWith(u8".png"));
+    CHECK(modelviewer::ThumbnailPathFor(thumbs.AsView(), model.AsView()) == first); // the same file, the same name
+    Touch(model.AsView(), u8"v 0 0 0\nv 1 0 0"); // changed: another size
+    CHECK(modelviewer::ThumbnailPathFor(thumbs.AsView(), model.AsView()) != first);
+    CHECK(modelviewer::ThumbnailPathFor(thumbs.AsView(), u8"/no/such/model.obj").IsEmpty());
+}
+
+TEST_CASE("model viewer: the grid's filters by name, rigged and animated; numbers read from the cache")
+{
+    modelviewer::ModelStats rigged;
+    rigged.skins = 1;
+    rigged.clips.PushBack(String(u8"Idle"));
+    rigged.clipSeconds.PushBack(1.0f);
+    modelviewer::ModelStats prop;
+
+    modelviewer::BrowseFilter filter;
+    CHECK(modelviewer::Matches(filter, u8"/m/Knight.fbx", nullptr)); // no filter: everything
+    filter.name = String(u8"knig");
+    CHECK(modelviewer::Matches(filter, u8"/m/Knight.fbx", nullptr)); // any case
+    CHECK_FALSE(modelviewer::Matches(filter, u8"/knights/crate.fbx", nullptr)); // the file's name, not its folder
+    filter.name = {};
+    filter.riggedOnly = true;
+    CHECK(modelviewer::Matches(filter, u8"/m/Knight.fbx", &rigged));
+    CHECK_FALSE(modelviewer::Matches(filter, u8"/m/crate.fbx", &prop));
+    CHECK_FALSE(modelviewer::Matches(filter, u8"/m/unknown.fbx", nullptr)); // not cooked yet: not known rigged
+    filter.riggedOnly = false;
+    filter.animatedOnly = true;
+    CHECK(modelviewer::Matches(filter, u8"/m/Knight.fbx", &rigged));
+    CHECK_FALSE(modelviewer::Matches(filter, u8"/m/crate.fbx", &prop));
+    filter.animatedOnly = false;
+    filter.starredOnly = true;
+    CHECK(modelviewer::Matches(filter, u8"/m/crate.fbx", &prop, /*starred*/ true));
+    CHECK_FALSE(modelviewer::Matches(filter, u8"/m/Knight.fbx", &rigged, false));
+
+    // A model cooked once has its numbers in the cache; one never opened has none.
+    const String fox = TestModel(u8"Tests/Models/FoxNested/glTF/Fox.gltf");
+    const String cache = FreshCache(u8"scratch_model_viewer_cached_stats");
+    modelviewer::ModelStats read;
+    CHECK_FALSE(modelviewer::ReadCachedStats(cache.AsView(), fox.AsView(), read));
+    {
+        modelviewer::OpenModel open(DefaultAllocator());
+        REQUIRE(open.Open(fox.AsView(), cache.AsView(), nullptr) == modelviewer::OpenModel::Outcome::Opened);
+    }
+    REQUIRE(modelviewer::ReadCachedStats(cache.AsView(), fox.AsView(), read));
+    CHECK(read.skins == 1u);
+    CHECK(read.clips.Size() == 3u);
+}
+
+TEST_CASE("model viewer: the shortlist stars, notes, writes and reads back, and exports CSV")
+{
+    modelviewer::Shortlist list(DefaultAllocator());
+    list.SetStarred(u8"/m/Knight.fbx", true);
+    list.SetNote(u8"/m/Crate, wooden.obj", u8"too \"plain\",\nmaybe"); // a note stars it
+    CHECK(list.IsStarred(u8"/m/Knight.fbx"));
+    CHECK(list.IsStarred(u8"/m/Crate, wooden.obj"));
+    CHECK(list.Count() == 2u);
+    list.SetStarred(u8"/m/Knight.fbx", true); // starred twice: once
+    CHECK(list.Count() == 2u);
+    list.SetNote(u8"/m/Knight.fbx", u8"a\ttab and a \\ backslash");
+
+    modelviewer::Shortlist read(DefaultAllocator());
+    read.Read(list.Write().AsView());
+    REQUIRE(read.Count() == 2u);
+    CHECK(read.At(0).path == u8"/m/Knight.fbx");
+    CHECK(read.Note(u8"/m/Knight.fbx") == u8"a\ttab and a \\ backslash");
+    CHECK(read.Note(u8"/m/Crate, wooden.obj") == u8"too \"plain\",\nmaybe");
+
+    const String csv = read.ToCsv();
+    CHECK(csv.AsView().StartsWith(u8"name,path,note\nKnight.fbx,/m/Knight.fbx,"));
+    CHECK(csv.AsView().EndsWith(u8"\"Crate, wooden.obj\",\"/m/Crate, wooden.obj\",\"too \"\"plain\"\",\nmaybe\"\n"));
+
+    read.SetStarred(u8"/m/Knight.fbx", false); // off the list, its note with it
+    CHECK_FALSE(read.IsStarred(u8"/m/Knight.fbx"));
+    CHECK(read.Note(u8"/m/Knight.fbx").IsEmpty());
+    CHECK(read.Count() == 1u);
+}
+
+TEST_CASE("model viewer: a material without its texture takes the image beside the model")
+{
+    const String folder = FreshCache(u8"scratch_model_viewer_loose");
+    foundation::image::Image pixel(2, 2, foundation::image::PixelFormat::RGBA8);
+    const StringView names[] = {u8"Body.png", u8"Knight.png", u8"aaa.png"};
+    for (const StringView name : names)
+        REQUIRE(foundation::image::io::SaveImage(pixel, PathJoin(folder.AsView(), name).AsView(), foundation::image::io::ImageFileFormat::PNG).IsOk());
+    const String path = PathJoin(folder.AsView(), u8"Knight.fbx");
+
+    foundation::model::Model model;
+    auto material = [&](StringView name, i32 texture)
+    {
+        auto* m = new foundation::model::ModelMaterial();
+        m->setName(name);
+        m->baseColorTextureIndex = texture;
+        return model.addMaterial(m);
+    };
+    auto* linked = new foundation::model::ModelTexture();
+    const i32 own = model.addTexture(linked);
+    const i32 body = material(u8"body", -1);   // its own name's image (any case)
+    const i32 cloak = material(u8"Cloak", -1); // none of its name: the model's
+    const i32 kept = material(u8"Sword", own); // linked: left alone
+    CHECK(modelviewer::ApplyLooseTextures(model, path.AsView()) == 2u);
+    const auto texture = [&](i32 m) { return model.textures()[static_cast<usize>(model.materials()[static_cast<usize>(m)]->baseColorTextureIndex)]; };
+    CHECK(texture(body)->uri() == u8"Body.png");
+    CHECK(texture(cloak)->uri() == u8"Knight.png");
+    CHECK(model.materials()[static_cast<usize>(kept)]->baseColorTextureIndex == own);
+
+    // With neither name's image there, the first in name order.
+    foundation::model::Model other;
+    auto* m = new foundation::model::ModelMaterial();
+    m->setName(u8"Helm");
+    other.addMaterial(m);
+    CHECK(modelviewer::ApplyLooseTextures(other, PathJoin(folder.AsView(), u8"Squire.fbx").AsView()) == 1u);
+    CHECK(other.textures()[0]->uri() == u8"Body.png");
+    // A folder without images: nothing taken.
+    foundation::model::Model bare;
+    auto* n = new foundation::model::ModelMaterial();
+    bare.addMaterial(n);
+    CHECK(modelviewer::ApplyLooseTextures(bare, u8"/no/such/folder/x.fbx") == 0u);
+    CHECK(bare.materials()[0]->baseColorTextureIndex == -1);
 }

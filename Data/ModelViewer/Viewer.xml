@@ -1,19 +1,100 @@
 <!--
-  The model viewer's window (Documentation/Specs/model-viewer.md): its bar over the stage the 3D view
-  fills. With nothing open, the stage says how to open a model. Its look is the editor's sheet with
-  the viewer's own after it (ModelViewer/viewer.css). Code puts the viewport in `viewer-stage`.
+  The model viewer's window (Documentation/Specs/model-viewer.md): a bar with a tab per open model,
+  Open and Screenshot; under it the stage (the 3D view over the animation bar) and the side panel
+  (the model's numbers, the view's light, the turntable, the skeleton). With nothing open, the
+  stage says how to open a model. Its look is the editor's sheet with the viewer's own after it
+  (ModelViewer/viewer.css). Code puts the viewport in `viewer-view`, a tab per model in
+  `viewer-tabs` after the Browse tab, the numbers in `viewer-stats` and the clips in `viewer-clip`.
+  With the Browse tab in front, the browser takes the stage's place: the folders, the filters and
+  a thumbnail per model under the chosen folder (`viewer-grid`).
 -->
 <Panel class="viewer">
     <Panel id="viewer-bar" class="panel-toolbar viewer-bar">
         <Label class="viewer-title" text="Model Viewer"/>
-        <Label id="viewer-file" class="viewer-file"/>
-        <Spacer/>
-        <Label class="preview-hint" text="Alt drag orbits · right drag looks, WASD flies · middle drag pans · wheel zooms · F frames"/>
+        <TabBar id="viewer-tabs" class="viewer-tabs" close-display="always" reorderable="true"/>
+        <Button id="viewer-open" class="ghost" text="Open..." tooltip="Open model files (glTF, GLB, FBX, OBJ); or drop them on the window"/>
+        <Button id="viewer-screenshot" class="ghost" text="Screenshot" tooltip="Save the view as a PNG"/>
     </Panel>
-    <Panel id="viewer-stage" class="viewer-stage">
-        <Panel id="viewer-empty" class="state-box viewer-empty">
-            <Label class="state-title" text="No model open"/>
-            <Label id="viewer-empty-text" class="state-text" text="Pass a glTF, GLB, FBX or OBJ file on the command line."/>
+    <Panel class="viewer-body">
+        <Panel id="viewer-browser" class="viewer-browser">
+            <Panel class="viewer-folders">
+                <Panel class="panel-toolbar viewer-folders-bar">
+                    <Button id="viewer-choose-folder" class="ghost" text="Choose folder..." tooltip="The folder to browse"/>
+                </Panel>
+                <TreeView id="viewer-folder-tree" class="viewer-folder-tree"/>
+            </Panel>
+            <Panel class="viewer-grid-pane">
+                <Panel class="panel-toolbar viewer-filter">
+                    <TextField id="viewer-filter-name" class="search-field viewer-filter-name" placeholder="Filter by name"/>
+                    <CheckBox id="viewer-filter-rigged" class="choice" text="Rigged" tooltip="Only models with a skeleton (known once drawn)"/>
+                    <CheckBox id="viewer-filter-animated" class="choice" text="Animated" tooltip="Only models with clips (known once drawn)"/>
+                    <CheckBox id="viewer-filter-starred" class="choice" text="Starred" tooltip="Only models on the shortlist"/>
+                    <Label id="viewer-grid-count" class="viewer-grid-count"/>
+                    <Button id="viewer-export" class="ghost" text="Export CSV..." tooltip="Save the shortlist (name, path, note) as CSV"/>
+                </Panel>
+                <ScrollView id="viewer-grid-scroll" class="viewer-grid-scroll">
+                    <Panel id="viewer-grid" class="viewer-grid"/>
+                </ScrollView>
+            </Panel>
+        </Panel>
+        <Panel id="viewer-stage" class="viewer-stage">
+            <Panel id="viewer-view" class="viewer-view">
+                <Panel id="viewer-empty" class="state-box viewer-empty">
+                    <Label class="state-title" text="No model open"/>
+                    <Label id="viewer-empty-text" class="state-text" text="Drop a glTF, GLB, FBX or OBJ file here, or use Open."/>
+                </Panel>
+            </Panel>
+            <Panel id="viewer-anim" class="panel-toolbar viewer-anim">
+                <ComboBox id="viewer-clip" class="viewer-clip" tooltip="The clip that plays"/>
+                <Button id="viewer-play" class="icon-button" icon="Editor/Icons/pause.svg" tooltip="Play or pause"/>
+                <Button id="viewer-stop" class="icon-button" icon="Editor/Icons/stop.svg" tooltip="Back to the start, paused"/>
+                <Button id="viewer-step-back" class="ghost" text="&lt;" tooltip="A frame back"/>
+                <Button id="viewer-step" class="ghost" text="&gt;" tooltip="A frame forward"/>
+                <Slider id="viewer-scrub" class="viewer-scrub" min="0" max="1" value="0" tooltip="Drag to a moment of the clip"/>
+                <Label id="viewer-time" class="viewer-time" text="0.00 / 0.00 s"/>
+                <CheckBox id="viewer-loop" class="choice" text="Loop" checked="true" tooltip="Start over at the end"/>
+                <ComboBox id="viewer-speed" class="viewer-speed" items="0.25x|0.5x|1x|2x" selected="2" tooltip="Playback speed"/>
+            </Panel>
+        </Panel>
+        <Panel id="viewer-panel" class="viewer-panel">
+            <Panel class="component-header"><Label class="component-name" text="Model"/></Panel>
+            <Label id="viewer-file" class="viewer-file"/>
+            <Panel id="viewer-stats" class="viewer-stats"/>
+            <Panel class="component-header"><Label class="component-name" text="Pick"/></Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Shortlist"/>
+                <CheckBox id="viewer-star" tooltip="Star this model: it goes on the shortlist"/>
+            </Panel>
+            <Panel class="prop-row">
+                <TextField id="viewer-note" class="viewer-note" placeholder="A note (writing one stars it)"/>
+            </Panel>
+            <Panel class="component-header"><Label class="component-name" text="View"/></Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Exposure"/>
+                <Slider id="viewer-exposure" min="-4" max="4" step="0.1" value="0" tooltip="Stops brighter or darker"/>
+            </Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Ambient"/>
+                <Slider id="viewer-ambient" min="0" max="2" step="0.05" value="0.3" tooltip="The flat fill on top of the sky's light"/>
+            </Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Sky"/>
+                <Slider id="viewer-sky" min="0" max="3" step="0.05" value="1" tooltip="The sky's brightness and the light it gives"/>
+            </Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Turntable"/>
+                <CheckBox id="viewer-turntable" tooltip="Turn the model slowly about its middle"/>
+            </Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Skeleton"/>
+                <CheckBox id="viewer-skeleton" tooltip="Draw the bones over the model"/>
+            </Panel>
+            <Panel class="prop-row">
+                <Label class="prop-name" text="Loose textures"/>
+                <CheckBox id="viewer-loose" checked="true" tooltip="A material that lost its texture takes the image beside the model with its name (or the model's, or the first); for models opened from now on"/>
+            </Panel>
+            <Spacer/>
+            <Label class="preview-hint viewer-hint" text="Alt drag orbits · right drag looks, WASD flies · middle drag pans · wheel zooms · F frames"/>
         </Panel>
     </Panel>
 </Panel>

@@ -7,11 +7,16 @@ target_link_libraries(ModelViewer
     PUBLIC
         Foundation::Core Foundation::RHI Foundation::VFS Foundation::Content Foundation::Resource
         Foundation::Model Foundation::Model.IO Foundation::Model.GLTF Foundation::Model.FBX
-        Foundation::Model.Resource Engine::Composition Engine::Model Pipeline::ModelImporter
+        Foundation::Model.Resource Foundation::Scene Foundation::Animation Engine::Animation Engine::Composition Engine::Model
+        Pipeline::ModelImporter
         Foundation::Policy)
 
 target_sources(ModelViewer
     PUBLIC
         FILE_SET modelviewer_modules TYPE CXX_MODULES FILES
             ModelViewerModule.cppm
-            ModelLibrary.cppm)
+            ModelLibrary.cppm
+            ModelTabs.cppm
+            ClipPlayback.cppm
+            ModelBrowse.cppm
+            Shortlist.cppm)

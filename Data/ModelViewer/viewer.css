@@ -1,11 +1,44 @@
 /*
   The model viewer's own rules (Documentation/Specs/model-viewer.md), after the editor's sheet and
-  its density, whose tokens they use: the viewer looks like the editor.
+  its density, whose tokens they use: the viewer looks like the editor. The side panel reuses the
+  inspector's section headers and rows.
 */
 .viewer { background-color: var(--chrome); flex-direction: column; width: 100%; height: 100%; }
 .viewer-bar { background-color: var(--surface); border-bottom: 1px solid var(--separator); }
-.viewer-title { color: var(--text-strong); font-weight: 600; }
-.viewer-file { color: var(--text-dim); text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex-shrink: 1; }
-.viewer-stage { flex-grow: 1; min-height: 0; flex-direction: column; }
-.viewer-stage > .preview-view { flex-grow: 1; }
+.viewer-title { color: var(--text-strong); font-weight: 600; flex-shrink: 0; }
+.viewer-tabs { flex-grow: 1; min-width: 0; }
+.viewer-body { flex-grow: 1; min-height: 0; flex-direction: row; }
+.viewer-stage { flex-grow: 1; min-width: 0; flex-direction: column; }
+.viewer-view { flex-grow: 1; min-height: 0; flex-direction: column; }
+.viewer-view > .preview-view { flex-grow: 1; }
+.viewer-anim { background-color: var(--surface); border-top: 1px solid var(--separator); align-items: center; }
+.viewer-clip { width: 160px; flex-shrink: 0; }
+.viewer-scrub { flex-grow: 1; min-width: 80px; }
+.viewer-time { color: var(--text-dim); width: 96px; flex-shrink: 0; }
+.viewer-speed { width: 72px; flex-shrink: 0; }
 .viewer-empty { flex-grow: 1; }
+.viewer-browser { flex-grow: 1; min-width: 0; flex-direction: row; }
+.viewer-folders { width: 260px; flex-shrink: 0; flex-direction: column; background-color: var(--surface);
+                  border-right: 1px solid var(--separator); }
+.viewer-folder-tree { flex-grow: 1; min-height: 0; }
+.viewer-grid-pane { flex-grow: 1; min-width: 0; flex-direction: column; }
+.viewer-filter { background-color: var(--surface); border-bottom: 1px solid var(--separator); align-items: center; }
+.viewer-filter-name { width: 220px; flex-shrink: 0; }
+.viewer-grid-count { color: var(--text-dim); flex-grow: 1; text-align: right; }
+.viewer-grid-scroll { flex-grow: 1; min-height: 0; overflow-x: hidden; }
+.viewer-grid { flex-direction: row; flex-wrap: wrap; width: 100%; padding: var(--space-m); column-gap: var(--space-m); row-gap: var(--space-m); }
+button.viewer-tile { flex-direction: column; align-items: center; width: 144px; padding: var(--space-s);
+                     background-color: transparent; border-radius: var(--radius-small); row-gap: var(--space-xs); }
+button.viewer-tile:hover { background-color: var(--ghost-hover); }
+button.viewer-tile > icon { width: 128px; height: 128px; }
+button.viewer-tile > label { width: 132px; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); text-align: center; }
+button.viewer-tile.starred > label { color: var(--accent-strong); font-weight: 600; }
+.viewer-note { flex-grow: 1; min-width: 0; }
+.viewer-panel { width: 280px; flex-shrink: 0; flex-direction: column; background-color: var(--surface);
+                border-left: 1px solid var(--separator); }
+.viewer-file { color: var(--text-dim); padding: var(--space-s) var(--space-m); text-overflow: ellipsis; white-space: nowrap; }
+.viewer-stats { flex-direction: column; padding-bottom: var(--space-s); }
+.viewer-stats > .prop-row, .viewer-panel > .prop-row { padding-left: var(--space-m); }
+.viewer-stat { flex-grow: 1; color: var(--text-strong); }
+.viewer-panel > .prop-row > slider { flex-grow: 1; min-width: 0; }
+.viewer-hint { padding: var(--space-m); white-space: normal; }

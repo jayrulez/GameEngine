@@ -10,3 +10,7 @@ module;
 export module modelviewer;
 
 export import :library; // a model file opened, cooked into the viewer's cache and bound
+export import :tabs;    // the models open, a tab each, and the side panel's rows
+export import :playback; // the animation bar's clip, play, pause, step, scrub, loop and speed
+export import :browse;   // folders listed, models collected, thumbnails' files, the filters
+export import :shortlist; // the models starred, their notes, the CSV

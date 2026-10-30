@@ -4,6 +4,7 @@
 # Data/ModelViewer, its look the editor's sheet (Data/Editor).
 
 add_executable(Tools.ModelViewer Main.cpp)
+target_sources(Tools.ModelViewer PRIVATE FILE_SET viewer_modules TYPE CXX_MODULES FILES ThumbnailRenderer.cppm)
 target_link_libraries(Tools.ModelViewer PRIVATE
     Foundation::Core Foundation::Runtime Foundation::Runtime.Client Foundation::Runtime.Desktop
     Foundation::Shell Foundation::Shell.Desktop Foundation::Graphics Foundation::Graphics.Gpu
@@ -11,7 +12,7 @@ target_link_libraries(Tools.ModelViewer PRIVATE
     Foundation::Fonts Foundation::Fonts.TrueType Foundation::Fonts.HarfBuzz Foundation::Fonts.Bidi
     Foundation::GUI Foundation::GUI.Hosting Foundation::GUI.Toolkit Foundation::GUI.VFS
     Foundation::Scene Foundation::Geometry Foundation::Render Engine::DefaultApp Engine::Render Engine::Model
-    Editor::Preview.Viewport Tools::ModelViewer)
+    Foundation::GUI.Viewport Foundation::RHI.Capture Foundation::Image.IO Editor::Preview.Viewport Editor::Camera Tools::ModelViewer)
 util_copy_runtime_deps(Tools.ModelViewer EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB})
 if(UNIX AND NOT APPLE)
     set_property(TARGET Tools.ModelViewer APPEND PROPERTY BUILD_RPATH "$ORIGIN")

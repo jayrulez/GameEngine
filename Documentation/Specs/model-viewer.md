@@ -1,6 +1,6 @@
 # Model viewer: a standalone tool to look at and pick models
 
-Status: proposed 2026-10-29. Approved to build now as a standalone tool (user 2026-10-29).
+Status: P0-P5 built 2026-10-29 (P0 committed; P1-P5 await the user's check). Approved to build now as a standalone tool (user 2026-10-29).
 
 ## Why
 
@@ -79,14 +79,46 @@ cook takes skin 0; noted where the side panel says so), materials beyond the eng
   spawn's entities and components. `--screenshot <png>` as the player has, for visual checks.
 - **P1 Tabs and panel.** Tabs, drag and drop, the Open dialog, the side panel's stats, exposure,
   ambient, turntable, screenshot. Tests: the stats from a known model; tab open and close.
+  Built 2026-10-29: `modelviewer::ModelTabs` (a file opened again goes to its tab; closing hands
+  the front to the neighbour), each tab's instance kept in the one preview scene and active only
+  while in front, its camera remembered; the panel (the inspector's rows) with the size measured
+  as placed; exposure, ambient and sky sliders; the turntable about the footprint's middle; the
+  screenshot is the view only, through a save dialog. The counts were fixed on the way: triangles
+  of a mesh with no index buffer, bones as the animated skin's joints (not every node).
 - **P2 Animation.** The animation bar and the skeleton overlay. Tests: clip selection, pause and
-  scrub times, loop.
+  scrub times, loop. Built 2026-10-29: `modelviewer::ClipPlayback` over the instance's animator
+  (a choice plays from its start on the next update; stop is the start, paused; a step is a 30th
+  of a second; the viewer's copy of a clip loops by default, the file untouched); the bar under the
+  view (clip, play/pause, stop, step back and forward, scrub with the time, loop, speed), hidden
+  for a model without clips; the bones drawn over the model in the pose it stands in
+  (`--skeleton` starts with them on).
 - **P3 Browse.** The folder pane, the thumbnail service and grid, the filters. Tests: the folder
-  scan and filters; thumbnail cache keys and invalidation on a changed file.
+  scan and filters; thumbnail cache keys and invalidation on a changed file. Built 2026-10-29: a
+  Browse tab, always first, in place of the stage while in front: a folder tree (filled as folders
+  are chosen, a level ahead), the filters (name; rigged and animated, known once a model is drawn,
+  from its cache record) and a wrapping grid of every model under the chosen folder; a click opens
+  it in a tab. The folder is kept in `model-viewer/settings.txt`. Thumbnails are the viewer's own
+  renderer (`modelviewer::ThumbnailRenderer`, the window's half): one model at a time in a private
+  scene in its rest pose, 128 pixels from the front quarter, read back to a PNG under
+  `model-viewer/thumbnails`, named by the file (`ThumbnailPathFor`). A model cooks on the main
+  thread, so the window stalls a moment per model while a folder is first drawn (about four a
+  second on the Juvi folder); a worker for the cook is the next step if that is too slow.
 - **P4 Pick.** Stars, notes, the shortlist and its CSV; the loose texture rule. Tests: the store's
-  round trip; the texture rule on a model without texture links.
+  round trip; the texture rule on a model without texture links. Built 2026-10-29:
+  `modelviewer::Shortlist` (a note stars a model; kept in `model-viewer/shortlist.txt`, a line a
+  model with tabs and line breaks escaped; CSV of name, path and note, quoted where needed); the
+  panel's Pick section (the star and the note of the tab in front), the browser's Starred filter
+  (a starred tile's name in the accent) and Export CSV. `ApplyLooseTextures` runs between the load
+  and the cook: a material with no colour texture takes the PNG or JPEG beside the model named
+  like the material, else like the model, else the first in name order. The toggle is in the View
+  section, kept in the settings, for models opened from then on; it is part of the cache key, so
+  each choice cooks once.
 - **P5 Ship.** A Linux distribution script (as the editor's), a README, the user guide page, and
-  screenshots for the user's look.
+  screenshots for the user's look. Built 2026-10-29: `scripts/build-model-viewer-dist.sh` (the
+  clang-reldbg build, the exe and its sidecars, Data/Engine, Data/Editor without its mock,
+  Data/ModelViewer, the cooked shader pack, a README.txt; the symbols split off) makes
+  `dist/ModelViewer-<version>-Linux64.tar.gz` (27 MB); unpacked outside the checkout it runs. The
+  user guide page is `tools/model-viewer` in the docs repo, under a new Tools section.
 
 Each phase is checked by the user on screen; the tool's own `--screenshot` gives pictures to hand
 over.

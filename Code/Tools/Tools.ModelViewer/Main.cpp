@@ -6,13 +6,25 @@
 // editor's camera. The app is the engine's default application (its scene, render and animation
 // subsystems) with a GUI of its own on the window (the editor's look: its sheet, its density, the
 // viewer's rules after them), the view a preview viewport in it. A model opens through the
-// `modelviewer` library: cooked into the viewer's cache, bound, put into the preview scene.
+// `modelviewer` library: cooked into the viewer's cache, bound, put into the preview scene. Each
+// open model has a tab (modelviewer::ModelTabs): its instance stays in the scene, active only while
+// its tab is in front, and the camera it was left with comes back with it.
 //
-//   Tools.ModelViewer [model files...] [--rest] [--screenshot <png> [--screenshot-exit] ...]
+//   Tools.ModelViewer [model files...] [--rest] [--skeleton] [--screenshot <png> [--screenshot-exit] ...]
 //
-// --rest shows the model in its rest pose, no clip playing.
+// --rest shows the model in its rest pose, no clip playing; --skeleton starts with the bones drawn.
 //
 // P0: the window, the view, one model from the command line, framed, on a grid scaled to it.
+// P1: a tab per model (the command line, dropped files, the Open dialog), the side panel's numbers,
+// exposure, ambient and sky, a turntable, and a screenshot of the view.
+// P2: the animation bar (modelviewer::ClipPlayback: the clip, play and pause, stop, step, scrub,
+// loop, speed) and the skeleton drawn over the model.
+// P3: the Browse tab (always first): a folder tree, the filters, and a thumbnail per model under
+// the chosen folder (modelviewer::ThumbnailRenderer draws them into the thumbnail cache); clicking
+// one opens it. The folder is remembered in the viewer's settings.
+// P4: the shortlist (modelviewer::Shortlist: a star and a note on the tab in front, a Starred filter
+// and a CSV export in the browser, kept in `model-viewer/shortlist.txt`) and the loose texture
+// rule's toggle (remembered in the settings, for models opened from then on).
 
 #include <cmath>
 #include <cstdio>
@@ -37,15 +49,21 @@ import foundation.gui;
 import foundation.gui.hosting;
 import foundation.gui.toolkit;
 import foundation.gui.vfs;
+import foundation.gui.viewport;
+import foundation.rhi.capture;
+import foundation.image;
+import foundation.image.io;
 import foundation.scene;
 import foundation.render;
 import foundation.model.resource;
 import foundation.geometry;
+import foundation.animation;
 import engine.defaultapp;
 import engine.render;
 import engine.model;
 import editor.preview.viewport;
 import modelviewer;
+import modelviewer.thumbnails;
 
 using namespace foundation::core;
 namespace shell = foundation::shell;
@@ -69,6 +87,8 @@ namespace
         void AddFile(StringView path) { m_files.PushBack(String(path)); }
         /// --rest: the model in its rest pose, no clip playing.
         void SetRest(bool rest) { m_rest = rest; }
+        /// --skeleton: the bones drawn from the start.
+        void SetSkeleton(bool on) { m_showSkeleton = on; }
 
         void OnStartup(runtime::IApplicationHost& host) override
         {
@@ -89,13 +109,35 @@ namespace
             }
             m_viewport = MakeUnique<editor::PreviewViewport>(m_allocator, m_allocator, host, m_guiHost.Get(), u8"model.viewer");
             m_viewport->SetSimulationEnabled(true); // the animation plays
-            if (gui::Node* stage = FindById(u8"viewer-stage"))
-                stage->AddChild(m_viewport->View().Get());
+            if (gui::Node* view = FindById(u8"viewer-view"))
+                view->AddChild(m_viewport->View().Get());
             SetUpScene();
             m_cacheRoot = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/cache");
-            if (!m_files.IsEmpty())
-                OpenFile(m_files[0].AsView());
-            ShowEmpty();
+            m_settingsPath = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/settings.txt");
+            m_shortlistPath = PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/shortlist.txt");
+            if (Result<Array<byte>> list = ReadFile(m_shortlistPath.AsView()); list.HasValue())
+                m_shortlist.Read(StringView(reinterpret_cast<const utf8char*>(list.Value().Data()), list.Value().Size()));
+            m_thumbnails = MakeUnique<modelviewer::ThumbnailRenderer>(m_allocator, m_allocator, host, m_cacheRoot.AsView(),
+                                                                     PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer/thumbnails").AsView());
+            ModelViewerApp* self = this;
+            m_thumbnails->SetOnDone([self](StringView model, StringView png) { self->ThumbnailDone(model, png); });
+            WireControls(host);
+            WireBrowser(host);
+            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
+            {
+                gui::Tab* browse = bar->AddTab(u8"Browse");
+                browse->SetClosable(false);
+                browse->SetTooltip(u8"The models under a folder, a picture each");
+            }
+            LoadSettings();
+            m_thumbnails->SetLooseTextures(m_looseTextures);
+            if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
+                loose->SetChecked(m_looseTextures);
+            WirePick(host);
+            for (const String& file : m_files)
+                OpenFile(file.AsView());
+            if (m_tabs.Count() == 0)
+                ShowBrowser();
         }
 
         void OnUpdate(runtime::IApplicationHost& host, f32 deltaTime) override
@@ -103,12 +145,19 @@ namespace
             DefaultApplication::OnUpdate(host, deltaTime); // a recorded screenshot written, --screenshot-exit
             if (!m_guiHost)
                 return;
-            if (m_open.Resources() != nullptr)
-                m_open.Resources()->Pump();
+            for (i32 i = 0; i < m_tabs.Count(); ++i)
+                if (m_tabs.At(i).open->Resources() != nullptr)
+                    m_tabs.At(i).open->Resources()->Pump();
             m_guiHost->Update(deltaTime);
-            if (m_viewport->Update(deltaTime))
+            if (m_thumbnails)
+                m_thumbnails->Update();
+            if (!m_browsing && m_viewport->Update(deltaTime))
                 FrameModel();
+            Turn(deltaTime);
+            ShowPlayback();
             DrawGrid();
+            DrawSkeleton();
+            FinishCapture();
         }
 
         void OnRenderWindow(runtime::IApplicationHost& host, graphics::FrameContext& frame) override
@@ -121,6 +170,9 @@ namespace
                 {
                     render->BeginRendering(*frame.encoder, frame.frameIndex);
                     m_viewport->RenderFrame(frame);
+                    RecordCapture(*frame.encoder);
+                    if (m_thumbnails)
+                        m_thumbnails->Render(*frame.encoder);
                     render->EndRendering();
                 }
             }
@@ -131,10 +183,17 @@ namespace
 
         void OnShutdown(runtime::IApplicationHost& host) override
         {
+            if (m_device != nullptr)
+                m_capture.Release(*m_device);
+            if (m_thumbnails)
+                m_thumbnails->Shutdown();
+            m_thumbnails.Reset();
+            m_tiles.Clear();
+            m_thumbImages.Clear();
             if (m_viewport)
                 m_viewport->Shutdown();
             m_viewport.Reset();
-            m_open.Close();
+            m_tabs.Clear();
             // The GUI's tree (the viewport's render targets in it) goes before its host and the device.
             m_frame = {};
             m_root = {};
@@ -250,29 +309,796 @@ namespace
             }
         }
 
-        // A model file opened into the view: cooked or taken from the cache, put into the scene,
-        // framed. What failed is said where the empty view is.
+        // The bar's buttons, the tabs, the panel's controls, and files dropped on the window.
+        void WireControls(runtime::IApplicationHost& host)
+        {
+            ModelViewerApp* self = this;
+            if (auto* tabs = FindAs<gui::TabBar>(u8"viewer-tabs"))
+            {
+                // The bar's first tab is Browse; a model's tab is one after its place in m_tabs.
+                tabs->SetOnSelected([self](i32 index)
+                                    {
+                                        if (self->m_syncingTabs)
+                                            return;
+                                        if (index == 0)
+                                            self->ShowBrowser();
+                                        else
+                                            self->ShowTab(index - 1);
+                                    });
+                tabs->SetCloseHandler([self](i32 index)
+                                      {
+                                          if (index > 0)
+                                              self->CloseTab(index - 1);
+                                      });
+                tabs->SetOnTabMoved([self, tabs](i32 from, i32 to)
+                                    {
+                                        if (self->m_syncingTabs)
+                                            return;
+                                        if (from == 0 || to == 0)
+                                        {
+                                            // Browse stays first: dragged, it goes back.
+                                            self->m_syncingTabs = true;
+                                            tabs->MoveTab(to, from);
+                                            self->m_syncingTabs = false;
+                                            return;
+                                        }
+                                        (void)self->m_tabs.Move(from - 1, to - 1);
+                                    });
+            }
+            if (auto* open = FindAs<gui::Button>(u8"viewer-open"))
+                open->SetOnClick([self, &host]() { self->ShowOpenDialog(host); });
+            if (auto* shot = FindAs<gui::Button>(u8"viewer-screenshot"))
+                shot->SetOnClick([self, &host]() { self->ShowScreenshotDialog(host); });
+            if (auto* exposure = FindAs<gui::Slider>(u8"viewer-exposure"))
+                exposure->SetOnValueChanging([self](f64 value)
+                                             {
+                                                 if (auto* post = self->Post())
+                                                     post->Post().exposureEV = static_cast<f32>(value);
+                                             });
+            if (auto* ambient = FindAs<gui::Slider>(u8"viewer-ambient"))
+                ambient->SetOnValueChanging([self](f64 value)
+                                            {
+                                                if (auto* environment = self->Environment())
+                                                    environment->Environment().ambientIntensity = static_cast<f32>(value);
+                                            });
+            if (auto* sky = FindAs<gui::Slider>(u8"viewer-sky"))
+                sky->SetOnValueChanging([self](f64 value)
+                                        {
+                                            if (auto* environment = self->Environment())
+                                                environment->Environment().skyIntensity = static_cast<f32>(value);
+                                        });
+            if (auto* turntable = FindAs<gui::CheckBox>(u8"viewer-turntable"))
+                turntable->SetOnToggled([self](bool on) { self->SetTurntable(on); });
+            if (auto* skeleton = FindAs<gui::CheckBox>(u8"viewer-skeleton"))
+            {
+                skeleton->SetChecked(m_showSkeleton);
+                skeleton->SetOnToggled([self](bool on) { self->m_showSkeleton = on; });
+            }
+            WireAnimationBar();
+            m_guiHost->SetDropObserver([self](const shell::DroppedFile& file)
+                                       {
+                                           if (modelviewer::IsModelFile(file.path.AsView()))
+                                               self->OpenFile(file.path.AsView());
+                                       });
+        }
+
+        [[nodiscard]] engine::render::EnvironmentSystem* Environment() const
+        {
+            scene::Scene* level = m_viewport ? m_viewport->Scene() : nullptr;
+            return level != nullptr ? level->GetSystem<engine::render::EnvironmentSystem>() : nullptr;
+        }
+        [[nodiscard]] engine::render::PostProcessSystem* Post() const
+        {
+            scene::Scene* level = m_viewport ? m_viewport->Scene() : nullptr;
+            return level != nullptr ? level->GetSystem<engine::render::PostProcessSystem>() : nullptr;
+        }
+
+        void ShowOpenDialog(runtime::IApplicationHost& host)
+        {
+            shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
+            if (dialogs == nullptr)
+                return;
+            const shell::FileFilter filters[] = {{u8"Models", modelviewer::kModelExtensions}, {u8"All files", u8"*"}};
+            ModelViewerApp* self = this;
+            dialogs->ShowOpenFile([self](Span<const String> paths)
+                                  {
+                                      for (const String& path : paths)
+                                          self->OpenFile(path.AsView());
+                                  },
+                                  Span<const shell::FileFilter>(filters, 2), {}, true);
+        }
+
+        // The view (not the window's panels) to a PNG the save dialog names.
+        void ShowScreenshotDialog(runtime::IApplicationHost& host)
+        {
+            shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
+            const modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            if (dialogs == nullptr || tab == nullptr)
+                return;
+            const shell::FileFilter filters[] = {{u8"PNG images", u8"png"}};
+            usize stem = tab->title.Size();
+            while (stem > 0 && tab->title[stem - 1] != u8'.')
+                --stem;
+            String suggested(tab->title.AsView().SubStr(0, stem > 0 ? stem - 1 : tab->title.Size()));
+            suggested += u8".png";
+            ModelViewerApp* self = this;
+            dialogs->ShowSaveFile([self](Span<const String> paths)
+                                  {
+                                      if (!paths.IsEmpty())
+                                          self->m_capture.Request(paths[0].AsView());
+                                  },
+                                  Span<const shell::FileFilter>(filters, 1), suggested.AsView());
+        }
+
+        // An armed capture copies the view's colour target once the frame drew it.
+        void RecordCapture(rhi::CommandEncoder& encoder)
+        {
+            if (!m_capture.Armed() || m_device == nullptr)
+                return;
+            auto* view = Cast<gui::Viewport>(m_viewport->View().Get());
+            if (view == nullptr || view->ColorTexture() == nullptr || view->RenderWidth() == 0)
+                return;
+            (void)m_capture.Record(*m_device, encoder, view->ColorTexture(), view->ColorFormat(), view->RenderWidth(),
+                                   view->RenderHeight(), rhi::ResourceState::ShaderRead);
+        }
+
+        // A copy recorded last frame, written once the GPU has run it.
+        void FinishCapture()
+        {
+            if (!m_capture.Recorded() || m_device == nullptr)
+                return;
+            m_device->WaitIdle();
+            foundation::image::Image written;
+            const Status saved = m_capture.Complete(*m_device, m_allocator, written);
+            if (saved.IsOk())
+                LOG_INFO(u8"ModelViewer", u8"saved the view, {}x{}", written.Width(), written.Height());
+        }
+
+        // A model file opened into a tab of its own (or its tab brought to the front, open
+        // already): cooked or taken from the cache, put into the scene, framed. What failed is
+        // said where the empty view is, and in the log.
         void OpenFile(StringView path)
         {
-            if (m_instance.root.IsAssigned() && m_viewport->Scene() != nullptr)
-                m_viewport->Scene()->DestroyEntity(m_instance.root);
-            m_instance = {};
-            const modelviewer::OpenModel::Outcome outcome = m_open.Open(path, m_cacheRoot.AsView(), m_device);
-            if (!m_open.IsOpen())
+            SaveCamera();
+            const modelviewer::ModelTabs::Opened opened = m_tabs.Open(path, m_cacheRoot.AsView(), m_device, m_looseTextures);
+            if (opened.index < 0)
             {
-                m_failure = Format(u8"{} did not open ({}).", path, OutcomeText(outcome));
+                m_failure = Format(u8"{} did not open ({}).", path, OutcomeText(opened.outcome));
                 LOG_ERROR(u8"ModelViewer", u8"{}", m_failure.AsView());
+                ShowEmpty();
                 return;
             }
             m_failure = {};
-            LOG_INFO(u8"ModelViewer", u8"opened {} ({})", path, OutcomeText(outcome));
-            engine::model::InstantiateOptions options;
-            options.animate = !m_rest;
-            m_instance = engine::model::InstantiateModel(*m_viewport->Scene(), *m_open.Model(), u8"model", options);
-            MeasureBounds();
+            if (opened.added)
+            {
+                LOG_INFO(u8"ModelViewer", u8"opened {} ({})", path, OutcomeText(opened.outcome));
+                modelviewer::ModelTab& tab = m_tabs.At(opened.index);
+                engine::model::InstantiateOptions options;
+                options.animate = !m_rest;
+                tab.instance = engine::model::InstantiateModel(*m_viewport->Scene(), *tab.open->Model(), tab.title.AsView(), options);
+                tab.playback = MakeUnique<modelviewer::ClipPlayback>(m_allocator, *m_viewport->Scene(), tab.instance.root, *tab.open->Model());
+                MeasureBounds(tab);
+                if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
+                {
+                    gui::Tab* added = bar->AddTab(tab.title.AsView());
+                    added->SetClosable(true);
+                    added->SetTooltip(tab.path.AsView());
+                }
+            }
+            ShowTab(opened.index);
+        }
+
+        // The tab in front: its model the only one active in the scene, its camera back (framed
+        // the first time), its numbers in the panel.
+        void ShowTab(i32 index)
+        {
+            if (!m_tabs.Valid(index))
+            {
+                ShowEmpty();
+                return;
+            }
+            if (index != m_tabs.Active() && !m_browsing)
+                SaveCamera();
+            SetBrowsing(false);
+            m_tabs.SetActive(index);
+            scene::Scene* level = m_viewport->Scene();
+            for (i32 i = 0; i < m_tabs.Count(); ++i)
+            {
+                const scene::EntityHandle root = m_tabs.At(i).instance.root;
+                if (level != nullptr && level->IsValid(root))
+                    level->SetActive(root, i == index);
+            }
+            modelviewer::ModelTab& tab = m_tabs.At(index);
+            if (tab.camera.saved)
+            {
+                editor::EditorCamera& camera = m_viewport->Camera();
+                camera.position = tab.camera.position;
+                camera.yaw = tab.camera.yaw;
+                camera.pitch = tab.camera.pitch;
+                camera.focusDistance = tab.camera.focusDistance;
+                ClipToModel(tab.radius);
+            }
+            else
+                FrameModel(/*snap*/ true);
+            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"); bar != nullptr && bar->GetSelectedIndex() != index + 1)
+            {
+                m_syncingTabs = true;
+                bar->SetSelectedIndex(index + 1);
+                m_syncingTabs = false;
+            }
+            ShowStats(tab);
+            ShowPick(tab);
+            ShowClips(tab);
+            ShowEmpty();
+        }
+
+        // The camera left on the tab in front, for when it comes back.
+        void SaveCamera()
+        {
+            modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            if (tab == nullptr || !m_viewport || m_browsing)
+                return;
+            const editor::EditorCamera& camera = m_viewport->Camera();
+            tab->camera.saved = true;
+            tab->camera.position = camera.position;
+            tab->camera.yaw = camera.yaw;
+            tab->camera.pitch = camera.pitch;
+            tab->camera.focusDistance = camera.focusDistance;
+        }
+
+        void CloseTab(i32 index)
+        {
+            if (!m_tabs.Valid(index))
+                return;
+            scene::Scene* level = m_viewport->Scene();
+            if (level != nullptr && level->IsValid(m_tabs.At(index).instance.root))
+                level->DestroyEntity(m_tabs.At(index).instance.root);
+            const bool wasActive = index == m_tabs.Active();
+            const i32 next = m_tabs.Close(index);
+            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"))
+            {
+                m_syncingTabs = true;
+                bar->RemoveTab(index + 1);
+                m_syncingTabs = false;
+            }
+            if (wasActive)
+                m_tabs.SetActive(-1); // nothing to save: the camera belonged to the closed tab
+            if (m_browsing)
+                return; // a tab closed from the browser: the browser stays
+            if (next >= 0)
+                ShowTab(next);
+            else
+                ShowBrowser();
+        }
+
+        // The panel's numbers for the tab in front: the file, then a row per count.
+        void ShowStats(const modelviewer::ModelTab& tab)
+        {
             if (auto* file = FindAs<gui::Label>(u8"viewer-file"))
-                file->SetText(path);
-            FrameModel(/*snap*/ true);
+                file->SetText(tab.path.AsView());
+            gui::Node* rows = FindById(u8"viewer-stats");
+            if (rows == nullptr)
+                return;
+            while (rows->ChildCount() > 0)
+                rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
+            // The size as it stands in the view (the file's axes turned upright, its node scale in
+            // it), not the file's raw box.
+            modelviewer::ModelStats stats = tab.open->Stats();
+            stats.size = tab.size;
+            for (const modelviewer::StatRow& stat : modelviewer::StatRows(stats))
+            {
+                auto row = MakeRef<gui::Panel>(m_allocator);
+                row->AddClass(u8"prop-row");
+                auto name = MakeRef<gui::Label>(m_allocator);
+                name->AddClass(u8"prop-name");
+                name->SetText(stat.label.AsView());
+                auto value = MakeRef<gui::Label>(m_allocator);
+                value->AddClass(u8"viewer-stat");
+                value->SetText(stat.value.AsView());
+                row->AddChild(name.Get());
+                row->AddChild(value.Get());
+                rows->AddChild(row.Get());
+            }
+        }
+
+        void SetTurntable(bool on)
+        {
+            m_turntable = on;
+            if (on)
+                return;
+            // Off: the model faces the way it came in.
+            m_turnAngle = 0.0f;
+            if (modelviewer::ModelTab* tab = m_tabs.ActiveTab())
+                PlaceTurned(*tab);
+        }
+
+        // The turntable turns the model in front about the middle of its footprint, slowly.
+        void Turn(f32 deltaTime)
+        {
+            modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            if (!m_turntable || tab == nullptr)
+                return;
+            m_turnAngle += deltaTime * 0.5f;
+            PlaceTurned(*tab);
+        }
+
+        void PlaceTurned(modelviewer::ModelTab& tab)
+        {
+            scene::Scene* level = m_viewport->Scene();
+            if (level == nullptr || !level->IsValid(tab.instance.root))
+                return;
+            const Float3 pivot{tab.center.x, 0.0f, tab.center.z};
+            Transform t = level->GetLocalTransform(tab.instance.root);
+            t.rotation = Quaternion::FromAxisAngle(Float3{0.0f, 1.0f, 0.0f}, m_turnAngle);
+            t.position = pivot - RotateVector(t.rotation, pivot);
+            level->SetLocalTransform(tab.instance.root, t);
+        }
+
+        // The animation bar drives the tab in front's playback.
+        void WireAnimationBar()
+        {
+            ModelViewerApp* self = this;
+            auto playback = [self]() -> modelviewer::ClipPlayback*
+            {
+                modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
+                return tab != nullptr ? tab->playback.Get() : nullptr;
+            };
+            if (auto* clip = FindAs<gui::ComboBox>(u8"viewer-clip"))
+                clip->SetOnSelectionChanged([self, playback](i32 index)
+                                            {
+                                                if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
+                                                    p->Select(index);
+                                            });
+            if (auto* play = FindAs<gui::Button>(u8"viewer-play"))
+                play->SetOnClick([playback]()
+                                 {
+                                     if (modelviewer::ClipPlayback* p = playback())
+                                         p->SetPlaying(!p->Playing());
+                                 });
+            if (auto* stop = FindAs<gui::Button>(u8"viewer-stop"))
+                stop->SetOnClick([playback]()
+                                 {
+                                     if (modelviewer::ClipPlayback* p = playback())
+                                         p->Stop();
+                                 });
+            if (auto* back = FindAs<gui::Button>(u8"viewer-step-back"))
+                back->SetOnClick([playback]()
+                                 {
+                                     if (modelviewer::ClipPlayback* p = playback())
+                                         p->Step(-1);
+                                 });
+            if (auto* step = FindAs<gui::Button>(u8"viewer-step"))
+                step->SetOnClick([playback]()
+                                 {
+                                     if (modelviewer::ClipPlayback* p = playback())
+                                         p->Step(1);
+                                 });
+            if (auto* scrub = FindAs<gui::Slider>(u8"viewer-scrub"))
+                scrub->SetOnValueChanging([self, playback](f64 ratio)
+                                          {
+                                              if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
+                                                  p->Scrub(static_cast<f32>(ratio) * p->Duration());
+                                          });
+            if (auto* loop = FindAs<gui::CheckBox>(u8"viewer-loop"))
+                loop->SetOnToggled([self, playback](bool on)
+                                   {
+                                       if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar)
+                                           p->SetLooping(on);
+                                   });
+            if (auto* speed = FindAs<gui::ComboBox>(u8"viewer-speed"))
+                speed->SetOnSelectionChanged([self, playback](i32 index)
+                                             {
+                                                 static constexpr f32 kSpeeds[] = {0.25f, 0.5f, 1.0f, 2.0f};
+                                                 if (modelviewer::ClipPlayback* p = playback(); p != nullptr && !self->m_syncingBar && index >= 0 && index < 4)
+                                                     p->SetSpeed(kSpeeds[index]);
+                                             });
+        }
+
+        // The bar for the tab in front: its clips, the one playing, its loop and speed; hidden
+        // for a model without clips.
+        void ShowClips(const modelviewer::ModelTab& tab)
+        {
+            gui::Node* bar = FindById(u8"viewer-anim");
+            const modelviewer::ClipPlayback* playback = tab.playback.Get();
+            const bool clips = playback != nullptr && playback->HasClips();
+            if (bar != nullptr)
+                bar->SetDisplayed(clips);
+            if (!clips)
+                return;
+            m_syncingBar = true;
+            if (auto* combo = FindAs<gui::ComboBox>(u8"viewer-clip"))
+            {
+                String items;
+                for (i32 i = 0; i < playback->ClipCount(); ++i)
+                {
+                    if (i > 0)
+                        items += u8"|";
+                    items += playback->ClipName(i).AsView();
+                }
+                combo->SetItemsText(items);
+                combo->SetSelectedIndex(playback->Selected());
+            }
+            if (auto* loop = FindAs<gui::CheckBox>(u8"viewer-loop"))
+                loop->SetChecked(playback->Looping());
+            if (auto* speed = FindAs<gui::ComboBox>(u8"viewer-speed"))
+            {
+                const f32 s = playback->Speed();
+                speed->SetSelectedIndex(s <= 0.3f ? 0 : s <= 0.6f ? 1 : s <= 1.5f ? 2 : 3);
+            }
+            m_syncingBar = false;
+        }
+
+        // Each frame: the scrub bar and the time follow the clip (not while dragged), the play
+        // button says what a click does.
+        void ShowPlayback()
+        {
+            modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            modelviewer::ClipPlayback* playback = tab != nullptr ? tab->playback.Get() : nullptr;
+            if (playback == nullptr || !playback->HasClips())
+                return;
+            const f32 duration = playback->Duration();
+            const f32 time = playback->Time();
+            m_syncingBar = true;
+            if (auto* scrub = FindAs<gui::Slider>(u8"viewer-scrub"); scrub != nullptr && !scrub->IsDragging())
+                scrub->SetValue(duration > 0.0f ? time / duration : 0.0);
+            m_syncingBar = false;
+            if (auto* label = FindAs<gui::Label>(u8"viewer-time"))
+                label->SetText(Format(u8"{} / {} s", FormatFixed(time, 2), FormatFixed(duration, 2)).AsView());
+            const bool playing = playback->Playing();
+            if (auto* play = FindAs<gui::Button>(u8"viewer-play"); play != nullptr && playing != m_shownPlaying)
+            {
+                m_shownPlaying = playing;
+                play->SetIconSource(String(playing ? u8"Editor/Icons/pause.svg" : u8"Editor/Icons/play.svg"));
+            }
+        }
+
+        // The bones over the model in front: a line from each to its parent, in the pose it
+        // stands in (the rest pose before any clip), through its skin's space.
+        void DrawSkeleton()
+        {
+            modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            if (!m_showSkeleton || tab == nullptr || !m_viewport || !m_viewport->IsValid() || tab->instance.skinned.IsEmpty())
+                return;
+            const foundation::animation::AnimationPlayer* player = tab->playback ? tab->playback->Player() : nullptr;
+            foundation::animation::Skeleton* skeleton = tab->open->Model()->skeleton.Get();
+            if (skeleton == nullptr)
+                return;
+            const usize count = static_cast<usize>(skeleton->BoneCount());
+            m_bonePoses.Resize(count);
+            skeleton->ComputeWorldPoses(player != nullptr ? player->GetFinalPoses() : Span<const foundation::animation::BoneTransform>{},
+                                        Span<Float4x4>(m_bonePoses.Data(), count));
+            const Float4x4 model = m_viewport->Scene()->ComposeWorldMatrix(tab->instance.skinned[0]);
+            const Color bone{0.35f, 0.85f, 1.0f, 1.0f};
+            render::debug::DebugDraw& draw = m_viewport->SceneDebugDraw();
+            for (usize i = 0; i < count; ++i)
+            {
+                const i32 parent = skeleton->GetBone(static_cast<i32>(i))->parentIndex;
+                if (parent < 0 || static_cast<usize>(parent) >= count)
+                    continue;
+                const Float4x4& a = m_bonePoses[static_cast<usize>(parent)];
+                const Float4x4& b = m_bonePoses[i];
+                draw.DrawLineOverlay(TransformPoint(Float3{a.m[3][0], a.m[3][1], a.m[3][2]}, model),
+                                     TransformPoint(Float3{b.m[3][0], b.m[3][1], b.m[3][2]}, model), bone);
+            }
+        }
+
+        // === The browser ===
+
+        void WireBrowser(runtime::IApplicationHost& host)
+        {
+            ModelViewerApp* self = this;
+            if (auto* choose = FindAs<gui::Button>(u8"viewer-choose-folder"))
+                choose->SetOnClick([self, &host]()
+                                   {
+                                       shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
+                                       if (dialogs == nullptr)
+                                           return;
+                                       dialogs->ShowOpenFolder([self](Span<const String> paths)
+                                                               {
+                                                                   if (!paths.IsEmpty())
+                                                                   {
+                                                                       self->SetBrowseRoot(paths[0].AsView());
+                                                                       self->SaveSettings();
+                                                                   }
+                                                               },
+                                                               self->m_browseRoot.AsView());
+                                   });
+            if (auto* tree = FindAs<gui::TreeView>(u8"viewer-folder-tree"))
+                tree->SetOnSelectionChanged([self](gui::ModelIndex index)
+                                            {
+                                                if (index.IsValid())
+                                                    self->ShowFolderNode(static_cast<i32>(index.InternalId));
+                                            });
+            if (auto* name = FindAs<gui::TextField>(u8"viewer-filter-name"))
+                name->SetOnTextChanging([self](StringView text)
+                                        {
+                                            self->m_filter.name = String(text);
+                                            self->ShowGrid();
+                                        });
+            if (auto* rigged = FindAs<gui::CheckBox>(u8"viewer-filter-rigged"))
+                rigged->SetOnToggled([self](bool on)
+                                     {
+                                         self->m_filter.riggedOnly = on;
+                                         self->ShowGrid();
+                                     });
+            if (auto* animated = FindAs<gui::CheckBox>(u8"viewer-filter-animated"))
+                animated->SetOnToggled([self](bool on)
+                                       {
+                                           self->m_filter.animatedOnly = on;
+                                           self->ShowGrid();
+                                       });
+            if (auto* starred = FindAs<gui::CheckBox>(u8"viewer-filter-starred"))
+                starred->SetOnToggled([self](bool on)
+                                      {
+                                          self->m_filter.starredOnly = on;
+                                          self->ShowGrid();
+                                      });
+        }
+
+        void SetBrowsing(bool browsing)
+        {
+            m_browsing = browsing;
+            if (gui::Node* browser = FindById(u8"viewer-browser"))
+                browser->SetDisplayed(browsing);
+            if (gui::Node* stage = FindById(u8"viewer-stage"))
+                stage->SetDisplayed(!browsing);
+            if (gui::Node* panel = FindById(u8"viewer-panel"))
+                panel->SetDisplayed(!browsing);
+        }
+
+        // The Browse tab in front: the models' instances stay where they are, the browser shows.
+        void ShowBrowser()
+        {
+            SaveCamera();
+            SetBrowsing(true);
+            if (auto* bar = FindAs<gui::TabBar>(u8"viewer-tabs"); bar != nullptr && bar->GetSelectedIndex() != 0)
+            {
+                m_syncingTabs = true;
+                bar->SetSelectedIndex(0);
+                m_syncingTabs = false;
+            }
+            if (m_folderModel.Get() == nullptr && !m_browseRoot.IsEmpty())
+                SetBrowseRoot(m_browseRoot.AsView());
+            if (m_browseRoot.IsEmpty())
+                if (auto* count = FindAs<gui::Label>(u8"viewer-grid-count"))
+                    count->SetText(u8"Choose a folder to browse");
+        }
+
+        // A new folder to browse: the tree starts over at it, it is selected and its models shown.
+        void SetBrowseRoot(StringView chosen)
+        {
+            const String folderCopy(chosen); // `chosen` may be a view of m_browseRoot itself
+            const StringView folder = folderCopy.AsView();
+            m_browseRoot = folderCopy;
+            auto* tree = FindAs<gui::TreeView>(u8"viewer-folder-tree");
+            if (tree == nullptr)
+                return;
+            tree->SetModel(nullptr);
+            m_folderModel = MakeUnique<gui::TreeModel>(m_allocator);
+            m_folderNodes.Clear();
+            const i32 root = AddFolderNode(gui::TreeModel::kRoot, folder);
+            tree->SetModel(m_folderModel.Get());
+            ListFolderNode(root);
+            tree->SetIdExpanded(static_cast<gui::ItemId>(root), true);
+            const gui::ItemId selected[] = {static_cast<gui::ItemId>(root)};
+            tree->SetSelectedIds(Span<const gui::ItemId>(selected, 1));
+            ShowFolderNode(root);
+        }
+
+        i32 AddFolderNode(i32 parent, StringView path)
+        {
+            const String title = modelviewer::FileTitle(path);
+            const i32 id = m_folderModel->AddNode(parent, title.IsEmpty() ? path : title.AsView());
+            if (static_cast<usize>(id) >= m_folderNodes.Size())
+                m_folderNodes.Resize(static_cast<usize>(id) + 1);
+            m_folderNodes[static_cast<usize>(id)] = FolderNode{String(path), parent, false};
+            return id;
+        }
+
+        // A node's subfolders, and theirs one level ahead, so a folder with more inside shows its arrow.
+        void ListFolderNode(i32 id, u32 depth = 2)
+        {
+            if (depth == 0 || id < 0 || static_cast<usize>(id) >= m_folderNodes.Size())
+                return;
+            if (!m_folderNodes[static_cast<usize>(id)].listed)
+            {
+                m_folderNodes[static_cast<usize>(id)].listed = true;
+                const String path = m_folderNodes[static_cast<usize>(id)].path;
+                for (const String& sub : modelviewer::ListFolder(path.AsView()).folders)
+                    (void)AddFolderNode(id, sub.AsView());
+            }
+            for (usize i = 0; i < m_folderNodes.Size(); ++i)
+                if (m_folderNodes[i].parent == id)
+                    ListFolderNode(static_cast<i32>(i), depth - 1);
+        }
+
+        // A folder chosen in the tree: every model under it, in the grid.
+        void ShowFolderNode(i32 id)
+        {
+            if (id < 0 || static_cast<usize>(id) >= m_folderNodes.Size())
+                return;
+            ListFolderNode(id);
+            m_folderModels.Clear();
+            modelviewer::CollectModels(m_folderNodes[static_cast<usize>(id)].path.AsView(), m_folderModels);
+            m_folderStats.Clear();
+            m_folderStatsKnown.Clear();
+            for (const String& model : m_folderModels)
+            {
+                modelviewer::ModelStats stats;
+                const bool known = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model.AsView(), stats, m_looseTextures);
+                m_folderStats.PushBack(foundation::core::Move(stats));
+                m_folderStatsKnown.PushBack(known);
+            }
+            ShowGrid();
+        }
+
+        // The grid for the folder's models that pass the filter, their thumbnails queued in order.
+        void ShowGrid()
+        {
+            gui::Node* grid = FindById(u8"viewer-grid");
+            if (grid == nullptr)
+                return;
+            while (grid->ChildCount() > 0)
+                grid->RemoveChild(grid->GetChildAt(grid->ChildCount() - 1));
+            m_tiles.Clear();
+            m_doneSinceFilter = 0;
+            Array<String> shown;
+            ModelViewerApp* self = this;
+            for (usize i = 0; i < m_folderModels.Size(); ++i)
+            {
+                const String& path = m_folderModels[i];
+                const bool starred = m_shortlist.IsStarred(path.AsView());
+                if (!modelviewer::Matches(m_filter, path.AsView(), m_folderStatsKnown[i] ? &m_folderStats[i] : nullptr, starred))
+                    continue;
+                auto tile = MakeRef<gui::Button>(m_allocator);
+                tile->AddClass(u8"viewer-tile");
+                if (starred)
+                    tile->AddClass(u8"starred");
+                tile->SetText(modelviewer::FileTitle(path.AsView()).AsView());
+                tile->SetTooltip(path.AsView());
+                const String opened = path;
+                tile->SetOnClick([self, opened]() { self->OpenFile(opened.AsView()); });
+                if (const foundation::image::Image* image = ThumbImageFor(path.AsView()))
+                    tile->SetIcon(MakeRef<gui::ImageDrawable>(m_allocator, image));
+                grid->AddChild(tile.Get());
+                m_tiles.PushBack(Tile{path, tile.Get()});
+                shown.PushBack(path);
+            }
+            if (auto* count = FindAs<gui::Label>(u8"viewer-grid-count"))
+                count->SetText(Format(u8"{} of {} models", shown.Size(), m_folderModels.Size()).AsView());
+            if (m_thumbnails)
+                m_thumbnails->SetQueue(shown.AsSpan());
+        }
+
+        [[nodiscard]] const foundation::image::Image* ThumbImageFor(StringView model) const
+        {
+            for (const ThumbImage& t : m_thumbImages)
+                if (t.path.AsView() == model)
+                    return t.image.Get();
+            return nullptr;
+        }
+
+        // A thumbnail drawn (or found drawn): its picture on its tile, the model's numbers known now.
+        void ThumbnailDone(StringView model, StringView png)
+        {
+            for (usize i = 0; i < m_folderModels.Size(); ++i)
+                if (m_folderModels[i].AsView() == model && !m_folderStatsKnown[i])
+                    m_folderStatsKnown[i] = modelviewer::ReadCachedStats(m_cacheRoot.AsView(), model, m_folderStats[i], m_looseTextures);
+            if (png.IsEmpty() || ThumbImageFor(model) != nullptr)
+                return;
+            auto image = MakeUnique<foundation::image::Image>(m_allocator);
+            if (!foundation::image::io::LoadImage(png, *image).IsOk())
+                return;
+            const foundation::image::Image* raw = image.Get();
+            m_thumbImages.PushBack(ThumbImage{String(model), foundation::core::Move(image)});
+            for (const Tile& tile : m_tiles)
+                if (tile.path.AsView() == model && tile.button != nullptr)
+                    tile.button->SetIcon(MakeRef<gui::ImageDrawable>(m_allocator, raw));
+            // The rigged and animated boxes learn as models are drawn: the grid catches up now and then.
+            if ((m_filter.riggedOnly || m_filter.animatedOnly) && (++m_doneSinceFilter >= 25 || (m_thumbnails && m_thumbnails->Remaining() == 0)))
+                ShowGrid();
+        }
+
+        // === The shortlist and the loose texture toggle ===
+
+        void WirePick(runtime::IApplicationHost& host)
+        {
+            ModelViewerApp* self = this;
+            if (auto* star = FindAs<gui::CheckBox>(u8"viewer-star"))
+                star->SetOnToggled([self](bool on)
+                                   {
+                                       const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
+                                       if (tab == nullptr || self->m_syncingPick)
+                                           return;
+                                       self->m_shortlist.SetStarred(tab->path.AsView(), on);
+                                       if (!on)
+                                           self->ShowPick(*tab); // its note went with it
+                                       self->SaveShortlist();
+                                   });
+            if (auto* note = FindAs<gui::TextField>(u8"viewer-note"))
+                note->SetOnTextChanged([self](StringView text)
+                                       {
+                                           const modelviewer::ModelTab* tab = self->m_tabs.ActiveTab();
+                                           if (tab == nullptr || self->m_syncingPick)
+                                               return;
+                                           if (text.IsEmpty() && !self->m_shortlist.IsStarred(tab->path.AsView()))
+                                               return;
+                                           self->m_shortlist.SetNote(tab->path.AsView(), text);
+                                           self->ShowPick(*tab); // a note stars it
+                                           self->SaveShortlist();
+                                       });
+            if (auto* loose = FindAs<gui::CheckBox>(u8"viewer-loose"))
+                loose->SetOnToggled([self](bool on)
+                                    {
+                                        self->m_looseTextures = on;
+                                        if (self->m_thumbnails)
+                                            self->m_thumbnails->SetLooseTextures(on);
+                                        self->SaveSettings();
+                                    });
+            if (auto* exportCsv = FindAs<gui::Button>(u8"viewer-export"))
+                exportCsv->SetOnClick([self, &host]()
+                                      {
+                                          shell::IDialogService* dialogs = host.Shell() != nullptr ? host.Shell()->Dialogs() : nullptr;
+                                          if (dialogs == nullptr)
+                                              return;
+                                          const shell::FileFilter filters[] = {{u8"CSV files", u8"csv"}};
+                                          dialogs->ShowSaveFile([self](Span<const String> paths)
+                                                                {
+                                                                    if (paths.IsEmpty())
+                                                                        return;
+                                                                    const String csv = self->m_shortlist.ToCsv();
+                                                                    if (WriteFile(paths[0].AsView(), Span<const byte>(reinterpret_cast<const byte*>(csv.Data()), csv.Size())))
+                                                                        LOG_INFO(u8"ModelViewer", u8"saved the shortlist ({} models) to {}", self->m_shortlist.Count(), paths[0].AsView());
+                                                                },
+                                                                Span<const shell::FileFilter>(filters, 1), u8"shortlist.csv");
+                                      });
+        }
+
+        // The tab in front's star and note.
+        void ShowPick(const modelviewer::ModelTab& tab)
+        {
+            m_syncingPick = true;
+            if (auto* star = FindAs<gui::CheckBox>(u8"viewer-star"))
+                star->SetChecked(m_shortlist.IsStarred(tab.path.AsView()));
+            if (auto* note = FindAs<gui::TextField>(u8"viewer-note"); note != nullptr && note->GetText() != m_shortlist.Note(tab.path.AsView()))
+                note->SetText(m_shortlist.Note(tab.path.AsView()));
+            m_syncingPick = false;
+        }
+
+        void SaveShortlist()
+        {
+            const String text = m_shortlist.Write();
+            (void)CreateDirectories(PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer").AsView());
+            (void)WriteFile(m_shortlistPath.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
+        }
+
+        // The viewer's settings: the folder it browses (a line `folder <path>`) and the loose
+        // texture rule (`loose 0` when off).
+        void LoadSettings()
+        {
+            Result<Array<byte>> bytes = ReadFile(m_settingsPath.AsView());
+            if (!bytes.HasValue())
+                return;
+            const StringView text(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+            usize start = 0;
+            while (start < text.Size())
+            {
+                usize end = start;
+                while (end < text.Size() && text[end] != u8'\n')
+                    ++end;
+                const StringView line = text.SubStr(start, end - start);
+                if (line.StartsWith(u8"folder "))
+                    m_browseRoot = String(line.SubStr(7, line.Size() - 7));
+                else if (line == StringView(u8"loose 0"))
+                    m_looseTextures = false;
+                start = end + 1;
+            }
+        }
+        void SaveSettings()
+        {
+            const String text = Format(u8"folder {}\nloose {}\n", m_browseRoot.AsView(), m_looseTextures ? 1 : 0);
+            (void)CreateDirectories(PathJoin(GetUserDataDirectory().AsView(), u8"model-viewer").AsView());
+            (void)WriteFile(m_settingsPath.AsView(), Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()));
         }
 
         [[nodiscard]] static StringView OutcomeText(modelviewer::OpenModel::Outcome outcome)
@@ -295,41 +1121,69 @@ namespace
             gui::Node* empty = FindById(u8"viewer-empty");
             if (empty == nullptr)
                 return;
-            const bool open = m_open.IsOpen();
+            const bool open = m_tabs.Count() > 0 && m_tabs.ActiveTab() != nullptr;
             empty->SetDisplayed(!open);
             m_viewport->View()->SetDisplayed(open);
+            if (!open)
+            {
+                if (auto* file = FindAs<gui::Label>(u8"viewer-file"))
+                    file->SetText(u8"");
+                if (gui::Node* rows = FindById(u8"viewer-stats"))
+                    while (rows->ChildCount() > 0)
+                        rows->RemoveChild(rows->GetChildAt(rows->ChildCount() - 1));
+            }
             if (auto* text = FindAs<gui::Label>(u8"viewer-empty-text"); text != nullptr && !m_failure.IsEmpty())
                 text->SetText(m_failure.AsView());
         }
 
-        // The model's bounds as placed: each mesh's box through its entity's world (a file's node
-        // scale, 0.01 or 100, is in it), measured when the model opens.
-        void MeasureBounds()
+        // A model's bounds as placed: each of its meshes' boxes through its entity's world (a
+        // file's node scale, 0.01 or 100, is in it), measured when the model opens.
+        void MeasureBounds(modelviewer::ModelTab& tab)
         {
-            m_center = Float3{};
-            m_radius = 1.0f;
+            tab.center = Float3{};
+            tab.radius = 1.0f;
             scene::Scene* level = m_viewport->Scene();
             auto* meshes = level != nullptr ? level->GetSystem<engine::render::MeshComponentManager>() : nullptr;
-            if (meshes == nullptr || !m_instance.root.IsAssigned())
+            if (meshes == nullptr || !tab.instance.root.IsAssigned())
                 return;
             AABB box = AABB::Empty();
             meshes->ForEach([&](engine::render::MeshComponent& component, scene::EntityHandle entity)
                             {
                                 const foundation::geometry::StaticMesh* mesh = component.mesh.Get();
-                                if (mesh == nullptr || !mesh->bounds.IsValid())
+                                if (mesh == nullptr || !mesh->bounds.IsValid() || !Under(*level, entity, tab.instance.root))
                                     return;
                                 box = Merge(box, TransformAABB(mesh->bounds, level->ComposeWorldMatrix(entity)));
                             });
             if (!box.IsValid())
                 return;
-            m_center = (box.min + box.max) * 0.5f;
-            m_radius = Max(Length(box.max - box.min) * 0.5f, 0.01f);
+            tab.center = (box.min + box.max) * 0.5f;
+            tab.radius = Max(Length(box.max - box.min) * 0.5f, 0.01f);
+            tab.size = box.max - box.min;
         }
 
-        void Bounds(Float3& center, f32& radius) const
+        [[nodiscard]] static bool Under(const scene::Scene& level, scene::EntityHandle entity, scene::EntityHandle root)
         {
-            center = m_center;
-            radius = m_radius;
+            for (scene::EntityHandle e = entity; level.IsValid(e); e = level.GetParent(e))
+                if (e == root)
+                    return true;
+            return false;
+        }
+
+        void Bounds(Float3& center, f32& radius)
+        {
+            const modelviewer::ModelTab* tab = m_tabs.ActiveTab();
+            center = tab != nullptr ? tab->center : Float3{};
+            radius = tab != nullptr ? tab->radius : 1.0f;
+        }
+
+        // The clip range follows the model: a 2 cm prop and a 200 m building both in reach. The
+        // near plane at a twentieth of its size keeps the scene's reverse-Z depth well above the
+        // grid's fixed bias toward the viewer, which a nearer plane lets the grid win through.
+        void ClipToModel(f32 radius)
+        {
+            editor::EditorCamera& camera = m_viewport->Camera();
+            camera.nearZ = Max(radius * 0.05f, 0.0001f);
+            camera.farZ = Max(radius * 100.0f, 50.0f);
         }
 
         void FrameModel(bool snap = false)
@@ -337,12 +1191,7 @@ namespace
             Float3 center;
             f32 radius;
             Bounds(center, radius);
-            // The clip range follows the model: a 2 cm prop and a 200 m building both in reach. The
-            // near plane at a twentieth of its size keeps the scene's reverse-Z depth well above the
-            // grid's fixed bias toward the viewer, which a nearer plane lets the grid win through.
-            editor::EditorCamera& camera = m_viewport->Camera();
-            camera.nearZ = Max(radius * 0.05f, 0.0001f);
-            camera.farZ = Max(radius * 100.0f, 50.0f);
+            ClipToModel(radius);
             m_viewport->Frame(center, radius);
             if (snap)
                 m_viewport->Camera().Advance(1000.0f); // straight there, no glide on opening
@@ -398,10 +1247,52 @@ namespace
         RefPtr<gui::SceneRoot> m_root;
         RefPtr<gui::Node> m_frame;
         UniquePtr<editor::PreviewViewport> m_viewport;
-        modelviewer::OpenModel m_open{m_allocator};
-        engine::model::ModelInstance m_instance;
-        Float3 m_center{};
-        f32 m_radius = 1.0f;
+        modelviewer::ModelTabs m_tabs{m_allocator};
+        bool m_syncingTabs = false; // the bar changed by code, not by a click
+        bool m_turntable = false;
+        f32 m_turnAngle = 0.0f;
+        bool m_syncingBar = false;   // the animation bar set by code, not by a hand
+        bool m_shownPlaying = true; // what the play button shows (pause while playing, as the markup starts)
+        bool m_showSkeleton = false;
+        Array<Float4x4> m_bonePoses;
+
+        // The browser.
+        struct Tile
+        {
+            String path;
+            gui::Button* button = nullptr; // held by the grid
+        };
+        struct ThumbImage
+        {
+            String path;
+            UniquePtr<foundation::image::Image> image;
+        };
+        struct FolderNode
+        {
+            String path;
+            i32 parent = -1;
+            bool listed = false; // its subfolders added
+        };
+        bool m_browsing = false;
+        String m_settingsPath;
+        String m_browseRoot;
+        UniquePtr<modelviewer::ThumbnailRenderer> m_thumbnails;
+        UniquePtr<gui::TreeModel> m_folderModel;
+        Array<FolderNode> m_folderNodes; // by the tree model's node id
+        Array<String> m_folderModels;     // every model under the chosen folder
+        Array<modelviewer::ModelStats> m_folderStats;
+        Array<bool> m_folderStatsKnown;
+        modelviewer::BrowseFilter m_filter;
+        Array<Tile> m_tiles;
+        Array<ThumbImage> m_thumbImages;
+        u32 m_doneSinceFilter = 0;
+
+        // The shortlist and the loose texture toggle.
+        modelviewer::Shortlist m_shortlist{m_allocator};
+        String m_shortlistPath;
+        bool m_syncingPick = false;
+        bool m_looseTextures = true;
+        foundation::rhi::ScreenshotCapture m_capture;
         String m_failure;
     };
 }
@@ -415,6 +1306,11 @@ int main(int argc, char** argv)
         if (arg == StringView(u8"--rest"))
         {
             app.SetRest(true);
+            continue;
+        }
+        if (arg == StringView(u8"--skeleton"))
+        {
+            app.SetSkeleton(true);
             continue;
         }
         if (arg.Size() > 0 && arg[0] == u8'-')

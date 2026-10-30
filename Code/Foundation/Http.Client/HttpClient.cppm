@@ -7,7 +7,10 @@
 /// responses come back by callback on the caller's thread when it pumps. `IHttpClient` is the seam;
 /// the native backend here runs each request on a worker thread (a name lookup blocks), speaking
 /// HTTP/1.1 over a PlainStream for http:// and a TlsStream for https:// (foundation.net.tls, the
-/// backend the application composes). A browser build has its own backend, over fetch.
+/// backend the application composes). A browser build has its own backend over the browser's
+/// fetch (emscripten's), which does TLS, redirects and certificates itself; there `url` is the URL
+/// asked for, maxRedirects is the browser's, and a cross-origin request needs the server's CORS
+/// headers (without them it fails, and the browser does not say why).
 ///
 /// What it does: GET, POST and any method; bodies by Content-Length, chunked, or until close;
 /// redirects within a limit (an https request is never followed to http); a timeout over the whole
@@ -102,8 +105,18 @@ export namespace foundation::http
     /// A redirect's Location made absolute against the URL that sent it.
     [[nodiscard]] String ResolveHttpLocation(const HttpUrl& base, StringView location);
 
+#if !PLATFORM_WEB
     /// The native client: requests on a worker; https through `tls` (null: http only, an https
     /// request failing to say so), checked against `trust`.
     [[nodiscard]] UniquePtr<IHttpClient> CreateNativeHttpClient(IAllocator& allocator, foundation::net::ITlsBackend* tls,
                                                                 foundation::net::TlsTrust trust = foundation::net::TlsTrust::System());
+#else
+    /// The browser client: the browser's fetch, its callbacks between frames.
+    [[nodiscard]] UniquePtr<IHttpClient> CreateBrowserHttpClient(IAllocator& allocator);
+#endif
+
+    /// The platform's client: the native one (`tls` and `trust` as there), or in a browser the
+    /// browser's (which ignores them: the browser does TLS).
+    [[nodiscard]] UniquePtr<IHttpClient> CreateHttpClient(IAllocator& allocator, foundation::net::ITlsBackend* tls,
+                                                          foundation::net::TlsTrust trust = foundation::net::TlsTrust::System());
 }

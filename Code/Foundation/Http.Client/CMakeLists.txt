@@ -11,3 +11,10 @@ target_sources(Http.Client
     PUBLIC
         FILE_SET http_client_modules TYPE CXX_MODULES FILES
             HttpClient.cppm)
+
+# The browser client: whoever links this library on wasm needs emscripten's fetch. INTERFACE, as
+# Net.WebSocket's websocket shim; an executable reaching it through a static private dependency
+# restates it.
+if(EMSCRIPTEN)
+    target_link_options(Http.Client INTERFACE "-sFETCH=1")
+endif()

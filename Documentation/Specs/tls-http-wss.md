@@ -128,7 +128,13 @@ asks; a game in the editor's play mode is a game like any other.
   statuses and HEAD, and a `TooLarge()` that tells the size cap from a malformed body. The live
   test runs when `ENGINE_HTTP_LIVE` is set.
 - **P3 The HTTP client in a browser.** The `fetch` backend. Built on the wasm lane; checked by hand
-  in a browser (no wasm tests run).
+  in a browser (no wasm tests run). Built 2026-10-30: `CreateBrowserHttpClient` over emscripten's
+  fetch (`-sFETCH=1`, an INTERFACE link option of Http.Client), and `CreateHttpClient`, the
+  platform's client for a composition root. The browser follows redirects and does TLS itself, so
+  there `url` is the URL asked for and `maxRedirects` is not ours; a status of 0 is no response
+  (the network, a timeout timed here, or a cross-origin refusal the browser does not explain).
+  `Http.Client.WebCheck` is the hand check: a page that sends five requests and prints the
+  answers.
 - **P4 wss.** The gateway's TLS, the native WebSocket client, the browser client's `wss://`. Tests:
   the native client joins the gateway over ws and over wss in process, packets both ways;
   a wrong certificate refused.

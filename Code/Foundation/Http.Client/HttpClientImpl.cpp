@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026-Present Robert Campbell
 
-// foundation.http.client - implementation: URLs, and the native client's worker.
+// foundation.http.client - implementation: URLs, the native client's worker, and the browser
+// client over fetch.
 
 module;
 #include "Core/Prelude.h"
+#if PLATFORM_WEB
+#include <emscripten/fetch.h>
+#endif
 
 module foundation.http.client;
 
@@ -20,12 +24,6 @@ namespace foundation::http
     namespace
     {
         bool EqualsIgnoreCase(StringView a, StringView b) { return a.Size() == b.Size() && a.ContainsIgnoreCase(b); }
-
-        void Append(Array<byte>& out, StringView text)
-        {
-            for (const utf8char c : text)
-                out.PushBack(static_cast<byte>(c));
-        }
     }
 
     bool ParseHttpUrl(StringView url, HttpUrl& out, String& error)
@@ -130,17 +128,27 @@ namespace foundation::http
 
     namespace
     {
-        struct Job
-        {
-            HttpRequestId id = 0;
-            HttpClientRequest request;
-            Function<void(const HttpClientResponse&)> done;
-        };
-
         struct Delivery
         {
             HttpRequestId id = 0;
             HttpClientResponse response;
+            Function<void(const HttpClientResponse&)> done;
+        };
+    }
+
+#if !PLATFORM_WEB
+    namespace
+    {
+        void Append(Array<byte>& out, StringView text)
+        {
+            for (const utf8char c : text)
+                out.PushBack(static_cast<byte>(c));
+        }
+
+        struct Job
+        {
+            HttpRequestId id = 0;
+            HttpClientRequest request;
             Function<void(const HttpClientResponse&)> done;
         };
 
@@ -447,4 +455,251 @@ namespace foundation::http
     {
         return MakeUnique<NativeHttpClient>(allocator, allocator, tls, Move(trust));
     }
+
+    UniquePtr<IHttpClient> CreateHttpClient(IAllocator& allocator, foundation::net::ITlsBackend* tls, foundation::net::TlsTrust trust)
+    {
+        return CreateNativeHttpClient(allocator, tls, Move(trust));
+    }
+#else
+    namespace
+    {
+        // The browser's fetch (emscripten's, over XMLHttpRequest). Without pthreads its callbacks
+        // run on this thread between frames; each finished request waits for Pump.
+        class BrowserHttpClient final : public IHttpClient
+        {
+        public:
+            explicit BrowserHttpClient(IAllocator& allocator) : m_allocator(&allocator) {}
+            ~BrowserHttpClient() override
+            {
+                for (UniquePtr<Flight>& f : m_flights)
+                    Abort(*f);
+            }
+            BrowserHttpClient(const BrowserHttpClient&) = delete;
+            BrowserHttpClient& operator=(const BrowserHttpClient&) = delete;
+
+            HttpRequestId Send(HttpClientRequest request, Function<void(const HttpClientResponse&)> done) override
+            {
+                const HttpRequestId id = ++m_nextId;
+                UniquePtr<Flight> f = MakeUnique<Flight>(*m_allocator);
+                f->owner = this;
+                f->id = id;
+                f->request = Move(request);
+                f->done = Move(done);
+                f->clock = Stopwatch::StartNew();
+
+                HttpUrl at;
+                String error;
+                if (!ParseHttpUrl(f->request.url.AsView(), at, error))
+                {
+                    Deliver(*f, Failed(Move(error)));
+                    return id;
+                }
+
+                emscripten_fetch_attr_t attr;
+                emscripten_fetch_attr_init(&attr);
+                const String method = f->request.method;
+                const usize length = Min(method.Size(), sizeof(attr.requestMethod) - 1);
+                for (usize i = 0; i < length; ++i)
+                    attr.requestMethod[i] = static_cast<char>(method[i]);
+                attr.requestMethod[length] = '\0';
+                attr.userData = f.Get();
+                attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+                attr.timeoutMSecs = static_cast<u32>(f->request.timeoutSeconds * 1000.0f);
+                attr.onsuccess = &BrowserHttpClient::OnDone;
+                attr.onerror = &BrowserHttpClient::OnDone;
+                // The caller's headers, less those a browser sets itself and refuses from a page.
+                for (const HttpHeader& h : f->request.headers)
+                {
+                    const StringView name = h.name.AsView();
+                    if (EqualsIgnoreCase(name, u8"Host") || EqualsIgnoreCase(name, u8"Content-Length") ||
+                        EqualsIgnoreCase(name, u8"Connection") || EqualsIgnoreCase(name, u8"User-Agent") ||
+                        EqualsIgnoreCase(name, u8"Accept-Encoding"))
+                        continue;
+                    f->headerText.PushBack(h.name);
+                    f->headerText.PushBack(h.value);
+                }
+                for (const String& text : f->headerText)
+                    f->headerPointers.PushBack(reinterpret_cast<const char*>(text.CStr()));
+                f->headerPointers.PushBack(nullptr);
+                attr.requestHeaders = f->headerPointers.Data();
+                if (!f->request.body.IsEmpty())
+                {
+                    attr.requestData = reinterpret_cast<const char*>(f->request.body.Data());
+                    attr.requestDataSize = f->request.body.Size();
+                }
+                Flight* flight = f.Get();
+                m_flights.PushBack(Move(f));
+                emscripten_fetch_t* fetch = emscripten_fetch(&attr, reinterpret_cast<const char*>(flight->request.url.CStr()));
+                // A callback may already have answered it (and freed the flight): look it up again.
+                for (UniquePtr<Flight>& live : m_flights)
+                    if (live->id == id && !live->finished)
+                    {
+                        live->fetch = fetch;
+                        if (fetch == nullptr)
+                        {
+                            live->finished = true;
+                            Finish(*live, Failed(String(u8"the browser refused the request")));
+                        }
+                        break;
+                    }
+                return id;
+            }
+
+            void Cancel(HttpRequestId id) override
+            {
+                for (usize i = 0; i < m_flights.Size(); ++i)
+                    if (m_flights[i]->id == id)
+                    {
+                        Abort(*m_flights[i]);
+                        m_flights.RemoveAt(i);
+                        return;
+                    }
+                for (usize i = 0; i < m_delivered.Size(); ++i)
+                    if (m_delivered[i].id == id)
+                    {
+                        m_delivered.RemoveAt(i);
+                        return;
+                    }
+            }
+
+            void Pump() override
+            {
+                Array<Delivery> ready = Move(m_delivered);
+                m_delivered.Clear();
+                for (Delivery& d : ready)
+                    if (d.done)
+                        d.done(d.response);
+            }
+
+            usize Pending() const override { return m_flights.Size() + m_delivered.Size(); }
+
+        private:
+            struct Flight
+            {
+                BrowserHttpClient* owner = nullptr;
+                HttpRequestId id = 0;
+                HttpClientRequest request; // its body and headers live as long as the fetch
+                Function<void(const HttpClientResponse&)> done;
+                Stopwatch clock;
+                Array<String> headerText;
+                Array<const char*> headerPointers;
+                emscripten_fetch_t* fetch = nullptr;
+                bool finished = false; // answered or cancelled: later callbacks are ignored
+            };
+
+            static HttpClientResponse Failed(String why)
+            {
+                HttpClientResponse r;
+                r.error = Move(why);
+                return r;
+            }
+
+            // A fetch still running is closed, its error callback (called by the close) ignored.
+            void Abort(Flight& f)
+            {
+                if (f.finished)
+                    return;
+                f.finished = true;
+                if (f.fetch != nullptr)
+                    (void)emscripten_fetch_close(f.fetch);
+                f.fetch = nullptr;
+            }
+
+            static void OnDone(emscripten_fetch_t* fetch)
+            {
+                auto* f = static_cast<Flight*>(fetch->userData);
+                if (f->finished)
+                    return; // the close of a cancelled or answered fetch
+                f->finished = true;
+                HttpClientResponse response = Read(*f, fetch);
+                f->fetch = nullptr;
+                (void)emscripten_fetch_close(fetch); // may call back here: ignored above, f still alive
+                f->owner->Finish(*f, Move(response)); // frees f
+            }
+
+            static HttpClientResponse Read(const Flight& f, emscripten_fetch_t* fetch)
+            {
+                HttpClientResponse r;
+                // A status of 0 is no response: the network, a timeout, or a cross-origin refusal
+                // (CORS; the browser keeps the reason from the page).
+                if (fetch->status == 0)
+                {
+                    const f32 elapsed = f.clock.Elapsed().AsSecondsF();
+                    r.error = elapsed >= f.request.timeoutSeconds - 0.05f
+                                  ? Format(u8"timed out after {} s", f.request.timeoutSeconds)
+                                  : String(u8"the request failed (the network, or a cross-origin request the server's CORS headers do not allow)");
+                    return r;
+                }
+                if (fetch->numBytes > f.request.maxResponseBytes)
+                {
+                    r.error = Format(u8"the response is larger than {} bytes", f.request.maxResponseBytes);
+                    return r;
+                }
+                r.status = fetch->status;
+                r.url = f.request.url;
+                r.body.Resize(static_cast<usize>(fetch->numBytes));
+                for (usize i = 0; i < r.body.Size(); ++i)
+                    r.body[i] = static_cast<byte>(fetch->data[i]);
+                const size_t length = emscripten_fetch_get_response_headers_length(fetch);
+                if (length > 0)
+                {
+                    Array<char> text;
+                    text.Resize(length + 1);
+                    (void)emscripten_fetch_get_response_headers(fetch, text.Data(), length + 1);
+                    char** pairs = emscripten_fetch_unpack_response_headers(text.Data());
+                    for (char** p = pairs; p != nullptr && p[0] != nullptr && p[1] != nullptr; p += 2)
+                    {
+                        StringView value(reinterpret_cast<const utf8char*>(p[1]));
+                        while (!value.IsEmpty() && (value[0] == u8' ' || value[0] == u8'\t'))
+                            value = value.SubStr(1, value.Size() - 1);
+                        while (!value.IsEmpty() && (value[value.Size() - 1] == u8'\r' || value[value.Size() - 1] == u8'\n' ||
+                                                    value[value.Size() - 1] == u8' '))
+                            value = value.SubStr(0, value.Size() - 1);
+                        r.headers.PushBack(HttpHeader{String(StringView(reinterpret_cast<const utf8char*>(p[0]))), String(value)});
+                    }
+                    emscripten_fetch_free_unpacked_response_headers(pairs);
+                }
+                return r;
+            }
+
+            // The answer queued for Pump, the flight gone.
+            void Finish(Flight& f, HttpClientResponse response)
+            {
+                Delivery d;
+                d.id = f.id;
+                d.response = Move(response);
+                d.done = Move(f.done);
+                m_delivered.PushBack(Move(d));
+                for (usize i = 0; i < m_flights.Size(); ++i)
+                    if (m_flights[i].Get() == &f)
+                    {
+                        m_flights.RemoveAt(i); // f is freed here; nothing touches it after
+                        return;
+                    }
+            }
+
+            // Failed before any fetch began: queued for Pump like any answer.
+            void Deliver(Flight& f, HttpClientResponse response)
+            {
+                Delivery d;
+                d.id = f.id;
+                d.response = Move(response);
+                d.done = Move(f.done);
+                m_delivered.PushBack(Move(d));
+            }
+
+            IAllocator* m_allocator;
+            Array<UniquePtr<Flight>> m_flights;
+            Array<Delivery> m_delivered;
+            HttpRequestId m_nextId = 0;
+        };
+    }
+
+    UniquePtr<IHttpClient> CreateBrowserHttpClient(IAllocator& allocator) { return MakeUnique<BrowserHttpClient>(allocator, allocator); }
+
+    UniquePtr<IHttpClient> CreateHttpClient(IAllocator& allocator, foundation::net::ITlsBackend*, foundation::net::TlsTrust)
+    {
+        return CreateBrowserHttpClient(allocator);
+    }
+#endif
 }

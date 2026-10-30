@@ -5,7 +5,8 @@
 // the engine's HttpServer for GET, POST, redirects (followed, a POST turned GET by 303, a loop
 // stopped), a timeout, a cancel and the size cap; a raw server for a chunked response, and for
 // https through the Mbed TLS backend with a self-signed certificate (trusted, and an https
-// request redirected to http refused). Also URL parsing and redirect resolution alone.
+// request redirected to http refused). Also URL parsing and redirect resolution alone, the only
+// part a wasm build compiles (its client is the browser's: Http.Client.WebCheck checks it by hand).
 #include <doctest/doctest.h>
 
 #include "Core/Prelude.h"
@@ -21,6 +22,7 @@ using namespace foundation::core;
 using namespace foundation::http;
 using namespace foundation::net;
 
+#if !PLATFORM_WEB
 namespace
 {
     Span<const byte> Bytes(StringView text) { return Span<const byte>(reinterpret_cast<const byte*>(text.Data()), text.Size()); }
@@ -115,6 +117,8 @@ namespace
     }
 }
 
+#endif
+
 TEST_CASE("http client: URLs split for a request; other schemes, no host, IPv6 and bad ports refused")
 {
     HttpUrl u;
@@ -152,6 +156,7 @@ TEST_CASE("http client: a redirect's Location made absolute")
     CHECK(ResolveHttpLocation(base, u8"/a") == StringView(u8"https://host/a"));
 }
 
+#if !PLATFORM_WEB
 TEST_CASE("http client: GET, POST, redirects followed and stopped, against the engine's server")
 {
     HttpServer server(DefaultAllocator());
@@ -378,3 +383,4 @@ TEST_CASE("http client: a real https site with the system's roots (ENGINE_HTTP_L
     CHECK(r.status == 200);
     CHECK(r.BodyText().ContainsIgnoreCase(u8"<html"));
 }
+#endif // !PLATFORM_WEB (a browser build has the fetch client: Http.Client.WebCheck, by hand)

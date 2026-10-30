@@ -489,7 +489,6 @@ namespace
                                                        self->Run(u8"settings.set", Arg(u8"tileSize", Number(static_cast<f64>(step))));
                                                });
             ApplyTileSize(); // the grids exist now
-            RebuildMenus();
             RefreshLibrary();
             for (const String& file : m_files)
                 OpenFile(file.AsView());
@@ -519,8 +518,6 @@ namespace
             Turn(deltaTime);
             if (m_libraryStale)
                 RefreshLibrary();
-            if (m_menusStale)
-                RebuildMenus();
             ShowPlayback();
             DrawGrid();
             DrawSkeleton();
@@ -1185,9 +1182,8 @@ namespace
         }
 
         // The viewer's own commands (the GUI's command model): each with its label, its keys and
-        // what it does, for the menu bar's items and the shortcuts alike. Most press the button
-        // or run the command the window has for it already, so a key, a menu item and a click are
-        // one path.
+        // what it does, for the shortcuts. Most press the bar's button or run the command the
+        // window has for it already, so a key and a click are one path.
         struct ViewerCommand
         {
             StringView id;
@@ -1366,45 +1362,6 @@ namespace
             const i32 current = m_page == Page::Browse ? 0 : m_page == Page::Library ? 1 : kFixedTabs + m_tabs.Active();
             const i32 next = ((current + by) % count + count) % count;
             Run(u8"tabs.select", Arg(u8"tab", Number(next == 0 ? -1 : next == 1 ? -2 : next - kFixedTabs)));
-        }
-
-        // The menu bar (File: what the viewer does with files and itself; the view's controls are
-        // the side panel's, the library's its tab's), made again when the recents change; its items
-        // are the commands above, which give their labels and keys.
-        void RebuildMenus()
-        {
-            m_menusStale = false;
-            auto* bar = FindAs<gui::MenuBar>(u8"viewer-menubar");
-            if (bar == nullptr)
-                return;
-            bar->ClearMenus();
-            auto item = [](gui::Menu* menu, StringView command) { menu->AddItem({}, {})->SetCommand(command); };
-            gui::Menu* file = bar->AddMenu(u8"File");
-            item(file, u8"viewer.open");
-            gui::Menu* recent = file->AddSubMenu(u8"Open Recent");
-            ModelViewerApp* self = this;
-            for (const String& model : m_settings.value.recentModels)
-            {
-                const String path = model;
-                (void)recent->AddItem(modelviewer::FileTitle(path.AsView()).AsView(),
-                                      [self, path]() { self->Run(u8"model.open", Arg(u8"path", Text(path.AsView()))); });
-            }
-            if (!m_settings.value.recentModels.IsEmpty() && !m_settings.value.recentFolders.IsEmpty())
-                recent->AddSeparator();
-            for (const String& folder : m_settings.value.recentFolders)
-            {
-                const String path = folder;
-                (void)recent->AddItem(Format(u8"Browse {}", path.AsView()).AsView(),
-                                      [self, path]() { self->Run(u8"browse.folder", Arg(u8"path", Text(path.AsView()))); });
-            }
-            if (m_settings.value.recentModels.IsEmpty() && m_settings.value.recentFolders.IsEmpty())
-                recent->AddItem(u8"Nothing opened yet", []() {})->SetEnabled(false);
-            item(file, u8"viewer.close-tab");
-            file->AddSeparator();
-            item(file, u8"viewer.screenshot");
-            item(file, u8"viewer.preferences");
-            file->AddSeparator();
-            item(file, u8"viewer.quit");
         }
 
         // The grid's count line, with how far the thumbnails have got while they are drawn
@@ -2793,12 +2750,8 @@ namespace
         }
 
         void SaveSettings() { (void)m_settings.Save(); }
-        // A model or folder to the front of the recents, and File > Open Recent made again.
-        void NoteRecent(bool folder, StringView path)
-        {
-            m_settings.Recent(folder, path);
-            m_menusStale = true;
-        }
+        // A model or folder to the front of the recents (the Recent button's menu).
+        void NoteRecent(bool folder, StringView path) { m_settings.Recent(folder, path); }
 
         // The settings changed (or the window started): the density's sheet, the loose texture
         // rule, the panel's toggle. The thumbnails' size and the cache's folder wait for the next start.
@@ -3143,7 +3096,6 @@ namespace
         RefPtr<gui::MessageBox> m_message;
         bool m_syncingTiles = false;
         bool m_panelShown = true; // the side panel, on a model's page (the bar's toggle) // the tile sliders set by code
-        bool m_menusStale = false; // the menu bar made again next frame (not from inside one of its own items)
         String m_shownProgress;
         String m_density; // the density whose sheet is applied
         u32 m_thumbnailSize = 128;

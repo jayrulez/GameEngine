@@ -5,8 +5,7 @@
 */
 .viewer { background-color: var(--chrome); flex-direction: column; width: 100%; height: 100%; }
 .viewer-bar { background-color: var(--surface); border-bottom: 1px solid var(--separator); }
-.viewer-menubar { padding: 0; } /* the bar's first item, beside the tabs (P10) */
-.viewer-tabs { flex-grow: 1; min-width: 0; }
+.viewer-tabs { flex-grow: 1; min-width: 0; margin-left: var(--space-s); } /* the bar starts with the tabs */
 .viewer-body { flex-grow: 1; min-height: 0; flex-direction: row; }
 .viewer-stage { flex-grow: 1; min-width: 0; flex-direction: column; }
 .viewer-view { flex-grow: 1; min-height: 0; flex-direction: column; }

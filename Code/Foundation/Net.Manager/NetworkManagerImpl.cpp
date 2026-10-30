@@ -7,6 +7,7 @@
 module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
+#include "Core/Log/Log.h"
 
 module foundation.net.manager;
 
@@ -69,7 +70,7 @@ namespace foundation::net
 
     core::UniquePtr<NetworkManager> NetworkManager::HostServer(IAllocator& allocator, u16 port, bool dedicated,
                                                                const ReliableConfig& config,
-                                                               u16 webSocketPort)
+                                                               u16 webSocketPort, const WebSocketTls* webSocketTls)
     {
         if (!CanHost())
         {
@@ -80,9 +81,13 @@ namespace foundation::net
             // Hybrid host: native peers over UDP + browser peers through the WS gateway,
             // one session behind one datagram socket.
             UniquePtr<WebSocketHybridSocket> hybrid =
-                MakeUnique<WebSocketHybridSocket>(allocator, allocator, port, webSocketPort);
+                MakeUnique<WebSocketHybridSocket>(allocator, allocator, port, webSocketPort, webSocketTls);
             if (!hybrid->IsOpen())
             {
+                if (!hybrid->Gateway().Failure().IsEmpty())
+                {
+                    LOG_ERROR(u8"Net", u8"the wss gateway did not open: {}", hybrid->Gateway().Failure());
+                }
                 return {};
             }
             UniquePtr<NetworkManager> manager = MakeUnique<NetworkManager>(

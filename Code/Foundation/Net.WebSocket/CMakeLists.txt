@@ -3,7 +3,7 @@
 # UDP+WS datagram socket, so a desktop host accepts browser clients on the unchanged net stack.
 
 util_add_engine_library(Net.WebSocket ALIAS Foundation::Net.WebSocket)
-target_link_libraries(Net.WebSocket PUBLIC Foundation::Core Foundation::Net Foundation::Http Foundation::Policy)
+target_link_libraries(Net.WebSocket PUBLIC Foundation::Core Foundation::Net Foundation::Net.Tls Foundation::Http Foundation::Policy)
 
 target_sources(Net.WebSocket
     PRIVATE

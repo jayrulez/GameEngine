@@ -15,8 +15,9 @@
 /// session/reliability/replication layers cannot tell the difference. WS endpoints are
 /// synthetic (bit 63 set + client id; real UDP endpoints use only the low 48 bits).
 ///
-/// Deliberate v1 bounds: no TLS (ws://, localhost/LAN trust domain - same as the HTTP
-/// module), no fragmented frames (FIN=0 is a protocol error; game packets are far below
+/// TLS (wss://) is the gateway's when the host hands it a backend and a certificate
+/// (`WebSocketTls`): each connection then runs a TLS session before the upgrade, through
+/// foundation.net.tls's streams. Deliberate v1 bounds: no fragmented frames (FIN=0 is a protocol error; game packets are far below
 /// any fragmentation threshold), text frames rejected (the wire is binary), 1 MiB frame
 /// cap. The reliability layer runs UNCHANGED over WS: TCP already guarantees delivery, so
 /// resends simply never fire (acks flow; redundant but correct - the keep-v1-simple
@@ -34,6 +35,7 @@ export module foundation.net.websocket;
 import foundation.core;
 import foundation.net;  // TcpListener/TcpSocket, IDatagramSocket, UdpSocket, endpoints
 import foundation.http; // HttpMessageParser - the upgrade request IS an HTTP request
+import foundation.net.tls; // the streams each connection rides, plain or TLS
 
 using namespace foundation::core;
 
@@ -133,6 +135,14 @@ export namespace foundation::net
         Array<byte> payload; // Message only
     };
 
+    /// What a gateway needs to speak wss://: the TLS backend (the application's, outliving
+    /// the gateway) and the host's certificate chain and key.
+    struct WebSocketTls
+    {
+        ITlsBackend* backend = nullptr;
+        TlsServerConfig config;
+    };
+
     /// The pump-model WS server: Pump() accepts pending TCP connections, progresses their
     /// HTTP upgrade handshakes, decodes frames (answering pings), and queues events; drain
     /// with Poll(). Single-threaded, like HttpServer.
@@ -140,15 +150,20 @@ export namespace foundation::net
     {
     public:
         /// Bind the listener (port 0 = OS-assigned; read BoundPort()). Check IsOpen().
+        /// With `tls`, every connection is TLS first (wss://); a certificate or key that does
+        /// not load leaves the gateway closed, Failure() saying why.
         // The allocator (required - the owner decides) backs the impl + per-client
         // handshake parsers.
-        WebSocketServerGateway(IAllocator& allocator, u16 port);
+        WebSocketServerGateway(IAllocator& allocator, u16 port, const WebSocketTls* tls = nullptr);
         ~WebSocketServerGateway();
         WebSocketServerGateway(const WebSocketServerGateway&) = delete;
         WebSocketServerGateway& operator=(const WebSocketServerGateway&) = delete;
 
         [[nodiscard]] bool IsOpen() const noexcept;
         [[nodiscard]] u16 BoundPort() const noexcept;
+        [[nodiscard]] bool IsSecure() const noexcept;
+        /// Why the gateway is not open, when its TLS configuration is the reason.
+        [[nodiscard]] StringView Failure() const noexcept;
 
         void Pump();
         [[nodiscard]] bool Poll(WsGatewayEvent& out);
@@ -221,8 +236,8 @@ export namespace foundation::net
     public:
         /// Bind the UDP socket on `udpPort` and the WS listener on `webSocketPort`
         /// (either may be 0 = OS-assigned). Check IsOpen().
-        WebSocketHybridSocket(IAllocator& allocator, u16 udpPort, u16 webSocketPort)
-            : m_udp(udpPort), m_gateway(allocator, webSocketPort)
+        WebSocketHybridSocket(IAllocator& allocator, u16 udpPort, u16 webSocketPort, const WebSocketTls* tls = nullptr)
+            : m_udp(udpPort), m_gateway(allocator, webSocketPort, tls)
         {
         }
 

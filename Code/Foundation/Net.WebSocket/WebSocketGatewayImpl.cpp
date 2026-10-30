@@ -16,6 +16,7 @@ module foundation.net.websocket;
 import foundation.core;
 import foundation.net;
 import foundation.http;
+import foundation.net.tls;
 
 using namespace foundation::core;
 
@@ -428,11 +429,10 @@ namespace foundation::net
         struct Client
         {
             u32 id = 0;
-            TcpSocket socket;
+            UniquePtr<INetByteStream> stream; // plain, or TLS (wss://); it buffers what would block
             bool upgraded = false;
             UniquePtr<http::HttpMessageParser> handshake; // until upgraded
             WebSocketFrameParser frames;                  // after
-            Array<byte> sendBuffer;                       // unsent tail (would-block)
             bool dead = false;
         };
 
@@ -440,6 +440,10 @@ namespace foundation::net
         IAllocator* allocator;
 
         TcpListener listener;
+        bool secure = false;
+        ITlsBackend* tls = nullptr;
+        TlsServerConfig tlsConfig;
+        String failure;
         Array<Client> clients;
         Array<WsGatewayEvent> events;
         usize eventHead = 0;
@@ -455,46 +459,37 @@ namespace foundation::net
             events.PushBack(static_cast<WsGatewayEvent&&>(event));
         }
 
-        // Queue-or-send: TCP sends may be partial / would-block; the tail buffers and
-        // FlushSend retries on every pump.
+        // The stream takes all of it, holding what the socket would not take yet.
         void SendRaw(Client& client, Span<const byte> bytes)
         {
-            for (byte b : bytes)
+            if (client.stream->Send(bytes) < 0)
             {
-                client.sendBuffer.PushBack(b);
-            }
-            FlushSend(client);
-        }
-
-        void FlushSend(Client& client)
-        {
-            while (!client.sendBuffer.IsEmpty())
-            {
-                const i64 sent = client.socket.Send(
-                    Span<const byte>{client.sendBuffer.Data(), client.sendBuffer.Size()});
-                if (sent < 0)
-                {
-                    client.dead = true;
-                    return;
-                }
-                if (sent == 0)
-                {
-                    return; // would-block: retry next pump
-                }
-                for (usize i = 0; i + static_cast<usize>(sent) < client.sendBuffer.Size(); ++i)
-                {
-                    client.sendBuffer[i] = client.sendBuffer[i + static_cast<usize>(sent)];
-                }
-                client.sendBuffer.Resize(client.sendBuffer.Size() - static_cast<usize>(sent));
+                client.dead = true;
             }
         }
 
         void PumpClient(Client& client)
         {
+            // Moves the stream's bytes (and a TLS handshake) on; what it already holds is still
+            // read below before a closed stream counts.
+            const bool alive = client.stream->Pump();
+            ReadClient(client);
+            if (!alive && !client.dead)
+            {
+                client.dead = true;
+                if (client.upgraded)
+                {
+                    PushEvent(WsGatewayEventKind::Disconnected, client.id);
+                }
+            }
+        }
+
+        void ReadClient(Client& client)
+        {
             byte chunk[4096];
             for (;;)
             {
-                const i64 got = client.socket.Receive(Span<byte>{chunk, sizeof(chunk)});
+                const i64 got = client.stream->Receive(Span<byte>{chunk, sizeof(chunk)});
                 if (got < 0)
                 {
                     client.dead = true;
@@ -599,19 +594,49 @@ namespace foundation::net
         }
     };
 
-    WebSocketServerGateway::WebSocketServerGateway(IAllocator& allocator, u16 port)
+    WebSocketServerGateway::WebSocketServerGateway(IAllocator& allocator, u16 port, const WebSocketTls* tls)
         : m_impl(MakeUnique<Impl>(allocator, allocator, port))
     {
+        if (tls == nullptr)
+        {
+            return;
+        }
+        m_impl->secure = true;
+        m_impl->tls = tls->backend;
+        m_impl->tlsConfig = tls->config;
+        if (tls->backend == nullptr)
+        {
+            m_impl->failure = String(u8"wss needs a TLS backend, and none was given");
+            return;
+        }
+        // A certificate or key that does not load fails every connection: say so now, once.
+        const UniquePtr<ITlsSession> probe = tls->backend->CreateServer(tls->config);
+        if (probe->State() == TlsState::Failed)
+        {
+            m_impl->failure = String(probe->Failure());
+        }
     }
-    WebSocketServerGateway::~WebSocketServerGateway() = default;
+    WebSocketServerGateway::~WebSocketServerGateway()
+    {
+        for (Impl::Client& client : m_impl->clients)
+        {
+            client.stream->Close();
+        }
+    }
 
-    bool WebSocketServerGateway::IsOpen() const noexcept { return m_impl->listener.IsOpen(); }
+    bool WebSocketServerGateway::IsOpen() const noexcept { return m_impl->listener.IsOpen() && m_impl->failure.IsEmpty(); }
+    bool WebSocketServerGateway::IsSecure() const noexcept { return m_impl->secure; }
+    StringView WebSocketServerGateway::Failure() const noexcept { return m_impl->failure.AsView(); }
     u16 WebSocketServerGateway::BoundPort() const noexcept { return m_impl->listener.BoundPort(); }
     usize WebSocketServerGateway::ClientCount() const noexcept { return m_impl->clients.Size(); }
 
     void WebSocketServerGateway::Pump()
     {
         Impl& impl = *m_impl;
+        if (!impl.failure.IsEmpty())
+        {
+            return;
+        }
         for (;;)
         {
             TcpSocket accepted = impl.listener.Accept();
@@ -625,7 +650,15 @@ namespace foundation::net
             }
             Impl::Client client;
             client.id = impl.nextClientId++;
-            client.socket = static_cast<TcpSocket&&>(accepted);
+            if (impl.secure)
+            {
+                client.stream = MakeUnique<TlsStream>(*impl.allocator, static_cast<TcpSocket&&>(accepted),
+                                                      impl.tls->CreateServer(impl.tlsConfig));
+            }
+            else
+            {
+                client.stream = MakeUnique<PlainStream>(*impl.allocator, static_cast<TcpSocket&&>(accepted));
+            }
             client.handshake = MakeUnique<http::HttpMessageParser>(
                 *impl.allocator, http::HttpMessageParser::Mode::Request, usize{4096});
             impl.clients.PushBack(static_cast<Impl::Client&&>(client));
@@ -634,17 +667,14 @@ namespace foundation::net
         {
             if (!client.dead)
             {
-                impl.FlushSend(client);
-                if (!client.dead)
-                {
-                    impl.PumpClient(client);
-                }
+                impl.PumpClient(client);
             }
         }
         for (usize i = impl.clients.Size(); i > 0; --i)
         {
             if (impl.clients[i - 1].dead)
             {
+                impl.clients[i - 1].stream->Close(); // what is still held goes (a close frame, close_notify)
                 impl.clients.RemoveAt(i - 1);
             }
         }

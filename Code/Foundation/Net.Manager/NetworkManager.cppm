@@ -144,7 +144,8 @@ export namespace foundation::net
         [[nodiscard]] static core::UniquePtr<NetworkManager>
         HostServer(core::IAllocator& allocator, u16 port, bool dedicated = false,
                    const ReliableConfig& config = {},
-                   u16 webSocketPort = 0); // != 0: ALSO accept browser clients over ws://
+                   u16 webSocketPort = 0, // != 0: ALSO accept browser clients over ws://
+                   const WebSocketTls* webSocketTls = nullptr); // and with it over wss:// instead
         [[nodiscard]] static core::UniquePtr<NetworkManager>
         JoinServer(core::IAllocator& allocator, core::StringView host, u16 port,
                    const ReliableConfig& config = {});

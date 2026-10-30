@@ -746,6 +746,85 @@ namespace foundation::net
         }
     }
 
+    bool ParseWebSocketAddress(StringView address, u16 defaultPort, WebSocketClientConfig& out)
+    {
+        const auto hasPrefix = [&](StringView prefix)
+        {
+            if (address.Size() < prefix.Size())
+            {
+                return false;
+            }
+            for (usize i = 0; i < prefix.Size(); ++i)
+            {
+                utf8char c = address[i];
+                if (c >= u8'A' && c <= u8'Z')
+                {
+                    c = static_cast<utf8char>(c - u8'A' + u8'a');
+                }
+                if (c != prefix[i])
+                {
+                    return false;
+                }
+            }
+            return true;
+        };
+        StringView rest;
+        if (hasPrefix(u8"wss://"))
+        {
+            out.secure = true;
+            rest = address.SubStr(6, address.Size() - 6);
+        }
+        else if (hasPrefix(u8"ws://"))
+        {
+            out.secure = false;
+            rest = address.SubStr(5, address.Size() - 5);
+        }
+        else
+        {
+            return false;
+        }
+        usize slash = 0;
+        while (slash < rest.Size() && rest[slash] != u8'/')
+        {
+            ++slash;
+        }
+        const StringView authority = rest.SubStr(0, slash);
+        out.path = slash < rest.Size() ? String(rest.SubStr(slash, rest.Size() - slash)) : String(u8"/");
+        usize colon = authority.Size();
+        for (usize i = 0; i < authority.Size(); ++i)
+        {
+            if (authority[i] == u8':')
+            {
+                colon = i;
+            }
+        }
+        out.host = String(authority.SubStr(0, colon));
+        out.port = defaultPort;
+        if (colon < authority.Size())
+        {
+            u32 value = 0;
+            const StringView digits = authority.SubStr(colon + 1, authority.Size() - colon - 1);
+            for (const utf8char c : digits)
+            {
+                if (c < u8'0' || c > u8'9' || value > 65535)
+                {
+                    return false;
+                }
+                value = value * 10 + static_cast<u32>(c - u8'0');
+            }
+            if (digits.IsEmpty() || value == 0 || value > 65535)
+            {
+                return false;
+            }
+            out.port = static_cast<u16>(value);
+        }
+        else if (out.port == 0)
+        {
+            out.port = out.secure ? 443 : 80; // the scheme's own, as a browser would
+        }
+        return !out.host.IsEmpty();
+    }
+
 #if PLATFORM_WEB
     // ---- the browser client socket -------------------------------------------------------
     // Callback-driven (emscripten/websocket.h); without pthreads the callbacks run on the

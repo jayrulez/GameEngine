@@ -8,6 +8,9 @@ module;
 #include "Core/Prelude.h"
 #include "Core/Reflection/Reflect.h"
 #include "Core/Log/Log.h"
+#if PLATFORM_WEB
+#include <emscripten/emscripten.h> // EM_ASM_INT: is the page https
+#endif
 
 module foundation.net.manager;
 
@@ -107,28 +110,51 @@ namespace foundation::net
         return manager;
     }
 
-    core::UniquePtr<NetworkManager> NetworkManager::JoinServer(IAllocator& allocator, StringView host, u16 port,
-                                                               const ReliableConfig& config)
+    namespace
     {
-#if PLATFORM_WEB
-        // Browsers have no UDP: join over a WebSocket to the host's gateway (`port` here is
-        // the host's WEB SOCKET port). Sends buffer through the async browser handshake, so
-        // the session's immediate connect packet is safe.
-        WebSocketClientConfig webSocket;
-        webSocket.host = String(host);
-        webSocket.port = port;
-        UniquePtr<WebSocketClientSocket> socket =
-            MakeUnique<WebSocketClientSocket>(allocator, allocator, webSocket);
-        if (!socket->IsOpen())
+        UniquePtr<NetworkManager> JoinWebSocket(IAllocator& allocator, const WebSocketClientConfig& webSocket,
+                                                const ReliableConfig& config)
         {
-            return {};
+            // Sends buffer through the async handshake, so the session's immediate connect
+            // packet is safe.
+            UniquePtr<WebSocketClientSocket> socket = MakeUnique<WebSocketClientSocket>(allocator, allocator, webSocket);
+            if (!socket->IsOpen())
+            {
+                LOG_ERROR(u8"Net", u8"could not join {}: {}", webSocket.host.AsView(), socket->Failure());
+                return {};
+            }
+            UniquePtr<NetworkManager> manager =
+                MakeUnique<NetworkManager>(allocator, static_cast<UniquePtr<WebSocketClientSocket>&&>(socket), config);
+            manager->ConnectTo(kWebSocketServerEndpoint);
+            return manager;
         }
-        UniquePtr<NetworkManager> manager = MakeUnique<NetworkManager>(
-            allocator, static_cast<UniquePtr<WebSocketClientSocket>&&>(socket),
-            config);
-        manager->ConnectTo(kWebSocketServerEndpoint);
-        return manager;
+    }
+
+    core::UniquePtr<NetworkManager> NetworkManager::JoinServer(IAllocator& allocator, StringView host, u16 port,
+                                                               const ReliableConfig& config, ITlsBackend* tls,
+                                                               TlsTrust trust)
+    {
+        WebSocketClientConfig webSocket;
+        const bool addressed = ParseWebSocketAddress(host, port, webSocket);
+#if PLATFORM_WEB
+        // Browsers have no UDP: a bare host is joined over a WebSocket to the host's gateway
+        // (`port` here is the host's WEB SOCKET port), secure when the page is.
+        (void)tls;
+        (void)trust;
+        if (!addressed)
+        {
+            webSocket.host = String(host);
+            webSocket.port = port;
+            webSocket.secure = EM_ASM_INT({ return location.protocol === 'https:' ? 1 : 0; }) != 0;
+        }
+        return JoinWebSocket(allocator, webSocket, config);
 #else
+        if (addressed)
+        {
+            webSocket.tls = tls;
+            webSocket.trust = static_cast<TlsTrust&&>(trust);
+            return JoinWebSocket(allocator, webSocket, config);
+        }
         UniquePtr<UdpSocket> socket =
             MakeUnique<UdpSocket>(allocator, u16{0}); // ephemeral
         if (!socket->IsOpen())

@@ -137,7 +137,13 @@ asks; a game in the editor's play mode is a game like any other.
   answers.
 - **P4 wss.** The gateway's TLS, the native WebSocket client, the browser client's `wss://`. Tests:
   the native client joins the gateway over ws and over wss in process, packets both ways;
-  a wrong certificate refused.
+  a wrong certificate refused. Built 2026-10-30 in three commits: the gateway takes a
+  `WebSocketTls` (backend and certificate) through the hybrid socket and `HostServer`;
+  `WebSocketClientSocket` is on every platform from one `WebSocketClientConfig` (natively the
+  engine's own client over a plain or TLS stream, with an upgrade timeout); `JoinServer` reads a
+  `ws://` or `wss://` address (natively too, wss through a TLS backend it is handed), and in a
+  browser a bare host is joined over wss when the page is https. Composing a TLS backend for the
+  running game (so a script's join can use wss natively) is P5's.
 - **P5 Scripts and docs.** The `Http` facade in AngelScript and Luau (tested in
   `Code/Integration`), the docs pages (the HTTP client; hosting over wss, with a certificate or
   behind a proxy), Masquerade P7.

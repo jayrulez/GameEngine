@@ -3,7 +3,7 @@
 # facade (AngelScript + Luau). Over foundation.net + foundation.script.
 
 util_add_engine_library(Net.Manager ALIAS Foundation::Net.Manager)
-target_link_libraries(Net.Manager PUBLIC Foundation::Core Foundation::Net Foundation::Net.WebSocket Foundation::Net.Replication Foundation::Scene Foundation::Script Foundation::Script.Facades Foundation::Profiler Foundation::Policy)
+target_link_libraries(Net.Manager PUBLIC Foundation::Core Foundation::Net Foundation::Net.WebSocket Foundation::Net.Tls Foundation::Net.Replication Foundation::Scene Foundation::Script Foundation::Script.Facades Foundation::Profiler Foundation::Policy)
 
 target_sources(Net.Manager
     PUBLIC

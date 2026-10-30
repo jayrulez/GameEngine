@@ -92,7 +92,9 @@ From a survey of the code (2026-10-14):
    skinning draws one mesh at many transforms; nothing moves instances with agents. And one
    instanced crowd plays one clip at evenly spaced phases: a guest cannot switch between walk,
    idle and dance, and there is no script facade for it.
-8. **`wss://`**: the browser client always builds a `ws://` URL.
+8. **`wss://`**: the browser client always builds a `ws://` URL. Closed in the engine 2026-10-30
+   (Specs/tls-http-wss.md P4): a join address may say `wss://` (or `ws://`), and from an https page
+   a bare host is joined over wss; the docs page on hosting behind TLS is P7's.
 
 ## Phases
 

@@ -22,6 +22,7 @@ import foundation.profiler;
 import foundation.net;
 import foundation.net.replication; // StateReplication / InterpolationBuffer (same foundation::net namespace)
 import foundation.net.websocket;   // WebSocketHybridSocket (UDP natives + WS browser clients)
+import foundation.net.tls;         // the backend and trust a wss join checks the host with
 import foundation.scene;           // Scene (the replicated world)
 import foundation.script;          // Object / IScriptContext / CurrentScriptContext / SetService
 import foundation.script.facades;  // the Scene and Entity handles Net.spawn spawns through and returns
@@ -127,15 +128,14 @@ export namespace foundation::net
         {
         }
 
-#if PLATFORM_WEB
-        // Web runtime client: owns the browser's WebSocket connection (JoinServer on web).
+        // WebSocket client: owns the connection to a host's gateway (JoinServer on web, or with a
+        // ws:// or wss:// address anywhere).
         explicit NetworkManager(core::UniquePtr<WebSocketClientSocket> socket,
                                 const ReliableConfig& config = {})
             : m_ownedSocket(static_cast<core::UniquePtr<WebSocketClientSocket>&&>(socket)),
               m_session(*m_ownedSocket, config)
         {
         }
-#endif
 
         // Runtime endpoint construction: open a real UDP socket and enter a role in one step. Returns
         // null if the socket fails to open (the caller logs + runs offline). HostServer binds `port`
@@ -146,9 +146,15 @@ export namespace foundation::net
                    const ReliableConfig& config = {},
                    u16 webSocketPort = 0, // != 0: ALSO accept browser clients over ws://
                    const WebSocketTls* webSocketTls = nullptr); // and with it over wss:// instead
+        // JoinServer's `host` may be an address with a scheme: "ws://host[:port][/path]" or
+        // "wss://..." joins the host's WebSocket gateway (`port` when the address names none),
+        // natively too, wss through `tls` checked against `trust`. A bare host joins over UDP
+        // natively; in a browser over a WebSocket to `port`, wss when the page is https (a
+        // browser refuses ws:// from an https page).
         [[nodiscard]] static core::UniquePtr<NetworkManager>
         JoinServer(core::IAllocator& allocator, core::StringView host, u16 port,
-                   const ReliableConfig& config = {});
+                   const ReliableConfig& config = {}, ITlsBackend* tls = nullptr,
+                   TlsTrust trust = TlsTrust::System());
 
         /// Whether THIS build can host a session at all. Browsers cannot listen on any
         /// socket - the web build's Host paths reject cleanly instead of hanging.

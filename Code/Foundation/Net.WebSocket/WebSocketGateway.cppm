@@ -223,6 +223,11 @@ export namespace foundation::net
         f32 upgradeTimeoutSeconds = 10.0f;
     };
 
+    /// A join address with a scheme: "ws://host[:port][/path]" or "wss://...". Fills `out`'s
+    /// host, port (`defaultPort` when the address names none), secure and path; false when
+    /// `address` has no ws:// or wss:// scheme (a bare host) or names no host.
+    [[nodiscard]] bool ParseWebSocketAddress(StringView address, u16 defaultPort, WebSocketClientConfig& out);
+
     /// One WebSocket connection to a host's gateway, presented as an IDatagramSocket (each
     /// binary frame = one datagram; the single remote is kWebSocketServerEndpoint). In a
     /// browser it is the browser's WebSocket; natively it is this module's own client over a

@@ -343,3 +343,24 @@ TEST_CASE("websocket: the client side's parser takes unmasked frames and refuses
     CHECK_FALSE(strict.Next(frame));
     CHECK(strict.Failed());
 }
+
+TEST_CASE("websocket: join addresses with a scheme are read; a bare host is not one")
+{
+    WebSocketClientConfig c;
+    REQUIRE(ParseWebSocketAddress(u8"wss://play.example.com/ball", 7000, c));
+    CHECK(c.secure);
+    CHECK(c.host == StringView(u8"play.example.com"));
+    CHECK(c.port == 7000);
+    CHECK(c.path == StringView(u8"/ball"));
+    REQUIRE(ParseWebSocketAddress(u8"WS://10.0.0.2:7010", 7000, c));
+    CHECK_FALSE(c.secure);
+    CHECK(c.host == StringView(u8"10.0.0.2"));
+    CHECK(c.port == 7010);
+    CHECK(c.path == StringView(u8"/"));
+    REQUIRE(ParseWebSocketAddress(u8"wss://host", 0, c));
+    CHECK(c.port == 443);
+    CHECK_FALSE(ParseWebSocketAddress(u8"10.0.0.2", 7000, c));
+    CHECK_FALSE(ParseWebSocketAddress(u8"https://host/", 7000, c));
+    CHECK_FALSE(ParseWebSocketAddress(u8"wss://", 7000, c));
+    CHECK_FALSE(ParseWebSocketAddress(u8"ws://host:99999", 7000, c));
+}

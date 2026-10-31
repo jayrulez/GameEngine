@@ -13,6 +13,17 @@
 > The work queued for the 0.1 release lives in `backlog-0.1.md`, and what waits for 0.2 in
 > `backlog-0.2.md` (both started 2026-10-10).
 
+## Queued 2026-10-30 (user, during the run spec): where the application time scale lives
+
+To discuss: moving the application's time scale off `runtime::SubsystemManager`
+(`SetTimeScale` / `TimeScale`, the outermost term of the time model: host delta x application x
+run x scene). The subsystem manager is a registry and lifecycle driver; the time scale (and the
+fixed step beside it, which scenes copy) is application configuration that rides along with it.
+Questions: where it belongs (the application host, a time service the manager holds, the
+application itself), what reads it today (the host's tick, `SceneSubsystem` seeding scenes, the
+input runtime's per-action time scale), and whether the run spec's run tier changes the answer.
+Left out of `Specs/run-context.md` ("Not in scope") and `Specs/subsystem-manager-rename.md`.
+
 ## Queued 2026-10-10 (the backlog audit, the instance fade)
 
 The per-instance distance fade (built 2026-09-23, d9ea0086; `instance_fade.hlsli`) has two gaps

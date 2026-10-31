@@ -3,12 +3,11 @@
 
 // Script - :script_debug partition
 //
-// The neutral interfaces, implemented by no backend, for a
-// step debugger, a VM profiler, and a cook-to-bytecode blob. Each backend declares the
-// matching ScriptCapabilities flag ABSENT and its factory returns null; the conformance
-// battery has a skipped-when-absent skeleton for each, so turning a capability on
-// has an immediate certification target. Modelled (trimmed) on Traktor's script debug
-// stack.
+// The neutral interfaces for a step debugger, a VM profiler, and a cook-to-bytecode blob.
+// Both backends implement the debugger and the bytecode blob and declare those
+// ScriptCapabilities flags; neither implements the profiler yet, so its flag stays absent and
+// its factory returns null. The conformance battery certifies each capability a backend
+// declares and skips the ones it lacks. Modelled (trimmed) on Traktor's script debug stack.
 //
 // The debugger SNAPSHOT value types (ScriptStackFrame / ScriptVariable /
 // ScriptValueObject) are plain data and WIRE-SYMMETRIC: they carry a Serialize() that

@@ -3,12 +3,13 @@
 
 /// Foundation::Render - the `:shadows` partition.
 ///
-/// Shadow mapping. The directional path: a single shadow map rendered
-/// from the scene's directional shadow caster's point of view, sampled with PCF in the forward
-/// shader. This partition OWNS the shadow depth texture(s) (one per frame-in-flight) and imports
-/// them into the frame graph; RenderFrame (:pipeline, which has the renderer registry) declares the
-/// depth pass that re-emits the casters and threads the binding into the forward pass. CSM cascades
-/// and the atlas/scheduler (modeled on PlayCanvas) extend this.
+/// Shadow mapping, sampled with PCF in the forward shader. The directional light renders
+/// kShadowCascadesCount (4) cascades into a depth array with a layer per view's cascade; spot and
+/// point lights render into a 2048 depth atlas of 512 tiles with two layers, a realtime one redrawn
+/// every frame and a static one redrawn only when its casters change. This partition OWNS the depth
+/// textures (one set per frame-in-flight) and imports them into the frame graph; RenderFrame
+/// (:pipeline, which has the renderer registry) declares the depth passes that re-emit the casters
+/// and threads the bindings into the forward pass.
 
 module;
 #include "Core/Prelude.h"

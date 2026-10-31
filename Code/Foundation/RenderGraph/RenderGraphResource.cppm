@@ -172,7 +172,7 @@ export namespace foundation::rendergraph
         i32 refCount = 0;
         PassHandle firstWriter = PassHandle::Invalid();
         PassHandle lastReader = PassHandle::Invalid();
-        i32 firstUsePass = -1; // for aliasing
+        i32 firstUsePass = -1; // the lifetime aliasing would need; nothing reads it yet
         i32 lastUsePass = -1;
 
         // --- texture data ---

@@ -4,8 +4,9 @@
 // Foundation::RenderGraph - :graph partition
 //
 // The orchestrator. GPU work is declared as passes with resource accesses; the
-// graph builds dependencies, culls unused work, topologically sorts, allocates/
-// aliases transient resources, inserts barriers (via BarrierSolver), and runs
+// graph builds dependencies, culls unused work, topologically sorts, allocates
+// transient resources (from a pool that reuses textures across frames; two
+// transients in one frame never share memory), inserts barriers (via BarrierSolver), and runs
 // the pass callbacks into a command encoder. Ported from Sedulous.RenderGraph
 // (RenderGraph.bf). Compile() works without an encoder so graph logic is
 // testable headless.

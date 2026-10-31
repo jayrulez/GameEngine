@@ -173,7 +173,8 @@ single artifact, works on every platform incl. web). Same source both ways.
   and both web players now restate -lwebsocket.js (Net.WebSocket's
   INTERFACE link option does not cross static private deps).
 
-- N6 - hot reload (DESIGNED, not scheduled; the gnarly part). What the
+- N6 - hot reload (BUILT 2026-09-04 in 2e695c7b5 as Project > Reload Native
+  Module, the scene-bracketed flow below; the gnarly part). What the
   plugin left behind decides everything - the inventory on unload:
   subsystems in Context (OnUnload removes - existing contract), TypeInfo*
   in GlobalTypeRegistry pointing INTO the .so, factory/function pointers in

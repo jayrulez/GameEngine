@@ -7,10 +7,9 @@
 /// logarithmic depth slices) once per frame via a compute pass, so the forward shader evaluates
 /// only the lights touching each fragment's cluster instead of all lights. This partition owns the
 /// build compute pipeline + the per-frame cluster buffers, and declares the build pass into the
-/// frame graph (ordered before the forward pass, which reads the buffers it writes).
-///
-/// 4.3a establishes the plumbing with a STUB kernel (writes empty cluster lists); 4.3b ports the
-/// real froxel-AABB / sphere-assignment kernel; 4.3c wires the buffers into the forward shader.
+/// frame graph (ordered before the forward pass, which reads the buffers it writes). The kernel,
+/// cluster_build.cs.hlsl, builds each froxel's view-space AABB and assigns it every directional
+/// light and each point or spot light whose range sphere meets the box.
 
 module;
 #include "Core/Prelude.h"

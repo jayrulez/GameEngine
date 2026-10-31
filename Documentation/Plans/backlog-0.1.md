@@ -300,11 +300,7 @@ website and the flagship game.
   - tools: the model viewer's model, Browse and Library tabs and its Preferences.
   The capture recipe: the editor with `--mcp-port` on a scratch copy of a sample, pages opened
   with `page_open`, dialogs through the command palette (`action_execute` cancels dialogs), shots
-  with `editor_screenshot`, cropped and placed under each section's first paragraph. One finding
-  waits for the user: Preferences' Templates help text (`Data/Editor/Preferences.xml`) says an
-  empty field means `$ENV_TEMPLATES_DIR`, else the editor's own folder, but `ResolveTemplatesRoot`
-  falls back to `<user data>/templates` (the editor's own player is offered as a template
-  besides, from its folder).
+  with `editor_screenshot`, cropped and placed under each section's first paragraph.
 - **The 0.1 release** (user 2026-10-09): the release itself, with
   - **a website** for the engine: started 2026-10-11 as `AssiduousEngine/website` (Astro, private
     source, published to the public `assiduousengine.github.io`, live at

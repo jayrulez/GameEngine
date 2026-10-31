@@ -2,8 +2,8 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App tests: the input tools over a GUI root of their own. Covers what a target finds, a
 // click reaching what it names (or refused when it names nothing, several things, or something
-// covered), clicking a point, typing into the focus and pressing a key. Each tool answers one
-// frame (a pump) after it acts.
+// covered), clicking a point, typing into the focus, pressing a key and dropping files. Each tool
+// answers one frame (a pump) after it acts.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 
@@ -45,6 +45,8 @@ namespace
         RefPtr<gui::Button> dialogOk;
         int shows = 0;
         int oks = 0;
+        Array<String> dropped;
+        bool takesDrops = true; // false: as with no project open
         McpServer server;
 
         Bed()
@@ -64,6 +66,17 @@ namespace
             app::InputToolSeams seams;
             gui::SceneRoot* over = root.Get();
             seams.root = [over]() { return over; };
+            seams.drop = [this](Span<const String> paths, String& error)
+            {
+                if (!takesDrops)
+                {
+                    error = String(u8"no project is open");
+                    return false;
+                }
+                for (const String& path : paths)
+                    dropped.PushBack(path);
+                return true;
+            };
             app::RegisterInputTools(server, Move(seams));
         }
     };
@@ -176,4 +189,34 @@ TEST_CASE("editor input tools: text goes to the focus, a key acts on it, and the
     REQUIRE(hover.ok);
     CHECK(hover.payload.Get(u8"over").Get(u8"node").AsString().AsView().ContainsIgnoreCase(u8"#show"));
     REQUIRE(Call(bed.server, u8"editor_scroll", u8"{\"target\":\"#dialog\",\"dy\":-1}").ok);
+}
+
+TEST_CASE("editor input tools: a drop hands existing files to the window's drop, and is refused otherwise")
+{
+    Bed bed;
+    // A file to drop, under the harness's .test-scratch, by its absolute path.
+    const String file = PathJoin(GetCurrentDirectory().AsView(), u8"editor-input-drop/crate.png");
+    (void)CreateDirectories(PathParent(file.AsView()));
+    constexpr StringView kBytes = u8"not really a png";
+    REQUIRE(WriteFile(file.AsView(), Span<const byte>(reinterpret_cast<const byte*>(kBytes.Data()), kBytes.Size())).IsOk());
+
+    const Answer dropped = Call(bed.server, u8"editor_drop", Format(u8"{{\"paths\":[\"{}\"]}}", file).AsView());
+    REQUIRE(dropped.ok);
+    CHECK(dropped.pumps == 1u); // answered on the frame after, as the other acts are
+    REQUIRE(bed.dropped.Size() == 1u);
+    CHECK(bed.dropped[0] == file.AsView());
+    CHECK(dropped.payload.Get(u8"dropped").At(0).AsString() == file.AsView());
+
+    // Refused, with nothing handed on: no paths, a relative path, a file that is not there, and a
+    // window that takes no drops (no project open).
+    CHECK_FALSE(Call(bed.server, u8"editor_drop", u8"{\"paths\":[]}").ok);
+    CHECK_FALSE(Call(bed.server, u8"editor_drop", u8"{\"paths\":[\"crate.png\"]}").ok);
+    const Answer missing = Call(bed.server, u8"editor_drop", Format(u8"{{\"paths\":[\"{}\"]}}", PathJoin(PathParent(file.AsView()), u8"gone.png")).AsView());
+    CHECK_FALSE(missing.ok);
+    CHECK(missing.error.AsView().ContainsIgnoreCase(u8"no file at"));
+    bed.takesDrops = false;
+    const Answer closed = Call(bed.server, u8"editor_drop", Format(u8"{{\"paths\":[\"{}\"]}}", file).AsView());
+    CHECK_FALSE(closed.ok);
+    CHECK(closed.error.AsView().ContainsIgnoreCase(u8"no project is open"));
+    CHECK(bed.dropped.Size() == 1u);
 }

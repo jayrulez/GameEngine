@@ -205,6 +205,9 @@ export namespace editor::app
         void OpenProjectSettings();
         /// Imports files into a group: at once when nothing needs review, else through the window.
         void ImportFiles(Span<const String> paths, foundation::content::Group& group);
+        /// Files dropped on the main window (from the operating system, or editor_drop): imported into
+        /// the group the Assets panel shows. False with `error` when no project is open.
+        bool DropFiles(Span<const String> paths, String& error);
         /// Opens Export Templates over the main window; `closed` is called when it closes.
         void OpenTemplates(Function<void()> closed = {});
         void OpenExport();

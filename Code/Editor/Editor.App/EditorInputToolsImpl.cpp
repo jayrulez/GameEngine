@@ -401,5 +401,47 @@ namespace editor::app
                        answer.Set(u8"handled", JsonValue::MakeBool(taken));
                        return true;
                    }));
+
+        server.RegisterTool(
+            u8"editor_drop",
+            u8"Drops files on the editor's window as the operating system would when a user drags them in "
+            u8"from a file manager: they are imported into the group the Assets panel shows, at once when "
+            u8"nothing needs deciding, else through the import window (editor_screenshot to see it, "
+            u8"editor_click to work it). `paths` are absolute paths of files that exist. Refused when one "
+            u8"is missing or no project is open. Answers a frame later with {dropped, focus}.",
+            SchemaBuilder().Arr(u8"paths", u8"string", u8"absolute paths of the files to drop", true).Build(),
+            ToolAnnotations::Creates(),
+            Acting(shared,
+                   [shared](gui::SceneRoot&, const JsonValue& args, JsonValue& answer, String& error)
+                   {
+                       const JsonValue list = args.Get(u8"paths");
+                       if (!list.IsArray() || list.Count() == 0)
+                       {
+                           error = String(u8"give `paths`: one or more absolute file paths");
+                           return false;
+                       }
+                       Array<String> paths(editor::EditorRootAllocator());
+                       for (const JsonValue& item : list.Items())
+                       {
+                           const String path = item.AsString();
+                           if (!PathIsAbsolute(path.AsView()) || !FileExists(path.AsView()))
+                           {
+                               error = Format(u8"no file at \"{}\" (an absolute path to a file that exists)", path);
+                               return false;
+                           }
+                           paths.PushBack(path);
+                       }
+                       if (!shared->seams.drop || !shared->seams.drop(paths.AsSpan(), error))
+                       {
+                           if (error.IsEmpty())
+                               error = String(u8"this editor takes no dropped files");
+                           return false;
+                       }
+                       JsonValue dropped = JsonValue::MakeArray();
+                       for (const String& path : paths)
+                           dropped.Add(JsonValue::MakeString(path));
+                       answer.Set(u8"dropped", Move(dropped));
+                       return true;
+                   }));
     }
 }

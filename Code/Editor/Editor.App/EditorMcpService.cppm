@@ -72,6 +72,8 @@ export namespace editor::app
             WindowToolSeams windows;
             /// The main window's GUI, which the input tools drive.
             Function<foundation::gui::SceneRoot*()> guiRoot;
+            /// What a file dropped on the main window does (editor_drop); false with `error` when it cannot.
+            Function<bool(Span<const String> paths, String& error)> dropFiles;
             /// The tools the application adds over its other parts (the dock, the actions).
             Function<void(foundation::mcp::McpServer&)> addTools;
         };
@@ -160,6 +162,12 @@ export namespace editor::app
             RegisterWindowTools(m_host->Server(), Move(windows));
             InputToolSeams input;
             input.root = [self]() { return self->m_services.guiRoot ? self->m_services.guiRoot() : nullptr; };
+            input.drop = [self](Span<const String> paths, String& error)
+            {
+                if (!self->m_services.dropFiles)
+                    return false;
+                return self->m_services.dropFiles(paths, error);
+            };
             RegisterInputTools(m_host->Server(), Move(input));
             ProfilerToolSeams profiler;
             profiler.profiler = &foundation::profiler::Profiler::Get();

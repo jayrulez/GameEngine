@@ -270,6 +270,7 @@ namespace editor::app
         mcp.windows.request = [self](Span<const WindowShotRequest> requests) { self->m_windowCapture.Request(requests); };
         mcp.windows.shots = [self]() { return self->m_windowCapture.Shots(); };
         mcp.guiRoot = [self]() { return self->m_window.Root(); };
+        mcp.dropFiles = [self](Span<const String> paths, String& error) { return self->DropFiles(paths, error); };
         m_mcp = MakeUnique<EditorMcpService>(m_editorAllocator, m_editorAllocator, Move(mcp));
 
         // Per-subsystem editor plugins register here with the embedded host (every page's scenes
@@ -614,6 +615,19 @@ namespace editor::app
                                                       m_window.LoadMarkup(ExportDialog::kPath));
         }
         (void)m_exportDialog->Open(*root);
+    }
+
+    bool EditorApplication::DropFiles(Span<const String> paths, String& error)
+    {
+        editor::EditorProject* project = m_session.Project();
+        if (project == nullptr)
+        {
+            error = String(u8"no project is open");
+            return false;
+        }
+        foundation::content::Group* into = m_assets && m_assets->CurrentGroup() != nullptr ? m_assets->CurrentGroup() : project->SourceDb().RootGroup();
+        ImportFiles(paths, *into);
+        return true;
     }
 
     // Imports `paths` into `group`: at once when nothing needs review, else through the import
@@ -1059,14 +1073,13 @@ namespace editor::app
         {
             Array<foundation::shell::DroppedFile> dropped(m_editorAllocator);
             host.Shell()->DrainDroppedFiles(dropped);
-            editor::EditorProject* project = m_session.Project();
-            if (!dropped.IsEmpty() && project != nullptr)
+            if (!dropped.IsEmpty())
             {
                 Array<String> paths(m_editorAllocator);
                 for (const foundation::shell::DroppedFile& file : dropped)
                     paths.PushBack(file.path);
-                foundation::content::Group* into = m_assets && m_assets->CurrentGroup() != nullptr ? m_assets->CurrentGroup() : project->SourceDb().RootGroup();
-                ImportFiles(paths.AsSpan(), *into);
+                String ignored; // with no project open, a drop does nothing
+                (void)DropFiles(paths.AsSpan(), ignored);
             }
         }
         m_window.Update(dt);

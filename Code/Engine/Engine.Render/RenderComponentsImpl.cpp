@@ -588,6 +588,8 @@ namespace engine::render
             .Attribute("description",
                        String(u8"Captures the scene around the entity into a cubemap that gives "
                               u8"reflections to surfaces in its box."))
+            .DataVersion(1)          // v1: no resolution (every probe captures at the system's size)
+            .ReadsDataVersionsFrom(0) // a v0 probe's resolution is read and dropped
             .Method<&foundation::script::ComponentOf<ReflectionProbeComponent>, ReflectionProbeComponent>(
                 "of")
             .Method<&ReflectionProbeComponent::capture>("capture")
@@ -597,7 +599,6 @@ namespace engine::render
             .PropAttribute("description", String(u8"Fade width at the probe volume's edge"))
             .Property<&ReflectionProbeComponent::intensity>("intensity")
             .PropAttribute("range", Float4{0.0f, 5.0f, 0.05f, 0.0f})
-            .Property<&ReflectionProbeComponent::resolution>("resolution")
             .Property<&ReflectionProbeComponent::priority>("priority")
             .Property<&ReflectionProbeComponent::update>("update")
             .Property<&ReflectionProbeComponent::parallax>("parallax")

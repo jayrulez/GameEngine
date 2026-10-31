@@ -124,6 +124,15 @@
   retune the terrain samples (Snowline, the terrain playground) with the user, since every terrain
   scene's look changes.
 
+- **Reflection probe resolution as a scene setting** (user 2026-10-31): every probe captures at
+  `ReflectionProbeSystem::kCaptureRes` (128) and prefilters at `kPrefilterRes` (128), because all
+  probes share one cube array and its slices cannot differ in size. The component's per-probe
+  `resolution` never reached the renderer, so it was removed (ReflectionProbeComponent data version
+  1; a v0 probe's value is read and dropped). Make the size a scene render setting instead (64, 128
+  or 256, beside the environment's other settings) that rebuilds the captured and prefiltered
+  arrays when it changes and recaptures every probe (check whether the prefilter's mip count,
+  `kPrefilterMips`, should change with it).
+
 - **Windows on X11 stay composited, as a setting** (user 2026-10-30, from
   https://github.com/jayrulez/GameEngine/pull/15, closed): SDL asks X11 compositors to stand
   aside for its windows by default (`SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR`), so the

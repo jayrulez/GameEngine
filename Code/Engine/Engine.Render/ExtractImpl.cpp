@@ -840,7 +840,6 @@ namespace engine::render
                 p.halfExtents = pc.halfExtents;
                 p.blendDistance = pc.blendDistance;
                 p.intensity = pc.intensity;
-                p.resolution = pc.resolution;
                 p.priority = pc.priority;
                 p.update = pc.update;
                 p.parallax = pc.parallax;

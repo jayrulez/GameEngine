@@ -65,8 +65,7 @@ export namespace foundation::render
     class ReflectionProbeSystem
     {
     public:
-        // One fixed array resolution for all probe slices (a cube array can't vary per slice, so the
-        // component's per-probe `resolution` is not applied here).
+        // One resolution for every probe: they share one cube array, and its slices cannot differ.
         static constexpr u32 kCaptureRes = 128;
         static constexpr u32 kPrefilterRes = 128;
         static constexpr u32 kPrefilterMips = 5; // roughness = mip / (mips - 1)
@@ -176,7 +175,7 @@ export namespace foundation::render
         // Stable slot for a probe key: reuse if seen, else claim the next free slot (up to kMaxProbes).
         u32 SlotFor(u64 key);
 
-        // Cheap change signature over a probe's captured-input state (transform, box, resolution). A bit-mixed
+        // Cheap change signature over a probe's captured-input state (transform and box). A bit-mixed
         // hash of the floats; exact equality is fine here (it only needs to tell a change since last frame).
         [[nodiscard]] static u64 TransformSignature(const ReflectionProbe& p);
 

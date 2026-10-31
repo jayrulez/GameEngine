@@ -399,7 +399,6 @@ export namespace engine::render
             Float3{5.0f, 5.0f, 5.0f}; // box influence and proxy half-extents (world units)
         f32 blendDistance = 1.0f;     // soft falloff width inward from the box edge
         f32 intensity = 1.0f;         // reflection multiplier
-        u32 resolution = 128;         // captured cube face size (64, 128, 256)
         u32 priority = 0;             // tie-break when volumes overlap (higher wins)
         ProbeUpdateMode update = ProbeUpdateMode::Static;
         bool parallax = true; // box-project the reflection ray (rather than an infinite env)
@@ -498,7 +497,13 @@ export namespace engine::render
         foundation::core::Serialize(ar, "halfExtents", c.halfExtents);
         foundation::core::Serialize(ar, "blendDistance", c.blendDistance);
         foundation::core::Serialize(ar, "intensity", c.intensity);
-        foundation::core::Serialize(ar, "resolution", c.resolution);
+        if (ar.Mode() == SerializeMode::Read && ar.Version() == 0)
+        {
+            // A v0 probe carried a per-probe resolution the renderer never applied (every probe
+            // shares one cube array): read past it.
+            u32 resolution = 0;
+            foundation::core::Serialize(ar, "resolution", resolution);
+        }
         foundation::core::Serialize(ar, "priority", c.priority);
         foundation::core::Serialize(ar, "update", update);
         foundation::core::Serialize(ar, "parallax", c.parallax);

@@ -2100,6 +2100,84 @@ TEST_CASE("extract: a reflection probe's capture requests reach the extracted pr
     CHECK(after.ReflectionProbes()[0].captureRequest != before.ReflectionProbes()[0].captureRequest);
 }
 
+// A v0 probe stored a per-probe resolution between intensity and priority; v1 has none. The
+// legacy reader reads past it, so the fields after it land where they belong.
+TEST_CASE("ReflectionProbeComponent: a v0 probe reads, its resolution dropped")
+{
+    RegisterRenderComponentReflection();
+    const TypeInfo& type = TypeOf<ReflectionProbeComponent>();
+    CHECK(type.dataVersion == 1u);
+
+    MemoryStream v0;
+    {
+        BinarySerializer ar(v0, SerializeMode::Write);
+        const SerializedDataVersion chain[] = {{type.id, 0u}};
+        u32 n = 1;
+        ar.Key("dataVersions");
+        ar.BeginArray(n);
+        SerializedDataVersion entry = chain[0];
+        ar.Key("type");
+        ar.Scalar(&entry.typeId, ScalarKind::UInt64);
+        ar.Key("version");
+        ar.Scalar(&entry.version, ScalarKind::UInt32);
+        ar.EndArray();
+        ar.PushVersionScope(chain, 1);
+        Float3 halfExtents{3.0f, 2.0f, 4.0f};
+        f32 blendDistance = 0.5f;
+        f32 intensity = 1.5f;
+        u32 resolution = 256;
+        u32 priority = 7;
+        u8 update = static_cast<u8>(ProbeUpdateMode::Manual);
+        bool parallax = false;
+        bool enabled = true;
+        Serialize(ar, "halfExtents", halfExtents);
+        Serialize(ar, "blendDistance", blendDistance);
+        Serialize(ar, "intensity", intensity);
+        Serialize(ar, "resolution", resolution);
+        Serialize(ar, "priority", priority);
+        Serialize(ar, "update", update);
+        Serialize(ar, "parallax", parallax);
+        Serialize(ar, "enabled", enabled);
+        ar.PopVersionScope();
+        REQUIRE(ar.IsOk());
+    }
+    (void)v0.Seek(0, SeekOrigin::Begin);
+    ReflectionProbeComponent read;
+    {
+        BinarySerializer ar(v0, SerializeMode::Read);
+        BeginVersionedPayload(ar, type);
+        engine::render::Serialize(ar, read);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    CHECK(read.halfExtents.z == doctest::Approx(4.0f));
+    CHECK(read.intensity == doctest::Approx(1.5f));
+    CHECK(read.priority == 7u);
+    CHECK(read.update == ProbeUpdateMode::Manual);
+    CHECK_FALSE(read.parallax);
+
+    // And v1 round-trips without it.
+    MemoryStream v1;
+    {
+        BinarySerializer ar(v1, SerializeMode::Write);
+        BeginVersionedPayload(ar, type);
+        engine::render::Serialize(ar, read);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    (void)v1.Seek(0, SeekOrigin::Begin);
+    ReflectionProbeComponent again;
+    {
+        BinarySerializer ar(v1, SerializeMode::Read);
+        BeginVersionedPayload(ar, type);
+        engine::render::Serialize(ar, again);
+        EndVersionedPayload(ar);
+        REQUIRE(ar.IsOk());
+    }
+    CHECK(again.priority == 7u);
+    CHECK(again.update == ProbeUpdateMode::Manual);
+}
+
 // The camera depth prepass holds only what its forward draw will place on exactly the same depth:
 // an opaque material whose shader moves its vertices with a depth program of its own (a surface
 // shader's Vertex()) is drawn without it, as a fading mesh is; masked and blended keep theirs.

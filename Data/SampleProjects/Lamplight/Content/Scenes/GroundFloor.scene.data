@@ -16766,7 +16766,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">4262178574624311518</u64>
-					<u32 name="version">0</u32>
+					<u32 name="version">1</u32>
 				</array>
 				<object name="halfExtents">
 					<f32 name="x">4</f32>
@@ -16775,7 +16775,6 @@
 				</object>
 				<f32 name="blendDistance">0.5</f32>
 				<f32 name="intensity">1</f32>
-				<u32 name="resolution">128</u32>
 				<u32 name="priority">0</u32>
 				<u8 name="update">0</u8>
 				<bool name="parallax">true</bool>
@@ -16788,7 +16787,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">4262178574624311518</u64>
-					<u32 name="version">0</u32>
+					<u32 name="version">1</u32>
 				</array>
 				<object name="halfExtents">
 					<f32 name="x">4</f32>
@@ -16797,7 +16796,6 @@
 				</object>
 				<f32 name="blendDistance">0.5</f32>
 				<f32 name="intensity">1</f32>
-				<u32 name="resolution">128</u32>
 				<u32 name="priority">0</u32>
 				<u8 name="update">0</u8>
 				<bool name="parallax">true</bool>
@@ -16810,7 +16808,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">4262178574624311518</u64>
-					<u32 name="version">0</u32>
+					<u32 name="version">1</u32>
 				</array>
 				<object name="halfExtents">
 					<f32 name="x">4</f32>
@@ -16819,7 +16817,6 @@
 				</object>
 				<f32 name="blendDistance">0.5</f32>
 				<f32 name="intensity">1</f32>
-				<u32 name="resolution">128</u32>
 				<u32 name="priority">0</u32>
 				<u8 name="update">0</u8>
 				<bool name="parallax">true</bool>
@@ -16832,7 +16829,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">4262178574624311518</u64>
-					<u32 name="version">0</u32>
+					<u32 name="version">1</u32>
 				</array>
 				<object name="halfExtents">
 					<f32 name="x">6</f32>
@@ -16841,7 +16838,6 @@
 				</object>
 				<f32 name="blendDistance">0.5</f32>
 				<f32 name="intensity">1</f32>
-				<u32 name="resolution">128</u32>
 				<u32 name="priority">0</u32>
 				<u8 name="update">0</u8>
 				<bool name="parallax">true</bool>
@@ -16854,7 +16850,7 @@
 			<object name="data">
 				<array name="dataVersions" count="1">
 					<u64 name="type">4262178574624311518</u64>
-					<u32 name="version">0</u32>
+					<u32 name="version">1</u32>
 				</array>
 				<object name="halfExtents">
 					<f32 name="x">6</f32>
@@ -16863,7 +16859,6 @@
 				</object>
 				<f32 name="blendDistance">0.5</f32>
 				<f32 name="intensity">1</f32>
-				<u32 name="resolution">128</u32>
 				<u32 name="priority">0</u32>
 				<u8 name="update">0</u8>
 				<bool name="parallax">true</bool>

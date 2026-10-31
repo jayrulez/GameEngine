@@ -615,7 +615,6 @@ export namespace foundation::render
             Float3{5, 5, 5};      // box half-extents (world; influence and parallax proxy)
         f32 blendDistance = 1.0f; // soft falloff width inward from the box edge
         f32 intensity = 1.0f;     // reflection multiplier
-        u32 resolution = 128;     // captured cube face size
         u32 priority = 0;         // tie-break when volumes overlap (higher wins)
         ProbeUpdateMode update = ProbeUpdateMode::Static;
         bool parallax = true; // box-project the reflection ray (rather than an infinite env)

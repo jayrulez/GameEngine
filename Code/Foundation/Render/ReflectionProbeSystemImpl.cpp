@@ -368,7 +368,6 @@ namespace foundation::render
         mix(p.halfExtents.x);
         mix(p.halfExtents.y);
         mix(p.halfExtents.z);
-        h ^= static_cast<u64>(p.resolution);
         return h;
     }
 

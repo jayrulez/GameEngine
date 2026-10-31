@@ -82,7 +82,7 @@ namespace
         gui::GuiScriptBinding binding;
         Errors errors;
         core::RefPtr<script::IScriptManager> manager;
-        core::RefPtr<script::IScriptContext> context;
+        core::RefPtr<script::IScriptContext> scriptContext;
         core::RefPtr<gui::Node> frame;
         gui::ScreenStack* stack = nullptr;
 
@@ -134,20 +134,20 @@ namespace
             manager = script::angelscript::CreateScriptManager(core::DefaultAllocator());
             script::RegisterReflectedTypes(*manager);
             binding.root = root.Get();
-            context = manager->CreateContext();
-            context->SetErrorHandler(&errors);
-            gui::InstallGuiScriptService(*context, binding);
-            const core::Status loaded = context->Load(ReadData(SV(u8"Samples/UI/showcase/menu.as")).AsView(), SV(u8"menu.as"));
+            scriptContext = manager->CreateContext();
+            scriptContext->SetErrorHandler(&errors);
+            gui::InstallGuiScriptService(*scriptContext, binding);
+            const core::Status loaded = scriptContext->Load(ReadData(SV(u8"Samples/UI/showcase/menu.as")).AsView(), SV(u8"menu.as"));
             INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
             REQUIRE(loaded.IsOk());
             Frame(0.0);
         }
         ~Showcase()
         {
-            if (context)
+            if (scriptContext)
             {
-                gui::ClearGuiScriptService(*context);
-                context->SetErrorHandler(nullptr);
+                gui::ClearGuiScriptService(*scriptContext);
+                scriptContext->SetErrorHandler(nullptr);
             }
             gui::InputPrompts::Uninstall(root->GetContext());
         }
@@ -166,7 +166,7 @@ namespace
         void Frame(double seconds)
         {
             core::Variant dt[1] = {core::Variant::From<core::f64>(seconds)};
-            (void)context->Call(SV(u8"update"), core::Span<core::Variant>(dt, 1));
+            (void)scriptContext->Call(SV(u8"update"), core::Span<core::Variant>(dt, 1));
             root->GetContext().Update(core::Duration::FromSeconds(seconds));
             styles.ApplyTree(*root);
             (void)root->UpdateLayout();

@@ -320,35 +320,35 @@ namespace foundation::script::conformance
         RegisterReflectedTypes(*manager); // walks the registry + FinalizeTypes()
 
         // --- context + valid load ---
-        RefPtr<IScriptContext> context = manager->CreateContext();
-        REQUIRE(context.Get() != nullptr);
-        CHECK(context->Load(dialect.functionsModule, u8"conformance.functions").IsOk());
+        RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+        REQUIRE(scriptContext.Get() != nullptr);
+        CHECK(scriptContext->Load(dialect.functionsModule, u8"conformance.functions").IsOk());
 
         // --- Variant marshalling: numbers in/out, strings out, missing = NotFound ---
         {
             Variant args[] = {Variant::From(2), Variant::From(3)};
-            auto sum = context->Call(u8"add", Span<Variant>{args, 2});
+            auto sum = scriptContext->Call(u8"add", Span<Variant>{args, 2});
             REQUIRE(sum.HasValue());
             CHECK(sum.Value().Get<f64>() == doctest::Approx(5.0));
         }
         {
-            auto text = context->Call(u8"greeting", Span<Variant>{});
+            auto text = scriptContext->Call(u8"greeting", Span<Variant>{});
             REQUIRE(text.HasValue());
             CHECK(text.Value().Get<String>() == u8"hi");
         }
-        CHECK(context->Call(u8"no_such_function", Span<Variant>{}).Error() == ErrorCode::NotFound);
+        CHECK(scriptContext->Call(u8"no_such_function", Span<Variant>{}).Error() == ErrorCode::NotFound);
 
         // --- module globals surface as Variants ---
-        CHECK(context->GetGlobal(u8"answer").Get<f64>() == doctest::Approx(42.0));
+        CHECK(scriptContext->GetGlobal(u8"answer").Get<f64>() == doctest::Approx(42.0));
 
         // --- script classes: construct with args, invoke methods, state persists.
         // NOTE the contract does NOT promise a later Load preserves an earlier load's
         // globals (some backends replace the module) - only that live ScriptObjects survive. ---
-        CHECK(context->Load(dialect.counterClass, u8"conformance.counter").IsOk());
+        CHECK(scriptContext->Load(dialect.counterClass, u8"conformance.counter").IsOk());
         RefPtr<ScriptObject> counter;
         {
             Variant ctorArgs[] = {Variant::From(10)};
-            counter = context->CreateInstance(u8"Counter", Span<Variant>{ctorArgs, 1});
+            counter = scriptContext->CreateInstance(u8"Counter", Span<Variant>{ctorArgs, 1});
             REQUIRE(counter.Get() != nullptr);
             CHECK(counter->Invoke(u8"increment", Span<Variant>{}).HasValue());
             auto value = counter->Invoke(u8"value", Span<Variant>{});
@@ -381,11 +381,11 @@ namespace foundation::script::conformance
         // --- per-context services: pointer round-trip, unknown = null ---
         {
             int payload = 7;
-            context->SetService(u8"conformance.service", &payload);
-            CHECK(context->GetService(u8"conformance.service") == &payload);
-            CHECK(context->GetService(u8"conformance.unknown") == nullptr);
-            context->SetService(u8"conformance.service", nullptr);
-            CHECK(context->GetService(u8"conformance.service") == nullptr);
+            scriptContext->SetService(u8"conformance.service", &payload);
+            CHECK(scriptContext->GetService(u8"conformance.service") == &payload);
+            CHECK(scriptContext->GetService(u8"conformance.unknown") == nullptr);
+            scriptContext->SetService(u8"conformance.service", nullptr);
+            CHECK(scriptContext->GetService(u8"conformance.service") == nullptr);
         }
 
         // --- GC hook: callable any time; live script objects and their state survive ---
@@ -410,10 +410,10 @@ namespace foundation::script::conformance
 
             // (1) a timed wait: does NOT complete before ~1s of accumulated advance, DOES after.
             {
-                RefPtr<IScriptContext> ctx = manager->CreateContext();
-                REQUIRE(ctx.Get() != nullptr);
-                CHECK(ctx->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
-                RefPtr<ScriptObject> coro = ctx->CreateInstance(u8"Coro", Span<Variant>{});
+                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+                REQUIRE(scriptContext.Get() != nullptr);
+                CHECK(scriptContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
+                RefPtr<ScriptObject> coro = scriptContext->CreateInstance(u8"Coro", Span<Variant>{});
                 REQUIRE(coro.Get() != nullptr);
                 REQUIRE(coro->Invoke(u8"begin", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 3; ++i)
@@ -430,9 +430,9 @@ namespace foundation::script::conformance
 
             // (2) waitUntil resumes when the predicate flips (not before).
             {
-                RefPtr<IScriptContext> ctx = manager->CreateContext();
-                CHECK(ctx->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
-                RefPtr<ScriptObject> coro = ctx->CreateInstance(u8"Coro", Span<Variant>{});
+                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+                CHECK(scriptContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
+                RefPtr<ScriptObject> coro = scriptContext->CreateInstance(u8"Coro", Span<Variant>{});
                 REQUIRE(coro.Get() != nullptr);
                 REQUIRE(coro->Invoke(u8"beginUntil", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 5; ++i)
@@ -450,9 +450,9 @@ namespace foundation::script::conformance
 
             // (3) CancelCoroutinesFor stops a pending coroutine (it never completes after).
             {
-                RefPtr<IScriptContext> ctx = manager->CreateContext();
-                CHECK(ctx->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
-                RefPtr<ScriptObject> coro = ctx->CreateInstance(u8"Coro", Span<Variant>{});
+                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+                CHECK(scriptContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
+                RefPtr<ScriptObject> coro = scriptContext->CreateInstance(u8"Coro", Span<Variant>{});
                 REQUIRE(coro.Get() != nullptr);
                 REQUIRE(coro->Invoke(u8"begin", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 3; ++i)
@@ -520,14 +520,14 @@ namespace foundation::script::conformance
             !dialect.delegateModule.IsEmpty())
         {
             manager->RegisterType(DelegateSignal::StaticType()); // late registration is supported
-            RefPtr<IScriptContext> ctx = manager->CreateContext();
-            REQUIRE(ctx.Get() != nullptr);
+            RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+            REQUIRE(scriptContext.Get() != nullptr);
             // Some backends scope reflected foreign types to the "main" module; load there so the
             // script can see DelegateSignal. AngelScript registers types engine-globally, so
             // the chunk name is immaterial to it.
-            CHECK(ctx->Load(dialect.delegateModule, u8"main").IsOk());
+            CHECK(scriptContext->Load(dialect.delegateModule, u8"main").IsOk());
 
-            Variant signalVar = ctx->GetGlobal(u8"signal");
+            Variant signalVar = scriptContext->GetGlobal(u8"signal");
             REQUIRE(signalVar.IsObject());
             DelegateSignal* signal = signalVar.AsObject<DelegateSignal>();
             REQUIRE(signal != nullptr);

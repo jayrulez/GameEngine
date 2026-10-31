@@ -102,15 +102,15 @@ namespace engine::runtime
         (void)once;
     }
 
-    void GameInstance::InstallRunServices(script::IScriptContext& context)
+    void GameInstance::InstallRunServices(script::IScriptContext& scriptContext)
     {
         m_runBinding.runEvents = &Events();            // run.events() -> THIS run's bus
-        InstallRunScriptService(context, m_runBinding);   // run.* -> this instance's registry
+        InstallRunScriptService(scriptContext, m_runBinding);   // run.* -> this instance's registry
         // THIS instance's input runtime as the context's Input service (overriding the shared editor
         // runtime the run-host configurator installed), so the run reads only ITS own source.
-        context.SetService(input::kInputScriptService, &m_inputRuntime);
-        InstallSaveScriptService(context, m_save); // Save.* -> this run's save
-        foundation::http::InstallHttpScriptService(context, m_http); // Http.* -> this run's client
+        scriptContext.SetService(input::kInputScriptService, &m_inputRuntime);
+        InstallSaveScriptService(scriptContext, m_save); // Save.* -> this run's save
+        foundation::http::InstallHttpScriptService(scriptContext, m_http); // Http.* -> this run's client
     }
 
     foundation::net::ITlsBackend* GameInstance::TlsBackend()
@@ -132,18 +132,18 @@ namespace engine::runtime
         // THIS instance's run host is the game's context. The host was
         // configured by the app (ConfigureRunHost) with the facades + Scene.spawn + entity.send routing.
         m_runHost.SetExternalErrorSink(m_errorHandler); // before the context is created
-        script::IScriptContext* context = m_runHost.EnsureContextForFile(name);
-        if (context == nullptr)
+        script::IScriptContext* scriptContext = m_runHost.EnsureContextForFile(name);
+        if (scriptContext == nullptr)
         {
             LOG_ERROR(u8"App", u8"no script backend for '{}'", name);
             m_scriptFault = Format(u8"no script backend runs '{}'", name);
             return false;
         }
-        m_scriptContext = core::RefPtr<script::IScriptContext>(context);
+        m_scriptContext = core::RefPtr<script::IScriptContext>(scriptContext);
         m_runHost.SetGameScriptHold(true);
         // The game script (its menu) can now call Net.startServer()/connect() - resolve the controller.
         m_network.InstallScriptBinding(m_scriptContext.Get());
-        InstallRunServices(*context); // the host's owner services did this at creation; idempotent
+        InstallRunServices(*scriptContext); // the host's owner services did this at creation; idempotent
 
         const bool loaded = m_scriptContext->Load(source, name).IsOk();
         m_runHost

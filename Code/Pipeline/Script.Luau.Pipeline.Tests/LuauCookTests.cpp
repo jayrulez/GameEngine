@@ -246,9 +246,9 @@ TEST_CASE("luau.cook: the cook stores loadable bytecode in the pack (the player 
         BinarySerializer reader(stream, SerializeMode::Read);
         blob->Serialize(reader);
     }
-    RefPtr<IScriptContext> context = manager->CreateContext();
-    REQUIRE(context->LoadBlob(*blob).IsOk());
-    RefPtr<ScriptObject> instance = context->CreateInstance(u8"NewBehavior", Span<Variant>{});
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(scriptContext->LoadBlob(*blob).IsOk());
+    RefPtr<ScriptObject> instance = scriptContext->CreateInstance(u8"NewBehavior", Span<Variant>{});
     CHECK(instance.Get() != nullptr);
 }
 

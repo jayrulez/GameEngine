@@ -277,9 +277,9 @@ export namespace engine::script
         void SetOwnerServices(Function<void(IScriptContext&)> services)
         {
             m_ownerServices = Move(services);
-            if (m_context.Get() != nullptr && m_ownerServices)
+            if (m_scriptContext.Get() != nullptr && m_ownerServices)
             {
-                m_ownerServices(*m_context);
+                m_ownerServices(*m_scriptContext);
             }
         }
         void SetExternalErrorSink(IScriptErrorHandler* sink) noexcept
@@ -321,7 +321,7 @@ export namespace engine::script
         /// gives. Empty when none was reported since the last take.
         [[nodiscard]] String TakeLastError() { return Move(m_errorSink.last); }
 
-        [[nodiscard]] IScriptContext* Context() const noexcept { return m_context.Get(); }
+        [[nodiscard]] IScriptContext* ScriptContext() const noexcept { return m_scriptContext.Get(); }
         [[nodiscard]] IScriptManager* Manager() const noexcept { return m_manager.Get(); }
         [[nodiscard]] StringView Language() const noexcept { return m_language.AsView(); }
         [[nodiscard]] ScriptRuntimeBinding& Binding() noexcept { return m_binding; }
@@ -331,11 +331,11 @@ export namespace engine::script
         /// gameplay context per run - the locked rule) and logged once.
         [[nodiscard]] IScriptContext* EnsureContext(StringView languageId)
         {
-            if (m_context.Get() != nullptr)
+            if (m_scriptContext.Get() != nullptr)
             {
                 if (m_language.AsView() == languageId)
                 {
-                    return m_context.Get();
+                    return m_scriptContext.Get();
                 }
                 WarnLanguageMismatchOnce(languageId);
                 return nullptr;
@@ -352,8 +352,8 @@ export namespace engine::script
                 return nullptr;
             }
             RegisterReflectedTypes(*m_manager);
-            m_context = m_manager->CreateContext();
-            if (m_context.Get() == nullptr)
+            m_scriptContext = m_manager->CreateContext();
+            if (m_scriptContext.Get() == nullptr)
             {
                 m_manager = nullptr;
                 return nullptr;
@@ -362,20 +362,20 @@ export namespace engine::script
             m_binding.timeSeconds = 0.0;
             m_binding.deltaSeconds = 0.0f;
             m_binding.random = core::Random{}; // fresh per-run RNG
-            m_context->SetErrorHandler(&m_errorSink);
-            m_context->SetService(kScriptRuntimeService, &m_binding);
+            m_scriptContext->SetErrorHandler(&m_errorSink);
+            m_scriptContext->SetService(kScriptRuntimeService, &m_binding);
             if (m_configurator)
             {
-                m_configurator(*m_context);
+                m_configurator(*m_scriptContext);
             }
             if (m_ownerServices)
             {
-                m_ownerServices(*m_context); // the owner's own, over the app's shared ones
+                m_ownerServices(*m_scriptContext); // the owner's own, over the app's shared ones
             }
             m_moduleCurrent = false;
             EnsureDebugger(); // a debugger requested before the context existed attaches now
             LOG_DEBUG(u8"Script", u8"run script context created ({})", languageId);
-            return m_context.Get();
+            return m_scriptContext.Get();
         }
 
         /// The run context resolved by a script FILE's extension (the game-script path).
@@ -422,7 +422,7 @@ export namespace engine::script
                 return nullptr;
             }
             RefPtr<ScriptObject> instance =
-                m_context->CreateInstance(scriptClass.className.AsView(), args);
+                m_scriptContext->CreateInstance(scriptClass.className.AsView(), args);
             if (instance.Get() == nullptr)
             {
                 LOG_ERROR(u8"Script", u8"class '{}' failed to instantiate",
@@ -490,7 +490,7 @@ export namespace engine::script
             }
             ++m_generation;
             const String moduleName = Format(u8"behaviors#{}", m_generation);
-            if (!m_context
+            if (!m_scriptContext
                      ->LoadBehaviorModule(
                          Span<const BehaviorModuleClass>{m_classSourceScratch.Data(),
                                                          m_classSourceScratch.Size()},
@@ -511,13 +511,13 @@ export namespace engine::script
         /// context alive until released - callers destroy instances FIRST.
         void Teardown()
         {
-            if (m_context.Get() == nullptr && m_manager.Get() == nullptr)
+            if (m_scriptContext.Get() == nullptr && m_manager.Get() == nullptr)
             {
                 return;
             }
-            if (m_context.Get() != nullptr)
+            if (m_scriptContext.Get() != nullptr)
             {
-                m_context->SetErrorHandler(nullptr);
+                m_scriptContext->SetErrorHandler(nullptr);
             }
             // The debugger holds engine contexts (a paused one) - release it BEFORE the
             // manager/engine it borrows. Clear the REQUEST + configurator too: they capture the
@@ -527,7 +527,7 @@ export namespace engine::script
             m_debugTracker.Reset();
             m_debuggerRequested = false;
             m_debuggerConfigurator = Function<void(IScriptDebugger&)>{};
-            m_context = nullptr;
+            m_scriptContext = nullptr;
             m_manager = nullptr;
             m_language = String{};
             m_loadedClasses.Clear();
@@ -536,7 +536,7 @@ export namespace engine::script
             LOG_DEBUG(u8"Script", u8"run script context torn down");
         }
 
-        [[nodiscard]] bool IsActive() const noexcept { return m_context.Get() != nullptr; }
+        [[nodiscard]] bool IsActive() const noexcept { return m_scriptContext.Get() != nullptr; }
 
     private:
         // Create the debugger once the manager exists and it was requested (idempotent). The
@@ -578,7 +578,7 @@ export namespace engine::script
         }
 
         RefPtr<IScriptManager> m_manager;
-        RefPtr<IScriptContext> m_context;
+        RefPtr<IScriptContext> m_scriptContext;
         String m_language;
         RunScriptErrorSink m_errorSink;
         ScriptRuntimeBinding m_binding;
@@ -1699,11 +1699,11 @@ export namespace engine::script
         {
             ScriptSubsystem* self = this;
             host.SetContextConfigurator(
-                Function<void(IScriptContext&)>{[self](IScriptContext& context)
+                Function<void(IScriptContext&)>{[self](IScriptContext& scriptContext)
                                                 {
                                                     if (self->m_configurator)
                                                     {
-                                                        self->m_configurator(context);
+                                                        self->m_configurator(scriptContext);
                                                     }
                                                 }});
             // Resource-swap seam: forward to the app's getter at call time, so a manager

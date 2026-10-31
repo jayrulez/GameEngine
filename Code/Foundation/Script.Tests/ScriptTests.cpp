@@ -95,37 +95,37 @@ TEST_CASE("script: reflected types register with a manager")
 TEST_CASE("script: context round-trips value and object globals as Variant")
 {
     RefPtr<MockManager> manager = MakeRef<MockManager>(DefaultAllocator());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // Value global.
-    ctx->SetGlobal(u8"pos", Variant::From(Float3{1.0f, 2.0f, 3.0f}));
-    CHECK(ctx->GetGlobal(u8"pos").Get<Float3>() == Float3{1.0f, 2.0f, 3.0f});
+    scriptContext->SetGlobal(u8"pos", Variant::From(Float3{1.0f, 2.0f, 3.0f}));
+    CHECK(scriptContext->GetGlobal(u8"pos").Get<Float3>() == Float3{1.0f, 2.0f, 3.0f});
 
     // Object global keeps the object alive and reports its dynamic type.
     RefPtr<Widget> widget = MakeRef<Widget>(DefaultAllocator());
     widget->id = 42;
-    ctx->SetGlobal(u8"w", Variant::From(widget));
+    scriptContext->SetGlobal(u8"w", Variant::From(widget));
     CHECK(widget->RefCount() == 2u); // widget + the global's Variant
 
-    Variant got = ctx->GetGlobal(u8"w");
+    Variant got = scriptContext->GetGlobal(u8"w");
     CHECK(got.IsObject());
     CHECK(got.Type() == &Widget::StaticType());
     REQUIRE(got.AsObject<Widget>() != nullptr);
     CHECK(got.AsObject<Widget>()->id == 42);
 
     // Missing global -> empty Variant.
-    CHECK(ctx->GetGlobal(u8"missing").IsEmpty());
+    CHECK(scriptContext->GetGlobal(u8"missing").IsEmpty());
 }
 
 TEST_CASE("script: backend reports unsupported operations cleanly")
 {
     RefPtr<MockManager> manager = MakeRef<MockManager>(DefaultAllocator());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    CHECK(ctx->Load(u8"print('hi')", u8"chunk").Code() == ErrorCode::NotSupported);
-    CHECK_FALSE(ctx->HasFunction(u8"main"));
-    CHECK(ctx->Call(u8"main", Span<Variant>{}).Error() == ErrorCode::NotSupported);
+    CHECK(scriptContext->Load(u8"print('hi')", u8"chunk").Code() == ErrorCode::NotSupported);
+    CHECK_FALSE(scriptContext->HasFunction(u8"main"));
+    CHECK(scriptContext->Call(u8"main", Span<Variant>{}).Error() == ErrorCode::NotSupported);
 }
 
 namespace

@@ -316,7 +316,10 @@ only if the callback becomes a burden.
 - **The script context's names made explicit** (user 2026-10-30, regardless of this spec):
   parameters, locals and members that hold an `IScriptContext` and are called `context` or
   `m_context` become `scriptContext` / `m_scriptContext`, so a reader never has to ask which
-  context. Mechanical, its own commit, before or alongside P2.
+  context. Mechanical, its own commit, before or alongside P2. Done on branch `run` after P3:
+  133 parameters, locals and members in 36 files (scoped renames, the compiler checking each),
+  `ScriptRunHost::Context()` now `ScriptContext()`; AngelScript's own VM context
+  (`asIScriptContext`) and the GUI's contexts keep their names.
 - **The subsystem manager's rename**: done (`Specs/subsystem-manager-rename.md`).
 
 ## Open questions (answered 2026-10-30, as proposed)

@@ -500,9 +500,9 @@ namespace foundation::gui
     {
         DataModel* ScriptDataModel()
         {
-            foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
+            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
             const auto* binding =
-                context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
+                scriptContext != nullptr ? static_cast<const GuiScriptBinding*>(scriptContext->GetService(kGuiScriptService)) : nullptr;
             SceneRoot* root = binding != nullptr ? binding->Root() : nullptr;
             return root != nullptr ? &root->GetContext().GetData() : nullptr;
         }
@@ -532,9 +532,9 @@ namespace foundation::gui
     {
         SceneRoot* ScriptRoot()
         {
-            foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
+            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
             const auto* binding =
-                context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
+                scriptContext != nullptr ? static_cast<const GuiScriptBinding*>(scriptContext->GetService(kGuiScriptService)) : nullptr;
             return binding != nullptr ? binding->Root() : nullptr;
         }
     }
@@ -699,9 +699,9 @@ namespace foundation::gui
 
     core::Variant Gui::Root()
     {
-        foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
+        foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
         const auto* binding =
-            context != nullptr ? static_cast<const GuiScriptBinding*>(context->GetService(kGuiScriptService)) : nullptr;
+            scriptContext != nullptr ? static_cast<const GuiScriptBinding*>(scriptContext->GetService(kGuiScriptService)) : nullptr;
         SceneRoot* root = binding != nullptr ? binding->Root() : nullptr;
         return root != nullptr ? root->HandleAs(Node::StaticType()) : core::Variant{};
     }

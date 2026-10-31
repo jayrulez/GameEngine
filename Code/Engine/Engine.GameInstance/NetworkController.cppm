@@ -77,12 +77,12 @@ export namespace engine::runtime
 
         /// Point `context` at this controller's net binding (controller=this), so the Net facade resolves
         /// THIS run's controller. Idempotent; null-safe (no-op when the context is null).
-        void InstallScriptBinding(script::IScriptContext* context)
+        void InstallScriptBinding(script::IScriptContext* scriptContext)
         {
             m_binding.controller = this; // stable; the endpoint m_net points at may come and go
-            if (context != nullptr)
+            if (scriptContext != nullptr)
             {
-                net::InstallNetScriptService(*context, m_binding);
+                net::InstallNetScriptService(*scriptContext, m_binding);
             }
         }
 

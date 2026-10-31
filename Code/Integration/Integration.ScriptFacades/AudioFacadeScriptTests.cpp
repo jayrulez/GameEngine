@@ -142,17 +142,17 @@ namespace
         REQUIRE(subsystem.Engine() != nullptr);
 
         foundation::script::RegisterReflectedTypes(*scripts);
-        RefPtr<foundation::script::IScriptContext> ctx = scripts->CreateContext();
-        REQUIRE(ctx.Get() != nullptr);
-        subsystem.ExposeToScript(*ctx, &manager);
+        RefPtr<foundation::script::IScriptContext> scriptContext = scripts->CreateContext();
+        REQUIRE(scriptContext.Get() != nullptr);
+        subsystem.ExposeToScript(*scriptContext, &manager);
 
-        REQUIRE(ctx->Load(script, u8"main").IsOk());
-        CHECK(ctx->GetGlobal(u8"Played").Get<bool>());
-        CHECK(ctx->GetGlobal(u8"Spatial").Get<bool>());
-        CHECK(ctx->GetGlobal(u8"Cue").Get<bool>());
-        CHECK(ctx->GetGlobal(u8"Music").Get<bool>());
-        CHECK_FALSE(ctx->GetGlobal(u8"Missing").Get<bool>());
-        CHECK_FALSE(ctx->GetGlobal(u8"MissingAgain").Get<bool>());
+        REQUIRE(scriptContext->Load(script, u8"main").IsOk());
+        CHECK(scriptContext->GetGlobal(u8"Played").Get<bool>());
+        CHECK(scriptContext->GetGlobal(u8"Spatial").Get<bool>());
+        CHECK(scriptContext->GetGlobal(u8"Cue").Get<bool>());
+        CHECK(scriptContext->GetGlobal(u8"Music").Get<bool>());
+        CHECK_FALSE(scriptContext->GetGlobal(u8"Missing").Get<bool>());
+        CHECK_FALSE(scriptContext->GetGlobal(u8"MissingAgain").Get<bool>());
         CHECK(subsystem.Engine()->ActiveVoiceCount() == 4u);
         VoiceStatus music;
         REQUIRE(subsystem.Engine()->GetVoiceStatus(subsystem.Engine()->MusicVoice(), music));

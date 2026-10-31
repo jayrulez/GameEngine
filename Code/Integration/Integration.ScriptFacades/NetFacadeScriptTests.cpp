@@ -540,13 +540,13 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
 
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     ServerFixture fx;
-    net::InstallNetScriptService(*ctx, fx.binding);
+    net::InstallNetScriptService(*scriptContext, fx.binding);
 
     // AngelScript: statics live in the type's namespace (Net::isServer()); logic in main().
-    const Status status = ctx->Load(u8"bool IsServer;\n"
+    const Status status = scriptContext->Load(u8"bool IsServer;\n"
                                     u8"bool IsClient;\n"
                                     u8"int Peers;\n"
                                     u8"bool CanHost;\n"
@@ -559,11 +559,11 @@ TEST_CASE("net-facade: AngelScript reads the live session through the Net facade
                                     u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(ctx->GetGlobal(u8"IsServer").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"IsClient").Get<bool>() == false);
-    CHECK(ctx->GetGlobal(u8"Peers").Get<f64>() ==
+    CHECK(scriptContext->GetGlobal(u8"IsServer").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"IsClient").Get<bool>() == false);
+    CHECK(scriptContext->GetGlobal(u8"Peers").Get<f64>() ==
           0.0); // the AS backend unifies integer globals to f64
-    CHECK(ctx->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost()); // the build's, not the session's
+    CHECK(scriptContext->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost()); // the build's, not the session's
 }
 #endif // OPTION_HAS_ANGELSCRIPT
 
@@ -575,22 +575,22 @@ TEST_CASE("net-facade: Luau reads the live session through the Net facade")
 
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     ServerFixture fx;
-    net::InstallNetScriptService(*ctx, fx.binding);
+    net::InstallNetScriptService(*scriptContext, fx.binding);
 
     // Luau: statics via `.`; the chunk runs at top level, so the globals it assigns are readable.
-    const Status status = ctx->Load(u8"IsServer = Net.isServer()\n"
+    const Status status = scriptContext->Load(u8"IsServer = Net.isServer()\n"
                                     u8"IsClient = Net.isClient()\n"
                                     u8"Peers = Net.peerCount()\n"
                                     u8"CanHost = Net.canHost()\n",
                                     u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(ctx->GetGlobal(u8"IsServer").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"IsClient").Get<bool>() == false);
-    CHECK(ctx->GetGlobal(u8"Peers").Get<f64>() == 0.0);
-    CHECK(ctx->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost());
+    CHECK(scriptContext->GetGlobal(u8"IsServer").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"IsClient").Get<bool>() == false);
+    CHECK(scriptContext->GetGlobal(u8"Peers").Get<f64>() == 0.0);
+    CHECK(scriptContext->GetGlobal(u8"CanHost").Get<bool>() == net::NetworkManager::CanHost());
 }
 #endif // OPTION_HAS_LUAU

@@ -348,10 +348,10 @@ TEST_CASE("as.cook: the cook stores loadable bytecode in the pack (the player pa
         BinarySerializer reader(stream, SerializeMode::Read);
         blob->Serialize(reader);
     }
-    RefPtr<IScriptContext> context = manager->CreateContext();
-    REQUIRE(context->LoadBlob(*blob).IsOk());
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(scriptContext->LoadBlob(*blob).IsOk());
     Variant args[] = {Variant::From<f64>(21.0)};
-    CHECK(context->Call(u8"twice", Span<Variant>{args, 1}).Value().Get<f64>() ==
+    CHECK(scriptContext->Call(u8"twice", Span<Variant>{args, 1}).Value().Get<f64>() ==
           doctest::Approx(42.0));
 }
 

@@ -395,13 +395,13 @@ export namespace foundation::net
 
     // Point / clear a script context's Net facade at a binding. The binding (a GameInstance member)
     // must outlive the context; the owner clears it before teardown. The facade reads binding.controller.
-    inline void InstallNetScriptService(IScriptContext& context, NetScriptBinding& binding)
+    inline void InstallNetScriptService(IScriptContext& scriptContext, NetScriptBinding& binding)
     {
-        context.SetService(kNetScriptService, &binding);
+        scriptContext.SetService(kNetScriptService, &binding);
     }
-    inline void ClearNetScriptService(IScriptContext& context)
+    inline void ClearNetScriptService(IScriptContext& scriptContext)
     {
-        context.SetService(kNetScriptService, nullptr);
+        scriptContext.SetService(kNetScriptService, nullptr);
     }
 
     // Script facade: read the live session, drive roles (server/connect/disconnect), and fire RPCs.
@@ -414,9 +414,9 @@ export namespace foundation::net
     public:
         [[nodiscard]] static NetScriptBinding* Resolve()
         {
-            IScriptContext* context = CurrentScriptContext();
-            return context != nullptr
-                       ? static_cast<NetScriptBinding*>(context->GetService(kNetScriptService))
+            IScriptContext* scriptContext = CurrentScriptContext();
+            return scriptContext != nullptr
+                       ? static_cast<NetScriptBinding*>(scriptContext->GetService(kNetScriptService))
                        : nullptr;
         }
         // The live endpoint for the current script context, or null when offline.

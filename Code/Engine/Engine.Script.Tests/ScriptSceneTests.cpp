@@ -720,7 +720,7 @@ TEST_CASE("script.scene: onDestroy fires on entity destroy AND on scene stop; st
     bed.Frame();
     CHECK(bed.scripts->InstanceCount() == 1u);
     {
-        const Variant count = bed.host.Context()->GetGlobal(u8"DestroyCount");
+        const Variant count = bed.host.ScriptContext()->GetGlobal(u8"DestroyCount");
         REQUIRE(count.TryGet<f64>() != nullptr);
         CHECK(*count.TryGet<f64>() == 1.0);
     }
@@ -728,7 +728,7 @@ TEST_CASE("script.scene: onDestroy fires on entity destroy AND on scene stop; st
     bed.scene.Stop();
     CHECK(bed.scripts->InstanceCount() == 0u);
     {
-        const Variant count = bed.host.Context()->GetGlobal(u8"DestroyCount");
+        const Variant count = bed.host.ScriptContext()->GetGlobal(u8"DestroyCount");
         REQUIRE(count.TryGet<f64>() != nullptr);
         CHECK(*count.TryGet<f64>() == 2.0);
     }
@@ -1523,7 +1523,7 @@ TEST_CASE("script.scene: LUAU onDestroy fires on entity destroy AND on scene sto
     bed.Frame();
     CHECK(bed.scripts->InstanceCount() == 1u);
     {
-        const Variant count = bed.host.Context()->GetGlobal(u8"DestroyCount");
+        const Variant count = bed.host.ScriptContext()->GetGlobal(u8"DestroyCount");
         REQUIRE(count.TryGet<f64>() != nullptr);
         CHECK(*count.TryGet<f64>() == 1.0);
     }
@@ -1531,7 +1531,7 @@ TEST_CASE("script.scene: LUAU onDestroy fires on entity destroy AND on scene sto
     bed.scene.Stop();
     CHECK(bed.scripts->InstanceCount() == 0u);
     {
-        const Variant count = bed.host.Context()->GetGlobal(u8"DestroyCount");
+        const Variant count = bed.host.ScriptContext()->GetGlobal(u8"DestroyCount");
         REQUIRE(count.TryGet<f64>() != nullptr);
         CHECK(*count.TryGet<f64>() == 2.0);
     }
@@ -2441,7 +2441,7 @@ TEST_CASE("script.scene: destroying a behavior cancels its pending coroutine (ne
     bed.Frame(0.5f);
     bed.Frame(0.5f); // well past 1.0s - a cancelled coroutine must not run
 
-    const Variant fired = bed.host.Context()->GetGlobal(u8"GhostFired");
+    const Variant fired = bed.host.ScriptContext()->GetGlobal(u8"GhostFired");
     REQUIRE(fired.TryGet<f64>() != nullptr);
     CHECK(*fired.TryGet<f64>() == 0.0);
 }
@@ -2473,7 +2473,7 @@ TEST_CASE("script.scene: disabling a behavior cancels its pending coroutine (nev
     bed.Frame(0.5f);
     bed.Frame(0.5f); // past 1.0s - must not fire
 
-    const Variant fired = bed.host.Context()->GetGlobal(u8"SleeperFired");
+    const Variant fired = bed.host.ScriptContext()->GetGlobal(u8"SleeperFired");
     REQUIRE(fired.TryGet<f64>() != nullptr);
     CHECK(*fired.TryGet<f64>() == 0.0);
 }
@@ -3397,7 +3397,7 @@ TEST_CASE("script.scene: DebugDraw.of(scene) appends to THIS scene's list on the
     // The app-side wiring: ExposeToScript installs the per-context render service at context
     // creation (the host's configurator seam, exactly like Input/Audio in a real run).
     bed.host.SetContextConfigurator(Function<void(IScriptContext&)>{
-        [&sub](IScriptContext& ctx) { sub.ExposeToScript(ctx); }});
+        [&sub](IScriptContext& scriptContext) { sub.ExposeToScript(scriptContext); }});
 
     RefPtr<ScriptClass> gizmo =
         MakeClass(u8"Gizmo",
@@ -5485,7 +5485,7 @@ TEST_CASE("script.scene: DebugDraw draws by Float3 and Color, over the scene wit
     engine::render::RenderSubsystem sub{DefaultAllocator(), device, 2, dataFs};
     ScriptedScene bed;
     bed.host.SetContextConfigurator(Function<void(IScriptContext&)>{
-        [&sub](IScriptContext& ctx) { sub.ExposeToScript(ctx); }});
+        [&sub](IScriptContext& scriptContext) { sub.ExposeToScript(scriptContext); }});
 
     RefPtr<ScriptClass> gizmo =
         MakeClass(u8"Gizmo",

@@ -69,16 +69,16 @@ namespace
         root->GetContext().SetResourceProvider(&documents);
         gui::GuiScriptBinding binding;
         binding.root = root.Get();
-        core::RefPtr<script::IScriptContext> context = manager.CreateContext();
+        core::RefPtr<script::IScriptContext> scriptContext = manager.CreateContext();
         Errors errors;
-        context->SetErrorHandler(&errors);
-        gui::InstallGuiScriptService(*context, binding);
-        const core::Status loaded = context->Load(source, u8"main");
+        scriptContext->SetErrorHandler(&errors);
+        gui::InstallGuiScriptService(*scriptContext, binding);
+        const core::Status loaded = scriptContext->Load(source, u8"main");
         INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
         REQUIRE(loaded.IsOk());
         const auto number = [&](const char8_t* function)
         {
-            core::Result<core::Variant> result = context->Call(function, core::Span<core::Variant>{});
+            core::Result<core::Variant> result = scriptContext->Call(function, core::Span<core::Variant>{});
             INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
             REQUIRE(result.HasValue());
             const double* value = result.Value().TryGet<double>();
@@ -93,8 +93,8 @@ namespace
         CHECK(number(u8"paused") == doctest::Approx(0.0));
         CHECK(number(u8"left") == doctest::Approx(1.0));
         CHECK(errors.count == 0);
-        gui::ClearGuiScriptService(*context);
-        context->SetErrorHandler(nullptr);
+        gui::ClearGuiScriptService(*scriptContext);
+        scriptContext->SetErrorHandler(nullptr);
     }
 }
 

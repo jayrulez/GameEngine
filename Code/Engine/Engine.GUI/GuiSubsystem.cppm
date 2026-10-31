@@ -548,7 +548,7 @@ export namespace engine::gui
 
         // ---- scripts ----
         /// `context`'s scripts given the screen tier's root (`gui::root()`).
-        void ExposeToScript(foundation::script::IScriptContext& context);
+        void ExposeToScript(foundation::script::IScriptContext& scriptContext);
 
         // ---- input ----
         /// The window whose platform text input (IME) follows the GUI's focus (the player's main

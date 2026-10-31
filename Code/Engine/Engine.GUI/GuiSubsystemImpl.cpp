@@ -882,7 +882,7 @@ namespace engine::gui
             m_overlay->RemoveChild(&overlay);
     }
 
-    void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& context) { InstallGuiScriptService(context, m_scriptBinding); }
+    void GuiSubsystem::ExposeToScript(foundation::script::IScriptContext& scriptContext) { InstallGuiScriptService(scriptContext, m_scriptBinding); }
 
     void GuiSubsystem::OnReady()
     {

@@ -77,8 +77,8 @@ export namespace engine::runtime
     public:
         [[nodiscard]] static RunSave* Resolve()
         {
-            script::IScriptContext* context = script::CurrentScriptContext();
-            return context != nullptr ? static_cast<RunSave*>(context->GetService(kSaveScriptService))
+            script::IScriptContext* scriptContext = script::CurrentScriptContext();
+            return scriptContext != nullptr ? static_cast<RunSave*>(scriptContext->GetService(kSaveScriptService))
                                       : nullptr;
         }
 
@@ -103,9 +103,9 @@ export namespace engine::runtime
         static bool flush();
     };
 
-    inline void InstallSaveScriptService(script::IScriptContext& context, RunSave& save)
+    inline void InstallSaveScriptService(script::IScriptContext& scriptContext, RunSave& save)
     {
-        context.SetService(kSaveScriptService, &save);
+        scriptContext.SetService(kSaveScriptService, &save);
     }
 
     // Registers the `Save` facade (and the save section's type, which reading a save file needs).

@@ -321,10 +321,10 @@ export namespace foundation::script
             {
                 return;
             }
-            IScriptContext* context = CurrentScriptContext();
+            IScriptContext* scriptContext = CurrentScriptContext();
             auto* binding =
-                context != nullptr
-                    ? static_cast<ScriptRuntimeBinding*>(context->GetService(kScriptRuntimeService))
+                scriptContext != nullptr
+                    ? static_cast<ScriptRuntimeBinding*>(scriptContext->GetService(kScriptRuntimeService))
                     : nullptr;
             if (binding != nullptr && binding->dispatchMessage)
             {
@@ -350,9 +350,9 @@ export namespace foundation::script
     public:
         [[nodiscard]] static ScriptRuntimeBinding* Resolve()
         {
-            IScriptContext* context = CurrentScriptContext();
-            return context != nullptr ? static_cast<ScriptRuntimeBinding*>(
-                                            context->GetService(kScriptRuntimeService))
+            IScriptContext* scriptContext = CurrentScriptContext();
+            return scriptContext != nullptr ? static_cast<ScriptRuntimeBinding*>(
+                                            scriptContext->GetService(kScriptRuntimeService))
                                       : nullptr;
         }
         [[nodiscard]] static f64 now()
@@ -665,10 +665,10 @@ export namespace foundation::script
     /// onto a component's resource::Ref. No ambient scene state - the binding is per-run.
     [[nodiscard]] inline foundation::resource::ResourceManager* CurrentRunResources()
     {
-        IScriptContext* context = CurrentScriptContext();
+        IScriptContext* scriptContext = CurrentScriptContext();
         auto* binding =
-            context != nullptr
-                ? static_cast<ScriptRuntimeBinding*>(context->GetService(kScriptRuntimeService))
+            scriptContext != nullptr
+                ? static_cast<ScriptRuntimeBinding*>(scriptContext->GetService(kScriptRuntimeService))
                 : nullptr;
         return (binding != nullptr && binding->resolveResources) ? binding->resolveResources()
                                                                  : nullptr;
@@ -677,10 +677,10 @@ export namespace foundation::script
     /// The run the current script context belongs to (ScriptRuntimeBinding::run), or null.
     [[nodiscard]] inline foundation::run::IRun* CurrentRun()
     {
-        IScriptContext* context = CurrentScriptContext();
+        IScriptContext* scriptContext = CurrentScriptContext();
         auto* binding =
-            context != nullptr
-                ? static_cast<ScriptRuntimeBinding*>(context->GetService(kScriptRuntimeService))
+            scriptContext != nullptr
+                ? static_cast<ScriptRuntimeBinding*>(scriptContext->GetService(kScriptRuntimeService))
                 : nullptr;
         return binding != nullptr ? binding->run : nullptr;
     }

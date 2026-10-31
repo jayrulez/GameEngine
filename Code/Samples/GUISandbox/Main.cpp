@@ -945,12 +945,12 @@ RefPtr<script::IScriptContext> GUISandbox::RunScript(StringView relative, gui::G
     const String source = ReadText(relative);
     if (source.Size() == 0)
         return {};
-    RefPtr<script::IScriptContext> context = m_scripts->CreateContext();
-    context->SetErrorHandler(&m_scriptErrors);
-    gui::InstallGuiScriptService(*context, binding);
-    if (!context->Load(source.AsView(), relative).IsOk())
+    RefPtr<script::IScriptContext> scriptContext = m_scripts->CreateContext();
+    scriptContext->SetErrorHandler(&m_scriptErrors);
+    gui::InstallGuiScriptService(*scriptContext, binding);
+    if (!scriptContext->Load(source.AsView(), relative).IsOk())
         std::fprintf(stderr, "GUISandbox: %s did not load\n", reinterpret_cast<const char*>(String(relative).CStr()));
-    return context;
+    return scriptContext;
 }
 
 void GUISandbox::BuildSandbox()
@@ -3440,13 +3440,13 @@ void GUISandbox::OnShutdown(runtime::IApplicationHost&)
     if (m_gui)
         gui::InputPrompts::Uninstall(*m_gui); // the GUI may outlive the menu's actions
     // Scripts first: their handles and handlers reach the trees.
-    const auto closeScript = [](RefPtr<script::IScriptContext>& context)
+    const auto closeScript = [](RefPtr<script::IScriptContext>& scriptContext)
     {
-        if (!context)
+        if (!scriptContext)
             return;
-        gui::ClearGuiScriptService(*context);
-        context->SetErrorHandler(nullptr);
-        context.Reset();
+        gui::ClearGuiScriptService(*scriptContext);
+        scriptContext->SetErrorHandler(nullptr);
+        scriptContext.Reset();
     };
     for (Page& page : m_pages)
         closeScript(page.script);

@@ -283,24 +283,24 @@ namespace engine::runtime
         DefaultApplication* self = this;
 
         m_scripts->SetContextConfigurator(core::Function<void(foundation::script::IScriptContext&)>{
-            [self](foundation::script::IScriptContext& context)
+            [self](foundation::script::IScriptContext& scriptContext)
             {
                 if (self->m_input != nullptr)
                 {
-                    self->m_input->ExposeToScript(context);
+                    self->m_input->ExposeToScript(scriptContext);
                 }
                 if (self->m_audio != nullptr)
                 {
-                    self->m_audio->ExposeToScript(context, self->Resources());
+                    self->m_audio->ExposeToScript(scriptContext, self->Resources());
                 }
                 if (self->m_render != nullptr)
                 {
-                    self->m_render->ExposeToScript(context); // `DebugDraw.of(scene)` -> DebugScene
+                    self->m_render->ExposeToScript(scriptContext); // `DebugDraw.of(scene)` -> DebugScene
                 }
                 // `gui` -> the engine GUI's screen tier.
                 if (self->m_gui != nullptr)
                 {
-                    self->m_gui->ExposeToScript(context);
+                    self->m_gui->ExposeToScript(scriptContext);
                 }
             }});
 

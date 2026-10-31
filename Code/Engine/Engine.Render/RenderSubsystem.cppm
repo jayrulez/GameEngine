@@ -262,10 +262,10 @@ export namespace engine::render
         // Publish this subsystem as the per-context render service, so the `DebugDraw` script facade
         // resolves it via CurrentScriptContext()->GetService(kRenderScriptService). Called by the app
         // for each run context (alongside Input/Audio/UI ExposeToScript).
-        void ExposeToScript(foundation::script::IScriptContext& context)
+        void ExposeToScript(foundation::script::IScriptContext& scriptContext)
         {
             m_scriptBinding.render = this;
-            context.SetService(kRenderScriptService, &m_scriptBinding);
+            scriptContext.SetService(kRenderScriptService, &m_scriptBinding);
         }
 
         // Temporal AA on/off (projection jitter + history resolve) + resolve tunables.

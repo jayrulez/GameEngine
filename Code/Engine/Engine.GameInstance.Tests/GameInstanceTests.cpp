@@ -598,13 +598,13 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (Lu
 
     RefPtr<script::IScriptManager> manager = foundation::script::CreateLuauScriptManager(DefaultAllocator());
     foundation::script::RegisterReflectedTypes(*manager);
-    RefPtr<script::IScriptContext> ctx = manager->CreateContext();
+    RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     RunFake fake;
-    engine::runtime::InstallRunScriptService(*ctx, fake.binding);
+    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
 
     // Kick the load, then poll to completion; record the observable results in module globals.
-    const Status status = ctx->Load(u8"t = run.loadSceneAsync(Guid.new(0xABC, 0xDEF))\n"
+    const Status status = scriptContext->Load(u8"t = run.loadSceneAsync(Guid.new(0xABC, 0xDEF))\n"
                                     u8"Poll1 = run.loadComplete(t)\n"
                                     u8"Prog = run.loadProgress(t)\n"
                                     u8"Poll2 = run.loadComplete(t)\n",
@@ -614,9 +614,9 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (Lu
     CHECK(fake.asyncCalls == 1);
     CHECK(fake.requested == Guid{0xABC, 0xDEF});
     CHECK(fake.ticketSeen == RunFake::kTicket); // the exact ticket round-tripped
-    CHECK(ctx->GetGlobal(u8"Poll1").Get<bool>() == false); // first poll: not complete
-    CHECK(ctx->GetGlobal(u8"Prog").Get<f64>() == doctest::Approx(0.5));
-    CHECK(ctx->GetGlobal(u8"Poll2").Get<bool>() == true); // second poll: complete
+    CHECK(scriptContext->GetGlobal(u8"Poll1").Get<bool>() == false); // first poll: not complete
+    CHECK(scriptContext->GetGlobal(u8"Prog").Get<f64>() == doctest::Approx(0.5));
+    CHECK(scriptContext->GetGlobal(u8"Poll2").Get<bool>() == true); // second poll: complete
 }
 
 TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (AngelScript)")
@@ -626,12 +626,12 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (An
 
     RefPtr<script::IScriptManager> manager = foundation::script::angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     foundation::script::RegisterReflectedTypes(*manager);
-    RefPtr<script::IScriptContext> ctx = manager->CreateContext();
+    RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     RunFake fake;
-    engine::runtime::InstallRunScriptService(*ctx, fake.binding);
+    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
 
-    const Status status = ctx->Load(u8"int t;\n"
+    const Status status = scriptContext->Load(u8"int t;\n"
                                     u8"bool Poll1; double Prog; bool Poll2;\n"
                                     u8"void main() {\n"
                                     u8"  t = run::loadSceneAsync(Guid(0xABC, 0xDEF));\n"
@@ -645,9 +645,9 @@ TEST_CASE("game-instance: run.loadSceneAsync -> ticket, polled to completion (An
     CHECK(fake.asyncCalls == 1);
     CHECK(fake.requested == Guid{0xABC, 0xDEF});
     CHECK(fake.ticketSeen == RunFake::kTicket);
-    CHECK(ctx->GetGlobal(u8"Poll1").Get<bool>() == false);
-    CHECK(ctx->GetGlobal(u8"Prog").Get<f64>() == doctest::Approx(0.5));
-    CHECK(ctx->GetGlobal(u8"Poll2").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"Poll1").Get<bool>() == false);
+    CHECK(scriptContext->GetGlobal(u8"Prog").Get<f64>() == doctest::Approx(0.5));
+    CHECK(scriptContext->GetGlobal(u8"Poll2").Get<bool>() == true);
 }
 
 // run.requestExit routing PROVEN on both backends: a fake RunScriptBinding whose requestExit records
@@ -680,13 +680,13 @@ TEST_CASE("game-instance: run.requestExit routes the exit code to the binding (A
 
     RefPtr<script::IScriptManager> manager = foundation::script::angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     foundation::script::RegisterReflectedTypes(*manager);
-    RefPtr<script::IScriptContext> ctx = manager->CreateContext();
+    RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     ExitFake fake;
-    engine::runtime::InstallRunScriptService(*ctx, fake.binding);
+    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
 
     // The 1-arg overload routes the code; the 0-arg overload routes code 0.
-    const Status status = ctx->Load(u8"void main() {\n"
+    const Status status = scriptContext->Load(u8"void main() {\n"
                                     u8"  run::requestExit(2);\n"
                                     u8"  run::requestExit();\n"
                                     u8"}\n",
@@ -703,12 +703,12 @@ TEST_CASE("game-instance: run.requestExit routes the exit code to the binding (L
 
     RefPtr<script::IScriptManager> manager = foundation::script::CreateLuauScriptManager(DefaultAllocator());
     foundation::script::RegisterReflectedTypes(*manager);
-    RefPtr<script::IScriptContext> ctx = manager->CreateContext();
+    RefPtr<script::IScriptContext> scriptContext = manager->CreateContext();
 
     ExitFake fake;
-    engine::runtime::InstallRunScriptService(*ctx, fake.binding);
+    engine::runtime::InstallRunScriptService(*scriptContext, fake.binding);
 
-    const Status status = ctx->Load(u8"run.requestExit(2)\n"
+    const Status status = scriptContext->Load(u8"run.requestExit(2)\n"
                                     u8"Seen = 1\n",
                                     u8"main");
     REQUIRE(status.IsOk());
@@ -716,7 +716,7 @@ TEST_CASE("game-instance: run.requestExit routes the exit code to the binding (L
     CHECK(fake.lastCode == 2); // the exact code round-tripped through the facade
 
     // The arity-0 overload routes code 0.
-    const Status status0 = ctx->Load(u8"run.requestExit()\n", u8"main0");
+    const Status status0 = scriptContext->Load(u8"run.requestExit()\n", u8"main0");
     REQUIRE(status0.IsOk());
     CHECK(fake.calls == 2);
     CHECK(fake.lastCode == 0);
@@ -815,10 +815,10 @@ TEST_CASE("game-instance: two instances own separate, isolated run-host contexts
     REQUIRE(a.StartScript(src, u8"game.as"));
     REQUIRE(b.StartScript(src, u8"game.as"));
 
-    REQUIRE(a.RunHost().Context() != nullptr);
-    REQUIRE(b.RunHost().Context() != nullptr);
-    CHECK(a.RunHost().Context() !=
-          b.RunHost().Context()); // distinct contexts = no shared script globals
+    REQUIRE(a.RunHost().ScriptContext() != nullptr);
+    REQUIRE(b.RunHost().ScriptContext() != nullptr);
+    CHECK(a.RunHost().ScriptContext() !=
+          b.RunHost().ScriptContext()); // distinct contexts = no shared script globals
 
     a.SetHeadless(true);
     CHECK(a.IsHeadless());
@@ -892,20 +892,20 @@ TEST_CASE("game-instance: the Game tier's on<Event> inbox harvests the run bus (
                                    u8"}\n",
                                    u8"game.as", Span<const String>(handlers, 1));
     REQUIRE(ok);
-    auto* ctx = gi.RunHost().Context();
-    REQUIRE(ctx != nullptr);
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // nothing fired yet
+    auto* scriptContext = gi.RunHost().ScriptContext();
+    REQUIRE(scriptContext != nullptr);
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // nothing fired yet
 
     // C++ publishes on the run bus -> onPing(42) fires on the Game class at the next drain.
     gi.Events().Publish(StringHash(StringView(u8"Ping")), Variant::From<i32>(42));
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // deferred until Drain
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // deferred until Drain
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // delivered with payload
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // delivered with payload
 
     // An event with NO matching on<Event> handler is ignored (only declared handlers subscribe).
     gi.Events().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // unchanged
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0)); // unchanged
 
     gi.StopScript();
 }
@@ -936,11 +936,11 @@ TEST_CASE("game-instance: a Game started from its cooked class hears the run bus
 
     engine::runtime::GameInstance gi;
     REQUIRE(gi.StartScript(cooked));
-    auto* ctx = gi.RunHost().Context();
-    REQUIRE(ctx != nullptr);
+    auto* scriptContext = gi.RunHost().ScriptContext();
+    REQUIRE(scriptContext != nullptr);
     gi.Events().Publish(StringHash(StringView(u8"GoalReached")), Variant::From<i32>(0));
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Reached").Get<f64>() == doctest::Approx(1.0));
+    CHECK(scriptContext->GetGlobal(u8"Reached").Get<f64>() == doctest::Approx(1.0));
     gi.StopScript();
 }
 
@@ -961,19 +961,19 @@ TEST_CASE("game-instance: the Game tier's on<Event> inbox harvests the run bus (
                                    u8"function Game:onPing(x) Pinged = x end\n",
                                    u8"game.luau", Span<const String>(handlers, 1));
     REQUIRE(ok);
-    auto* ctx = gi.ScriptContext();
-    REQUIRE(ctx != nullptr);
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0));
+    auto* scriptContext = gi.ScriptContext();
+    REQUIRE(scriptContext != nullptr);
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0));
 
     // C++ publishes on the run bus -> Game:onPing(42) fires at drain (deferred).
     gi.Events().Publish(StringHash(StringView(u8"Ping")), Variant::From<i32>(42));
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0));
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0));
 
     // A non-subscribed event is ignored.
     gi.Events().Publish(StringHash(StringView(u8"Unheard")), Variant::From<i32>(99));
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0));
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(42.0));
 
     gi.StopScript();
 }
@@ -998,12 +998,12 @@ TEST_CASE("game-instance: run.events().emit publishes on the run bus, round-trip
         u8"}\n",
         u8"game.as", Span<const String>(handlers, 1));
     REQUIRE(ok);
-    auto* ctx = gi.RunHost().Context();
-    REQUIRE(ctx != nullptr);
+    auto* scriptContext = gi.RunHost().ScriptContext();
+    REQUIRE(scriptContext != nullptr);
     // launch() emitted, but the run bus delivers deferred - nothing fires until the drain.
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0));
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0));
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(7.0)); // script -> run bus -> script
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(7.0)); // script -> run bus -> script
     gi.StopScript();
 }
 
@@ -1053,10 +1053,10 @@ TEST_CASE("game-instance: run.setTimeScale/timeScale route from script to the ru
                                    u8"game.luau", Span<const String>{});
     REQUIRE(ok);
     CHECK(captured == doctest::Approx(0.5f)); // launch() -> run.setTimeScale -> binding (synchronous)
-    auto* ctx = gi.ScriptContext();
-    REQUIRE(ctx != nullptr);
+    auto* scriptContext = gi.ScriptContext();
+    REQUIRE(scriptContext != nullptr);
     // The exact scale round-tripped back through run.timeScale() (getter reads the binding).
-    CHECK(ctx->GetGlobal(u8"Scale").Get<f64>() == doctest::Approx(0.5));
+    CHECK(scriptContext->GetGlobal(u8"Scale").Get<f64>() == doctest::Approx(0.5));
     gi.StopScript();
 }
 
@@ -1161,11 +1161,11 @@ TEST_CASE("game-instance: run.events():emit publishes on the run bus, round-trip
         u8"function Game:onPing(x) Pinged = x end\n",
         u8"game.luau", Span<const String>(handlers, 1));
     REQUIRE(ok);
-    auto* ctx = gi.ScriptContext();
-    REQUIRE(ctx != nullptr);
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // deferred until drain
+    auto* scriptContext = gi.ScriptContext();
+    REQUIRE(scriptContext != nullptr);
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(0.0)); // deferred until drain
     gi.DrainRunEvents();
-    CHECK(ctx->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(7.0)); // script -> run bus -> script
+    CHECK(scriptContext->GetGlobal(u8"Pinged").Get<f64>() == doctest::Approx(7.0)); // script -> run bus -> script
     gi.StopScript();
 }
 
@@ -1518,11 +1518,11 @@ TEST_CASE("game-instance: a context for behaviors gets the run's input, run and 
     foundation::script::angelscript::RegisterAngelScriptBackend();
     engine::runtime::GameInstance gi;
     CHECK_FALSE(gi.ScriptRunning());
-    foundation::script::IScriptContext* context = gi.RunHost().EnsureContextForFile(u8"behaviors.as");
-    REQUIRE(context != nullptr);
-    CHECK(context->GetService(foundation::input::kInputScriptService) == &gi.InputRuntime());
-    CHECK(context->GetService(engine::runtime::kRunScriptService) != nullptr);
-    CHECK(context->GetService(engine::runtime::kSaveScriptService) == &gi.Saves());
+    foundation::script::IScriptContext* scriptContext = gi.RunHost().EnsureContextForFile(u8"behaviors.as");
+    REQUIRE(scriptContext != nullptr);
+    CHECK(scriptContext->GetService(foundation::input::kInputScriptService) == &gi.InputRuntime());
+    CHECK(scriptContext->GetService(engine::runtime::kRunScriptService) != nullptr);
+    CHECK(scriptContext->GetService(engine::runtime::kSaveScriptService) == &gi.Saves());
 }
 
 // agent-playtesting-and-asset-creation.md P4 (Sedulous aaf5ff78): the run clock is the host's

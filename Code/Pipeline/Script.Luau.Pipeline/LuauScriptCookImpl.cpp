@@ -170,10 +170,10 @@ namespace pipeline{
         // runtime with a real owner) - it just yields no editor properties, with a note.
         // Marks the properties the class's `replicated` list names. False, with the problem in
         // `error`, for a name that is not one of its properties (a typo must not do nothing).
-        [[nodiscard]] bool MarkLuauReplicated(IScriptContext& context, Array<ScriptPropertyDesc>& properties,
+        [[nodiscard]] bool MarkLuauReplicated(IScriptContext& scriptContext, Array<ScriptPropertyDesc>& properties,
                                               String& error)
         {
-            const Variant listVariant = context.GetGlobal(u8"drReplicated");
+            const Variant listVariant = scriptContext.GetGlobal(u8"drReplicated");
             const String* list = listVariant.TryGet<String>();
             if (list == nullptr)
             {
@@ -207,11 +207,11 @@ namespace pipeline{
             return true;
         }
 
-        void HarvestLuauProperties(IScriptContext& context, StringView fileName,
+        void HarvestLuauProperties(IScriptContext& scriptContext, StringView fileName,
                                    StringView className, Array<ScriptPropertyDesc>& outProperties)
         {
             const String probe = BuildLuauPropertyProbe(className);
-            if (!context.Load(probe.AsView(), fileName).IsOk())
+            if (!scriptContext.Load(probe.AsView(), fileName).IsOk())
             {
                 LOG_WARNING(u8"Script",
                                     u8"'{}': Luau property-harvest probe failed to run - no editor "
@@ -219,7 +219,7 @@ namespace pipeline{
                                     fileName);
                 return;
             }
-            const Variant errorVariant = context.GetGlobal(u8"drHarvestError");
+            const Variant errorVariant = scriptContext.GetGlobal(u8"drHarvestError");
             if (const String* probeError = errorVariant.TryGet<String>();
                 probeError != nullptr && !probeError->IsEmpty())
             {
@@ -229,7 +229,7 @@ namespace pipeline{
                                     fileName, className, *probeError);
                 return;
             }
-            const Variant resultVariant = context.GetGlobal(u8"drHarvestResult");
+            const Variant resultVariant = scriptContext.GetGlobal(u8"drHarvestResult");
             const String* harvest = resultVariant.TryGet<String>();
             if (harvest == nullptr)
             {
@@ -328,17 +328,17 @@ namespace pipeline{
                 {
                     return false;
                 }
-                RefPtr<IScriptContext> context = manager->CreateContext();
-                if (context.Get() == nullptr)
+                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+                if (scriptContext.Get() == nullptr)
                 {
                     return false;
                 }
-                context->SetErrorHandler(&sink);
+                scriptContext->SetErrorHandler(&sink);
 
                 // Compile check: Load the raw source. Luau classes are plain global tables and
                 // facades are globals, so no behavior-module framing is needed; unknown
                 // globals compile fine. Running it defines `<Class>`.
-                if (!context->Load(source, assetName).IsOk())
+                if (!scriptContext->Load(source, assetName).IsOk())
                 {
                     ReportScriptCookErrors(assetName, sink);
                     return false;
@@ -372,10 +372,10 @@ namespace pipeline{
                 // harvest model). Only when the source declares a class.
                 if (!out.className.IsEmpty())
                 {
-                    HarvestLuauProperties(*context, assetName, out.className.AsView(),
+                    HarvestLuauProperties(*scriptContext, assetName, out.className.AsView(),
                                           out.properties);
                     String replicatedError;
-                    if (!MarkLuauReplicated(*context, out.properties, replicatedError))
+                    if (!MarkLuauReplicated(*scriptContext, out.properties, replicatedError))
                     {
                         ReportCookProblem(sink, assetName, replicatedError);
                         return false;

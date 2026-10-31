@@ -764,13 +764,13 @@ export namespace engine::audio
         /// scripting facade (class Audio below) resolves it per context. Call once per
         /// context, AFTER init. `resources` (optional) enables content-path playback
         /// (Audio.playOneShot("Sounds/laser") etc.); without it those calls no-op.
-        void ExposeToScript(foundation::script::IScriptContext& context,
+        void ExposeToScript(foundation::script::IScriptContext& scriptContext,
                             foundation::resource::ResourceManager* resources = nullptr)
         {
             m_scriptBinding.engine = m_engine.Get();
             m_scriptBinding.subsystem = this;
             m_scriptBinding.resources = resources;
-            context.SetService(kAudioScriptService, &m_scriptBinding);
+            scriptContext.SetService(kAudioScriptService, &m_scriptBinding);
         }
 
         // ---- content-path playback (the facade's resource addressing) ----
@@ -1252,9 +1252,9 @@ export namespace engine::audio
     public:
         [[nodiscard]] static AudioScriptBinding* ResolveBinding()
         {
-            foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
-            return context != nullptr
-                       ? static_cast<AudioScriptBinding*>(context->GetService(kAudioScriptService))
+            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
+            return scriptContext != nullptr
+                       ? static_cast<AudioScriptBinding*>(scriptContext->GetService(kAudioScriptService))
                        : nullptr;
         }
 

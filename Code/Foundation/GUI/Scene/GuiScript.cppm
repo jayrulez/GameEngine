@@ -39,13 +39,13 @@ export namespace foundation::gui
         [[nodiscard]] SceneRoot* Root() const { return resolve ? resolve() : root; }
     };
 
-    inline void InstallGuiScriptService(foundation::script::IScriptContext& context, GuiScriptBinding& binding)
+    inline void InstallGuiScriptService(foundation::script::IScriptContext& scriptContext, GuiScriptBinding& binding)
     {
-        context.SetService(kGuiScriptService, &binding);
+        scriptContext.SetService(kGuiScriptService, &binding);
     }
-    inline void ClearGuiScriptService(foundation::script::IScriptContext& context)
+    inline void ClearGuiScriptService(foundation::script::IScriptContext& scriptContext)
     {
-        context.SetService(kGuiScriptService, nullptr);
+        scriptContext.SetService(kGuiScriptService, nullptr);
     }
 
     /// The `gui` facade: statics only (script name `gui`).

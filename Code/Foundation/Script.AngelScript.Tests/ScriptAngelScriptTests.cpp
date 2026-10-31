@@ -165,12 +165,12 @@ TEST_CASE("angelscript: a scriptName alias binds the class under the alias, not 
     manager->RegisterType(AliasProbe::StaticType());
     manager->FinalizeTypes();
 
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    const Status ok = ctx->Load(u8"double Got = 0;\n"
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    const Status ok = scriptContext->Load(u8"double Got = 0;\n"
                                 u8"void main() { Got = double(aka::answer()); }\n", // the ALIAS
                                 u8"m");
     REQUIRE(ok.IsOk());
-    CHECK(ctx->GetGlobal(u8"Got").Get<f64>() == 42.0);
+    CHECK(scriptContext->GetGlobal(u8"Got").Get<f64>() == 42.0);
 
     // The C++ name is NOT a script type (the alias replaces it on the surface): referencing it fails.
     RefPtr<IScriptContext> ctx2 = manager->CreateContext();
@@ -443,9 +443,9 @@ TEST_CASE("angelscript: a facade Array<T> return crosses as a native array<T> (n
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterBag(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    const Status status = ctx->Load(u8"double N; double R; double E; double L;\n"
+    const Status status = scriptContext->Load(u8"double N; double R; double E; double L;\n"
                                     u8"void main() {\n"
                                     u8"  Bag b;\n"
                                     u8"  array<int>@ ns = b.numbers();\n"
@@ -458,19 +458,19 @@ TEST_CASE("angelscript: a facade Array<T> return crosses as a native array<T> (n
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"N").Get<f64>() == 63.0);
-    CHECK(ctx->GetGlobal(u8"R").Get<f64>() == 9.0);
-    CHECK(ctx->GetGlobal(u8"E").Get<f64>() == 0.0);
-    CHECK(ctx->GetGlobal(u8"L").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"N").Get<f64>() == 63.0);
+    CHECK(scriptContext->GetGlobal(u8"R").Get<f64>() == 9.0);
+    CHECK(scriptContext->GetGlobal(u8"E").Get<f64>() == 0.0);
+    CHECK(scriptContext->GetGlobal(u8"L").Get<f64>() == 7.0);
 }
 
 TEST_CASE("angelscript: a script array crosses into a facade Array<T> parameter")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterBag(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    const Status status = ctx->Load(u8"double S; double L; double E; double D;\n"
+    const Status status = scriptContext->Load(u8"double S; double L; double E; double D;\n"
                                     u8"void main() {\n"
                                     u8"  Bag b;\n"
                                     u8"  array<float> xs = {1.5f, 2.25f, -0.75f};\n"
@@ -484,19 +484,19 @@ TEST_CASE("angelscript: a script array crosses into a facade Array<T> parameter"
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"S").Get<f64>() == doctest::Approx(3.0));
-    CHECK(ctx->GetGlobal(u8"L").Get<f64>() == 5.0);
-    CHECK(ctx->GetGlobal(u8"E").Get<f64>() == 0.0);
-    CHECK(ctx->GetGlobal(u8"D").Get<f64>() == doctest::Approx(6.0)); // the script's own array unchanged
+    CHECK(scriptContext->GetGlobal(u8"S").Get<f64>() == doctest::Approx(3.0));
+    CHECK(scriptContext->GetGlobal(u8"L").Get<f64>() == 5.0);
+    CHECK(scriptContext->GetGlobal(u8"E").Get<f64>() == 0.0);
+    CHECK(scriptContext->GetGlobal(u8"D").Get<f64>() == doctest::Approx(6.0)); // the script's own array unchanged
 }
 
 TEST_CASE("angelscript: a nested-value member is a borrow handle edited in place (unit 2b)")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterHouse(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    const Status status = ctx->Load(u8"double S;\n"
+    const Status status = scriptContext->Load(u8"double S;\n"
                                     u8"void main() {\n"
                                     u8"  House h;\n"
                                     u8"  Room@ r = h.room;\n" // borrow over the House's Room subobject
@@ -505,16 +505,16 @@ TEST_CASE("angelscript: a nested-value member is a borrow handle edited in place
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"S").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"S").Get<f64>() == 7.0);
 }
 
 TEST_CASE("angelscript: a UniquePtr (non-Object) container element is a borrow handle (unit 2b)")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterHouse(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    const Status status = ctx->Load(u8"double C; double Z;\n"
+    const Status status = scriptContext->Load(u8"double C; double Z;\n"
                                     u8"void main() {\n"
                                     u8"  Shelf s;\n"
                                     u8"  Room@ room = s.rooms_add();\n" // default-constructs + borrows
@@ -524,17 +524,17 @@ TEST_CASE("angelscript: a UniquePtr (non-Object) container element is a borrow h
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"C").Get<f64>() == 1.0);
-    CHECK(ctx->GetGlobal(u8"Z").Get<f64>() == 42.0);
+    CHECK(scriptContext->GetGlobal(u8"C").Get<f64>() == 1.0);
+    CHECK(scriptContext->GetGlobal(u8"Z").Get<f64>() == 42.0);
 }
 
 TEST_CASE("angelscript: a polymorphic container member binds as script ops (count/at/add/removeAt)")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterZoo(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    const Status status = ctx->Load(u8"double C0; double C1; double L; double C2; double C3;\n"
+    const Status status = scriptContext->Load(u8"double C0; double C1; double L; double C2; double C3;\n"
                                     u8"void main() {\n"
                                     u8"  Zoo z;\n"
                                     u8"  C0 = z.animals_count();\n"        // 0
@@ -549,11 +549,11 @@ TEST_CASE("angelscript: a polymorphic container member binds as script ops (coun
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"C0").Get<f64>() == 0.0);
-    CHECK(ctx->GetGlobal(u8"C1").Get<f64>() == 1.0);
-    CHECK(ctx->GetGlobal(u8"L").Get<f64>() == 3.0);
-    CHECK(ctx->GetGlobal(u8"C2").Get<f64>() == 2.0);
-    CHECK(ctx->GetGlobal(u8"C3").Get<f64>() == 1.0);
+    CHECK(scriptContext->GetGlobal(u8"C0").Get<f64>() == 0.0);
+    CHECK(scriptContext->GetGlobal(u8"C1").Get<f64>() == 1.0);
+    CHECK(scriptContext->GetGlobal(u8"L").Get<f64>() == 3.0);
+    CHECK(scriptContext->GetGlobal(u8"C2").Get<f64>() == 2.0);
+    CHECK(scriptContext->GetGlobal(u8"C3").Get<f64>() == 1.0);
 }
 
 TEST_CASE("angelscript: a constructor-less reflected type is usable as a returned handle")
@@ -561,9 +561,9 @@ TEST_CASE("angelscript: a constructor-less reflected type is usable as a returne
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(Leaf::StaticType());        // no ctor - declared + props bound anyway
     manager->RegisterType(LeafFactory::StaticType()); // hands a Leaf@ back
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    const Status status = ctx->Load(u8"double V;\n"
+    const Status status = scriptContext->Load(u8"double V;\n"
                                     u8"void main() {\n"
                                     u8"  LeafFactory f;\n"
                                     u8"  Leaf@ leaf = f.make();\n"
@@ -572,7 +572,7 @@ TEST_CASE("angelscript: a constructor-less reflected type is usable as a returne
                                     u8"}\n",
                                     u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"V").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"V").Get<f64>() == 7.0);
 }
 
 TEST_CASE("angelscript: reflected value types support value assignment (Float3 p = expr)")
@@ -582,11 +582,11 @@ TEST_CASE("angelscript: reflected value types support value assignment (Float3 p
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     const Status status =
-        ctx->Load(u8"double X; double Y; double Z;\n"
+        scriptContext->Load(u8"double X; double Y; double Z;\n"
                   u8"void main() {\n"
                   u8"  Float3 a = Float3(1, 2, 3);\n" // copy-init from a factory return (opAssign)
                   u8"  Float3 b = a;\n"               // value assignment from another local
@@ -597,9 +597,9 @@ TEST_CASE("angelscript: reflected value types support value assignment (Float3 p
                   u8"}\n",
                   u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"X").Get<f64>() == 1.0);
-    CHECK(ctx->GetGlobal(u8"Y").Get<f64>() == 8.0);
-    CHECK(ctx->GetGlobal(u8"Z").Get<f64>() ==
+    CHECK(scriptContext->GetGlobal(u8"X").Get<f64>() == 1.0);
+    CHECK(scriptContext->GetGlobal(u8"Y").Get<f64>() == 8.0);
+    CHECK(scriptContext->GetGlobal(u8"Z").Get<f64>() ==
           1.0); // value semantics: a not mutated by b's reassign
 }
 
@@ -610,11 +610,11 @@ TEST_CASE("angelscript: reflected operators - a + b, v * 2.0f, -v, a == b, p += 
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     const Status status =
-        ctx->Load(u8"double SumY; double ScaledZ; double NegX; bool Same; bool Differ;\n"
+        scriptContext->Load(u8"double SumY; double ScaledZ; double NegX; bool Same; bool Differ;\n"
                   u8"double MovedX; double HalfY; double TwoD; double QW; double Hue;\n"
                   u8"void main() {\n"
                   u8"  Float3 a = Float3(1, 2, 3);\n"
@@ -638,16 +638,16 @@ TEST_CASE("angelscript: reflected operators - a + b, v * 2.0f, -v, a == b, p += 
                   u8"}\n",
                   u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"SumY").Get<f64>() == doctest::Approx(7.0));
-    CHECK(ctx->GetGlobal(u8"ScaledZ").Get<f64>() == doctest::Approx(6.0));
-    CHECK(ctx->GetGlobal(u8"NegX").Get<f64>() == doctest::Approx(-1.0));
-    CHECK(ctx->GetGlobal(u8"Same").Get<bool>());
-    CHECK(ctx->GetGlobal(u8"Differ").Get<bool>());
-    CHECK(ctx->GetGlobal(u8"MovedX").Get<f64>() == doctest::Approx(4.0)); // 1 + 4 - 1
-    CHECK(ctx->GetGlobal(u8"HalfY").Get<f64>() == doctest::Approx(2.5));
-    CHECK(ctx->GetGlobal(u8"TwoD").Get<f64>() == doctest::Approx(-3.0));
-    CHECK(ctx->GetGlobal(u8"QW").Get<f64>() == doctest::Approx(1.0));
-    CHECK(ctx->GetGlobal(u8"Hue").Get<f64>() == doctest::Approx(0.75));
+    CHECK(scriptContext->GetGlobal(u8"SumY").Get<f64>() == doctest::Approx(7.0));
+    CHECK(scriptContext->GetGlobal(u8"ScaledZ").Get<f64>() == doctest::Approx(6.0));
+    CHECK(scriptContext->GetGlobal(u8"NegX").Get<f64>() == doctest::Approx(-1.0));
+    CHECK(scriptContext->GetGlobal(u8"Same").Get<bool>());
+    CHECK(scriptContext->GetGlobal(u8"Differ").Get<bool>());
+    CHECK(scriptContext->GetGlobal(u8"MovedX").Get<f64>() == doctest::Approx(4.0)); // 1 + 4 - 1
+    CHECK(scriptContext->GetGlobal(u8"HalfY").Get<f64>() == doctest::Approx(2.5));
+    CHECK(scriptContext->GetGlobal(u8"TwoD").Get<f64>() == doctest::Approx(-3.0));
+    CHECK(scriptContext->GetGlobal(u8"QW").Get<f64>() == doctest::Approx(1.0));
+    CHECK(scriptContext->GetGlobal(u8"Hue").Get<f64>() == doctest::Approx(0.75));
 }
 
 // Two asset ids compare in a script (Snowline's music: is this the track already playing).
@@ -656,10 +656,10 @@ TEST_CASE("angelscript: Guids compare with == and !=")
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
     const Status status =
-        ctx->Load(u8"bool Same; bool Differ; bool NilSame;\n"
+        scriptContext->Load(u8"bool Same; bool Differ; bool NilSame;\n"
                   u8"Guid kTrack = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
                   u8"void main() {\n"
                   u8"  Guid playing = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
@@ -670,9 +670,9 @@ TEST_CASE("angelscript: Guids compare with == and !=")
                   u8"}\n",
                   u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"Same").Get<bool>());
-    CHECK(ctx->GetGlobal(u8"Differ").Get<bool>());
-    CHECK(ctx->GetGlobal(u8"NilSame").Get<bool>());
+    CHECK(scriptContext->GetGlobal(u8"Same").Get<bool>());
+    CHECK(scriptContext->GetGlobal(u8"Differ").Get<bool>());
+    CHECK(scriptContext->GetGlobal(u8"NilSame").Get<bool>());
 }
 
 // A reflected-type field reads back whether it is a plain member (the object itself) or a handle,
@@ -682,9 +682,9 @@ TEST_CASE("angelscript: plain reflected-type members and globals read back as th
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
-    REQUIRE(ctx->Load(u8"Guid kTrack = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
+    REQUIRE(scriptContext->Load(u8"Guid kTrack = Guid(\"6b0a7709-5169-4a0e-8077-c78b87a132e6\");\n"
                       u8"class Holder {\n"
                       u8"  Guid track;\n"
                       u8"  Float3 where;\n"
@@ -698,7 +698,7 @@ TEST_CASE("angelscript: plain reflected-type members and globals read back as th
     REQUIRE(Guid::TryParse(u8"6b0a7709-5169-4a0e-8077-c78b87a132e6", track));
     REQUIRE(Guid::TryParse(u8"0758e8d2-c6cd-47a7-bce6-9728a9501018", held));
 
-    RefPtr<ScriptObject> holder = ctx->CreateInstance(u8"Holder", Span<Variant>{});
+    RefPtr<ScriptObject> holder = scriptContext->CreateInstance(u8"Holder", Span<Variant>{});
     REQUIRE(static_cast<bool>(holder));
     Result<Variant> got = holder->GetProperty(u8"track");
     REQUIRE(got.HasValue());
@@ -713,7 +713,7 @@ TEST_CASE("angelscript: plain reflected-type members and globals read back as th
     REQUIRE(handle.Value().Is<Guid>());
     CHECK(handle.Value().Get<Guid>() == held);
 
-    const Variant global = ctx->GetGlobal(u8"kTrack");
+    const Variant global = scriptContext->GetGlobal(u8"kTrack");
     REQUIRE(global.Is<Guid>());
     CHECK(global.Get<Guid>() == track);
 }
@@ -723,13 +723,13 @@ TEST_CASE("angelscript: 64-bit integer facade args/returns round-trip exactly (n
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     REQUIRE(static_cast<bool>(manager));
     manager->RegisterType(NumProbe::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext(); // defensively finalizes
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext(); // defensively finalizes
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // ArgOk: script passes 2^53+1 into an int64 facade param -> C++ must see it exactly.
     // ReturnOk: an int64 facade return equals the same literal, compared in-script (int64==int64).
     // I32Ok: a 32-bit natural-typed param also survives.
-    const Status status = ctx->Load(u8"bool ArgOk; bool ReturnOk; bool I32Ok;\n"
+    const Status status = scriptContext->Load(u8"bool ArgOk; bool ReturnOk; bool I32Ok;\n"
                                     u8"void main() {\n"
                                     u8"  NumProbe p;\n"
                                     u8"  p.takeI64(9007199254740993);\n"
@@ -741,9 +741,9 @@ TEST_CASE("angelscript: 64-bit integer facade args/returns round-trip exactly (n
                                     u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(ctx->GetGlobal(u8"ArgOk").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"ReturnOk").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"I32Ok").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"ArgOk").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"ReturnOk").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"I32Ok").Get<bool>() == true);
 }
 
 TEST_CASE("angelscript: a reflected method marshals 9 args without truncating the trailing ones")
@@ -751,14 +751,14 @@ TEST_CASE("angelscript: a reflected method marshals 9 args without truncating th
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     REQUIRE(static_cast<bool>(manager));
     manager->RegisterType(NumProbe::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // 9 args exceed the old 8-arg marshalling cap (kMaxArgs). Powers of two so any dropped or garbled
     // argument changes the sum: 1+2+4+8+16+32+64+128+256 = 511. Truncation would lose the 256.
     // (This is the bug that made DebugDraw.line - 6 coords + 3 color = 9 args - a silent no-op.)
     const Status status =
-        ctx->Load(u8"float S;\n"
+        scriptContext->Load(u8"float S;\n"
                   u8"void main() {\n"
                   u8"  NumProbe p;\n"
                   u8"  p.take9(1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f, 256.0f);\n"
@@ -766,7 +766,7 @@ TEST_CASE("angelscript: a reflected method marshals 9 args without truncating th
                   u8"}\n",
                   u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"S").Get<f64>() == doctest::Approx(511.0));
+    CHECK(scriptContext->GetGlobal(u8"S").Get<f64>() == doctest::Approx(511.0));
 }
 
 TEST_CASE("angelscript: a reflected method marshals 16 args - the top of the raised cap")
@@ -774,13 +774,13 @@ TEST_CASE("angelscript: a reflected method marshals 16 args - the top of the rai
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     REQUIRE(static_cast<bool>(manager));
     manager->RegisterType(NumProbe::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // 16 args = kMaxArgs exactly (raised from 8). Powers of two so any dropped or garbled argument
     // changes the sum: 1+2+...+32768 = 65535. A boundary off-by-one would lose the trailing 32768.
     const Status status =
-        ctx->Load(u8"float S;\n"
+        scriptContext->Load(u8"float S;\n"
                   u8"void main() {\n"
                   u8"  NumProbe p;\n"
                   u8"  p.take16(1.0f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f, 128.0f,\n"
@@ -790,7 +790,7 @@ TEST_CASE("angelscript: a reflected method marshals 16 args - the top of the rai
                   u8"}\n",
                   u8"main");
     REQUIRE(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"S").Get<f64>() == doctest::Approx(65535.0));
+    CHECK(scriptContext->GetGlobal(u8"S").Get<f64>() == doctest::Approx(65535.0));
 }
 
 TEST_CASE("angelscript: a context runs valid source")
@@ -798,11 +798,11 @@ TEST_CASE("angelscript: a context runs valid source")
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     REQUIRE(static_cast<bool>(manager));
 
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // A real class-based program: define a class, instantiate, call a method.
-    const Status status = ctx->Load(u8"class Greeter {\n"
+    const Status status = scriptContext->Load(u8"class Greeter {\n"
                                     u8"  string name;\n"
                                     u8"  Greeter(string n) { name = n; }\n"
                                     u8"  string greet() { return \"hi \" + name; }\n"
@@ -811,17 +811,17 @@ TEST_CASE("angelscript: a context runs valid source")
                                     u8"void main() { Greeter g(\"engine\"); G = g.greet(); }\n",
                                     u8"main");
     CHECK(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"G").Get<String>() == u8"hi engine");
+    CHECK(scriptContext->GetGlobal(u8"G").Get<String>() == u8"hi engine");
 }
 
 TEST_CASE("angelscript: string concatenates numbers (opAdd from RegisterStdString, no utils needed)")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // Documents that a HUD can build "Score: 1200" without RegisterStdStringUtils: the primitive
     // opAdd(int64/double) operators ship with RegisterStdString (int widens to int64).
-    const Status status = ctx->Load(u8"string C;\n"
+    const Status status = scriptContext->Load(u8"string C;\n"
                                     u8"void main() {\n"
                                     u8"  int score = 1200;\n"
                                     u8"  double t = 3.5;\n"
@@ -829,13 +829,13 @@ TEST_CASE("angelscript: string concatenates numbers (opAdd from RegisterStdStrin
                                     u8"}\n",
                                     u8"main");
     CHECK(status.IsOk());
-    CHECK(ctx->GetGlobal(u8"C").Get<String>() == u8"Score: 1200 (3.5)");
+    CHECK(scriptContext->GetGlobal(u8"C").Get<String>() == u8"Score: 1200 (3.5)");
 }
 
 TEST_CASE("angelscript: a compile error is reported")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    const Status status = ctx->Load(u8"this is not valid angelscript @#$", u8"main");
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    const Status status = scriptContext->Load(u8"this is not valid angelscript @#$", u8"main");
     CHECK_FALSE(status.IsOk());
     CHECK(status.Code() == ErrorCode::InvalidArgument);
 }
@@ -861,12 +861,12 @@ namespace
 
 TEST_CASE("angelscript: errors are surfaced to a handler")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
     CapturingErrors errors;
-    ctx->SetErrorHandler(&errors);
+    scriptContext->SetErrorHandler(&errors);
 
     // Compile error: kind + non-empty message + a source line.
-    CHECK_FALSE(ctx->Load(u8"int = = =", u8"main").IsOk());
+    CHECK_FALSE(scriptContext->Load(u8"int = = =", u8"main").IsOk());
     CHECK(errors.count >= 1);
     CHECK(errors.lastKind == ScriptErrorKind::Compile);
     CHECK(!errors.lastMessage.IsEmpty());
@@ -875,23 +875,23 @@ TEST_CASE("angelscript: errors are surfaced to a handler")
     // Runtime error (via the main() load convention): kind switches to Runtime.
     const int afterCompile = errors.count;
     CHECK_FALSE(
-        ctx->Load(u8"void main() { int zero = 0; int boom = 10 / zero; }\n", u8"main").IsOk());
+        scriptContext->Load(u8"void main() { int zero = 0; int boom = 10 / zero; }\n", u8"main").IsOk());
     CHECK(errors.count > afterCompile);
     CHECK(errors.lastKind == ScriptErrorKind::Runtime);
     CHECK(!errors.lastMessage.IsEmpty());
 
     // Clearing the handler restores default (console) reporting - no more captures.
-    ctx->SetErrorHandler(nullptr);
+    scriptContext->SetErrorHandler(nullptr);
     const int afterRuntime = errors.count;
-    CHECK_FALSE(ctx->Load(u8"more @#$ garbage", u8"main").IsOk());
+    CHECK_FALSE(scriptContext->Load(u8"more @#$ garbage", u8"main").IsOk());
     CHECK(errors.count == afterRuntime);
 }
 
 TEST_CASE("angelscript: a runtime error is reported")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
     const Status status =
-        ctx->Load(u8"void main() { int zero = 0; int boom = 10 / zero; }\n", u8"main");
+        scriptContext->Load(u8"void main() { int zero = 0; int boom = 10 / zero; }\n", u8"main");
     CHECK_FALSE(status.IsOk());
     CHECK(status.Code() == ErrorCode::Internal);
 }
@@ -900,10 +900,10 @@ TEST_CASE("angelscript: a runtime fault in a GLOBAL INITIALIZER is a Runtime err
 {
     // Build both compiles and runs global initializers; the backend classifies a
     // failed init as Runtime (not Compile) by Build's return code.
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
     CapturingErrors errors;
-    ctx->SetErrorHandler(&errors);
-    const Status status = ctx->Load(u8"int Zero() { return 0; }\n"
+    scriptContext->SetErrorHandler(&errors);
+    const Status status = scriptContext->Load(u8"int Zero() { return 0; }\n"
                                     u8"int boom = 10 / Zero();\n",
                                     u8"main");
     CHECK_FALSE(status.IsOk());
@@ -966,9 +966,9 @@ TEST_CASE("angelscript: Check runs neither the global initializers nor main")
     CHECK(errors.count == 0);
 
     // The engine still initializes globals for an ordinary load afterwards.
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(ctx->Load(u8"int Answer = 42;\n", u8"main").IsOk());
-    CHECK(ctx->GetGlobal(u8"Answer").Get<f64>() == 42.0);
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(scriptContext->Load(u8"int Answer = 42;\n", u8"main").IsOk());
+    CHECK(scriptContext->GetGlobal(u8"Answer").Get<f64>() == 42.0);
 }
 
 TEST_CASE("angelscript: each context is isolated")
@@ -986,51 +986,51 @@ TEST_CASE("angelscript: each context is isolated")
 
 TEST_CASE("angelscript: read module globals as Variant")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    REQUIRE(ctx->Load(u8"int Answer = 42;\n"
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    REQUIRE(scriptContext->Load(u8"int Answer = 42;\n"
                       u8"string Name = \"engine\";\n"
                       u8"bool Flag = true;\n"
                       u8"double Pi = 3.5;\n",
                       u8"main")
                 .IsOk());
 
-    CHECK(ctx->GetGlobal(u8"Answer").Get<f64>() == 42.0); // numbers surface as f64
-    CHECK(ctx->GetGlobal(u8"Name").Get<String>() == u8"engine");
-    CHECK(ctx->GetGlobal(u8"Flag").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"Pi").Get<f64>() == 3.5);
+    CHECK(scriptContext->GetGlobal(u8"Answer").Get<f64>() == 42.0); // numbers surface as f64
+    CHECK(scriptContext->GetGlobal(u8"Name").Get<String>() == u8"engine");
+    CHECK(scriptContext->GetGlobal(u8"Flag").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"Pi").Get<f64>() == 3.5);
 
-    CHECK(ctx->GetGlobal(u8"Missing").IsEmpty()); // absent -> empty Variant
+    CHECK(scriptContext->GetGlobal(u8"Missing").IsEmpty()); // absent -> empty Variant
 }
 
 TEST_CASE("angelscript: SetGlobal writes typed module globals")
 {
     // AngelScript globals are
     // directly writable - the contract's SetGlobal is real here.
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    REQUIRE(ctx->Load(u8"double Speed = 1;\n"
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    REQUIRE(scriptContext->Load(u8"double Speed = 1;\n"
                       u8"string Tag = \"none\";\n"
                       u8"double ReadSpeed() { return Speed; }\n"
                       u8"string ReadTag() { return Tag; }\n",
                       u8"main")
                 .IsOk());
 
-    ctx->SetGlobal(u8"Speed", Variant::From(4.5));
-    ctx->SetGlobal(u8"Tag", Variant::From(String(u8"fast")));
-    CHECK(ctx->Call(u8"ReadSpeed", Span<Variant>{}).Value().Get<f64>() == 4.5);
-    CHECK(ctx->Call(u8"ReadTag", Span<Variant>{}).Value().Get<String>() == u8"fast");
+    scriptContext->SetGlobal(u8"Speed", Variant::From(4.5));
+    scriptContext->SetGlobal(u8"Tag", Variant::From(String(u8"fast")));
+    CHECK(scriptContext->Call(u8"ReadSpeed", Span<Variant>{}).Value().Get<f64>() == 4.5);
+    CHECK(scriptContext->Call(u8"ReadTag", Span<Variant>{}).Value().Get<String>() == u8"fast");
 }
 
 TEST_CASE("angelscript: a read-only property reads, and an assignment fails to compile - no setter exists")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(Widget::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    REQUIRE(ctx->Load(u8"double S = 0;\n"
+    REQUIRE(scriptContext->Load(u8"double S = 0;\n"
                       u8"void main() { Widget@ w = Widget(); S = w.serial; }\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"S").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"S").Get<f64>() == 7.0);
 
     // The assignment is refused by the compiler: the backend registers get_serial only.
     RefPtr<IScriptContext> other = manager->CreateContext();
@@ -1042,10 +1042,10 @@ TEST_CASE("angelscript: reflected value types are usable from script (construct 
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager); // collect + FinalizeTypes (two-phase)
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // Construct a reflected Float3, read and write its properties.
-    const Status status = ctx->Load(u8"Float3@ v = Float3(1, 2, 3);\n"
+    const Status status = scriptContext->Load(u8"Float3@ v = Float3(1, 2, 3);\n"
                                     u8"double X = 0;\n"
                                     u8"double Z = 0;\n"
                                     u8"double X2 = 0;\n"
@@ -1058,9 +1058,9 @@ TEST_CASE("angelscript: reflected value types are usable from script (construct 
                                     u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(ctx->GetGlobal(u8"X").Get<f64>() == 1.0); // construct + getter
-    CHECK(ctx->GetGlobal(u8"Z").Get<f64>() == 3.0);
-    CHECK(ctx->GetGlobal(u8"X2").Get<f64>() == 9.0); // setter took effect
+    CHECK(scriptContext->GetGlobal(u8"X").Get<f64>() == 1.0); // construct + getter
+    CHECK(scriptContext->GetGlobal(u8"Z").Get<f64>() == 3.0);
+    CHECK(scriptContext->GetGlobal(u8"X2").Get<f64>() == 9.0); // setter took effect
 }
 
 TEST_CASE("angelscript: call reflected methods (static, instance, struct return, object args)")
@@ -1068,30 +1068,30 @@ TEST_CASE("angelscript: call reflected methods (static, instance, struct return,
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // Static method (namespace emission): Float3::Dot(a, b) with object args.
-    REQUIRE(ctx->Load(u8"Float3@ a = Float3(1, 2, 3);\n"
+    REQUIRE(scriptContext->Load(u8"Float3@ a = Float3(1, 2, 3);\n"
                       u8"Float3@ b = Float3(4, 5, 6);\n"
                       u8"double D = 0;\n"
                       u8"void main() { D = Float3::Dot(a, b); }\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"D").Get<f64>() == 32.0);
+    CHECK(scriptContext->GetGlobal(u8"D").Get<f64>() == 32.0);
 
     // Instance method returning a struct (Float4.XYZ() -> Float3), then read it.
-    REQUIRE(ctx->Load(u8"Float4@ v4 = Float4(7, 8, 9, 10);\n"
+    REQUIRE(scriptContext->Load(u8"Float4@ v4 = Float4(7, 8, 9, 10);\n"
                       u8"double XX = 0;\n"
                       u8"double ZZ = 0;\n"
                       u8"void main() { Float3@ xyz = v4.XYZ(); XX = xyz.x; ZZ = xyz.z; }\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"XX").Get<f64>() == 7.0);
-    CHECK(ctx->GetGlobal(u8"ZZ").Get<f64>() == 9.0);
+    CHECK(scriptContext->GetGlobal(u8"XX").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"ZZ").Get<f64>() == 9.0);
 
     // Instance method taking an object arg, returning bool; constructed from
     // object args too (AABB(Float3, Float3)).
-    REQUIRE(ctx->Load(u8"AABB@ box = AABB(Float3(0, 0, 0), Float3(10, 10, 10));\n"
+    REQUIRE(scriptContext->Load(u8"AABB@ box = AABB(Float3(0, 0, 0), Float3(10, 10, 10));\n"
                       u8"bool inside = false;\n"
                       u8"bool outside = true;\n"
                       u8"void main() {\n"
@@ -1100,8 +1100,8 @@ TEST_CASE("angelscript: call reflected methods (static, instance, struct return,
                       u8"}\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"inside").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"outside").Get<bool>() == false);
+    CHECK(scriptContext->GetGlobal(u8"inside").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"outside").Get<bool>() == false);
 }
 
 TEST_CASE("angelscript: same-arity type overloads carry distinct script names (overloadedName)")
@@ -1109,11 +1109,11 @@ TEST_CASE("angelscript: same-arity type overloads carry distinct script names (o
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // Same-arity type overloads carry distinct script names (the overloadedName contract): Mul
     // (Float3, Float3) componentwise and MulScalar (Float3, float) scale, both bound.
-    REQUIRE(ctx->Load(u8"Float3@ p = Float3(2, 3, 4);\n"
+    REQUIRE(scriptContext->Load(u8"Float3@ p = Float3(2, 3, 4);\n"
                       u8"double CX = 0;\n"
                       u8"double CZ = 0;\n"
                       u8"double SX = 0;\n"
@@ -1126,9 +1126,9 @@ TEST_CASE("angelscript: same-arity type overloads carry distinct script names (o
                       u8"}\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"CX").Get<f64>() == 2.0); // chose (Float3, Float3)
-    CHECK(ctx->GetGlobal(u8"CZ").Get<f64>() == 12.0);
-    CHECK(ctx->GetGlobal(u8"SX").Get<f64>() == 4.0); // chose (Float3, float)
+    CHECK(scriptContext->GetGlobal(u8"CX").Get<f64>() == 2.0); // chose (Float3, Float3)
+    CHECK(scriptContext->GetGlobal(u8"CZ").Get<f64>() == 12.0);
+    CHECK(scriptContext->GetGlobal(u8"SX").Get<f64>() == 4.0); // chose (Float3, float)
 }
 
 TEST_CASE("angelscript: reflected math ops (Math statics, Float3/Quaternion vector ops)")
@@ -1136,9 +1136,9 @@ TEST_CASE("angelscript: reflected math ops (Math statics, Float3/Quaternion vect
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
-    REQUIRE(ctx->Load(u8"double R = 0;\n"
+    REQUIRE(scriptContext->Load(u8"double R = 0;\n"
                       u8"double K = 0;\n"
                       u8"double CZ = 0;\n"
                       u8"double RX = 0;\n"
@@ -1155,10 +1155,10 @@ TEST_CASE("angelscript: reflected math ops (Math statics, Float3/Quaternion vect
                       u8"}\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"R").Get<f64>() == 4.0);
-    CHECK(ctx->GetGlobal(u8"K").Get<f64>() == 171.0);
-    CHECK(ctx->GetGlobal(u8"CZ").Get<f64>() == 1.0);
-    CHECK(ctx->GetGlobal(u8"RX").Get<f64>() == doctest::Approx(1.0));
+    CHECK(scriptContext->GetGlobal(u8"R").Get<f64>() == 4.0);
+    CHECK(scriptContext->GetGlobal(u8"K").Get<f64>() == 171.0);
+    CHECK(scriptContext->GetGlobal(u8"CZ").Get<f64>() == 1.0);
+    CHECK(scriptContext->GetGlobal(u8"RX").Get<f64>() == doctest::Approx(1.0));
 }
 
 TEST_CASE("angelscript: bound-api signatures carry reflected parameter names")
@@ -1230,9 +1230,9 @@ TEST_CASE("angelscript: Object-derived type as a script-visible class")
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(Widget::StaticType());           // register just the Object type
-    RefPtr<IScriptContext> ctx = manager->CreateContext(); // defensively finalizes
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext(); // defensively finalizes
 
-    REQUIRE(ctx->Load(u8"double I = 0;\n"
+    REQUIRE(scriptContext->Load(u8"double I = 0;\n"
                       u8"double D = 0;\n"
                       u8"double O = 0;\n"
                       u8"double H = 0;\n"
@@ -1248,10 +1248,10 @@ TEST_CASE("angelscript: Object-derived type as a script-visible class")
                       u8"}\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"I").Get<f64>() == 21.0);
-    CHECK(ctx->GetGlobal(u8"D").Get<f64>() == 42.0);
-    CHECK(ctx->GetGlobal(u8"O").Get<f64>() == 5.0);
-    CHECK(ctx->GetGlobal(u8"H").Get<f64>() == 5.0); // read one level deeper than a bare object
+    CHECK(scriptContext->GetGlobal(u8"I").Get<f64>() == 21.0);
+    CHECK(scriptContext->GetGlobal(u8"D").Get<f64>() == 42.0);
+    CHECK(scriptContext->GetGlobal(u8"O").Get<f64>() == 5.0);
+    CHECK(scriptContext->GetGlobal(u8"H").Get<f64>() == 5.0); // read one level deeper than a bare object
 }
 
 TEST_CASE("angelscript: a default-constructed reflected type")
@@ -1259,51 +1259,51 @@ TEST_CASE("angelscript: a default-constructed reflected type")
     RegisterCoreTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // Guid has a default ctor and (u64, u64); its props surface as doubles.
-    REQUIRE(ctx->Load(u8"Guid@ g = Guid(7, 42);\n"
+    REQUIRE(scriptContext->Load(u8"Guid@ g = Guid(7, 42);\n"
                       u8"double Hi = 0;\n"
                       u8"double Lo = 0;\n"
                       u8"void main() { Hi = double(g.high); Lo = double(g.low); }\n",
                       u8"main")
                 .IsOk());
-    CHECK(ctx->GetGlobal(u8"Hi").Get<f64>() == 7.0);
-    CHECK(ctx->GetGlobal(u8"Lo").Get<f64>() == 42.0);
+    CHECK(scriptContext->GetGlobal(u8"Hi").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"Lo").Get<f64>() == 42.0);
 }
 
 TEST_CASE("angelscript: call a script function with marshalled args")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    REQUIRE(ctx->Load(u8"double add(double a, double b) { return a + b; }\n"
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    REQUIRE(scriptContext->Load(u8"double add(double a, double b) { return a + b; }\n"
                       u8"string greeting() { return \"hi\"; }\n"
                       u8"string greet(string name) { return \"hi \" + name; }\n",
                       u8"main")
                 .IsOk());
 
-    CHECK(ctx->HasFunction(u8"add"));
-    CHECK_FALSE(ctx->HasFunction(u8"nope"));
+    CHECK(scriptContext->HasFunction(u8"add"));
+    CHECK_FALSE(scriptContext->HasFunction(u8"nope"));
 
     // int args marshal to script doubles; result comes back as f64.
     Variant addArgs[] = {Variant::From(2), Variant::From(3)};
-    CHECK(ctx->Call(u8"add", Span<Variant>{addArgs, 2}).Value().Get<f64>() == 5.0);
+    CHECK(scriptContext->Call(u8"add", Span<Variant>{addArgs, 2}).Value().Get<f64>() == 5.0);
 
     // no-arg call returning a string.
-    CHECK(ctx->Call(u8"greeting", Span<Variant>{}).Value().Get<String>() == u8"hi");
+    CHECK(scriptContext->Call(u8"greeting", Span<Variant>{}).Value().Get<String>() == u8"hi");
 
     // String argument in, string out.
     Variant greetArgs[] = {Variant::From(String(u8"engine"))};
-    CHECK(ctx->Call(u8"greet", Span<Variant>{greetArgs, 1}).Value().Get<String>() ==
+    CHECK(scriptContext->Call(u8"greet", Span<Variant>{greetArgs, 1}).Value().Get<String>() ==
           u8"hi engine");
 
     // missing callable -> NotFound.
-    CHECK(ctx->Call(u8"nope", Span<Variant>{}).Error() == ErrorCode::NotFound);
+    CHECK(scriptContext->Call(u8"nope", Span<Variant>{}).Error() == ErrorCode::NotFound);
 }
 
 TEST_CASE("angelscript: instantiate a script class and invoke its methods")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    REQUIRE(ctx->Load(u8"class Counter {\n"
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    REQUIRE(scriptContext->Load(u8"class Counter {\n"
                       u8"  double n;\n"
                       u8"  Counter(double start) { n = start; }\n"
                       u8"  void add(double x) { n = n + x; }\n"
@@ -1314,7 +1314,7 @@ TEST_CASE("angelscript: instantiate a script class and invoke its methods")
                 .IsOk());
 
     Variant ctorArgs[] = {Variant::From(10)};
-    RefPtr<ScriptObject> counter = ctx->CreateInstance(u8"Counter", Span<Variant>{ctorArgs, 1});
+    RefPtr<ScriptObject> counter = scriptContext->CreateInstance(u8"Counter", Span<Variant>{ctorArgs, 1});
     REQUIRE(static_cast<bool>(counter));
 
     Variant addArgs[] = {Variant::From(5)};
@@ -1332,23 +1332,23 @@ TEST_CASE("angelscript: instantiate a script class and invoke its methods")
 
 TEST_CASE("angelscript: CreateInstance returns null for an unknown class")
 {
-    RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-    REQUIRE(ctx->Load(u8"class Known { Known() {} }\n", u8"main").IsOk());
-    CHECK_FALSE(static_cast<bool>(ctx->CreateInstance(u8"Missing", Span<Variant>{})));
+    RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+    REQUIRE(scriptContext->Load(u8"class Known { Known() {} }\n", u8"main").IsOk());
+    CHECK_FALSE(static_cast<bool>(scriptContext->CreateInstance(u8"Missing", Span<Variant>{})));
 }
 
 TEST_CASE("angelscript: a script object outlives the local context reference")
 {
     RefPtr<ScriptObject> obj;
     {
-        RefPtr<IScriptContext> ctx = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
-        REQUIRE(ctx->Load(u8"class Echo {\n"
+        RefPtr<IScriptContext> scriptContext = angelscript::CreateScriptManager(foundation::core::DefaultAllocator())->CreateContext();
+        REQUIRE(scriptContext->Load(u8"class Echo {\n"
                           u8"  Echo() {}\n"
                           u8"  double ping() { return 42; }\n"
                           u8"}\n",
                           u8"main")
                     .IsOk());
-        obj = ctx->CreateInstance(u8"Echo", Span<Variant>{});
+        obj = scriptContext->CreateInstance(u8"Echo", Span<Variant>{});
         REQUIRE(static_cast<bool>(obj));
         // ctx goes out of scope here; obj retains it (keeps the engine alive).
     }
@@ -1396,8 +1396,8 @@ TEST_CASE("angelscript: LoadBehaviorModule reports each class's sourceName as it
     UniquePtr<IScriptDebugger> debugger = manager->CreateDebugger();
     REQUIRE(debugger.Get() != nullptr);
 
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
-    REQUIRE(static_cast<bool>(ctx));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(static_cast<bool>(scriptContext));
 
     // One behavior class, source file "Mover.as"; line 5 is the breakpoint line.
     const StringView moverSource =
@@ -1409,7 +1409,7 @@ TEST_CASE("angelscript: LoadBehaviorModule reports each class's sourceName as it
         u8"  }\n"                  // 6
         u8"}\n";                   // 7
     const BehaviorModuleClass classes[] = {{u8"Mover.as", moverSource, {}}};
-    REQUIRE(ctx->LoadBehaviorModule(Span<const BehaviorModuleClass>{classes, 1}, u8"behaviors#1")
+    REQUIRE(scriptContext->LoadBehaviorModule(Span<const BehaviorModuleClass>{classes, 1}, u8"behaviors#1")
                 .IsOk());
 
     struct Sink final : IScriptDebuggerListener
@@ -1423,7 +1423,7 @@ TEST_CASE("angelscript: LoadBehaviorModule reports each class's sourceName as it
     // NOT on the "behaviors#1" module name.
     debugger->SetBreakpoint(u8"Mover.as", 5);
 
-    RefPtr<ScriptObject> mover = ctx->CreateInstance(u8"Mover", Span<Variant>{});
+    RefPtr<ScriptObject> mover = scriptContext->CreateInstance(u8"Mover", Span<Variant>{});
     REQUIRE(static_cast<bool>(mover));
     (void)mover->Invoke(u8"tick", Span<Variant>{}); // suspends at the breakpoint
 
@@ -1568,11 +1568,11 @@ TEST_CASE("angelscript: bytecode capability - compile to blob, serialize, load i
     }
 
     // PLAYER side: LoadByteCode into a context (no Build) and call the restored functions.
-    RefPtr<IScriptContext> context = manager->CreateContext();
-    REQUIRE(context->LoadBlob(*reloaded).IsOk());
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(scriptContext->LoadBlob(*reloaded).IsOk());
     Variant args[] = {Variant::From<f64>(2.0), Variant::From<f64>(3.0)};
-    CHECK(context->Call(u8"add", Span<Variant>{args, 2}).Value().Get<f64>() == doctest::Approx(5.0));
-    CHECK(context->Call(u8"answer", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(42.0));
+    CHECK(scriptContext->Call(u8"add", Span<Variant>{args, 2}).Value().Get<f64>() == doctest::Approx(5.0));
+    CHECK(scriptContext->Call(u8"answer", Span<Variant>{}).Value().Get<f64>() == doctest::Approx(42.0));
 }
 
 TEST_CASE("angelscript: CompileToBlob rejects a broken source at cook")
@@ -1585,16 +1585,16 @@ TEST_CASE("angelscript: a script function is a native callback via IScriptDelega
 {
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(conformance::DelegateSignal::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // A behavior subscribes a function handle to a native event; native code fires it.
-    REQUIRE(ctx->Load(u8"double add5(double x) { return x + 5; }\n"
+    REQUIRE(scriptContext->Load(u8"double add5(double x) { return x + 5; }\n"
                       u8"DelegateSignal@ signal = DelegateSignal();\n"
                       u8"void main() { signal.Connect(ScriptDelegate(add5)); }\n",
                       u8"main")
                 .IsOk());
 
-    Variant signalVar = ctx->GetGlobal(u8"signal");
+    Variant signalVar = scriptContext->GetGlobal(u8"signal");
     REQUIRE(signalVar.IsObject());
     conformance::DelegateSignal* signal = signalVar.AsObject<conformance::DelegateSignal>();
     REQUIRE(signal != nullptr);
@@ -1615,9 +1615,9 @@ namespace
     public:
         void Poke() const
         {
-            if (IScriptContext* context = CurrentScriptContext())
+            if (IScriptContext* scriptContext = CurrentScriptContext())
             {
-                if (int* flag = static_cast<int*>(context->GetService(u8"probe.flag")))
+                if (int* flag = static_cast<int*>(scriptContext->GetService(u8"probe.flag")))
                 {
                     *flag = 42;
                 }
@@ -1637,25 +1637,25 @@ TEST_CASE("angelscript: a delegate callback scopes its owning context (facades r
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(conformance::DelegateSignal::StaticType());
     manager->RegisterType(ContextProbe::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     conformance::CapturedErrors errors;
-    ctx->SetErrorHandler(&errors);
+    scriptContext->SetErrorHandler(&errors);
 
     // The per-context service the handler's facade will resolve (engine singletons reach
     // scripts through CurrentScriptContext()->GetService, never a process global).
     int flag = 0;
-    ctx->SetService(u8"probe.flag", &flag);
+    scriptContext->SetService(u8"probe.flag", &flag);
 
     // A script function subscribed to a native signal; its body calls the reflected static that
     // reads CurrentScriptContext()->GetService and writes through it.
-    REQUIRE(ctx->Load(u8"double onFire(double x) { ContextProbe p; p.Poke(); return x; }\n"
+    REQUIRE(scriptContext->Load(u8"double onFire(double x) { ContextProbe p; p.Poke(); return x; }\n"
                       u8"DelegateSignal@ signal = DelegateSignal();\n"
                       u8"void main() { signal.Connect(ScriptDelegate(onFire)); }\n",
                       u8"main")
                 .IsOk());
     CHECK(errors.count == 0);
 
-    Variant signalVar = ctx->GetGlobal(u8"signal");
+    Variant signalVar = scriptContext->GetGlobal(u8"signal");
     REQUIRE(signalVar.IsObject());
     conformance::DelegateSignal* signal = signalVar.AsObject<conformance::DelegateSignal>();
     REQUIRE(signal != nullptr);
@@ -1679,16 +1679,16 @@ TEST_CASE("angelscript: a facade's delegate shape is a type scripts use without 
     CHECK(found == 1u);
 
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     conformance::CapturedErrors errors;
-    ctx->SetErrorHandler(&errors);
-    REQUIRE(ctx->Load(u8"double add(double a, double b) { return a + b; }\n"
+    scriptContext->SetErrorHandler(&errors);
+    REQUIRE(scriptContext->Load(u8"double add(double a, double b) { return a + b; }\n"
                       u8"double Sum = 0;\n"
                       u8"void main() { ProbeShape @f = add; Sum = f(2, 3); }\n",
                       u8"main")
                 .IsOk());
     CHECK(errors.count == 0);
-    CHECK(ctx->GetGlobal(u8"Sum").Get<f64>() == doctest::Approx(5.0));
+    CHECK(scriptContext->GetGlobal(u8"Sum").Get<f64>() == doctest::Approx(5.0));
 }
 
 TEST_CASE("angelscript: a METHOD delegate is a native callback via IScriptDelegate")
@@ -1700,13 +1700,13 @@ TEST_CASE("angelscript: a METHOD delegate is a native callback via IScriptDelega
     // captured object so the object's field is mutated.
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     manager->RegisterType(conformance::DelegateSignal::StaticType());
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
     conformance::CapturedErrors errors;
-    ctx->SetErrorHandler(&errors);
+    scriptContext->SetErrorHandler(&errors);
 
     // A script class whose method matches the ScriptDelegate funcdef (double(double)); a bound
     // method delegate to a live instance is subscribed to the native signal.
-    REQUIRE(ctx->Load(u8"class Handler { double v = 0;\n"
+    REQUIRE(scriptContext->Load(u8"class Handler { double v = 0;\n"
                       u8"  double bump(double x) { v += x; return v; } }\n"
                       u8"Handler@ h = Handler();\n"
                       u8"DelegateSignal@ signal = DelegateSignal();\n"
@@ -1715,7 +1715,7 @@ TEST_CASE("angelscript: a METHOD delegate is a native callback via IScriptDelega
                 .IsOk());
     CHECK(errors.count == 0);
 
-    Variant signalVar = ctx->GetGlobal(u8"signal");
+    Variant signalVar = scriptContext->GetGlobal(u8"signal");
     REQUIRE(signalVar.IsObject());
     conformance::DelegateSignal* signal = signalVar.AsObject<conformance::DelegateSignal>();
     REQUIRE(signal != nullptr);
@@ -1734,8 +1734,8 @@ TEST_CASE("angelscript: many engine lifecycles in one process (the cook pattern)
         RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
         REQUIRE(manager.Get() != nullptr);
         manager->FinalizeTypes();
-        RefPtr<IScriptContext> ctx = manager->CreateContext();
-        REQUIRE(ctx.Get() != nullptr);
-        CHECK(ctx->Load(u8"void main() { }", u8"cook_cycle").IsOk());
+        RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+        REQUIRE(scriptContext.Get() != nullptr);
+        CHECK(scriptContext->Load(u8"void main() { }", u8"cook_cycle").IsOk());
     }
 }

@@ -105,13 +105,13 @@ export namespace engine::runtime
         messaging::EventBus* runEvents = nullptr;
     };
 
-    inline void InstallRunScriptService(script::IScriptContext& context, RunScriptBinding& binding)
+    inline void InstallRunScriptService(script::IScriptContext& scriptContext, RunScriptBinding& binding)
     {
-        context.SetService(kRunScriptService, &binding);
+        scriptContext.SetService(kRunScriptService, &binding);
     }
-    inline void ClearRunScriptService(script::IScriptContext& context)
+    inline void ClearRunScriptService(script::IScriptContext& scriptContext)
     {
-        context.SetService(kRunScriptService, nullptr);
+        scriptContext.SetService(kRunScriptService, nullptr);
     }
 
     // ---- run.* script facade: the run/app tier surfaced to scripts. A
@@ -141,9 +141,9 @@ export namespace engine::runtime
     public:
         [[nodiscard]] static RunScriptBinding* Resolve()
         {
-            script::IScriptContext* context = script::CurrentScriptContext();
-            return context != nullptr
-                       ? static_cast<RunScriptBinding*>(context->GetService(kRunScriptService))
+            script::IScriptContext* scriptContext = script::CurrentScriptContext();
+            return scriptContext != nullptr
+                       ? static_cast<RunScriptBinding*>(scriptContext->GetService(kRunScriptService))
                        : nullptr;
         }
         [[nodiscard]] static RunEvents events()
@@ -334,7 +334,7 @@ export namespace engine::runtime
             // Every context of this run reads THIS run's services (run.*, its input, its save), the
             // behaviors' as much as a game script's: a project with no game script still has input.
             m_runHost.SetOwnerServices(core::Function<void(script::IScriptContext&)>{
-                [this](script::IScriptContext& context) { InstallRunServices(context); }});
+                [this](script::IScriptContext& scriptContext) { InstallRunServices(scriptContext); }});
             // The run's HTTP client is made on its scripts' first request, and https and a wss
             // join use the run's TLS backend, made when first needed.
             m_http.SetFactory([this]() { return foundation::http::CreateHttpClient(*m_allocator, TlsBackend()); });
@@ -361,7 +361,7 @@ export namespace engine::runtime
 
         /// This run's services on a script context: run.* (and its event bus), the run's own
         /// input runtime (over the shared one the app's configurator installs) and its save.
-        void InstallRunServices(script::IScriptContext& context);
+        void InstallRunServices(script::IScriptContext& scriptContext);
 
         void SetScene(scene::Scene* scene) noexcept
         {

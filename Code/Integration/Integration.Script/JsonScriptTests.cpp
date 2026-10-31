@@ -48,10 +48,10 @@ TEST_CASE("integration.script: parse / query / build / stringify from AngelScrip
     RegisterJsonTypes();
     RefPtr<IScriptManager> manager = angelscript::CreateScriptManager(foundation::core::DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     const Status status =
-        ctx->Load(u8"double N = 0;\n"
+        scriptContext->Load(u8"double N = 0;\n"
                   u8"string NAME;\n"
                   u8"bool ISOBJ = false;\n"
                   u8"string OUT;\n"
@@ -68,10 +68,10 @@ TEST_CASE("integration.script: parse / query / build / stringify from AngelScrip
                   u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(ctx->GetGlobal(u8"N").Get<f64>() == 7.0);
-    CHECK(ctx->GetGlobal(u8"NAME").Get<String>() == StringView(u8"tool"));
-    CHECK(ctx->GetGlobal(u8"ISOBJ").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"OUT").Get<String>() == StringView(u8"{\"id\":1,\"ok\":true}"));
+    CHECK(scriptContext->GetGlobal(u8"N").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"NAME").Get<String>() == StringView(u8"tool"));
+    CHECK(scriptContext->GetGlobal(u8"ISOBJ").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"OUT").Get<String>() == StringView(u8"{\"id\":1,\"ok\":true}"));
 }
 #endif
 
@@ -81,11 +81,11 @@ TEST_CASE("integration.script: parse / query / build / stringify from Luau")
     RegisterJsonTypes();
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> ctx = manager->CreateContext();
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
 
     // Luau: statics via `.` (JsonValue.Parse), instance methods via `:`; the chunk runs at top level.
     const Status status =
-        ctx->Load(u8"local doc = JsonValue.Parse(\"{\\\"n\\\":7,\\\"name\\\":\\\"tool\\\"}\")\n"
+        scriptContext->Load(u8"local doc = JsonValue.Parse(\"{\\\"n\\\":7,\\\"name\\\":\\\"tool\\\"}\")\n"
                   u8"N = doc:Get(\"n\"):AsNumber(0)\n"
                   u8"NAME = doc:Get(\"name\"):AsString()\n"
                   u8"ISOBJ = doc:IsObject()\n"
@@ -96,9 +96,9 @@ TEST_CASE("integration.script: parse / query / build / stringify from Luau")
                   u8"main");
     REQUIRE(status.IsOk());
 
-    CHECK(ctx->GetGlobal(u8"N").Get<f64>() == 7.0);
-    CHECK(ctx->GetGlobal(u8"NAME").Get<String>() == StringView(u8"tool"));
-    CHECK(ctx->GetGlobal(u8"ISOBJ").Get<bool>() == true);
-    CHECK(ctx->GetGlobal(u8"OUT").Get<String>() == StringView(u8"{\"id\":1,\"ok\":true}"));
+    CHECK(scriptContext->GetGlobal(u8"N").Get<f64>() == 7.0);
+    CHECK(scriptContext->GetGlobal(u8"NAME").Get<String>() == StringView(u8"tool"));
+    CHECK(scriptContext->GetGlobal(u8"ISOBJ").Get<bool>() == true);
+    CHECK(scriptContext->GetGlobal(u8"OUT").Get<String>() == StringView(u8"{\"id\":1,\"ok\":true}"));
 }
 #endif

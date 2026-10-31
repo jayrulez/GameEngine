@@ -262,9 +262,9 @@ namespace engine::render
             {
                 return nullptr;
             }
-            foundation::script::IScriptContext* ctx = foundation::script::CurrentScriptContext();
+            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
             RenderScriptBinding* binding =
-                ctx != nullptr ? static_cast<RenderScriptBinding*>(ctx->GetService(kRenderScriptService))
+                scriptContext != nullptr ? static_cast<RenderScriptBinding*>(scriptContext->GetService(kRenderScriptService))
                                : nullptr;
             return (binding != nullptr && binding->render != nullptr)
                        ? &binding->render->DebugScene(*scene)

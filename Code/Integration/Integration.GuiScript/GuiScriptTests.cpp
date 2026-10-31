@@ -47,38 +47,38 @@ namespace
         RefPtr<gui::SceneRoot> root = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
         gui::GuiScriptBinding binding;
         Errors errors;
-        RefPtr<IScriptContext> context;
+        RefPtr<IScriptContext> scriptContext;
 
         explicit GuiBed(IScriptManager& manager)
         {
             root->SetSize(Float2{400.0f, 300.0f});
             binding.root = root.Get();
-            context = manager.CreateContext();
-            context->SetErrorHandler(&errors);
-            gui::InstallGuiScriptService(*context, binding);
+            scriptContext = manager.CreateContext();
+            scriptContext->SetErrorHandler(&errors);
+            gui::InstallGuiScriptService(*scriptContext, binding);
         }
         ~GuiBed()
         {
-            if (context)
-                context->SetErrorHandler(nullptr);
+            if (scriptContext)
+                scriptContext->SetErrorHandler(nullptr);
         }
 
         [[nodiscard]] f64 Number(const char8_t* function)
         {
-            Result<Variant> result = context->Call(function, Span<Variant>{});
+            Result<Variant> result = scriptContext->Call(function, Span<Variant>{});
             INFO(doctest::String(reinterpret_cast<const char*>(errors.last.CStr())));
             REQUIRE(result.HasValue());
             const f64* value = result.Value().TryGet<f64>();
             REQUIRE(value != nullptr);
             return *value;
         }
-        void Run(const char8_t* function) { REQUIRE(context->Call(function, Span<Variant>{}).HasValue()); }
+        void Run(const char8_t* function) { REQUIRE(scriptContext->Call(function, Span<Variant>{}).HasValue()); }
         // `function` must fail with the gone-handle error.
         void Refused(const char8_t* function)
         {
             INFO(reinterpret_cast<const char*>(function));
             const int before = errors.count;
-            CHECK_FALSE(context->Call(function, Span<Variant>{}).HasValue());
+            CHECK_FALSE(scriptContext->Call(function, Span<Variant>{}).HasValue());
             CHECK(errors.count > before);
             CHECK(errors.last.AsView().ContainsIgnoreCase(StringView(u8"the object is gone")));
         }
@@ -154,7 +154,7 @@ namespace
 
         // A handle outliving its GUI reads as gone, never as freed memory.
         CHECK(bed.Number(u8"goValid") == doctest::Approx(1.0));
-        gui::ClearGuiScriptService(*bed.context);
+        gui::ClearGuiScriptService(*bed.scriptContext);
         bed.binding.root = nullptr;
         bed.root = RefPtr<gui::SceneRoot>{};
         CHECK(bed.Number(u8"goValid") == doctest::Approx(0.0));
@@ -246,7 +246,7 @@ TEST_CASE("gui-script: AngelScript defines, handles and runs commands")
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool CommandHandler();\n"
         u8"bool toggleMusic() { gui::setCommandChecked(\"music\", !gui::isCommandChecked(\"music\")); return false; }\n"
         u8"void main() {\n"
@@ -270,7 +270,7 @@ TEST_CASE("gui-script: Luau defines, handles and runs commands")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local root = gui.root()\n"
         u8"gui.defineCommand(\"music\", \"Music\")\n"
         u8"root:onCommand(\"music\", function() gui.setCommandChecked(\"music\", not gui.isCommandChecked(\"music\")); return false end)\n"
@@ -314,7 +314,7 @@ TEST_CASE("gui-script: AngelScript captures the next key, names it and binds it"
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool CommandHandler();\n"
         u8"double count = 0;\n"
         u8"bool jump() { count += 1; return false; }\n"
@@ -340,7 +340,7 @@ TEST_CASE("gui-script: Luau captures the next key, names it and binds it")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local count = 0\n"
         u8"gui.root():onCommand(\"jump\", function() count = count + 1; return false end)\n"
         u8"function listen()\n"
@@ -362,7 +362,7 @@ TEST_CASE("gui-script: AngelScript binds widgets to data and to each other")
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
     SeedBindingData(bed);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef string TextExpression();\n"
         u8"funcdef double NumberExpression();\n"
         u8"Slider@ slider;\n"
@@ -396,7 +396,7 @@ TEST_CASE("gui-script: Luau binds widgets to data and to each other")
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
     SeedBindingData(bed);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local root = gui.root()\n"
         u8"local score = Label.of(root:add(\"Label\"))\n"
         u8"local slider = Slider.of(root:add(\"Slider\"))\n"
@@ -420,7 +420,7 @@ TEST_CASE("gui-script: AngelScript builds, styles and clicks the GUI's widgets, 
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"double clickCount = 0;\n"
         u8"double byeInHandler = -1;\n"
         u8"Button@ go;\n"
@@ -470,7 +470,7 @@ TEST_CASE("gui-script: Luau builds, styles and clicks the GUI's widgets, and hol
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local clickCount = 0\n"
         u8"local byeInHandler = -1\n"
         u8"local root = gui.root()\n"
@@ -538,7 +538,7 @@ TEST_CASE("gui-script: an AngelScript handler reads the event and takes it")
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"double x = -1; double localX = -1; double count = 0; double saw = 0;\n"
         u8"bool onDown(GuiEvent e) { x = e.x; localX = e.localX; count = e.clickCount; return true; }\n"
@@ -566,7 +566,7 @@ TEST_CASE("gui-script: a Luau handler reads the event and takes it")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local x, localX, count, saw = -1, -1, 0, 0\n"
         u8"local root = gui.root()\n"
         u8"local button = root:add(\"Button\")\n"
@@ -612,7 +612,7 @@ TEST_CASE("gui-script: an AngelScript handler takes a node's gestures, declared 
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"double scale = 0; double rotation = 0; double startCount = 0; double endCount = 0;\n"
         u8"bool onStart(GuiEvent e) { startCount += 1; return true; }\n"
@@ -642,7 +642,7 @@ TEST_CASE("gui-script: a Luau handler takes a node's gestures, declared by its t
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local scale, rotation, startCount, endCount = 0, 0, 0, 0\n"
         u8"local pad = gui.root():add(\"Panel\")\n"
         u8"pad.x = 50; pad.y = 50; pad.width = 300; pad.height = 300\n"
@@ -666,7 +666,7 @@ TEST_CASE("gui-script: an AngelScript source and targets drag and drop, a dragqu
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"double dropped = 0; double right = 0; double asked = 0; double ended = 0;\n"
         u8"bool onDrop(GuiEvent e) { dropped += 1; if (e.dragType == \"color\" && e.text == \"red\" && e.effect == \"move\") right += 1; return true; }\n"
@@ -749,7 +749,7 @@ TEST_CASE("gui-script: AngelScript tweens, springs and plays a sequence (E14)")
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef void Done();\n"
         u8"int finished = 0;\n"
         u8"void tick() { finished++; }\n"
@@ -776,7 +776,7 @@ TEST_CASE("gui-script: Luau tweens, springs and plays a sequence (E14)")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local finished = 0\n"
         u8"local root = gui.root()\n"
         u8"local box = root:add(\"Label\")\n"
@@ -830,7 +830,7 @@ TEST_CASE("gui-script: AngelScript makes a node leave and hears its transition e
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"double heard = 0; double elapsed = 0;\n"
         u8"Button@ card;\n"
@@ -856,7 +856,7 @@ TEST_CASE("gui-script: Luau makes a node leave and hears its transition end (K0)
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local heard, elapsed = 0, 0\n"
         u8"local card = Button.of(gui.root():add(\"Button\"))\n"
         u8"card:addClass(\"card\")\n"
@@ -897,7 +897,7 @@ TEST_CASE("gui-script: AngelScript tweens a data value (K3)")
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
     bed.root->GetContext().GetData().Set(StringView(u8"score"), Variant::From<i32>(0));
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"Tween@ counting;\n"
         u8"void main() { @counting = gui::tween(\"score\", 10, 1.0, \"linear\"); }\n"
         u8"double done() { return counting.isDone() ? 1 : 0; }\n",
@@ -914,7 +914,7 @@ TEST_CASE("gui-script: Luau tweens a data value (K3)")
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
     bed.root->GetContext().GetData().Set(StringView(u8"score"), Variant::From<i32>(0));
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local counting = gui.tween(\"score\", 10, 1.0, \"linear\")\n"
         u8"function done() return counting:isDone() and 1 or 0 end\n",
         u8"main");
@@ -943,7 +943,7 @@ TEST_CASE("gui-script: AngelScript reads the input kind and hears it change (K2b
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"double heard = 0;\n"
         u8"bool onKind(GuiEvent e) { heard += 1; return false; }\n"
@@ -962,7 +962,7 @@ TEST_CASE("gui-script: Luau reads the input kind and hears it change (K2b)")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local heard = 0\n"
         u8"gui.root():on(\"inputkind\", function(e) heard = heard + 1; return false end)\n"
         u8"function isPad() return gui.inputKind() == \"pad\" and 1 or 0 end\n"
@@ -979,7 +979,7 @@ TEST_CASE("gui-script: Luau hears an event a library names, with its detail (K4)
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local heard = \"\"\n"
         u8"gui.root():on(\"screenenter\", function(e) heard = e.type .. \":\" .. e.text; return false end)\n"
         u8"function heardIt() return heard == \"screenenter:title\" and 1 or 0 end\n",
@@ -1019,7 +1019,7 @@ TEST_CASE("gui-script: AngelScript turns listeners off, from inside one too (E16
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"int onces = 0; int alwayses = 0; int onceToken = 0; int alwaysToken = 0;\n"
         u8"bool once(GuiEvent e) { onces++; gui::root().childAt(0).off(onceToken); return false; }\n"
@@ -1045,7 +1045,7 @@ TEST_CASE("gui-script: Luau turns listeners off, from inside one too (E16)")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local onces, alwayses = 0, 0\n"
         u8"local button = gui.root():add(\"Button\")\n"
         u8"button.width = 80; button.height = 30\n"
@@ -1131,7 +1131,7 @@ TEST_CASE("gui-script: AngelScript opens windows, menus and popups of its own (E
 {
     RefPtr<IScriptManager> manager = Bound(angelscript::CreateScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"int closes = 0; bool picked = false;\n"
         u8"bool onClose(GuiEvent e) { closes++; return false; }\n"
@@ -1169,7 +1169,7 @@ TEST_CASE("gui-script: Luau opens windows, menus and popups of its own (E16)")
 {
     RefPtr<IScriptManager> manager = Bound(CreateLuauScriptManager(DefaultAllocator()));
     GuiBed bed(*manager);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local closes, picked = 0, false\n"
         u8"local root = gui.root()\n"
         u8"local win = root:add(\"Window\"); win.width = 200; win.height = 150\n"
@@ -1237,7 +1237,7 @@ TEST_CASE("gui-script: AngelScript fills a list model and reads localized texts 
     GuiBed bed(*manager);
     Texts texts;
     bed.root->GetContext().SetLocalization(&texts.loc);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"ListModel@ model;\n"
         u8"void main() {\n"
         u8"  @model = ListModel();\n"
@@ -1264,7 +1264,7 @@ TEST_CASE("gui-script: Luau fills a list model and reads localized texts (E16)")
     GuiBed bed(*manager);
     Texts texts;
     bed.root->GetContext().SetLocalization(&texts.loc);
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local model = ListModel.new()\n"
         u8"model:add(\"one\"); model:add(\"two\"); model:add(\"three\")\n"
         u8"ListView.of(gui.root():add(\"ListView\")):setModel(model)\n"
@@ -1322,7 +1322,7 @@ TEST_CASE("gui-script: AngelScript fills in a toast request and posts it, and he
     GuiBed bed(*manager);
     RefPtr<gui::ToastHost> host = MakeRef<gui::ToastHost>(DefaultAllocator());
     bed.root->AddChild(host.Get());
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"funcdef bool EventHandler(GuiEvent e);\n"
         u8"bool onAction(GuiEvent e) { gui::set(\"pressed\", e.id); return true; }\n"
         u8"void main() {\n"
@@ -1356,7 +1356,7 @@ TEST_CASE("gui-script: Luau fills in a toast request and posts it, and hears its
     GuiBed bed(*manager);
     RefPtr<gui::ToastHost> host = MakeRef<gui::ToastHost>(DefaultAllocator());
     bed.root->AddChild(host.Get());
-    const Status loaded = bed.context->Load(
+    const Status loaded = bed.scriptContext->Load(
         u8"local host = ToastHost.nearest(gui.root())\n"
         u8"local r = ToastRequest.new()\n"
         u8"r.title = \"Exported\"\n"

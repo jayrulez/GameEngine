@@ -143,9 +143,9 @@ export namespace engine::input
         /// Binds THIS subsystem's runtime as `context`'s input service - the scripting
         /// facade (class Input below) resolves it per context, so two contexts can read
         /// two different runtimes (players; editor vs game). Call once per created context.
-        void ExposeToScript(foundation::script::IScriptContext& context)
+        void ExposeToScript(foundation::script::IScriptContext& scriptContext)
         {
-            context.SetService(kInputScriptService, &m_runtime);
+            scriptContext.SetService(kInputScriptService, &m_runtime);
         }
 
         void Update(f32 deltaTime) override
@@ -180,9 +180,9 @@ export namespace engine::input
     public:
         [[nodiscard]] static ActionRuntime* Resolve()
         {
-            foundation::script::IScriptContext* context = foundation::script::CurrentScriptContext();
-            return context != nullptr
-                       ? static_cast<ActionRuntime*>(context->GetService(kInputScriptService))
+            foundation::script::IScriptContext* scriptContext = foundation::script::CurrentScriptContext();
+            return scriptContext != nullptr
+                       ? static_cast<ActionRuntime*>(scriptContext->GetService(kInputScriptService))
                        : nullptr;
         }
 

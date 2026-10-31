@@ -65,11 +65,11 @@ export namespace foundation::http
         UniquePtr<IHttpClient> m_client;
     };
 
-    inline void InstallHttpScriptService(script::IScriptContext& context, HttpScriptBinding& binding)
+    inline void InstallHttpScriptService(script::IScriptContext& scriptContext, HttpScriptBinding& binding)
     {
-        context.SetService(kHttpScriptService, &binding);
+        scriptContext.SetService(kHttpScriptService, &binding);
     }
-    inline void ClearHttpScriptService(script::IScriptContext& context) { context.SetService(kHttpScriptService, nullptr); }
+    inline void ClearHttpScriptService(script::IScriptContext& scriptContext) { scriptContext.SetService(kHttpScriptService, nullptr); }
 
     class Http final : public Object
     {
@@ -77,8 +77,8 @@ export namespace foundation::http
     public:
         [[nodiscard]] static HttpScriptBinding* Resolve()
         {
-            script::IScriptContext* context = script::CurrentScriptContext();
-            return context != nullptr ? static_cast<HttpScriptBinding*>(context->GetService(kHttpScriptService)) : nullptr;
+            script::IScriptContext* scriptContext = script::CurrentScriptContext();
+            return scriptContext != nullptr ? static_cast<HttpScriptBinding*>(scriptContext->GetService(kHttpScriptService)) : nullptr;
         }
 
         /// Each returns the request's id (for cancel), or 0 when this run has no HTTP (its handler

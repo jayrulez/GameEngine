@@ -185,10 +185,10 @@ export namespace foundation::script
     class ScriptCallScope
     {
     public:
-        explicit ScriptCallScope(IScriptContext* context) noexcept
+        explicit ScriptCallScope(IScriptContext* scriptContext) noexcept
             : m_previous(detail::CurrentScriptContextSlot())
         {
-            detail::CurrentScriptContextSlot() = context;
+            detail::CurrentScriptContextSlot() = scriptContext;
         }
         ~ScriptCallScope() { detail::CurrentScriptContextSlot() = m_previous; }
         ScriptCallScope(const ScriptCallScope&) = delete;

@@ -112,11 +112,11 @@ namespace
     void Check(IScriptManager& manager, StringView script)
     {
         RegisterReflectedTypes(manager);
-        RefPtr<IScriptContext> context = manager.CreateContext();
+        RefPtr<IScriptContext> scriptContext = manager.CreateContext();
         Fixture fx;
-        http::InstallHttpScriptService(*context, fx.binding);
+        http::InstallHttpScriptService(*scriptContext, fx.binding);
         CHECK(fx.made == 0); // nothing until a script asks
-        REQUIRE(context->Load(script, u8"http").IsOk());
+        REQUIRE(scriptContext->Load(script, u8"http").IsOk());
         CHECK(fx.made == 1);
         REQUIRE(fx.log.Size() == 4);
 
@@ -138,13 +138,13 @@ namespace
         failed.error = String(u8"timed out after 30 s");
         fx.client->Answer(2, Move(failed));
         fx.client->Answer(3, Fixture::Response(200, u8"never"));
-        CHECK(context->GetGlobal(u8"Calls").Get<f64>() == doctest::Approx(0.0)); // only on the pump
+        CHECK(scriptContext->GetGlobal(u8"Calls").Get<f64>() == doctest::Approx(0.0)); // only on the pump
         fx.binding.Pump();
 
-        CHECK(context->GetGlobal(u8"Calls").Get<f64>() == doctest::Approx(3.0));
-        CHECK(context->GetGlobal(u8"Scores").Get<String>() == StringView(u8"200 top: 42"));
-        CHECK(context->GetGlobal(u8"Posted").Get<f64>() == doctest::Approx(404.0));
-        CHECK(context->GetGlobal(u8"Why").Get<String>() == StringView(u8"0 timed out after 30 s"));
+        CHECK(scriptContext->GetGlobal(u8"Calls").Get<f64>() == doctest::Approx(3.0));
+        CHECK(scriptContext->GetGlobal(u8"Scores").Get<String>() == StringView(u8"200 top: 42"));
+        CHECK(scriptContext->GetGlobal(u8"Posted").Get<f64>() == doctest::Approx(404.0));
+        CHECK(scriptContext->GetGlobal(u8"Why").Get<String>() == StringView(u8"0 timed out after 30 s"));
     }
 }
 
@@ -192,8 +192,8 @@ TEST_CASE("http-facade: a context with no Http service gets 0 back, and nothing 
 #ifdef OPTION_HAS_LUAU
     RefPtr<IScriptManager> manager = CreateLuauScriptManager(DefaultAllocator());
     RegisterReflectedTypes(*manager);
-    RefPtr<IScriptContext> context = manager->CreateContext();
-    REQUIRE(context->Load(u8"Id = Http.get('https://example.com/', function() end)\n", u8"none").IsOk());
-    CHECK(context->GetGlobal(u8"Id").Get<f64>() == doctest::Approx(0.0));
+    RefPtr<IScriptContext> scriptContext = manager->CreateContext();
+    REQUIRE(scriptContext->Load(u8"Id = Http.get('https://example.com/', function() end)\n", u8"none").IsOk());
+    CHECK(scriptContext->GetGlobal(u8"Id").Get<f64>() == doctest::Approx(0.0));
 #endif
 }

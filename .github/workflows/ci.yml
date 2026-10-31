@@ -353,6 +353,65 @@ jobs:
   # directories are not uploaded because they are very large (1.4-2.2 GB).
   # Instead, CI produces the packaged editor + deployment templates (RelWithDebInfo, symbols split off) using
   # the same distribution scripts as release.yml, so PRs have small downloadable builds for testing.
+
+  # Windows with Clang, through the clang presets and build-clang.cmd. LLVM_VERSION is pinned
+  # because the runner image's LLVM drifts.
+  windows-clang:
+    name: Windows / clang / Debug
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '4' # lower to 2 if the modules build OOMs on the 16 GB runner
+      LLVM_VERSION: '21.1.6' # the version development and the Linux lanes use
+    steps:
+      - uses: actions/checkout@v7
+
+      # Clang targets the MSVC ABI here and links with lld-link, so the MSVC toolchain and the
+      # Windows SDK still have to be present. Clang finds them itself; this step installs them.
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Ninja
+        run: choco install ninja -y # the clang preset uses the Ninja generator (C++20 modules)
+
+      # Installed side by side with whatever LLVM the image ships, and BUILD_CLANG_PATH points at
+      # it, so the compiler that builds is the one named above rather than an image detail.
+      - name: Install LLVM/clang ${{ env.LLVM_VERSION }}
+        shell: pwsh
+        run: |
+          choco install llvm -y --no-progress --version=$env:LLVM_VERSION --allow-downgrade
+          $clang = "$env:ProgramFiles\LLVM\bin\clang++.exe"
+          if (-not (Test-Path $clang)) { throw "clang++ not present after install: $clang" }
+          & $clang --version
+          "BUILD_CLANG_PATH=$env:ProgramFiles\LLVM" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # Same reason as the MSVC lanes: without the SDK, find_package(Vulkan) fails, the root
+      # CMakeLists skips Foundation::RHI.Vulkan, and the build carries no Vulkan backend and
+      # never compiles RHI.Vulkan.Tests.
+      - name: Install the Vulkan SDK
+        shell: pwsh
+        run: |
+          choco install vulkan-sdk -y --no-progress
+          $sdk = $env:VULKAN_SDK
+          if (-not $sdk -or -not (Test-Path $sdk)) {
+            $sdk = (Get-ChildItem 'C:\VulkanSDK' -Directory -ErrorAction SilentlyContinue |
+                    Sort-Object Name -Descending | Select-Object -First 1).FullName
+          }
+          if (-not $sdk) { throw "Vulkan SDK not present after install" }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "VULKAN_SDK=$sdk"
+
+      # Through the wrapper rather than a bare `cmake --preset clang`: the preset asks for plain
+      # "clang++", which resolves by PATH order on a machine carrying several (a standalone LLVM,
+      # a Swift toolchain, Visual Studio's bundled copy). build-clang.cmd pins C/CXX/ASM to one
+      # compiler and prints its version, and configures and builds in one invocation.
+      - name: Configure and build
+        run: .\build-clang.cmd
+
+      # Device-creating suites run against whatever headless adapter the runner provides (D3D12
+      # WARP); ones with no software path skip themselves. --timeout bounds any hang.
+      - name: Test
+        run: ctest --preset clang --output-on-failure --timeout 300 --no-tests=error
+
   linux-release:
     name: Linux / Release distribution
     runs-on: ubuntu-24.04

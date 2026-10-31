@@ -31,10 +31,18 @@
   - **Pause and resume one.** No tool sets the tab's pause (the toolbar's toggle, which pauses
     the run: its simulation and its sound), and `pie_state` does not say whether a tab is paused
     (`runTime` keeps counting frames either way, so it cannot tell).
-  - **Focus one.** No tool makes a tab the focused run (the one heard, with "Game audio: all
-    instances" off), as clicking into its viewport does.
+  - **Bring one to the front.** No tool activates a Game tab. With the item below, that is also
+    how an agent focuses its run (the one heard, with "Game audio: all instances" off).
   Each new PIE tool bumps `kPieToolCount` (`Code/Editor/Editor.Play/PieMcpTools.cppm`, 7 today)
   and goes into McpGuide.md with the PIE tools.
+
+- **A Game tab made active focuses its run** (user 2026-10-31): today a run takes the focus (the
+  one heard, the one the run manager reports focused) only when Play is pressed in its tab
+  (`GamePageImpl.cpp:536`) or its viewport takes the keyboard (`:706`); selecting the tab alone
+  does not, so switching tabs keeps the other run's sound. The editor knows the active page
+  (`EditorContext::ActivePage()`, following the dock's active tab through `NoteActivePanel` in
+  `EditorPages.cppm`): the Game tab focuses its run when it becomes the active page, as well as on
+  a viewport click.
 
 - **Scene and prefab thumbnails never draw** (user 2026-10-26; the old editor too): the assets
   browser and the pickers show a scene's and a prefab's icon, never a picture, while meshes and

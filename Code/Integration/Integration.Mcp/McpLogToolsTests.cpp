@@ -169,7 +169,9 @@ TEST_CASE("integration.mcp: log tools - markers, incremental reads, filters, kno
         McpServer bare;
         editor::EditorLogBuffer bareBuffer(DefaultAllocator());
         editor::mcp::RegisterLogTools(bare, bareBuffer, String());
-        CHECK(LogCallErr(bare, u8"known_issues", LogObj()).Size() > 0u);
+        const String why = LogCallErr(bare, u8"known_issues", LogObj());
+        // It names the file the hosts actually look for.
+        CHECK(why.AsView().ContainsIgnoreCase(u8"KnownIssues.md"));
     }
 
     GlobalLogger().RemoveSink(&buffer);

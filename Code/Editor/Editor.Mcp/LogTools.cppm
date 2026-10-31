@@ -187,8 +187,9 @@ export namespace editor::mcp
             {
                 if (knownIssuesPath.IsEmpty())
                 {
-                    return Err(String(u8"KNOWN_ISSUES.md was not found near the host executable "
-                                      u8"- run the MCP host from inside the engine checkout"));
+                    return Err(String(u8"KnownIssues.md was not found beside the host executable "
+                                      u8"or in the engine checkout's Documentation/Shipping; run "
+                                      u8"the MCP host from a distribution or from inside the checkout"));
                 }
                 FileStream stream(knownIssuesPath.AsView(), FileMode::Read);
                 if (!stream.IsValid())

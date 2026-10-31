@@ -21,6 +21,21 @@
   skinned mesh in its current pose (today its bind pose, the pose its CPU vertices hold); the
   instanced meshes and other drawn surfaces answering `ISceneSurfaceQuery` too.
 
+- **The PIE tools an agent was missing** (user 2026-10-31, from playtesting the run branch in the
+  editor over MCP): what a user does to a Game tab, an agent could not, and had to click the GUI
+  for (`editor_click` on `#game-pause`, a hover then the tab's `TabCloseButton`):
+  - **Close a Game tab.** `page_close` takes an asset guid and refuses a PIE id ("invalid guid
+    'game-page-1'"); no PIE tool closes one. Closing an extra tab releases its instance (its run
+    destroyed), a path worth driving in a playtest. Either `pie_close {pie}` or `page_close`
+    accepting a PIE id.
+  - **Pause and resume one.** No tool sets the tab's pause (the toolbar's toggle, which pauses
+    the run: its simulation and its sound), and `pie_state` does not say whether a tab is paused
+    (`runTime` keeps counting frames either way, so it cannot tell).
+  - **Focus one.** No tool makes a tab the focused run (the one heard, with "Game audio: all
+    instances" off), as clicking into its viewport does.
+  Each new PIE tool bumps `kPieToolCount` (`Code/Editor/Editor.Play/PieMcpTools.cppm`, 7 today)
+  and goes into McpGuide.md with the PIE tools.
+
 - **Scene and prefab thumbnails never draw** (user 2026-10-26; the old editor too): the assets
   browser and the pickers show a scene's and a prefab's icon, never a picture, while meshes and
   materials draw. The generators exist (Editor.Scene's AssetThumbnailsImpl.cpp: Prefab- and

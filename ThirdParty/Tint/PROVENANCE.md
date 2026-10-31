@@ -51,3 +51,9 @@ prebuilt tint distribution exists - from source is the only authoritative path.
 The uniformity rule tint enforces (the one that surfaced forward.ps / taa.ps in the spike) is
 WGSL-spec-stable across tint versions, so even this provisional binary is a valid oracle for
 that class of error; a pinned build is about reproducibility, not correctness of this finding.
+
+## Licence
+
+Tint is part of Dawn, under the BSD 3-Clause licence. `LICENSE` is Dawn's, from its main branch on
+2026-10-31: the Linux and macOS binaries carry no version to match a tag to. Tint runs at cook time
+only and ships in no binary, so it is not in the third-party notices.

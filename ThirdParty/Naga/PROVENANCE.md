@@ -32,3 +32,9 @@ DXC (`ThirdParty/DXC`), wgpu-native (`ThirdParty/WgpuNative`), and tint (`ThirdP
 `bin/mac-arm64/naga` is still missing - build it with the same
 `cargo install naga-cli --version 29.0.4 --locked` on that host and drop the binary here.
 Keep the pin at the 29.0 line to stay matched to wgpu-native v29's naga.
+
+## Licence
+
+naga is dual licensed MIT OR Apache-2.0. `LICENSE.MIT` and `LICENSE.APACHE` are the files of the
+wgpu repository's `v29.0.4` tag, where naga 29.0.4 lives. naga-cli runs at cook time only and
+ships in no binary, so it is not in the third-party notices.

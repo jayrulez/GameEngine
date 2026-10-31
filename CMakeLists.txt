@@ -118,6 +118,8 @@ endif()
 
 # Reusable helpers (util_copy_runtime_deps, ...).
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Helpers.cmake)
+# BUILDSYSTEM_NOTICES_FILE: the third-party notices every shipped executable stages beside it.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ThirdPartyNotices.cmake)
 
 # Add a module's flat-sibling doctest suite, but only when the module target was actually built -
 # so the web subset and platform-gated backends (Shell.Desktop, ...) skip cleanly; a test never

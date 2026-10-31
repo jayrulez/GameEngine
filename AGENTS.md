@@ -54,7 +54,9 @@ cmake --build build/clang -j4                          # everything
   does` with a body saying why, and no `Co-Authored-By` or session trailer lines. Stage
   explicit paths. Push only when asked.
 - **Third-party content**: check its licence before adding it. Nothing goes in that may not
-  be published; keep the licence text beside it, and credit what requires it.
+  be published; keep the licence text beside it, and credit what requires it. A library that
+  ships in a binary also joins `cmake/ThirdPartyNotices.cmake`, which builds the
+  `THIRD-PARTY-NOTICES.txt` every player, editor and export carries.
 - **Visual checks belong to the user.** Hand over a build and list what to look at; do not
   claim something looks right.
 

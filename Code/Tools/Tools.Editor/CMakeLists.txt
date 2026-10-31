@@ -50,7 +50,9 @@ target_link_libraries(Tools.Editor PRIVATE
 # wgpu-native is a dlopen dependency with the SAME shape as DXC: the --webgpu backend resolves
 # the bare soname via $ORIGIN in a relocated dist, so it must be staged too - without it a dist
 # launched with --webgpu renders nothing.
-util_copy_runtime_deps(Tools.Editor EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB})
+# The third-party notices ride along (cmake/ThirdPartyNotices.cmake).
+util_copy_runtime_deps(Tools.Editor EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB}
+                                    ${BUILDSYSTEM_NOTICES_FILE})
 if(UNIX AND NOT APPLE)
     set_property(TARGET Tools.Editor APPEND PROPERTY BUILD_RPATH "$ORIGIN")
     set_property(TARGET Tools.Editor PROPERTY INSTALL_RPATH "$ORIGIN")

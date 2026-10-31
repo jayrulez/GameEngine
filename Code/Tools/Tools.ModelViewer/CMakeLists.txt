@@ -14,7 +14,8 @@ target_link_libraries(Tools.ModelViewer PRIVATE
     Foundation::Scene Foundation::Geometry Foundation::Render Engine::DefaultApp Engine::Render Engine::Model
     Foundation::GUI.Viewport Foundation::RHI.Capture Foundation::Image.IO Foundation::Mcp Foundation::Mcp.Http Foundation::Json
     Editor::Preview.Viewport Editor::Camera Tools::ModelViewer)
-util_copy_runtime_deps(Tools.ModelViewer EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB})
+util_copy_runtime_deps(Tools.ModelViewer EXTRA ${BUILDSYSTEM_DXC_LIB} ${BUILDSYSTEM_WGPU_LIB}
+                                         ${BUILDSYSTEM_NOTICES_FILE})
 if(UNIX AND NOT APPLE)
     set_property(TARGET Tools.ModelViewer APPEND PROPERTY BUILD_RPATH "$ORIGIN")
     set_property(TARGET Tools.ModelViewer PROPERTY INSTALL_RPATH "$ORIGIN")

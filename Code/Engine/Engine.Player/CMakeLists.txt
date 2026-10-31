@@ -93,10 +93,12 @@ if(EMSCRIPTEN)
                 "${CMAKE_CURRENT_SOURCE_DIR}/serve.py" "${_web_out_dir}/serve.py"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                 "${_engine_logo_svg}" "${_web_out_dir}/assiduous-logo.svg"
-        COMMENT "Engine.Player(web): staging serve.py and the logo"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${BUILDSYSTEM_NOTICES_FILE}" "${_web_out_dir}/THIRD-PARTY-NOTICES.txt"
+        COMMENT "Engine.Player(web): staging serve.py, the logo and the third-party notices"
         VERBATIM)
     file(GENERATE OUTPUT "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Engine.Player.runtime-libs"
-         CONTENT "Engine.Player.js\nEngine.Player.wasm\nserve.py\nassiduous-logo.svg\n")
+         CONTENT "Engine.Player.js\nEngine.Player.wasm\nserve.py\nassiduous-logo.svg\nTHIRD-PARTY-NOTICES.txt\n")
 
 else()
 
@@ -135,7 +137,7 @@ else()
         add_executable(Engine.GamePlayer ShipMain.cpp)
         target_link_libraries(Engine.GamePlayer PRIVATE
             Engine.Player.Main ${ENGINE_GAME_NATIVE_TARGET} Foundation::Policy)
-        util_copy_runtime_deps(Engine.GamePlayer EXTRA ${BUILDSYSTEM_WGPU_LIB})
+        util_copy_runtime_deps(Engine.GamePlayer EXTRA ${BUILDSYSTEM_WGPU_LIB} ${BUILDSYSTEM_NOTICES_FILE})
         if(UNIX AND NOT APPLE)
             set_property(TARGET Engine.GamePlayer APPEND PROPERTY BUILD_RPATH "$ORIGIN")
             set_property(TARGET Engine.GamePlayer PROPERTY INSTALL_RPATH "$ORIGIN")
@@ -153,7 +155,9 @@ else()
     # shaders.dpak, and a dev player run from Bin/ finds the vendored compiler at
     # BUILDSYSTEM_DXC_PATH. Only the editor and the cook tools carry DXC (its glibc 2.38 floor would
     # also keep a template from ever running on an older system, the Steam Deck's).
-    util_copy_runtime_deps(Engine.Player EXTRA ${BUILDSYSTEM_WGPU_LIB})
+    # The third-party notices ride along the same way (cmake/ThirdPartyNotices.cmake), so every
+    # template and export carries them.
+    util_copy_runtime_deps(Engine.Player EXTRA ${BUILDSYSTEM_WGPU_LIB} ${BUILDSYSTEM_NOTICES_FILE})
     if(UNIX AND NOT APPLE)
         set_property(TARGET Engine.Player APPEND PROPERTY BUILD_RPATH "$ORIGIN")
         set_property(TARGET Engine.Player PROPERTY INSTALL_RPATH "$ORIGIN")

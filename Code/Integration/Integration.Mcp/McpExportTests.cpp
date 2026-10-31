@@ -7,6 +7,7 @@
 // (which sits next to Engine.Player in Bin, exactly the layout the MCP host and export CLI
 // run from).
 #include <doctest/doctest.h>
+#include <cstdlib> // setenv (the scratch templates root)
 #include <filesystem>
 #include "Core/Prelude.h"
 import foundation.core;
@@ -64,6 +65,15 @@ TEST_CASE("integration.mcp: project_export - a real dist from an authored projec
 {
     std::error_code ec;
     std::filesystem::remove_all("mcp_export_project", ec);
+    // An empty templates root, so the export takes the host template (this build's player and its
+    // sidecars) and never a template installed on the machine running the test.
+    std::filesystem::remove_all("mcp_export_templates", ec);
+    std::filesystem::create_directories("mcp_export_templates", ec);
+#ifdef _WIN32
+    _putenv_s("ENV_TEMPLATES_DIR", "mcp_export_templates");
+#else
+    setenv("ENV_TEMPLATES_DIR", "mcp_export_templates", 1);
+#endif
 
     pipeline::BuilderRegistry builders{DefaultAllocator()};
     pipeline::RegisterPipelineTypes();
@@ -115,4 +125,13 @@ TEST_CASE("integration.mcp: project_export - a real dist from an authored projec
     CHECK(std::filesystem::is_regular_file(out / "Content.pak", ec));
     CHECK(std::filesystem::is_regular_file(out / "player.xml", ec));
     CHECK(exported.Get(u8"filesStaged").AsNumber() >= 1.0); // the player + sidecars are staged
+    // The licences the player's binary carries go with it: a sidecar the build lists.
+    CHECK(std::filesystem::is_regular_file(out / "THIRD-PARTY-NOTICES.txt", ec));
+
+#ifdef _WIN32
+    _putenv_s("ENV_TEMPLATES_DIR", "");
+#else
+    unsetenv("ENV_TEMPLATES_DIR");
+#endif
+    std::filesystem::remove_all("mcp_export_templates", ec);
 }

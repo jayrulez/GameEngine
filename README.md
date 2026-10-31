@@ -241,8 +241,10 @@ export template, so the export packages a game for the Deck. macOS has no backen
 Vendored under `ThirdParty/`: SDL3 (its source, built statically into the executables; set
 `ENGINE_SYSTEM_SDL` to use a system SDL3 instead), wgpu-native,
 DXC, naga and tint, JoltPhysics, recastnavigation, miniaudio, AngelScript and Luau, cgltf and
-ufbx, meshoptimizer, msdfgen, stb, astcenc, bc7enc and bcdec, Mbed TLS, Dear ImGui, and doctest. The Vulkan
-SDK is a system install.
+ufbx, meshoptimizer, msdfgen, HarfBuzz and SheenBidi, stb, astcenc, bc7enc and bcdec, Mbed TLS, Dear
+ImGui, and doctest. Each keeps its licence beside it, and the build gathers those that ship in a
+binary into `THIRD-PARTY-NOTICES.txt` beside every player, editor and export. The Vulkan SDK is a
+system install.
 
 ## Community
 

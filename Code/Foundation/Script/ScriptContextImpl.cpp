@@ -11,6 +11,8 @@ module;
 
 module foundation.script;
 
+import foundation.core;
+
 namespace foundation::script
 {
     ScriptBackendRegistry& ScriptBackendRegistry::Get()

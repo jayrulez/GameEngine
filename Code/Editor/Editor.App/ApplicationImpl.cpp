@@ -620,6 +620,8 @@ namespace editor::app
     bool EditorApplication::DropFiles(Span<const String> paths, String& error)
     {
         editor::EditorProject* project = m_session.Project();
+        if (project == nullptr && m_manager && m_window.ShowsScreen())
+            return m_manager->OpenDropped(paths); // a folder dropped on the manager opens its project
         if (project == nullptr)
         {
             error = String(u8"no project is open");
@@ -775,6 +777,7 @@ namespace editor::app
             m_manager->Rebuild(); // returning from a project: probe the list again
         m_manager->SetStatus({});
         m_window.ShowScreen(m_manager->Content());
+        m_manager->Shown();
     }
 
     // Opens a project from the manager. A project saved by another engine version asks first: the
@@ -1078,7 +1081,7 @@ namespace editor::app
                 Array<String> paths(m_editorAllocator);
                 for (const foundation::shell::DroppedFile& file : dropped)
                     paths.PushBack(file.path);
-                String ignored; // with no project open, a drop does nothing
+                String ignored; // with no project and no manager, a drop does nothing
                 (void)DropFiles(paths.AsSpan(), ignored);
             }
         }

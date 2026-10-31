@@ -241,6 +241,17 @@ TEST_CASE("project-registry: when a project was opened is said for a person, by 
     CHECK(DescribeTime(now, -14 * 3600).AsView() == u8"31 Oct 2026, 23:22");
 }
 
+TEST_CASE("project-registry: a folder under the home shows as ~, a whole folder name only")
+{
+    CHECK(ShortenHomePath(u8"/home/rob/Games/Snowline", u8"/home/rob").AsView() == u8"~/Games/Snowline");
+    CHECK(ShortenHomePath(u8"/home/rob/Games", u8"/home/rob/").AsView() == u8"~/Games");
+    CHECK(ShortenHomePath(u8"/home/rob", u8"/home/rob").AsView() == u8"~");
+    CHECK(ShortenHomePath(u8"/home/robert/Games", u8"/home/rob").AsView() == u8"/home/robert/Games");
+    CHECK(ShortenHomePath(u8"/media/usb/Jam", u8"/home/rob").AsView() == u8"/media/usb/Jam");
+    CHECK(ShortenHomePath(u8"C:\\Users\\rob\\Games", u8"C:\\Users\\rob").AsView() == u8"~\\Games");
+    CHECK(ShortenHomePath(u8"/home/rob/Games", u8"").AsView() == u8"/home/rob/Games");
+}
+
 TEST_CASE("project-registry: probe reads the manifest without opening; NotFound for non-projects")
 {
     const StringView dir = u8"scratch_registry_probe_test";

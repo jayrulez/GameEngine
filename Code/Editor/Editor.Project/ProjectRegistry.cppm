@@ -262,6 +262,25 @@ export namespace editor
                       t.minute < 10 ? u8"0" : u8"", t.minute);
     }
 
+    // A folder as the manager shows it: under `home`, the home written as "~" ("~/Games/Snowline");
+    // anywhere else, or with no home, as it is. Only a whole folder name matches, so "/home/rob"
+    // does not shorten "/home/robert".
+    [[nodiscard]] inline String ShortenHomePath(StringView path, StringView home)
+    {
+        while (home.Size() > 1 && (home[home.Size() - 1] == u8'/' || home[home.Size() - 1] == u8'\\'))
+            home = home.SubStr(0, home.Size() - 1);
+        if (home.IsEmpty() || !path.StartsWith(home))
+            return String(path);
+        if (path.Size() == home.Size())
+            return String(u8"~");
+        const utf8char next = path[home.Size()];
+        if (next != u8'/' && next != u8'\\')
+            return String(path);
+        String out(u8"~");
+        out += path.SubStr(home.Size(), path.Size() - home.Size());
+        return out;
+    }
+
     // Reads a project's manifest without opening the project (no content DBs, no directory
     // scaffolding). NotFound when there is no manifest at `directory` (not a project, moved or
     // deleted).

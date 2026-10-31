@@ -2,8 +2,10 @@
 // Copyright (c) 2026-Present Robert Campbell
 // Editor::App tests: the project manager over its markup (Data/Editor/ProjectManager.xml). The
 // recent projects show as a list or a grid (the choice is remembered), each with its picture (the
-// thumbnail in its editor folder, an image chosen for it, or its initial). A missing project has no
-// Open. Also covers each project's menu and what it runs, and the New Project dialog.
+// thumbnail in its editor folder, an image chosen for it, or its initial); missing ones in a section
+// of their own with Locate... and no Open. Also covers the pin, the sort and the search, the keys and
+// the focus ring, the first run's welcome, a dropped folder, each project's menu and what it runs,
+// and the New Project dialog.
 #include <doctest/doctest.h>
 #include "Core/Prelude.h"
 #include <initializer_list>
@@ -118,19 +120,27 @@ namespace
     };
 }
 
-TEST_CASE("launcher: the projects as a list or a grid, the choice remembered; a missing one has no Open")
+TEST_CASE("launcher: the projects as a list or a grid, the choice remembered; a missing one in its own section, with no Open")
 {
     Launcher l;
     CHECK_FALSE(l.view->IsGridView());
+    CHECK_FALSE(l.view->IsWelcome());
     CHECK(l.view->ShownCount() == 3u);
     CHECK(l.view->ThumbnailCount() == 0u); // no pictures yet: initials
     gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
+    gui::Node* missing = FindId<gui::Node>(*l.view->Content(), u8"manager-missing-list");
     REQUIRE(list != nullptr);
-    REQUIRE(list->ChildCount() == 3u);
-    // First, then Second, then Gone (most recent first); Gone is missing, so it has no Open.
+    REQUIRE(missing != nullptr);
+    // First, then Second (most recent first); Gone is missing, so it is listed apart, with Locate...
+    // and no Open.
+    REQUIRE(list->ChildCount() == 2u);
+    REQUIRE(missing->ChildCount() == 1u);
+    CHECK(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-missing")->IsDisplayed());
+    CHECK(FindId<gui::Label>(*l.view->Content(), u8"manager-count")->GetText() == StringView(u8"2 projects"));
     CHECK(ButtonText(*list->GetChildAt(0), u8"Open") != nullptr);
-    CHECK(ButtonText(*list->GetChildAt(2), u8"Open") == nullptr);
-    CHECK(Cast<gui::UIWidget>(list->GetChildAt(2))->HasClass(u8"missing"));
+    CHECK(ButtonText(*missing->GetChildAt(0), u8"Open") == nullptr);
+    CHECK(ButtonText(*missing->GetChildAt(0), u8"Locate...") != nullptr);
+    CHECK(Cast<gui::UIWidget>(missing->GetChildAt(0))->HasClass(u8"missing"));
     CHECK(ButtonText(*list->GetChildAt(0), u8"Open")->HandleActivate());
     REQUIRE(l.opened.Size() == 1u);
     CHECK(l.opened[0] == l.first);
@@ -140,10 +150,181 @@ TEST_CASE("launcher: the projects as a list or a grid, the choice remembered; a 
     CHECK(l.view->IsGridView());
     CHECK(l.view->ShownCount() == 3u);
     CHECK(Cast<gui::UIWidget>(list)->HasClass(u8"grid"));
+    CHECK(Cast<gui::UIWidget>(list->GetChildAt(0))->HasClass(u8"manager-tile"));
     CHECK(l.saves == 1u);
     CHECK(l.controller->Entries().gridView); // kept with the recent projects
     l.view->SetGridView(true);
     CHECK(l.saves == 1u); // no change, nothing to save
+}
+
+namespace
+{
+    // The names of the projects listed, in their order.
+    Array<String> ListedNames(Launcher& l)
+    {
+        Array<String> names;
+        gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
+        for (usize i = 0; i < list->ChildCount(); ++i)
+        {
+            Array<gui::Node*> stack;
+            stack.PushBack(list->GetChildAt(i));
+            while (!stack.IsEmpty())
+            {
+                gui::Node* n = stack[stack.Size() - 1];
+                stack.PopBack();
+                if (auto* label = Cast<gui::Label>(n); label != nullptr && label->HasClass(u8"manager-name"))
+                {
+                    names.PushBack(String(label->GetText()));
+                    break;
+                }
+                for (usize c = n->ChildCount(); c-- > 0;)
+                    stack.PushBack(n->GetChildAt(c));
+            }
+        }
+        return names;
+    }
+}
+
+TEST_CASE("launcher: a pinned project comes first whatever the sort; the sort and the search arrange what was probed")
+{
+    Launcher l;
+    Array<String> names = ListedNames(l);
+    REQUIRE(names.Size() == 2u);
+    CHECK(names[0] == StringView(u8"First"));
+
+    // Pinning Second puts it first, and is saved.
+    l.view->SetFavourite(l.second.AsView(), true);
+    l.Drain();
+    CHECK(l.saves == 1u);
+    names = ListedNames(l);
+    CHECK(names[0] == StringView(u8"Second"));
+    CHECK(l.view->FocusedPath() == l.second.AsView()); // the ring went with it
+    l.view->SetFavourite(l.second.AsView(), false);
+    l.Drain();
+    CHECK(ListedNames(l)[0] == StringView(u8"First"));
+
+    // By name: First before Second still, then the opposite order of recency shows it sorts.
+    TouchRecentProject(l.store, l.second.AsView(), u8"Second", u8"0.1.0");
+    l.view->Rebuild();
+    CHECK(ListedNames(l)[0] == StringView(u8"Second"));
+    l.view->SetSortByName(true);
+    l.Drain();
+    CHECK(l.controller->SortByName());
+    CHECK(ListedNames(l)[0] == StringView(u8"First"));
+
+    // The search matches the name or the folder, any case; the count says how many of how many.
+    l.view->SetQuery(u8"sec");
+    CHECK(ListedNames(l).Size() == 1u);
+    CHECK(FindId<gui::Label>(*l.view->Content(), u8"manager-count")->GetText() == StringView(u8"1 of 2"));
+    CHECK_FALSE(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-missing")->IsDisplayed()); // Gone does not match
+    l.view->SetQuery(u8"nothing like it");
+    CHECK(ListedNames(l).IsEmpty());
+    CHECK(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-no-match")->IsDisplayed());
+    l.view->SetQuery(u8"");
+    CHECK(ListedNames(l).Size() == 2u);
+    CHECK_FALSE(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-no-match")->IsDisplayed());
+}
+
+TEST_CASE("launcher: Up and Down move the ring, Enter opens its project, Del takes it off the list; Ctrl+N is New Project")
+{
+    Launcher l;
+    l.view->Shown();
+    gui::EventDispatcher& d = *l.scene->GetEventDispatcher();
+    CHECK(l.view->FocusedPath() == l.first.AsView());
+    CHECK(d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Down)));
+    CHECK(l.view->FocusedPath() == l.second.AsView());
+    CHECK(d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Down)));
+    CHECK(l.view->FocusedPath() == l.gone.AsView()); // the missing come after the rest
+    CHECK(d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Down)));
+    CHECK(l.view->FocusedPath() == l.gone.AsView()); // the end holds
+    CHECK(d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Up)));
+    CHECK(d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Return)));
+    REQUIRE(l.opened.Size() == 1u);
+    CHECK(l.opened[0] == l.second);
+
+    CHECK(d.InjectKeyDown(static_cast<u32>(gui::KeyCode::Delete)));
+    l.Drain();
+    CHECK(l.saves == 1u);
+    CHECK(l.view->ShownCount() == 2u);
+    CHECK(l.view->Status() == StringView(u8"Second was taken off the list; its files are untouched."));
+    CHECK(FileExists(PathJoin(l.second.AsView(), u8"Project.xml").AsView())); // only the list changed
+
+    // In the search, Del edits the text; Enter still opens the ring's project.
+    l.view->HandleKey(static_cast<u32>(gui::KeyCode::F), gui::KeyModCtrl);
+    auto* search = FindId<gui::TextField>(*l.view->Content(), u8"manager-search");
+    REQUIRE(search != nullptr);
+    CHECK(d.GetFocusNode() == search);
+    CHECK_FALSE(l.view->HandleKey(static_cast<u32>(gui::KeyCode::Delete), 0));
+
+    CHECK(l.view->CreateDialog() == nullptr);
+    CHECK(l.view->HandleKey(static_cast<u32>(gui::KeyCode::N), gui::KeyModCtrl));
+    CHECK(l.view->CreateDialog() != nullptr);
+}
+
+TEST_CASE("launcher: Locate... points a missing project at its new folder; Remove missing takes the rest off, files untouched")
+{
+    Launcher l;
+    // A folder with no project is refused.
+    CHECK_FALSE(l.view->Locate(l.gone.AsView(), l.root.AsView()));
+    CHECK(l.view->ShownCount() == 3u);
+    // Gone was moved: its project is at Moved now.
+    const String moved = PathJoin(l.root.AsView(), u8"Moved");
+    REQUIRE(EditorProject::Create(DefaultAllocator(), moved.AsView(), u8"Gone").IsOk());
+    CHECK(l.view->Locate(l.gone.AsView(), moved.AsView()));
+    l.Drain();
+    CHECK(l.saves == 1u);
+    CHECK_FALSE(FindId<gui::UIWidget>(*l.view->Content(), u8"manager-missing")->IsDisplayed());
+    CHECK(ListedNames(l).Size() == 3u);
+
+    // Two missing, then both off the list at once.
+    TouchRecentProject(l.store, PathJoin(l.root.AsView(), u8"Lost1").AsView(), u8"Lost1", u8"0.1.0");
+    TouchRecentProject(l.store, PathJoin(l.root.AsView(), u8"Lost2").AsView(), u8"Lost2", u8"0.1.0");
+    l.view->Rebuild();
+    CHECK(FindId<gui::Node>(*l.view->Content(), u8"manager-missing-list")->ChildCount() == 2u);
+    CHECK(ButtonText(*l.view->Content(), u8"Remove missing from list")->HandleActivate());
+    l.Drain();
+    CHECK(l.saves == 2u);
+    CHECK(l.view->ShownCount() == 3u);
+    CHECK(l.view->Status() == StringView(u8"2 missing projects were taken off the list; no files were touched."));
+}
+
+TEST_CASE("launcher: with no projects, a welcome with New Project and Open Folder stands in for the lists")
+{
+    RegisterProjectRegistryTypes();
+    foundation::settings::Settings store{DefaultAllocator()};
+    ProjectManagerController controller(store);
+    app::ProjectManagerView::Services services;
+    services.controller = &controller;
+    services.loadMarkup = [](StringView path) { return LoadMarkup(path); };
+    RefPtr<gui::SceneRoot> scene = MakeRef<gui::SceneRoot>(DefaultAllocator(), MakeRef<gui::GUIContext>(DefaultAllocator()));
+    app::ProjectManagerView view(DefaultAllocator(), Move(services), LoadMarkup(app::kProjectManagerViewPath));
+    scene->AddChild(view.Content().Get());
+    CHECK(view.IsWelcome());
+    CHECK(FindId<gui::UIWidget>(*view.Content(), u8"manager-welcome")->IsDisplayed());
+    CHECK_FALSE(FindId<gui::UIWidget>(*view.Content(), u8"manager-projects-page")->IsDisplayed());
+    CHECK(FindId<gui::Button>(*view.Content(), u8"manager-welcome-new")->HandleActivate());
+    CHECK(view.CreateDialog() != nullptr);
+
+    // The Samples tab replaces the welcome while it is chosen.
+    view.ShowSamples(true);
+    CHECK(view.IsShowingSamples());
+    CHECK_FALSE(FindId<gui::UIWidget>(*view.Content(), u8"manager-welcome")->IsDisplayed());
+    CHECK(FindId<gui::UIWidget>(*view.Content(), u8"manager-samples-page")->IsDisplayed());
+    CHECK(FindId<gui::Button>(*view.Content(), u8"manager-tab-samples")->IsChecked());
+}
+
+TEST_CASE("launcher: a folder dropped on the manager opens its project, or the status says it holds none")
+{
+    Launcher l;
+    Array<String> dropped;
+    dropped.PushBack(l.root);
+    CHECK(l.view->OpenDropped(dropped.AsSpan()));
+    CHECK(l.opened.IsEmpty());
+    CHECK(l.view->Status() == StringView(u8"scratch_launcher holds no Project.xml, so it is not a project. New Project makes one."));
+    dropped[0] = l.second;
+    CHECK(l.view->OpenDropped(dropped.AsSpan()));
+    REQUIRE(l.opened.Size() == 1u);
+    CHECK(l.opened[0] == l.second);
 }
 
 TEST_CASE("launcher: a project's picture is its thumbnail, an image chosen for it, or none")
@@ -196,6 +377,7 @@ TEST_CASE("launcher: each project's menu holds what applies to it; Remove from L
     l.Drain();
     CHECK(l.saves == before + 1u);
     CHECK(l.view->ShownCount() == 2u);
+    CHECK(l.view->Status() == StringView(u8"Gone was taken off the list; its files are untouched."));
 }
 
 TEST_CASE("launcher: New Project waits for a name and a folder, then makes it in a folder of its name")
@@ -249,10 +431,9 @@ namespace
         (void)l.scene->UpdateLayout();
         gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
         REQUIRE(list != nullptr);
-        gui::Node* scroller = list->GetParent();
-        while (scroller != nullptr && Cast<gui::ScrollView>(scroller) == nullptr)
-            scroller = scroller->GetParent();
+        gui::Node* scroller = FindId<gui::Node>(*l.view->Content(), u8"manager-scroll");
         REQUIRE(scroller != nullptr);
+        REQUIRE(scroller->IsScrollContainer());
         const gui::Rect card = list->GetChildAt(0)->GetScreenBounds();
         const Float2 at{card.x + card.width * 0.5f, card.y + card.height * 0.4f};
         gui::EventDispatcher& d = *l.scene->GetEventDispatcher();
@@ -274,7 +455,7 @@ namespace
     }
 }
 
-TEST_CASE("launcher: the wheel over the grid's cards scrolls notch after notch, the pointer held still, over a missing project's card too")
+TEST_CASE("launcher: the wheel over the grid's cards scrolls notch after notch, the pointer held still, with missing projects listed")
 {
     Launcher l(18);
     WheelOverCards(l);
@@ -286,7 +467,7 @@ TEST_CASE("launcher: the wheel over the grid's cards scrolls notch after notch, 
     WheelOverCards(l);
 }
 
-TEST_CASE("launcher: under the editor's sheet a card's picture button rings it evenly, inside the card")
+TEST_CASE("launcher: under the editor's sheet a card's picture fills its button evenly, inside the card")
 {
     Launcher l;
     String sheet;
@@ -324,4 +505,28 @@ TEST_CASE("launcher: under the editor's sheet a card's picture button rings it e
     CHECK(left == doctest::Approx(right));
     CHECK(b.x >= c.x); // inside the card
     CHECK(b.x + b.width <= c.x + c.width + 0.5f);
+}
+
+TEST_CASE("launcher: under the editor's sheet a row stretches across the window, less the page's margins")
+{
+    Launcher l;
+    String sheet;
+    for (const char8_t* file : {u8"Editor/editor.css", u8"Editor/density-default.css"})
+    {
+        Result<Array<byte>> bytes = ReadFile(PathJoin(PathJoin(StringView(reinterpret_cast<const char8_t*>(RAPTOR_SOURCE_DIR)), u8"Data").AsView(), StringView(file)).AsView());
+        REQUIRE(bytes.HasValue());
+        sheet += StringView(reinterpret_cast<const utf8char*>(bytes.Value().Data()), bytes.Value().Size());
+        sheet += u8"\n";
+    }
+    gui::StyleManager styles;
+    styles.SetStyleSheet(gui::CSSParser::Parse(sheet.AsView()));
+    styles.ApplyTree(*l.scene);
+    (void)l.scene->UpdateLayout();
+    gui::Node* list = FindId<gui::Node>(*l.view->Content(), u8"manager-projects");
+    REQUIRE(list != nullptr);
+    const gui::Rect row = list->GetChildAt(0)->GetScreenBounds();
+    CHECK(row.x == doctest::Approx(40.0f));
+    CHECK(row.width > 1100.0f); // 1280 less 40 each side and a scroll bar at most
+    const gui::Rect missing = FindId<gui::Node>(*l.view->Content(), u8"manager-missing-list")->GetChildAt(0)->GetScreenBounds();
+    CHECK(missing.width == doctest::Approx(row.width));
 }

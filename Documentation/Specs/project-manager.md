@@ -1,6 +1,6 @@
 # The project manager
 
-Status: SPEC (2026-10-31), agreed with the user over a mockup. Replaces the project manager of
+Status: P1 and P2 BUILT (2026-10-31); P3 to P5 to come. Agreed with the user over a mockup. Replaces the project manager of
 editor-gui.md section 5.1 (layer 13) where they differ.
 
 Goal: the screen the editor opens on without a project looks and behaves like a finished tool:
@@ -82,7 +82,9 @@ it is handed to the user for the visual check.
   locate operations. A relative-time formatter ("2 hours ago") with its tests.
 - **P2. The page.** ProjectManager.xml and ProjectManagerView rebuilt to the design above: header
   and tabs (Samples empty until P5), toolbar, rows and tiles, the missing section, the footer,
-  keyboard focus, folder drop, the first-run state.
+  keyboard focus, folder drop, the first-run state. Built: the tabs stay on the first run, so the
+  samples are one click away there; the search filters the missing section too; Documentation
+  opens the docs site.
 - **P3. New Project.** The folder option, the check line, the remembered location; the check
   itself a pure function with its tests (the dialog only shows it).
 - **P4. What downloading needs.** A zip reader (deflate through stb's zlib decoder, no new

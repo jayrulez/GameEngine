@@ -9,9 +9,9 @@ target_link_libraries(Tools.Export PRIVATE
     Pipeline::Texture Pipeline::Fonts Pipeline::Image Foundation::Image.Resource Pipeline::Geometry
     Pipeline::Animation Pipeline::Materials Pipeline::Shaders
     Pipeline::Particles Foundation::Input Foundation::Input.Resource Pipeline::Input Pipeline::ModelImporter
-    Engine::Composition # the full manager set and component reflection for the transcode scratch
-    Engine::Composition # RegisterAllScriptFacades: the complete engine facade surface the
-                          # script cooks compile against (run/ui/physics/audio/... facades)
+    # The full manager set and component reflection for the transcode scratch, and
+    # RegisterAllScriptFacades, the engine facade surface the script cooks compile against.
+    Engine::Composition
     Foundation::Physics Foundation::Physics.Resource Pipeline::Physics
     Foundation::Audio Foundation::Audio.Resource Pipeline::Audio
     # Both script backends and their cooks come transitively from Pipeline::Registration (PUBLIC),

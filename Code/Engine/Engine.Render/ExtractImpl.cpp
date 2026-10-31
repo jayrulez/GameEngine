@@ -19,6 +19,7 @@ module engine.render;
 import foundation.core;
 import foundation.scene;
 import foundation.render;    // ExtractedScene, MeshRenderData, ViewCamera, categories
+import foundation.rhi;       // TextureView (sprite and decal texture views)
 import foundation.materials; // BlendMode (category mapping)
 import foundation.geometry;  // StaticMesh::bounds (world bounding sphere for shadow-caster culling)
 import foundation.texture.resource; // texture::Texture (cooked product behind sprite/decal refs)

@@ -62,55 +62,8 @@ enables AI agents to build entire games, from initial project setup to fully pla
 
 ## Building
 
-Requirements:
-
-- CMake 3.28+ and Ninja.
-- Linux x64: Clang 21 and/or GCC 15+ (both are kept green; Clang is the daily driver), the
-  Vulkan development libraries, and SDL3's build dependencies. On Ubuntu or Debian:
-
-  ```
-  sudo apt install cmake ninja-build clang pkg-config \
-      libvulkan-dev vulkan-tools vulkan-validationlayers mesa-vulkan-drivers \
-      libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev \
-      libxtst-dev libwayland-dev wayland-protocols libxkbcommon-dev libasound2-dev
-  ```
-
-  Clang 21 is what development and CI use. Ubuntu 24.04's default Clang 18 does not work (it
-  rejects flags the build passes under `-Werror`); 19 and 20 are untested. `build-clang.sh` picks
-  the newest Clang installed.
-
-- Windows x64: Clang 21 (LLVM) or MSVC, and the Windows SDK. The MSVC presets run from a
-  Developer Command Prompt (vcvars64), so `cl.exe` and the SDK are on the path.
-- A Vulkan 1.3 (or, on Windows, D3D12) capable GPU to run anything that draws.
-- For web builds, emsdk 6.0.5 with the project's response file patch applied; see
-  [Documentation/Guides/emscripten-windows.md](Documentation/Guides/emscripten-windows.md).
-
-Everything goes through CMake presets; outputs (executables, cooked shader packs, runtime
-sidecars) land in `Bin/<Config>/<Platform>-<Compiler>/`, e.g. `Bin/Debug/Linux64-Clang/`.
-
-```
-cmake --preset clang                  # or gcc; clang-release, clang-shipping, wasm, ...
-cmake --build --preset clang
-ctest --preset clang                  # the unit and integration tests
-```
-
-| Preset | Meaning |
-|---|---|
-| `clang` / `gcc` / `msvc` | Debug, the development configuration |
-| `clang-shared` / `msvc-shared` | Debug with shared libraries |
-| `clang-reldbg` / `msvc-reldbg` | RelWithDebInfo, for performance work and the editor download |
-| `clang-release` / `gcc-release` / `msvc-release` | Release |
-| `clang-shipping` / `gcc-shipping` / `msvc-shipping` | Shipping (no asserts, stripped) |
-| `wasm` / `wasm-release` / `wasm-shipping` | Emscripten wasm32: Debug, Release with the profiler, Shipping |
-
-Running the editor:
-
-```
-Bin/Debug/Linux64-Clang/Tools.Editor               # the project manager
-Bin/Debug/Linux64-Clang/Tools.Editor <projectDir>  # open a project
-```
-
-Add `--mcp` to serve the open project to an agent over MCP while you work in the editor.
+See [Documentation/BUILDING.md](Documentation/BUILDING.md) for the requirements, the presets and
+how to run the editor.
 
 ## Sample projects
 
@@ -194,51 +147,12 @@ themselves: toon bands, and lighting that walks the scene's lights. Its lessons 
 
 **NativeSample** is the reference for a game with native C++ code beside its scripts.
 
-## Repository layout
-
-```
-Code/
-  Foundation/     Core, RHI and backends, Shell, Resource, VFS, Scene, Render, GUI, VG,
-                  Fonts, Audio, Physics, Navigation, Net, Script, Shaders, Mcp, ...
-  Engine/         The subsystems over Foundation, the composition root, the default
-                  application, the game instance, the player
-  Pipeline/       Importers and cooks per asset type, the per-language script cooks
-  Editor/         Editor core, the project half, the app and one module per domain;
-                  the MCP tools
-  Tools/          Editor, Cook, Export, ShaderPack, Mcp and ModelViewer executables
-  Integration/    Flows that cross collections
-  Samples/        Low-level C++ samples, one per engine area, and the RHI samples
-                  (Code/Samples/README.md)
-  Extensions/     Dear ImGui as a debug UI extension
-  Deprecated/     The old UI framework and its sandbox, built only on request
-Data/             The engine's shaders and fonts, the editor's and the model viewer's interface,
-                  branding, project templates, the code samples' and tests' data, and the
-                  sample projects
-ThirdParty/       Vendored dependencies
-scripts/          Distribution, export template and Steam Deck builds
-Documentation/    Shipping documentation (served to agents through the MCP host), systems,
-                  guides and plans
-```
-
-Each Foundation and Engine module has a sibling `.Tests` target; `Code/Integration/` holds the
-flows that cross collections.
-
 ## Platform support
 
-Linux and Windows are the development platforms. WebGPU runs on the desktop through wgpu-native
-and in the browser through a wasm build, and the export produces a web player. A Steam Deck player
-builds in a container (`scripts/build-steamdeck.sh`, glibc 2.35, below SteamOS) and installs as an
-export template, so the export packages a game for the Deck. macOS has no backend yet.
-
-## Dependencies
-
-Vendored under `ThirdParty/`: SDL3 (its source, built statically into the executables; set
-`ENGINE_SYSTEM_SDL` to use a system SDL3 instead), wgpu-native,
-DXC, naga and tint, JoltPhysics, recastnavigation, miniaudio, AngelScript and Luau, cgltf and
-ufbx, meshoptimizer, msdfgen, HarfBuzz and SheenBidi, stb, astcenc, bc7enc and bcdec, Mbed TLS, Dear
-ImGui, and doctest. Each keeps its licence beside it, and the build gathers those that ship in a
-binary into `THIRD-PARTY-NOTICES.txt` beside every player, editor and export. The Vulkan SDK is a
-system install.
+- **Linux and Windows:** the development platforms; the editor and the player run on both.
+- **Web:** games export to the browser as WebAssembly with WebGPU.
+- **Steam Deck:** games export through a Deck player template, built in a container by
+  `scripts/build-steamdeck.sh`.
 
 ## Community
 

@@ -24,7 +24,7 @@ A C++23 game engine plus a full editor, in one repository. Defining traits:
 - **Web is a shipping target.** The same game exports to the browser
   (Emscripten + WebGPU), with per-target cooked asset variants.
 
-Read next: the root `README.md` (requirements and build commands), and
+Read next: [BUILDING.md](BUILDING.md) (requirements and build commands), and
 `Documentation/Plans/backlog-0.1.md` (what is queued for the 0.1 release).
 
 ## Repository map
@@ -138,33 +138,7 @@ Further reading: every subsystem has a doc in `Documentation/Systems/`:
 
 ## Building
 
-Requirements and per-platform package lists are in the root `README.md`. The
-short version: CMake 3.28+, Ninja, Vulkan SDK, and Clang 21 (Linux also keeps
-GCC 15+ green; Windows builds with Clang or MSVC, through the `msvc` presets,
-which CI builds and tests).
-
-Everything goes through CMake presets:
-
-```bash
-cmake --preset clang              # configure (once); also: gcc, clang-reldbg,
-                                  # clang-release, *-shipping, wasm
-cmake --build --preset clang      # build
-ctest --preset clang              # run the unit-test suites
-```
-
-Outputs land in `Bin/<Config>/<Platform>-<Compiler>/`, e.g.
-`Bin/Debug/Linux64-Clang/`. Practical notes:
-
-- **Debug is the development configuration.** A change must build green on
-  both clang and gcc on Linux before it is done.
-- Each library has a doctest sibling (`GUI.Tests`, `Engine.Render.Tests`, ...)
-  you can build and run on its own, which iterates much faster than the full
-  suite. New test targets appear after a re-configure.
-- The web build (`--preset wasm`) needs the emsdk environment sourced first and
-  the project's emsdk patch applied; see `Guides/emscripten-windows.md`. New
-  shaders must translate to WGSL (through naga) to run on the web.
-- Sanitizer trees: configure with `-DBUILDSYSTEM_OUTPUT_SUFFIX=-ASAN` so output
-  lands in `...-ASAN/` and never clobbers the regular `Bin/` tree.
+See [BUILDING.md](BUILDING.md) for the requirements, the presets and the build notes.
 
 ## Running things
 
@@ -196,13 +170,8 @@ the binding rule set, and reviews enforce it. The headlines:
 - **Every addition lands with tests** (doctest, in the module's `.Tests`
   target). GPU-visible behavior prefers semantic pixel probes on real devices
   over image goldens.
-- **Both compilers green** (clang + gcc, Debug) before a change is done.
-  The GCC that works is Ubuntu's packaged GCC 15 (`g++-15` on 24.04+ backports /
-  26.04 LTS): the upstream 15.2.0 release cannot resolve transitive module CMIs
-  from CMake's module maps ("Bad import dependency"), and the toolchain-r noble
-  backport miscompiles module interfaces (defaulted constructors diagnosed as
-  overloading themselves). Clang is the portable lane; CI's gcc job runs in an
-  `ubuntu:26.04` container for exactly this reason.
+- **Both compilers green** (clang and gcc, Debug) before a change is done.
+  Which GCC works is in [BUILDING.md](BUILDING.md).
 - **Style**: Allman braces, the root `.clang-format`, PascalCase methods,
   full descriptive names, no em or en dashes anywhere (ASCII hyphen only).
 - **Module hygiene**: heavy third-party headers and reflection bodies go in
@@ -219,6 +188,7 @@ the binding rule set, and reviews enforce it. The headlines:
 ```
 Documentation/
   GETTING-STARTED.md   This file.
+  BUILDING.md          Requirements, presets and build notes.
   Systems/             The reference: one doc per shipped subsystem.
   Specs/               Feature specs: what is being built and why. A spec is
                        stamped BUILT when it ships and carries its review rulings.

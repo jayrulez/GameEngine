@@ -11,6 +11,10 @@ module;
 
 module foundation.gui;
 
+import foundation.core;
+import foundation.vg;
+import foundation.fonts;
+
 using namespace foundation::core;
 namespace core = foundation::core;
 namespace vg = foundation::vg;

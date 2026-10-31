@@ -18,6 +18,8 @@ module;
 
 module foundation.gui;
 
+import foundation.core;
+
 using namespace foundation::core;
 namespace core = foundation::core;
 

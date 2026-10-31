@@ -17,6 +17,7 @@ module;
 module foundation.gui;
 
 import foundation.core;
+import foundation.vg;
 
 using namespace foundation::core;
 namespace core = foundation::core;

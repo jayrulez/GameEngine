@@ -46,7 +46,9 @@ export namespace editor
         struct Preset
         {
             StringView label;
-            void (pipeline::TextureAsset::*setup)();
+            // A plain function, not a member function pointer: Windows Clang 21.1.8 crashed
+            // generating code for this class while it held one.
+            void (*setup)(pipeline::TextureAsset& asset);
         };
         /// The presets, in menu order.
         [[nodiscard]] static Span<const Preset> Presets();

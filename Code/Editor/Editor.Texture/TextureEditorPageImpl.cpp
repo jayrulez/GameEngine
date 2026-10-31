@@ -76,13 +76,13 @@ namespace editor
         }
 
         constexpr TextureEditorPage::Preset kPresets[] = {
-            {u8"UI", &pipeline::TextureAsset::SetupForUI},
-            {u8"Sprite", &pipeline::TextureAsset::SetupForSprite},
-            {u8"3D Surface", &pipeline::TextureAsset::SetupFor3D},
-            {u8"Normal Map", &pipeline::TextureAsset::SetupForNormalMap},
-            {u8"Data Mask", &pipeline::TextureAsset::SetupForDataMask},
-            {u8"Equirect Sky", &pipeline::TextureAsset::SetupForEquirectangularSkybox},
-            {u8"Cubemap Sky", &pipeline::TextureAsset::SetupForCubemapSkybox},
+            {u8"UI", [](pipeline::TextureAsset& asset) { asset.SetupForUI(); }},
+            {u8"Sprite", [](pipeline::TextureAsset& asset) { asset.SetupForSprite(); }},
+            {u8"3D Surface", [](pipeline::TextureAsset& asset) { asset.SetupFor3D(); }},
+            {u8"Normal Map", [](pipeline::TextureAsset& asset) { asset.SetupForNormalMap(); }},
+            {u8"Data Mask", [](pipeline::TextureAsset& asset) { asset.SetupForDataMask(); }},
+            {u8"Equirect Sky", [](pipeline::TextureAsset& asset) { asset.SetupForEquirectangularSkybox(); }},
+            {u8"Cubemap Sky", [](pipeline::TextureAsset& asset) { asset.SetupForCubemapSkybox(); }},
         };
     } // namespace
 
@@ -129,8 +129,8 @@ namespace editor
         {
             if (preset.label != label)
                 continue;
-            void (pipeline::TextureAsset::*setup)() = preset.setup;
-            EditWhole(u8"texture_preset", [setup](ISerializable& object) { (static_cast<pipeline::TextureAsset&>(object).*setup)(); });
+            void (*setup)(pipeline::TextureAsset&) = preset.setup;
+            EditWhole(u8"texture_preset", [setup](ISerializable& object) { setup(static_cast<pipeline::TextureAsset&>(object)); });
             return true;
         }
         return false;

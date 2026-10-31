@@ -123,6 +123,21 @@ export namespace foundation::shaders
                 rhi::LogInfof("ShaderSystemHost: cooked shader pack (%u variants)%s",
                               static_cast<unsigned>(m_pack->Count()),
                               m_compiler != nullptr ? " - registered sources still compile" : "");
+                // A registered source (a project's custom shader in an editor dist) includes the
+                // engine's .hlsli files, so with a compiler and the sources at hand they resolve
+                // through the provider. The engine's own shaders still come from the pack.
+                if (m_compiler != nullptr && haveSources)
+                {
+                    m_provider = MakeUnique<FileShaderSourceProvider>(*m_allocator, *m_allocator);
+                    if (m_provider->Initialize(dataFileSystem, kShaderFolder).IsOk())
+                    {
+                        m_shaders->SetIncludeResolver(m_provider.Get());
+                    }
+                    else
+                    {
+                        m_provider.Reset();
+                    }
+                }
             }
             else
             {

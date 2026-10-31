@@ -315,6 +315,10 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         std::ofstream f(root / "Engine" / "Shaders" / "hosted.vs.hlsl", std::ios::binary);
         f << "float4 main(uint id : SV_VertexID) : SV_Position { return float4(0,0,0,1); }\n";
     }
+    {
+        std::ofstream f(root / "Engine" / "Shaders" / "hosted_common.hlsli", std::ios::binary);
+        f << "float HostedZero() { return 0.0; }\n";
+    }
     vfs::NativeFileSystem dataFs(u8"host_data_root", DefaultAllocator());
     CHECK(kShaderPackPath == u8"Engine/Shaders/shaders.dpak"); // the layout every writer targets
 
@@ -339,6 +343,14 @@ TEST_CASE("shader system host: dev-first policy - a pack in the data root does n
         REQUIRE(host.Initialize(device, dataFs));
         CHECK(host.UsingPack());
         CHECK(host.PackVariantCount() == 1u);
+        // A registered source (a project's custom shader) still compiles, and its includes of the
+        // engine's .hlsli files resolve from the sources beside the pack.
+        host.System()->RegisterSource(u8"custom", ShaderStage::Vertex,
+                                      u8"#include \"hosted_common.hlsli\"\n"
+                                      u8"float4 main(uint id : SV_VertexID) : SV_Position "
+                                      u8"{ return float4(HostedZero(), 0, 0, 1); }\n",
+                                      u8"main");
+        CHECK(host.GetVariant(u8"custom", ShaderStage::Vertex, ShaderFlags::None) != nullptr);
         std::filesystem::remove(root / "Engine" / "Shaders" / ".pack-first");
     }
     {

@@ -362,7 +362,7 @@ jobs:
     timeout-minutes: 180
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '4' # lower to 2 if the modules build OOMs on the 16 GB runner
-      LLVM_VERSION: '21.1.6' # the version development and the Linux lanes use
+      LLVM_VERSION: '21.1.8' # the version development and the Linux lanes use
     steps:
       - uses: actions/checkout@v7
 
@@ -379,6 +379,8 @@ jobs:
         shell: pwsh
         run: |
           choco install llvm -y --no-progress --version=$env:LLVM_VERSION --allow-downgrade
+          # The image ships its own LLVM, so a failed install would otherwise build with that one.
+          if ($LASTEXITCODE -ne 0) { throw "choco could not install llvm $env:LLVM_VERSION" }
           $clang = "$env:ProgramFiles\LLVM\bin\clang++.exe"
           if (-not (Test-Path $clang)) { throw "clang++ not present after install: $clang" }
           & $clang --version

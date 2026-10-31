@@ -410,10 +410,10 @@ namespace foundation::script::conformance
 
             // (1) a timed wait: does NOT complete before ~1s of accumulated advance, DOES after.
             {
-                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-                REQUIRE(scriptContext.Get() != nullptr);
-                CHECK(scriptContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
-                RefPtr<ScriptObject> coro = scriptContext->CreateInstance(u8"Coro", Span<Variant>{});
+                RefPtr<IScriptContext> coroutineContext = manager->CreateContext();
+                REQUIRE(coroutineContext.Get() != nullptr);
+                CHECK(coroutineContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
+                RefPtr<ScriptObject> coro = coroutineContext->CreateInstance(u8"Coro", Span<Variant>{});
                 REQUIRE(coro.Get() != nullptr);
                 REQUIRE(coro->Invoke(u8"begin", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 3; ++i)
@@ -430,9 +430,9 @@ namespace foundation::script::conformance
 
             // (2) waitUntil resumes when the predicate flips (not before).
             {
-                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-                CHECK(scriptContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
-                RefPtr<ScriptObject> coro = scriptContext->CreateInstance(u8"Coro", Span<Variant>{});
+                RefPtr<IScriptContext> coroutineContext = manager->CreateContext();
+                CHECK(coroutineContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
+                RefPtr<ScriptObject> coro = coroutineContext->CreateInstance(u8"Coro", Span<Variant>{});
                 REQUIRE(coro.Get() != nullptr);
                 REQUIRE(coro->Invoke(u8"beginUntil", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 5; ++i)
@@ -450,9 +450,9 @@ namespace foundation::script::conformance
 
             // (3) CancelCoroutinesFor stops a pending coroutine (it never completes after).
             {
-                RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-                CHECK(scriptContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
-                RefPtr<ScriptObject> coro = scriptContext->CreateInstance(u8"Coro", Span<Variant>{});
+                RefPtr<IScriptContext> coroutineContext = manager->CreateContext();
+                CHECK(coroutineContext->Load(dialect.coroutineClass, u8"conformance.coroutine").IsOk());
+                RefPtr<ScriptObject> coro = coroutineContext->CreateInstance(u8"Coro", Span<Variant>{});
                 REQUIRE(coro.Get() != nullptr);
                 REQUIRE(coro->Invoke(u8"begin", Span<Variant>{}).HasValue());
                 for (int i = 0; i < 3; ++i)
@@ -520,14 +520,14 @@ namespace foundation::script::conformance
             !dialect.delegateModule.IsEmpty())
         {
             manager->RegisterType(DelegateSignal::StaticType()); // late registration is supported
-            RefPtr<IScriptContext> scriptContext = manager->CreateContext();
-            REQUIRE(scriptContext.Get() != nullptr);
+            RefPtr<IScriptContext> delegateContext = manager->CreateContext();
+            REQUIRE(delegateContext.Get() != nullptr);
             // Some backends scope reflected foreign types to the "main" module; load there so the
             // script can see DelegateSignal. AngelScript registers types engine-globally, so
             // the chunk name is immaterial to it.
-            CHECK(scriptContext->Load(dialect.delegateModule, u8"main").IsOk());
+            CHECK(delegateContext->Load(dialect.delegateModule, u8"main").IsOk());
 
-            Variant signalVar = scriptContext->GetGlobal(u8"signal");
+            Variant signalVar = delegateContext->GetGlobal(u8"signal");
             REQUIRE(signalVar.IsObject());
             DelegateSignal* signal = signalVar.AsObject<DelegateSignal>();
             REQUIRE(signal != nullptr);

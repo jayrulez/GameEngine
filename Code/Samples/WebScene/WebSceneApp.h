@@ -405,7 +405,6 @@ namespace samples
                 m_scene->SetLocalPosition(m_probe, core::Float3{4.0f, 1.0f, 2.0f});
                 engine::render::ReflectionProbeComponent& pc = probes->Add(m_probe);
                 pc.halfExtents = core::Float3{5.0f, 3.5f, 5.0f};
-                pc.resolution = 128;
                 pc.parallax = true;
             }
         }

@@ -20,7 +20,7 @@ of the Sedulous engine (Beef) and has grown well past it. Defining traits:
   management: scene editing, asset pipeline/cook, play-in-editor, export.
 - **A real runtime**: scene/ECS, PBR renderer (clustered forward, CSM/spot/
   point shadows, IBL, SSR, decals, particles, post stack), physics (Jolt),
-  audio (miniaudio), input, networking, game UI, and three scripting backends
+  audio (miniaudio), input, networking, game UI, and two scripting backends
   (AngelScript, Luau) behind one backend-neutral registry.
 - **Web is a shipping target.** The same game exports to the browser
   (Emscripten + WebGPU), with per-target cooked asset variants.
@@ -137,9 +137,9 @@ counting) - `renderer.md`, `scripting.md`, `physics.md`, `audio.md`,
 ## Building
 
 Requirements and per-platform package lists are in the root `README.md`. The
-short version: CMake 3.28+, Ninja, Vulkan SDK, and Clang 17+ (Linux also keeps
-GCC 15+ green; Windows builds with clang - an MSVC port exists on the `msvc`
-branch, see KNOWN_ISSUES).
+short version: CMake 3.28+, Ninja, Vulkan SDK, and Clang 21 (Linux also keeps
+GCC 15+ green; Windows builds with Clang or MSVC, through the `msvc` presets,
+which CI builds and tests).
 
 Everything goes through CMake presets:
 

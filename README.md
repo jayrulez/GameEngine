@@ -74,7 +74,7 @@ plays the game with scripted input and reads back probes and screenshots.
 Requirements:
 
 - CMake 3.28+ and Ninja.
-- Linux x64: Clang 17+ and/or GCC 15+ (both are kept green; Clang is the daily driver), the
+- Linux x64: Clang 21 and/or GCC 15+ (both are kept green; Clang is the daily driver), the
   Vulkan development libraries, and SDL3's build dependencies. On Ubuntu or Debian:
 
   ```
@@ -84,7 +84,11 @@ Requirements:
       libxtst-dev libwayland-dev wayland-protocols libxkbcommon-dev libasound2-dev
   ```
 
-- Windows x64: Clang 17+ (LLVM) or MSVC, and the Windows SDK. The MSVC presets run from a
+  Clang 21 is what development and CI use. Ubuntu 24.04's default Clang 18 does not work (it
+  rejects flags the build passes under `-Werror`); 19 and 20 are untested. `build-clang.sh` picks
+  the newest Clang installed.
+
+- Windows x64: Clang 21 (LLVM) or MSVC, and the Windows SDK. The MSVC presets run from a
   Developer Command Prompt (vcvars64), so `cl.exe` and the SDK are on the path.
 - A Vulkan 1.3 (or, on Windows, D3D12) capable GPU to run anything that draws.
 - For web builds, emsdk 6.0.5 with the project's response file patch applied; see
@@ -234,7 +238,8 @@ export template, so the export packages a game for the Deck. macOS has no backen
 
 ## Dependencies
 
-Vendored under `ThirdParty/`: SDL3 (prebuilt on Windows, the system's on Linux), wgpu-native,
+Vendored under `ThirdParty/`: SDL3 (its source, built statically into the executables; set
+`ENGINE_SYSTEM_SDL` to use a system SDL3 instead), wgpu-native,
 DXC, naga and tint, JoltPhysics, recastnavigation, miniaudio, AngelScript and Luau, cgltf and
 ufbx, meshoptimizer, msdfgen, stb, astcenc, bc7enc and bcdec, Mbed TLS, Dear ImGui, and doctest. The Vulkan
 SDK is a system install.

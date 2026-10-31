@@ -10,7 +10,7 @@
 # --preset must come FIRST: clang, clang-shared, clang-reldbg, clang-release, clang-shipping.
 #
 # WHY THIS WRAPPER EXISTS: the preset asks for plain "clang++", but a distro's default clang is
-# routinely too old for this tree (README: Clang 17+; Ubuntu 24.04 still ships 18, whose C++23
+# routinely too old for this tree (README: Clang 21; Ubuntu 24.04 still ships 18, whose C++23
 # modules support is weaker and which rejects flags we pass under -Werror). So pick the NEWEST
 # versioned clang++ installed, verify it clears the floor, and pin C/CXX/ASM explicitly - the
 # same override CI applies by hand. ASM is driven by the C++ driver; the vendored C sources
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 REPO="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CLANG_FLOOR=17
+CLANG_FLOOR=21 # what development and CI use; 18 is known to fail, 19 and 20 are untested
 
 # Linux only, and enforced rather than assumed. Under a Windows bash (git-bash/MSYS) every path
 # here comes out POSIX-shaped (/c/Program Files/...) while CMake's cache holds C:/Program

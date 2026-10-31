@@ -59,6 +59,7 @@ export module engine.gui;
 import foundation.core;
 import engine.domain;
 import foundation.runtime;
+import foundation.run;        // the runs that have screen tiers, and their lifecycle
 import foundation.scene;
 import engine.scene;
 import foundation.resource;
@@ -437,7 +438,8 @@ export namespace engine::gui
     class GuiSubsystem final : public foundation::runtime::Subsystem,
                                public scene::ISceneObserver,
                                public render::ISceneOverlay,
-                               public render::IScreenOverlay
+                               public render::IScreenOverlay,
+                               private foundation::run::IRunListener
     {
     public:
         /// `dataFileSystem` is the application's data mount (borrowed for the subsystem's life):
@@ -497,15 +499,15 @@ export namespace engine::gui
         [[nodiscard]] bool RunScreens() const noexcept { return m_runScreens; }
         /// `run`'s screen stack and root, made on first use; the shared tier's with run screens off
         /// or no run.
-        [[nodiscard]] ScreenStack* ScreensFor(const void* run);
-        [[nodiscard]] SceneRoot* ScreenRootFor(const void* run);
-        void SetScreenResolution(const void* run, u32 width, u32 height, FitMode fit);
-        void SetScreenOrientation(const void* run, ScreenOrientation orientation);
+        /// A run's tier goes with its session (the run's stop, or the run gone without one), every
+        /// screen on it too: the run manager says so (Documentation/Specs/run-context.md).
+        [[nodiscard]] ScreenStack* ScreensFor(foundation::run::IRun* run);
+        [[nodiscard]] SceneRoot* ScreenRootFor(foundation::run::IRun* run);
+        void SetScreenResolution(foundation::run::IRun* run, u32 width, u32 height, FitMode fit);
+        void SetScreenOrientation(foundation::run::IRun* run, ScreenOrientation orientation);
         /// The run whose screen tier the next screen overlay draws under the shared one's overlays
         /// (null: none), set by a host around its overlays for that run's view.
-        void SetRenderRun(const void* run) noexcept { m_renderRun = run; }
-        /// The run ended: its screen tier and every screen on it go.
-        void EndRunScreens(const void* run);
+        void SetRenderRun(foundation::run::IRun* run) noexcept { m_renderRun = run != nullptr ? run->Id() : 0; }
         [[nodiscard]] usize RunScreenCount() const noexcept { return m_runTiers.Size(); }
         [[nodiscard]] Node* OverlayLayer() noexcept { return m_overlay.Get(); }
         /// Whether the GUI input reaches is editing text (a field has the focus), as of the last
@@ -645,7 +647,7 @@ export namespace engine::gui
         // too), its input, and the game's screen it lays out for.
         struct ScreenTier
         {
-            const void* Run = nullptr; ///< null: the shared tier
+            foundation::run::RunId Run = 0; ///< 0: the shared tier
             RefPtr<SceneRoot> Root;
             RefPtr<ScreenStack> Screens;
             UniquePtr<GuiInputBridge> Bridge;
@@ -658,7 +660,15 @@ export namespace engine::gui
         };
         void MakeScreenTier(ScreenTier& tier);
         static void ApplyResolution(ScreenTier& tier, u32 width, u32 height, FitMode fit);
-        [[nodiscard]] ScreenTier* FindRunTier(const void* run) noexcept;
+        [[nodiscard]] ScreenTier* FindRunTier(foundation::run::RunId run) noexcept;
+        [[nodiscard]] ScreenTier* FindRunTier(const foundation::run::IRun* run) noexcept
+        {
+            return run != nullptr ? FindRunTier(run->Id()) : nullptr;
+        }
+        // The run's tier and every screen on it go.
+        void EndRunScreens(foundation::run::RunId run);
+        void OnRunStopping(foundation::run::IRun& run) override { EndRunScreens(run.Id()); }
+        void OnRunDestroyed(foundation::run::IRun& run) override { EndRunScreens(run.Id()); }
         [[nodiscard]] ScreenTier* TierOfRoot(const SceneRoot* root) noexcept;
         // The tier input reaches: the run of the scene the input is bound to, when it has a tier.
         [[nodiscard]] ScreenTier& InputTier() noexcept;
@@ -690,7 +700,8 @@ export namespace engine::gui
         ScreenTier m_screen;                     // the shared tier
         Array<UniquePtr<ScreenTier>> m_runTiers; // a tier per run, with run screens on
         bool m_runScreens = false;
-        const void* m_renderRun = nullptr;
+        foundation::run::RunId m_renderRun = 0;
+        foundation::run::IRunManager* m_runManager = nullptr; // subscribed to (OnReady .. OnShutdown)
         RefPtr<UIWidget> m_overlay;
         RefPtr<GuiTouchGuide> m_touchGuide; // beneath the shared tier's screens
         bool m_touchSeen = false;           // a finger has touched the screen: the guide shows

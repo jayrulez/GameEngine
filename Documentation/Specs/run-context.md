@@ -275,6 +275,13 @@ counter, as D1-D7, D10 and D12, with `Run.Tests`. Nothing in the engine uses the
   run's id is not reused by the next; a subsystem registered after runs exist (as a plugin's
   would be) catches up.
 - Acceptance: no `const void* run` remains (`grep -rn "const void\* run" Code` is empty).
+- As built: Audio and the GUI are private `IRunListener`s, subscribing in `OnReady` (Audio
+  catches up on the focus; a group made for a paused run starts paused) and unsubscribing in
+  `OnShutdown`; both end a run's state on its stop AND its destruction, so a run gone without a
+  stop leaves nothing. `engine.net` sits below `engine.gameinstance`, so `NetworkSubsystem`
+  cannot name `NetworkController`: a GameInstance also registers its controller as the
+  foundation's `net::INetworkController`, which the pump reads. The Game tab's focus check reads
+  the run manager's focus (`AudioSubsystem::FocusedRun` is gone).
 
 ### P4 (optional): the run host reads the run
 

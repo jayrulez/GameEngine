@@ -23,6 +23,7 @@ import foundation.resource;
 import foundation.script;
 import foundation.script.facades; // ScriptRuntimeBinding (the run a context belongs to)
 import foundation.run;
+import foundation.runtime; // SubsystemManager (the audio subsystem finds the runs on it)
 #ifdef OPTION_HAS_ANGELSCRIPT
 import foundation.script.angelscript;
 #endif
@@ -129,12 +130,15 @@ namespace
         manager.AddFactory(&clipFactory);
         manager.AddFactory(&cueFactory);
 
-        // A headless subsystem (Init is the public lifecycle seam) + the script binding.
+        // A headless subsystem on a subsystem manager with the host's runs + the script binding.
         AudioEngineSettings engineSettings;
         engineSettings.headless = true;
         engineSettings.dedupeWindowSeconds = 0.0f; // each facade call = its own voice
-        AudioSubsystem subsystem(engineSettings);
-        subsystem.Init();
+        foundation::run::RunRegistry runs(DefaultAllocator());
+        foundation::runtime::SubsystemManager subsystems(DefaultAllocator());
+        AudioSubsystem& subsystem = *subsystems.AddSubsystem<AudioSubsystem>(engineSettings);
+        subsystems.SetRunManager(&runs);
+        subsystems.Startup();
         REQUIRE(subsystem.Engine() != nullptr);
 
         foundation::script::RegisterReflectedTypes(*scripts);
@@ -211,6 +215,8 @@ namespace
             {
                 TestRun() : RunBase(DefaultAllocator(), u8"test") {}
             } runKey;
+            runs.Add(runKey);
+            runKey.Start();
             foundation::script::ScriptRuntimeBinding runtime;
             runtime.run = &runKey;
             subsystem.Engine()->SetBusVolume(AudioBus::Music, 1.0f);
@@ -239,7 +245,7 @@ namespace
             CHECK_FALSE(subsystem.Engine()->NamedBusMuted(u8"drums"));
             CHECK(inRun->GetGlobal(u8"DrumsVolume").Get<f64>() == doctest::Approx(0.4));
 
-            subsystem.EndRun(&runKey);
+            runKey.Stop(); // the run's session ends: its music with it
             for (int i = 0; i < 4; ++i)
             {
                 subsystem.Update(0.1f);
@@ -252,7 +258,7 @@ namespace
         REQUIRE(bare->Load(bareScript, u8"main").IsOk());
         CHECK_FALSE(bare->GetGlobal(u8"Played").Get<bool>());
 
-        subsystem.Shutdown();
+        subsystems.Shutdown();
         FileDelete(u8"scratch_audio_scriptdb/sfx/beep.rasset");
         FileDelete(u8"scratch_audio_scriptdb/sfx/beep.data.bin");
         FileDelete(u8"scratch_audio_scriptdb/sfx/steps.rasset");

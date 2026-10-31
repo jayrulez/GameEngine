@@ -13,6 +13,7 @@
 import foundation.core;
 import foundation.vfs;
 import foundation.runtime;
+import foundation.run;
 import foundation.scene;
 import engine.scene;
 import engine.render; // sprites and cameras (the textures, the panels' ray)
@@ -256,8 +257,14 @@ namespace
 
     // A context with the scene subsystem and the GUI's (and the input subsystem's, on fake
     // devices), started.
+    struct TestRun final : foundation::run::RunBase
+    {
+        TestRun() : RunBase(DefaultAllocator(), u8"test") {}
+    };
+
     struct Engine
     {
+        foundation::run::RunRegistry runs{DefaultAllocator()}; // the host's runs (outlives the subsystems)
         runtime::SubsystemManager context{DefaultAllocator()};
         scene::SceneManager scenes{DefaultAllocator()};
         FakeDevices devices;
@@ -277,6 +284,7 @@ namespace
             input = context.AddSubsystem<engine::input::InputSubsystem>(nullptr);
             claiming = context.AddSubsystem<ClaimingSubsystem>(*input);
             gui = context.AddSubsystem<GuiSubsystem>(DefaultAllocator(), DataFs());
+            context.SetRunManager(&runs);
             context.Startup();
             input->SetSourceProvider(&devices);
         }
@@ -1238,8 +1246,12 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     rhi::null::NullDevice device{DefaultAllocator()}; // outlives the GUI that draws on it
     Engine engine;
     engine.gui->EnsureRenderReady(device, 2);
-    int runA = 0;
-    int runB = 0;
+    TestRun runA;
+    TestRun runB;
+    engine.runs.Add(runA);
+    engine.runs.Add(runB);
+    runA.Start();
+    runB.Start();
     CHECK(engine.gui->ScreensFor(&runA) == engine.gui->Screens()); // off: one tier for every run
     engine.gui->SetRunScreens(true);
     ScreenStack* a = engine.gui->ScreensFor(&runA);
@@ -1273,9 +1285,17 @@ TEST_CASE("engine.gui: with run screens on each run has its own screen tier, dra
     pass->End();
     engine.gui->SetRenderRun(nullptr);
 
-    engine.gui->EndRunScreens(&runA);
+    // Its run's session ends (the tab's Stop): its tier goes, with no call to the GUI. A run gone
+    // without a stop takes its tier too.
+    runA.Stop();
     CHECK(engine.gui->RunScreenCount() == 1u);
-    engine.gui->EndRunScreens(&runB);
+    runB.Dispose();
+    CHECK(engine.gui->RunScreenCount() == 0u);
+    // A's next session starts with a new tier, which its stop ends in turn.
+    runA.Start();
+    REQUIRE(engine.gui->ScreensFor(&runA) != nullptr);
+    CHECK(engine.gui->RunScreenCount() == 1u);
+    runA.Stop();
     CHECK(engine.gui->RunScreenCount() == 0u);
 }
 

@@ -890,6 +890,9 @@ namespace engine::gui
         if (context == nullptr)
             return;
         m_input = context->GetSubsystem<engine::input::InputSubsystem>();
+        // The runs' lifecycle: a run's tier goes with its session.
+        if ((m_runManager = context->RunManager()) != nullptr)
+            m_runManager->Subscribe(*this);
         m_prompts.Install(*m_context); // every prompt in the game's GUI names its bindings through it
         SyncPrompts();
         if (auto* scenes = context->GetSubsystem<engine::scene::SceneSubsystem>())
@@ -909,6 +912,11 @@ namespace engine::gui
 
     void GuiSubsystem::OnShutdown()
     {
+        if (m_runManager != nullptr)
+        {
+            m_runManager->Unsubscribe(*this);
+            m_runManager = nullptr;
+        }
         if (m_sceneRenderer != nullptr)
             m_sceneRenderer->UnregisterOverlay(static_cast<render::ISceneOverlay*>(this));
         if (m_screenRenderer != nullptr)
@@ -1781,9 +1789,9 @@ namespace engine::gui
 
     void GuiSubsystem::SetScreenResolution(u32 width, u32 height, FitMode fit) { ApplyResolution(m_screen, width, height, fit); }
 
-    GuiSubsystem::ScreenTier* GuiSubsystem::FindRunTier(const void* run) noexcept
+    GuiSubsystem::ScreenTier* GuiSubsystem::FindRunTier(foundation::run::RunId run) noexcept
     {
-        if (run == nullptr)
+        if (run == 0)
             return nullptr;
         for (const UniquePtr<ScreenTier>& tier : m_runTiers)
             if (tier->Run == run)
@@ -1803,28 +1811,28 @@ namespace engine::gui
         return nullptr;
     }
 
-    ScreenStack* GuiSubsystem::ScreensFor(const void* run)
+    ScreenStack* GuiSubsystem::ScreensFor(foundation::run::IRun* run)
     {
         SceneRoot* root = ScreenRootFor(run);
         ScreenTier* tier = TierOfRoot(root);
         return tier != nullptr ? tier->Screens.Get() : nullptr;
     }
 
-    SceneRoot* GuiSubsystem::ScreenRootFor(const void* run)
+    SceneRoot* GuiSubsystem::ScreenRootFor(foundation::run::IRun* run)
     {
         if (!m_runScreens || run == nullptr || !m_screen.Root)
             return m_screen.Root.Get();
         if (ScreenTier* found = FindRunTier(run))
             return found->Root.Get();
         UniquePtr<ScreenTier> tier = MakeUnique<ScreenTier>(m_allocator);
-        tier->Run = run;
+        tier->Run = run->Id();
         MakeScreenTier(*tier);
         SceneRoot* root = tier->Root.Get();
         m_runTiers.PushBack(Move(tier));
         return root;
     }
 
-    void GuiSubsystem::SetScreenResolution(const void* run, u32 width, u32 height, FitMode fit)
+    void GuiSubsystem::SetScreenResolution(foundation::run::IRun* run, u32 width, u32 height, FitMode fit)
     {
         // Made on first use, so a tab can size its tier before anything is pushed.
         ScreenTier* tier = TierOfRoot(ScreenRootFor(run));
@@ -1832,13 +1840,13 @@ namespace engine::gui
             ApplyResolution(*tier, width, height, fit);
     }
 
-    void GuiSubsystem::SetScreenOrientation(const void* run, ScreenOrientation orientation)
+    void GuiSubsystem::SetScreenOrientation(foundation::run::IRun* run, ScreenOrientation orientation)
     {
         if (ScreenTier* tier = TierOfRoot(ScreenRootFor(run)))
             tier->Orientation = orientation;
     }
 
-    void GuiSubsystem::EndRunScreens(const void* run)
+    void GuiSubsystem::EndRunScreens(foundation::run::RunId run)
     {
         for (usize i = 0; i < m_runTiers.Size(); ++i)
             if (m_runTiers[i]->Run == run)
@@ -1853,7 +1861,7 @@ namespace engine::gui
                 break;
             }
         if (m_renderRun == run)
-            m_renderRun = nullptr;
+            m_renderRun = 0;
     }
 
     GuiSubsystem::ScreenTier& GuiSubsystem::InputTier() noexcept

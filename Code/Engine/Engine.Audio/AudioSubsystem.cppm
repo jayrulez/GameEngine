@@ -27,6 +27,7 @@ import foundation.core;
 import engine.domain;
 import foundation.profiler;
 import foundation.runtime;
+import foundation.run; // the runs whose groups it keeps, and their lifecycle
 import foundation.scene;
 import engine.scene;
 import foundation.audio;
@@ -132,7 +133,7 @@ export namespace engine::audio
         [[nodiscard]] AudioEngine* Engine() const noexcept { return m_engine; }
         /// How the scene finds its run's group when it starts (the subsystem wires it; without it
         /// the scene plays outside every run).
-        void SetRunGroupResolver(Function<u64(const void*)> resolver) { m_runGroupFor = Move(resolver); }
+        void SetRunGroupResolver(Function<u64(foundation::run::IRun*)> resolver) { m_runGroupFor = Move(resolver); }
         [[nodiscard]] u64 SceneGroup() const noexcept { return m_sceneGroup; }
         [[nodiscard]] scene::Scene* ScenePtr() const noexcept { return m_scene; }
         [[nodiscard]] bool Started() const noexcept { return m_started; }
@@ -552,7 +553,7 @@ export namespace engine::audio
         scene::Scene* m_scene = nullptr;
         AudioEngine* m_engine = nullptr;
         u64 m_sceneGroup = 0;
-        Function<u64(const void*)> m_runGroupFor; // run -> its group (the subsystem's registry)
+        Function<u64(foundation::run::IRun*)> m_runGroupFor; // run -> its group (the subsystem's registry)
         bool m_started = false;
         bool m_wasSimulating = true;
         Random m_cueRandom; // cue variant selection (per scene system)
@@ -668,7 +669,9 @@ export namespace engine::audio
         scene.AddSystem<AudioSceneSystem>();
     }
 
-    class AudioSubsystem final : public foundation::runtime::Subsystem, public scene::ISceneObserver
+    class AudioSubsystem final : public foundation::runtime::Subsystem,
+                                 public scene::ISceneObserver,
+                                 private foundation::run::IRunListener
     {
     public:
         explicit AudioSubsystem(const AudioEngineSettings& engineSettings = {})
@@ -686,8 +689,8 @@ export namespace engine::audio
         {
             AudioSceneSystem* system = scene.GetSystem<AudioSceneSystem>();
             system->SetEngine(m_engine.Get());
-            system->SetRunGroupResolver(Function<u64(const void*)>{
-                [this](const void* run) { return RunGroupFor(run); }});
+            system->SetRunGroupResolver(Function<u64(foundation::run::IRun*)>{
+                [this](foundation::run::IRun* run) { return RunGroupFor(run); }});
             m_systems.PushBack(SceneEntry{&scene, system});
         }
         void OnDestroying(scene::Scene& scene) override
@@ -898,68 +901,28 @@ export namespace engine::audio
             }
         }
 
-        // ---- runs: what one running game plays (keyed by its run, Scene::Run / CurrentRun) ----
+        // ---- runs: what one running game plays (keyed by its run's id, Scene::Run / CurrentRun) ----
+        // A run's group follows its lifecycle (Documentation/Specs/run-context.md): its session's
+        // stop (or its destruction) fades the group out, the host's pause pauses it, the run manager's
+        // focus decides who is heard. No host relays any of it.
         /// The run's group, made on first use (0 for no run or no engine). A new run starts muted
         /// when another run holds the focus and only the focused run is heard.
-        [[nodiscard]] u64 RunGroupFor(const void* run)
+        [[nodiscard]] u64 RunGroupFor(foundation::run::IRun* run)
         {
             if (run == nullptr || m_engine.Get() == nullptr)
             {
                 return 0;
             }
-            for (const RunEntry& entry : m_runs)
-            {
-                if (entry.run == run)
-                {
-                    return entry.group;
-                }
-            }
-            const u64 group = m_engine->CreateRunGroup();
-            m_runs.PushBack(RunEntry{run, group});
-            m_engine->SetRunGroupMuted(group, !IsRunAudible(run));
-            return group;
-        }
-        /// The run is over (its Stop, its instance released): everything it plays fades out over
-        /// `fadeSeconds`, then its group is freed. Other runs and the editor are untouched.
-        void EndRun(const void* run, f32 fadeSeconds = 0.1f)
-        {
-            for (usize i = 0; i < m_runs.Size(); ++i)
-            {
-                if (m_runs[i].run != run)
-                {
-                    continue;
-                }
-                if (m_engine.Get() != nullptr)
-                {
-                    m_engine->StopRunGroup(m_runs[i].group, fadeSeconds);
-                    m_endingRuns.PushBack(EndingRun{m_runs[i].group, fadeSeconds + 0.05f});
-                }
-                m_runs.RemoveAt(i);
-                break;
-            }
-            if (m_focusedRun == run)
-            {
-                m_focusedRun = nullptr;
-                ApplyRunAudibility();
-            }
-        }
-        /// The host's pause (the toolbar's, a debugger break): the run's music and one-shots freeze
-        /// with the game. A game's own pause menu (time scale 0) is the game's business.
-        void SetRunPaused(const void* run, bool paused)
-        {
             if (const u64 group = FindRunGroup(run); group != 0)
             {
-                m_engine->SetRunGroupPaused(group, paused);
+                return group;
             }
+            const u64 group = m_engine->CreateRunGroup();
+            m_runs.PushBack(RunEntry{run->Id(), group});
+            m_engine->SetRunGroupMuted(group, !IsRunAudible(run));
+            m_engine->SetRunGroupPaused(group, run->State() == foundation::run::RunState::Paused);
+            return group;
         }
-        /// The run the user is playing (the focused Game tab): with HearAllRuns off, only it is
-        /// heard; the others keep running muted. Null = no preference: every run is heard.
-        void SetFocusedRun(const void* run)
-        {
-            m_focusedRun = run;
-            ApplyRunAudibility();
-        }
-        [[nodiscard]] const void* FocusedRun() const noexcept { return m_focusedRun; }
         /// The editor setting "Game audio: all instances" (default off: the focused one only).
         void SetHearAllRuns(bool all)
         {
@@ -968,20 +931,13 @@ export namespace engine::audio
         }
         [[nodiscard]] bool HearAllRuns() const noexcept { return m_hearAllRuns; }
         /// Whether `run` is heard (scenes outside every run always are).
-        [[nodiscard]] bool IsRunAudible(const void* run) const noexcept
+        [[nodiscard]] bool IsRunAudible(const foundation::run::IRun* run) const noexcept
         {
-            return run == nullptr || m_hearAllRuns || m_focusedRun == nullptr || m_focusedRun == run;
+            return run == nullptr || IsRunAudible(run->Id());
         }
-        [[nodiscard]] u64 FindRunGroup(const void* run) const noexcept
+        [[nodiscard]] u64 FindRunGroup(const foundation::run::IRun* run) const noexcept
         {
-            for (const RunEntry& entry : m_runs)
-            {
-                if (entry.run == run)
-                {
-                    return entry.group;
-                }
-            }
-            return 0;
+            return run != nullptr ? FindRunGroup(run->Id()) : 0;
         }
 
         void Stop(VoiceHandle handle)
@@ -1027,6 +983,13 @@ export namespace engine::audio
                     scenes->RegisterObserver(this, scene::SceneLifecycleStage::SystemsReady);
                     scenes->RegisterObserver(this, scene::SceneLifecycleStage::Destroying);
                 }
+                // The runs' lifecycle; caught up on what holds already (the focus; paused groups
+                // are made paused when their run first plays).
+                if ((m_runManager = context->RunManager()) != nullptr)
+                {
+                    m_runManager->Subscribe(*this);
+                    OnFocusChanged(m_runManager->Focused());
+                }
             }
         }
         void OnShutdown() override
@@ -1038,14 +1001,71 @@ export namespace engine::audio
                 scenes->UnregisterObserver(this);
             }
             }
+            if (m_runManager != nullptr)
+            {
+                m_runManager->Unsubscribe(*this);
+                m_runManager = nullptr;
+            }
             m_engine = nullptr;
         }
 
         struct RunEntry
         {
-            const void* run = nullptr;
+            foundation::run::RunId run = 0;
             u64 group = 0;
         };
+
+        [[nodiscard]] bool IsRunAudible(foundation::run::RunId run) const noexcept
+        {
+            return m_hearAllRuns || m_focusedRun == 0 || m_focusedRun == run;
+        }
+        [[nodiscard]] u64 FindRunGroup(foundation::run::RunId run) const noexcept
+        {
+            for (const RunEntry& entry : m_runs)
+            {
+                if (entry.run == run)
+                {
+                    return entry.group;
+                }
+            }
+            return 0;
+        }
+        // The run's session is over (stopped, or the run gone without a stop): what it plays fades
+        // out over `fadeSeconds`, then its group is freed. Other runs and the editor are untouched.
+        void EndRunGroup(foundation::run::RunId run, f32 fadeSeconds)
+        {
+            for (usize i = 0; i < m_runs.Size(); ++i)
+            {
+                if (m_runs[i].run != run)
+                {
+                    continue;
+                }
+                if (m_engine.Get() != nullptr)
+                {
+                    m_engine->StopRunGroup(m_runs[i].group, fadeSeconds);
+                    m_endingRuns.PushBack(EndingRun{m_runs[i].group, fadeSeconds + 0.05f});
+                }
+                m_runs.RemoveAt(i);
+                return;
+            }
+        }
+
+        // IRunListener: the run manager's announcements.
+        void OnRunStopping(foundation::run::IRun& run) override { EndRunGroup(run.Id(), kRunFadeSeconds); }
+        void OnRunDestroyed(foundation::run::IRun& run) override { EndRunGroup(run.Id(), kRunFadeSeconds); }
+        void OnRunPaused(foundation::run::IRun& run, bool paused) override
+        {
+            if (const u64 group = FindRunGroup(run.Id()); group != 0 && m_engine.Get() != nullptr)
+            {
+                m_engine->SetRunGroupPaused(group, paused);
+            }
+        }
+        void OnFocusChanged(foundation::run::IRun* run) override
+        {
+            m_focusedRun = run != nullptr ? run->Id() : 0;
+            ApplyRunAudibility();
+        }
+        static constexpr f32 kRunFadeSeconds = 0.1f;
         struct EndingRun
         {
             u64 group = 0;
@@ -1213,7 +1233,8 @@ export namespace engine::audio
         AudioScriptBinding m_scriptBinding;        // the bound script service payload
         Array<RunEntry> m_runs;                    // live runs' groups
         Array<EndingRun> m_endingRuns;             // ended runs fading out before their free
-        const void* m_focusedRun = nullptr;        // the heard run (null = every run)
+        foundation::run::RunId m_focusedRun = 0;   // the heard run (0 = every run)
+        foundation::run::IRunManager* m_runManager = nullptr; // subscribed to (OnReady .. OnShutdown)
         bool m_hearAllRuns = false;                // the editor setting (default: focused only)
         HashMap<String, bool> m_warnedScriptPaths; // warn-once per content path
     };

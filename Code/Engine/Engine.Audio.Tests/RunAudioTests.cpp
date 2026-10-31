@@ -91,13 +91,19 @@ namespace
     };
 }
 
-TEST_CASE("run audio: ending a run fades out its scenes and its music, not another run's")
+TEST_CASE("run audio: a run's stop fades out its scenes and its music, not another run's")
 {
+    foundation::run::RunRegistry runs(DefaultAllocator()); // the host's runs
+    TestRun runA, runB; // two games
+    runs.Add(runA);
+    runs.Add(runB);
+    runA.Start();
+    runB.Start();
     foundation::runtime::SubsystemManager ctx(DefaultAllocator());
     AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
+    ctx.SetRunManager(&runs);
     ctx.Startup();
     AudioEngine& engine = *audio->Engine();
-    TestRun runA, runB; // two games
 
     CHECK(audio->RunGroupFor(nullptr) == 0u); // outside every run
     const u64 groupA = audio->RunGroupFor(&runA);
@@ -115,7 +121,7 @@ TEST_CASE("run audio: ending a run fades out its scenes and its music, not anoth
     REQUIRE(musicB.IsValid());
     const VoiceHandle sourceA = sceneA.Voice();
 
-    audio->EndRun(&runA); // the Game tab's Stop
+    runA.Stop(); // the Game tab's Stop: no call to the audio, the run's lifecycle reaches it
     for (int i = 0; i < 4; ++i)
     {
         audio->Update(0.1f);
@@ -134,11 +140,17 @@ TEST_CASE("run audio: ending a run fades out its scenes and its music, not anoth
 
 TEST_CASE("run audio: only the focused run is heard, unless every run is; pause freezes a run")
 {
+    foundation::run::RunRegistry runs(DefaultAllocator());
+    TestRun runA, runB, runC;
+    runs.Add(runA);
+    runs.Add(runB);
+    runs.Add(runC);
+    runA.Start();
     foundation::runtime::SubsystemManager ctx(DefaultAllocator());
     AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
+    ctx.SetRunManager(&runs);
     ctx.Startup();
     AudioEngine& engine = *audio->Engine();
-    TestRun runA, runB, runC;
     const u64 a = audio->RunGroupFor(&runA);
     const u64 b = audio->RunGroupFor(&runB);
 
@@ -146,14 +158,14 @@ TEST_CASE("run audio: only the focused run is heard, unless every run is; pause 
     CHECK_FALSE(engine.IsRunGroupMuted(a));
     CHECK_FALSE(engine.IsRunGroupMuted(b));
 
-    audio->SetFocusedRun(&runA); // clicking into a Game tab
+    runs.SetFocused(&runA); // clicking into a Game tab
     CHECK_FALSE(engine.IsRunGroupMuted(a));
     CHECK(engine.IsRunGroupMuted(b)); // runs on, muted
     CHECK(audio->IsRunAudible(nullptr)); // the editor's own sounds are always heard
     const u64 c = audio->RunGroupFor(&runC);
     CHECK(engine.IsRunGroupMuted(c)); // a new run while another is focused starts muted
 
-    audio->SetFocusedRun(&runB);
+    runs.SetFocused(&runB);
     CHECK(engine.IsRunGroupMuted(a));
     CHECK_FALSE(engine.IsRunGroupMuted(b));
 
@@ -163,13 +175,36 @@ TEST_CASE("run audio: only the focused run is heard, unless every run is; pause 
     CHECK_FALSE(engine.IsRunGroupMuted(c));
     audio->SetHearAllRuns(false);
 
-    audio->EndRun(&runB); // the focused run ends: no focus, every remaining run heard
-    CHECK(audio->FocusedRun() == nullptr);
+    runB.Dispose(); // the focused run goes (a tab closed, no stop first): no focus, every remaining run heard
+    CHECK(runs.Focused() == nullptr);
     CHECK_FALSE(engine.IsRunGroupMuted(a));
+    CHECK(audio->FindRunGroup(&runB) == 0u); // its group went with it
 
-    audio->SetRunPaused(&runA, true); // the toolbar's pause, a debugger break
+    runA.SetPaused(true); // the toolbar's pause, a debugger break
     CHECK(engine.IsRunGroupPaused(a));
-    audio->SetRunPaused(&runA, false);
+    runA.SetPaused(false);
     CHECK_FALSE(engine.IsRunGroupPaused(a));
     ctx.Shutdown();
+}
+
+TEST_CASE("run audio: a subsystem made after the runs catches up on the focus and a paused run")
+{
+    foundation::run::RunRegistry runs(DefaultAllocator());
+    TestRun runA, runB;
+    runs.Add(runA);
+    runs.Add(runB);
+    runB.Start();
+    runB.SetPaused(true);
+    runs.SetFocused(&runA); // before any audio exists (a plugin's subsystem arriving late)
+    foundation::runtime::SubsystemManager ctx(DefaultAllocator());
+    AudioSubsystem* audio = ctx.AddSubsystem<AudioSubsystem>(Headless());
+    ctx.SetRunManager(&runs);
+    ctx.Startup();
+    AudioEngine& engine = *audio->Engine();
+    const u64 b = audio->RunGroupFor(&runB);
+    CHECK(engine.IsRunGroupMuted(b));  // not the focused run
+    CHECK(engine.IsRunGroupPaused(b)); // its run is paused
+    CHECK_FALSE(engine.IsRunGroupMuted(audio->RunGroupFor(&runA)));
+    ctx.Shutdown();
+    runs.SetFocused(nullptr); // the audio stopped listening at its shutdown: nothing reaches it
 }

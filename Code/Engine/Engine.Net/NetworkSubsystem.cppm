@@ -21,7 +21,8 @@ export module engine.net;
 
 import foundation.core;
 import engine.domain;
-import foundation.runtime;         // Subsystem, Context
+import foundation.runtime;         // Subsystem, SubsystemManager
+import foundation.run;             // the runs whose endpoints it pumps
 import foundation.scene; // Scene + SceneSystem
 import engine.scene; // SceneSubsystem (to register as scene-aware)
 import foundation.net.replication; // NetworkComponentManager + RegisterReplicationComponents
@@ -68,11 +69,6 @@ export namespace engine::net
         scene.AddSystem<NetworkSceneSystem>();
     }
 
-    // The app sets this once: it visits every LIVE endpoint across all instances (pull model), so the
-    // subsystem can pump each one per-frame without knowing about GameInstances or NetworkControllers.
-    // Re-fetched each frame (null endpoints skipped), so it never holds an endpoint pointer across frames.
-    using EndpointVisitor = Function<void(const Function<void(net::NetworkManager&)>&)>;
-
     // The once-per-context networking subsystem. It (a) registers the reflected components, (b) installs
     // the net scene managers + the fixed-lane replication driver via the SceneModule, and (c) OWNS THE
     // TRANSPORT PUMP: each frame it drives every live endpoint's UpdateTransport on the Context lane
@@ -80,14 +76,6 @@ export namespace engine::net
     // rides the per-scene fixed lane (NetworkSceneSystem); this is the socket recv/send half.
     class NetworkSubsystem final : public foundation::runtime::Subsystem
     {
-    public:
-        /// The app provides the endpoint enumerator (it owns the instance list); the subsystem owns the
-        /// tick. Clear it (default-construct) at shutdown so the stored callback never outlives the app.
-        void SetEndpointSource(EndpointVisitor source)
-        {
-            m_endpoints = static_cast<EndpointVisitor&&>(source);
-        }
-
     protected:
         void OnInit() override
         {
@@ -101,18 +89,30 @@ export namespace engine::net
         // NOTE: the finer BeginFrame-recv / PostUpdate-send split is
         // NOT done - NetSession::Update recv+flushes in one call, and separating them is a transport-layer
         // change. A single UpdateTransport per frame is the pump.
+        //
+        // The endpoints are the runs' (Documentation/Specs/run-context.md): each run's network
+        // controller (its INetworkController service) holds its live endpoint, re-read every frame,
+        // so no endpoint pointer is held across frames.
         void PostUpdate(f32 deltaTime) override
         {
-            if (!m_endpoints)
+            foundation::run::IRunManager* runs = Manager() != nullptr ? Manager()->RunManager() : nullptr;
+            if (runs == nullptr)
             {
                 return;
             }
             const f32 deltaMs = deltaTime * 1000.0f;
-            m_endpoints([deltaMs](net::NetworkManager& endpoint) { endpoint.UpdateTransport(deltaMs); });
+            runs->ForEachRun(
+                [deltaMs](foundation::run::IRun& run)
+                {
+                    if (net::INetworkController* controller = run.Get<net::INetworkController>())
+                    {
+                        if (net::NetworkManager* endpoint = controller->NetEndpoint())
+                        {
+                            endpoint->UpdateTransport(deltaMs);
+                        }
+                    }
+                });
         }
-
-    private:
-        EndpointVisitor m_endpoints; // app-provided; visits live endpoints across all instances
     };
 
 } // namespace engine::net

@@ -342,6 +342,7 @@ export namespace engine::runtime
             // What the run owns and others reach through it (run.Get<T>()): borrowed, members all.
             Register<GameInstance>(*this);
             Register<NetworkController>(m_network);
+            Register<foundation::net::INetworkController>(m_network); // how engine.net reaches it (below this library)
             Register<input::ActionRuntime>(m_inputRuntime);
             Register<RunSave>(m_save);
             Register<engine::script::ScriptRunHost>(m_runHost);

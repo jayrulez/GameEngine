@@ -20,6 +20,7 @@ module editor.play;
 import foundation.core;
 import foundation.content;
 import foundation.vfs;
+import foundation.run; // IRunManager: the runs, their focus
 import foundation.resource;
 import foundation.scene;
 import foundation.settings; // the project's editor store (the Game tab's settings)
@@ -530,13 +531,9 @@ namespace editor
         m_sceneTitle = (m_scene != nullptr) ? String(m_scene->Name()) : String(u8"(no scene)");
         BindInput();
         BindBusLayout(*m_host);
-        if (m_audio != nullptr && m_gameInstance != nullptr)
-        {
-            m_audio->SetFocusedRun(m_gameInstance); // the tab Play was pressed in is the one heard
-        }
         if (m_app != nullptr && m_app->Runs() != nullptr && m_gameInstance != nullptr)
         {
-            m_app->Runs()->SetFocused(m_gameInstance); // ... and the one the user is playing
+            m_app->Runs()->SetFocused(m_gameInstance); // the tab Play was pressed in is the one played (and heard)
         }
         LOG_INFO(u8"Editor", u8"Game: running scene '{}'", m_sceneTitle);
         RefreshToolbar();
@@ -607,21 +604,11 @@ namespace editor
             }
             m_scene = nullptr;
         }
-        // The run's session ends (its lifecycle's listeners hear it).
+        // The run's session ends: its sound fades out and its screens go with it, as everything
+        // following the run's lifecycle hears (another tab's run and the editor's own play on).
         if (m_gameInstance != nullptr)
         {
             m_gameInstance->Stop();
-        }
-        // The run's sound ends with it: its music, one-shots and anything still fading (another
-        // tab's run and the editor's own sounds play on).
-        if (m_audio != nullptr && m_gameInstance != nullptr)
-        {
-            m_audio->EndRun(m_gameInstance);
-        }
-        // Its screens go with it (another tab's run keeps its own).
-        if (m_app != nullptr && m_app->GUI() != nullptr && m_gameInstance != nullptr)
-        {
-            m_app->GUI()->EndRunScreens(m_gameInstance);
         }
         m_running = false;
         m_viewport->ClearPicture(); // the run's last frame does not linger
@@ -710,19 +697,15 @@ namespace editor
         // own pause menu is time scale 0, the game's business: its menu music plays on).
         const bool paused =
             m_simPausedByDebugger || (m_pauseToggle != nullptr && m_pauseToggle->IsChecked());
-        m_audio->SetRunPaused(m_gameInstance, paused);
         if (m_gameInstance != nullptr)
         {
-            m_gameInstance->SetPaused(paused); // the host's pause: the run hears it once per change
+            m_gameInstance->SetPaused(paused); // the host's pause: the run (its sound with it) hears it once per change
         }
-        // Clicking into this tab's viewport makes its run the one heard, and the one played.
-        if (m_viewport->IsFocused() && m_audio->FocusedRun() != m_gameInstance)
+        // Clicking into this tab's viewport makes its run the one played, and the one heard.
+        foundation::run::IRunManager* runs = m_app != nullptr ? m_app->Runs() : nullptr;
+        if (m_viewport->IsFocused() && runs != nullptr && m_gameInstance != nullptr && runs->Focused() != m_gameInstance)
         {
-            m_audio->SetFocusedRun(m_gameInstance);
-            if (m_app != nullptr && m_app->Runs() != nullptr)
-            {
-                m_app->Runs()->SetFocused(m_gameInstance);
-            }
+            runs->SetFocused(m_gameInstance);
         }
     }
 

@@ -229,31 +229,16 @@ namespace engine::runtime
         host.Subsystems().AddSubsystem<engine::navigation::NavigationSubsystem>();
         // Networking scene integration: injects the NetworkComponentManager into every scene so
         // authored NetworkComponents work (the per-instance endpoint replicates over it). The subsystem
-        // also OWNS the per-frame transport pump: give it the endpoint enumerator (we own the
-        // instance list; it owns the tick).
-        auto* netSubsystem = host.Subsystems().AddSubsystem<engine::net::NetworkSubsystem>();
-        netSubsystem->SetEndpointSource(
-            [this](const core::Function<void(foundation::net::NetworkManager&)>& visit)
-            {
-                ForEachInstance(
-                    [&visit](GameInstance& gi)
-                    {
-                        if (foundation::net::NetworkManager* endpoint = gi.NetEndpoint())
-                        {
-                            visit(*endpoint);
-                        }
-                    });
-            });
+        // also OWNS the per-frame transport pump, over the runs' endpoints (it finds the runs on the
+        // subsystem manager).
+        (void)host.Subsystems().AddSubsystem<engine::net::NetworkSubsystem>();
         m_audio = host.Subsystems().AddSubsystem<engine::audio::AudioSubsystem>(m_audioEngineSettings);
         m_input = host.Subsystems().AddSubsystem<engine::input::InputSubsystem>(
             host.Shell() != nullptr ? host.Shell()->Input() : nullptr);
         // The primary instance's per-instance input reads the shell devices by default (the player
         // path); the editor Game tab overrides this to its gated viewport source per tab.
         m_instance.SetInputSource(&m_input->ShellSource());
-        // Every instance's action runtime, so the GUI's consumption and touch guide reach the game.
-        m_input->SetActionRuntimeProvider(
-            [this](const engine::input::InputSubsystem::ActionRuntimeVisitor& visit)
-            { ForEachInstance([&visit](GameInstance& instance) { visit(instance.InputRuntime()); }); });
+        // Every run's action runtime reaches the GUI's consumption and touch guide through the runs.
         // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
         // The engine's GUI: every game has it (its screen tier, its components, `gui` in its scripts).
         m_gui = host.Subsystems().AddSubsystem<engine::gui::GuiSubsystem>(host.Subsystems().Allocator(), *m_dataFileSystem);
@@ -453,11 +438,7 @@ namespace engine::runtime
             }
             instance->Scenes().Clear(); // destroy any remaining scenes (aware subsystems notified)
             instance->RunHost().Teardown();
-            if (m_audio != nullptr)
-            {
-                m_audio->EndRun(instance); // its sound ends with it
-            }
-            m_extraInstances.RemoveAt(i); // frees the GameInstance
+            m_extraInstances.RemoveAt(i); // frees the GameInstance: its run's end reaches every subsystem
             return;
         }
     }
@@ -715,12 +696,6 @@ namespace engine::runtime
         // The subsystems have shut down (and stopped listening): nothing reaches the runs through
         // the subsystem manager after this. The runs themselves go with the app.
         host.Subsystems().SetRunManager(nullptr);
-        // Drop the net subsystem's endpoint source before teardown - the stored callback captures `this`,
-        // so it must not outlive the app (the context tick has already stopped, so this is belt-and-braces).
-        if (auto* netSubsystem = host.Subsystems().GetSubsystem<engine::net::NetworkSubsystem>())
-        {
-            netSubsystem->SetEndpointSource({});
-        }
         if (m_profilerOverlay.Get() != nullptr)
         {
             m_profilerOverlay->Hide(); // off the GUI's overlay layer while the GUI is alive

@@ -10,7 +10,8 @@
 #include "Core/Prelude.h"
 
 import foundation.core;
-import foundation.runtime;         // Context (drives the subsystem PostUpdate pump)
+import foundation.runtime;         // SubsystemManager (drives the subsystem PostUpdate pump)
+import foundation.run;             // the runs whose endpoints the subsystem pumps
 import foundation.scene;
 import foundation.net;             // SimDatagramNetwork / IDatagramSocket
 import foundation.net.replication; // RegisterReplicationComponents + component managers
@@ -170,8 +171,8 @@ TEST_CASE("net-scene-system: a NetworkSceneSystem with no endpoint is inert")
 
 TEST_CASE("net-subsystem: the transport pump drives every enumerated endpoint per frame")
 {
-    // The NetworkSubsystem owns the per-frame transport pump: its PostUpdate visits every live endpoint
-    // (via the app-provided source) and drives UpdateTransport. Driven here through a real Context (the
+    // The NetworkSubsystem owns the per-frame transport pump: its PostUpdate visits every run's live
+    // endpoint (through the runs on its subsystem manager) and drives UpdateTransport. Driven here through a real Context (the
     // production lane), a server + client connect purely because the subsystem pumps them - no
     // DriveNetwork, no app fan-out.
     foundation::net::RegisterReplicationComponents();
@@ -182,15 +183,34 @@ TEST_CASE("net-subsystem: the transport pump drives every enumerated endpoint pe
     server.StartServer(/*dedicated=*/true);
     (void)client.ConnectTo(sv->LocalEndpoint());
 
+    // Two runs, each with a network controller holding its endpoint, as a GameInstance has.
+    struct Controller final : net::INetworkController
+    {
+        explicit Controller(net::NetworkManager& endpoint) : endpoint(&endpoint) {}
+        bool StartServer(u16, bool) override { return false; }
+        bool Connect(StringView, u16) override { return false; }
+        void StopNetworking() override {}
+        [[nodiscard]] net::NetworkManager* NetEndpoint() const override { return endpoint; }
+        net::NetworkManager* endpoint;
+    };
+    struct TestRun final : foundation::run::RunBase
+    {
+        TestRun() : RunBase(DefaultAllocator(), u8"test") {}
+    };
+    Controller serverController(server);
+    Controller clientController(client);
+    TestRun serverRun;
+    TestRun clientRun;
+    serverRun.Register<net::INetworkController>(serverController);
+    clientRun.Register<net::INetworkController>(clientController);
+    foundation::run::RunRegistry runs(DefaultAllocator());
+    runs.Add(serverRun);
+    runs.Add(clientRun);
+
     foundation::runtime::SubsystemManager ctx(foundation::core::DefaultAllocator());
-    engine::net::NetworkSubsystem* netSub = ctx.AddSubsystem<engine::net::NetworkSubsystem>();
+    (void)ctx.AddSubsystem<engine::net::NetworkSubsystem>();
+    ctx.SetRunManager(&runs);
     ctx.Startup();
-    netSub->SetEndpointSource(
-        [&](const Function<void(net::NetworkManager&)>& visit)
-        {
-            visit(server);
-            visit(client);
-        });
 
     for (int i = 0; i < 200 && server.Session().PeerCount() == 0u; ++i)
     {

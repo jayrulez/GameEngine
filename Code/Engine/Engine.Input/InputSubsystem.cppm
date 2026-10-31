@@ -21,6 +21,7 @@ import foundation.core;
 import engine.domain;
 import foundation.shell;
 import foundation.runtime;
+import foundation.run; // the runs whose action runtimes the UI reaches
 import foundation.script;
 import foundation.input;
 
@@ -54,22 +55,25 @@ export namespace engine::input
 
         [[nodiscard]] ActionRuntime& Runtime() noexcept { return m_runtime; }
 
-        /// How to reach the action runtimes a host's game instances each run (the player, the
-        /// editor's Game tabs), beside this subsystem's own: the UI marks what it takes on every
-        /// one (else a tap on a menu also reached the game's actions) and shows their touch
-        /// controls. Unset: this subsystem's runtime alone.
+        /// This subsystem's runtime, then each run's (the player's, the editor's Game tabs': the
+        /// ActionRuntime a run holds as a service, Documentation/Specs/run-context.md): the UI marks
+        /// what it takes on every one (else a tap on a menu also reached the game's actions) and
+        /// shows their touch controls. No runs here: this subsystem's runtime alone.
         using ActionRuntimeVisitor = Function<void(ActionRuntime&)>;
-        void SetActionRuntimeProvider(Function<void(const ActionRuntimeVisitor&)> forEach)
-        {
-            m_actionRuntimeProvider = Move(forEach);
-        }
-        /// This subsystem's runtime, then each in play.
         void ForEachActionRuntime(const ActionRuntimeVisitor& visit)
         {
             visit(m_runtime);
-            if (m_actionRuntimeProvider)
+            foundation::run::IRunManager* runs = Manager() != nullptr ? Manager()->RunManager() : nullptr;
+            if (runs != nullptr)
             {
-                m_actionRuntimeProvider(visit);
+                runs->ForEachRun(
+                    [&visit](foundation::run::IRun& run)
+                    {
+                        if (ActionRuntime* runtime = run.Get<ActionRuntime>())
+                        {
+                            visit(*runtime);
+                        }
+                    });
             }
         }
 
@@ -162,7 +166,6 @@ export namespace engine::input
         const void* m_boundSceneKey = nullptr; // the override's scene binding (comparison only)
         UnboundInputScenePolicy m_unboundScenePolicy = UnboundInputScenePolicy::AllScenes;
         ActionRuntime m_runtime;
-        Function<void(const ActionRuntimeVisitor&)> m_actionRuntimeProvider; // the host's instances' runtimes
     };
 
     // The scripting facade: a foreign class named `Input` whose STATIC methods resolve the

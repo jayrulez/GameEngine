@@ -36,7 +36,7 @@ enables AI agents to build entire games, from initial project setup to fully pla
 - **Networking** with state replication.
 - **Scripting** in AngelScript or Luau over the engine's reflected facades: behaviours per entity,
   a level script per scene and a game script per run, with coroutines, events and an in-editor
-  debugger. See [Documentation/Shipping/Scripting.md](Documentation/Shipping/Scripting.md).
+  debugger.
 - **UI:** a retained-mode GUI with flex, grid and stack layouts, `.xml` markup, CSS sheets
   (cascade, variables, transitions, animations, media queries), shaped bidirectional text,
   keyboard and gamepad navigation, data binding, world-space UI, and a game kit for screens and
